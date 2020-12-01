@@ -482,9 +482,6 @@
     (and found-k
          (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
-(defn- value-buffer->id-buffer ^org.agrona.DirectBuffer [index-snapshot ^DirectBuffer value-buffer]
-  (c/->id-buffer (db/decode-value index-snapshot value-buffer)))
-
 (defn- canonical-buffer-lookup ^org.agrona.DirectBuffer [canonical-buffer-cache ^DirectBuffer buffer]
   (cache/compute-if-absent canonical-buffer-cache
                            buffer
@@ -573,9 +570,8 @@
                                   attr-buffer
                                   value-buffer
                                   (buffer-or-value-buffer min-e))
-               (step-fn i #(let [eid-value-buffer (key-suffix % (.capacity prefix))
-                                 eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-                             (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+               (step-fn i #(let [eid-value-buffer (key-suffix % (.capacity prefix))]
+                             (when-let [content-hash-buffer (entity-resolver-fn eid-value-buffer)]
                                (when-let [vs (cav-cache-lookup cav-cache canonical-buffer-cache @cache-iterator-delay
                                                                eid-value-buffer content-hash-buffer attr-buffer)]
                                  (when (.contains vs value-buffer)
@@ -592,9 +588,8 @@
 
   (aev [this a e min-v entity-resolver-fn]
     (let [attr-buffer (c/->id-buffer a)
-          eid-value-buffer (buffer-or-value-buffer e)
-          eid-buffer (value-buffer->id-buffer this eid-value-buffer)]
-      (when-let [content-hash-buffer (entity-resolver-fn eid-buffer)]
+          eid-value-buffer (buffer-or-value-buffer e)]
+      (when-let [content-hash-buffer (entity-resolver-fn eid-value-buffer)]
         (when-let [vs (cav-cache-lookup cav-cache canonical-buffer-cache @cache-iterator-delay
                                         eid-value-buffer content-hash-buffer attr-buffer)]
           (.tailSet vs (buffer-or-value-buffer min-v))))))
@@ -603,6 +598,11 @@
     (assert tx-id)
     (let [i @entity-as-of-iterator-delay
           prefix-size (+ c/index-id-size c/id-size)
+          eid (if (instance? DirectBuffer eid)
+                (if (c/id-buffer? eid)
+                  eid
+                  (db/decode-value this eid))
+                eid)
           eid-buffer (c/->id-buffer eid)
           seek-k (encode-bitemp-key-to (.get seek-buffer-tl)
                                        eid-buffer
