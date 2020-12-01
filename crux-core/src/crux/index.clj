@@ -184,7 +184,7 @@
 
 (deftype UnaryJoinVirtualIndex [^objects indexes
                                 ^:unsynchronized-mutable ^long index
-                                ^:unsynchronized-mutable last-match]
+                                ^:unsynchronized-mutable state]
   db/Index
   (seek-values [this k]
     (if-let [indexes (loop [n 0
@@ -197,32 +197,32 @@
       (do (doto indexes
             (Arrays/sort unary-join-iterator-state-comparator))
           (set! index 0)
-          (set! last-match ::init)
+          (set! state ::init)
           (db/next-values this))
-      (set! last-match nil)))
+      (set! state nil)))
 
   (next-values [this]
-    (when (and last-match (not= ::init last-match))
+    (when (and state (not= ::init state))
       (let [idx (aget indexes index)]
-        (if (if (= ::next last-match)
+        (if (if (= ::next state)
               (db/next-values idx)
-              (db/seek-values idx last-match))
+              (db/seek-values idx state))
           (let [index (inc index)
                 index (if (= index (alength indexes))
                         0
                         index)]
             (set! (.index this) index))
-          (set! last-match nil))))
-    (when last-match
+          (set! state nil))))
+    (when state
       (let [idx ^DerefIndex (aget indexes index)
             max-index (if (zero? index)
                         (dec (alength indexes))
                         (dec index))
             max-k (.deref ^DerefIndex (aget indexes max-index))
             match? (mem/buffers=? (.deref idx) max-k)]
-        (set! last-match (if match?
-                           ::next
-                           max-k))
+        (set! state (if match?
+                      ::next
+                      max-k))
         (if match?
           max-k
           (recur)))))
