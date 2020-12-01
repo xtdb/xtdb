@@ -349,9 +349,7 @@
         (time
          (do (dotimes [_ 10]
                (time
-                ;; TODO: Note, the cached decorator still uses
-                ;; bytes, so we grab the underlying kv store.
-                (with-open [snapshot (kv/new-snapshot (:kv kv-store))
+                (with-open [snapshot (kv/new-snapshot kv-store)
                             i (kv/new-iterator snapshot)]
                   (dotimes [idx n]
                     (let [idx (- (dec n) idx)
