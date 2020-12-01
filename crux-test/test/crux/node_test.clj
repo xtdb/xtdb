@@ -135,8 +135,9 @@
 
 (t/deftest test-await-tx
   (let [bus (bus/->bus {})
+        tx-ingester (tx/map->TxIngester {:!error (atom nil)})
         await-tx (fn [tx timeout]
-                   (#'n/await-tx {:bus bus} ::tx/tx-id tx timeout))
+                   (#'n/await-tx {:bus bus :tx-ingester tx-ingester} ::tx/tx-id tx timeout))
         tx1 {::tx/tx-id 1
              ::tx/tx-time (Date.)}
         tx-evt {:crux/event-type ::tx/indexed-tx

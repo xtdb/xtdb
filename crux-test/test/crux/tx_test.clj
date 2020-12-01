@@ -917,11 +917,20 @@
 
 
 (t/deftest await-fails-quickly-738
-  (with-redefs [tx/index-tx-event (fn [_ _ _] (throw (ex-info "test error for await-fails-quickly-738" {})))]
-    (let [!fut (future (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
-      (t/is (thrown-with-msg? Exception #"Transaction ingester aborted"
-                              (deref !fut 1000 ::timeout)))
-      (future-cancel !fut))))
+  (with-redefs [tx/index-tx-event (fn [_ _ _]
+                                    (Thread/sleep 100)
+                                    (throw (ex-info "test error for await-fails-quickly-738" {})))]
+    (let [last-tx (crux/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+      (t/testing "Testing fail while we are awaiting an event"
+        (t/is (thrown-with-msg?
+               Exception
+               #"Transaction ingester aborted"
+               (crux/await-tx *api* last-tx (Duration/ofMillis 1000)))))
+      (t/testing "Testing fail before we await an event"
+        (t/is (thrown-with-msg?
+               Exception
+               #"Transaction ingester aborted"
+               (crux/await-tx *api* last-tx (Duration/ofMillis 1000))))))))
 
 (t/deftest test-evict-documents-with-common-attributes
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 1}]
