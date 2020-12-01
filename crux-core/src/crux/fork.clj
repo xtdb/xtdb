@@ -131,7 +131,7 @@
                              capped-valid-time capped-tx-id]
   db/IndexStore
   (index-docs [this docs]
-    (swap! !indexed-docs merge docs)
+    (swap! !indexed-docs into docs)
     (db/index-docs transient-index-store docs))
 
   (unindex-eids [this eids]
@@ -152,10 +152,10 @@
         {:tombstones tombstones})))
 
   (index-entity-txs [this tx entity-txs]
-    (swap! !etxs merge (->> entity-txs
-                            (into {} (map (juxt (fn [^EntityTx etx]
-                                                  [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
-                                                identity)))))
+    (swap! !etxs into (->> entity-txs
+                           (into {} (map (juxt (fn [^EntityTx etx]
+                                                 [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
+                                               identity)))))
     (db/index-entity-txs transient-index-store tx entity-txs))
 
   (store-index-meta [this k v]
@@ -207,7 +207,7 @@
 (defrecord ForkedDocumentStore [doc-store !docs]
   db/DocumentStore
   (submit-docs [_ docs]
-    (swap! !docs merge docs))
+    (swap! !docs into docs))
 
   (fetch-docs [_ ids]
     (let [overridden-docs (select-keys @!docs ids)]

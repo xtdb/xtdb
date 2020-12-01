@@ -52,8 +52,9 @@
   (let [ids (set ids)]
     (loop [indexed {}]
       (let [missing-ids (set/difference ids (set (keys indexed)))
-            indexed (merge indexed (when (seq missing-ids)
-                                     (db/fetch-docs document-store missing-ids)))]
+            indexed (into indexed
+                          (when (seq missing-ids)
+                            (db/fetch-docs document-store missing-ids)))]
         (if (= (count indexed) (count ids))
           indexed
           (do
@@ -212,12 +213,12 @@
                       (let [conformed-tx-ops (mapv txc/conform-tx-op res)
                             tx-events (mapv txc/->tx-event conformed-tx-ops)]
                         {:tx-events tx-events
-                         :docs (merge (when args-doc-id
-                                        {args-content-hash {:crux.db/id args-doc-id
-                                                            :crux.db.fn/tx-events tx-events}})
-                                      (into {}
-                                            (mapcat :docs)
-                                            conformed-tx-ops))})))
+                         :docs (into (if args-doc-id
+                                       {args-content-hash {:crux.db/id args-doc-id
+                                                           :crux.db.fn/tx-events tx-events}}
+                                       {})
+                                     (mapcat :docs)
+                                     conformed-tx-ops)})))
 
                   (catch Throwable t
                     (reset! !last-tx-fn-error t)
