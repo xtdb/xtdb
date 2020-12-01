@@ -290,10 +290,10 @@
 (defn- etx->kvs [^EntityTx etx]
   (let [eid (c/->id-buffer (.eid etx))
         z (encode-entity-tx-z-number (.vt etx) (.tx-id etx))]
-    [[(encode-bitemp-key-to nil eid (.vt etx) (.tx-id etx) (.tt etx))
-      (c/->id-buffer (.content-hash etx))]
-     [(encode-bitemp-z-key-to nil eid z (.tt etx))
-      (c/->id-buffer (.content-hash etx))]]))
+    [(MapEntry/create (encode-bitemp-key-to nil eid (.vt etx) (.tx-id etx) (.tt etx))
+                      (c/->id-buffer (.content-hash etx)))
+     (MapEntry/create (encode-bitemp-z-key-to nil eid z (.tt etx))
+                      (c/->id-buffer (.content-hash etx)))]))
 
 ;; Index Version
 
@@ -848,7 +848,7 @@
     (kv/store kv-store
               (->> (conj (mapcat etx->kvs entity-txs)
                          (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer))
-                   (into (sorted-map-by mem/buffer-comparator)))))
+                   (sort-by key mem/buffer-comparator))))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
