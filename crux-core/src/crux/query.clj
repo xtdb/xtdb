@@ -1156,11 +1156,6 @@
                    {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
-(defn- constrain-join-result-by-constraints [index-snapshot db idx-id->idx constraints join-keys]
-  (every? (fn [f]
-            (f index-snapshot db idx-id->idx join-keys))
-          constraints))
-
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
                (reduce
