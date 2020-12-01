@@ -17,12 +17,14 @@
 (defmacro with-kv-store [bindings & body]
   `(with-kv-store* (fn [~@bindings] ~@body)))
 
-(def rocks-dep {:crux/module `crux.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
-(def lmdb-dep {:crux/module `crux.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
-(def memkv-dep {:crux/module `crux.mem-kv/->kv-store})
+(def rocks-dep {:crux/module 'crux.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
+(def lmdb-dep {:crux/module 'crux.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
+(def memkv-dep {:crux/module 'crux.mem-kv/->kv-store})
+(def mutablekv-dep {:crux/module 'crux.kv.mutable-kv/->mutable-kv-store})
 
 (defn with-each-kv-store* [f]
   (doseq [kv-opts [memkv-dep
+                   mutablekv-dep
                    rocks-dep
                    {:crux/module `crux.rocksdb.jnr/->kv-store
                     :db-dir-suffix "rocksdb-jnr"}

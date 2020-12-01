@@ -9,9 +9,12 @@
             [crux.db :as db]
             [crux.error :as err]
             [crux.fork :as fork]
+            [crux.kv :as kv]
             [crux.io :as cio]
             [crux.kv.index-store :as kvi]
+            [crux.memory :as mem]
             [crux.mem-kv :as mem-kv]
+            [crux.kv.mutable-kv :as mut-kv]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
@@ -19,7 +22,7 @@
            java.io.Closeable
            java.time.Duration
            [java.util.concurrent Executors ExecutorService TimeUnit]
-           java.util.Date))
+           [java.util Date NavigableMap TreeMap]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -408,7 +411,10 @@
 
       (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx}))
 
-    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)
+    ;; TODO this is the wrong level of abstraction -
+    ;; I'd like to move more of this fork logic to the KV index store,
+    ;; given so much of it is about KVs
+    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
                                                                                            :cav-cache (nop-cache/->nop-cache {})
                                                                                            :canonical-buffer-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
