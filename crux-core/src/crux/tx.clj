@@ -325,13 +325,14 @@
                                        {:abort? true
                                         :docs docs}
                                        res)))]
-                             (db/submit-docs forked-document-store docs)
+                             (when (seq docs)
+                               (db/submit-docs forked-document-store docs))
 
                              (when-not abort?
                                (doto forked-index-store
-                                 (db/index-docs docs)
-                                 (db/unindex-eids evict-eids)
-                                 (db/index-entity-txs tx etxs)))
+                                 (cond-> (seq docs) (db/index-docs docs))
+                                 (cond-> (seq evict-eids) (db/unindex-eids evict-eids))
+                                 (cond-> (seq etxs) (db/index-entity-txs tx etxs))))
 
                              (or abort?
                                  (recur (concat new-tx-events more-tx-events))))))]

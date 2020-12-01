@@ -138,8 +138,7 @@
     (swap! !evicted-eids set/union (set eids))
     (db/unindex-eids transient-index-store eids)
 
-    (with-open [persistent-index-snapshot (db/open-index-snapshot persistent-index-store)
-                transient-index-snapshot (db/open-index-snapshot transient-index-store)]
+    (with-open [transient-index-snapshot (db/open-index-snapshot transient-index-store)]
       (let [tombstones (->> (for [eid eids
                                   etx (concat (db/entity-history persistent-index-snapshot eid :asc
                                                                  {:with-corrections? true})
