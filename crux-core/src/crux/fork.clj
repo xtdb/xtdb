@@ -5,6 +5,7 @@
             [crux.io :as cio]
             [crux.memory :as mem])
   (:import crux.codec.EntityTx
+           org.agrona.DirectBuffer
            java.util.Date))
 
 (defn- merge-seqs
@@ -58,9 +59,15 @@
                 (db/aev transient-index-snapshot a e min-v entity-resolver-fn)))
 
   (entity-as-of-resolver [this eid valid-time tx-id]
-    (some-> ^EntityTx (db/entity-as-of this eid valid-time tx-id)
-            (.content-hash)
-            c/->id-buffer))
+    (let [eid (if (instance? DirectBuffer eid)
+                (if (c/id-buffer? eid)
+                  eid
+                  (db/decode-value this eid))
+                eid)
+          eid-buffer (c/->id-buffer eid)]
+      (some-> ^EntityTx (db/entity-as-of this eid-buffer valid-time tx-id)
+              (.content-hash)
+              c/->id-buffer)))
 
   (entity-as-of [this eid valid-time tx-id]
     (->> [(when capped-tx-id
