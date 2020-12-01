@@ -1420,7 +1420,7 @@
                                           not-constraints
                                           not-join-constraints
                                           or-constraints)
-                                  (update-depth->constraints (vec (repeat (inc (count vars-in-join-order)) nil))))
+                                  (update-depth->constraints (vec (repeat (inc (count var->joins)) nil))))
           in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
                                  :let [bind-vars (find-binding-vars binding)]]
                              {:idx-id idx-id
