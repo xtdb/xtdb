@@ -17,18 +17,6 @@ You can enable checkpoints on your index-store by adding a `:checkpointer` depen
 
 [tabs]
 ====
-Clojure/EDN::
-+
-[source,clojure]
-----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               ...
-                               :checkpointer {:crux/module 'crux.checkpoint/->checkpointer
-                                              :store {:crux/module 'crux.s3.checkpoint/->cp-store
-                                                      :bucket "<bucket>"}
-                                              :approx-frequency "PT6H"}}}
- ...}
-----
 JSON::
 +
 [source,json]
@@ -50,6 +38,32 @@ JSON::
   },
   ...
 }
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                               ...
+                               :checkpointer {:crux/module 'crux.checkpoint/->checkpointer
+                                              :store {:crux/module 'crux.s3.checkpoint/->cp-store
+                                                      :bucket "<bucket>"}
+                                              :approx-frequency (Duration/ofHours 6)}}}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                               ...
+                               :checkpointer {:crux/module crux.checkpoint/->checkpointer
+                                              :store {:crux/module crux.s3.checkpoint/->cp-store
+                                                      :bucket "<bucket>"}
+                                              :approx-frequency "PT6H"}}}
+ ...}
 ----
 ====
 

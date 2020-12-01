@@ -33,6 +33,24 @@ pom.xml::
 
 Replace the implementation of the document store with `+crux.azure.blobs/->document-store+`
 
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "crux/document-store": {
+    "crux/module": "crux.azure.blobs/->document-store",
+    "sas-token": "your-sas-token",
+    "storage-account": "your-storage-account",
+    "container": "your-container-name"
+  },
+}
+----
+
+Clojure::
++
 [source,clojure]
 ----
 {:crux/document-store {:crux/module 'crux.azure.blobs/->document-store
@@ -40,6 +58,17 @@ Replace the implementation of the document store with `+crux.azure.blobs/->docum
                        :storage-account "your-storage-account"
                        :container "your-container-name"}}
 ----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/document-store {:crux/module crux.azure.blobs/->document-store
+                       :sas-token "your-sas-token"
+                       :storage-account "your-storage-account"
+                       :container "your-container-name"}}
+----
+====
 
 You'll need to create a `Storage Account`, then a `Container` for storing the documents.
 

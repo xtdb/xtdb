@@ -50,12 +50,22 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                                :db-dir (io/file "/tmp/rocksdb")}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                               :db-dir "/tmp/rocksdb"}}
  :crux/document-store {...}
  :crux/tx-log {...}}
 ----
@@ -100,12 +110,22 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                                :metrics {:crux/module 'crux.rocksdb.metrics/->metrics}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                               :metrics {:crux/module crux.rocksdb.metrics/->metrics}}
  :crux/document-store {...}
  :crux/tx-log {...}}
 ----

@@ -64,7 +64,15 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{...
+ :crux.calcite/server {:port 1501}}
+----
+
+EDN::
 +
 [source,clojure]
 ----

@@ -52,12 +52,22 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/index-store {:kv-store {:crux/module 'crux.lmdb/->kv-store
                                :db-dir (io/file "/tmp/lmdb")}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module crux.lmdb/->kv-store
+                               :db-dir "/tmp/lmdb"}}
  :crux/document-store {...}
  :crux/tx-log {...}}
 ----

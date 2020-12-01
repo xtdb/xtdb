@@ -47,7 +47,15 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{...
+ :crux.lucene/lucene-store {:db-dir "lucene-dir"}}
+----
+
+EDN::
 +
 [source,clojure]
 ----

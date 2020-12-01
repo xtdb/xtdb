@@ -100,7 +100,14 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.http-server/server {:port 3000}}
+----
+
+EDN::
 +
 [source,clojure]
 ----
@@ -141,11 +148,20 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/document-store {:crux/module 'crux.s3/->document-store
+                       :bucket "my-bucket"
+                       :prefix "my-prefix"}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/document-store {:crux/module crux.s3/->document-store
                        :bucket "my-bucket"
                        :prefix "my-prefix"}}
 ----
@@ -193,12 +209,22 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                           :db-dir (io/file "/tmp/txs")}}
+ :crux/document-store {...}
+ :crux/index-store {...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store
+                          :db-dir "/tmp/txs"}}
  :crux/document-store {...}
  :crux/index-store {...}}
 ----
@@ -283,12 +309,23 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:my-rocksdb {:crux/module 'crux.rocksdb/->kv-store
               :db-dir (io/file "/tmp/rocksdb")}
+ :crux/tx-log {:kv-store :my-rocksdb}
+ :crux/document-store {:kv-store :my-rocksdb}}
+----
+
+
+EDN::
++
+[source,clojure]
+----
+{:my-rocksdb {:crux/module crux.rocksdb/->kv-store
+              :db-dir "/tmp/rocksdb"}
  :crux/tx-log {:kv-store :my-rocksdb}
  :crux/document-store {:kv-store :my-rocksdb}}
 ----

@@ -40,7 +40,15 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.http-server/server {:port 3000
+                           ...}
+----
+
+EDN::
 +
 [source,clojure]
 ----
