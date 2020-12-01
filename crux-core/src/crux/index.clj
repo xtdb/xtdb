@@ -182,6 +182,9 @@
       (mem/compare-buffers (.deref ^IDeref x)
                            (.deref ^IDeref y)))))
 
+(def ^:private init-state ::init)
+(def ^:private next-state ::next)
+
 (deftype UnaryJoinVirtualIndex [^objects indexes
                                 ^:unsynchronized-mutable ^long index
                                 ^:unsynchronized-mutable state]
@@ -197,14 +200,14 @@
       (do (doto indexes
             (Arrays/sort unary-join-iterator-state-comparator))
           (set! index 0)
-          (set! state ::init)
+          (set! state init-state)
           (db/next-values this))
       (set! state nil)))
 
   (next-values [this]
-    (when (and state (not= ::init state))
+    (when (and state (not (identical? init-state state)))
       (let [idx (aget indexes index)]
-        (if (if (= ::next state)
+        (if (if (identical? next-state state)
               (db/next-values idx)
               (db/seek-values idx state))
           (let [index (inc index)
@@ -221,7 +224,7 @@
             max-k (.deref ^DerefIndex (aget indexes max-index))
             match? (mem/buffers=? (.deref idx) max-k)]
         (set! state (if match?
-                      ::next
+                      next-state
                       max-k))
         (if match?
           max-k
