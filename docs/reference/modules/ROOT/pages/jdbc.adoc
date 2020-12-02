@@ -77,12 +77,24 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/tx-log {:crux/module 'crux.jdbc/->tx-log
                :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+                                 :pool-opts { ... }
+                                 :db-spec { ... }}
+               :poll-sleep-duration (Duration/ofSeconds 1)}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/tx-log {:crux/module crux.jdbc/->tx-log
+               :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
                                  :pool-opts { ... }
                                  :db-spec { ... }}
                :poll-sleep-duration "PT1S"}
@@ -116,12 +128,23 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux/document-store {:crux/module 'crux.jdbc/->document-store
                        :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+                                         :pool-opts { ... }
+                                         :db-spec { ... }}}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/document-store {:crux/module crux.jdbc/->document-store
+                       :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
                                          :pool-opts { ... }
                                          :db-spec { ... }}}
  ...}
@@ -162,7 +185,7 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
@@ -172,6 +195,20 @@ Clojure/EDN::
  :crux/tx-log {:crux/module 'crux.jdbc/->tx-log
                :connection-pool :crux.jdbc/connection-pool}
  :crux/document-store {:crux/module 'crux.jdbc/->document-store
+                       :connection-pool :crux.jdbc/connection-pool}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.jdbc/connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
+                             :pool-opts { ... }
+                             :db-spec { ... }}
+ :crux/tx-log {:crux/module crux.jdbc/->tx-log
+               :connection-pool :crux.jdbc/connection-pool}
+ :crux/document-store {:crux/module crux.jdbc/->document-store
                        :connection-pool :crux.jdbc/connection-pool}
  ...}
 ----

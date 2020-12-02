@@ -46,11 +46,20 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----
 {:crux.document-store {:crux/module 'crux.s3/->document-store
+                       :bucket "your-bucket"
+                       ...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.document-store {:crux/module crux.s3/->document-store
                        :bucket "your-bucket"
                        ...}}
 ----
@@ -89,7 +98,7 @@ By default, we get credentials through the usual AWS credentials provider, and s
 
 [tabs]
 ====
-Clojure/EDN::
+Clojure::
 +
 [source,clojure]
 ----

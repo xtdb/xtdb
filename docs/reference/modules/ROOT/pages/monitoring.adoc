@@ -47,6 +47,21 @@ JSON::
   "crux.metrics/metrics": { ... },
 }
 ----
+
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics/metrics { ... }}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.metrics/metrics { ... }}
+----
+
 ====
 
 You can omit this if you're happy with its default parameters.
@@ -92,7 +107,14 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics.prometheus/reporter { ... }}
+----
+
+EDN::
 +
 [source,clojure]
 ----
@@ -142,7 +164,14 @@ JSON::
 ----
 
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics.prometheus/http-exporter { ... }}
+----
+
+EDN::
 +
 [source,clojure]
 ----
@@ -187,7 +216,14 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics.cloudwatch/reporter { ... }}
+----
+
+EDN::
 +
 [source,clojure]
 ----
@@ -234,7 +270,14 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics.jmx/reporter { ... }}
+----
+
+EDN::
 +
 [source,clojure]
 ----
@@ -269,7 +312,14 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics.console/reporter { ... }}
+----
+
+EDN::
 +
 [source,clojure]
 ----
@@ -304,7 +354,14 @@ JSON::
 }
 ----
 
-Clojure/EDN::
+Clojure::
++
+[source,clojure]
+----
+{:crux.metrics.csv/reporter { ... }}
+----
+
+EDN::
 +
 [source,clojure]
 ----
