@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
+            [clojure.java.io :as io]
             [com.stuartsierra.dependency :as dep]
             [crux.cache :as cache]
             [crux.codec :as c]
@@ -1917,6 +1918,9 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
+(def default-allow-list (->> (slurp (io/resource "query-allowlist.edn"))
+                             (read-string)))
+
 (s/def ::fn-allow-list
   (s/and
    (s/coll-of (s/or :sym symbol? :str string?))
@@ -1928,7 +1932,7 @@
                        (if (qualified-symbol? pred-symbol)
                          (update allow-map :allowed-fns conj pred-symbol)
                          (update allow-map :allowed-ns conj pred-symbol))))
-                   {:allowed-ns #{} :allowed-fns #{}}
+                   {:allowed-ns #{} :allowed-fns default-allow-list}
                    fal)))))
 
 (defn ->query-engine {::sys/deps {:index-store :crux/index-store
