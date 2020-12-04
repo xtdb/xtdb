@@ -86,15 +86,15 @@
       (log/error t)
       (throw t))))
 
-(defn- evict! [indexer, node, eids]
+(defn- evict! [index-store, node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
+        attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
                             keys
                             (map #(vector (->hash-str %) %))
                             (into {}))]
-    (with-open [index-snapshot (db/open-index-snapshot indexer)
+    (with-open [index-snapshot (db/open-index-snapshot index-store)
                 index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
-      (let [qs (for [[a v] (db/exclusive-avs indexer eids)
+      (let [qs (for [[a v] (db/exclusive-avs index-store eids)
                      :let [a (attrs-id->attr (->hash-str a))
                            v (db/decode-value index-snapshot v)]
                      :when (not= :crux.db/id a)]

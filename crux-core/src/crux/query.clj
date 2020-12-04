@@ -698,10 +698,10 @@
            idx-id (gensym "in")
            join {:id idx-id
                  :idx-fn
-                 (fn [_ index-store _]
+                 (fn [_ index-snapshot _]
                    (idx/new-relation-virtual-index []
                                                    (count bind-vars)
-                                                   (partial db/encode-value index-store)))}]
+                                                   (partial db/encode-value index-snapshot)))}]
        [(conj acc idx-id)
         (->> bind-vars
              (reduce
