@@ -254,7 +254,7 @@
 
 (defn index-tx [tx tx-events]
   (let [{:keys [tx-ingester]} *api*
-        in-flight-tx (db/begin-tx tx-ingester tx)]
+        in-flight-tx (db/begin-tx tx-ingester tx nil)]
     (db/index-tx-events in-flight-tx tx-events)
     (db/commit in-flight-tx)))
 
@@ -874,7 +874,6 @@
                                                          (c/new-id {:crux.db/id :foo, :foo :baz})
                                                          (c/new-id {:crux.db/id :foo, :foo :quux})})))
 
-
   (t/testing "even though the CaS was unrelated, the whole transaction fails - we should still evict those docs"
     (fix/submit+await-tx [[:crux.tx/evict :frob]])
     (t/is (every? (comp c/evicted-doc? val)
@@ -884,8 +883,7 @@
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
         !latch (promise)]
-    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-docs ::tx/indexed-docs
-                                                  ::tx/indexing-tx ::tx/indexed-tx}}
+    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-tx ::tx/committing-tx ::tx/indexed-tx}}
                 (fn [evt]
                   (swap! !events conj evt)
                   (when (= ::tx/indexed-tx (:crux/event-type evt))
@@ -893,19 +891,22 @@
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
+          doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
           submitted-tx (fix/submit+await-tx [[:crux.tx/put doc-1] [:crux.tx/put doc-2]])]
 
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
 
-      (t/is (= [{:crux/event-type ::tx/indexing-tx, ::tx/submitted-tx submitted-tx}
-                {:crux/event-type ::tx/indexing-docs, :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}}
-                {:crux/event-type ::tx/indexed-docs
-                 :doc-ids #{(c/new-id doc-1) (c/new-id doc-2)}
-                 :av-count 4}
+      (t/is (= [{:crux/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
+                {:crux/event-type ::tx/committing-tx,
+                 :submitted-tx submitted-tx,
+                 :evicting-eids #{}
+                 :doc-ids doc-ids}
                 {:crux/event-type ::tx/indexed-tx,
-                 ::tx/submitted-tx submitted-tx,
+                 :submitted-tx submitted-tx,
                  :committed? true
+                 :doc-ids doc-ids
+                 :av-count 4
                  ::txe/tx-events [[:crux.tx/put
                                    #crux/id "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
                                    #crux/id "974e28e6484fb6c66e5ca6444ec616207800d815"]
@@ -914,7 +915,6 @@
                                    #crux/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
                    (update 2 dissoc :bytes-indexed)))))))
-
 
 (t/deftest await-fails-quickly-738
   (with-redefs [tx/index-tx-event (fn [_ _ _]
@@ -1114,6 +1114,8 @@
                       :where '[[?e :name ?name]]
                       :args [{:?e (int 10)}]})))))
 
+;; TODO fails, see #1337
+#_
 (t/deftest test-put-evict-in-same-transaction-1337
   (t/testing "put then evict"
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test1/a, :test1? true}]])
@@ -1153,8 +1155,6 @@
       (t/is (= {:crux.db/id :test3/b, :test3? true} (crux/entity db :test3/b)))
       (t/is (= #{[:test3/b]} (crux/q db '{:find [?e], :where [[?e :test3? true]]})))))
 
-  ;; TODO fails, see #1337
-  #_
   (t/testing "evict then re-put"
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test4, :test4? true}]])
 

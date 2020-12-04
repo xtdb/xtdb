@@ -70,8 +70,8 @@
   ([api entities]
    (transact! api entities (Date.)))
   ([^ICruxAPI api entities ts]
-   (doto (crux/submit-tx api (maps->tx-ops entities ts))
-     (->> (crux/await-tx api)))
+   (let [tx (crux/submit-tx api (maps->tx-ops entities ts))]
+     (crux/await-tx api tx))
    entities))
 
 (defn random-person []

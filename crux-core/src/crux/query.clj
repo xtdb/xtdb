@@ -1847,10 +1847,7 @@
                   :crux.tx/tx-id tx-id}})
 
   (withTx [this tx-ops]
-    (let [tx (merge {:fork-at {::db/valid-time valid-time
-                               ::tx/tx-time tx-time
-                               ::tx/tx-id tx-id}
-                     ::db/valid-time valid-time}
+    (let [tx (merge {::db/valid-time valid-time}
                     (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
@@ -1858,7 +1855,9 @@
                       {::tx/tx-time (Date.)
                        ::tx/tx-id 0}))
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
-          in-flight-tx (db/begin-tx tx-ingester tx)]
+          in-flight-tx (db/begin-tx tx-ingester tx {::db/valid-time valid-time
+                                                    ::tx/tx-time tx-time
+                                                    ::tx/tx-id tx-id})]
 
       (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
