@@ -1267,7 +1267,7 @@
                (when fn-allow-list
                  (when-not (or (contains? allowed-fns (symbol pred-var))
                                (contains? allowed-ns (-> pred-var (meta) ^clojure.lang.Namespace (:ns) (.getName))))
-                   (throw (err/illegal-arg :fn-not-allowed {::err/message "Query used a function that was not in the allowlist"}))))
+                   (throw (err/illegal-arg :fn-not-allowed {::err/message (str "Query used a function that was not in the allowlist: " (symbol pred-var))}))))
                (update-in sub-clause [1 :pred :pred-fn] var-get))
              sub-clause)))
        (into [])))
