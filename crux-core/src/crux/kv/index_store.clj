@@ -710,7 +710,11 @@
   (open-nested-index-snapshot [this]
     (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache cav-cache canonical-buffer-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
-      nested-index-snapshot)))
+      nested-index-snapshot))
+
+  db/IndexMeta
+  (-read-index-meta [_ k not-found]
+    (read-meta-snapshot snapshot k not-found)))
 
 ;;;; IndexStore
 
@@ -853,18 +857,16 @@
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
 
-  (read-index-meta [this k]
-    (db/read-index-meta this k nil))
-
-  (read-index-meta [this k not-found]
-    (read-meta kv-store k not-found))
-
   (latest-completed-tx [this]
     (latest-completed-tx kv-store))
 
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
+
+  db/IndexMeta
+  (-read-index-meta [this k not-found]
+    (read-meta kv-store k not-found))
 
   (open-index-snapshot [this]
     (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) cav-cache canonical-buffer-cache true))
