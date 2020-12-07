@@ -135,3 +135,55 @@ EDN::
 
 * `instance-name` (string, default `"rocksdb"`): unique name for this instance of RocksDB, used in metrics domains
 * `sample-window` (duration, default 3s): sample window of statistics collector
+
+[#blocks-cache]
+== Configuring the Block Cache
+
+To configure the block cache used by the RocksDB instance, override the `block-cache` dependency:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "crux/index-store": {
+    "kv-store": {
+      "crux/module": "crux.rocksdb/->kv-store",
+      "block-cache": {
+	"cache-size":64000000
+      }
+      ...
+    }
+  },
+
+  "crux/document-store": { ... },
+  "crux/tx-log": { ... }
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                               :block-cache {:cache-size 64000000}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                               :block-cache {:cache-size 64000000}}
+ :crux/document-store {...}
+ :crux/tx-log {...}}
+----
+====
+
+=== Parameters
+
+* `cache-size` (int, default `8*1024*1024`): Size of the cache in bytes.
