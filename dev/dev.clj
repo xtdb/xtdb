@@ -49,9 +49,17 @@
   (.close node))
 
 (def standalone-config
-  {::crux {:node-opts {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "indexes")}}
-                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "documents")}}
-                       :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file dev-node-dir "tx-log")}}
+  {::crux {:node-opts {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                     :db-dir (io/file dev-node-dir "indexes"),
+                                                     :block-cache :crux.rocksdb/block-cache}}
+                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                        :db-dir (io/file dev-node-dir "documents")
+                                                        :block-cache :crux.rocksdb/block-cache}}
+                       :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
+                                                :db-dir (io/file dev-node-dir "tx-log")
+                                                :block-cache :crux.rocksdb/block-cache}}
+                       :crux.rocksdb/block-cache {:crux/module `rocks/->lru-block-cache
+                                                  :cache-size (* 128 1024 1024)}
                        :crux.metrics.jmx/reporter {}
                        :crux.http-server/server {}
                        :crux.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
