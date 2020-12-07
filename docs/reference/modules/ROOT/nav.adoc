@@ -1,6 +1,8 @@
 .Reference
 * xref:installation.adoc[Installation]
-* xref:configuration.adoc[Configuration]
+* Configuration
+** xref:configuration.adoc[Introduction]
+** xref:query-configuration.adoc[Query Engine]
 * xref:transactions.adoc[Transactions]
 * xref:queries.adoc[Queries]
 * Core API
