@@ -151,7 +151,7 @@
 
 ;; Utils
 
-(def ^:private chunk-size 8)
+(def ^:const ^:private chunk-size 8)
 
 (defn idx->seq
   [idx]
