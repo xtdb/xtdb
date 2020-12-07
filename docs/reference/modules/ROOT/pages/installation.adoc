@@ -55,6 +55,14 @@ include::example$src/docs/Install.java[tags=imports]
 
 include::example$src/docs/Install.java[tags=main,indent=0]
 ----
+
+Kotlin::
++
+[source,kotlin]
+----
+include::example$src/docs/Install.kt[tags=imports]
+
+include::example$src/docs/Install.kt[tags=main,indent=0]
 ====
 
 
