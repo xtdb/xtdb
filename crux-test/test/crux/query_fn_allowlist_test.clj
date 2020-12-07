@@ -107,3 +107,28 @@
                  :in [[age ...]]
                  :where [[(crux.query-fn-allowlist-test/multiple-of-seven? age)]]}
                [21 22]))))))))
+
+(t/deftest test-allowlist-strings
+  (let [with-fixtures (t/join-fixtures
+                       [(fix/with-opts {:crux/query-engine {:fn-allow-list ["crux.query-fn-allowlist-test/multiple-of-seven?"]}})
+                        fix/with-node])]
+    (with-fixtures
+      (fn []
+        (t/is
+         (= #{[21]}
+            (api/q
+             (api/db *api*)
+             '{:find [age]
+               :in [[age ...]]
+               :where [[(crux.query-fn-allowlist-test/multiple-of-seven? age)]]}
+             [21 22])))
+        (t/is
+         (thrown-with-msg?
+          IllegalArgumentException
+          #"Query used a function that was not in the allowlist"
+          (api/q
+           (api/db *api*)
+           '{:find [age]
+             :in [[age ...]]
+             :where [[(crux.query-fn-allowlist-test/multiple-of-three? age)]]}
+           [21 22])))))))
