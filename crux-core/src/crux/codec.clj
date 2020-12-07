@@ -62,7 +62,7 @@
 (def ^:const ^:private max-value-index-length 224)
 
 (def ^:const ^:private string-terminate-mark-size Byte/BYTES)
-(def ^:const ^:private string-terminate-mark (byte 1))
+(def ^:const ^:private string-terminate-mark 1)
 
 (defprotocol IdOrBuffer
   (new-id ^crux.codec.Id [id])
