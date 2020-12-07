@@ -14,7 +14,7 @@
            java.nio.ByteBuffer
            (java.nio.file Files Path)
            java.nio.file.attribute.FileAttribute
-           (org.rocksdb Checkpoint CompressionType FlushOptions LRUCache
+           (org.rocksdb BlockBasedTableConfig Checkpoint CompressionType FlushOptions LRUCache
                         Options ReadOptions RocksDB RocksIterator
                         WriteBatch WriteOptions Statistics StatsLevel)))
 
@@ -119,8 +119,15 @@
 
 (def ^:private cp-format {:index-version c/index-version, ::version "6"})
 
+(defn ->lru-block-cache {::sys/args {:cache-size {:doc "Cache size"
+                                                  :default (* 8 1024 1024)
+                                                  :spec ::sys/nat-int}}}
+  [{:keys [cache-size]}]
+  (LRUCache. cache-size))
+
 (defn ->kv-store {::sys/deps {:metrics (fn [_])
-                              :checkpointer (fn [_])}
+                              :checkpointer (fn [_])
+                              :block-cache `->lru-block-cache}
                   ::sys/args {:db-dir {:doc "Directory to store K/V files"
                                        :required? true
                                        :spec ::sys/path}
@@ -132,7 +139,7 @@
                               :disable-wal? {:doc "Disable Write Ahead Log"
                                              :default false
                                              :spec ::sys/boolean}}}
-  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer db-options] :as options}]
+  [{:keys [^Path db-dir sync? disable-wal? metrics checkpointer ^Options db-options block-cache] :as options}]
 
   (RocksDB/loadLibrary)
 
@@ -145,6 +152,9 @@
                (.setCompressionType CompressionType/LZ4_COMPRESSION)
                (.setBottommostCompressionType CompressionType/ZSTD_COMPRESSION)
                (.setCreateIfMissing true))
+        opts (cond-> opts
+               (and block-cache (nil? (.tableFormatConfig opts))) (.setTableFormatConfig (doto (BlockBasedTableConfig.)
+                                                                                           (.setBlockCache block-cache))))
 
         db (try
              (RocksDB/open opts (-> (Files/createDirectories db-dir (make-array FileAttribute 0))
