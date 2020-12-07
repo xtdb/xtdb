@@ -139,7 +139,8 @@ EDN::
 [#blocks-cache]
 == Configuring the Block Cache
 
-To configure the block cache used by the RocksDB instance, override the `block-cache` dependency:
+To configure the https://github.com/facebook/rocksdb/wiki/Block-Cache[block cache] used by the RocksDB instance, override the `block-cache` dependency.
+In the example below, there is a single shared cache between multiple `kv-stores`:
 
 [tabs]
 ====
@@ -148,18 +149,29 @@ JSON::
 [source,json]
 ----
 {
+  "crux.rocksdb/block-cache": {
+    "crux/module": "crux.rocksdb/>lru-block-cache",
+    "cache-size":536870912
+  },
   "crux/index-store": {
     "kv-store": {
       "crux/module": "crux.rocksdb/->kv-store",
-      "block-cache": {
-	"cache-size":64000000
-      }
+      "block-cache": "crux.rocksdb/block-cache"
       ...
     }
   },
-
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "crux/document-store": {
+    "kv-store": {
+      "crux/module": "crux.rocksdb/->kv-store",
+      "block-cache": "crux.rocksdb/block-cache"
+    }
+  },
+  "crux/tx-log": {
+    "kv-store": {
+      "crux/module": "crux.rocksdb/->kv-store",
+      "block-cache": "crux.rocksdb/block-cache"
+    }
+  }
 }
 ----
 
@@ -167,23 +179,31 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               :block-cache {:cache-size 64000000}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:crux.rocksdb/block-cache {:crux/module 'crux.rocksdb/->lru-block-cache
+			    :cache-size (* 512 1024 1024)}
+ :crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                               :block-cache :crux.rocksdb/block-cache}}
+ :crux/document-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                                  :block-cache :crux.rocksdb/block-cache}}
+ :crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                          :block-cache :crux.rocksdb/block-cache}}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               :block-cache {:cache-size 64000000}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:crux.rocksdb/block-cache {:crux/module crux.rocksdb/->lru-block-cache
+			    :cache-size 536870912}
+ :crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                               :block-cache :crux.rocksdb/block-cache}}
+ :crux/document-store {:kv-store {:crux/module crux.rocksdb/->kv-store
+                                  :block-cache :crux.rocksdb/block-cache}}
+ :crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store
+                          :block-cache :crux.rocksdb/block-cache}}}
 ----
 ====
 
 === Parameters
 
-* `cache-size` (int, default `8*1024*1024`): Size of the cache in bytes.
+* `cache-size` (int): Size of the cache in bytes - default size is 8Mb, although it is https://github.com/facebook/rocksdb/wiki/Setup-Options-and-Basic-Tuning#block-cache-size[recommended] this is set to a higher amount.
