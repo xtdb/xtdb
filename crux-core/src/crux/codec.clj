@@ -15,6 +15,7 @@
            java.nio.charset.StandardCharsets
            [java.time LocalDate LocalTime LocalDateTime Instant Duration]
            [java.util Base64 Date Map Set UUID]
+           java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
@@ -334,8 +335,14 @@
        (.putByte 0 nil-value-type-id))
      value-type-id-size)))
 
+(def ^:private ^ThreadLocal value-buffer-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (ExpandableDirectByteBuffer. 32)))))
+
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
-  (value->buffer x (ExpandableDirectByteBuffer. 32)))
+  (mem/copy-to-unpooled-buffer (value->buffer x (.get value-buffer-tl))))
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/limit-buffer buffer value-type-id-size))
