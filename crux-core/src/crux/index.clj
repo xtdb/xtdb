@@ -333,22 +333,22 @@
   (->SortedVirtualIndex s nil))
 
 (definterface IRelationVirtualIndexUpdate
-  (^void updateIndex [tree indexes]))
+  (^void updateIndex [tree rootIndex]))
 
-(deftype RelationVirtualIndex [max-depth
+(deftype RelationVirtualIndex [^long max-depth
                                encode-value-fn
                                ^:unsynchronized-mutable tree
                                ^:unsynchronized-mutable path
-                               ^:unsynchronized-mutable ^List indexes
+                               ^:unsynchronized-mutable ^objects indexes
                                ^:unsynchronized-mutable key]
   db/Index
   (seek-values [this k]
-    (when-let [k (db/seek-values (.get indexes (dec (.size indexes))) (or k mem/empty-buffer))]
+    (when-let [k (db/seek-values (aget indexes (count path)) (or k mem/empty-buffer))]
       (set! key k)
       k))
 
   (next-values [this]
-    (when-let [k (db/next-values (.get indexes (dec (.size indexes))))]
+    (when-let [k (db/next-values (aget indexes (count path)))]
       (set! key k)
       k))
 
@@ -359,10 +359,10 @@
     (let [new-path (conj path key)
           level (count new-path)]
       (set! path new-path)
-      (set! indexes (conj indexes
-                          (some->  ^NavigableMap (get-in tree new-path)
-                                   (.navigableKeySet)
-                                   (new-sorted-virtual-index))))
+      (when-let [idx (some-> ^NavigableMap (get-in tree new-path)
+                             (.navigableKeySet)
+                             (new-sorted-virtual-index))]
+        (aset indexes level idx))
       (set! key nil))
     nil)
 
@@ -370,7 +370,6 @@
     (when (zero? (count path))
       (throw (IllegalStateException. "Cannot close level at root.")))
     (set! path (pop path))
-    (set! indexes (pop indexes))
     (set! key nil)
     nil)
 
@@ -378,10 +377,10 @@
     max-depth)
 
   IRelationVirtualIndexUpdate
-  (updateIndex [_ new-tree new-indexes]
+  (updateIndex [_ new-tree root-index]
     (set! tree new-tree)
     (set! path [])
-    (set! indexes new-indexes)
+    (aset indexes 0 root-index)
     (set! key nil)))
 
 (defn- tree-map-put-in [^TreeMap m [k & ks] v]
@@ -405,19 +404,22 @@
                    (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
-         root-level (if single-values?
-                      (new-sorted-virtual-index (if (instance? NavigableSet tuples)
-                                                  tuples
-                                                  (doto (TreeSet. mem/buffer-comparator)
-                                                    (.addAll (mapv encode-value-fn tuples)))))
-                      (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
-     (.updateIndex relation tree [root-level])
+         root-idx (if single-values?
+                    (new-sorted-virtual-index (if (instance? NavigableSet tuples)
+                                                tuples
+                                                (doto (TreeSet. mem/buffer-comparator)
+                                                  (.addAll (mapv encode-value-fn tuples)))))
+                    (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
+     (.updateIndex relation tree root-idx)
      relation)))
 
 (defn new-relation-virtual-index [tuples max-depth encode-value-fn]
   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
                                                           encode-value-fn
-                                                          nil nil nil nil)
+                                                          nil
+                                                          nil
+                                                          (object-array (long max-depth))
+                                                          nil)
                                   tuples))
 
 (deftype SingletonVirtualIndex [v]
