@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
             [crux.memory :as mem])
-  (:import [clojure.lang Box IDeref]
+  (:import [clojure.lang Box IDeref IPersistentVector PersistentVector]
            java.util.function.Function
            [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
@@ -297,26 +297,27 @@
 (defn layered-idx->seq [idx]
   (when idx
     (let [max-depth (long (db/max-depth idx))
-          step (fn step [max-ks ^long depth needs-seek?]
+          step (fn step [^IPersistentVector max-ks ^long depth needs-seek?]
                  (when (Thread/interrupted)
                    (throw (InterruptedException.)))
                  (if (= depth (dec max-depth))
-                   (concat (for [v (idx->seq idx)]
-                             (conj max-ks v))
-                           (when (pos? depth)
-                             (lazy-seq
-                              (db/close-level idx)
-                              (step (pop max-ks) (dec depth) false))))
+                   (concat
+                    (for [v (idx->seq idx)]
+                      (.assocN max-ks depth v))
+                    (when (pos? depth)
+                      (lazy-seq
+                       (db/close-level idx)
+                       (step max-ks (dec depth) false))))
                    (if-let [v (if needs-seek?
                                 (db/seek-values idx nil)
                                 (db/next-values idx))]
                      (do (db/open-level idx)
-                         (recur (conj max-ks v) (inc depth) true))
+                         (recur (.assocN max-ks depth v) (inc depth) true))
                      (when (pos? depth)
                        (db/close-level idx)
-                       (recur (pop max-ks) (dec depth) false)))))]
+                       (recur max-ks (dec depth) false)))))]
       (when (pos? max-depth)
-        (step [] 0 true)))))
+        (step (PersistentVector/adopt (object-array max-depth)) 0 true)))))
 
 (deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
@@ -338,16 +339,16 @@
                                encode-value-fn
                                ^:unsynchronized-mutable tree
                                ^:unsynchronized-mutable path
-                               ^:unsynchronized-mutable indexes
+                               ^:unsynchronized-mutable ^List indexes
                                ^:unsynchronized-mutable key]
   db/Index
   (seek-values [this k]
-    (when-let [k (db/seek-values (last indexes) (or k mem/empty-buffer))]
+    (when-let [k (db/seek-values (.get indexes (dec (.size indexes))) (or k mem/empty-buffer))]
       (set! key k)
       k))
 
   (next-values [this]
-    (when-let [k (db/next-values (last indexes))]
+    (when-let [k (db/next-values (.get indexes (dec (.size indexes))))]
       (set! key k)
       k))
 
