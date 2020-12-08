@@ -7,7 +7,7 @@ import crux.api.Crux
 // tag::main[]
 fun main() {
     Crux.startNode().use {
-        it.submitTx()
+        // ...
     }
 }
 // end::main[]

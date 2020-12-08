@@ -28,6 +28,24 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 });
 ----
 --
+Kotlin::
++
+--
+For a Kotlin in-process node, the modules are configured using the supplied Configurator, a file, or a classpath resource:
+
+[source,kotlin]
+----
+import crux.api.Crux
+
+val cruxNode = Crux.startNode(File(...))
+
+val cruxNode = Crux.startNode(MyApp::class.java.getResource(...))
+
+val cruxNode = Crux.startNode { n ->
+    // ...
+}
+----
+--
 Clojure::
 +
 --
@@ -89,6 +107,17 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
 });
 ----
 
+Kotlin::
++
+[source,kotlin]
+----
+val cruxNode = Crux.startNode { n ->
+    n.with("crux.http-server/server") { http ->
+        http["port"] = 3000
+    }
+}
+----
+
 JSON::
 +
 [source,json]
@@ -133,6 +162,19 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
      docStore.set("prefix", "my-prefix");
    });
 });
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+val cruxNode = Crux.startNode { n ->
+    n.with("crux/document-store") { docStore ->
+        docStore.module("crux.s3/->document-store")
+        docStore["bucket"] = "my-bucket"
+        docStore["prefix"] = "my-prefix"
+    }
+}
 ----
 
 JSON::
@@ -190,6 +232,22 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
   n.with("crux/document-store", docStore -> { ... });
   n.with("crux/index-store", indexStore -> { ... });
 });
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+val cruxNode = Crux.startNode{ n ->
+    n.with("crux/tx-log") { txLog ->
+        txLog.with("kv-store") { kv ->
+            kv.module("crux.rocksdb/->kv-store")
+            kv["db-dir"] = File("/tmp/rocksdb")
+        }
+    }
+    n.with("crux/document-store") { docStore -> ... }
+    n.with("crux/index-store") { indexStore -> ... }
+}
 ----
 
 JSON::
@@ -289,6 +347,24 @@ ICruxAPI cruxNode = Crux.startNode(n -> {
      txLog.with("kv-store", "my-rocksdb");
    });
 });
+----
+
+Kotlin::
++
+[source,kotlin]
+----
+val cruxNode = Crux.startNode { n ->
+    n.with("my-rocksdb") { rocks ->
+        rocks.module("crux.rocksdb/->kv-store")
+        rocks["db-dir"] = File("/tmp/rocksdb")
+    }
+    n.with("crux/document-store") { docStore ->
+        docStore["kv-store"] = "my-rocksdb"
+    }
+    n.with("crux/tx-log") { txLog ->
+        txLog["kv-store"] = "my-rocksdb"
+    }
+}
 ----
 
 JSON::
