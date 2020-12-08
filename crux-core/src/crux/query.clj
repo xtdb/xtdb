@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
+            [clojure.java.io :as io]
             [com.stuartsierra.dependency :as dep]
             [crux.cache :as cache]
             [crux.codec :as c]
@@ -59,12 +60,11 @@
                         (complement built-ins)
                         (s/conformer #(or (if (pred-constraint? %)
                                             %
-                                            (some->> (if (qualified-symbol? %)
-                                                       (requiring-resolve %)
-                                                       (ns-resolve 'clojure.core %))
-                                                     (var-get)))
+                                            (if (qualified-symbol? %)
+                                              (requiring-resolve %)
+                                              (ns-resolve 'clojure.core %)))
                                           %))
-                        (some-fn fn? logic-var?)))
+                        (some-fn var? logic-var?)))
 (s/def ::binding (s/or :scalar logic-var?
                        :tuple ::args-list
                        :collection (s/tuple logic-var? '#{...})
@@ -1259,6 +1259,19 @@
            [sub-clause]))
        (reduce into [])))
 
+(defn- build-pred-fns [clauses {:keys [allowed-ns allowed-fns] :as fn-allow-list}]
+  (->> (for [[type clause :as sub-clause] clauses]
+         (let [pred-var (get-in clause [:pred :pred-fn])]
+           (if (and (= :pred type) (var? pred-var))
+             (do
+               (when fn-allow-list
+                 (when-not (or (contains? allowed-fns (symbol pred-var))
+                               (contains? allowed-ns (-> pred-var (meta) ^clojure.lang.Namespace (:ns) (.getName))))
+                   (throw (err/illegal-arg :fn-not-allowed {::err/message (str "Query used a function that was not in the allowlist: " (symbol pred-var))}))))
+               (update-in sub-clause [1 :pred :pred-fn] var-get))
+             sub-clause)))
+       (into [])))
+
 ;; NOTE: this isn't exact, used to detect vars that can be bound
 ;; before an or sub query. Is there a better way to incrementally
 ;; build up the join order? Done until no new vars are found to catch
@@ -1343,9 +1356,10 @@
 
 (def ^:private ^:dynamic *broken-cycles* #{})
 
-(defn- compile-sub-query [encode-value-fn where in rule-name->rules stats]
+(defn- compile-sub-query [encode-value-fn fn-allow-list where in rule-name->rules stats]
   (try
-    (let [where (expand-rules where rule-name->rules {})
+    (let [where (-> (expand-rules where rule-name->rules {})
+                    (build-pred-fns fn-allow-list))
           in-vars (set (find-binding-vars (:bindings in)))
           [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars stats)
           {triple-clauses :triple
@@ -1435,7 +1449,7 @@
         (if (and (= ::dep/circular-dependency reason)
                  (not (contains? *broken-cycles* cycle)))
           (binding [*broken-cycles* (conj *broken-cycles* cycle)]
-            (compile-sub-query encode-value-fn (break-cycle where cycle) in rule-name->rules stats))
+            (compile-sub-query encode-value-fn fn-allow-list (break-cycle where cycle) in rule-name->rules stats))
           (throw e))))))
 
 (defn- build-idx-id->idx [db index-snapshot {:keys [var->joins] :as compiled-query}]
@@ -1467,7 +1481,7 @@
                                                     logic-var+range-constraint)))))
     compiled-query))
 
-(defn- build-sub-query [index-snapshot {:keys [query-cache] :as db} where in in-args rule-name->rules stats]
+(defn- build-sub-query [index-snapshot {:keys [query-cache fn-allow-list] :as db} where in in-args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [encode-value-fn (partial db/encode-value index-snapshot)
@@ -1484,7 +1498,7 @@
                                   [where in rule-name->rules]
                                   identity
                                   (fn [_]
-                                    (compile-sub-query encode-value-fn where in rule-name->rules stats)))
+                                    (compile-sub-query encode-value-fn fn-allow-list where in rule-name->rules stats)))
                                  (add-logic-var-constraints))
         idx-id->idx (build-idx-id->idx db index-snapshot compiled-query)
         unary-join-indexes (for [v vars-in-join-order]
@@ -1646,7 +1660,7 @@
   (s/assert ::query q)
   (let [{:keys [where in rules]} (s/conform ::query q)
         [in in-args] (add-legacy-args q [])]
-    (compile-sub-query encode-value-fn where in (rule-name->rules rules) stats)))
+    (compile-sub-query encode-value-fn nil where in (rule-name->rules rules) stats)))
 
 (defn query [{:keys [index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
@@ -1732,7 +1746,8 @@
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache projection-cache
                             index-snapshot
-                            entity-resolver-fn]
+                            entity-resolver-fn
+                            fn-allow-list]
   Closeable
   (close [_]
     (when index-snapshot
@@ -1775,7 +1790,9 @@
     (let [index-snapshot (open-index-snapshot db)
           db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
-          db (assoc db :entity-resolver-fn entity-resolver-fn)
+          db (assoc db
+                    :entity-resolver-fn entity-resolver-fn
+                    :fn-allow-list fn-allow-list)
 
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
@@ -1901,6 +1918,23 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
+(def default-allow-list (->> (slurp (io/resource "query-allowlist.edn"))
+                             (read-string)))
+
+(s/def ::fn-allow-list
+  (s/and
+   (s/coll-of (s/or :sym symbol? :str string?))
+   (s/conformer (fn [fal]
+                  (reduce
+                   (fn [allow-map [type pred]]
+                     (let [pred-symbol (cond-> pred
+                                         (= :str type) symbol)]
+                       (if (qualified-symbol? pred-symbol)
+                         (update allow-map :allowed-fns conj pred-symbol)
+                         (update allow-map :allowed-ns conj pred-symbol))))
+                   {:allowed-ns #{} :allowed-fns default-allow-list}
+                   fal)))))
+
 (defn ->query-engine {::sys/deps {:index-store :crux/index-store
                                   :bus :crux/bus
                                   :document-store :crux/document-store
@@ -1919,6 +1953,9 @@
                                   :batch-size {:doc "Batch size of results"
                                                :default 100
                                                :required? true
-                                               :spec ::sys/pos-int}}}
+                                               :spec ::sys/pos-int}
+                                  :fn-allow-list {:doc "Predicate Allowlist"
+                                                  :default nil
+                                                  :spec ::fn-allow-list}}}
   [opts]
   (map->QueryEngine (assoc opts :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter")))))
