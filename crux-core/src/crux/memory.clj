@@ -8,7 +8,7 @@
            java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
-           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
@@ -56,22 +56,22 @@
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (let [chunk ^ByteBuffer (.get chunk-tl)
-        offset (.position chunk)]
+        offset (.position chunk)
+        new-aligned-offset (bit-and-not (+ offset size alignment-round-mask)
+                                        alignment-round-mask)]
     (cond
       (> size large-buffer-size)
       (allocate-unpooled-buffer size)
 
-      (> size (.remaining chunk))
+      (> new-aligned-offset (.capacity chunk))
       (let [chunk (allocate-pooled-buffer default-chunk-size)]
         (.set chunk-tl chunk)
         (recur size))
 
       :else
-      ;; TODO: This limit is safer if the byte buffer itself is used,
+      ;; TODO: This slice is safer if the byte buffer itself is used,
       ;; but slower.
-      (let [buffer (.limit (.slice chunk) size)
-            new-aligned-offset (bit-and (+ offset size alignment-round-mask)
-                                        (bit-not alignment-round-mask))]
+      (let [buffer (.slice (.limit (.duplicate chunk) (+ offset size)))]
         (.position chunk new-aligned-offset)
         (UnsafeBuffer. ^ByteBuffer buffer 0 size)))))
 
@@ -181,10 +181,15 @@
     (UnsafeBuffer. (->off-heap b tmp) 0 (capacity b))))
 
 (defn direct-byte-buffer ^java.nio.ByteBuffer [b]
-  (let [b (->off-heap b)]
+  (let [b (->off-heap b)
+        offset (- (.addressOffset b)
+                  (BufferUtil/address (.byteBuffer b)))]
     (-> (.byteBuffer b)
-        (.position 0)
-        (.limit (.capacity b)))))
+        (.duplicate)
+        (.clear)
+        (.position offset)
+        (.limit (+ offset (.capacity b)))
+        (.slice))))
 
 (defn on-heap-buffer ^org.agrona.DirectBuffer [^bytes b]
   (UnsafeBuffer. b))
