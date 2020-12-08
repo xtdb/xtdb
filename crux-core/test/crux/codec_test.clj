@@ -85,12 +85,17 @@
 (def ^:private byte-array-class
   (Class/forName "[B"))
 
+(defn- no-negative-zeros [vs]
+  ;; HACK filter out -0.0 because Java doesn't sort -0.0 ahead of 0.0, but Crux does
+  (remove (every-pred double? zero? #(not= 0 (Double/doubleToLongBits %))) vs))
+
 (tcct/defspec test-ordering-of-values 100
   (prop/for-all [values (gen/one-of (->> primitive-generators
                                          (remove (comp false? ::sortable? meta))
-                                         (map #(gen/vector % 10))))]
-                (let [values (shuffle values)
-                      value+buffer (for [v values]
+                                         (map (fn [gen]
+                                                (->> (gen/vector gen 10)
+                                                     (gen/fmap no-negative-zeros))))))]
+                (let [value+buffer (for [v values]
                                      [v (c/->value-buffer v)])]
 
                   (t/is (= (sort-by first value+buffer)
