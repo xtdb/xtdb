@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
             [crux.memory :as mem])
-  (:import [clojure.lang Box IDeref IPersistentVector PersistentVector]
+  (:import [clojure.lang Box IDeref IPersistentVector]
            java.util.function.Function
            [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
@@ -317,7 +317,7 @@
                        (db/close-level idx)
                        (recur max-ks (dec depth) false)))))]
       (when (pos? max-depth)
-        (step (PersistentVector/adopt (object-array max-depth)) 0 true)))))
+        (step (vec (repeat max-depth nil)) 0 true)))))
 
 (deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
