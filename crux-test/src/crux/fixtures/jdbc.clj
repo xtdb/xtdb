@@ -14,13 +14,13 @@
     f))
 
 (defn with-h2-opts [f]
-  (fix/with-tmp-dir "db-dir" [db-dir]
+  (fix/with-tmp-dirs #{db-dir}
     (with-jdbc-opts {:dialect 'crux.jdbc.h2/->dialect
                      :db-spec {:dbname (str (io/file db-dir "cruxtest"))}}
       f)))
 
 (defn with-sqlite-opts [f]
-  (fix/with-tmp-dir "db-dir" [db-dir]
+  (fix/with-tmp-dirs #{db-dir}
     (with-jdbc-opts {:dialect 'crux.jdbc.sqlite/->dialect
                      :db-spec  {:dbname (str (io/file db-dir "cruxtest"))}}
       f)))

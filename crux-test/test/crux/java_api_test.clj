@@ -55,7 +55,7 @@
                              (.set "db-dir" (io/file data-dir "docs"))))))))))))
 
 (t/deftest test-configure-rocks
-  (fix/with-tmp-dir "data" [data-dir]
+  (fix/with-tmp-dirs #{data-dir}
     (with-open [node (start-rocks-node data-dir)]
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:tx-log :kv-store]))
@@ -65,7 +65,7 @@
                (get-in node [:tx-log :kv-store :db-dir]))))))
 
 (t/deftest test-configure-rocks-ingest
-  (fix/with-tmp-dir "data" [data-dir]
+  (fix/with-tmp-dirs #{data-dir}
     (with-open [node (start-rocks-ingest-node data-dir)]
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:document-store :document-store :kv-store])))))))

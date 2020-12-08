@@ -2,10 +2,8 @@
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [crux.api :as crux]
-            [crux.io :as cio]
-            [clojure.test :as t])
+            [crux.io :as cio])
   (:import crux.api.ICruxAPI
-           java.io.File
            java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            [java.util ArrayList Date List UUID]))
@@ -21,9 +19,22 @@
       (finally
         (cio/delete-dir dir)))))
 
-(defmacro with-tmp-dir [prefix [dir-binding] & body]
-  `(with-tmp-dir* ~prefix (fn [~(-> dir-binding (with-meta {:type File}))]
-                            ~@body)))
+(defmacro ^:deprecated with-tmp-dir [prefix [dir-binding] & body]
+  `(with-tmp-dir* ~prefix
+     (fn [~(-> dir-binding (vary-meta assoc :tag 'java.io.File))]
+       ~@body)))
+
+(defmacro with-tmp-dirs
+  "Usage:
+    (with-tmp-dirs #{node-dir lucene-dir}
+      ...)"
+  [[dir-binding & more-bindings] & body]
+  (if dir-binding
+    `(with-tmp-dir* ~(name dir-binding)
+       (fn [~(vary-meta dir-binding assoc :tag 'java.io.File)]
+         (with-tmp-dirs #{~@more-bindings}
+           ~@body)))
+    `(do ~@body)))
 
 (def ^:dynamic ^ICruxAPI *api*)
 (def ^:dynamic *opts* [])
@@ -33,11 +44,6 @@
   ([opts f]
    (binding [*opts* (conj *opts* opts)]
      (f))))
-
-(defn with-kv-dir [f]
-  (with-tmp-dir "kv-store" [db-dir]
-    (with-opts {:crux.kv/db-dir db-dir}
-      f)))
 
 (defn with-node [f]
   (with-open [node (crux/start-node *opts*)]
