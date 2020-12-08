@@ -5,8 +5,10 @@
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
-            [crux.rocksdb :as rocks])
-  (:import org.apache.lucene.document.Document))
+            [crux.rocksdb :as rocks]
+            [clojure.java.io :as io])
+  (:import org.apache.lucene.document.Document
+           crux.api.ICruxAPI))
 
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
@@ -237,6 +239,24 @@
         (t/is false "Exception expected")
         (catch Exception t
           (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t)))))))))
+
+(defn ^ICruxAPI start-rocks-lucene-node [node-dir lucene-dir]
+  (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                               :db-dir (io/file node-dir "indexes")}}
+                 :crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                  :db-dir (io/file node-dir "documents")}}
+                 :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
+                                          :db-dir (io/file node-dir "tx-log")}}
+                 :crux.lucene/lucene-store {:db-dir lucene-dir}}))
+
+(t/deftest test-lucene-node-restart
+  (t/testing "test regular restarts with lucene enabled"
+    (fix/with-tmp-dir "test-node" [node-tmp-dir]
+      (fix/with-tmp-dir "lucene" [lucene-tmp-dir]
+        (with-open [node (start-rocks-lucene-node node-tmp-dir lucene-tmp-dir)]
+          (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+        (with-open [node (start-rocks-lucene-node node-tmp-dir lucene-tmp-dir)]
+          (t/is (= (c/entity (c/db node) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))
 
 (t/deftest test-id-can-be-key-1274
   (t/is (c/tx-committed? *api* (c/await-tx *api* (c/submit-tx *api* [[:crux.tx/put {:crux.db/id 512 :id "1"}]])))))

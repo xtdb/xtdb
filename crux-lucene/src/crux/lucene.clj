@@ -116,12 +116,14 @@
         (let [index-searcher (IndexSearcher. directory-reader)
               q (TermQuery. (Term. "meta" "latest-completed-tx"))
               d ^ScoreDoc (first (.-scoreDocs (.search index-searcher q 1)))]
-          (when d (.get (.doc index-searcher (.-doc d)) "latest-completed-tx")))))))
+          (when d (some-> (.doc index-searcher (.-doc d))
+                          (.get "latest-completed-tx")
+                          (Long/parseLong))))))))
 
 (defn validate-lucene-store-up-to-date [index-store lucene-store]
-  (when-let [latest-tx (db/latest-completed-tx index-store)]
-    (let [latest-lucene-tx (latest-submitted-tx lucene-store)]
-      (when-not (= latest-tx latest-lucene-tx)
+  (when-let [{:crux.tx/keys [tx-id] :as latest-tx} (db/latest-completed-tx index-store)]
+    (let [latest-lucene-tx-id (latest-submitted-tx lucene-store)]
+      (when-not (= tx-id latest-lucene-tx-id)
         (throw (IllegalStateException. "Lucene store latest tx mismatch"))))))
 
 (defn search [lucene-store, k, v]
