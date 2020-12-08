@@ -240,23 +240,47 @@
         (catch Exception t
           (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t)))))))))
 
-(defn ^ICruxAPI start-rocks-lucene-node [node-dir lucene-dir]
-  (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
-                                               :db-dir (io/file node-dir "indexes")}}
-                 :crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
-                                                  :db-dir (io/file node-dir "documents")}}
-                 :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
-                                          :db-dir (io/file node-dir "tx-log")}}
-                 :crux.lucene/lucene-store {:db-dir lucene-dir}}))
+(defn- with-lucene-rocks-node* [{:keys [node-dir index-dir lucene-dir]} f]
+  (with-open [node (c/start-node (merge {:crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                          :db-dir (io/file node-dir "documents")}}
+                                         :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
+                                                                  :db-dir (io/file node-dir "tx-log")}}}
+                                        (when lucene-dir
+                                          {:crux.lucene/lucene-store {:db-dir lucene-dir}})
+                                        (when index-dir
+                                          {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                                                         :db-dir index-dir}}})))]
+    (binding [*api* node]
+      (c/sync node)
+      (f))))
+
+(defmacro with-lucene-rocks-node [dir-keys & body]
+  `(with-lucene-rocks-node* ~dir-keys (fn [] ~@body)))
 
 (t/deftest test-lucene-node-restart
-  (t/testing "test regular restarts with lucene enabled"
-    (fix/with-tmp-dir "test-node" [node-tmp-dir]
-      (fix/with-tmp-dir "lucene" [lucene-tmp-dir]
-        (with-open [node (start-rocks-lucene-node node-tmp-dir lucene-tmp-dir)]
-          (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
-        (with-open [node (start-rocks-lucene-node node-tmp-dir lucene-tmp-dir)]
-          (t/is (= (c/entity (c/db node) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))
+  (t/testing "test restart with nil indexes"
+    (fix/with-tmp-dirs #{node-dir lucene-dir}
+      (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+        (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+      (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+        (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))
+
+  (t/testing "restart with partial indices (> lucene-tx-id tx-id)"
+    (fix/with-tmp-dirs #{node-dir lucene-dir index-dir}
+      (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir :index-dir index-dir}
+        (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+      (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+        (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :fred :name "Fred"}]]))
+      (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir :index-dir index-dir}
+        (let [db (c/db *api*)]
+          (t/is (= (c/entity db :fred) {:crux.db/id :fred :name "Fred"}))
+          (t/is (= (c/entity db :ivan) {:crux.db/id :ivan :name "Ivan"}))
+          (t/is (= #{[:fred]} (c/q db {:find '[?e]
+                                       :where '[[(text-search :name "Fred") [[?e]]]
+                                                [?e :crux.db/id]]})))
+          (t/is (= #{[:ivan]} (c/q db {:find '[?e]
+                                       :where '[[(text-search :name "Ivan") [[?e]]]
+                                                [?e :crux.db/id]]}))))))))
 
 (t/deftest test-id-can-be-key-1274
   (t/is (c/tx-committed? *api* (c/await-tx *api* (c/submit-tx *api* [[:crux.tx/put {:crux.db/id 512 :id "1"}]])))))
