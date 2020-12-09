@@ -222,7 +222,7 @@
   (->QuotaAllocator owned-allocator quota))
 
 (def default-allocator (->direct-allocator))
-(def ^:dynamic ^Allocator *allocator* (->bump-allocator))
+(def ^:dynamic ^Allocator *allocator* default-allocator)
 
 (defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (malloc default-allocator size))
