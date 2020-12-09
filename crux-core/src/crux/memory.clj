@@ -7,7 +7,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream]
            java.lang.reflect.Constructor
-           [java.lang.ref PhantomReference Reference ReferenceQueue WeakReference]
+           [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference WeakReference]
            [java.nio ByteBuffer DirectByteBuffer]
            [java.util Comparator HashMap Map Set]
            java.util.function.Supplier
@@ -69,7 +69,9 @@
 
   Closeable
   (close [this]
-    (allocated this)))
+    (allocated this)
+    (.clear ref->address)
+    (.clear address->cleaner)))
 
 (defn ->direct-allocator ^crux.memory.DirectAllocator []
   (->DirectAllocator (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
@@ -112,7 +114,7 @@
   (malloc [this size]
     (let [buffer (malloc parent-allocator size)
           address (.addressOffset buffer)]
-      (.put address->reference address (WeakReference. buffer))
+      (.put address->reference address (SoftReference. (.byteBuffer buffer)))
       buffer))
 
   (free [this buffer]
@@ -128,7 +130,7 @@
     (doseq [ref (vals address->reference)
             :let [b (.get ^Reference ref)]
             :when b]
-      (free this b))
+      (free this (UnsafeBuffer. ^ByteBuffer b)))
     (let [used (allocated this)]
       (when-not (zero? used)
         (log/warn "memory still used after close:" used)))
