@@ -25,6 +25,26 @@ public class ByteUtils {
         }
     }
 
+    public static long malloc(long size) {
+        return UNSAFE.allocateMemory(size);
+    }
+
+    public static long realloc(long address, long size) {
+        return UNSAFE.reallocateMemory(address, size);
+    }
+
+    public static void free(long address) {
+        UNSAFE.freeMemory(address);
+    }
+
+    public static void memcpy(long from, long to, long size) {
+        UNSAFE.copyMemory(null, from, null, to, size);
+    }
+
+    public static long pageSize() {
+        return UNSAFE.pageSize();
+    }
+
     private static final char[] TWO_BYTES_TO_HEX = new char[256 * 256 * Character.BYTES * 2];
 
     static {
