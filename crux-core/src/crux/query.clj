@@ -1807,6 +1807,8 @@
       (->> (try
              (crux.query/query db conformed-query args)
              (catch Throwable t
+               (cio/try-close index-snapshot)
+               (cio/try-close mem/*allocator*)
                (pop-thread-bindings)
                (when bus
                  (bus/send bus {:crux/event-type ::failed-query
@@ -1844,6 +1846,8 @@
                              with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
                                                                 (get (.content-hash etx))))))))
                (catch Throwable t
+                 (cio/try-close index-snapshot)
+                 (cio/try-close mem/*allocator*)
                  (pop-thread-bindings)
                  (throw t)))
              (cio/->cursor #(do (cio/try-close index-snapshot)
