@@ -26,6 +26,8 @@
 
   (^long capacity [this]))
 
+(def ^:private ^:const page-size (ByteUtils/pageSize))
+
 (def ^:private ^:const default-chunk-size (* 128 1024))
 (def ^:private ^:const large-buffer-size (quot default-chunk-size 4))
 (defonce ^:private pool-allocation-stats (atom {:allocated 0
@@ -35,7 +37,7 @@
   (log/debug :pool-allocation-stats (assoc pool-allocation-stats :in-use (- (long allocated) (long deallocated)))))
 
 (defn- allocate-pooled-buffer [^long size]
-  (let [chunk (ByteBuffer/allocateDirect size)]
+  (let [chunk (BufferUtil/allocateDirectAligned size page-size)]
     (assert (= size (.capacity chunk)))
     (log-pool-memory (swap! pool-allocation-stats update :allocated + (.capacity chunk)))
     (cio/register-cleaner chunk #(log-pool-memory (swap! pool-allocation-stats update :deallocated + size)))
