@@ -187,7 +187,7 @@
     (set! chunk nil)
     (cio/try-close owned-allocator)))
 
-(def ^:private ^:const default-chunk-size (* 4 1024))
+(def ^:private ^:const default-chunk-size (* 8 1024))
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
