@@ -7,6 +7,7 @@
             [clojure.string :as str]
             [taoensso.nippy :as nippy])
   (:import [crux.api ICursor]
+           crux.ByteUtils
            [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
            [java.lang AutoCloseable]
            [java.lang.ref PhantomReference ReferenceQueue]
@@ -227,7 +228,7 @@
 (defn statm []
   (let [os (System/getProperty "os.name")]
     (if (re-find #"(?i)linux" os)
-      (let [page-size (Long/parseLong (str/trim (:out (sh/sh "getconf" "PAGESIZE"))))]
+      (let [page-size (ByteUtils/pageSize)]
         (zipmap
          [:size :resident :share :text :lib :data :dt]
          (for [stat (str/split (:out (sh/sh "cat" (str "/proc/" (pid) "/statm"))) #"\s+")]
