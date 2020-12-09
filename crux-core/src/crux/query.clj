@@ -1679,7 +1679,6 @@
                                           (dissoc :args))))
     (validate-in in)
     (let [rule-name->rules (with-meta (rule-name->rules rules) {:rules (:rules q)})
-          db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (or (:entity-resolver-fn db)
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
@@ -1792,19 +1791,25 @@
           db (assoc db :index-snapshot index-snapshot :fn-allow-list fn-allow-list)
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
+          safe-query (-> conformed-query .q-normalized (dissoc :args))
+          needs-allocator? (identical? mem/*allocator* mem/default-allocator)
+          close-fn (fn []
+                     (cio/try-close index-snapshot)
+                     (when needs-allocator?
+                       (log/debug "memory used by query:" query-id "bytes:" (mem/allocated-size mem/*allocator*))
+                       (cio/try-close mem/*allocator*)
+                       (pop-thread-bindings)))]
 
       (when bus
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (push-thread-bindings {#'mem/*allocator* (mem/->bump-allocator)})
+      (when needs-allocator?
+        (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator (mem/->bump-allocator) (:query-memory-quota db))}))
       (->> (try
              (crux.query/query db conformed-query args)
              (catch Throwable t
-               (cio/try-close index-snapshot)
-               (cio/try-close mem/*allocator*)
-               (pop-thread-bindings)
+               (close-fn)
                (when bus
                  (bus/send bus {:crux/event-type ::failed-query
                                 ::query safe-query
@@ -1813,9 +1818,7 @@
                                          :message (.getMessage t)}}))
                (throw t)))
            (cio/->cursor (fn []
-                           (cio/try-close index-snapshot)
-                           (cio/try-close mem/*allocator*)
-                           (pop-thread-bindings)
+                           (close-fn)
                            (when bus
                              (bus/send bus {:crux/event-type ::completed-query
                                             ::query safe-query
@@ -1961,6 +1964,9 @@
                                   :query-timeout {:doc "Query Timeout ms"
                                                   :default 30000
                                                   :spec ::sys/nat-int}
+                                  :query-memory-quota {:doc "Query Memory Quota"
+                                                       :default (* 32 1024 1024)
+                                                       :spec ::sys/nat-int}
                                   :batch-size {:doc "Batch size of results"
                                                :default 100
                                                :required? true

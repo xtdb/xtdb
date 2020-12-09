@@ -26,8 +26,8 @@
 (defn- restore-db [dir]
   (cio/with-nippy-thaw-all
     (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memkv"))]
-           [(mem/->off-heap k)
-            (mem/->off-heap v)])
+           [(mem/copy-buffer-to-allocator (mem/as-buffer k) mem/default-allocator)
+            (mem/copy-buffer-to-allocator (mem/as-buffer v) mem/default-allocator)])
          (into (sorted-map-by mem/buffer-comparator)))))
 
 ;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
@@ -76,8 +76,8 @@
 
   (store [_ kvs]
     (swap! !db into (for [[k v] kvs]
-                     (MapEntry/create (mem/copy-to-unpooled-buffer (mem/as-buffer k))
-                                      (mem/copy-to-unpooled-buffer (mem/as-buffer v)))))
+                     (MapEntry/create (mem/copy-buffer-to-allocator (mem/as-buffer k) mem/default-allocator)
+                                      (mem/copy-buffer-to-allocator (mem/as-buffer v) mem/default-allocator))))
     nil)
 
   (delete [_ ks]

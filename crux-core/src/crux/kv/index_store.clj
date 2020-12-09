@@ -70,8 +70,9 @@
              (lazy-seq
               (when (and k (mem/buffers=? seek-k k prefix-length))
                 (cons (if entries?
-                        (MapEntry/create (mem/copy-to-unpooled-buffer k) (mem/copy-to-unpooled-buffer (kv/value i)))
-                        (mem/copy-to-unpooled-buffer k))
+                        (MapEntry/create (mem/copy-buffer-to-allocator k mem/default-allocator)
+                                         (mem/copy-buffer-to-allocator (kv/value i) mem/default-allocator))
+                        (mem/copy-buffer-to-allocator k mem/default-allocator))
                       (step (if reverse? (kv/prev i) (kv/next i)))))))]
      (step (if reverse?
              (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
@@ -375,7 +376,7 @@
 ;;;; tx-id/tx-time mappings
 
 (def tx-time-mapping-prefix
-  (doto ^MutableDirectBuffer (mem/allocate-unpooled-buffer c/index-id-size)
+  (doto ^MutableDirectBuffer (mem/allocate-buffer c/index-id-size)
     (.putByte 0 c/tx-time-mapping-id)))
 
 (defn- encode-tx-time-mapping-key-to [to tx-time tx-id]
@@ -485,7 +486,7 @@
 (defn- canonical-buffer-lookup ^org.agrona.DirectBuffer [canonical-buffer-cache ^DirectBuffer buffer]
   (cache/compute-if-absent canonical-buffer-cache
                            buffer
-                           mem/copy-to-unpooled-buffer
+                           #(mem/copy-buffer-to-allocator % mem/default-allocator)
                            identity))
 
 (defn- cav-cache-lookup ^java.util.NavigableSet [cav-cache canonical-buffer-cache cache-i ^DirectBuffer eid-value-buffer

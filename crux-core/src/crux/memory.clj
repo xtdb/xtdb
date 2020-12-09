@@ -36,7 +36,7 @@
 
   (free [this ^DirectBuffer buffer])
 
-  (^long allocated [this]))
+  (^long allocated-size [this]))
 
 (def ^:private ^:const page-size (ByteUtils/pageSize))
 (def ^:private ^:const default-alignment 16)
@@ -58,7 +58,7 @@
             (cleaner))
         (log/warn "trying to free unknown buffer: " buffer))))
 
-  (allocated [this]
+  (allocated-size [this]
     (loop [ref (.poll reference-queue)]
       (when ref
         (when-let [address (.remove ref->address ref)]
@@ -69,7 +69,7 @@
 
   Closeable
   (close [this]
-    (allocated this)
+    (allocated-size this)
     (.clear ref->address)
     (.clear address->cleaner)))
 
@@ -100,7 +100,7 @@
             nil)
         (log/warn "trying to free unknown buffer: " buffer))))
 
-  (allocated [this]
+  (allocated-size [this]
     (reduce + (vals address->size)))
 
   Closeable
@@ -122,8 +122,8 @@
       (free parent-allocator buffer)
       (log/warn "trying to free unknown buffer: " buffer)))
 
-  (allocated [this]
-    (allocated parent-allocator))
+  (allocated-size [this]
+    (allocated-size parent-allocator))
 
   Closeable
   (close [this]
@@ -131,7 +131,7 @@
             :let [b (.get ^Reference ref)]
             :when b]
       (free this (UnsafeBuffer. ^ByteBuffer b)))
-    (let [used (allocated this)]
+    (let [used (allocated-size this)]
       (when-not (zero? used)
         (log/warn "memory still used after close:" used)))
     (.clear address->reference)))
@@ -176,8 +176,8 @@
       (.position chunk (- (.position chunk) (.capacity ^DirectBuffer buffer)))
       (log/warn "can only free/undo latest allocation with bump allocator")))
 
-  (allocated [this]
-    (- (allocated owned-allocator)
+  (allocated-size [this]
+    (- (allocated-size owned-allocator)
        (if chunk
          (.remaining chunk)
          0)))
@@ -200,19 +200,19 @@
 (deftype QuotaAllocator [owned-allocator ^long quota]
   Allocator
   (malloc [_ size]
-    (when (> (+ size (allocated owned-allocator)) quota)
+    (when (> (+ size (allocated-size owned-allocator)) quota)
       (throw (err/illegal-arg :qouta-exceeded
                               {::err/message (str "Exceeded allocator quota")
                                :quota quota
-                               :allocated (allocated owned-allocator)
+                               :allocated-size (allocated-size owned-allocator)
                                :requested-size size})))
     (malloc owned-allocator size))
 
   (free [_ buffer]
     (free owned-allocator buffer))
 
-  (allocated [_]
-    (allocated owned-allocator))
+  (allocated-size [_]
+    (allocated-size owned-allocator))
 
   Closeable
   (close [_]
@@ -221,16 +221,13 @@
 (defn ->quota-allocator ^crux.memory.QuotaAllocator [owned-allocator ^long quota]
   (->QuotaAllocator owned-allocator quota))
 
-(def default-allocator (->direct-allocator))
-(def ^:dynamic ^Allocator *allocator* default-allocator)
-
-(defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
-  (malloc default-allocator size))
-
-(defonce empty-buffer (UnsafeBuffer. (ByteBuffer/allocateDirect 0)))
+(def ^crux.memory.Allocator default-allocator (->direct-allocator))
+(def ^:dynamic ^crux.memory.Allocator *allocator* default-allocator)
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (malloc *allocator* size))
+
+(defonce empty-buffer (allocate-buffer 0))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
@@ -241,8 +238,8 @@
    (doto to
      (.putBytes 0 from 0 limit))))
 
-(defn copy-to-unpooled-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
-  (copy-buffer from (.capacity from) (allocate-unpooled-buffer (.capacity from))))
+(defn copy-buffer-to-allocator ^org.agrona.MutableDirectBuffer [^DirectBuffer from allocator]
+  (copy-buffer from (.capacity from) (malloc allocator (.capacity from))))
 
 (defn slice-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long offset ^long limit]
   (UnsafeBuffer. buffer offset limit))

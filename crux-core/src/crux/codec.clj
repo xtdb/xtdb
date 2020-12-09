@@ -100,7 +100,7 @@
     (aset 0 (byte id-value-type-id))))
 
 (def nil-id-buffer
-  (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
+  (mem/->off-heap nil-id-bytes (mem/allocate-buffer (count nil-id-bytes))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
@@ -658,7 +658,7 @@
 
 (defn safe-id ^crux.codec.Id [^Id id]
   (when id
-    (Id. (mem/copy-to-unpooled-buffer (.buffer id)) 0)))
+    (Id. (mem/copy-buffer-to-allocator (.buffer id) mem/default-allocator) 0)))
 
 (defn hex->id-buffer
   ([hex] (hex->id-buffer hex (mem/allocate-buffer id-size)))
