@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.index
   (:require [crux.db :as db]
             [crux.memory :as mem])
-  (:import [clojure.lang Box IDeref]
+  (:import [clojure.lang Box IDeref IPersistentVector]
            java.util.function.Function
            [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            org.agrona.DirectBuffer))
@@ -297,26 +297,27 @@
 (defn layered-idx->seq [idx]
   (when idx
     (let [max-depth (long (db/max-depth idx))
-          step (fn step [max-ks ^long depth needs-seek?]
+          step (fn step [^IPersistentVector max-ks ^long depth needs-seek?]
                  (when (Thread/interrupted)
                    (throw (InterruptedException.)))
                  (if (= depth (dec max-depth))
-                   (concat (for [v (idx->seq idx)]
-                             (conj max-ks v))
-                           (when (pos? depth)
-                             (lazy-seq
-                              (db/close-level idx)
-                              (step (pop max-ks) (dec depth) false))))
+                   (concat
+                    (for [v (idx->seq idx)]
+                      (.assocN max-ks depth v))
+                    (when (pos? depth)
+                      (lazy-seq
+                       (db/close-level idx)
+                       (step max-ks (dec depth) false))))
                    (if-let [v (if needs-seek?
                                 (db/seek-values idx nil)
                                 (db/next-values idx))]
                      (do (db/open-level idx)
-                         (recur (conj max-ks v) (inc depth) true))
+                         (recur (.assocN max-ks depth v) (inc depth) true))
                      (when (pos? depth)
                        (db/close-level idx)
-                       (recur (pop max-ks) (dec depth) false)))))]
+                       (recur max-ks (dec depth) false)))))]
       (when (pos? max-depth)
-        (step [] 0 true)))))
+        (step (vec (repeat max-depth nil)) 0 true)))))
 
 (deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
@@ -332,56 +333,52 @@
   (->SortedVirtualIndex s nil))
 
 (definterface IRelationVirtualIndexUpdate
-  (^void updateIndex [tree indexes]))
+  (^void updateIndex [tree rootIndex]))
 
-(deftype RelationVirtualIndex [max-depth
+(deftype RelationVirtualIndex [^long max-depth
                                encode-value-fn
                                ^:unsynchronized-mutable tree
-                               ^:unsynchronized-mutable path
-                               ^:unsynchronized-mutable indexes
-                               ^:unsynchronized-mutable key]
+                               ^:unsynchronized-mutable ^long depth
+                               ^:unsynchronized-mutable ^objects path
+                               ^:unsynchronized-mutable ^objects indexes]
   db/Index
   (seek-values [this k]
-    (when-let [k (db/seek-values (last indexes) (or k mem/empty-buffer))]
-      (set! key k)
+    (when-let [k (db/seek-values (aget indexes depth) (or k mem/empty-buffer))]
+      (aset path depth k)
       k))
 
   (next-values [this]
-    (when-let [k (db/next-values (last indexes))]
-      (set! key k)
+    (when-let [k (db/next-values (aget indexes depth))]
+      (aset path depth k)
       k))
 
   db/LayeredIndex
   (open-level [this]
-    (when (= max-depth (count path))
+    (when (= max-depth depth)
       (throw (IllegalStateException. (str "Cannot open level at max depth: " max-depth))))
-    (let [new-path (conj path key)
-          level (count new-path)]
-      (set! path new-path)
-      (set! indexes (conj indexes
-                          (some->  ^NavigableMap (get-in tree new-path)
-                                   (.navigableKeySet)
-                                   (new-sorted-virtual-index))))
-      (set! key nil))
+    (set! depth (inc depth))
+    (loop [n 0
+           ^NavigableMap tree tree]
+      (when tree
+        (if (= depth n)
+          (aset indexes depth (new-sorted-virtual-index (.navigableKeySet tree)))
+          (recur (inc n) (.get tree (aget path n))))))
     nil)
 
   (close-level [this]
-    (when (zero? (count path))
+    (when (zero? depth)
       (throw (IllegalStateException. "Cannot close level at root.")))
-    (set! path (pop path))
-    (set! indexes (pop indexes))
-    (set! key nil)
+    (set! depth (dec depth))
     nil)
 
   (max-depth [_]
     max-depth)
 
   IRelationVirtualIndexUpdate
-  (updateIndex [_ new-tree new-indexes]
+  (updateIndex [_ new-tree root-index]
     (set! tree new-tree)
-    (set! path [])
-    (set! indexes new-indexes)
-    (set! key nil)))
+    (set! depth 0)
+    (aset indexes 0 root-index)))
 
 (defn- tree-map-put-in [^TreeMap m [k & ks] v]
   (if ks
@@ -404,19 +401,22 @@
                    (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
-         root-level (if single-values?
-                      (new-sorted-virtual-index (if (instance? NavigableSet tuples)
-                                                  tuples
-                                                  (doto (TreeSet. mem/buffer-comparator)
-                                                    (.addAll (mapv encode-value-fn tuples)))))
-                      (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
-     (.updateIndex relation tree [root-level])
+         root-idx (if single-values?
+                    (new-sorted-virtual-index (if (instance? NavigableSet tuples)
+                                                tuples
+                                                (doto (TreeSet. mem/buffer-comparator)
+                                                  (.addAll (mapv encode-value-fn tuples)))))
+                    (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
+     (.updateIndex relation tree root-idx)
      relation)))
 
 (defn new-relation-virtual-index [tuples max-depth encode-value-fn]
   (update-relation-virtual-index! (->RelationVirtualIndex max-depth
                                                           encode-value-fn
-                                                          nil nil nil nil)
+                                                          nil
+                                                          0
+                                                          (object-array (long max-depth))
+                                                          (object-array (long max-depth)))
                                   tuples))
 
 (deftype SingletonVirtualIndex [v]
