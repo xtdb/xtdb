@@ -7,11 +7,11 @@
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream]
            java.lang.reflect.Constructor
-           [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference WeakReference]
+           [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference]
            [java.nio ByteBuffer DirectByteBuffer]
-           [java.util Comparator HashMap Map Set]
+           [java.util Comparator HashMap Map Queue Set]
            java.util.function.Supplier
-           [java.util.concurrent ConcurrentHashMap ConcurrentSkipListSet]
+           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
            java.util.concurrent.atomic.AtomicLong
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -142,16 +142,65 @@
   (^crux.memory.RegionAllocator [parent-allocator]
    (->RegionAllocator parent-allocator (ConcurrentHashMap.))))
 
-(deftype BumpAllocator [owned-allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^ByteBuffer chunk]
+(deftype PooledAllocator [parent-allocator ^long supported-size ^Queue pool ^Map address->cleaner]
+  Allocator
+  (malloc [this size]
+    (if (not= supported-size size)
+      (malloc parent-allocator size)
+      (let [byte-buffer (or (loop [ref (.poll pool)]
+                              (when ref
+                                (if-let [b (.get ^Reference ref)]
+                                  b
+                                  (recur (.poll pool)))))
+                            (.byteBuffer (malloc parent-allocator size)))
+            address (BufferUtil/address byte-buffer)
+            buffer-copy (.slice ^ByteBuffer byte-buffer)
+            ref (SoftReference. byte-buffer)]
+        (.put address->cleaner address #(.offer pool ref))
+        (cio/register-cleaner buffer-copy #(when-let [cleaner (.remove address->cleaner address)]
+                                             (cleaner)))
+        (UnsafeBuffer. buffer-copy))))
+
+  (free [this buffer]
+    (if (= supported-size (.capacity ^DirectBuffer buffer))
+      (when-let [cleaner (.remove address->cleaner (.addressOffset ^DirectBuffer buffer))]
+        (cleaner))
+      (free parent-allocator buffer)))
+
+  (allocated-size [this]
+    (allocated-size parent-allocator))
+
+  Closeable
+  (close [this]
+    (doseq [cleaner (vals address->cleaner)]
+      (cleaner))
+    (.clear address->cleaner)
+    (loop [ref (.poll pool)]
+      (when ref
+        (when-let [b (.get ^Reference ref)]
+          (free parent-allocator (UnsafeBuffer. ^ByteBuffer b)))
+        (recur (.poll pool))))
+    (let [used (allocated-size this)]
+      (when-not (zero? used)
+        (log/warn "memory still used after close:" used)))))
+
+(defn ->pooled-allocator
+  (^crux.memory.PooledAllocator [^long supported-size]
+   (->pooled-allocator (->direct-allocator) supported-size))
+  (^crux.memory.PooledAllocator [parent-allocator ^long supported-size]
+   (->PooledAllocator parent-allocator supported-size (LinkedBlockingQueue.) (ConcurrentHashMap.))))
+
+(deftype BumpAllocator [owned-allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^ByteBuffer chunk ^:unsynchronized-mutable ^long position]
   Allocator
   (malloc [this size]
     (if-not chunk
       (do (set! chunk (let [buffer (malloc owned-allocator chunk-size)]
                         (or (.byteBuffer buffer)
                             (->byte-buffer (.addressOffset buffer) (.capacity buffer)))))
+          (set! position 0)
           (recur size))
       (let [size (long size)
-            offset (.position chunk)
+            offset position
             alignment-mask (dec default-alignment)
             new-aligned-offset (bit-and-not (+ offset size alignment-mask)
                                             alignment-mask)]
@@ -159,14 +208,13 @@
           (> size large-buffer-size)
           (malloc owned-allocator size)
 
-          (> new-aligned-offset (.capacity chunk))
+          (> new-aligned-offset chunk-size)
           (do (set! chunk nil)
               (recur size))
 
           :else
-          (let [buffer (.slice (.limit (.duplicate chunk) (+ offset size)))]
-            (.position chunk new-aligned-offset)
-            (UnsafeBuffer. buffer 0 size))))))
+          (do (set! position new-aligned-offset)
+              (UnsafeBuffer. chunk offset size))))))
 
   (free [this buffer]
     (if (= (+ (.addressOffset ^DirectBuffer buffer)
@@ -191,11 +239,11 @@
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
-   (->bump-allocator (->region-allocator)))
+   (->bump-allocator (->pooled-allocator default-chunk-size) default-chunk-size))
   (^crux.memory.BumpAllocator [owned-allocator]
    (->bump-allocator owned-allocator default-chunk-size))
   (^crux.memory.BumpAllocator [owned-allocator chunk-size]
-   (->BumpAllocator owned-allocator chunk-size (quot default-chunk-size 4) nil)))
+   (->BumpAllocator owned-allocator chunk-size (quot default-chunk-size 4) nil 0)))
 
 (deftype QuotaAllocator [owned-allocator ^long quota]
   Allocator
