@@ -1796,7 +1796,8 @@
           close-fn (fn []
                      (cio/try-close index-snapshot)
                      (when needs-allocator?
-                       (log/debug "memory used by query:" query-id "bytes:" (mem/allocated-size mem/*allocator*))
+                       (log/debug :memory-used-by-query (cio/pr-edn-str {:query-id query-id
+                                                                         :bytes (mem/allocated-size mem/*allocator*)}))
                        (cio/try-close mem/*allocator*)
                        (pop-thread-bindings)))]
 
