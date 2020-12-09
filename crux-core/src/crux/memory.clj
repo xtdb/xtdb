@@ -13,7 +13,7 @@
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
 
-(defprotocol MemoryRegion
+(defprotocol Memory
   (->on-heap ^bytes [this])
 
   (->off-heap
@@ -93,7 +93,7 @@
 (defn limit-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long limit]
   (slice-buffer buffer 0 limit))
 
-(extend-protocol MemoryRegion
+(extend-protocol Memory
   (class (byte-array 0))
   (->on-heap [this]
     this)
