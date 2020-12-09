@@ -140,7 +140,7 @@
   (^crux.memory.RegionAllocator []
    (->region-allocator (->direct-allocator)))
   (^crux.memory.RegionAllocator [parent-allocator]
-   (->RegionAllocator parent-allocator (HashMap.))))
+   (->RegionAllocator parent-allocator (ConcurrentHashMap.))))
 
 (deftype BumpAllocator [owned-allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^ByteBuffer chunk]
   Allocator
