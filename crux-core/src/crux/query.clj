@@ -1498,7 +1498,8 @@
                                   [where in rule-name->rules]
                                   identity
                                   (fn [_]
-                                    (compile-sub-query encode-value-fn fn-allow-list where in rule-name->rules stats)))
+                                    (binding [mem/*allocator* mem/default-allocator]
+                                      (compile-sub-query encode-value-fn fn-allow-list where in rule-name->rules stats))))
                                  (add-logic-var-constraints))
         idx-id->idx (build-idx-id->idx db index-snapshot compiled-query)
         unary-join-indexes (for [v vars-in-join-order]
@@ -1802,18 +1803,22 @@
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
+      (push-thread-bindings {#'mem/*allocator* (mem/->bump-allocator)})
       (->> (try
              (crux.query/query db conformed-query args)
-             (catch Exception e
+             (catch Throwable t
+               (pop-thread-bindings)
                (when bus
                  (bus/send bus {:crux/event-type ::failed-query
                                 ::query safe-query
                                 ::query-id query-id
-                                ::error {:type (cio/pr-edn-str (type e))
-                                         :message (.getMessage e)}}))
-               (throw e)))
+                                ::error {:type (cio/pr-edn-str (type t))
+                                         :message (.getMessage t)}}))
+               (throw t)))
            (cio/->cursor (fn []
                            (cio/try-close index-snapshot)
+                           (cio/try-close mem/*allocator*)
+                           (pop-thread-bindings)
                            (when bus
                              (bus/send bus {:crux/event-type ::completed-query
                                             ::query safe-query
@@ -1828,15 +1833,22 @@
       cio/empty-cursor
       (let [index-snapshot (open-index-snapshot this)
             {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
-        (cio/->cursor #(.close index-snapshot)
-                      (->> (db/entity-history index-snapshot eid sort-order opts)
-                           (map (fn [^EntityTx etx]
-                                  (cond-> {:crux.tx/tx-time (.tt etx)
-                                           :crux.tx/tx-id (.tx-id etx)
-                                           :crux.db/valid-time (.vt etx)
-                                           :crux.db/content-hash (.content-hash etx)}
-                                    with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
-                                                                       (get (.content-hash etx))))))))))))
+        (push-thread-bindings {#'mem/*allocator* (mem/->bump-allocator)})
+        (->> (try
+               (->> (db/entity-history index-snapshot eid sort-order opts)
+                    (map (fn [^EntityTx etx]
+                           (cond-> {:crux.tx/tx-time (.tt etx)
+                                    :crux.tx/tx-id (.tx-id etx)
+                                    :crux.db/valid-time (.vt etx)
+                                    :crux.db/content-hash (.content-hash etx)}
+                             with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
+                                                                (get (.content-hash etx))))))))
+               (catch Throwable t
+                 (pop-thread-bindings)
+                 (throw t)))
+             (cio/->cursor #(do (cio/try-close index-snapshot)
+                                (cio/try-close mem/*allocator*)
+                                (pop-thread-bindings)))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
