@@ -1797,7 +1797,7 @@
                      (cio/try-close index-snapshot)
                      (when needs-allocator?
                        (log/debug :memory-used-by-query (cio/pr-edn-str {:query-id query-id
-                                                                         :bytes (mem/allocated-size mem/*allocator*)}))
+                                                                         :off-heap-bytes (mem/allocated-size mem/*allocator*)}))
                        (cio/try-close mem/*allocator*)
                        (pop-thread-bindings)))]
 
@@ -1806,7 +1806,9 @@
                        ::query safe-query
                        ::query-id query-id}))
       (when needs-allocator?
-        (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator (mem/->bump-allocator) (:query-memory-quota db))}))
+        (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator
+                                                  (mem/->bump-allocator)
+                                                  (:query-memory-quota db))}))
       (->> (try
              (crux.query/query db conformed-query args)
              (catch Throwable t
