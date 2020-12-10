@@ -76,12 +76,8 @@
 (defn ->direct-allocator ^crux.memory.DirectAllocator []
   (->DirectAllocator (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
 
-(def ^:private ^Constructor direct-byte-buffer-constructor
-  (doto (.getDeclaredConstructor DirectByteBuffer (into-array [Long/TYPE Integer/TYPE]))
-    (.setAccessible true)))
-
 (defn- ->byte-buffer ^java.nio.DirectByteBuffer [^long address ^long size]
-  (.newInstance direct-byte-buffer-constructor (object-array [address (int size)])))
+  (ByteUtils/newDirectByteBuffer address size))
 
 (deftype UnsafeAllocator [^Map address->size]
   Allocator

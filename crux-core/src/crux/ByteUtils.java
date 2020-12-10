@@ -1,7 +1,11 @@
 package crux;
 
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
-import java.math.BigInteger;
+import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -23,6 +27,38 @@ public class ByteUtils {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static final MethodHandle DIRECT_BUFFER_CONSTRUCTOR_METHOD_HANDLE;
+
+    static {
+        try {
+            final Class<?> directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
+            try {
+                Method getModule = Class.class.getDeclaredMethod("getModule");
+                Class<?> moduleClass = getModule.getReturnType();
+                Method isNamed = moduleClass.getDeclaredMethod("isNamed");
+                Method addOpens = moduleClass.getDeclaredMethod("addOpens", String.class, moduleClass);
+
+                Object thisModule = getModule.invoke(ByteUtils.class);
+                if (!(boolean) isNamed.invoke(thisModule)) {
+                    Object javaBaseModule = getModule.invoke(directByteBufferClass);
+                    addOpens.invoke(javaBaseModule, directByteBufferClass.getPackage().getName(), thisModule);
+                }
+            } catch (Exception ignore) {
+            }
+
+            Constructor<?> ctor = directByteBufferClass.getDeclaredConstructor(new Class<?>[] {long.class, int.class});
+            ctor.setAccessible(true);
+            MethodHandle mh = MethodHandles.lookup().unreflectConstructor(ctor);
+            DIRECT_BUFFER_CONSTRUCTOR_METHOD_HANDLE = mh.asType(mh.type().changeReturnType(ByteBuffer.class));;
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static final ByteBuffer newDirectByteBuffer(long address, int size) throws Throwable {
+        return (ByteBuffer) DIRECT_BUFFER_CONSTRUCTOR_METHOD_HANDLE.invokeExact(address, size);
     }
 
     public static long malloc(long size) {
