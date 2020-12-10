@@ -13,9 +13,9 @@ public interface ICruxIngestAPI extends Closeable {
      * Writes transactions to the log for processing.
      *
      * @param txOps the transactions to be processed.
-     * @return      a map with details about the submitted transaction.
+     * @return      a TransactionInstant with details about the submitted transaction.
      */
-    public Map<Keyword,?> submitTx(List<List<?>> txOps);
+    public TransactionInstant submitTx(List<List<?>> txOps);
 
     /**
      * Reads the transaction log. Optionally includes  operations, which allow the contents

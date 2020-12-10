@@ -3,7 +3,8 @@
             [crux.error :as err]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [crux.transaction-instant :as cti])
   (:import crux.api.ICruxAsyncIngestAPI
            [java.io Closeable Writer]
            java.lang.AutoCloseable))
@@ -13,7 +14,7 @@
   (submitTxAsync [_ tx-ops]
     (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
       (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-      (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))
+      (delay (cti/->transaction-instant @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
   (submitTx [this tx-ops]
     @(.submitTxAsync this tx-ops))

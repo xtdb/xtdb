@@ -20,7 +20,8 @@
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
             [crux.system :as sys]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [crux.transaction-instant :as cti])
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
@@ -1843,8 +1844,8 @@
 
   (dbBasis [_]
     {:crux.db/valid-time valid-time
-     :crux.tx/tx {:crux.tx/tx-time tx-time,
-                  :crux.tx/tx-id tx-id}})
+     :crux.tx/tx (cti/->transaction-instant {:crux.tx/tx-time tx-time,
+                                             :crux.tx/tx-id tx-id})})
 
   (withTx [this tx-ops]
     (let [tx (merge {:fork-at {::db/valid-time valid-time

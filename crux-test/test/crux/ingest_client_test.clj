@@ -20,7 +20,7 @@
               (with-open [tx-log-iterator (db/open-tx-log (:tx-log ingest-client) nil)]
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))
-                  (t/is (= [(assoc submitted-tx
+                  (t/is (= [(assoc (into {} submitted-tx)
                                    :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
                            result))
                   (t/is (realized? result))))

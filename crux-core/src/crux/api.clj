@@ -8,6 +8,7 @@
             [crux.ingest-client :as ic]
             [crux.io :as cio]
             [crux.query-state :as qs]
+            [crux.transaction-instant :as cti]
             [crux.system :as sys])
   (:import [crux.api Crux HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICruxIngestAPI RemoteClientOptions]
            java.lang.AutoCloseable
@@ -200,7 +201,7 @@
   ICruxAPI
   (status [this] (.status this))
 
-  (tx-committed? [this submitted-tx] (.hasTxCommitted this submitted-tx))
+  (tx-committed? [this submitted-tx] (.hasTxCommitted this (cti/->transaction-instant submitted-tx)))
 
   (sync
     ([this] (.sync this nil))
@@ -213,7 +214,7 @@
 
   (await-tx
     ([this submitted-tx] (await-tx this submitted-tx nil))
-    ([this submitted-tx timeout] (.awaitTx this submitted-tx timeout)))
+    ([this submitted-tx timeout] (.awaitTx this (cti/->transaction-instant submitted-tx) timeout)))
 
   (await-tx-time
     ([this tx-time] (await-tx-time this tx-time nil))

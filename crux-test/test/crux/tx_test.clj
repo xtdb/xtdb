@@ -696,7 +696,7 @@
              {:crux.db/id :tx-metadata-fn
               :crux.db/fn `(fn [ctx#]
                              [[:crux.tx/put {:crux.db/id :tx-metadata :crux.tx/current-tx (api/indexing-tx ctx#)}]])}]])
-          (let [submitted-tx (fix/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]])]
+          (let [submitted-tx (into {} (fix/submit+await-tx '[[:crux.tx/fn :tx-metadata-fn]]))]
             (some-> (#'tx/reset-tx-fn-error) throw)
             (t/is (= {:crux.db/id :tx-metadata
                       :crux.tx/current-tx submitted-tx}
@@ -893,7 +893,7 @@
 
     (let [doc-1 {:crux.db/id :foo, :value 1}
           doc-2 {:crux.db/id :bar, :value 2}
-          submitted-tx (fix/submit+await-tx [[:crux.tx/put doc-1] [:crux.tx/put doc-2]])]
+          submitted-tx (into {} (fix/submit+await-tx [[:crux.tx/put doc-1] [:crux.tx/put doc-2]]))]
 
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))

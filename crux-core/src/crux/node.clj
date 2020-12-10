@@ -13,7 +13,8 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [crux.transaction-instant :as cti])
   (:import [crux.api ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICursor]
            [java.io Closeable Writer]
            [java.time Duration Instant]
@@ -54,7 +55,7 @@
                         :timeout-value {:timeout? true}})]
     (cond
       ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
-      timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
+      timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str (into {} awaited-tx))
                                               ", index has: " (pr-str (api/latest-completed-tx node)))))
       node-closed? (throw (InterruptedException. "Node closed."))
       tx tx)))
@@ -139,7 +140,7 @@
       (ensure-node-open this)
       (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
         (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-        @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
+        (cti/->transaction-instant @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
   (hasTxCommitted [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
@@ -185,7 +186,7 @@
     (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
 
   (awaitTx [this submitted-tx timeout]
-    (await-tx this ::tx/tx-id submitted-tx timeout))
+    (cti/->transaction-instant (await-tx this ::tx/tx-id submitted-tx timeout)))
 
   (listen [this {:crux/keys [event-type] :as event-opts} consumer]
     (case event-type
@@ -203,10 +204,10 @@
   (latestCompletedTx [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/latest-completed-tx index-store)))
+      (cti/->transaction-instant (db/latest-completed-tx index-store))))
 
   (latestSubmittedTx [this]
-    (db/latest-submitted-tx tx-log))
+    (cti/->transaction-instant (db/latest-submitted-tx tx-log)))
 
   (activeQueries [this]
     (map qs/->QueryState (vals (:in-progress @!running-queries))))
@@ -225,7 +226,8 @@
       (ensure-node-open this)
       (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
         (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
+        (delay
+          (cti/->transaction-instant @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))))
 
   Closeable
   (close [_]

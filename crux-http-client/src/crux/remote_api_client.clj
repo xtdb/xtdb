@@ -5,6 +5,7 @@
             [crux.error :as err]
             [crux.io :as cio]
             [crux.query-state :as qs]
+            [crux.transaction-instant :as cti]
             [crux.tx :as tx])
   (:import com.nimbusds.jwt.SignedJWT
            [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
@@ -177,7 +178,7 @@
   (transactionTime [_] tx-time)
   (dbBasis [this]
     {:crux.db/valid-time valid-time
-     :crux.tx/tx {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id}}))
+     :crux.tx/tx (cti/->transaction-instant {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id})}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
   ICruxAPI
@@ -224,9 +225,10 @@
 
   (submitTx [_ tx-ops]
     (try
-      (api-request-sync (str url "/_crux/submit-tx")
-                        {:body {:tx-ops tx-ops}
-                         :->jwt-token ->jwt-token})
+      (-> (api-request-sync (str url "/_crux/submit-tx")
+                            {:body {:tx-ops tx-ops}
+                             :->jwt-token ->jwt-token})
+          (cti/->transaction-instant))
       (catch Exception e
         (let [data (ex-data e)]
           (when (and (= 403 (:status data))
@@ -268,24 +270,30 @@
         (get :crux.tx/tx-time)))
 
   (awaitTx [_ tx timeout]
-    (api-request-sync (str url "/_crux/await-tx")
-                      {:http-opts {:method :get
-                                   :query-params {:tx-id (:crux.tx/tx-id tx)
-                                                  :timeout (some-> timeout (cio/format-duration-millis))}}
-                       :->jwt-token ->jwt-token}))
+    (->
+     (api-request-sync (str url "/_crux/await-tx")
+                       {:http-opts {:method :get
+                                    :query-params {:tx-id (:crux.tx/tx-id tx)
+                                                   :timeout (some-> timeout (cio/format-duration-millis))}}
+                        :->jwt-token ->jwt-token})
+     (cti/->transaction-instant)))
 
   (listen [_ opts f]
     (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))
 
   (latestCompletedTx [_]
-    (api-request-sync (str url "/_crux/latest-completed-tx")
-                      {:http-opts {:method :get}
-                       :->jwt-token ->jwt-token}))
+    (->
+     (api-request-sync (str url "/_crux/latest-completed-tx")
+                       {:http-opts {:method :get}
+                        :->jwt-token ->jwt-token})
+     (cti/->transaction-instant)))
 
   (latestSubmittedTx [_]
-    (api-request-sync (str url "/_crux/latest-submitted-tx")
-                      {:http-opts {:method :get}
-                       :->jwt-token ->jwt-token}))
+    (->
+     (api-request-sync (str url "/_crux/latest-submitted-tx")
+                       {:http-opts {:method :get}
+                        :->jwt-token ->jwt-token})
+     (cti/->transaction-instant)))
 
   (activeQueries [_]
     (->> (api-request-sync (str url "/_crux/active-queries")

@@ -4,7 +4,7 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.*;
 import crux.api.HistoryOptions.SortOrder;
-
+import crux.api.TransactionInstant;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
@@ -51,9 +51,9 @@ public class CruxNode implements AutoCloseable {
             txVector = txVector.cons(op.toEdn());
         }
 
-        Map<Keyword,Object> result = node.submitTx(txVector);
-        Date txTime = (Date) result.get(TX_TIME);
-        long txId = (Long) result.get(TX_ID);
+        TransactionInstant result = node.submitTx(txVector);
+        Date txTime = (Date) result.valAt(TX_TIME);
+        long txId = (Long) result.valAt(TX_ID);
         return crux.api.alpha.TxResult.txResult(txTime, txId);
     }
 

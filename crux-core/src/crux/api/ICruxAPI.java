@@ -115,7 +115,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return true if the submitted transaction was committed, false if it was not committed.
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
-    public boolean hasTxCommitted(Map<Keyword, ?> submittedTx) throws NodeOutOfSyncException;
+    public boolean hasTxCommitted(TransactionInstant submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
@@ -149,7 +149,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction.
      */
-    public Map<Keyword, ?> awaitTx(Map<Keyword, ?> tx, Duration timeout);
+    public TransactionInstant awaitTx(TransactionInstant tx, Duration timeout);
 
     /**
      * Temporary helper value to pass to `listen`, to subscribe to tx-indexed events.
@@ -176,12 +176,12 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     /**
        @return the latest transaction to have been indexed by this node.
      */
-    public Map<Keyword, ?> latestCompletedTx();
+    public TransactionInstant latestCompletedTx();
 
     /**
        @return the latest transaction to have been submitted to this cluster
     */
-    public Map<Keyword, ?> latestSubmittedTx();
+    public TransactionInstant latestSubmittedTx();
 
     /**
      * Return frequencies of indexed attributes.

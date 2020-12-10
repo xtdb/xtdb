@@ -25,7 +25,7 @@
                                          :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
                                                                        :db-dir db-dir-2}}})]
         (t/is (= {:crux.tx/tx-id 0}
-                 (crux/latest-submitted-tx node)))
+                 (into {} (crux/latest-submitted-tx node))))
         (t/is (crux/sync node (Duration/ofSeconds 2)))
         (t/is (= {:crux.db/id :hello}
                  (crux/entity (crux/db node) :hello)))))))
@@ -51,7 +51,7 @@
                                            :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
                                                                          :db-dir db-dir-2}}})]
           (t/is (= {:crux.tx/tx-id (dec n)}
-                   (crux/latest-submitted-tx node)))
+                   (into {} (crux/latest-submitted-tx node))))
           (t/is (crux/sync node (Duration/ofSeconds 10)))
           (t/is (= n
                    (count (crux/q (crux/db node) '{:find [?e]

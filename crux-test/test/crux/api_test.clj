@@ -131,7 +131,7 @@
         (let [entity-tx (api/entity-tx db :ivan)
               ivan {:crux.db/id :ivan :name "Ivan"}
               ivan-crux-id (c/new-id ivan)]
-          (t/is (= (merge submitted-tx
+          (t/is (= (merge (into {} submitted-tx)
                           {:crux.db/id (c/new-id :ivan)
                            :crux.db/content-hash ivan-crux-id
                            :crux.db/valid-time valid-time})
@@ -212,7 +212,7 @@
 
 (t/deftest test-tx-log
   (let [valid-time (Date.)
-        tx1 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+        tx1 (into {} (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]]))]
 
     (t/testing "tx-log"
       (with-open [tx-log-iterator (.openTxLog *api* nil false)]
@@ -282,7 +282,7 @@
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
             (let [doc (merge {:crux.db/id :ivan, :name "Ivan"} m)]
-              (merge (fix/submit+await-tx [[:crux.tx/put doc valid-time]])
+              (merge (into {} (fix/submit+await-tx [[:crux.tx/put doc valid-time]]))
                      {:crux.db/doc doc
                       :crux.db/valid-time valid-time
                       :crux.db/content-hash (c/new-id doc)})))]
@@ -367,8 +367,7 @@
   (t/is (nil? (.latestSubmittedTx *api*)))
 
   (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
-    (t/is (= {:crux.tx/tx-id tx-id}
-             (.latestSubmittedTx *api*))))
+    (t/is (= tx-id (:crux.tx/tx-id (.latestSubmittedTx *api*)))))
 
   (api/sync *api*)
 
