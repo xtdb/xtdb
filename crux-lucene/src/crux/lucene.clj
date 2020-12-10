@@ -30,13 +30,6 @@
 (defn- ^String ->hash-str [eid]
   (str (cc/new-id eid)))
 
-(defn- crux-doc->triples [crux-doc]
-  (->> (dissoc crux-doc :crux.db/id)
-       (mapcat (fn [[k v]]
-                 (for [v (cc/vectorize-value v)
-                       :when (string? v)]
-                   [k v])))))
-
 (defrecord DocumentId [a v])
 
 (defn ^String keyword->k [k]
@@ -45,20 +38,6 @@
 (def ^:const ^:private field-crux-id "_crux_id")
 (def ^:const ^:private field-crux-val "_crux_val")
 (def ^:const ^:private field-crux-attr "_crux_attr")
-
-(defn- ^Document triple->doc [[k ^String v]]
-  (doto (Document.)
-    ;; To search for triples by a-v for deduping
-    (.add (StringField. field-crux-id, (->hash-str (DocumentId. k v)), Field$Store/NO))
-    ;; The actual term, which will be tokenized
-    (.add (TextField. (keyword->k k), v, Field$Store/YES))
-    ;; Used for wildcard searches
-    (.add (TextField. field-crux-val, v, Field$Store/YES))
-    ;; Used for wildcard searches
-    (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES))))
-
-(defn- ^Term triple->term [[k ^String v]]
-  (Term. field-crux-id (->hash-str (DocumentId. k v))))
 
 (defn doc-count []
   (let [{:keys [^Directory directory]} *lucene-store*
@@ -70,8 +49,23 @@
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
 (defn index-docs! [^IndexWriter index-writer docs]
-  (doseq [d (vals docs), t (crux-doc->triples d)]
-    (.updateDocument index-writer (triple->term t) (triple->doc t))))
+  (doseq [crux-doc (vals docs)
+          [k v] (->> (dissoc crux-doc :crux.db/id)
+                     (mapcat (fn [[k v]]
+                               (for [v (cc/vectorize-value v)
+                                     :when (string? v)]
+                                 [k v]))))
+          :let [id-str (->hash-str (DocumentId. k v))
+                doc (doto (Document.)
+                      ;; To search for triples by a-v for deduping
+                      (.add (StringField. field-crux-id, id-str, Field$Store/NO))
+                      ;; The actual term, which will be tokenized
+                      (.add (TextField. (keyword->k k), v, Field$Store/YES))
+                      ;; Used for wildcard searches
+                      (.add (TextField. field-crux-val, v, Field$Store/YES))
+                      ;; Used for wildcard searches
+                      (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES)))]]
+    (.updateDocument index-writer (Term. field-crux-id id-str) doc)))
 
 (defn- evict! [index-store, ^IndexWriter index-writer, eids]
   (let [attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
