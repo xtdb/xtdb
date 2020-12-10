@@ -107,15 +107,13 @@
            (into [] (mapcat identity))))))
 
 (defn -main [& args]
-  (bench/post-to-slack (format "*Starting Benchmark*, Crux Version: %s, Commit Hash: %s\n"
-                               bench/crux-version bench/commit-hash))
+  (bench/post-to-slack (format "*Starting Benchmark*, Commit Hash: %s\n" bench/commit-hash))
 
   (let [bench-results (run-benches (-> (or (parse-args args)
                                            (System/exit 1))
                                        (update :selected-nodes disj "h2-rocksdb" "sqlite-rocksdb")))]
 
-    (bench/post-to-slack (format "*Finished Benchmark*, Crux Version: %s, Commit Hash: %s\n"
-                                 bench/crux-version bench/commit-hash))
+    (bench/post-to-slack (format "*Finished Benchmark*, Commit Hash: %s\n" bench/commit-hash))
     (bench/send-email-via-ses (bench/results->email bench-results)))
 
   (shutdown-agents))

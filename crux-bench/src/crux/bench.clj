@@ -32,11 +32,6 @@
 (def commit-hash
   (System/getenv "COMMIT_HASH"))
 
-(def crux-version
-  (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
-    (with-open [in (io/reader pom-file)]
-      (get (cio/load-properties in) "version"))))
-
 (def ^:dynamic ^:private *bench-ns*)
 (def ^:dynamic ^:private *bench-dimensions* {})
 (def ^:dynamic ^:private *!bench-results*)
@@ -49,7 +44,7 @@
   `(with-dimensions* ~dims (fn [] ~@body)))
 
 (defmacro with-crux-dimensions [& body]
-  `(with-dimensions {:crux-version crux-version, :crux-commit commit-hash}
+  `(with-dimensions {:crux-commit commit-hash}
      ~@body))
 
 (defn with-timing* [f]
@@ -147,7 +142,7 @@
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
                         (let [time-taken-seconds (/ time-taken-ms 1000)]
-                          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                          (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :time-taken-ms
                                           :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken))))]
                (when (and (= bench-type :ingest) doc-count av-count bytes-indexed)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
@@ -177,7 +172,7 @@
                         (Duration/ofMillis minimum-time-taken-this-week)
                         (Duration/ofMillis maximum-time-taken-this-week)
                         (sparkline times-taken)
-                        (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :crux-version :time-taken-ms
+                        (pr-str (dissoc bench-map :bench-ns :bench-type :crux-node-type :crux-commit :time-taken-ms
                                         :percentage-difference-since-last-run :minimum-time-taken-this-week :maximum-time-taken-this-week :times-taken)))]
                (when (= bench-type :ingest)
                  (->> (let [time-taken-seconds (/ time-taken-ms 1000)]
