@@ -1794,12 +1794,15 @@
           safe-query (-> conformed-query .q-normalized (dissoc :args))
           needs-allocator? (identical? mem/*allocator* mem/root-allocator)
           close-fn (fn []
-                     (cio/try-close index-snapshot)
-                     (when needs-allocator?
-                       (log/debug :memory-used-by-query (cio/pr-edn-str {:query-id query-id
-                                                                         :off-heap-bytes (mem/allocated-size mem/*allocator*)}))
-                       (cio/try-close mem/*allocator*)
-                       (pop-thread-bindings)))]
+                     (try
+                       (cio/try-close index-snapshot)
+                       (when needs-allocator?
+                         (log/debug :memory-used-by-query (cio/pr-edn-str {:query-id query-id
+                                                                           :off-heap-bytes (mem/allocated-size mem/*allocator*)}))
+                         (cio/try-close mem/*allocator*))
+                       (finally
+                         (when needs-allocator?
+                           (pop-thread-bindings)))))]
 
       (when bus
         (bus/send bus {:crux/event-type ::submitted-query
@@ -1835,8 +1838,21 @@
     (if-not tx-id
       cio/empty-cursor
       (let [index-snapshot (open-index-snapshot this)
-            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
-        (push-thread-bindings {#'mem/*allocator* (mem/->bump-allocator)})
+            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))
+            needs-allocator? (identical? mem/*allocator* mem/root-allocator)
+            close-fn (fn []
+                       (try
+                         (cio/try-close index-snapshot)
+                         (when needs-allocator?
+                           (log/debug :memory-used-by-history (cio/pr-edn-str {:off-heap-bytes (mem/allocated-size mem/*allocator*)}))
+                           (cio/try-close mem/*allocator*))
+                         (finally
+                           (when needs-allocator?
+                             (pop-thread-bindings)))))]
+        (when needs-allocator?
+          (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator
+                                                    (mem/->bump-allocator)
+                                                    (:query-memory-quota this))}))
         (->> (try
                (->> (db/entity-history index-snapshot eid sort-order opts)
                     (map (fn [^EntityTx etx]
@@ -1847,13 +1863,9 @@
                              with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
                                                                 (get (.content-hash etx))))))))
                (catch Throwable t
-                 (cio/try-close index-snapshot)
-                 (cio/try-close mem/*allocator*)
-                 (pop-thread-bindings)
+                 (close-fn)
                  (throw t)))
-             (cio/->cursor #(do (cio/try-close index-snapshot)
-                                (cio/try-close mem/*allocator*)
-                                (pop-thread-bindings)))))))
+             (cio/->cursor close-fn)))))
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
