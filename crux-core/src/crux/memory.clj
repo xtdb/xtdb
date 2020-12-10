@@ -112,30 +112,26 @@
 (defn ->unsafe-allocator ^crux.memory.UnsafeAllocator []
   (->UnsafeAllocator (ConcurrentHashMap.)))
 
-(deftype RegionAllocator [allocator ^Map id->reference]
+(deftype RegionAllocator [allocator ^Queue references]
   Allocator
   (malloc [this size]
-    (let [buffer (malloc allocator size)
-          id (System/identityHashCode buffer)]
-      (.put id->reference id (WeakReference. (.byteBuffer buffer)))
+    (let [buffer (malloc allocator size)]
+      (.offer references (WeakReference. (.byteBuffer buffer)))
       buffer))
 
   (free [this buffer]
-    (let [id (System/identityHashCode (.byteBuffer ^DirectBuffer buffer))]
-      (if (.remove id->reference id)
-        (free allocator buffer)
-        (log/warn "trying to free unknown buffer:" buffer))))
+    (free allocator buffer))
 
   (allocated-size [this]
     (allocated-size allocator))
 
   Closeable
   (close [this]
-    (doseq [reference (vals id->reference)
-            :let [byte-buffer (.get ^Reference reference)]
-            :when byte-buffer]
-      (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
-    (.clear id->reference)
+    (doseq [reference references
+            :let [buffer (.get ^Reference reference)]
+            :when buffer]
+      (free this (UnsafeBuffer. ^ByteBuffer buffer)))
+    (.clear references)
     (cio/try-close allocator)
     (let [used (allocated-size this)]
       (when-not (zero? used)
@@ -145,7 +141,7 @@
   (^crux.memory.RegionAllocator []
    (->region-allocator (->direct-allocator)))
   (^crux.memory.RegionAllocator [allocator]
-   (->RegionAllocator allocator (ConcurrentHashMap.))))
+   (->RegionAllocator allocator (LinkedBlockingQueue.))))
 
 (deftype PooledAllocator [allocator ^long supported-size ^Queue pool ^Map address->cleaner]
   Allocator
