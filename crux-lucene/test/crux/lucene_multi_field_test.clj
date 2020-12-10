@@ -71,5 +71,15 @@
                              :where '[[(lucene-text-search "firstname:James OR surname:preston") [[?e]]]
                                       [?e :crux.db/id]]}))))))
 
+(t/deftest test-namespaced-keywords
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :person/surname "Smith"}]])
+
+  (with-open [db (c/open-db *api*)]
+    ;; QueryParser/escape also works
+    (t/is (seq (c/q db {:find '[?e]
+                        :where '[[(lucene-text-search "person\\/surname: Smith") [[?e]]]
+                                 [?e :crux.db/id]]})))))
+
+
 ;; todo test eviction
 ;; todo test error handling, malformed query
