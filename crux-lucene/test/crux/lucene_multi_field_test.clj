@@ -10,10 +10,10 @@
             [crux.memory :as mem]
             [crux.query :as q])
   (:import org.apache.lucene.analysis.Analyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField TextField]
-           org.apache.lucene.index.IndexWriter
+           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.index IndexWriter Term]
            org.apache.lucene.queryparser.classic.QueryParser
-           org.apache.lucene.search.Query))
+           [org.apache.lucene.search Query TermQuery]))
 
 (def ^:const ^:private field-content-hash "_crux_content_hash")
 (def ^:const ^:private field-eid "_crux_eid")
@@ -25,6 +25,8 @@
     (doseq [[k v] (filter (comp string? val) doc)]
       ;; The actual term, which will be tokenized
       (.add d (TextField. (l/keyword->k k), v, Field$Store/YES)))
+    ;; For eviction:
+    (.add d (StringField. field-eid, (str (cc/new-id (:crux.db/id doc))), Field$Store/NO))
     d))
 
 (defn- index-docs! [^IndexWriter index-writer docs]
@@ -32,20 +34,9 @@
 
 (defn- evict! [index-store, ^IndexWriter index-writer, eids]
   (with-open [index-snapshot (db/open-index-snapshot index-store)]
-    (doseq [eid eids]
-      (println (db/entity-history index-snapshot eid :desc {}))))
-  ;; get all content-hashes for an eid?
-  #_(let [attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
-                            keys
-                            (map #(vector (->hash-str %) %))
-                            (into {}))]
-      (with-open [index-snapshot (db/open-index-snapshot indexer)]
-      (let [qs (for [[a v] (db/exclusive-avs indexer eids)
-                     :let [a (attrs-id->attr (->hash-str a))
-                           v (db/decode-value index-snapshot v)]
-                     :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. field-content-hash (->hash-str (DocumentId. a v)))))]
-        (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
+    (doseq [eid eids
+            :let [q (TermQuery. (Term. field-eid (str (cc/new-id eid))))]]
+      (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
 
 (t/use-fixtures :each (lf/with-lucene-opts {:index-docs index-docs! :evict evict!}) fix/with-node)
 
