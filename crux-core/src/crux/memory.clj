@@ -41,14 +41,14 @@
 (def ^:private ^:const page-size (ByteUtils/pageSize))
 (def ^:private ^:const default-alignment 16)
 
-(deftype DirectAllocator [^AtomicLong allocated-bytes ^Map ref->address ^Map address->cleaner ^ReferenceQueue reference-queue]
+(deftype DirectAllocator [^AtomicLong allocated-bytes ^Map reference->address ^Map address->cleaner ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
     (let [buffer (ByteBuffer/allocateDirect size)
           address (BufferUtil/address buffer)]
       (.addAndGet allocated-bytes size)
       (.put address->cleaner address #(.addAndGet allocated-bytes (- size)))
-      (.put ref->address (PhantomReference. buffer reference-queue) address)
+      (.put reference->address (PhantomReference. buffer reference-queue) address)
       (UnsafeBuffer. buffer)))
 
   (free [this buffer]
@@ -59,9 +59,9 @@
         (log/warn "trying to free unknown buffer: " buffer))))
 
   (allocated-size [this]
-    (loop [ref (.poll reference-queue)]
-      (when ref
-        (when-let [address (.remove ref->address ref)]
+    (loop [reference (.poll reference-queue)]
+      (when reference
+        (when-let [address (.remove reference->address reference)]
           (when-let [cleaner (.remove address->cleaner address)]
             (cleaner)))
         (recur (.poll reference-queue))))
@@ -70,7 +70,7 @@
   Closeable
   (close [this]
     (allocated-size this)
-    (.clear ref->address)
+    (.clear reference->address)
     (.clear address->cleaner)))
 
 (defn ->direct-allocator ^crux.memory.DirectAllocator []
@@ -125,10 +125,10 @@
 
   Closeable
   (close [this]
-    (doseq [ref (vals address->reference)
-            :let [b (.get ^Reference ref)]
-            :when b]
-      (free this (UnsafeBuffer. ^ByteBuffer b)))
+    (doseq [reference (vals address->reference)
+            :let [byte-buffer (.get ^Reference reference)]
+            :when byte-buffer]
+      (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
     (let [used (allocated-size this)]
       (when-not (zero? used)
         (log/warn "memory still used after close:" used)))
@@ -153,8 +153,8 @@
                             (.byteBuffer (malloc allocator size)))
             address (BufferUtil/address byte-buffer)
             buffer-copy (.slice ^ByteBuffer byte-buffer)
-            ref (SoftReference. byte-buffer)]
-        (.put address->cleaner address #(.offer pool ref))
+            reference (SoftReference. byte-buffer)]
+        (.put address->cleaner address #(.offer pool reference))
         (cio/register-cleaner buffer-copy #(when-let [cleaner (.remove address->cleaner address)]
                                              (cleaner)))
         (UnsafeBuffer. buffer-copy))
@@ -222,7 +222,7 @@
   (allocated-size [this]
     (- (allocated-size allocator)
        (if chunk
-         (.remaining chunk)
+         (- chunk-size position)
          0)))
 
   Closeable
