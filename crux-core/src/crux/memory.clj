@@ -41,6 +41,8 @@
 (def ^:private ^:const page-size (ByteUtils/pageSize))
 (def ^:private ^:const default-alignment 16)
 
+(declare cleanup-references)
+
 (deftype DirectAllocator [^AtomicLong allocated-bytes ^Map reference->address ^Map address->cleaner ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
@@ -56,22 +58,27 @@
       (if-let [cleaner (.remove address->cleaner address)]
         (do (BufferUtil/free ^DirectBuffer buffer)
             (cleaner))
-        (log/warn "trying to free unknown buffer:" buffer))))
+        (log/warn "trying to free unknown buffer:" buffer))
+      (cleanup-references this)))
 
   (allocated-size [this]
-    (loop [reference (.poll reference-queue)]
-      (when reference
-        (when-let [address (.remove reference->address reference)]
-          (when-let [cleaner (.remove address->cleaner address)]
-            (cleaner)))
-        (recur (.poll reference-queue))))
+    (cleanup-references this)
     (.get allocated-bytes))
 
   Closeable
   (close [this]
+    (cleanup-references this)
     (allocated-size this)
     (.clear reference->address)
     (.clear address->cleaner)))
+
+(defn- cleanup-references [^DirectAllocator allocator]
+  (loop [reference (.poll ^ReferenceQueue (.reference-queue allocator))]
+    (when reference
+      (when-let [address (.remove ^Map (.reference->address allocator) reference)]
+        (when-let [cleaner (.remove ^Map (.address->cleaner allocator) address)]
+          (cleaner)))
+      (recur (.poll ^ReferenceQueue (.reference-queue allocator))))))
 
 (defn ->direct-allocator ^crux.memory.DirectAllocator []
   (->DirectAllocator (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
