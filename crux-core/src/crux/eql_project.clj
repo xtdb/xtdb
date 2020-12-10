@@ -58,11 +58,12 @@
 
 (defn- ->next-recurse-state-fn [{:keys [query] :as join}]
   (cond
-    (= '... query) (fn [^RecurseState recurse-state]
-                     (-> recurse-state (update :recurse-depth inc)))
-    (int? query) (fn [^RecurseState recurse-state]
-                   (when (< (.recurse-depth recurse-state) ^long query)
-                     (-> recurse-state (update :recurse-depth inc))))
+    ;; TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
+    ;; (= '... query) (fn [^RecurseState recurse-state]
+    ;;                  (-> recurse-state (update :recurse-depth inc)))
+    ;; (int? query) (fn [^RecurseState recurse-state]
+    ;;                (when (< (.recurse-depth recurse-state) ^long query)
+    ;;                  (-> recurse-state (update :recurse-depth inc))))
     :else (constantly (RecurseState. 0 (project-child-fns join)))))
 
 (defn- forward-joins-child-fn [{:keys [props special forward-joins unions]}]

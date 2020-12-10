@@ -220,10 +220,14 @@
                  (crux/q db '{:find [(eql/project ?e [:part-name {:_part-of [:part-name]}])]
                               :where [[?e :crux.db/id :a]]})))
 
+        ;; TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
+        #_
         (t/is (= parts
                  (crux/q db '{:find [(eql/project ?e [:part-name {:_part-of 1}])]
                               :where [[?e :crux.db/id :a]]})))))))
 
+;; TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
+#_
 (t/deftest test-pull-recursion
   (let [db (submit-test-docs people-docs)
         friends {:name "Lucy"

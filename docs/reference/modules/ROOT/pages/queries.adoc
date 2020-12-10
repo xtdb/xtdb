@@ -449,6 +449,8 @@ include::example$src/docs/examples.clj[tags=eql-query-6-r]
 ----
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
+// TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
+Crux does not (yet) support recursive queries.
 
 [#ordering-and-pagination]
 == Ordering and Pagination
