@@ -43,23 +43,22 @@
 
 (declare cleanup-references)
 
-(deftype DirectAllocator [^AtomicLong allocated-bytes ^Map reference->address ^Map address->cleaner ^ReferenceQueue reference-queue]
+(deftype DirectAllocator [^AtomicLong allocated-bytes ^Map reference->id ^Map id->cleaner ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
     (let [buffer (ByteBuffer/allocateDirect size)
-          address (BufferUtil/address buffer)]
+          id (System/identityHashCode buffer)]
       (.addAndGet allocated-bytes size)
-      (.put address->cleaner address #(.addAndGet allocated-bytes (- size)))
-      (.put reference->address (PhantomReference. buffer reference-queue) address)
+      (.put id->cleaner id #(.addAndGet allocated-bytes (- size)))
+      (.put reference->id (PhantomReference. buffer reference-queue) id)
       (UnsafeBuffer. buffer)))
 
   (free [this buffer]
-    (let [address (.addressOffset ^DirectBuffer buffer)]
-      (if-let [cleaner (.remove address->cleaner address)]
+    (let [id (System/identityHashCode (.byteBuffer ^DirectBuffer buffer))]
+      (if-let [cleaner (.remove id->cleaner id)]
         (do (BufferUtil/free ^DirectBuffer buffer)
             (cleaner))
-        (log/warn "trying to free unknown buffer:" buffer))
-      (cleanup-references this)))
+        (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
     (cleanup-references this)
@@ -68,15 +67,14 @@
   Closeable
   (close [this]
     (cleanup-references this)
-    (allocated-size this)
-    (.clear reference->address)
-    (.clear address->cleaner)))
+    (.clear reference->id)
+    (.clear id->cleaner)))
 
 (defn- cleanup-references [^DirectAllocator allocator]
   (loop [reference (.poll ^ReferenceQueue (.reference-queue allocator))]
     (when reference
-      (when-let [address (.remove ^Map (.reference->address allocator) reference)]
-        (when-let [cleaner (.remove ^Map (.address->cleaner allocator) address)]
+      (when-let [id (.remove ^Map (.reference->id allocator) reference)]
+        (when-let [cleaner (.remove ^Map (.id->cleaner allocator) id)]
           (cleaner)))
       (recur (.poll ^ReferenceQueue (.reference-queue allocator))))))
 
