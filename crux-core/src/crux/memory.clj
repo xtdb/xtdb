@@ -9,8 +9,7 @@
            java.lang.reflect.Constructor
            [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference WeakReference]
            java.nio.ByteBuffer
-           [java.util Comparator HashMap Map Queue Set]
-           java.util.function.Supplier
+           [java.util Comparator HashMap Map Queue]
            [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
            java.util.concurrent.atomic.AtomicLong
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
@@ -154,7 +153,7 @@
                                   (recur (.poll pool)))))
                             (.byteBuffer (malloc allocator size)))
             address (BufferUtil/address byte-buffer)
-            buffer-copy (.slice ^ByteBuffer byte-buffer)
+            buffer-copy (.duplicate ^ByteBuffer byte-buffer)
             reference (SoftReference. byte-buffer)]
         (.put address->cleaner address #(when (.get reference)
                                           (.offer pool reference)))
@@ -233,7 +232,7 @@
     (set! chunk nil)
     (cio/try-close allocator)))
 
-(def ^:private ^:const default-chunk-size (* 8 1024))
+(def ^:private ^:const default-chunk-size page-size)
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
