@@ -8,7 +8,7 @@
   (:import [java.io Closeable DataInputStream DataOutputStream]
            java.lang.reflect.Constructor
            [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference]
-           [java.nio ByteBuffer DirectByteBuffer]
+           java.nio.ByteBuffer
            [java.util Comparator HashMap Map Queue Set]
            java.util.function.Supplier
            [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
@@ -76,14 +76,14 @@
 (defn ->direct-allocator ^crux.memory.DirectAllocator []
   (->DirectAllocator (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
 
-(defn- ->byte-buffer ^java.nio.DirectByteBuffer [^long address ^long size]
+(defn- ->byte-buffer ^java.nio.ByteBuffer [^long address ^long size]
   (ByteUtils/newDirectByteBuffer address size))
 
 (deftype UnsafeAllocator [^Map address->size]
   Allocator
   (malloc [this size]
     (let [address (ByteUtils/malloc size)
-          buffer (UnsafeBuffer. address size)]
+          buffer (UnsafeBuffer. ^ByteBuffer (->byte-buffer address size))]
       (.put address->size address size)
       (cio/register-cleaner buffer #(when (.remove address->size address)
                                       (ByteUtils/free address)))
@@ -105,21 +105,21 @@
 (defn ->unsafe-allocator ^crux.memory.UnsafeAllocator []
   (->UnsafeAllocator (ConcurrentHashMap.)))
 
-(deftype RegionAllocator [parent-allocator ^Map address->reference]
+(deftype RegionAllocator [allocator ^Map address->reference]
   Allocator
   (malloc [this size]
-    (let [buffer (malloc parent-allocator size)
+    (let [buffer (malloc allocator size)
           address (.addressOffset buffer)]
       (.put address->reference address (SoftReference. (.byteBuffer buffer)))
       buffer))
 
   (free [this buffer]
     (if (.remove address->reference (.addressOffset ^DirectBuffer buffer))
-      (free parent-allocator buffer)
+      (free allocator buffer)
       (log/warn "trying to free unknown buffer: " buffer)))
 
   (allocated-size [this]
-    (allocated-size parent-allocator))
+    (allocated-size allocator))
 
   Closeable
   (close [this]
@@ -130,25 +130,29 @@
     (let [used (allocated-size this)]
       (when-not (zero? used)
         (log/warn "memory still used after close:" used)))
-    (.clear address->reference)))
+    (.clear address->reference)
+    (cio/try-close allocator)))
 
 (defn ->region-allocator
   (^crux.memory.RegionAllocator []
    (->region-allocator (->direct-allocator)))
-  (^crux.memory.RegionAllocator [parent-allocator]
-   (->RegionAllocator parent-allocator (ConcurrentHashMap.))))
+  (^crux.memory.RegionAllocator [allocator]
+   (->RegionAllocator allocator (ConcurrentHashMap.))))
 
-(deftype PooledAllocator [parent-allocator ^long supported-size ^Queue pool ^Map address->cleaner]
+(deftype PooledAllocator [allocator ^long supported-size ^Queue pool ^Map address->cleaner]
   Allocator
   (malloc [this size]
     (if (not= supported-size size)
-      (malloc parent-allocator size)
+      (throw (err/illegal-arg :unsupported-size
+                              {::err/message "Unsupported size"
+                               :supported-size supported-size
+                               :requested-size size}))
       (let [byte-buffer (or (loop [ref (.poll pool)]
                               (when ref
                                 (if-let [b (.get ^Reference ref)]
                                   b
                                   (recur (.poll pool)))))
-                            (.byteBuffer (malloc parent-allocator size)))
+                            (.byteBuffer (malloc allocator size)))
             address (BufferUtil/address byte-buffer)
             buffer-copy (.slice ^ByteBuffer byte-buffer)
             ref (SoftReference. byte-buffer)]
@@ -158,13 +162,17 @@
         (UnsafeBuffer. buffer-copy))))
 
   (free [this buffer]
-    (if (= supported-size (.capacity ^DirectBuffer buffer))
-      (when-let [cleaner (.remove address->cleaner (.addressOffset ^DirectBuffer buffer))]
-        (cleaner))
-      (free parent-allocator buffer)))
+    (let [size (.capacity ^DirectBuffer buffer)]
+      (if (= supported-size size)
+        (when-let [cleaner (.remove address->cleaner (.addressOffset ^DirectBuffer buffer))]
+          (cleaner))
+        (throw (err/illegal-arg :unsupported-size
+                                {::err/message "Unsupported size"
+                                 :supported-size supported-size
+                                 :requested-size size})))))
 
   (allocated-size [this]
-    (allocated-size parent-allocator))
+    (allocated-size allocator))
 
   Closeable
   (close [this]
@@ -174,25 +182,21 @@
     (loop [ref (.poll pool)]
       (when ref
         (when-let [b (.get ^Reference ref)]
-          (free parent-allocator (UnsafeBuffer. ^ByteBuffer b)))
+          (free allocator (UnsafeBuffer. ^ByteBuffer b)))
         (recur (.poll pool))))
-    (let [used (allocated-size this)]
-      (when-not (zero? used)
-        (log/warn "memory still used after close:" used)))))
+    (cio/try-close allocator)))
 
 (defn ->pooled-allocator
   (^crux.memory.PooledAllocator [^long supported-size]
-   (->pooled-allocator (->direct-allocator) supported-size))
-  (^crux.memory.PooledAllocator [parent-allocator ^long supported-size]
-   (->PooledAllocator parent-allocator supported-size (LinkedBlockingQueue.) (ConcurrentHashMap.))))
+   (->pooled-allocator (->region-allocator) supported-size))
+  (^crux.memory.PooledAllocator [allocator ^long supported-size]
+   (->PooledAllocator allocator supported-size (LinkedBlockingQueue.) (ConcurrentHashMap.))))
 
-(deftype BumpAllocator [owned-allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^ByteBuffer chunk ^:unsynchronized-mutable ^long position]
+(deftype BumpAllocator [allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^ByteBuffer chunk ^:unsynchronized-mutable ^long position]
   Allocator
   (malloc [this size]
     (if-not chunk
-      (do (set! chunk (let [buffer (malloc owned-allocator chunk-size)]
-                        (or (.byteBuffer buffer)
-                            (->byte-buffer (.addressOffset buffer) (.capacity buffer)))))
+      (do (set! chunk (.byteBuffer (malloc allocator chunk-size)))
           (set! position 0)
           (recur size))
       (let [size (long size)
@@ -202,7 +206,7 @@
                                             alignment-mask)]
         (cond
           (> size large-buffer-size)
-          (malloc owned-allocator size)
+          (malloc allocator size)
 
           (> new-aligned-offset chunk-size)
           (do (set! chunk nil)
@@ -215,13 +219,12 @@
   (free [this buffer]
     (if (= (+ (.addressOffset ^DirectBuffer buffer)
               (.capacity ^DirectBuffer buffer))
-           (+ (BufferUtil/address chunk)
-              (.position chunk)))
-      (.position chunk (- (.position chunk) (.capacity ^DirectBuffer buffer)))
+           (+ (BufferUtil/address chunk) position))
+      (set! position (- position (.capacity ^DirectBuffer buffer)))
       (log/warn "can only free/undo latest allocation with bump allocator")))
 
   (allocated-size [this]
-    (- (allocated-size owned-allocator)
+    (- (allocated-size allocator)
        (if chunk
          (.remaining chunk)
          0)))
@@ -229,41 +232,41 @@
   Closeable
   (close [this]
     (set! chunk nil)
-    (cio/try-close owned-allocator)))
+    (cio/try-close allocator)))
 
 (def ^:private ^:const default-chunk-size (* 8 1024))
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
    (->bump-allocator (->pooled-allocator default-chunk-size) default-chunk-size))
-  (^crux.memory.BumpAllocator [owned-allocator]
-   (->bump-allocator owned-allocator default-chunk-size))
-  (^crux.memory.BumpAllocator [owned-allocator chunk-size]
-   (->BumpAllocator owned-allocator chunk-size (quot default-chunk-size 4) nil 0)))
+  (^crux.memory.BumpAllocator [allocator]
+   (->bump-allocator allocator default-chunk-size))
+  (^crux.memory.BumpAllocator [allocator chunk-size]
+   (->BumpAllocator allocator chunk-size (quot default-chunk-size 4) nil 0)))
 
-(deftype QuotaAllocator [owned-allocator ^long quota]
+(deftype QuotaAllocator [allocator ^long quota]
   Allocator
   (malloc [_ size]
-    (when (> (+ size (allocated-size owned-allocator)) quota)
+    (when (> (+ size (allocated-size allocator)) quota)
       (throw (err/illegal-arg :qouta-exceeded
-                              {::err/message (str "Exceeded allocator quota")
+                              {::err/message "Exceeded allocator quota"
                                :quota quota
-                               :allocated-size (allocated-size owned-allocator)
+                               :allocated-size (allocated-size allocator)
                                :requested-size size})))
-    (malloc owned-allocator size))
+    (malloc allocator size))
 
   (free [_ buffer]
-    (free owned-allocator buffer))
+    (free allocator buffer))
 
   (allocated-size [_]
-    (allocated-size owned-allocator))
+    (allocated-size allocator))
 
   Closeable
   (close [_]
-    (cio/try-close owned-allocator)))
+    (cio/try-close allocator)))
 
-(defn ->quota-allocator ^crux.memory.QuotaAllocator [owned-allocator ^long quota]
-  (->QuotaAllocator owned-allocator quota))
+(defn ->quota-allocator ^crux.memory.QuotaAllocator [allocator ^long quota]
+  (->QuotaAllocator allocator quota))
 
 (def ^crux.memory.Allocator default-allocator (->direct-allocator))
 (def ^:dynamic ^crux.memory.Allocator *allocator* default-allocator)
