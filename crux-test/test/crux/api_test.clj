@@ -254,30 +254,32 @@
               (let [result (iterator-seq tx-log-iterator)]
                 (t/is (= 2 (count result))))))))
 
-      (t/testing "from tx id - doesnt't include items <= `after-tx-id`"
+      (t/testing "from tx id - doesn't include items <= `after-tx-id`"
         (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
           (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
 
-      (t/testing "tx fns return with-ops? correctly"
-        (let [tx4 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :jack :age 21}]
-                                        [:crux.tx/put {:crux.db/id :increment-age
-                                                       :crux.db/fn '(fn [ctx eid]
-                                                                      (let [db (crux.api/db ctx)
-                                                                            entity (crux.api/entity db eid)]
-                                                                        [[:crux.tx/put (update entity :age inc)]]))}]
-                                        [:crux.tx/put {:crux.db/id :increment-age-2
-                                                       :crux.db/fn '(fn [ctx eid]
-                                                                      [[:crux.tx/fn :increment-age eid]])}]
-                                        [:crux.tx/fn :increment-age-2 :jack]])]
-          (t/is (true? (api/tx-committed? *api* tx4)))
-          (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
-            (let [tx-ops (-> tx-log-iterator iterator-seq last :crux.api/tx-ops)]
-              (t/is (= [:crux.tx/fn
-                        (c/new-id :increment-age-2)
-                        {:crux.api/tx-ops [[:crux.tx/fn
-                                            (c/new-id :increment-age)
-                                            {:crux.api/tx-ops [[:crux.tx/put {:crux.db/id :jack, :age 22}]]}]]}]
-                       (last tx-ops))))))))))
+      ;; Intermittent failure on Kafka, see #1256
+      (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
+        (t/testing "tx fns return with-ops? correctly"
+          (let [tx4 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :jack :age 21}]
+                                          [:crux.tx/put {:crux.db/id :increment-age
+                                                         :crux.db/fn '(fn [ctx eid]
+                                                                        (let [db (crux.api/db ctx)
+                                                                              entity (crux.api/entity db eid)]
+                                                                          [[:crux.tx/put (update entity :age inc)]]))}]
+                                          [:crux.tx/put {:crux.db/id :increment-age-2
+                                                         :crux.db/fn '(fn [ctx eid]
+                                                                        [[:crux.tx/fn :increment-age eid]])}]
+                                          [:crux.tx/fn :increment-age-2 :jack]])]
+            (t/is (true? (api/tx-committed? *api* tx4)))
+            (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
+              (let [tx-ops (-> tx-log-iterator iterator-seq last :crux.api/tx-ops)]
+                (t/is (= [:crux.tx/fn
+                          (c/new-id :increment-age-2)
+                          {:crux.api/tx-ops [[:crux.tx/fn
+                                              (c/new-id :increment-age)
+                                              {:crux.api/tx-ops [[:crux.tx/put {:crux.db/id :jack, :age 22}]]}]]}]
+                         (last tx-ops)))))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
@@ -406,25 +408,27 @@
                  @!events))))))
 
 (t/deftest test-tx-fn-replacing-arg-docs-866
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
-                                       :crux.db/fn '(fn [ctx doc]
-                                                      [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
+  ;; Intermittent failure on Kafka, see #1256
+  (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
+                                         :crux.db/fn '(fn [ctx doc]
+                                                        [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
 
-  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
-    (t/testing "replaces args doc with resulting ops"
-      (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
+    (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
+      (t/testing "replaces args doc with resulting ops"
+        (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
 
-      (t/is (= {:crux.db/id :ivan, :name "Ivan"}
-               (api/entity (api/db *api*) :ivan)))
+        (t/is (= {:crux.db/id :ivan, :name "Ivan"}
+                 (api/entity (api/db *api*) :ivan)))
 
-      (let [*server-api* (or *http-server-api* *api*)
-            arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
-                         (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
+        (let [*server-api* (or *http-server-api* *api*)
+              arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
+                           (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
-        (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
-                 (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
-                     (get arg-doc-id)
-                     (dissoc :crux.db/id))))))))
+          (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
+                   (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
+                       (get arg-doc-id)
+                       (dissoc :crux.db/id)))))))))
 
 (t/deftest test-await-tx
   (when-not (= *node-type* :remote)
