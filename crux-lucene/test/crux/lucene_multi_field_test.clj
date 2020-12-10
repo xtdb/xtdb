@@ -30,7 +30,24 @@
 (defn- index-docs! [^IndexWriter index-writer docs]
   (.addDocuments index-writer (map index-all-fields docs)))
 
-(t/use-fixtures :each (lf/with-lucene-multi-docs-module index-docs!) fix/with-node)
+(defn- evict! [index-store, ^IndexWriter index-writer, eids]
+  (with-open [index-snapshot (db/open-index-snapshot index-store)]
+    (doseq [eid eids]
+      (println (db/entity-history index-snapshot eid :desc {}))))
+  ;; get all content-hashes for an eid?
+  #_(let [attrs-id->attr (->> (db/read-index-meta indexer :crux/attribute-stats)
+                            keys
+                            (map #(vector (->hash-str %) %))
+                            (into {}))]
+      (with-open [index-snapshot (db/open-index-snapshot indexer)]
+      (let [qs (for [[a v] (db/exclusive-avs indexer eids)
+                     :let [a (attrs-id->attr (->hash-str a))
+                           v (db/decode-value index-snapshot v)]
+                     :when (not= :crux.db/id a)]
+                 (TermQuery. (Term. field-content-hash (->hash-str (DocumentId. a v)))))]
+        (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
+
+(t/use-fixtures :each (lf/with-lucene-opts {:index-docs index-docs! :evict evict!}) fix/with-node)
 
 (defn ^Query build-lucene-text-query
   [^Analyzer analyzer, [^String q]]
@@ -80,6 +97,26 @@
                         :where '[[(lucene-text-search "person\\/surname: Smith") [[?e]]]
                                  [?e :crux.db/id]]})))))
 
+(t/deftest test-evict
+  (let [lucene-q "name: Smith"
+        in-crux? (fn []
+                   (with-open [db (c/open-db *api*)]
+                     (boolean (seq (c/q db {:find '[?e]
+                                            :where '[[(lucene-text-search "name: Smith") [[?e]]]
+                                                     [?e :crux.db/id]]})))))
+        in-lucene-store? (fn []
+                           (let [lucene-store (:crux.lucene/lucene-store @(:!system *api*))]
+                             (with-open [search-results (lf/search build-lucene-text-query ["name: Smith"])]
+                               (boolean (seq (iterator-seq search-results))))))]
 
-;; todo test eviction
+    (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Smith"}]])
+
+    (assert (in-crux?))
+    (assert (in-lucene-store?))
+
+    (submit+await-tx [[:crux.tx/evict :ivan]])
+
+    (t/is (not (in-crux?)))
+    (t/is (not (in-lucene-store?)))))
+
 ;; todo test error handling, malformed query

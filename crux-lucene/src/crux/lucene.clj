@@ -73,14 +73,12 @@
   (doseq [d (vals docs), t (crux-doc->triples d)]
     (.updateDocument index-writer (triple->term t) (triple->doc t))))
 
-(defn- evict! [index-store, node, eids]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} node
-        attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
+(defn- evict! [index-store, ^IndexWriter index-writer, eids]
+  (let [attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
                             keys
                             (map #(vector (->hash-str %) %))
                             (into {}))]
-    (with-open [index-snapshot (db/open-index-snapshot index-store)
-                index-writer (IndexWriter. directory, (IndexWriterConfig. analyzer))]
+    (with-open [index-snapshot (db/open-index-snapshot index-store)]
       (let [qs (for [[a v] (db/exclusive-avs index-store eids)
                      :let [a (attrs-id->attr (->hash-str a))
                            v (db/decode-value index-snapshot v)]
@@ -211,11 +209,13 @@
                         :required? true
                         :spec ::sys/path}
                :index-docs {:doc "Indexing Docs Fn"
-                            :default index-docs!}}
+                            :default index-docs!}
+               :evict {:doc "Evict Docs Fn"
+                       :default evict!}}
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
                :index-store :crux/index-store}}
-  [{:keys [^Path db-dir index-docs index-store document-store bus] :as opts}]
+  [{:keys [^Path db-dir index-docs evict index-store document-store bus] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
         lucene-store (LuceneNode. directory analyzer)]
@@ -234,5 +234,12 @@
                       (with-open [index-writer (index-writer lucene-store)]
                         (index-docs index-writer docs)))
                     :crux.tx/unindexing-eids
-                    (evict! index-store lucene-store (:eids ev)))))
+                    (let [docs (db/fetch-docs document-store (:doc-ids ev))]
+                      (try
+                        (with-open [index-writer (index-writer lucene-store)]
+                          (evict index-store index-writer (:eids ev)))
+                        (catch Throwable t
+                          ;; TODO until #1275 is fixed
+                          (log/error t)
+                          (throw t)))))))
     lucene-store))

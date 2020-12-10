@@ -17,16 +17,12 @@
 
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
-(defn- -query [a v]
-  (let [{:keys [analyzer]} (:crux.lucene/lucene-store @(:!system *api*))]
-    (l/build-query analyzer [a v])))
-
 (t/deftest test-can-search-string
   (let [doc {:crux.db/id :ivan :name "Ivan"}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
 
     (t/testing "using Lucene directly"
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) (-query :name "Ivan"))]
+      (with-open [search-results (lf/search l/build-query [:name "Ivan"])]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (ffirst docs) "_crux_val"))))))
@@ -69,9 +65,9 @@
                                :where
                                '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) (-query :name "Ivan"))]
+      (with-open [search-results (lf/search l/build-query [:name "Ivan"])]
         (t/is (empty? (iterator-seq search-results))))
-      (with-open [search-results ^crux.api.ICursor (l/search (:crux.lucene/lucene-store @(:!system *api*)) (-query :name "Derek"))]
+      (with-open [search-results (lf/search l/build-query [:name "Derek"])]
         (t/is (seq (iterator-seq search-results)))))
 
     (t/testing "Scores"
