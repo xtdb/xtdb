@@ -2,7 +2,7 @@ package com.example.workflow
 
 import clojure.lang.Keyword
 import com.example.contract.IOUState
-import crux.corda.service.CruxService
+import com.example.service.CruxService
 import net.corda.core.node.services.queryBy
 import net.corda.core.utilities.getOrThrow
 import net.corda.testing.core.singleIdentity
@@ -25,7 +25,7 @@ class IOUFlowTests {
         network = MockNetwork(MockNetworkParameters(cordappsForAllNodes = listOf(
             TestCordapp.findCordapp("com.example.contract"),
             TestCordapp.findCordapp("com.example.workflow"),
-            TestCordapp.findCordapp("crux.corda.service"))))
+            TestCordapp.findCordapp("com.example.service"))))
         a = network.createPartyNode()
         b = network.createPartyNode()
         // For real nodes this happens automatically, but we have to manually register the flow for tests.
@@ -71,7 +71,7 @@ class IOUFlowTests {
         // We check Crux gets a transaction
         for (node in nodes) {
             val cruxService = node.services.cordaService(CruxService::class.java)
-            val cruxNode = cruxService.cruxNode
+            val cruxNode = cruxService.node
 
             assertEquals(1L, cruxService.cruxTx(signedTx.id)!![txIdKey])
             assertEquals(1L, cruxNode.latestCompletedTx()[txIdKey])

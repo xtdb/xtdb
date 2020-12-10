@@ -24,12 +24,12 @@ dependencies {
     cordaRuntime(cordaGroup, "corda", cordaVersion)
     cordapp(project(":iou-contract"))
     cordapp(project(":crux-corda-state"))
-    cordapp(project(":crux-corda-service"))
+    cordapp(project(":crux-corda"))
+    implementation("juxt", "crux-core", "20.09-1.12.1-beta")
 
     testImplementation("junit", "junit", "4.12")
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)
     testImplementation("org.clojure", "clojure", "1.10.0")
-    testImplementation("juxt", "crux-core", "20.09-1.11.1-beta-SNAPSHOT")
 
     testImplementation("com.h2database", "h2", "1.4.199")
     testImplementation("org.postgresql", "postgresql", "42.2.17")

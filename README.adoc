@@ -1,14 +1,49 @@
 = Crux Corda
 
-WIP!
+A https://opencrux.com[Crux] library that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
 
-We have three Cordapps here - one production (`service`) two test (`iou-contract` and `iou-workflow`).
+WIP! TODO:
+
+* allow user to override document mapping
 
 Things of interest:
 
-* `crux-corda-service/src/main/kotlin/crux/corda/service/CruxService.kt` - entry point for the Crux driver, a `CordaService`
-* `crux-corda-service/src/main/clojure/crux/corda/service.clj` - the implementation of the Crux driver
-* `crux-corda-state/src/main/kotlin/crux/corda/CruxState.kt` - interface that Corda states should implement to be included in Crux
+`crux-corda` library::
+
+* `crux-corda/src/main/kotlin/crux/corda/CruxCorda.kt` - entry point for the Crux driver, adds extension functions to `AppServiceHub`
+* `crux-corda/src/main/clojure/crux/corda.clj` - the implementation of the Crux driver
+* `crux-corda-state/src/main/kotlin/crux/corda/state/CruxState.kt` - interface that Corda states should implement to be included in Crux
+
+Example user app::
 
 * `iou-contract/src/main/kotlin/com/example/contract/IOUState.kt` - example of a Corda state with a Crux mapping
++
+[source,kotlin]
+----
+@BelongsToContract(IOUContract::class)
+data class IOUState(val value: Int,
+                    val lender: Party,
+                    val borrower: Party,
+                    override val linearId: UniqueIdentifier = UniqueIdentifier()) :
+    LinearState, QueryableState, CruxState {
+
+    override val cruxId = linearId.id
+    override val cruxDoc: Map<String, Any> = mapOf(
+        "iou-state/value" to value,
+        "iou-state/lender" to lender.name.toString(),
+        "iou-state/borrower" to borrower.name.toString())
+}
+----
+* `iou-workflow/src/main/kotlin/com/example/service/CruxService.kt` - example of a CordaService that starts a Crux node
++
+[source,kotlin]
+----
+@CordaService
+class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsToken() {
+
+    val node = serviceHub.startCruxNode {
+        // this :: crux.api.NodeConfigurator
+    }
+}
+----
 * `iou-workflow/src/test/kotlin/com/example/workflow/IOUFlowTests.kt` - E2E test for the IOU app

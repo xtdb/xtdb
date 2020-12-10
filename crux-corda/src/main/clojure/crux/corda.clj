@@ -1,4 +1,4 @@
-(ns crux.corda.service
+(ns crux.corda
   (:require [crux.api :as crux]
             [crux.tx :as tx]
             [crux.db :as db]
@@ -8,7 +8,7 @@
             [next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
             [crux.io :as cio])
-  (:import (crux.corda CruxState)
+  (:import (crux.corda.state CruxState)
            (crux.api ICursor)
            (net.corda.core.crypto SecureHash)
            (net.corda.core.node AppServiceHub)
@@ -131,13 +131,7 @@
             (tx-row->tx dialect)
             (select-keys [::tx/tx-id ::tx/tx-time]))))
 
-(defn ->tx-log {::sys/deps {:service-hub ::service-hub
-                            :dialect 'crux.corda.h2/->dialect}}
-  [{:keys [dialect ^AppServiceHub service-hub] :as opts}]
-  (setup-tx-schema! dialect (.jdbcSession service-hub))
-  (map->CordaTxLog opts))
-
-(defn sync-txs [{:keys [tx-ingester document-store tx-log] :as crux-node}]
+(defn sync-txs [{:keys [tx-log tx-ingester document-store] :as crux-node}]
   (with-open [txs (open-tx-log tx-log (::tx/tx-id (crux/latest-completed-tx crux-node)))]
     (doseq [{:keys [docs ::tx/tx-events] :as tx} (iterator-seq txs)]
       (let [in-flight-tx (db/begin-tx tx-ingester tx)]
@@ -151,6 +145,10 @@
             ;; TODO behaviour here? abort consumption entirely?
             ))))))
 
-(defn start-node [service-hub]
-  (crux/start-node {::service-hub (fn [_] service-hub)
-                    :crux/tx-log `->tx-log}))
+(defn ->tx-log {::sys/deps {:dialect 'crux.corda.h2/->dialect
+                            :tx-ingester :crux/tx-ingester
+                            :document-store :crux/document-store
+                            :service-hub ::service-hub}}
+  [{:keys [dialect ^AppServiceHub service-hub] :as opts}]
+  (setup-tx-schema! dialect (.jdbcSession service-hub))
+  (map->CordaTxLog opts))

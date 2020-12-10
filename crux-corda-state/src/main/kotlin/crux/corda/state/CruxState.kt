@@ -1,4 +1,4 @@
-package crux.corda
+package crux.corda.state
 
 @Suppress("unused")
 interface CruxState {

@@ -1,5 +1,5 @@
 (ns crux.corda.postgres
-  (:require [crux.corda.service :as crux-corda]
+  (:require [crux.corda :as crux-corda]
             [crux.tx :as tx]
             [next.jdbc :as jdbc])
   (:import (java.util Date)

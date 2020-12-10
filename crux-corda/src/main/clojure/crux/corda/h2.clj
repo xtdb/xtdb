@@ -1,5 +1,5 @@
 (ns crux.corda.h2
-  (:require [crux.corda.service :as crux-corda]
+  (:require [crux.corda :as crux-corda]
             [crux.tx :as tx]
             [next.jdbc :as jdbc])
   (:import (java.time OffsetDateTime LocalDate LocalTime ZoneOffset)
@@ -22,7 +22,7 @@ CREATE TABLE IF NOT EXISTS crux_txs (
 CREATE TRIGGER IF NOT EXISTS crux_tx_trigger
   AFTER INSERT, UPDATE ON node_transactions
   FOR EACH ROW
-  CALL \"crux.corda.service.NodeTransactionTrigger\""]))))
+  CALL \"crux.corda.NodeTransactionTrigger\""]))))
 
 (defmethod crux-corda/tx-row->tx :h2 [tx-row _]
   (let [^TimestampWithTimeZone h2-tx-time (:crux_tx_time tx-row)]
