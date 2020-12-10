@@ -101,7 +101,8 @@
     (reduce + (vals address->size)))
 
   Closeable
-  (close [this]))
+  (close [this]
+    (.clear address->size)))
 
 (defn ->unsafe-allocator ^crux.memory.UnsafeAllocator []
   (->UnsafeAllocator (ConcurrentHashMap.)))
