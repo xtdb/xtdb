@@ -7,25 +7,14 @@ import java.lang.reflect.Method;
 
 import java.util.concurrent.ConcurrentHashMap;
 
+import crux.ByteUtils;
+
 public final class ConcurrentHashMapTableAccess {
     private static final MethodHandle TABLE_FIELD_METHOD_HANDLE;
 
     static {
         try {
-            try {
-                Method getModule = Class.class.getDeclaredMethod("getModule");
-                Class<?> moduleClass = getModule.getReturnType();
-                Method isNamed = moduleClass.getDeclaredMethod("isNamed");
-                Method addOpens = moduleClass.getDeclaredMethod("addOpens", String.class, moduleClass);
-
-                Object thisModule = getModule.invoke(ConcurrentHashMapTableAccess.class);
-                if (!(boolean) isNamed.invoke(thisModule)) {
-                    Object javaBaseModule = getModule.invoke(ConcurrentHashMap.class);
-                    addOpens.invoke(javaBaseModule, ConcurrentHashMap.class.getPackage().getName(), thisModule);
-                }
-            } catch (Exception ignore) {
-            }
-
+            ByteUtils.tryOpenReflectiveAccess(ConcurrentHashMapTableAccess.class, ConcurrentHashMap.class);
             Field tableField = ConcurrentHashMap.class.getDeclaredField("table");
             tableField.setAccessible(true);
             MethodHandle mh = MethodHandles.lookup().unreflectGetter(tableField);

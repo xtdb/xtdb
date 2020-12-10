@@ -17,15 +17,31 @@ public class ByteUtils {
     public static final Comparator<DirectBuffer> UNSIGNED_BUFFER_COMPARATOR = new UnsignedBufferComparator();
 
     private static final boolean IS_LITTLE_ENDIAN = ByteOrder.nativeOrder() == ByteOrder.LITTLE_ENDIAN;
-    private static final sun.misc.Unsafe UNSAFE;
+    private static final sun.misc.Unsafe UNSAFE = getUnsafe();
 
-    static {
+    public static sun.misc.Unsafe getUnsafe() {
         try {
             Field f = sun.misc.Unsafe.class.getDeclaredField("theUnsafe");
             f.setAccessible(true);
-            UNSAFE = (sun.misc.Unsafe) f.get(null);
+            return (sun.misc.Unsafe) f.get(null);
         } catch (Exception e) {
             throw new RuntimeException(e);
+        }
+    }
+
+    public static void tryOpenReflectiveAccess(Class<?> from, Class<?> to) {
+        try {
+            Method getModule = Class.class.getDeclaredMethod("getModule");
+            Class<?> moduleClass = getModule.getReturnType();
+            Method isNamed = moduleClass.getDeclaredMethod("isNamed");
+            Method addOpens = moduleClass.getDeclaredMethod("addOpens", String.class, moduleClass);
+
+            Object fromModule = getModule.invoke(from);
+            if (!(boolean) isNamed.invoke(fromModule)) {
+                Object toModule = getModule.invoke(to);
+                addOpens.invoke(toModule, to.getPackage().getName(), fromModule);
+            }
+        } catch (Exception ignore) {
         }
     }
 
@@ -34,20 +50,7 @@ public class ByteUtils {
     static {
         try {
             final Class<?> directByteBufferClass = Class.forName("java.nio.DirectByteBuffer");
-            try {
-                Method getModule = Class.class.getDeclaredMethod("getModule");
-                Class<?> moduleClass = getModule.getReturnType();
-                Method isNamed = moduleClass.getDeclaredMethod("isNamed");
-                Method addOpens = moduleClass.getDeclaredMethod("addOpens", String.class, moduleClass);
-
-                Object thisModule = getModule.invoke(ByteUtils.class);
-                if (!(boolean) isNamed.invoke(thisModule)) {
-                    Object javaBaseModule = getModule.invoke(directByteBufferClass);
-                    addOpens.invoke(javaBaseModule, directByteBufferClass.getPackage().getName(), thisModule);
-                }
-            } catch (Exception ignore) {
-            }
-
+            tryOpenReflectiveAccess(ByteUtils.class, directByteBufferClass);
             Constructor<?> ctor = directByteBufferClass.getDeclaredConstructor(new Class<?>[] {long.class, int.class});
             ctor.setAccessible(true);
             MethodHandle mh = MethodHandles.lookup().unreflectConstructor(ctor);
