@@ -83,7 +83,7 @@
       (with-open [db (c/open-db *api*)]
         (t/is (= #{["test1" "ivan" 1.0] ["test4" "ivanpost" 1.0]}
                  (c/q db {:find '[?e ?v ?score]
-                          :where '[[(text-search :name "ivan*") [[?e ?v ?a ?score]]]
+                          :where '[[(text-search :name "ivan*") [[?e ?v ?score]]]
                                    [?e :crux.db/id]]})))))
 
     (t/testing "cardinality many"
@@ -304,7 +304,8 @@
   (s/cat :pred-fn #{'or-text-search} :args (s/spec (s/cat :attr keyword? :v (s/coll-of string?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'or-text-search [_ pred-ctx]
-  (l/pred-constraint #'build-or-query #'l/resolve-search-results-a-v pred-ctx))
+  (let [resolver (partial l/resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
+    (l/pred-constraint build-or-query resolver pred-ctx)))
 
 (t/deftest test-or-text-search
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])

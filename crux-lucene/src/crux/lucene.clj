@@ -52,10 +52,9 @@
     (.add (StringField. field-crux-id, (->hash-str (DocumentId. k v)), Field$Store/NO))
     ;; The actual term, which will be tokenized
     (.add (TextField. (keyword->k k), v, Field$Store/YES))
-    ;; Uses for wildcard searches
+    ;; Used for wildcard searches
     (.add (TextField. field-crux-val, v, Field$Store/YES))
-    ;; The Attr (storage only, for temporal resolution, could
-    ;; potentially remove for non-wildcard usage)
+    ;; Used for wildcard searches
     (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES))))
 
 (defn- ^Term triple->term [[k ^String v]]
@@ -134,17 +133,6 @@
                          (vector (.doc index-searcher (.-doc d))
                                  (.-score d))) score-docs))))
 
-(defn- resolve-search-results-a-v
-  "Given search results each containing a single A/V pair document,
-  perform a temporal resolution against A/V to resolve the eid."
-  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
-  (mapcat (fn [[^Document doc score]]
-            (let [v (.get ^Document doc field-crux-val)
-                  a (keyword (.get ^Document doc field-crux-attr))]
-              (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
-                [(db/decode-value index-snapshot eid) v a score])))
-          search-results))
-
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
   (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
     (let [arg-bindings (map (fn [a]
@@ -170,11 +158,33 @@
             (.add (.parse qp v) BooleanClause$Occur/MUST))]
     (.build b)))
 
+(defn resolve-search-results-a-v
+  "Given search results each containing a single A/V pair document,
+  perform a temporal resolution against A/V to resolve the eid."
+  [attr index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
+  (mapcat (fn [[^Document doc score]]
+            (let [v (.get ^Document doc field-crux-val)]
+              (for [eid (db/ave index-snapshot attr v nil entity-resolver-fn)]
+                [(db/decode-value index-snapshot eid) v score])))
+          search-results))
+
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
-  (pred-constraint #'build-query #'resolve-search-results-a-v pred-ctx))
+  (let [resolver (partial resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
+    (pred-constraint #'build-query resolver pred-ctx)))
+
+(defn- resolve-search-results-a-v-wildcard
+  "Given search results each containing a single A/V pair document,
+  perform a temporal resolution against A/V to resolve the eid."
+  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
+  (mapcat (fn [[^Document doc score]]
+            (let [v (.get ^Document doc field-crux-val)
+                  a (keyword (.get ^Document doc field-crux-attr))]
+              (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
+                [(db/decode-value index-snapshot eid) v a score])))
+          search-results))
 
 (defn ^Query build-query-wildcard
   "Wildcard query builder"
@@ -190,7 +200,7 @@
   (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
-  (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v pred-ctx))
+  (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v-wildcard pred-ctx))
 
 (defn- entity-txes->content-hashes [txes]
   (set (for [^EntityTx entity-tx txes]
