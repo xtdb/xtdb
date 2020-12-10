@@ -7,7 +7,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream]
            java.lang.reflect.Constructor
-           [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference]
+           [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference WeakReference]
            java.nio.ByteBuffer
            [java.util Comparator HashMap Map Queue Set]
            java.util.function.Supplier
@@ -56,7 +56,7 @@
       (if-let [cleaner (.remove address->cleaner address)]
         (do (BufferUtil/free ^DirectBuffer buffer)
             (cleaner))
-        (log/warn "trying to free unknown buffer: " buffer))))
+        (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
     (loop [reference (.poll reference-queue)]
@@ -95,7 +95,7 @@
       (if (.remove address->size address)
         (do (ByteUtils/free address)
             nil)
-        (log/warn "trying to free unknown buffer: " buffer))))
+        (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
     (reduce + (vals address->size)))
@@ -112,13 +112,13 @@
   (malloc [this size]
     (let [buffer (malloc allocator size)
           address (.addressOffset buffer)]
-      (.put address->reference address (SoftReference. (.byteBuffer buffer)))
+      (.put address->reference address (WeakReference. (.byteBuffer buffer)))
       buffer))
 
   (free [this buffer]
     (if (.remove address->reference (.addressOffset ^DirectBuffer buffer))
       (free allocator buffer)
-      (log/warn "trying to free unknown buffer: " buffer)))
+      (log/warn "trying to free unknown buffer:" buffer)))
 
   (allocated-size [this]
     (allocated-size allocator))
@@ -129,11 +129,11 @@
             :let [byte-buffer (.get ^Reference reference)]
             :when byte-buffer]
       (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
+    (.clear address->reference)
+    (cio/try-close allocator)
     (let [used (allocated-size this)]
       (when-not (zero? used)
-        (log/warn "memory still used after close:" used)))
-    (.clear address->reference)
-    (cio/try-close allocator)))
+        (log/warn "memory still used after close:" used)))))
 
 (defn ->region-allocator
   (^crux.memory.RegionAllocator []
@@ -234,7 +234,7 @@
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
-   (->bump-allocator (->pooled-allocator default-chunk-size) default-chunk-size))
+   (->bump-allocator (->region-allocator) default-chunk-size))
   (^crux.memory.BumpAllocator [allocator]
    (->bump-allocator allocator default-chunk-size))
   (^crux.memory.BumpAllocator [allocator chunk-size]
