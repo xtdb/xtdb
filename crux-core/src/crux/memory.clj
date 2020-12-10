@@ -142,11 +142,7 @@
 (deftype PooledAllocator [allocator ^long supported-size ^Queue pool ^Map address->cleaner]
   Allocator
   (malloc [this size]
-    (if (not= supported-size size)
-      (throw (err/illegal-arg :unsupported-size
-                              {::err/message "Unsupported size"
-                               :supported-size supported-size
-                               :requested-size size}))
+    (if (= supported-size size)
       (let [byte-buffer (or (loop [ref (.poll pool)]
                               (when ref
                                 (if-let [b (.get ^Reference ref)]
@@ -159,7 +155,11 @@
         (.put address->cleaner address #(.offer pool ref))
         (cio/register-cleaner buffer-copy #(when-let [cleaner (.remove address->cleaner address)]
                                              (cleaner)))
-        (UnsafeBuffer. buffer-copy))))
+        (UnsafeBuffer. buffer-copy))
+      (throw (err/illegal-arg :unsupported-size
+                              {::err/message "Unsupported size"
+                               :supported-size supported-size
+                               :requested-size size}))))
 
   (free [this buffer]
     (let [size (.capacity ^DirectBuffer buffer)]
@@ -176,14 +176,8 @@
 
   Closeable
   (close [this]
-    (doseq [cleaner (vals address->cleaner)]
-      (cleaner))
     (.clear address->cleaner)
-    (loop [ref (.poll pool)]
-      (when ref
-        (when-let [b (.get ^Reference ref)]
-          (free allocator (UnsafeBuffer. ^ByteBuffer b)))
-        (recur (.poll pool))))
+    (.clear pool)
     (cio/try-close allocator)))
 
 (defn ->pooled-allocator
