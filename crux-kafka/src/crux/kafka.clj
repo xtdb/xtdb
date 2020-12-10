@@ -299,7 +299,9 @@
     (ensure-topic-exists admin-client (-> doc-topic-opts
                                           (update :topic-config
                                                   (fn [topic-config]
-                                                    (merge {"cleanup.policy" "compact"} topic-config)))))))
+                                                    (merge {"retention.ms" (str Long/MAX_VALUE)
+                                                            "cleanup.policy" "compact"}
+                                                           topic-config)))))))
 
 (defn ->document-store {::sys/deps {:kafka-config `->kafka-config
                                     :doc-topic-opts {:crux/module `->topic-opts,
