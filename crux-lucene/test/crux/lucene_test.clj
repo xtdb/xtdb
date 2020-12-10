@@ -8,7 +8,7 @@
             [crux.lucene :as l]
             [crux.rocksdb :as rocks]
             [clojure.java.io :as io]
-            [crux.query :as q]
+            [crux.query :as q])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
            crux.api.ICruxAPI
