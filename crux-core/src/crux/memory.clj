@@ -83,10 +83,11 @@
   Allocator
   (malloc [this size]
     (let [address (ByteUtils/malloc size)
-          buffer (UnsafeBuffer. ^ByteBuffer (->byte-buffer address size))]
+          byte-buffer ^ByteBuffer (->byte-buffer address size)
+          buffer (UnsafeBuffer. byte-buffer)]
       (.put address->size address size)
-      (cio/register-cleaner buffer #(when (.remove address->size address)
-                                      (ByteUtils/free address)))
+      (cio/register-cleaner byte-buffer #(when (.remove address->size address)
+                                           (ByteUtils/free address)))
       buffer))
 
   (free [this buffer]
