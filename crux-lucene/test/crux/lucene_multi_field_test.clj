@@ -41,8 +41,8 @@
   temporal resolution to resolve the eid."
   [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
   (keep (fn [[^Document doc score]]
-          (let [content-hash (mem/->off-heap (.-bytes (.getBinaryValue doc field-content-hash)))
-                eid (cc/decode-value-buffer (mem/->off-heap (.-bytes (.getBinaryValue doc field-eid))))]
+          (let [content-hash (mem/as-buffer (.-bytes (.getBinaryValue doc field-content-hash)))
+                eid (cc/decode-value-buffer (mem/as-buffer (.-bytes (.getBinaryValue doc field-eid))))]
             (when (some-> (cc/->id-buffer eid) entity-resolver-fn (mem/buffers=? content-hash))
               [eid score])))
         search-results))
