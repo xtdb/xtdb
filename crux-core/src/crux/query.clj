@@ -1358,7 +1358,7 @@
 
 (defn- compile-sub-query [encode-value-fn fn-allow-list where in rule-name->rules stats]
   (try
-    (binding [mem/*allocator* mem/default-allocator]
+    (binding [mem/*allocator* mem/root-allocator]
       (let [where (-> (expand-rules where rule-name->rules {})
                       (build-pred-fns fn-allow-list))
             in-vars (set (find-binding-vars (:bindings in)))
@@ -1792,7 +1792,7 @@
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))
-          needs-allocator? (identical? mem/*allocator* mem/default-allocator)
+          needs-allocator? (identical? mem/*allocator* mem/root-allocator)
           close-fn (fn []
                      (cio/try-close index-snapshot)
                      (when needs-allocator?

@@ -264,8 +264,8 @@
 (defn ->quota-allocator ^crux.memory.QuotaAllocator [allocator ^long quota]
   (->QuotaAllocator allocator quota))
 
-(def ^crux.memory.Allocator default-allocator (->direct-allocator))
-(def ^:dynamic ^crux.memory.Allocator *allocator* default-allocator)
+(def ^crux.memory.Allocator root-allocator (->direct-allocator))
+(def ^:dynamic ^crux.memory.Allocator *allocator* root-allocator)
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (malloc *allocator* size))
@@ -283,6 +283,9 @@
 
 (defn copy-buffer-to-allocator ^org.agrona.MutableDirectBuffer [^DirectBuffer from allocator]
   (copy-buffer from (.capacity from) (malloc allocator (.capacity from))))
+
+(defn copy-buffer-to-root-allocator ^org.agrona.MutableDirectBuffer [^DirectBuffer from]
+  (copy-buffer-to-allocator from root-allocator))
 
 (defn slice-buffer ^org.agrona.MutableDirectBuffer [^DirectBuffer buffer ^long offset ^long limit]
   (UnsafeBuffer. buffer offset limit))

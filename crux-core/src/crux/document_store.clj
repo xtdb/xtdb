@@ -58,7 +58,7 @@
           (assoc! acc id (cache/compute-if-absent
                           cache
                           (c/->id-buffer id)
-                          #(mem/copy-buffer-to-allocator % mem/default-allocator)
+                          mem/copy-buffer-to-root-allocator
                           (fn [_]
                             doc))))
         (transient cached-id->docs)

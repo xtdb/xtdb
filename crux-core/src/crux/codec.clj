@@ -658,7 +658,7 @@
 
 (defn safe-id ^crux.codec.Id [^Id id]
   (when id
-    (Id. (mem/copy-buffer-to-allocator (.buffer id) mem/default-allocator) 0)))
+    (Id. (mem/copy-buffer-to-root-allocator (.buffer id)) 0)))
 
 (defn hex->id-buffer
   ([hex] (hex->id-buffer hex (mem/allocate-buffer id-size)))

@@ -70,9 +70,9 @@
              (lazy-seq
               (when (and k (mem/buffers=? seek-k k prefix-length))
                 (cons (if entries?
-                        (MapEntry/create (mem/copy-buffer-to-allocator k mem/default-allocator)
-                                         (mem/copy-buffer-to-allocator (kv/value i) mem/default-allocator))
-                        (mem/copy-buffer-to-allocator k mem/default-allocator))
+                        (MapEntry/create (mem/copy-buffer-to-root-allocator k)
+                                         (mem/copy-buffer-to-root-allocator (kv/value i)))
+                        (mem/copy-buffer-to-root-allocator k))
                       (step (if reverse? (kv/prev i) (kv/next i)))))))]
      (step (if reverse?
              (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
@@ -486,7 +486,7 @@
 (defn- canonical-buffer-lookup ^org.agrona.DirectBuffer [canonical-buffer-cache ^DirectBuffer buffer]
   (cache/compute-if-absent canonical-buffer-cache
                            buffer
-                           #(mem/copy-buffer-to-allocator % mem/default-allocator)
+                           mem/copy-buffer-to-root-allocator
                            identity))
 
 (defn- cav-cache-lookup ^java.util.NavigableSet [cav-cache canonical-buffer-cache cache-i ^DirectBuffer eid-value-buffer
