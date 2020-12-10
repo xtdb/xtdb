@@ -46,12 +46,12 @@
 (deftype DirectAllocator [^AtomicLong allocated-bytes ^Map reference->id ^Map id->cleaner ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
-    (let [buffer (ByteBuffer/allocateDirect size)
-          id (System/identityHashCode buffer)]
+    (let [byte-buffer (ByteBuffer/allocateDirect size)
+          id (System/identityHashCode byte-buffer)]
       (.addAndGet allocated-bytes size)
       (.put id->cleaner id #(.addAndGet allocated-bytes (- size)))
-      (.put reference->id (PhantomReference. buffer reference-queue) id)
-      (UnsafeBuffer. buffer)))
+      (.put reference->id (PhantomReference. byte-buffer reference-queue) id)
+      (UnsafeBuffer. byte-buffer)))
 
   (free [this buffer]
     (let [id (System/identityHashCode (.byteBuffer ^DirectBuffer buffer))]
@@ -112,29 +112,30 @@
 (defn ->unsafe-allocator ^crux.memory.UnsafeAllocator []
   (->UnsafeAllocator (ConcurrentHashMap.)))
 
-(deftype RegionAllocator [allocator ^Map address->reference]
+(deftype RegionAllocator [allocator ^Map id->reference]
   Allocator
   (malloc [this size]
     (let [buffer (malloc allocator size)
-          address (.addressOffset buffer)]
-      (.put address->reference address (WeakReference. (.byteBuffer buffer)))
+          id (System/identityHashCode buffer)]
+      (.put id->reference id (WeakReference. (.byteBuffer buffer)))
       buffer))
 
   (free [this buffer]
-    (if (.remove address->reference (.addressOffset ^DirectBuffer buffer))
-      (free allocator buffer)
-      (log/warn "trying to free unknown buffer:" buffer)))
+    (let [id (System/identityHashCode (.byteBuffer ^DirectBuffer buffer))]
+      (if (.remove id->reference id)
+        (free allocator buffer)
+        (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
     (allocated-size allocator))
 
   Closeable
   (close [this]
-    (doseq [reference (vals address->reference)
+    (doseq [reference (vals id->reference)
             :let [byte-buffer (.get ^Reference reference)]
             :when byte-buffer]
       (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
-    (.clear address->reference)
+    (.clear id->reference)
     (cio/try-close allocator)
     (let [used (allocated-size this)]
       (when-not (zero? used)
@@ -159,7 +160,8 @@
             address (BufferUtil/address byte-buffer)
             buffer-copy (.slice ^ByteBuffer byte-buffer)
             reference (SoftReference. byte-buffer)]
-        (.put address->cleaner address #(.offer pool reference))
+        (.put address->cleaner address #(when (.get reference)
+                                          (.offer pool reference)))
         (cio/register-cleaner buffer-copy #(when-let [cleaner (.remove address->cleaner address)]
                                              (cleaner)))
         (UnsafeBuffer. buffer-copy))
