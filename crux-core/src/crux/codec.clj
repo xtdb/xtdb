@@ -168,9 +168,9 @@
 
 (defn- biginteger->buffer [^BigInteger x type-id ^MutableDirectBuffer to]
   (let [signum (.signum x)]
-    (-> to
-        (doto (.putByte 0 type-id))
-        (doto (.putByte value-type-id-size (inc (.signum x)))))
+    (doto to
+      (.putByte 0 type-id)
+      (.putByte value-type-id-size (inc (.signum x))))
 
     (if (zero? signum)
       (-> to (mem/limit-buffer (+ value-type-id-size Byte/BYTES)))
@@ -180,23 +180,22 @@
                                                      s
                                                      to
                                                      (+ value-type-id-size Byte/BYTES Integer/BYTES))]
-        (-> to
-            (doto (.putInt (+ value-type-id-size Byte/BYTES)
-                           (-> (* signum (count s)) (bit-xor Integer/MIN_VALUE))
-                           ByteOrder/BIG_ENDIAN))
+        (-> (doto to
+              (.putInt (+ value-type-id-size Byte/BYTES)
+                       (-> (* signum (count s)) (bit-xor Integer/MIN_VALUE))
+                       ByteOrder/BIG_ENDIAN))
             (mem/limit-buffer (+ value-type-id-size Byte/BYTES Integer/BYTES bcd-len)))))))
 
 ;; Adapted from https://github.com/ndimiduk/orderly
 (extend-protocol ValueToBuffer
   Boolean
   (value->buffer [this ^MutableDirectBuffer to]
-    (mem/limit-buffer
-     (doto to
-       (.putByte 0 boolean-value-type-id)
-       (.putByte value-type-id-size ^byte (if this
-                                            1
-                                            0)))
-     (+ value-type-id-size Byte/BYTES)))
+    (-> (doto to
+          (.putByte 0 boolean-value-type-id)
+          (.putByte value-type-id-size ^byte (if this
+                                               1
+                                               0)))
+        (mem/limit-buffer (+ value-type-id-size Byte/BYTES))))
 
   Byte
   (value->buffer [this to]
@@ -212,11 +211,10 @@
 
   Long
   (value->buffer [this ^MutableDirectBuffer to]
-    (mem/limit-buffer
-     (doto to
-       (.putByte 0 long-value-type-id)
-       (.putLong value-type-id-size (bit-xor ^long this Long/MIN_VALUE) ByteOrder/BIG_ENDIAN))
-     (+ value-type-id-size Long/BYTES)))
+    (-> (doto to
+          (.putByte 0 long-value-type-id)
+          (.putLong value-type-id-size (bit-xor ^long this Long/MIN_VALUE) ByteOrder/BIG_ENDIAN))
+        (mem/limit-buffer (+ value-type-id-size Long/BYTES))))
 
   Float
   (value->buffer [this to]
@@ -226,11 +224,10 @@
   (value->buffer [this ^MutableDirectBuffer to]
     (let [l (Double/doubleToLongBits this)
           l (inc (bit-xor l (bit-or (bit-shift-right l (dec Long/SIZE)) Long/MIN_VALUE)))]
-      (mem/limit-buffer
-       (doto to
-         (.putByte 0 double-value-type-id)
-         (.putLong value-type-id-size l ByteOrder/BIG_ENDIAN))
-       (+ value-type-id-size Double/BYTES))))
+      (-> (doto to
+            (.putByte 0 double-value-type-id)
+            (.putLong value-type-id-size l ByteOrder/BIG_ENDIAN))
+          (mem/limit-buffer (+ value-type-id-size Double/BYTES)))))
 
   Date
   (value->buffer [this ^MutableDirectBuffer to]
@@ -239,11 +236,10 @@
 
   Character
   (value->buffer [this ^MutableDirectBuffer to]
-    (mem/limit-buffer
-     (doto to
-       (.putByte 0 char-value-type-id)
-       (.putChar value-type-id-size this ByteOrder/BIG_ENDIAN))
-     (+ value-type-id-size Character/BYTES)))
+    (-> (doto to
+          (.putByte 0 char-value-type-id)
+          (.putChar value-type-id-size this ByteOrder/BIG_ENDIAN))
+        (mem/limit-buffer (+ value-type-id-size Character/BYTES))))
 
   String
   (value->buffer [this ^MutableDirectBuffer to]
@@ -268,9 +264,9 @@
     (let [this (.stripTrailingZeros this)
           signum (.signum this)]
 
-      (-> to
-          (doto (.putByte 0 bigdec-value-type-id))
-          (doto (.putByte value-type-id-size (inc (.signum this)))))
+      (doto to
+        (.putByte 0 bigdec-value-type-id)
+        (.putByte value-type-id-size (inc (.signum this))))
 
       (if (zero? signum)
         (-> to (mem/limit-buffer (+ value-type-id-size Byte/BYTES)))
@@ -279,10 +275,10 @@
                                                        (str (.abs (.unscaledValue this)))
                                                        to
                                                        (+ value-type-id-size Byte/BYTES Integer/BYTES))]
-          (-> to
-              (doto (.putInt (+ value-type-id-size Byte/BYTES)
-                             (MathCodec/encodeExponent this)
-                             ByteOrder/BIG_ENDIAN))
+          (-> (doto to
+                (.putInt (+ value-type-id-size Byte/BYTES)
+                         (MathCodec/encodeExponent this)
+                         ByteOrder/BIG_ENDIAN))
               (mem/limit-buffer (+ value-type-id-size Byte/BYTES Integer/BYTES bcd-len)))))))
 
   BigInteger
@@ -295,46 +291,46 @@
 
   LocalDate
   (value->buffer [this ^MutableDirectBuffer to]
-    (-> to
-        (doto (.putByte 0 localdate-value-type-id))
-        (doto (.putInt value-type-id-size (-> (.getYear this) (bit-xor Integer/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
-        (doto (.putByte (+ value-type-id-size Integer/BYTES) (.getMonthValue this)))
-        (doto (.putByte (+ value-type-id-size Integer/BYTES Byte/BYTES) (.getDayOfMonth this)))
+    (-> (doto to
+          (.putByte 0 localdate-value-type-id)
+          (.putInt value-type-id-size (-> (.getYear this) (bit-xor Integer/MIN_VALUE)) ByteOrder/BIG_ENDIAN)
+          (.putByte (+ value-type-id-size Integer/BYTES) (.getMonthValue this))
+          (.putByte (+ value-type-id-size Integer/BYTES Byte/BYTES) (.getDayOfMonth this)))
         (mem/limit-buffer (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES))))
 
   LocalTime
   (value->buffer [this ^MutableDirectBuffer to]
-    (-> to
-        (doto (.putByte 0 localtime-value-type-id))
-        (doto (.putLong value-type-id-size (.toNanoOfDay this) ByteOrder/BIG_ENDIAN))
+    (-> (doto to
+          (.putByte 0 localtime-value-type-id)
+          (.putLong value-type-id-size (.toNanoOfDay this) ByteOrder/BIG_ENDIAN))
         (mem/limit-buffer (+ value-type-id-size Long/BYTES))))
 
   LocalDateTime
   (value->buffer [this ^MutableDirectBuffer to]
-    (-> to
-        (doto (.putByte 0 localdatetime-value-type-id))
-        (doto (.putInt value-type-id-size (-> (.getYear this) (bit-xor Integer/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
-        (doto (.putByte (+ value-type-id-size Integer/BYTES) (.getMonthValue this)))
-        (doto (.putByte (+ value-type-id-size Integer/BYTES Byte/BYTES) (.getDayOfMonth this)))
-        (doto (.putLong (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES)
-                        (.toNanoOfDay (.toLocalTime this))
-                        ByteOrder/BIG_ENDIAN))
+    (-> (doto to
+          (.putByte 0 localdatetime-value-type-id)
+          (.putInt value-type-id-size (-> (.getYear this) (bit-xor Integer/MIN_VALUE)) ByteOrder/BIG_ENDIAN)
+          (.putByte (+ value-type-id-size Integer/BYTES) (.getMonthValue this))
+          (.putByte (+ value-type-id-size Integer/BYTES Byte/BYTES) (.getDayOfMonth this))
+          (.putLong (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES)
+                    (.toNanoOfDay (.toLocalTime this))
+                    ByteOrder/BIG_ENDIAN))
         (mem/limit-buffer (+ value-type-id-size Integer/BYTES Byte/BYTES Byte/BYTES Long/BYTES))))
 
   Instant
   (value->buffer [this ^MutableDirectBuffer to]
-    (-> to
-        (doto (.putByte 0 instant-value-type-id))
-        (doto (.putLong value-type-id-size (-> (.getEpochSecond this) (bit-xor Long/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
-        (doto (.putInt (+ value-type-id-size Long/BYTES) (.getNano this) ByteOrder/BIG_ENDIAN))
+    (-> (doto to
+          (.putByte 0 instant-value-type-id)
+          (.putLong value-type-id-size (-> (.getEpochSecond this) (bit-xor Long/MIN_VALUE)) ByteOrder/BIG_ENDIAN)
+          (.putInt (+ value-type-id-size Long/BYTES) (.getNano this) ByteOrder/BIG_ENDIAN))
         (mem/limit-buffer (+ value-type-id-size Long/BYTES Integer/BYTES))))
 
   Duration
   (value->buffer [this ^MutableDirectBuffer to]
-    (-> to
-        (doto (.putByte 0 duration-value-type-id))
-        (doto (.putLong value-type-id-size (-> (.getSeconds this) (bit-xor Long/MIN_VALUE)) ByteOrder/BIG_ENDIAN))
-        (doto (.putInt (+ value-type-id-size Long/BYTES) (.getNano this) ByteOrder/BIG_ENDIAN))
+    (-> (doto to
+          (.putByte 0 duration-value-type-id)
+          (.putLong value-type-id-size (-> (.getSeconds this) (bit-xor Long/MIN_VALUE)) ByteOrder/BIG_ENDIAN)
+          (.putInt (+ value-type-id-size Long/BYTES) (.getNano this) ByteOrder/BIG_ENDIAN))
         (mem/limit-buffer (+ value-type-id-size Long/BYTES Integer/BYTES))))
 
   Class
@@ -352,18 +348,16 @@
               (not (nippy/freezable? this)))
         (doto (id-function to nippy-buffer)
           (.putByte 0 object-value-type-id))
-        (mem/limit-buffer
-         (doto to
-           (.putByte 0 nippy-value-type-id)
-           (.putBytes value-type-id-size nippy-buffer 0 (.capacity nippy-buffer)))
-         (+ value-type-id-size (.capacity nippy-buffer))))))
+        (-> (doto to
+              (.putByte 0 nippy-value-type-id)
+              (.putBytes value-type-id-size nippy-buffer 0 (.capacity nippy-buffer)))
+            (mem/limit-buffer (+ value-type-id-size (.capacity nippy-buffer)))))))
 
   nil
   (value->buffer [this ^MutableDirectBuffer to]
-    (mem/limit-buffer
-     (doto to
-       (.putByte 0 nil-value-type-id))
-     value-type-id-size)))
+    (-> (doto to
+          (.putByte 0 nil-value-type-id))
+        (mem/limit-buffer value-type-id-size))))
 
 (def ^:private ^ThreadLocal value-buffer-tl
   (ThreadLocal/withInitial
@@ -514,22 +508,23 @@
   (id->buffer [this ^MutableDirectBuffer to]
     (if (and (= id-size (alength ^bytes this))
              (= id-value-type-id (aget ^bytes this 0)))
-      (mem/limit-buffer
-       (doto to
-         (.putBytes 0 this))
-       id-size)
+      (-> (doto to
+            (.putBytes 0 this))
+          (mem/limit-buffer id-size))
       (throw (err/illegal-arg :not-an-id-byte-array
                               {::err/message (str "Not an id byte array: " (mem/buffer->hex (mem/as-buffer this)))}))))
 
   ByteBuffer
   (id->buffer [this ^MutableDirectBuffer to]
-    (mem/limit-buffer (doto to
-                        (.putBytes 0 this)) id-size))
+    (-> (doto to
+          (.putBytes 0 this))
+        (mem/limit-buffer id-size)))
 
   DirectBuffer
   (id->buffer [this ^MutableDirectBuffer to]
-    (mem/limit-buffer (doto to
-                        (.putBytes 0 this 0 id-size)) id-size))
+    (-> (doto to
+          (.putBytes 0 this 0 id-size))
+        (mem/limit-buffer id-size)))
 
   Keyword
   (id->buffer [this to]
