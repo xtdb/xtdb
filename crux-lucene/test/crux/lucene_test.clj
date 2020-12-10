@@ -25,19 +25,16 @@
     (t/testing "using in-built function"
       (with-open [db (c/open-db *api*)]
         (t/is (= #{[:ivan]} (c/q db {:find '[?e]
-                                     :where '[[(text-search :name "Ivan") [[?e]]]
-                                              [?e :crux.db/id]]})))
+                                     :where '[[(text-search :name "Ivan") [[?e]]]]})))
 
         (t/testing "bad spec"
           (t/is (thrown-with-msg? clojure.lang.ExceptionInfo #""
                                   (c/q db {:find '[?e]
-                                           :where '[[(text-search "Wot" "Ivan") [[?e]]]
-                                                    [?e :crux.db/id]]}))))
+                                           :where '[[(text-search "Wot" "Ivan") [[?e]]]]}))))
 
         (t/testing "fuzzy"
           (t/is (= #{[:ivan]} (c/q db {:find '[?e]
-                                       :where '[[(text-search :name "Iv*") [[?e]]]
-                                                [?e :crux.db/id]]}))))))
+                                       :where '[[(text-search :name "Iv*") [[?e]]]]}))))))
 
     (t/testing "Subsequent tx/doc"
       (with-open [before-db (c/open-db *api*)]
