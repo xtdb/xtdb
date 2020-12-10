@@ -240,7 +240,7 @@ public class ByteUtils {
     }
 
     public static class UnsignedBufferComparator implements Comparator<DirectBuffer> {
-        public int compare(final DirectBuffer a, final DirectBuffer b) {
+        public final int compare(final DirectBuffer a, final DirectBuffer b) {
             return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE);
         }
     }
