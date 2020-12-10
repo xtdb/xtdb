@@ -225,6 +225,7 @@
 
 ;;;; DocumentStore
 (defn- submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
+  ;; TODO this no longer preserves submit-tx-async semantics, see #1266
   (let [fs (doall (for [[content-hash doc] id-and-docs]
                     (->> (ProducerRecord. doc-topic content-hash doc)
                          (.send producer))))]
