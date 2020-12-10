@@ -118,7 +118,7 @@
           (t/is
            (thrown-with-msg?
             java.util.concurrent.ExecutionException
-            #"The message is 19912 bytes when serialized which is larger than the maximum request size you have configured with the max.request.size configuration."
+            #"org.apache.kafka.common.errors.RecordTooLargeException"
             (api/submit-tx
              *api*
              [[:crux.tx/put
