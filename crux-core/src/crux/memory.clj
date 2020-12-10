@@ -128,9 +128,9 @@
   Closeable
   (close [this]
     (doseq [reference references
-            :let [buffer (.get ^Reference reference)]
-            :when buffer]
-      (free this (UnsafeBuffer. ^ByteBuffer buffer)))
+            :let [byte-buffer (.get ^Reference reference)]
+            :when byte-buffer]
+      (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
     (.clear references)
     (cio/try-close allocator)
     (let [used (allocated-size this)]
