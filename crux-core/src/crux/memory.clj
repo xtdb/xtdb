@@ -393,9 +393,6 @@
         ^ByteBuffer (.limit (+ offset (.capacity b)))
         (.slice))))
 
-(defn on-heap-buffer ^org.agrona.DirectBuffer [^bytes b]
-  (UnsafeBuffer. b))
-
 (defn buffer->hex ^String [^DirectBuffer b]
   (some-> b (ByteUtils/bufferToHex)))
 

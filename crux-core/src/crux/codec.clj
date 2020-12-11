@@ -248,7 +248,7 @@
         (doto (id->buffer this to)
           (.putByte 0 clob-value-type-id))
         (let [offset (byte 2)
-              ub-in (mem/on-heap-buffer bs)
+              ub-in (mem/as-buffer bs)
               length (.capacity ub-in)]
           (.putByte to 0 string-value-type-id)
           (loop [idx 0]
