@@ -256,12 +256,21 @@
          [k (count (c/vectorize-value v))])
        (into {})))
 
-(defn- index-docs [{:keys [bus index-store] :as tx-ingester} docs]
-  (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
-    (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
-                                          :docs missing-ids})))
+(defn- tx-fn-doc? [doc]
+  (some #{:crux.db.fn/args
+          :crux.db.fn/tx-events
+          :crux.db.fn/failed?}
+        (keys doc)))
 
+(defn- without-tx-fn-docs [docs]
+  (into {} (remove (comp tx-fn-doc? val) docs)))
+
+(defn- index-docs [{:keys [bus index-store] :as tx-ingester} docs]
   (when (seq docs)
+    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
+      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
+                                            :docs missing-ids})))
+
     (let [doc-ids (into #{} (map c/new-id) (keys docs))]
       (bus/send bus {:crux/event-type ::indexing-docs, :doc-ids doc-ids})
 
@@ -274,7 +283,7 @@
                        :av-count (->> (vals indexed-docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})))))
 
-(defn- with-tx-fn-args [[op & args :as evt] {:keys [document-store index-store]}]
+(defn- with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
   (case op
     :crux.tx/fn (let [[fn-eid arg-doc-id] args]
                   (cond-> [op fn-eid]
@@ -316,7 +325,9 @@
 
       (with-open [index-snapshot (db/open-index-snapshot index-store)]
         (let [forked-index-store (assoc forked-index-store :persistent-index-snapshot index-snapshot)]
-          (db/index-docs forked-index-store (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
+          (db/index-docs forked-index-store
+                         (-> (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events))
+                             without-tx-fn-docs))
 
           (let [forked-deps {:index-store forked-index-store
                              :document-store forked-document-store
@@ -338,7 +349,7 @@
 
                              (when-not abort?
                                (doto forked-index-store
-                                 (cond-> (seq docs) (db/index-docs docs))
+                                 (cond-> (seq docs) (db/index-docs (-> docs without-tx-fn-docs)))
                                  (cond-> (seq evict-eids) (db/unindex-eids evict-eids))
                                  (cond-> (seq etxs) (db/index-entity-txs tx etxs))))
 
