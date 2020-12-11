@@ -5,11 +5,13 @@
             [crux.error :as err]
             [crux.io :as cio]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream]
+  (:import [java.io Closeable DataInputStream DataOutputStream File]
            java.lang.reflect.Constructor
            [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference WeakReference]
            java.nio.ByteBuffer
-           [java.util Comparator HashMap Map Queue]
+           java.nio.file.StandardOpenOption
+           [java.nio.channels FileChannel FileChannel$MapMode]
+           [java.util Comparator HashMap Map Queue UUID]
            [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
            java.util.concurrent.atomic.AtomicLong
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
@@ -42,10 +44,10 @@
 
 (declare cleanup-references)
 
-(deftype DirectAllocator [^AtomicLong allocated-bytes ^Map reference->id ^Map id->cleaner ^ReferenceQueue reference-queue]
+(deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map reference->id ^Map id->cleaner ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
-    (let [byte-buffer (ByteBuffer/allocateDirect size)
+    (let [byte-buffer ^ByteBuffer (malloc-fn size)
           id (System/identityHashCode byte-buffer)]
       (.addAndGet allocated-bytes size)
       (.put id->cleaner id #(.addAndGet allocated-bytes (- size)))
@@ -53,9 +55,10 @@
       (UnsafeBuffer. byte-buffer)))
 
   (free [this buffer]
-    (let [id (System/identityHashCode (.byteBuffer ^DirectBuffer buffer))]
+    (let [byte-buffer (.byteBuffer ^DirectBuffer buffer)
+          id (System/identityHashCode byte-buffer)]
       (if-let [cleaner (.remove id->cleaner id)]
-        (do (BufferUtil/free ^DirectBuffer buffer)
+        (do (free-fn byte-buffer)
             (cleaner))
         (log/warn "trying to free unknown buffer:" buffer))))
 
@@ -69,7 +72,7 @@
     (.clear reference->id)
     (.clear id->cleaner)))
 
-(defn- cleanup-references [^DirectAllocator allocator]
+(defn- cleanup-references [^SystemAllocator allocator]
   (loop [reference (.poll ^ReferenceQueue (.reference-queue allocator))]
     (when reference
       (when-let [id (.remove ^Map (.reference->id allocator) reference)]
@@ -77,39 +80,32 @@
           (cleaner)))
       (recur (.poll ^ReferenceQueue (.reference-queue allocator))))))
 
-(defn ->direct-allocator ^crux.memory.DirectAllocator []
-  (->DirectAllocator (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
+(defn ->system-allocator ^crux.memory.SystemAllocator [malloc-fn free-fn]
+  (->SystemAllocator malloc-fn free-fn (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
 
-(defn- ->byte-buffer ^java.nio.ByteBuffer [^long address ^long size]
-  (ByteUtils/newDirectByteBuffer address size))
+(defn ->direct-allocator ^crux.memory.SystemAllocator []
+  (->system-allocator (fn [^long size]
+                        (ByteBuffer/allocateDirect size))
+                      (fn [^ByteBuffer buffer]
+                        (BufferUtil/free buffer))))
 
-(deftype UnsafeAllocator [^Map address->size]
-  Allocator
-  (malloc [this size]
-    (let [address (ByteUtils/malloc size)
-          byte-buffer ^ByteBuffer (->byte-buffer address size)
-          buffer (UnsafeBuffer. byte-buffer)]
-      (.put address->size address size)
-      (cio/register-cleaner byte-buffer #(when (.remove address->size address)
-                                           (ByteUtils/free address)))
-      buffer))
+(defn ->unsafe-allocator ^crux.memory.SystemAllocator []
+  (->system-allocator (fn [^long size]
+                        (ByteUtils/newDirectByteBuffer (ByteUtils/malloc size) size))
+                      (fn [^ByteBuffer buffer]
+                        (ByteUtils/free (BufferUtil/address buffer)))))
 
-  (free [this buffer]
-    (let [address (.addressOffset ^DirectBuffer buffer)]
-      (if (.remove address->size address)
-        (do (ByteUtils/free address)
-            nil)
-        (log/warn "trying to free unknown buffer:" buffer))))
-
-  (allocated-size [this]
-    (reduce + (vals address->size)))
-
-  Closeable
-  (close [this]
-    (.clear address->size)))
-
-(defn ->unsafe-allocator ^crux.memory.UnsafeAllocator []
-  (->UnsafeAllocator (ConcurrentHashMap.)))
+(defn ->mmap-allocator ^crux.memory.SystemAllocator []
+  (->system-allocator (fn [^long size]
+                        (with-open [f (FileChannel/open (.toPath (File. (str "/dev/shm/" (UUID/randomUUID))))
+                                                        (into-array [StandardOpenOption/READ
+                                                                     StandardOpenOption/WRITE
+                                                                     StandardOpenOption/CREATE_NEW
+                                                                     StandardOpenOption/SPARSE
+                                                                     StandardOpenOption/DELETE_ON_CLOSE]))]
+                          (.map f FileChannel$MapMode/PRIVATE 0 size)))
+                      (fn [^ByteBuffer buffer]
+                        (BufferUtil/free buffer))))
 
 (deftype RegionAllocator [allocator ^Queue references]
   Allocator
