@@ -52,9 +52,7 @@ public class CruxNode implements AutoCloseable {
         }
 
         TransactionInstant result = node.submitTx(txVector);
-        Date txTime = (Date) result.valAt(TX_TIME);
-        long txId = (Long) result.valAt(TX_ID);
-        return crux.api.alpha.TxResult.txResult(txTime, txId);
+        return crux.api.alpha.TxResult.txResult(result.getTxTime(), result.getTxId());
     }
 
     /**

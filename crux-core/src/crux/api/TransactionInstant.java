@@ -27,9 +27,9 @@ public interface TransactionInstant extends ILookup {
     }
 
     public static TransactionInstant create(Long txId, Date txTime) {
-	Map<Keyword, Object> txMap = new HashMap<Keyword, Object>();
-	txMap.put(Keyword.intern("crux.tx/tx-id"), txId);
-	txMap.put(Keyword.intern("crux.tx/tx-time"), txTime);
-        return (TransactionInstant) Builder.TO_TRANSACTION_INSTANT.invoke(txMap);
+        return (TransactionInstant) Builder.TO_TRANSACTION_INSTANT.invoke(txId, txTime);
     }
+
+    public Long getTxId();
+    public Date getTxTime();
 }
