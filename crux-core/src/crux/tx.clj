@@ -282,6 +282,11 @@
                                          (get arg-doc-id)))))
     evt))
 
+(defn- raise-ingester-error! [{:keys [!error bus]} e]
+  (reset! !error e)
+  (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
+  (throw e))
+
 (defrecord InFlightTx [tx !state !tx-events !error
                        forked-index-store forked-document-store
                        query-engine index-store document-store bus
@@ -303,13 +308,13 @@
 
   db/InFlightTx
   (index-tx-events [this tx-events]
-    (when (not= @!state :open)
-      (throw (IllegalStateException. "Transaction marked as " (name @!state))))
+    (try
+      (when (not= @!state :open)
+        (throw (IllegalStateException. "Transaction marked as " (name @!state))))
 
-    (swap! !tx-events into tx-events)
+      (swap! !tx-events into tx-events)
 
-    (with-open [index-snapshot (db/open-index-snapshot index-store)]
-      (try
+      (with-open [index-snapshot (db/open-index-snapshot index-store)]
         (let [forked-index-store (assoc forked-index-store :persistent-index-snapshot index-snapshot)]
           (db/index-docs forked-index-store (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
 
@@ -342,66 +347,72 @@
             (when abort?
               (reset! !state :abort-only))
 
-            (not abort?)))
+            (not abort?))))
 
-        (catch Throwable e
-          (reset! !error e)
-          (reset! !state :abort-only)
-          (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
-          (throw e)))))
+      (catch Throwable e
+        (reset! !state :abort-only)
+        (raise-ingester-error! this e))))
 
   (commit [this]
-    (when-not (compare-and-set! !state :open :committed)
-      (throw (IllegalStateException. (str "Transaction marked as " (name @!state)))))
+    (try
+      (when-not (compare-and-set! !state :open :committed)
+        (throw (IllegalStateException. (str "Transaction marked as " (name @!state)))))
 
-    (when (:fork-at tx)
-      (throw (IllegalStateException. "Can't commit from fork.")))
+      (when (:fork-at tx)
+        (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (when-let [new-docs (fork/new-docs forked-document-store)]
-      (db/submit-docs document-store new-docs)
+      (when-let [new-docs (fork/new-docs forked-document-store)]
+        (db/submit-docs document-store new-docs)
 
-      ;; ensure the docs are available before we commit the tx, see #1105
-      (fetch-docs document-store (keys new-docs)))
+        ;; ensure the docs are available before we commit the tx, see #1105
+        (fetch-docs document-store (keys new-docs)))
 
-    (index-docs this (fork/indexed-docs forked-index-store))
+      (index-docs this (fork/indexed-docs forked-index-store))
 
-    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
-      (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
-      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
-        (db/submit-docs document-store tombstones)))
+      (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
+        (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
+        (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
+          (db/submit-docs document-store tombstones)))
 
-    (bus/send bus {:crux/event-type ::indexing-tx-pre-commit, ::submitted-tx tx})
+      (bus/send bus {:crux/event-type ::indexing-tx-pre-commit, ::submitted-tx tx})
 
-    (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
+      (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
 
-    (bus/send bus {:crux/event-type ::indexed-tx,
-                   ::submitted-tx tx,
-                   :committed? true
-                   ::txe/tx-events @!tx-events}))
+      (bus/send bus {:crux/event-type ::indexed-tx,
+                     ::submitted-tx tx,
+                     :committed? true
+                     ::txe/tx-events @!tx-events})
+
+      (catch Throwable e
+        (raise-ingester-error! this e))))
 
   (abort [this]
-    (swap! !state (fn [state]
-                    (if-not (contains? #{:open :abort-only} state)
-                      (throw (IllegalStateException. "Transaction marked as " (name @!state)))
-                      :aborted)))
+    (try
+      (swap! !state (fn [state]
+                      (if-not (contains? #{:open :abort-only} state)
+                        (throw (IllegalStateException. "Transaction marked as " (name @!state)))
+                        :aborted)))
 
-    (when (:fork-at tx)
-      (throw (IllegalStateException. "Can't abort from fork.")))
+      (when (:fork-at tx)
+        (throw (IllegalStateException. "Can't abort from fork.")))
 
-    (log/debug "Transaction aborted:" (pr-str tx))
+      (log/debug "Transaction aborted:" (pr-str tx))
 
-    (db/submit-docs document-store
-                    (->> (fork/new-docs forked-document-store)
-                         (into {} (filter (comp :crux.db.fn/failed? val)))))
+      (db/submit-docs document-store
+                      (->> (fork/new-docs forked-document-store)
+                           (into {} (filter (comp :crux.db.fn/failed? val)))))
 
-    (index-docs this (fork/indexed-docs forked-index-store))
+      (index-docs this (fork/indexed-docs forked-index-store))
 
-    (db/mark-tx-as-failed index-store tx)
+      (db/mark-tx-as-failed index-store tx)
 
-    (bus/send bus {:crux/event-type ::indexed-tx,
-                   ::submitted-tx tx,
-                   :committed? false
-                   ::txe/tx-events @!tx-events})))
+      (bus/send bus {:crux/event-type ::indexed-tx,
+                     ::submitted-tx tx,
+                     :committed? false
+                     ::txe/tx-events @!tx-events})
+
+      (catch Throwable e
+        (raise-ingester-error! this e)))))
 
 (defrecord TxIngester [!error index-store document-store bus query-engine ^ExecutorService stats-executor]
   db/TxIngester
