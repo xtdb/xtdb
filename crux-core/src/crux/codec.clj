@@ -1,5 +1,5 @@
-(ns ^:no-doc crux.codec
-  #:clojure.tools.namespace.repl{:load false, :unload false} ; because of the deftypes in here
+(ns ^:no-doc ^{:clojure.tools.namespace.repl/load false, :clojure.tools.namespace.repl/unload false} ; because of the deftypes in here
+    crux.codec
   (:require [clojure.edn :as edn]
             [crux.error :as err]
             [crux.hash :as hash]
