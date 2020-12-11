@@ -30,8 +30,7 @@
             [ring.adapter.jetty :as j]
             [ring.middleware.params :as p]
             [ring.util.response :as resp]
-            [ring.util.time :as rt]
-            [crux.transaction-instant :as cti])
+            [ring.util.time :as rt])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
@@ -53,7 +52,7 @@
                                              :tx-time tx-time
                                              :tx-id tx-id})]
       (resp/response (merge {:crux.db/valid-time (crux/valid-time db)}
-                            (update (crux/db-basis db) :crux.tx/tx #(into {} %)))))))
+                            (crux/db-basis db))))))
 
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
@@ -106,7 +105,7 @@
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
           {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
       (-> {:status 202
-           :body (into {} submitted-tx)}
+           :body submitted-tx}
           (add-last-modified tx-time)))))
 
 (s/def ::with-ops? boolean?)
@@ -167,7 +166,7 @@
     (let [{:keys [timeout tx-id]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
           {:keys [crux.tx/tx-time] :as tx} (crux/await-tx crux-node {:crux.tx/tx-id tx-id} timeout)]
-      (-> {:status 200, :body (into {} tx)}
+      (-> {:status 200, :body tx}
           (add-last-modified tx-time)))))
 
 (defn- attribute-stats [^ICruxAPI crux-node]
@@ -190,7 +189,7 @@
   (fn [_]
     (if-let [latest-completed-tx (crux/latest-completed-tx crux-node)]
       {:status 200
-       :body (into {} latest-completed-tx)}
+       :body latest-completed-tx}
       {:status 404
        :body {:error "No latest-completed-tx found."}})))
 
@@ -198,7 +197,7 @@
   (fn [_]
     (if-let [latest-submitted-tx (crux/latest-submitted-tx crux-node)]
       {:status 200
-       :body (into {} latest-submitted-tx)}
+       :body latest-submitted-tx}
       {:status 404
        :body {:error "No latest-submitted-tx found."}})))
 

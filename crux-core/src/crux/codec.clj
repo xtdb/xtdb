@@ -3,6 +3,7 @@
   (:require [clojure.edn :as edn]
             [crux.error :as err]
             [crux.hash :as hash]
+            [crux.transaction-instant :as cti]
             [crux.io :as cio]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
@@ -672,7 +673,8 @@
 
 (defn read-edn-string-with-readers [s]
   (edn/read-string {:readers {'crux/id id-edn-reader
-                              'crux/base64 base64-reader}} s))
+                              'crux/base64 base64-reader
+                              'crux/transaction-instant cti/->transaction-instant}} s))
 
 (def ^:const ^:private base64-print-method-enabled?
   (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_BASE64_PRINT_METHOD")))
