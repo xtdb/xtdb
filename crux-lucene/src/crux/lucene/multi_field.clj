@@ -15,8 +15,8 @@
 (def ^:const ^:private field-eid "_crux_eid")
 
 (defn ^Query build-lucene-text-query
-  [^Analyzer analyzer, [^String q]]
-  (.parse (QueryParser. nil analyzer) q))
+  [^Analyzer analyzer, [^String q & args]]
+  (.parse (QueryParser. nil analyzer) (format q args)))
 
 (defn- resolve-search-results-content-hash
   "Given search results each containing a content-hash, perform a
@@ -30,7 +30,7 @@
         search-results))
 
 (defmethod q/pred-args-spec 'lucene-text-search [_]
-  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string?)) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string? :bindings (s/* :crux.query/binding))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
   (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))

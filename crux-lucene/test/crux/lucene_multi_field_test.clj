@@ -9,23 +9,28 @@
 
 (t/use-fixtures :each (lf/with-lucene-opts {:indexer 'crux.lucene.multi-field/->indexer}) fix/with-node)
 
-(t/deftest test-sanity-check
+(t/deftest test-multi-field-lucene-queries
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
                                    :firstname "Fred"
                                    :surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db {:find '[?e]
-                        :where '[[(lucene-text-search "firstname: Fred") [[?e]]]
-                                 [?e :crux.db/id]]}))))
+                        :where '[[(lucene-text-search "firstname: Fred") [[?e]]]]})))
+    (t/is (seq (c/q db {:find '[?e]
+                        :where '[[(lucene-text-search "firstname:James OR surname:smith") [[?e]]]]})))
+    (t/is (not (seq (c/q db {:find '[?e]
+                             :where '[[(lucene-text-search "firstname:James OR surname:preston") [[?e]]]]}))))))
+
+(t/deftest test-bindings
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+                                   :firstname "Fred"
+                                   :surname "Fred"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db {:find '[?e]
-                        :where '[[(lucene-text-search "firstname:James OR surname:smith") [[?e]]]
-                                 [?e :crux.db/id]]})))
-    (t/is (not (seq (c/q db {:find '[?e]
-                             :where '[[(lucene-text-search "firstname:James OR surname:preston") [[?e]]]
-                                      [?e :crux.db/id]]}))))))
+                        :where '[[?e :firstname ?firstname]
+                                 [(lucene-text-search "surname: %s" ?firstname) [[?e]]]]})))))
 
 (t/deftest test-namespaced-keywords
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :person/surname "Smith"}]])
