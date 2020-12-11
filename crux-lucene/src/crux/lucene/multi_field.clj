@@ -14,27 +14,6 @@
 (def ^:const ^:private field-content-hash "_crux_content_hash")
 (def ^:const ^:private field-eid "_crux_eid")
 
-(defn ^Query build-lucene-text-query
-  [^Analyzer analyzer, [^String q & args]]
-  (.parse (QueryParser. nil analyzer) (format q args)))
-
-(defn- resolve-search-results-content-hash
-  "Given search results each containing a content-hash, perform a
-  temporal resolution to resolve the eid."
-  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
-  (keep (fn [[^Document doc score]]
-          (let [content-hash (mem/as-buffer (.-bytes (.getBinaryValue doc field-content-hash)))
-                eid (cc/decode-value-buffer (mem/as-buffer (.-bytes (.getBinaryValue doc field-eid))))]
-            (when (some-> (cc/->id-buffer eid) entity-resolver-fn (mem/buffers=? content-hash))
-              [eid score])))
-        search-results))
-
-(defmethod q/pred-args-spec 'lucene-text-search [_]
-  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string? :bindings (s/* :crux.query/binding))) :return (s/? :crux.query/binding)))
-
-(defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
-  (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))
-
 (defrecord LuceneMultiFieldIndexer []
   l/LuceneIndexer
 
@@ -56,6 +35,29 @@
     (doseq [eid eids
             :let [q (TermQuery. (Term. field-eid (str (cc/new-id eid))))]]
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
+
+(defn ^Query build-lucene-text-query
+  [^Analyzer analyzer, [^String q & args]]
+  (.parse (QueryParser. nil analyzer) (format q args)))
+
+(defn- resolve-search-results-content-hash
+  "Given search results each containing a content-hash, perform a
+  temporal resolution to resolve the eid."
+  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
+  (keep (fn [[^Document doc score]]
+          (let [content-hash (mem/as-buffer (.-bytes (.getBinaryValue doc field-content-hash)))
+                eid (cc/decode-value-buffer (mem/as-buffer (.-bytes (.getBinaryValue doc field-eid))))]
+            (when (some-> (cc/->id-buffer eid) entity-resolver-fn (mem/buffers=? content-hash))
+              [eid score])))
+        search-results))
+
+(defmethod q/pred-args-spec 'lucene-text-search [_]
+  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string? :bindings (s/* :crux.query/binding))) :return (s/? :crux.query/binding)))
+
+(defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
+  (when-not (instance? LuceneMultiFieldIndexer (:indexer l/*lucene-store*))
+    (throw (IllegalStateException. "Lucene multi field indexer not configured, consult the docs.")))
+  (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))
 
 (defn ->indexer
   [_]

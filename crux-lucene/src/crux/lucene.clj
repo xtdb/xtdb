@@ -21,7 +21,7 @@
 
 (def ^:dynamic *lucene-store*)
 
-(defrecord LuceneNode [directory analyzer]
+(defrecord LuceneNode [directory analyzer indexer]
   java.io.Closeable
   (close [this]
     (cio/try-close directory)))
@@ -219,7 +219,7 @@
                :analyzer ::analyzer}}
   [{:keys [^Path db-dir index-store document-store bus analyzer indexer] :as opts}]
   (let [directory (FSDirectory/open db-dir)
-        lucene-store (LuceneNode. directory analyzer)]
+        lucene-store (LuceneNode. directory analyzer indexer)]
     (validate-lucene-store-up-to-date index-store lucene-store)
     (alter-var-root #'*lucene-store* (constantly lucene-store))
     (bus/listen bus {:crux/event-types #{:crux.tx/indexing-tx-pre-commit :crux.tx/indexed-docs :crux.tx/unindexing-eids}

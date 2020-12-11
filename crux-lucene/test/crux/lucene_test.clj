@@ -314,6 +314,12 @@
     (t/is (= #{[:ivan] [:fred]} (c/q db {:find '[?e]
                                          :where '[[(or-text-search :name #{"Ivan" "Fred"}) [[?e ?v]]]]})))))
 
+(t/deftest test-cannot-use-multi-field-lucene-queries
+  (t/is (thrown-with-msg? java.lang.IllegalStateException #"Lucene multi field indexer not configured, consult the docs."
+                          (with-open [db (c/open-db *api*)]
+                            (c/q db {:find '[?e]
+                                     :where '[[(lucene-text-search "firstname: Fred") [[?e]]]]})))))
+
 (comment
   (do
     (import '[ch.qos.logback.classic Level Logger]
