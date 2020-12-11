@@ -2,7 +2,9 @@
 
 Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 
-Note: This module is in alpha and likely to change.
+WARNING: This module is in alpha and likely to change. In particular,
+we might rationalize/combine the different query functions available
+(see https://github.com/juxt/crux/issues/1318).
 
 == Setup
 
@@ -86,7 +88,10 @@ The destructuring available is `entity-id`, `matched-value` and
  [?e :crux.db/id]]}
 ----
 
-You can use standard Lucene search capabilities:
+In the above example, `?e` is the entity ID of the matched search
+rsult. `?v` is the matched value and `?s` is the matched score.
+
+You can use standard Lucene fuzzy textual search capabilities:
 
 [source,clojure]
 ----
@@ -98,7 +103,20 @@ You can use standard Lucene search capabilities:
 Will return all entities that with a `:name` that starts with
 "Iva". See the Lucene documentation for more information.
 
-You can search across all attributes:
+It's possible to supply var bindings to use in `text-search`:
+
+[source,clojure]
+----
+(c/q db '{:find  [?v]
+          :in    [input]
+          :where [[(text-search :name input) [[?e ?v]]]]}
+     "Ivan")
+----
+
+== Wildcard Attributes
+
+There is an an experimental wildcard search function, where you can
+search across all attributes:
 
 [source,clojure]
 ----
@@ -109,4 +127,55 @@ You can search across all attributes:
 
 Will return all entities that have an attribute with a value that
 matches "Iva". The destructured binding also contains `a` which is the
-attribute.
+matched attribute.
+
+== Multi-field searches
+
+There is an entirely different search-function available for
+multi-field searches using Lucene in Crux: `lucene-text-search`:
+
+[source,clojure]
+----
+{:find '[?e]
+ :where '[[(lucene-text-search "firstname:James OR surname:preston") [[?e]]]]}
+----
+
+This `lucene-text-search` takes a Lucene query string.
+
+WARNING: If you use `lucene-text-search`, you cannot use the search
+functions listed above - `wildcard-text-search` and
+`text-search`. This is because the way we index documents into Lucene
+is different.
+
+NOTE: In the normal case for `text-search` and `wildcard-text-search`,
+we index each A/V pair in a Crux document as individual documents in
+Lucene. This allows for a large degree of structural sharing, which
+will help in the case where there is a lot historical data in
+Crux. This is targeted to ease the disk-space taken up by Lucene, but
+also for query efficiency reasons.
+
+NOTE: `lucene-text-search` indexs a single document per
+document-version in Crux. The downside of this is structural sharing
+impacting disk space, but the upside is taking advantage of more of
+the Lucene query language capability, and to perform queries taking
+into account multiple fields.
+
+To enable `lucene-text-search`, you must configure the Lucene Indexer, such like:
+
+[source,clojure]
+----
+{...
+ :crux.lucene/lucene-store {:db-dir "lucene-dir" :indexer 'crux.lucene.multi-field/->indexer}}
+----
+
+=== Bindings
+
+It's possible to supply var bindings also, that are wired in using
+`format` when the vars are bound.
+
+[source,clojure]
+----
+{:find '[?e]
+ :where '[[(lucene-text-search "firstname:%s" ?surname) [[?e]]]
+          [?e :firstname ?firstname]]}
+----
