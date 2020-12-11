@@ -390,7 +390,7 @@
         (.duplicate)
         (.clear)
         (.position offset)
-        (.limit (+ offset (.capacity b)))
+        ^ByteBuffer (.limit (+ offset (.capacity b)))
         (.slice))))
 
 (defn on-heap-buffer ^org.agrona.DirectBuffer [^bytes b]
