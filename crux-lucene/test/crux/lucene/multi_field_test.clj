@@ -5,7 +5,8 @@
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
-            [crux.lucene.multi-field :as lmf]))
+            [crux.lucene.multi-field :as lmf])
+  (:import org.apache.lucene.queryparser.classic.ParseException))
 
 (t/use-fixtures :each (lf/with-lucene-opts {:indexer 'crux.lucene.multi-field/->indexer}) fix/with-node)
 
@@ -63,4 +64,8 @@
     (t/is (not (in-crux?)))
     (t/is (not (in-lucene-store?)))))
 
-;; todo test error handling, malformed query
+(t/deftest test-malformed-query
+  (t/is (thrown-with-msg? ParseException #"Cannot parse"
+                          (c/q (c/db *api*) {:find '[?e]
+                                             :where '[[(lucene-text-search "+12!") [[?e]]]
+                                                      [?e :crux.db/id]]}))))
