@@ -1,65 +1,13 @@
 (ns crux.lucene-multi-field-test
-  (:require [clojure.spec.alpha :as s]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [crux.api :as c]
-            [crux.codec :as cc]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
-            [crux.memory :as mem]
-            [crux.query :as q])
-  (:import org.apache.lucene.analysis.Analyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
-           [org.apache.lucene.index IndexWriter Term]
-           org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search Query TermQuery]))
+            [crux.lucene.multi-field :as lmf]))
 
-(def ^:const ^:private field-content-hash "_crux_content_hash")
-(def ^:const ^:private field-eid "_crux_eid")
-
-(defn index-all-fields [[content-hash doc]]
-  (let [d (Document.)]
-    (.add d (StoredField. field-content-hash, ^bytes (mem/->on-heap (cc/->id-buffer content-hash))))
-    (.add d (StoredField. field-eid, ^bytes (mem/->on-heap (cc/->value-buffer (:crux.db/id doc)))))
-    (doseq [[k v] (filter (comp string? val) doc)]
-      ;; The actual term, which will be tokenized
-      (.add d (TextField. (l/keyword->k k), v, Field$Store/YES)))
-    ;; For eviction:
-    (.add d (StringField. field-eid, (str (cc/new-id (:crux.db/id doc))), Field$Store/NO))
-    d))
-
-(defn- index-docs! [^IndexWriter index-writer docs]
-  (.addDocuments index-writer (map index-all-fields docs)))
-
-(defn- evict! [index-store, ^IndexWriter index-writer, eids]
-  (with-open [index-snapshot (db/open-index-snapshot index-store)]
-    (doseq [eid eids
-            :let [q (TermQuery. (Term. field-eid (str (cc/new-id eid))))]]
-      (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
-
-(t/use-fixtures :each (lf/with-lucene-opts {:index-docs index-docs! :evict evict!}) fix/with-node)
-
-(defn ^Query build-lucene-text-query
-  [^Analyzer analyzer, [^String q]]
-  (.parse (QueryParser. nil analyzer) q))
-
-(defn- resolve-search-results-content-hash
-  "Given search results each containing a content-hash, perform a
-  temporal resolution to resolve the eid."
-  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
-  (keep (fn [[^Document doc score]]
-          (let [content-hash (mem/as-buffer (.-bytes (.getBinaryValue doc field-content-hash)))
-                eid (cc/decode-value-buffer (mem/as-buffer (.-bytes (.getBinaryValue doc field-eid))))]
-            (when (some-> (cc/->id-buffer eid) entity-resolver-fn (mem/buffers=? content-hash))
-              [eid score])))
-        search-results))
-
-(defmethod q/pred-args-spec 'lucene-text-search [_]
-  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string?)) :return (s/? :crux.query/binding)))
-
-(defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
-  (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))
+(t/use-fixtures :each (lf/with-lucene-opts {:indexer 'crux.lucene.multi-field/->indexer}) fix/with-node)
 
 (t/deftest test-sanity-check
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
@@ -97,7 +45,7 @@
                                                      [?e :crux.db/id]]})))))
         in-lucene-store? (fn []
                            (let [lucene-store (:crux.lucene/lucene-store @(:!system *api*))]
-                             (with-open [search-results (lf/search build-lucene-text-query ["name: Smith"])]
+                             (with-open [search-results (lf/search lmf/build-lucene-text-query ["name: Smith"])]
                                (boolean (seq (iterator-seq search-results))))))]
 
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Smith"}]])

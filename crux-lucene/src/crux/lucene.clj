@@ -7,8 +7,7 @@
             [crux.io :as cio]
             [crux.query :as q]
             [crux.system :as sys])
-  (:import crux.codec.EntityTx
-           crux.query.VarBinding
+  (:import crux.query.VarBinding
            java.io.Closeable
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
@@ -48,45 +47,12 @@
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
-(defn index-docs! [^IndexWriter index-writer docs]
-  (doseq [crux-doc (vals docs)
-          [k v] (->> (dissoc crux-doc :crux.db/id)
-                     (mapcat (fn [[k v]]
-                               (for [v (cc/vectorize-value v)
-                                     :when (string? v)]
-                                 [k v]))))
-          :let [id-str (->hash-str (DocumentId. k v))
-                doc (doto (Document.)
-                      ;; To search for triples by a-v for deduping
-                      (.add (StringField. field-crux-id, id-str, Field$Store/NO))
-                      ;; The actual term, which will be tokenized
-                      (.add (TextField. (keyword->k k), v, Field$Store/YES))
-                      ;; Used for wildcard searches
-                      (.add (TextField. field-crux-val, v, Field$Store/YES))
-                      ;; Used for wildcard searches
-                      (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES)))]]
-    (.updateDocument index-writer (Term. field-crux-id id-str) doc)))
-
-(defn- evict! [index-store, ^IndexWriter index-writer, eids]
-  (let [attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
-                            keys
-                            (map #(vector (->hash-str %) %))
-                            (into {}))]
-    (with-open [index-snapshot (db/open-index-snapshot index-store)]
-      (let [qs (for [[a v] (db/exclusive-avs index-store eids)
-                     :let [a (attrs-id->attr (->hash-str a))
-                           v (db/decode-value index-snapshot v)]
-                     :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
-        (.deleteDocuments index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
-
-(defn- index-tx! [lucene-store tx]
+(defn- index-tx! [^IndexWriter index-writer tx]
   (let [t (Term. "meta" "latest-completed-tx")
         d (doto (Document.)
             (.add (StringField. "meta", "latest-completed-tx" Field$Store/NO))
             (.add (StoredField. "latest-completed-tx" ^long (:crux.tx/tx-id tx))))]
-    (with-open [index-writer (index-writer lucene-store)]
-      (.updateDocument index-writer t d))))
+    (.updateDocument index-writer t d)))
 
 (defn latest-submitted-tx [lucene-store]
   (let [{:keys [^Directory directory]} lucene-store]
@@ -194,22 +160,59 @@
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
   (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v-wildcard pred-ctx))
 
-(defn- entity-txes->content-hashes [txes]
-  (set (for [^EntityTx entity-tx txes]
-         (.content-hash entity-tx))))
+(defprotocol LuceneIndexer
+  (index! [this index-writer docs])
+  (evict! [this index-writer eids]))
+
+(defrecord LuceneAvIndexer [index-store]
+  LuceneIndexer
+
+  (index! [this index-writer docs]
+    (doseq [crux-doc (vals docs)
+            [k v] (->> (dissoc crux-doc :crux.db/id)
+                       (mapcat (fn [[k v]]
+                                 (for [v (cc/vectorize-value v)
+                                       :when (string? v)]
+                                   [k v]))))
+            :let [id-str (->hash-str (DocumentId. k v))
+                  doc (doto (Document.)
+                        ;; To search for triples by a-v for deduping
+                        (.add (StringField. field-crux-id, id-str, Field$Store/NO))
+                        ;; The actual term, which will be tokenized
+                        (.add (TextField. (keyword->k k), v, Field$Store/YES))
+                        ;; Used for wildcard searches
+                        (.add (TextField. field-crux-val, v, Field$Store/YES))
+                        ;; Used for wildcard searches
+                        (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES)))]]
+      (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
+
+  (evict! [this index-writer eids]
+    (let [attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
+                              keys
+                              (map #(vector (->hash-str %) %))
+                              (into {}))]
+      (with-open [index-snapshot (db/open-index-snapshot index-store)]
+        (let [qs (for [[a v] (db/exclusive-avs index-store eids)
+                       :let [a (attrs-id->attr (->hash-str a))
+                             v (db/decode-value index-snapshot v)]
+                       :when (not= :crux.db/id a)]
+                   (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
+          (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))))
+
+(defn ->indexer
+  {::sys/deps {:index-store :crux/index-store}}
+  [{:keys [index-store]}]
+  (LuceneAvIndexer. index-store))
 
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
-                        :spec ::sys/path}
-               :index-docs {:doc "Indexing Docs Fn"
-                            :default index-docs!}
-               :evict {:doc "Evict Docs Fn"
-                       :default evict!}}
+                        :spec ::sys/path}}
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
-               :index-store :crux/index-store}}
-  [{:keys [^Path db-dir index-docs evict index-store document-store bus] :as opts}]
+               :index-store :crux/index-store
+               :indexer ::indexer}}
+  [{:keys [^Path db-dir index-store document-store bus indexer] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         analyzer (StandardAnalyzer.)
         lucene-store (LuceneNode. directory analyzer)]
@@ -220,20 +223,15 @@
                                           (execute [_ f]
                                             (.run f)))}
                 (fn [ev]
-                  (case (:crux/event-type ev)
-                    :crux.tx/indexing-tx-pre-commit
-                    (index-tx! lucene-store (:crux.tx/submitted-tx ev))
-                    :crux.tx/indexed-docs
-                    (let [docs (db/fetch-docs document-store (:doc-ids ev))]
-                      (with-open [index-writer (index-writer lucene-store)]
-                        (index-docs index-writer docs)))
-                    :crux.tx/unindexing-eids
-                    (let [docs (db/fetch-docs document-store (:doc-ids ev))]
-                      (try
-                        (with-open [index-writer (index-writer lucene-store)]
-                          (evict index-store index-writer (:eids ev)))
-                        (catch Throwable t
-                          ;; TODO until #1275 is fixed
-                          (log/error t)
-                          (throw t)))))))
+                  (with-open [index-writer (index-writer lucene-store)]
+                    (case (:crux/event-type ev)
+
+                      :crux.tx/indexing-tx-pre-commit
+                      (index-tx! index-writer (:crux.tx/submitted-tx ev))
+
+                      :crux.tx/indexed-docs
+                      (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
+
+                      :crux.tx/unindexing-eids
+                      (evict! indexer index-writer (:eids ev))))))
     lucene-store))
