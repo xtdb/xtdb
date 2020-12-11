@@ -86,14 +86,14 @@
 (defn ->direct-allocator ^crux.memory.SystemAllocator []
   (->system-allocator (fn [^long size]
                         (ByteBuffer/allocateDirect size))
-                      (fn [^ByteBuffer buffer]
-                        (BufferUtil/free buffer))))
+                      (fn [^ByteBuffer byte-buffer]
+                        (BufferUtil/free byte-buffer))))
 
 (defn ->unsafe-allocator ^crux.memory.SystemAllocator []
   (->system-allocator (fn [^long size]
                         (ByteUtils/newDirectByteBuffer (ByteUtils/malloc size) size))
-                      (fn [^ByteBuffer buffer]
-                        (ByteUtils/free (BufferUtil/address buffer)))))
+                      (fn [^ByteBuffer byte-buffer]
+                        (ByteUtils/free (BufferUtil/address byte-buffer)))))
 
 (defn ->mmap-allocator ^crux.memory.SystemAllocator []
   (->system-allocator (fn [^long size]
@@ -104,8 +104,8 @@
                                                                      StandardOpenOption/SPARSE
                                                                      StandardOpenOption/DELETE_ON_CLOSE]))]
                           (.map f FileChannel$MapMode/PRIVATE 0 size)))
-                      (fn [^ByteBuffer buffer]
-                        (BufferUtil/free buffer))))
+                      (fn [^ByteBuffer byte-buffer]
+                        (BufferUtil/free byte-buffer))))
 
 (deftype RegionAllocator [allocator ^Queue references]
   Allocator
