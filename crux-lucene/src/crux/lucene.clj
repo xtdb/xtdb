@@ -204,6 +204,10 @@
   [{:keys [index-store]}]
   (LuceneAvIndexer. index-store))
 
+(defn ->analyzer
+  [_]
+  (StandardAnalyzer.))
+
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
@@ -211,10 +215,10 @@
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
                :index-store :crux/index-store
-               :indexer ::indexer}}
-  [{:keys [^Path db-dir index-store document-store bus indexer] :as opts}]
+               :indexer ::indexer
+               :analyzer ::analyzer}}
+  [{:keys [^Path db-dir index-store document-store bus analyzer indexer] :as opts}]
   (let [directory (FSDirectory/open db-dir)
-        analyzer (StandardAnalyzer.)
         lucene-store (LuceneNode. directory analyzer)]
     (validate-lucene-store-up-to-date index-store lucene-store)
     (alter-var-root #'*lucene-store* (constantly lucene-store))
