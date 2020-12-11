@@ -186,11 +186,11 @@
   (^crux.memory.PooledAllocator [allocator ^long supported-size]
    (->PooledAllocator allocator supported-size (LinkedBlockingQueue.) (ConcurrentHashMap.))))
 
-(deftype BumpAllocator [allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^ByteBuffer chunk ^:unsynchronized-mutable ^long position]
+(deftype BumpAllocator [allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^DirectBuffer chunk ^:unsynchronized-mutable ^long position]
   Allocator
   (malloc [this size]
     (if-not chunk
-      (do (set! chunk (.byteBuffer (malloc allocator chunk-size)))
+      (do (set! chunk (malloc allocator chunk-size))
           (set! position 0)
           (recur size))
       (let [size (long size)
@@ -213,7 +213,7 @@
   (free [this buffer]
     (if (= (+ (.addressOffset ^DirectBuffer buffer)
               (.capacity ^DirectBuffer buffer))
-           (+ (BufferUtil/address chunk) position))
+           (+ (.addressOffset chunk) position))
       (set! position (- position (.capacity ^DirectBuffer buffer)))
       (log/warn "can only free/undo latest allocation with bump allocator")))
 
