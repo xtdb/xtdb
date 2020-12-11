@@ -1113,3 +1113,43 @@
                      {:find '[?e ?name]
                       :where '[[?e :name ?name]]
                       :args [{:?e (int 10)}]})))))
+
+(t/deftest test-put-evict-in-same-transaction
+  (t/testing "put then evict should clear AV"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo 1, :name "Ivan"}]])
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo2, :foo 1, :evicted? true}]
+                          [:crux.tx/evict :foo2]])
+    (let [db (crux/db *api*)]
+      (t/is (= {:crux.db/id :foo, :foo 1, :name "Ivan"}
+               (crux/entity db :foo)))
+      (t/is (nil? (crux/entity db :foo2)))
+
+      (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
+        (t/is (empty? (db/av index-snapshot :evicted? nil))))
+
+      (t/is (= #{[:foo]} (crux/q db '{:find [?e], :where [[?e :foo 1]]})))
+      (t/is (= #{} (crux/q db '{:find [?e], :where [[?e :evicted? true]]})))))
+
+  (t/testing "put then evict an earlier entity shouldn't clear AV"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo 1, :evicted? true}]])
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo2, :foo 1, :name "Ivan"}]
+                          [:crux.tx/evict :foo]])
+    (let [db (crux/db *api*)]
+      (t/is (nil? (crux/entity db :foo)))
+      (t/is (= {:crux.db/id :foo2, :foo 1, :name "Ivan"} (crux/entity db :foo2)))
+
+      (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
+        (t/is (empty? (db/av index-snapshot :evicted? nil))))
+
+      (t/is (= #{[:foo2]} (crux/q db '{:find [?e], :where [[?e :foo 1]]})))
+      (t/is (= #{} (crux/q db '{:find [?e], :where [[?e :evicted? true]]})))))
+
+  (t/testing "evict then put shouldn't clear AV"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :bar, :bar 1}]])
+
+    (fix/submit+await-tx [[:crux.tx/evict :bar]
+                          [:crux.tx/put {:crux.db/id :bar2, :bar 1}]])
+    (let [db (crux/db *api*)]
+      (t/is (nil? (crux/entity db :bar)))
+      (t/is (= {:crux.db/id :bar2, :bar 1} (crux/entity db :bar2)))
+      (t/is (= #{[:bar2]} (crux/q db '{:find [?e], :where [[?e :bar 1]]}))))))
