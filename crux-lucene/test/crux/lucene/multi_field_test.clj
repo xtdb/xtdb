@@ -1,4 +1,4 @@
-(ns crux.lucene-multi-field-test
+(ns crux.lucene.multi-field-test
   (:require [clojure.test :as t]
             [crux.api :as c]
             [crux.db :as db]
