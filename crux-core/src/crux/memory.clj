@@ -44,22 +44,25 @@
 
 (declare cleanup-references)
 
-(deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map reference->id ^Map id->cleaner ^ReferenceQueue reference-queue]
+(deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map reference->cleaner ^Map address->cleaner ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
     (let [byte-buffer ^ByteBuffer (malloc-fn size)
-          id (System/identityHashCode byte-buffer)]
-      (.addAndGet allocated-bytes size)
-      (.put id->cleaner id #(.addAndGet allocated-bytes (- size)))
-      (.put reference->id (PhantomReference. byte-buffer reference-queue) id)
-      (UnsafeBuffer. byte-buffer)))
+          address (BufferUtil/address byte-buffer)]
+      (when-let [cleaner (.remove address->cleaner address)]
+        @cleaner)
+      (let [cleaner (delay (.addAndGet allocated-bytes (- size)))]
+        (.addAndGet allocated-bytes size)
+        (.put address->cleaner address cleaner)
+        (.put reference->cleaner (PhantomReference. byte-buffer reference-queue) cleaner)
+        (UnsafeBuffer. byte-buffer))))
 
   (free [this buffer]
     (let [byte-buffer (.byteBuffer ^DirectBuffer buffer)
-          id (System/identityHashCode byte-buffer)]
-      (if-let [cleaner (.remove id->cleaner id)]
+          address (BufferUtil/address byte-buffer)]
+      (if-let [cleaner (.remove address->cleaner address)]
         (do (free-fn byte-buffer)
-            (cleaner))
+            @cleaner)
         (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
@@ -69,15 +72,14 @@
   Closeable
   (close [this]
     (cleanup-references this)
-    (.clear reference->id)
-    (.clear id->cleaner)))
+    (.clear reference->cleaner)
+    (.clear address->cleaner)))
 
 (defn- cleanup-references [^SystemAllocator allocator]
   (loop [reference (.poll ^ReferenceQueue (.reference-queue allocator))]
     (when reference
-      (when-let [id (.remove ^Map (.reference->id allocator) reference)]
-        (when-let [cleaner (.remove ^Map (.id->cleaner allocator) id)]
-          (cleaner)))
+      (when-let [cleaner (.remove ^Map (.reference->cleaner allocator) reference)]
+        @cleaner)
       (recur (.poll ^ReferenceQueue (.reference-queue allocator))))))
 
 (defn ->system-allocator ^crux.memory.SystemAllocator [malloc-fn free-fn]
@@ -107,11 +109,11 @@
                       (fn [^ByteBuffer byte-buffer]
                         (BufferUtil/free byte-buffer))))
 
-(deftype RegionAllocator [allocator ^Queue references]
+(deftype RegionAllocator [allocator ^Map address->reference]
   Allocator
   (malloc [this size]
     (let [buffer (malloc allocator size)]
-      (.offer references (WeakReference. (.byteBuffer buffer)))
+      (.put address->reference (.addressOffset buffer) (WeakReference. (.byteBuffer buffer)))
       buffer))
 
   (free [this buffer]
@@ -122,21 +124,23 @@
 
   Closeable
   (close [this]
-    (doseq [reference references
-            :let [byte-buffer (.get ^Reference reference)]
-            :when byte-buffer]
-      (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
-    (.clear references)
-    (cio/try-close allocator)
-    (let [used (allocated-size this)]
-      (when-not (zero? used)
-        (log/warn "memory still used after close:" used)))))
+    (try
+      (doseq [[_ reference] address->reference
+              :let [byte-buffer (.get ^Reference reference)]
+              :when byte-buffer]
+        (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
+      (let [used (allocated-size this)]
+        (when-not (zero? used)
+          (log/warn "memory still used after close:" used)))
+      (finally
+        (.clear address->reference)
+        (cio/try-close allocator)))))
 
 (defn ->region-allocator
   (^crux.memory.RegionAllocator []
    (->region-allocator (->direct-allocator)))
   (^crux.memory.RegionAllocator [allocator]
-   (->RegionAllocator allocator (LinkedBlockingQueue.))))
+   (->RegionAllocator allocator (ConcurrentHashMap.))))
 
 (deftype PooledAllocator [allocator ^long supported-size ^Queue pool ^Map address->cleaner]
   Allocator
@@ -232,7 +236,7 @@
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
-   (->bump-allocator (->region-allocator) default-chunk-size))
+    (->bump-allocator (->region-allocator) default-chunk-size))
   (^crux.memory.BumpAllocator [allocator]
    (->bump-allocator allocator default-chunk-size))
   (^crux.memory.BumpAllocator [allocator chunk-size]
