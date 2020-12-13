@@ -7,13 +7,14 @@
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream File]
            java.lang.reflect.Constructor
-           [java.lang.ref PhantomReference Reference ReferenceQueue SoftReference WeakReference]
+           [java.lang.ref Reference ReferenceQueue SoftReference WeakReference]
            java.nio.ByteBuffer
            java.nio.file.StandardOpenOption
            [java.nio.channels FileChannel FileChannel$MapMode]
            [java.util Comparator HashMap Map Queue UUID]
            [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
            java.util.concurrent.atomic.AtomicLong
+           clojure.lang.IDeref
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
@@ -44,25 +45,29 @@
 
 (declare cleanup-references)
 
-(deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map reference->cleaner ^Map address->cleaner ^ReferenceQueue reference-queue]
+(deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
     (let [byte-buffer ^ByteBuffer (malloc-fn size)
           address (BufferUtil/address byte-buffer)]
-      (when-let [cleaner (.remove address->cleaner address)]
-        @cleaner)
-      (let [cleaner (delay (.addAndGet allocated-bytes (- size)))]
+      (when-let [reference-delay (.remove address->reference address)]
+        @reference-delay)
+      (let [decrement-delay (delay (.addAndGet allocated-bytes (- size)))
+            reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
+                              (deref []
+                                @decrement-delay))]
         (.addAndGet allocated-bytes size)
-        (.put address->cleaner address cleaner)
-        (.put reference->cleaner (PhantomReference. byte-buffer reference-queue) cleaner)
+        (.put address->reference address reference-delay)
         (UnsafeBuffer. byte-buffer))))
 
   (free [this buffer]
     (let [byte-buffer (.byteBuffer ^DirectBuffer buffer)
           address (BufferUtil/address byte-buffer)]
-      (if-let [cleaner (.remove address->cleaner address)]
-        (do (free-fn byte-buffer)
-            @cleaner)
+      (if-let [reference-delay (.remove address->reference address)]
+        (if (identical? byte-buffer (.get ^Reference reference-delay))
+          (do (free-fn byte-buffer)
+              @reference-delay)
+          (log/warn "double free:" buffer))
         (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
@@ -72,18 +77,16 @@
   Closeable
   (close [this]
     (cleanup-references this)
-    (.clear reference->cleaner)
-    (.clear address->cleaner)))
+    (.clear address->reference)))
 
 (defn- cleanup-references [^SystemAllocator allocator]
-  (loop [reference (.poll ^ReferenceQueue (.reference-queue allocator))]
-    (when reference
-      (when-let [cleaner (.remove ^Map (.reference->cleaner allocator) reference)]
-        @cleaner)
-      (recur (.poll ^ReferenceQueue (.reference-queue allocator))))))
+  (loop []
+    (when-let [reference-delay (.poll ^ReferenceQueue (.reference-queue allocator))]
+      @reference-delay
+      (recur))))
 
 (defn ->system-allocator ^crux.memory.SystemAllocator [malloc-fn free-fn]
-  (->SystemAllocator malloc-fn free-fn (AtomicLong.) (ConcurrentHashMap.) (ConcurrentHashMap.) (ReferenceQueue.)))
+  (->SystemAllocator malloc-fn free-fn (AtomicLong.) (ConcurrentHashMap.) (ReferenceQueue.)))
 
 (defn ->direct-allocator ^crux.memory.SystemAllocator []
   (->system-allocator (fn [^long size]
@@ -146,11 +149,11 @@
   Allocator
   (malloc [this size]
     (if (= supported-size size)
-      (let [byte-buffer (or (loop [ref (.poll pool)]
-                              (when ref
+      (let [byte-buffer (or (loop []
+                              (when-let [ref (.poll pool)]
                                 (if-let [b (.get ^Reference ref)]
                                   b
-                                  (recur (.poll pool)))))
+                                  (recur))))
                             (.byteBuffer (malloc allocator size)))
             address (BufferUtil/address byte-buffer)
             buffer-copy (.duplicate ^ByteBuffer byte-buffer)
