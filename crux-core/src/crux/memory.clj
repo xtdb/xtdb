@@ -396,8 +396,7 @@
 
 (defn direct-byte-buffer ^java.nio.ByteBuffer [b]
   (let [b (->off-heap b)
-        offset (- (.addressOffset b)
-                  (BufferUtil/address (.byteBuffer b)))]
+        offset (.wrapAdjustment b)]
     (-> (.byteBuffer b)
         (.duplicate)
         (.clear)
