@@ -114,14 +114,14 @@
 (defn ->region-allocator ^crux.memory.RegionAllocator [malloc-fn free-fn gc-free-fn]
   (->RegionAllocator malloc-fn free-fn gc-free-fn (AtomicLong.) (ConcurrentHashMap.) (ReferenceQueue.)))
 
-(defn ->direct-allocator ^crux.memory.RegionAllocator []
+(defn ->direct-region-allocator ^crux.memory.RegionAllocator []
   (->region-allocator (fn [^long size]
                         (ByteBuffer/allocateDirect size))
                       (fn [^ByteBuffer byte-buffer]
                         (BufferUtil/free byte-buffer))
                       (constantly nil)))
 
-(defn ->unsafe-allocator ^crux.memory.RegionAllocator []
+(defn ->unsafe-region-allocator ^crux.memory.RegionAllocator []
   (->region-allocator (fn [^long size]
                         (ByteUtils/newDirectByteBuffer (ByteUtils/malloc size) size))
                       (constantly nil)
@@ -174,7 +174,7 @@
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
-    (->bump-allocator (->direct-allocator) default-chunk-size))
+    (->bump-allocator (->direct-region-allocator) default-chunk-size))
   (^crux.memory.BumpAllocator [allocator]
    (->bump-allocator allocator default-chunk-size))
   (^crux.memory.BumpAllocator [allocator chunk-size]
