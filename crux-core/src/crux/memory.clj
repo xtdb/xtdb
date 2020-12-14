@@ -137,7 +137,7 @@
       (doseq [[_ reference] address->reference
               :let [byte-buffer (.get ^Reference reference)]
               :when byte-buffer]
-        (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
+        (free allocator (UnsafeBuffer. ^ByteBuffer byte-buffer)))
       (let [used (long (allocated-size this))]
         (when-not (zero? used)
           (log/warn "memory still used after close:" used)))
