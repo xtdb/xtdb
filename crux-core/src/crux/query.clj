@@ -1534,7 +1534,7 @@
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
   (let [entity-cache (cache/->cache {:cache-size entity-cache-size})]
     (fn [k]
-      (cache/compute-if-absent entity-cache k identity entity-resolver-fn))))
+      (cache/compute-if-absent entity-cache k mem/copy-buffer-to-root-allocator entity-resolver-fn))))
 
 (defn- new-entity-resolver-fn [{:keys [valid-time tx-id index-snapshot] :as db}]
   (with-entity-resolver-cache #(when tx-id (db/entity-as-of-resolver index-snapshot % valid-time tx-id)) db))
