@@ -65,20 +65,23 @@
 (deftype RegionAllocator [malloc-fn free-fn gc-free-fn ^AtomicLong allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
+    (cleanup-references address->reference reference-queue)
     (let [byte-buffer ^ByteBuffer (malloc-fn size)
           address (BufferUtil/address byte-buffer)]
       (when-let [reference-delay (.remove address->reference address)]
         @reference-delay)
-      (let [decrement-delay (delay (.addAndGet allocated-bytes (- (long size)))
-                                   (gc-free-fn address))
+      (let [freed-delay (delay (.addAndGet allocated-bytes (- (long size)))
+                               (gc-free-fn address)
+                               address)
             reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
                               (deref []
-                                @decrement-delay))]
+                                @freed-delay))]
         (.addAndGet allocated-bytes size)
         (.put address->reference address reference-delay)
         (UnsafeBuffer. byte-buffer))))
 
   (free [this buffer]
+    (cleanup-references address->reference reference-queue)
     (let [byte-buffer (.byteBuffer ^DirectBuffer buffer)
           address (BufferUtil/address byte-buffer)]
       (if-let [reference-delay (.remove address->reference address)]
@@ -89,26 +92,26 @@
         (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
-    (cleanup-references reference-queue)
+    (cleanup-references address->reference reference-queue)
     (.get allocated-bytes))
 
   Closeable
   (close [this]
-    (cleanup-references reference-queue)
-    (doseq [[_ reference-delay] address->reference
-            :let [byte-buffer (.get ^Reference reference-delay)]]
-      (if byte-buffer
-        (free this (UnsafeBuffer. ^ByteBuffer byte-buffer))
-        @reference-delay))
+    (cleanup-references address->reference reference-queue)
+    (doseq [[_ reference-delay] address->reference]
+      (when-let [byte-buffer (.get ^Reference reference-delay)]
+        (free-fn byte-buffer))
+      @reference-delay)
+    (.clear address->reference)
     (let [used (long (allocated-size this))]
       (when-not (zero? used)
-        (log/warn "memory still used after close:" used)))
-    (.clear address->reference)))
+        (log/warn "memory still used after close:" used)))))
 
-(defn- cleanup-references [^ReferenceQueue reference-queue]
+(defn- cleanup-references [^Map address->reference ^ReferenceQueue reference-queue]
   (loop []
     (when-let [reference-delay (.poll reference-queue)]
-      @reference-delay
+      (let [address @reference-delay]
+        (.remove address->reference address reference-delay))
       (recur))))
 
 (defn ->region-allocator ^crux.memory.RegionAllocator [malloc-fn free-fn gc-free-fn]
