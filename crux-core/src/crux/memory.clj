@@ -122,7 +122,11 @@
       buffer))
 
   (free [this buffer]
-    (free allocator buffer))
+    (let [buffer ^DirectBuffer buffer]
+      (when-let [reference ^Reference (.get address->reference (.addressOffset buffer))]
+        (when (identical? (.byteBuffer buffer) (.get reference))
+          (.remove address->reference (.addressOffset buffer))))
+      (free allocator buffer)))
 
   (allocated-size [this]
     (allocated-size allocator))
@@ -273,6 +277,9 @@
 
 (def ^crux.memory.Allocator root-allocator (->direct-allocator))
 (def ^:dynamic ^crux.memory.Allocator *allocator* root-allocator)
+
+(defn ->local-allocator []
+  (->bump-allocator (->region-allocator)))
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (malloc *allocator* size))

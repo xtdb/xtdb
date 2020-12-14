@@ -489,7 +489,7 @@
 
                                   (s/assert ::txe/tx-events tx-events)
 
-                                  (binding [mem/*allocator* (mem/->bump-allocator)]
+                                  (binding [mem/*allocator* (mem/->local-allocator)]
                                     (let [in-flight-tx (db/begin-tx tx-ingester tx)
                                           res (db/index-tx-events in-flight-tx tx-events)]
                                       (if res

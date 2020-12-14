@@ -1810,7 +1810,7 @@
                        ::query-id query-id}))
       (when needs-allocator?
         (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator
-                                                  (mem/->bump-allocator)
+                                                  (mem/->local-allocator)
                                                   (:query-memory-quota db))}))
       (->> (try
              (crux.query/query db conformed-query args)
@@ -1851,7 +1851,7 @@
                              (pop-thread-bindings)))))]
         (when needs-allocator?
           (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator
-                                                    (mem/->bump-allocator)
+                                                    (mem/->local-allocator)
                                                     (:query-memory-quota this))}))
         (->> (try
                (->> (db/entity-history index-snapshot eid sort-order opts)
