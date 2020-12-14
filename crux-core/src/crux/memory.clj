@@ -20,6 +20,8 @@
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defprotocol Memory
   (->on-heap ^bytes [this])
 
@@ -52,7 +54,7 @@
           address (BufferUtil/address byte-buffer)]
       (when-let [reference-delay (.remove address->reference address)]
         @reference-delay)
-      (let [decrement-delay (delay (.addAndGet allocated-bytes (- size)))
+      (let [decrement-delay (delay (.addAndGet allocated-bytes (- (long size))))
             reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
                               (deref []
                                 @decrement-delay))]
@@ -132,7 +134,7 @@
               :let [byte-buffer (.get ^Reference reference)]
               :when byte-buffer]
         (free this (UnsafeBuffer. ^ByteBuffer byte-buffer)))
-      (let [used (allocated-size this)]
+      (let [used (long (allocated-size this))]
         (when-not (zero? used)
           (log/warn "memory still used after close:" used)))
       (finally
@@ -248,7 +250,7 @@
 (deftype QuotaAllocator [allocator ^long quota]
   Allocator
   (malloc [_ size]
-    (when (> (+ size (allocated-size allocator)) quota)
+    (when (> (+ (long size) (long (allocated-size allocator))) quota)
       (throw (err/illegal-arg :qouta-exceeded
                               {::err/message "Exceeded allocator quota"
                                :quota quota
