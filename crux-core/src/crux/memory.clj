@@ -7,12 +7,10 @@
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream File]
            java.lang.reflect.Constructor
-           [java.lang.ref Reference ReferenceQueue SoftReference WeakReference]
+           [java.lang.ref Reference ReferenceQueue WeakReference]
            java.nio.ByteBuffer
-           java.nio.file.StandardOpenOption
-           [java.nio.channels FileChannel FileChannel$MapMode]
-           [java.util Comparator HashMap Map Queue UUID]
-           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue]
+           [java.util Comparator HashMap Map]
+           [java.util.concurrent ConcurrentHashMap]
            java.util.concurrent.atomic.AtomicLong
            clojure.lang.IDeref
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
@@ -45,8 +43,6 @@
 (def ^:private ^:const page-size (ByteUtils/pageSize))
 (def ^:private ^:const default-alignment 16)
 
-(declare cleanup-references)
-
 (deftype DirectRootAllocator []
   Allocator
   (malloc [this size]
@@ -64,14 +60,17 @@
 (defn ->direct-root-allocator ^crux.memory.DirectRootAllocator []
   (->DirectRootAllocator))
 
-(deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
+(declare cleanup-references)
+
+(deftype RegionAllocator [malloc-fn free-fn gc-free-fn ^AtomicLong allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
     (let [byte-buffer ^ByteBuffer (malloc-fn size)
           address (BufferUtil/address byte-buffer)]
       (when-let [reference-delay (.remove address->reference address)]
         @reference-delay)
-      (let [decrement-delay (delay (.addAndGet allocated-bytes (- (long size))))
+      (let [decrement-delay (delay (.addAndGet allocated-bytes (- (long size)))
+                                   (gc-free-fn address))
             reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
                               (deref []
                                 @decrement-delay))]
@@ -96,6 +95,14 @@
   Closeable
   (close [this]
     (cleanup-references reference-queue)
+    (doseq [[_ reference-delay] address->reference
+            :let [byte-buffer (.get ^Reference reference-delay)]]
+      (if byte-buffer
+        (free this (UnsafeBuffer. ^ByteBuffer byte-buffer))
+        @reference-delay))
+    (let [used (long (allocated-size this))]
+      (when-not (zero? used)
+        (log/warn "memory still used after close:" used)))
     (.clear address->reference)))
 
 (defn- cleanup-references [^ReferenceQueue reference-queue]
@@ -104,117 +111,22 @@
       @reference-delay
       (recur))))
 
-(defn ->system-allocator ^crux.memory.SystemAllocator [malloc-fn free-fn]
-  (->SystemAllocator malloc-fn free-fn (AtomicLong.) (ConcurrentHashMap.) (ReferenceQueue.)))
+(defn ->region-allocator ^crux.memory.RegionAllocator [malloc-fn free-fn gc-free-fn]
+  (->RegionAllocator malloc-fn free-fn gc-free-fn (AtomicLong.) (ConcurrentHashMap.) (ReferenceQueue.)))
 
-(defn ->direct-allocator ^crux.memory.SystemAllocator []
-  (->system-allocator (fn [^long size]
+(defn ->direct-allocator ^crux.memory.RegionAllocator []
+  (->region-allocator (fn [^long size]
                         (ByteBuffer/allocateDirect size))
                       (fn [^ByteBuffer byte-buffer]
-                        (BufferUtil/free byte-buffer))))
+                        (BufferUtil/free byte-buffer))
+                      (constantly nil)))
 
-(defn ->unsafe-allocator ^crux.memory.SystemAllocator []
-  (->system-allocator (fn [^long size]
+(defn ->unsafe-allocator ^crux.memory.RegionAllocator []
+  (->region-allocator (fn [^long size]
                         (ByteUtils/newDirectByteBuffer (ByteUtils/malloc size) size))
-                      (fn [^ByteBuffer byte-buffer]
-                        (ByteUtils/free (BufferUtil/address byte-buffer)))))
-
-(defn ->mmap-allocator ^crux.memory.SystemAllocator []
-  (->system-allocator (fn [^long size]
-                        (with-open [f (FileChannel/open (.toPath (File. (str "/dev/shm/" (UUID/randomUUID))))
-                                                        (into-array [StandardOpenOption/READ
-                                                                     StandardOpenOption/WRITE
-                                                                     StandardOpenOption/CREATE_NEW
-                                                                     StandardOpenOption/SPARSE
-                                                                     StandardOpenOption/DELETE_ON_CLOSE]))]
-                          (.map f FileChannel$MapMode/PRIVATE 0 size)))
-                      (fn [^ByteBuffer byte-buffer]
-                        (BufferUtil/free byte-buffer))))
-
-(deftype RegionAllocator [allocator ^Map address->reference]
-  Allocator
-  (malloc [this size]
-    (let [buffer (malloc allocator size)]
-      (.put address->reference (.addressOffset buffer) (WeakReference. (.byteBuffer buffer)))
-      buffer))
-
-  (free [this buffer]
-    (let [buffer ^DirectBuffer buffer]
-      (when-let [reference ^Reference (.get address->reference (.addressOffset buffer))]
-        (when (identical? (.byteBuffer buffer) (.get reference))
-          (.remove address->reference (.addressOffset buffer))))
-      (free allocator buffer)))
-
-  (allocated-size [this]
-    (allocated-size allocator))
-
-  Closeable
-  (close [this]
-    (try
-      (doseq [[_ reference] address->reference
-              :let [byte-buffer (.get ^Reference reference)]
-              :when byte-buffer]
-        (free allocator (UnsafeBuffer. ^ByteBuffer byte-buffer)))
-      (let [used (long (allocated-size this))]
-        (when-not (zero? used)
-          (log/warn "memory still used after close:" used)))
-      (finally
-        (.clear address->reference)
-        (cio/try-close allocator)))))
-
-(defn ->region-allocator
-  (^crux.memory.RegionAllocator []
-   (->region-allocator (->direct-allocator)))
-  (^crux.memory.RegionAllocator [allocator]
-   (->RegionAllocator allocator (ConcurrentHashMap.))))
-
-(deftype PooledAllocator [allocator ^long supported-size ^Queue pool ^Map address->cleaner]
-  Allocator
-  (malloc [this size]
-    (if (= supported-size size)
-      (let [byte-buffer (or (loop []
-                              (when-let [ref (.poll pool)]
-                                (if-let [b (.get ^Reference ref)]
-                                  b
-                                  (recur))))
-                            (.byteBuffer (malloc allocator size)))
-            address (BufferUtil/address byte-buffer)
-            buffer-copy (.duplicate ^ByteBuffer byte-buffer)
-            reference (SoftReference. byte-buffer)]
-        (.put address->cleaner address #(when (.get reference)
-                                          (.offer pool reference)))
-        (cio/register-cleaner buffer-copy #(when-let [cleaner (.remove address->cleaner address)]
-                                             (cleaner)))
-        (UnsafeBuffer. buffer-copy))
-      (throw (err/illegal-arg :unsupported-size
-                              {::err/message "Unsupported size"
-                               :supported-size supported-size
-                               :requested-size size}))))
-
-  (free [this buffer]
-    (let [size (.capacity ^DirectBuffer buffer)]
-      (if (= supported-size size)
-        (when-let [cleaner (.remove address->cleaner (.addressOffset ^DirectBuffer buffer))]
-          (cleaner))
-        (throw (err/illegal-arg :unsupported-size
-                                {::err/message "Unsupported size"
-                                 :supported-size supported-size
-                                 :requested-size size})))))
-
-  (allocated-size [this]
-    (allocated-size allocator))
-
-  Closeable
-  (close [this]
-    (.clear address->cleaner)
-    (.clear pool)
-    (cio/try-close allocator)))
-
-(defn ->pooled-allocator
-  (^crux.memory.PooledAllocator [^long supported-size]
-   (->pooled-allocator (->region-allocator) supported-size))
-  (^crux.memory.PooledAllocator [allocator ^long supported-size]
-   (->PooledAllocator allocator supported-size (LinkedBlockingQueue.) (ConcurrentHashMap.))))
+                      (constantly nil)
+                      (fn [^long address]
+                        (ByteUtils/free address))))
 
 (deftype BumpAllocator [allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^DirectBuffer chunk ^:unsynchronized-mutable ^long position]
   Allocator
@@ -262,7 +174,7 @@
 
 (defn ->bump-allocator
   (^crux.memory.BumpAllocator []
-    (->bump-allocator (->region-allocator) default-chunk-size))
+    (->bump-allocator (->direct-allocator) default-chunk-size))
   (^crux.memory.BumpAllocator [allocator]
    (->bump-allocator allocator default-chunk-size))
   (^crux.memory.BumpAllocator [allocator chunk-size]
@@ -296,7 +208,7 @@
 (def ^:dynamic ^crux.memory.Allocator *allocator* root-allocator)
 
 (defn ->local-allocator []
-  (->bump-allocator (->region-allocator)))
+  (->bump-allocator))
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (malloc *allocator* size))
