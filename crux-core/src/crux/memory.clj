@@ -56,7 +56,7 @@
     (BufferUtil/free ^DirectBuffer buffer))
 
   (allocated-size [this]
-    (cio/direct-memory-used))
+    (cio/buffer-pool-memory-used "direct"))
 
   Closeable
   (close [_]))
