@@ -1662,11 +1662,11 @@
         [in in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn nil where in (rule-name->rules rules) stats)))
 
-(defn query [{:keys [index-store index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
+(defn query [{:keys [index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
         {:keys [find where in rules offset limit order-by full-results?]} q-conformed
-        stats (or (db/read-index-meta index-store :crux/attribute-stats) {})
+        stats (or (db/read-index-meta index-snapshot :crux/attribute-stats) {})
         [in in-args] (add-legacy-args q-conformed in-args)]
     (when full-results?
       (defonce -full-results-deprecation-log

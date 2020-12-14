@@ -21,11 +21,17 @@
   (index-entity-txs [this tx entity-txs])
   (mark-tx-as-failed [this tx])
   (store-index-meta [this k v])
-  (read-index-meta [this k] [this k not-found])
   (latest-completed-tx [this])
   (tx-failed? [this tx-id])
   (open-index-snapshot ^java.io.Closeable [this]))
 ;; end::IndexStore[]
+
+(defprotocol IndexMeta
+  (-read-index-meta [this k not-found]))
+
+(defn read-index-meta
+  ([index-meta k] (-read-index-meta index-meta k nil))
+  ([index-meta k not-found] (-read-index-meta index-meta k not-found)))
 
 ;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot

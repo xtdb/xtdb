@@ -290,10 +290,10 @@
 (defn- etx->kvs [^EntityTx etx]
   (let [eid (c/->id-buffer (.eid etx))
         z (encode-entity-tx-z-number (.vt etx) (.tx-id etx))]
-    [[(encode-bitemp-key-to nil eid (.vt etx) (.tx-id etx) (.tt etx))
-      (c/->id-buffer (.content-hash etx))]
-     [(encode-bitemp-z-key-to nil eid z (.tt etx))
-      (c/->id-buffer (.content-hash etx))]]))
+    [(MapEntry/create (encode-bitemp-key-to nil eid (.vt etx) (.tx-id etx) (.tt etx))
+                      (c/->id-buffer (.content-hash etx)))
+     (MapEntry/create (encode-bitemp-z-key-to nil eid z (.tt etx))
+                      (c/->id-buffer (.content-hash etx)))]))
 
 ;; Index Version
 
@@ -710,7 +710,11 @@
   (open-nested-index-snapshot [this]
     (let [nested-index-snapshot (new-kv-index-snapshot snapshot temp-hash-cache cav-cache canonical-buffer-cache false)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
-      nested-index-snapshot)))
+      nested-index-snapshot))
+
+  db/IndexMeta
+  (-read-index-meta [_ k not-found]
+    (read-meta-snapshot snapshot k not-found)))
 
 ;;;; IndexStore
 
@@ -848,16 +852,10 @@
     (kv/store kv-store
               (->> (conj (mapcat etx->kvs entity-txs)
                          (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer))
-                   (into (sorted-map-by mem/buffer-comparator)))))
+                   (sort-by key mem/buffer-comparator))))
 
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
-
-  (read-index-meta [this k]
-    (db/read-index-meta this k nil))
-
-  (read-index-meta [this k not-found]
-    (read-meta kv-store k not-found))
 
   (latest-completed-tx [this]
     (latest-completed-tx kv-store))
@@ -865,6 +863,10 @@
   (tx-failed? [this tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
+
+  db/IndexMeta
+  (-read-index-meta [this k not-found]
+    (read-meta kv-store k not-found))
 
   (open-index-snapshot [this]
     (new-kv-index-snapshot (kv/new-snapshot kv-store) (HashMap.) cav-cache canonical-buffer-cache true))

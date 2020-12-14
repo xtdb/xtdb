@@ -120,6 +120,13 @@
                            capped-valid-time
                            capped-tx-id))
 
+  db/IndexMeta
+  (-read-index-meta [this k not-found]
+    (let [v (db/read-index-meta transient-index-snapshot k ::not-found)]
+      (if (not= v ::not-found)
+        v
+        (db/read-index-meta persistent-index-snapshot k not-found))))
+
   java.io.Closeable
   (close [_]
     (cio/try-close transient-index-snapshot)
@@ -131,15 +138,14 @@
                              capped-valid-time capped-tx-id]
   db/IndexStore
   (index-docs [this docs]
-    (swap! !indexed-docs merge docs)
+    (swap! !indexed-docs into docs)
     (db/index-docs transient-index-store docs))
 
   (unindex-eids [this eids]
     (swap! !evicted-eids set/union (set eids))
     (db/unindex-eids transient-index-store eids)
 
-    (with-open [persistent-index-snapshot (db/open-index-snapshot persistent-index-store)
-                transient-index-snapshot (db/open-index-snapshot transient-index-store)]
+    (with-open [transient-index-snapshot (db/open-index-snapshot transient-index-store)]
       (let [tombstones (->> (for [eid eids
                                   etx (concat (db/entity-history persistent-index-snapshot eid :asc
                                                                  {:with-corrections? true})
@@ -152,23 +158,14 @@
         {:tombstones tombstones})))
 
   (index-entity-txs [this tx entity-txs]
-    (swap! !etxs merge (->> entity-txs
-                            (into {} (map (juxt (fn [^EntityTx etx]
-                                                  [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
-                                                identity)))))
+    (swap! !etxs into (->> entity-txs
+                           (into {} (map (juxt (fn [^EntityTx etx]
+                                                 [(.eid etx) (.vt etx) (.tt etx) (.tx-id etx)])
+                                               identity)))))
     (db/index-entity-txs transient-index-store tx entity-txs))
 
   (store-index-meta [this k v]
     (db/store-index-meta transient-index-store k v))
-
-  (read-index-meta [this k]
-    (db/read-index-meta this k nil))
-
-  (read-index-meta [this k not-found]
-    (let [v (db/read-index-meta transient-index-store k ::not-found)]
-      (if (not= v ::not-found)
-        v
-        (db/read-index-meta persistent-index-store k not-found))))
 
   (latest-completed-tx [this]
     (or (db/latest-completed-tx transient-index-store)
@@ -180,6 +177,13 @@
   (tx-failed? [this tx-id]
     (or (db/tx-failed? transient-index-store tx-id)
         (db/tx-failed? persistent-index-store tx-id)))
+
+  db/IndexMeta
+  (-read-index-meta [this k not-found]
+    (let [v (db/read-index-meta transient-index-store k ::not-found)]
+      (if (not= v ::not-found)
+        v
+        (db/read-index-meta persistent-index-store k not-found))))
 
   (open-index-snapshot ^java.io.Closeable [this]
     (->ForkedIndexSnapshot (or persistent-index-snapshot (db/open-index-snapshot persistent-index-store))
@@ -207,7 +211,7 @@
 (defrecord ForkedDocumentStore [doc-store !docs]
   db/DocumentStore
   (submit-docs [_ docs]
-    (swap! !docs merge docs))
+    (swap! !docs into docs))
 
   (fetch-docs [_ ids]
     (let [overridden-docs (select-keys @!docs ids)]

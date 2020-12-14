@@ -9,9 +9,12 @@
             [crux.db :as db]
             [crux.error :as err]
             [crux.fork :as fork]
+            [crux.kv :as kv]
             [crux.io :as cio]
             [crux.kv.index-store :as kvi]
+            [crux.memory :as mem]
             [crux.mem-kv :as mem-kv]
+            [crux.kv.mutable-kv :as mut-kv]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
@@ -19,7 +22,7 @@
            java.io.Closeable
            java.time.Duration
            [java.util.concurrent Executors ExecutorService TimeUnit]
-           java.util.Date))
+           [java.util Date NavigableMap TreeMap]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -52,8 +55,9 @@
   (let [ids (set ids)]
     (loop [indexed {}]
       (let [missing-ids (set/difference ids (set (keys indexed)))
-            indexed (merge indexed (when (seq missing-ids)
-                                     (db/fetch-docs document-store missing-ids)))]
+            indexed (into indexed
+                          (when (seq missing-ids)
+                            (db/fetch-docs document-store missing-ids)))]
         (if (= (count indexed) (count ids))
           indexed
           (do
@@ -212,12 +216,12 @@
                       (let [conformed-tx-ops (mapv txc/conform-tx-op res)
                             tx-events (mapv txc/->tx-event conformed-tx-ops)]
                         {:tx-events tx-events
-                         :docs (merge (when args-doc-id
-                                        {args-content-hash {:crux.db/id args-doc-id
-                                                            :crux.db.fn/tx-events tx-events}})
-                                      (into {}
-                                            (mapcat :docs)
-                                            conformed-tx-ops))})))
+                         :docs (into (if args-doc-id
+                                       {args-content-hash {:crux.db/id args-doc-id
+                                                           :crux.db.fn/tx-events tx-events}}
+                                       {})
+                                     (mapcat :docs)
+                                     conformed-tx-ops)})))
 
                   (catch Throwable t
                     (reset! !last-tx-fn-error t)
@@ -278,6 +282,11 @@
                                          (get arg-doc-id)))))
     evt))
 
+(defn- raise-ingester-error! [{:keys [!error bus]} e]
+  (reset! !error e)
+  (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
+  (throw e))
+
 (defrecord InFlightTx [tx !state !tx-events !error
                        forked-index-store forked-document-store
                        query-engine index-store document-store bus
@@ -299,13 +308,13 @@
 
   db/InFlightTx
   (index-tx-events [this tx-events]
-    (when (not= @!state :open)
-      (throw (IllegalStateException. "Transaction marked as " (name @!state))))
+    (try
+      (when (not= @!state :open)
+        (throw (IllegalStateException. "Transaction marked as " (name @!state))))
 
-    (swap! !tx-events into tx-events)
+      (swap! !tx-events into tx-events)
 
-    (with-open [index-snapshot (db/open-index-snapshot index-store)]
-      (try
+      (with-open [index-snapshot (db/open-index-snapshot index-store)]
         (let [forked-index-store (assoc forked-index-store :persistent-index-snapshot index-snapshot)]
           (db/index-docs forked-index-store (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events)))
 
@@ -324,79 +333,86 @@
                                        {:abort? true
                                         :docs docs}
                                        res)))]
-                             (db/submit-docs forked-document-store docs)
+                             (when (seq docs)
+                               (db/submit-docs forked-document-store docs))
 
                              (when-not abort?
                                (doto forked-index-store
-                                 (db/index-docs docs)
-                                 (db/unindex-eids evict-eids)
-                                 (db/index-entity-txs tx etxs)))
+                                 (cond-> (seq docs) (db/index-docs docs))
+                                 (cond-> (seq evict-eids) (db/unindex-eids evict-eids))
+                                 (cond-> (seq etxs) (db/index-entity-txs tx etxs))))
 
                              (or abort?
                                  (recur (concat new-tx-events more-tx-events))))))]
             (when abort?
               (reset! !state :abort-only))
 
-            (not abort?)))
+            (not abort?))))
 
-        (catch Throwable e
-          (reset! !error e)
-          (reset! !state :abort-only)
-          (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
-          (throw e)))))
+      (catch Throwable e
+        (reset! !state :abort-only)
+        (raise-ingester-error! this e))))
 
   (commit [this]
-    (when-not (compare-and-set! !state :open :committed)
-      (throw (IllegalStateException. (str "Transaction marked as " (name @!state)))))
+    (try
+      (when-not (compare-and-set! !state :open :committed)
+        (throw (IllegalStateException. (str "Transaction marked as " (name @!state)))))
 
-    (when (:fork-at tx)
-      (throw (IllegalStateException. "Can't commit from fork.")))
+      (when (:fork-at tx)
+        (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (when-let [new-docs (fork/new-docs forked-document-store)]
-      (db/submit-docs document-store new-docs)
+      (when-let [new-docs (fork/new-docs forked-document-store)]
+        (db/submit-docs document-store new-docs)
 
-      ;; ensure the docs are available before we commit the tx, see #1105
-      (fetch-docs document-store (keys new-docs)))
+        ;; ensure the docs are available before we commit the tx, see #1105
+        (fetch-docs document-store (keys new-docs)))
 
-    (index-docs this (fork/indexed-docs forked-index-store))
+      (index-docs this (fork/indexed-docs forked-index-store))
 
-    (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
-      (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
-      (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
-        (db/submit-docs document-store tombstones)))
+      (when-let [evict-eids (not-empty (fork/newly-evicted-eids forked-index-store))]
+        (bus/send bus {:crux/event-type ::unindexing-eids, :eids evict-eids})
+        (let [{:keys [tombstones]} (db/unindex-eids index-store evict-eids)]
+          (db/submit-docs document-store tombstones)))
 
-    (bus/send bus {:crux/event-type ::indexing-tx-pre-commit, ::submitted-tx tx})
+      (bus/send bus {:crux/event-type ::indexing-tx-pre-commit, ::submitted-tx tx})
 
-    (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
+      (db/index-entity-txs index-store tx (fork/new-etxs forked-index-store))
 
-    (bus/send bus {:crux/event-type ::indexed-tx,
-                   ::submitted-tx tx,
-                   :committed? true
-                   ::txe/tx-events @!tx-events}))
+      (bus/send bus {:crux/event-type ::indexed-tx,
+                     ::submitted-tx tx,
+                     :committed? true
+                     ::txe/tx-events @!tx-events})
+
+      (catch Throwable e
+        (raise-ingester-error! this e))))
 
   (abort [this]
-    (swap! !state (fn [state]
-                    (if-not (contains? #{:open :abort-only} state)
-                      (throw (IllegalStateException. "Transaction marked as " (name @!state)))
-                      :aborted)))
+    (try
+      (swap! !state (fn [state]
+                      (if-not (contains? #{:open :abort-only} state)
+                        (throw (IllegalStateException. "Transaction marked as " (name @!state)))
+                        :aborted)))
 
-    (when (:fork-at tx)
-      (throw (IllegalStateException. "Can't abort from fork.")))
+      (when (:fork-at tx)
+        (throw (IllegalStateException. "Can't abort from fork.")))
 
-    (log/debug "Transaction aborted:" (pr-str tx))
+      (log/debug "Transaction aborted:" (pr-str tx))
 
-    (db/submit-docs document-store
-                    (->> (fork/new-docs forked-document-store)
-                         (into {} (filter (comp :crux.db.fn/failed? val)))))
+      (db/submit-docs document-store
+                      (->> (fork/new-docs forked-document-store)
+                           (into {} (filter (comp :crux.db.fn/failed? val)))))
 
-    (index-docs this (fork/indexed-docs forked-index-store))
+      (index-docs this (fork/indexed-docs forked-index-store))
 
-    (db/mark-tx-as-failed index-store tx)
+      (db/mark-tx-as-failed index-store tx)
 
-    (bus/send bus {:crux/event-type ::indexed-tx,
-                   ::submitted-tx tx,
-                   :committed? false
-                   ::txe/tx-events @!tx-events})))
+      (bus/send bus {:crux/event-type ::indexed-tx,
+                     ::submitted-tx tx,
+                     :committed? false
+                     ::txe/tx-events @!tx-events})
+
+      (catch Throwable e
+        (raise-ingester-error! this e)))))
 
 (defrecord TxIngester [!error index-store document-store bus query-engine ^ExecutorService stats-executor]
   db/TxIngester
@@ -406,7 +422,10 @@
 
       (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx}))
 
-    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mem-kv/->kv-store)
+    ;; TODO this is the wrong level of abstraction -
+    ;; I'd like to move more of this fork logic to the KV index store,
+    ;; given so much of it is about KVs
+    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
                                                                                            :cav-cache (nop-cache/->nop-cache {})
                                                                                            :canonical-buffer-cache (nop-cache/->nop-cache {})})
                                                         (::db/valid-time fork-at)
