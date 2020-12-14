@@ -242,6 +242,11 @@
           :memory-used (.getMemoryUsed b)
           :total-capacity (.getTotalCapacity b)})))
 
+(defn direct-memory-used []
+  (first (for [{:keys [memory-used name]} (buffer-pool-usage)
+               :when (= "direct" name)]
+           memory-used)))
+
 (defn memory-usage []
   [(assoc (dissoc (bean (.getNonHeapMemoryUsage (ManagementFactory/getMemoryMXBean))) :class) :name "non-heap")
    (assoc (dissoc (bean (.getHeapMemoryUsage (ManagementFactory/getMemoryMXBean))) :class) :name "heap")])

@@ -56,7 +56,7 @@
     (BufferUtil/free ^DirectBuffer buffer))
 
   (allocated-size [this]
-    (reduce + (map :memory-used (cio/buffer-pool-usage))))
+    (cio/direct-memory-used))
 
   Closeable
   (close [_]))
