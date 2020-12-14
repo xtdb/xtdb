@@ -25,7 +25,7 @@
       (db/submit-docs *doc-store* {alice-key evicted-alice})
 
       (t/is (= {alice-key evicted-alice, bob-key bob}
-               (db/fetch-docs *doc-store* (keys people)))))))
+               (db/-fetch-docs *doc-store* (keys people)))))))
 
 (defn test-doc-store [ns]
   (let [once-fixture-fn (t/join-fixtures (::t/once-fixtures (meta ns)))

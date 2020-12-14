@@ -14,7 +14,7 @@
 
 (defrecord FileDocumentStore [dir]
   db/DocumentStore
-  (fetch-docs [this ids]
+  (-fetch-docs [this ids]
     (cio/with-nippy-thaw-all
       (persistent!
        (reduce
@@ -41,7 +41,7 @@
 
 (defrecord CachedDocumentStore [cache document-store]
   db/DocumentStore
-  (fetch-docs [this ids]
+  (-fetch-docs [this ids]
     (let [ids (set ids)
           cached-id->docs (persistent!
                            (reduce
@@ -51,7 +51,7 @@
                                 acc))
                             (transient {}) ids))
           missing-ids (set/difference ids (keys cached-id->docs))
-          missing-id->docs (db/fetch-docs document-store missing-ids)]
+          missing-id->docs (db/-fetch-docs document-store missing-ids)]
       (persistent!
        (reduce-kv
         (fn [acc id doc]

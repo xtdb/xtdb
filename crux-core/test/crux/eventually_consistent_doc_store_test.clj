@@ -13,7 +13,7 @@
                        (vary-meta update ::insert-times
                                   merge (zipmap (keys new-docs) (repeat (Instant/now))))))))
 
-  (fetch-docs [_ ids]
+  (-fetch-docs [_ ids]
     (let [docs @!docs
           insert-times (::insert-times (meta docs))
           now (Instant/now)]

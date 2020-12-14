@@ -1,4 +1,5 @@
-(ns ^:no-doc crux.db)
+(ns ^:no-doc crux.db
+  (:require [clojure.set :as set]))
 
 ;; tag::Index[]
 (defprotocol Index
@@ -66,4 +67,17 @@
 
 (defprotocol DocumentStore
   (submit-docs [this id-and-docs])
-  (fetch-docs [this ids]))
+  (-fetch-docs [this ids]))
+
+(defn fetch-docs [document-store ids]
+  (let [ids (set ids)]
+    (loop [docs {}]
+      (let [missing-ids (set/difference ids (set (keys docs)))
+            docs (into docs
+                       (when (seq missing-ids)
+                         (-fetch-docs document-store missing-ids)))]
+        (if (= (count docs) (count ids))
+          docs
+          (do
+            (Thread/sleep 100)
+            (recur docs)))))))
