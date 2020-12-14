@@ -47,6 +47,23 @@
 
 (declare cleanup-references)
 
+(deftype DirectRootAllocator []
+  Allocator
+  (malloc [this size]
+    (UnsafeBuffer. (ByteBuffer/allocateDirect size)))
+
+  (free [this buffer]
+    (BufferUtil/free ^DirectBuffer buffer))
+
+  (allocated-size [this]
+    (reduce + (map :memory-used (cio/buffer-pool-usage))))
+
+  Closeable
+  (close [_]))
+
+(defn ->direct-root-allocator ^crux.memory.DirectRootAllocator []
+  (->DirectRootAllocator))
+
 (deftype SystemAllocator [malloc-fn free-fn ^AtomicLong allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
@@ -73,17 +90,17 @@
         (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
-    (cleanup-references this)
+    (cleanup-references reference-queue)
     (.get allocated-bytes))
 
   Closeable
   (close [this]
-    (cleanup-references this)
+    (cleanup-references reference-queue)
     (.clear address->reference)))
 
-(defn- cleanup-references [^SystemAllocator allocator]
+(defn- cleanup-references [^ReferenceQueue reference-queue]
   (loop []
-    (when-let [reference-delay (.poll ^ReferenceQueue (.reference-queue allocator))]
+    (when-let [reference-delay (.poll reference-queue)]
       @reference-delay
       (recur))))
 
@@ -275,7 +292,7 @@
 (defn ->quota-allocator ^crux.memory.QuotaAllocator [allocator ^long quota]
   (->QuotaAllocator allocator quota))
 
-(def ^crux.memory.Allocator root-allocator (->direct-allocator))
+(def ^crux.memory.Allocator root-allocator (->direct-root-allocator))
 (def ^:dynamic ^crux.memory.Allocator *allocator* root-allocator)
 
 (defn ->local-allocator []
