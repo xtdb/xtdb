@@ -290,7 +290,7 @@
   ;; NOTE: Assumes locations are stable over time.
 
   (bench/run-bench :hourly-average-min-max-temperatures-for-field-locations
-    (with-open [db (api/db node)]
+    (with-open [db (api/open-db node)]
       (let [result (let [condition-ids (->> (api/q db
                                                    '{:find [c]
                                                      :where [[c :condition/device-id device-id]
@@ -316,7 +316,7 @@
                                        (trunc (first temperatures) 2)
                                        (trunc (last temperatures) 2)]))))
                        (finally
-                         (run! cio/try-close histories))))
+                         (run! cio/try-close (reverse histories)))))
 
             success? (= result
                         [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]
