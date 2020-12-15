@@ -72,17 +72,16 @@
   (malloc [this size]
     (cleanup-references address->reference reference-queue)
     (let [byte-buffer (ByteBuffer/allocateDirect size)
-          address (BufferUtil/address byte-buffer)]
-      (when-let [reference-delay (.remove address->reference address)]
-        @reference-delay)
-      (let [freed-delay (delay (set! (.allocated-size this) (- (.allocated-size this) size))
-                               address)
-            reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
-                              (deref []
-                                @freed-delay))]
-        (set! allocated-size (+ size allocated-size))
-        (.put address->reference address reference-delay)
-        (UnsafeBuffer. byte-buffer))))
+          address (BufferUtil/address byte-buffer)
+          decrement-delay (delay (set! (.allocated-size this) (- (.allocated-size this) size))
+                                 address)
+          reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
+                            (deref []
+                              @decrement-delay))]
+      (some-> (.put address->reference address reference-delay)
+              (deref))
+      (set! allocated-size (+ size allocated-size))
+      (UnsafeBuffer. byte-buffer)))
 
   (free [this buffer]
     (cleanup-references address->reference reference-queue)
