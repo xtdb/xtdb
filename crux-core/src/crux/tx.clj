@@ -211,7 +211,10 @@
                         db (api/db ctx tx-time)
                         res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
                     (if (false? res)
-                      {:failed? true}
+                      {:failed? true
+                       :docs (when args-doc-id
+                               {args-content-hash {:crux.db/id args-doc-id
+                                                   :crux.db.fn/failed? true}})}
 
                       (let [conformed-tx-ops (mapv txc/conform-tx-op res)
                             tx-events (mapv txc/->tx-event conformed-tx-ops)]
@@ -230,7 +233,8 @@
                     {:failed? true
                      :fn-error t
                      :docs (when args-doc-id
-                             {args-content-hash {:crux.db.fn/failed? true
+                             {args-content-hash {:crux.db/id args-doc-id
+                                                 :crux.db.fn/failed? true
                                                  :crux.db.fn/exception (symbol (.getName (class t)))
                                                  :crux.db.fn/message (ex-message t)
                                                  :crux.db.fn/ex-data (ex-data t)}})})))]
