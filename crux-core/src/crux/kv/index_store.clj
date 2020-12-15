@@ -840,7 +840,10 @@
                                                                               (set (all-keys-in-prefix bitemp-i (encode-bitemp-z-key-to nil eid-id-buffer)))))))
                                                             eids)})))]
 
-      (kv/delete kv-store ks)
+      ;; TODO this is naively replacing kv/delete with kv/store after #1310
+      ;; later, we'll want to combine this with the kv/store when we index the docs
+      (kv/store kv-store (for [k ks]
+                           [k nil]))
       {:tombstones tombstones}))
 
   (mark-tx-as-failed [this {:crux.tx/keys [tx-id tx-time] :as tx}]

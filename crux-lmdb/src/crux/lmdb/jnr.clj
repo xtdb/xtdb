@@ -82,7 +82,9 @@
           (let [kb (ExpandableDirectByteBuffer.)
                 vb (ExpandableDirectByteBuffer.)]
             (doseq [[k v] kvs]
-              (.put dbi tx (mem/ensure-off-heap k kb) (mem/ensure-off-heap v vb) (make-array PutFlags 0)))
+              (if v
+                (.put dbi tx (mem/ensure-off-heap k kb) (mem/ensure-off-heap v vb) (make-array PutFlags 0))
+                (.delete dbi tx (mem/ensure-off-heap k kb))))
             (.commit tx))))
       (catch Env$MapFullException e
         (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
@@ -90,21 +92,6 @@
             (throw (IllegalStateException. "Too large size of keys to store at once.")))
           (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
           (kv/store this kvs)))))
-
-  (delete [this ks]
-    (try
-      (cio/with-read-lock mapsize-lock
-        (with-open [tx (.txnWrite env)]
-          (let [kb (ExpandableDirectByteBuffer.)]
-            (doseq [k ks]
-              (.delete dbi tx (mem/ensure-off-heap k kb)))
-            (.commit tx))))
-      (catch Env$MapFullException e
-        (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
-          (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
-            (throw (IllegalStateException. "Too large size of keys to delete at once.")))
-          (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
-          (kv/delete this ks)))))
 
   (fsync [this]
     (.sync env true))

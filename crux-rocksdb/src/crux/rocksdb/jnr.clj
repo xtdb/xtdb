@@ -209,21 +209,10 @@
       (try
         (doseq [[k v] kvs
                 :let [k (mem/ensure-off-heap k kb)
-                      v (mem/ensure-off-heap v vb)]]
-          (.rocksdb_writebatch_put rocksdb wb (buffer->pointer k) (.capacity k) (buffer->pointer v) (.capacity v)))
-        (.rocksdb_write rocksdb db write-options wb errptr-out)
-        (finally
-          (.rocksdb_writeoptions_destroy rocksdb wb)
-          (check-error errptr-out)))))
-
-  (delete [_ ks]
-    (let [wb (.rocksdb_writebatch_create rocksdb)
-          errptr-out (make-array String 1)
-          kb (ExpandableDirectByteBuffer.)]
-      (try
-        (doseq [k ks
-                :let [k (mem/ensure-off-heap k kb)]]
-          (.rocksdb_writebatch_delete rocksdb wb (buffer->pointer k) (.capacity k)))
+                      v (some-> v (mem/ensure-off-heap vb))]]
+          (if v
+            (.rocksdb_writebatch_put rocksdb wb (buffer->pointer k) (.capacity k) (buffer->pointer v) (.capacity v))
+            (.rocksdb_writebatch_delete rocksdb wb (buffer->pointer k) (.capacity k))))
         (.rocksdb_write rocksdb db write-options wb errptr-out)
         (finally
           (.rocksdb_writeoptions_destroy rocksdb wb)

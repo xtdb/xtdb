@@ -1,10 +1,9 @@
 (ns ^:no-doc crux.kv
   "Protocols for KV backend implementations."
+  (:refer-clojure :exclude [next])
   (:require [crux.io :as cio]
             [crux.status :as status]
-            [crux.system :as sys])
-  (:refer-clojure :exclude [next])
-  (:import java.io.Closeable))
+            [crux.system :as sys]))
 
 (defprotocol KvIterator
   (seek [this k])
@@ -20,7 +19,6 @@
 (defprotocol KvStore
   (new-snapshot ^java.io.Closeable [this])
   (store [this kvs])
-  (delete [this ks])
   (fsync [this])
   (compact [this])
   (count-keys [this])

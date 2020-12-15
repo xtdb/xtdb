@@ -6,7 +6,7 @@
 (def ^:dynamic *kv-opts* {})
 
 (defn with-kv-store* [f]
-  (fix/with-tmp-dir "kv" [db-dir]
+  (fix/with-tmp-dirs #{db-dir}
     (with-open [sys (-> (sys/prep-system
                          {:kv-store (merge (when-let [db-dir-suffix (:db-dir-suffix *kv-opts*)]
                                              {:db-dir (io/file db-dir db-dir-suffix)})
@@ -39,7 +39,7 @@
   `(with-each-kv-store* (fn [] ~@body)))
 
 (defn with-kv-store-opts* [kv-opts f]
-  (fix/with-tmp-dir "db-dir" [db-dir]
+  (fix/with-tmp-dirs #{db-dir}
     (letfn [(->kv-opts [module]
               (merge (when-let [db-dir-suffix (:db-dir-suffix kv-opts)]
                        {:db-dir (io/file db-dir db-dir-suffix module)})

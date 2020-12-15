@@ -75,13 +75,14 @@
     (->MemKvSnapshot @!db))
 
   (store [_ kvs]
-    (swap! !db into (for [[k v] kvs]
-                     (MapEntry/create (mem/copy-to-unpooled-buffer (mem/as-buffer k))
-                                      (mem/copy-to-unpooled-buffer (mem/as-buffer v)))))
-    nil)
-
-  (delete [_ ks]
-    (swap! !db #(apply dissoc % (map mem/->off-heap ks)))
+    (swap! !db (fn [db]
+                 (reduce (fn [db [k v]]
+                           (let [k-buf (mem/as-buffer k)]
+                             (if v
+                               (assoc db (mem/copy-to-unpooled-buffer k-buf) (mem/copy-to-unpooled-buffer (mem/as-buffer v)))
+                               (dissoc db k-buf))))
+                         db
+                         kvs)))
     nil)
 
   (compact [_])

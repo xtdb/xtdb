@@ -142,28 +142,17 @@
           vb (ExpandableDirectByteBuffer.)]
       (doseq [[k v] kvs]
         (let [k (mem/ensure-off-heap k kb)
-              v (mem/ensure-off-heap v vb)
+              v (some-> v (mem/ensure-off-heap vb))
               kv (-> kv
                      (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
-                     (.mv_size (.capacity k)))
-              dv (.mv_size dv (.capacity v))]
-          (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
-          (.getBytes v 0 (.mv_data dv) (.mv_size dv)))))))
-
-(defn- tx-delete [mapsize-lock env dbi ks]
-  (with-open [stack (MemoryStack/stackPush)
-              tx (new-transaction mapsize-lock env 0)]
-    (let [{:keys [^long txn]} tx
-          kv (MDBVal/mallocStack stack)
-          kb (ExpandableDirectByteBuffer.)]
-      (doseq [k ks]
-        (let [k (mem/ensure-off-heap k kb)
-              kv (-> kv
-                     (.mv_data (MemoryUtil/memByteBuffer (.addressOffset k) (.capacity k)))
-                     (.mv_size (.capacity k)))
-              rc (LMDB/mdb_del txn dbi kv nil)]
-          (when-not (= LMDB/MDB_NOTFOUND rc)
-            (success? rc)))))))
+                     (.mv_size (.capacity k)))]
+          (if v
+            (let [dv (.mv_size dv (.capacity v))]
+              (success? (LMDB/mdb_cursor_put cursor kv dv LMDB/MDB_RESERVE))
+              (.getBytes v 0 (.mv_data dv) (.mv_size dv)))
+            (let [rc (LMDB/mdb_del (:txn tx) dbi kv nil)]
+              (when-not (= LMDB/MDB_NOTFOUND rc)
+                (success? rc)))))))))
 
 (defn- tx-get [dbi ^LMDBTransaction tx k]
   (with-open [stack (MemoryStack/stackPush)]
@@ -241,18 +230,6 @@
               (throw (IllegalStateException. "Too large size of key values to store at once.")))
             (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
             (kv/store this kvs))
-          (throw e)))))
-
-  (delete [this ks]
-    (try
-      (tx-delete mapsize-lock env dbi ks)
-      (catch ExceptionInfo e
-        (if (= LMDB/MDB_MAP_FULL (:error (ex-data e)))
-          (binding [*mapsize-increase-factor* (* 2 *mapsize-increase-factor*)]
-            (when (> *mapsize-increase-factor* max-mapsize-increase-factor)
-              (throw (IllegalStateException. "Too large size of keys to delete at once.")))
-            (increase-mapsize mapsize-lock env *mapsize-increase-factor*)
-            (kv/delete this ks))
           (throw e)))))
 
   (compact [_])

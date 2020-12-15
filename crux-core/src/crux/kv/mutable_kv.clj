@@ -44,11 +44,9 @@
 
   (store [this kvs]
     (doseq [[k v] kvs]
-      (.put db (mem/as-buffer k) (mem/as-buffer v))))
-
-  (delete [this ks]
-    (doseq [k ks]
-      (.remove db (mem/as-buffer k))))
+      (if v
+        (.put db (mem/as-buffer k) (mem/as-buffer v))
+        (.remove db (mem/as-buffer k)))))
 
   (fsync [this])
   (compact [this])

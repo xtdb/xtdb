@@ -74,13 +74,9 @@
   (store [_ kvs]
     (with-open [wb (WriteBatch.)]
       (doseq [[k v] kvs]
-        (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v)))
-      (.write db write-options wb)))
-
-  (delete [_ ks]
-    (with-open [wb (WriteBatch.)]
-      (doseq [k ks]
-        (.remove wb (mem/direct-byte-buffer k)))
+        (if v
+          (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
+          (.remove wb (mem/direct-byte-buffer k))))
       (.write db write-options wb)))
 
   (compact [_]
