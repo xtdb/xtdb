@@ -111,51 +111,51 @@
 (defmethod index-tx-event :crux.tx/match [[op k v at-valid-time :as match-op]
                                           {::keys [tx-time tx-id], :keys [crux.db/valid-time], :as tx}
                                           {:keys [index-snapshot] :as tx-ingester}]
-  {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot
-                                                                (c/new-id k)
-                                                                (or at-valid-time valid-time tx-time)
-                                                                tx-id)]
-                     (or (= (c/new-id content-hash) (c/new-id v))
-                         (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash))))})
+  (let [content-hash (db/entity-as-of-resolver index-snapshot
+                                               (c/new-id k)
+                                               (or at-valid-time valid-time tx-time)
+                                               tx-id)
+        match? (= (c/new-id content-hash) (c/new-id v))]
+    (when-not match?
+      (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash)))
+
+    {:abort? (not match?)}))
 
 (defmethod index-tx-event :crux.tx/cas [[op k old-v new-v at-valid-time :as cas-op]
                                         {::keys [tx-time tx-id], :keys [crux.db/valid-time] :as tx}
                                         {:keys [index-snapshot document-store] :as tx-ingester}]
   (let [eid (c/new-id k)
-        valid-time (or at-valid-time valid-time tx-time)]
-
-    {:pre-commit-fn #(let [content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)
-                           current-id (c/new-id content-hash)
-                           expected-id (c/new-id old-v)]
-                       ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
-                       ;; can't rely on the old content-hashing returning the same hash for the same document
-                       (or (= current-id expected-id)
-                           (let [docs (db/fetch-docs document-store #{current-id expected-id})]
-                             (= (get docs current-id)
-                                (get docs expected-id)))
-                           (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))))
-
-     :etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx tx-ingester)}))
+        valid-time (or at-valid-time valid-time tx-time)
+        content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)
+        current-id (c/new-id content-hash)
+        expected-id (c/new-id old-v)]
+    (if (or (= current-id expected-id)
+            ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
+            ;; can't rely on the old content-hashing returning the same hash for the same document
+            (let [docs (db/fetch-docs document-store #{current-id expected-id})]
+              (= (get docs current-id)
+                 (get docs expected-id))))
+      {:etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx tx-ingester)}
+      (do
+        (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
+        {:abort? true}))))
 
 (def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
 (defmethod index-tx-event :crux.tx/evict [[op k & legacy-args] tx _]
-  (let [eid (c/new-id k)]
-    {:pre-commit-fn #(cond
-                       (empty? legacy-args) true
+  (cond
+    (empty? legacy-args) {:evict-eids #{k}}
 
-                       (not *evict-all-on-legacy-time-ranges?*)
-                       (throw (err/illegal-arg :evict-with-time-range
-                                               {::err/message (str "Evict no longer supports time-range parameters. "
-                                                                   "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")}))
+    (not *evict-all-on-legacy-time-ranges?*)
+    (throw (err/illegal-arg :evict-with-time-range
+                            {::err/message (str "Evict no longer supports time-range parameters. "
+                                                "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")}))
 
-                       :else (do
-                               (log/warnf "Evicting '%s' for all valid-times, '%s' set"
-                                          k evict-time-ranges-env-var)
-                               true))
-
-     :evict-eids #{k}}))
+    :else (do
+            (log/warnf "Evicting '%s' for all valid-times, '%s' set"
+                       k evict-time-ranges-env-var)
+            {:evict-eids #{k}})))
 
 (def ^:private tx-fn-eval-cache (memoize eval))
 
@@ -191,59 +191,50 @@
                                        {:keys [query-engine document-store index-snapshot], :as tx-ingester}]
   (let [fn-id (c/new-id k)
         {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
-        args-content-hash (c/new-id args-doc)
+        args-content-hash (c/new-id args-doc)]
+    (cond
+      tx-events {:tx-events tx-events
+                 :docs (fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
 
-        {:keys [tx-events docs failed?]}
-        (cond
-          tx-events {:tx-events tx-events
-                     :docs (fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
+      failed? (do
+                (log/warn "Transaction function failed when originally evaluated:"
+                          fn-id args-doc-id
+                          (pr-str (select-keys args-doc [:crux.db.fn/exception
+                                                         :crux.db.fn/message
+                                                         :crux.db.fn/ex-data])))
+                {:abort? true})
 
-          failed? (do
-                    (log/warn "Transaction function failed when originally evaluated:"
-                              fn-id args-doc-id
-                              (pr-str (select-keys args-doc [:crux.db.fn/exception
-                                                             :crux.db.fn/message
-                                                             :crux.db.fn/ex-data])))
-                    {:failed? true})
+      :else (try
+              (let [ctx (->TxFnContext query-engine tx)
+                    db (api/db ctx tx-time)
+                    res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
+                (if (false? res)
+                  {:abort? true
+                   :docs (when args-doc-id
+                           {args-content-hash {:crux.db/id args-doc-id
+                                               :crux.db.fn/failed? true}})}
 
-          :else (try
-                  (let [ctx (->TxFnContext query-engine tx)
-                        db (api/db ctx tx-time)
-                        res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
-                    (if (false? res)
-                      {:failed? true
-                       :docs (when args-doc-id
-                               {args-content-hash {:crux.db/id args-doc-id
-                                                   :crux.db.fn/failed? true}})}
+                  (let [conformed-tx-ops (mapv txc/conform-tx-op res)
+                        tx-events (mapv txc/->tx-event conformed-tx-ops)]
+                    {:tx-events tx-events
+                     :docs (into (if args-doc-id
+                                   {args-content-hash {:crux.db/id args-doc-id
+                                                       :crux.db.fn/tx-events tx-events}}
+                                   {})
+                                 (mapcat :docs)
+                                 conformed-tx-ops)})))
 
-                      (let [conformed-tx-ops (mapv txc/conform-tx-op res)
-                            tx-events (mapv txc/->tx-event conformed-tx-ops)]
-                        {:tx-events tx-events
-                         :docs (into (if args-doc-id
-                                       {args-content-hash {:crux.db/id args-doc-id
-                                                           :crux.db.fn/tx-events tx-events}}
-                                       {})
-                                     (mapcat :docs)
-                                     conformed-tx-ops)})))
+              (catch Throwable t
+                (reset! !last-tx-fn-error t)
+                (log/warn t "Transaction function failure:" fn-id args-doc-id)
 
-                  (catch Throwable t
-                    (reset! !last-tx-fn-error t)
-                    (log/warn t "Transaction function failure:" fn-id args-doc-id)
-
-                    {:failed? true
-                     :fn-error t
-                     :docs (when args-doc-id
-                             {args-content-hash {:crux.db/id args-doc-id
-                                                 :crux.db.fn/failed? true
-                                                 :crux.db.fn/exception (symbol (.getName (class t)))
-                                                 :crux.db.fn/message (ex-message t)
-                                                 :crux.db.fn/ex-data (ex-data t)}})})))]
-    (if failed?
-      {:pre-commit-fn (constantly false)
-       :docs docs}
-
-      {:tx-events tx-events
-       :docs docs})))
+                {:abort? true
+                 :docs (when args-doc-id
+                         {args-content-hash {:crux.db/id args-doc-id
+                                             :crux.db.fn/failed? true
+                                             :crux.db.fn/exception (symbol (.getName (class t)))
+                                             :crux.db.fn/message (ex-message t)
+                                             :crux.db.fn/ex-data (ex-data t)}})})))))
 
 (defmethod index-tx-event :default [[op & _] tx tx-ingester]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
@@ -340,14 +331,10 @@
                          (when tx-event
                            (let [{new-tx-events :tx-events, :keys [abort? evict-eids etxs docs]}
                                  (with-open [index-snapshot (db/open-index-snapshot forked-index-store)]
-                                   (let [{:keys [docs pre-commit-fn] :as res} (index-tx-event (-> tx-event
-                                                                                                  (with-tx-fn-args forked-deps))
-                                                                                              tx
-                                                                                              (assoc forked-deps :index-snapshot index-snapshot))]
-                                     (if (and pre-commit-fn (not (pre-commit-fn)))
-                                       {:abort? true
-                                        :docs docs}
-                                       res)))]
+                                   (index-tx-event (-> tx-event
+                                                       (with-tx-fn-args forked-deps))
+                                                   tx
+                                                   (assoc forked-deps :index-snapshot index-snapshot)))]
                              (when (seq docs)
                                (db/submit-docs forked-document-store docs))
 
