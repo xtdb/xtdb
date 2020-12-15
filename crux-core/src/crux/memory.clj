@@ -62,21 +62,21 @@
 
 (declare cleanup-references)
 
-(deftype RegionAllocator [malloc-fn free-fn gc-free-fn ^AtomicLong allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
+(deftype RegionAllocator [^:unsynchronized-mutable ^long allocated-bytes ^Map address->reference ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
     (cleanup-references address->reference reference-queue)
-    (let [byte-buffer ^ByteBuffer (malloc-fn size)
+    (let [size (long size)
+          byte-buffer (ByteBuffer/allocateDirect size)
           address (BufferUtil/address byte-buffer)]
       (when-let [reference-delay (.remove address->reference address)]
         @reference-delay)
-      (let [freed-delay (delay (.addAndGet allocated-bytes (- (long size)))
-                               (gc-free-fn address)
+      (let [freed-delay (delay (set! (.allocated-bytes this) (- (.allocated-bytes this) size))
                                address)
             reference-delay (proxy [WeakReference IDeref] [byte-buffer reference-queue]
                               (deref []
                                 @freed-delay))]
-        (.addAndGet allocated-bytes size)
+        (set! allocated-bytes (+ size allocated-bytes))
         (.put address->reference address reference-delay)
         (UnsafeBuffer. byte-buffer))))
 
@@ -86,21 +86,21 @@
           address (BufferUtil/address byte-buffer)]
       (if-let [reference-delay (.remove address->reference address)]
         (if (identical? byte-buffer (.get ^Reference reference-delay))
-          (do (free-fn byte-buffer)
+          (do (BufferUtil/free byte-buffer)
               @reference-delay)
           (log/warn "double free:" buffer))
         (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocated-size [this]
     (cleanup-references address->reference reference-queue)
-    (.get allocated-bytes))
+    allocated-bytes)
 
   Closeable
   (close [this]
     (cleanup-references address->reference reference-queue)
     (doseq [[_ reference-delay] address->reference]
       (when-let [byte-buffer (.get ^Reference reference-delay)]
-        (free-fn byte-buffer))
+        (BufferUtil/free ^ByteBuffer byte-buffer))
       @reference-delay)
     (.clear address->reference)
     (let [used (long (allocated-size this))]
@@ -114,22 +114,8 @@
         (.remove address->reference address reference-delay))
       (recur))))
 
-(defn ->region-allocator ^crux.memory.RegionAllocator [malloc-fn free-fn gc-free-fn]
-  (->RegionAllocator malloc-fn free-fn gc-free-fn (AtomicLong.) (ConcurrentHashMap.) (ReferenceQueue.)))
-
 (defn ->direct-region-allocator ^crux.memory.RegionAllocator []
-  (->region-allocator (fn [^long size]
-                        (ByteBuffer/allocateDirect size))
-                      (fn [^ByteBuffer byte-buffer]
-                        (BufferUtil/free byte-buffer))
-                      (constantly nil)))
-
-(defn ->unsafe-region-allocator ^crux.memory.RegionAllocator []
-  (->region-allocator (fn [^long size]
-                        (ByteUtils/newDirectByteBuffer (ByteUtils/malloc size) size))
-                      (constantly nil)
-                      (fn [^long address]
-                        (ByteUtils/free address))))
+  (->RegionAllocator 0 (HashMap.) (ReferenceQueue.)))
 
 (deftype BumpAllocator [allocator ^long chunk-size ^long large-buffer-size ^:unsynchronized-mutable ^DirectBuffer chunk ^:unsynchronized-mutable ^long position]
   Allocator
