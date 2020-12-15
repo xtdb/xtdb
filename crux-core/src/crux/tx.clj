@@ -489,13 +489,10 @@
 
                                   (s/assert ::txe/tx-events tx-events)
 
-                                  (with-open [allocator (mem/->local-allocator)]
-                                    (binding [mem/*allocator* allocator]
-                                      (let [in-flight-tx (db/begin-tx tx-ingester tx)
-                                            res (db/index-tx-events in-flight-tx tx-events)]
-                                        (if res
-                                          (db/commit in-flight-tx)
-                                          (db/abort in-flight-tx)))))
+                                  (let [in-flight-tx (db/begin-tx tx-ingester tx)]
+                                    (if (db/index-tx-events in-flight-tx tx-events)
+                                      (db/commit in-flight-tx)
+                                      (db/abort in-flight-tx)))
 
                                   (when (Thread/interrupted)
                                     (throw (InterruptedException.))))
