@@ -61,8 +61,8 @@
                     (swap! !timer-store assoc submitted-tx (dropwizard/start timer))
 
                     :crux.tx/indexed-tx
-                    (do
-                      (dropwizard/stop (get @!timer-store submitted-tx))
+                    (when-let [timer-context (get @!timer-store submitted-tx)]
+                      (dropwizard/stop timer-context)
                       (swap! !timer-store dissoc submitted-tx)))))
     timer))
 
