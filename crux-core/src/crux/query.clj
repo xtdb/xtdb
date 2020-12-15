@@ -1788,7 +1788,9 @@
 
   (openQuery [db query args]
     (let [index-snapshot (open-index-snapshot db)
-          db (assoc db :index-snapshot index-snapshot :fn-allow-list fn-allow-list)
+          db (assoc db :index-snapshot index-snapshot)
+          entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
+          db (assoc db :entity-resolver-fn entity-resolver-fn :fn-allow-list fn-allow-list)
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
           safe-query (-> conformed-query .q-normalized (dissoc :args))
