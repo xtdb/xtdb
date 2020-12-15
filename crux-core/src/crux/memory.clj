@@ -193,7 +193,7 @@
 (def ^crux.memory.Allocator root-allocator (->direct-root-allocator))
 (def ^:dynamic ^crux.memory.Allocator *allocator* root-allocator)
 
-(defn ->local-allocator ^crux.memory.Allocator []
+(defn ->local-allocator ^java.io.Closeable []
   (->bump-allocator))
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
