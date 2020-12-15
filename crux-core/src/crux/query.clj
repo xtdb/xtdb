@@ -1798,7 +1798,7 @@
                        (cio/try-close index-snapshot)
                        (when needs-allocator?
                          (log/debug :memory-used-by-query (cio/pr-edn-str {:query-id query-id
-                                                                           :off-heap-bytes (mem/allocated-size mem/*allocator*)}))
+                                                                           :off-heap-bytes (.allocatedSize mem/*allocator*)}))
                          (cio/try-close mem/*allocator*))
                        (finally
                          (when needs-allocator?
@@ -1844,7 +1844,7 @@
                        (try
                          (cio/try-close index-snapshot)
                          (when needs-allocator?
-                           (log/debug :memory-used-by-history (cio/pr-edn-str {:off-heap-bytes (mem/allocated-size mem/*allocator*)}))
+                           (log/debug :memory-used-by-history (cio/pr-edn-str {:off-heap-bytes (.allocatedSize mem/*allocator*)}))
                            (cio/try-close mem/*allocator*))
                          (finally
                            (when needs-allocator?
