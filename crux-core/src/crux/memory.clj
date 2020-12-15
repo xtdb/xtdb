@@ -67,10 +67,13 @@
         (.remove address->reference address reference-delay))
       (recur))))
 
+(def ^:private ^:const cleanup-frequency 0.01)
+
 (deftype DirectRegionAllocator [^:unsynchronized-mutable ^long allocated-size ^Map address->reference ^ReferenceQueue reference-queue]
   Allocator
   (malloc [this size]
-    (cleanup-references address->reference reference-queue)
+    (when (< (Math/random) cleanup-frequency)
+      (cleanup-references address->reference reference-queue))
     (let [byte-buffer (ByteBuffer/allocateDirect size)
           address (BufferUtil/address byte-buffer)
           decrement-delay (delay (set! (.allocated-size this) (- (.allocated-size this) size))
@@ -95,7 +98,8 @@
         (log/warn "trying to free unknown buffer:" buffer))))
 
   (allocatedSize [this]
-    (cleanup-references address->reference reference-queue)
+    (when (< (Math/random) cleanup-frequency)
+      (cleanup-references address->reference reference-queue))
     allocated-size)
 
   Closeable
