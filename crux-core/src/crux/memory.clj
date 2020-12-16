@@ -7,7 +7,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream File]
            java.nio.ByteBuffer
-           [java.util Comparator HashMap Map]
+           java.util.Comparator
            java.util.function.Supplier
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
