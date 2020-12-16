@@ -78,8 +78,9 @@
               (recur size))
 
           :else
-          (do (set! position new-aligned-offset)
-              (UnsafeBuffer. chunk offset size))))))
+          (let [buffer (.slice (.limit (.position (.duplicate (.byteBuffer chunk)) offset) (+ offset size)))]
+            (set! position new-aligned-offset)
+            (UnsafeBuffer. buffer offset size))))))
 
   (free [this buffer]
     (if (= (+ (.addressOffset ^DirectBuffer buffer)
