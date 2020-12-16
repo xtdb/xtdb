@@ -1951,9 +1951,6 @@
                                   :query-timeout {:doc "Query Timeout ms"
                                                   :default 30000
                                                   :spec ::sys/nat-int}
-                                  :query-memory-quota {:doc "Query Memory Quota"
-                                                       :default (* 32 1024 1024)
-                                                       :spec ::sys/nat-int}
                                   :batch-size {:doc "Batch size of results"
                                                :default 100
                                                :required? true
