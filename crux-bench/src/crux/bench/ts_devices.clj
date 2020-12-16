@@ -240,7 +240,7 @@
                                        (first battery-levels)
                                        (last battery-levels)]))))
                        (finally
-                         (run! cio/try-close (reverse histories)))))
+                         (run! cio/try-close histories))))
 
             success? (= [[#inst "2016-11-15T12:00:00.000-00:00" 20.0 99.0]
                          [#inst "2016-11-15T13:00:00.000-00:00" 13.0 100.0]
