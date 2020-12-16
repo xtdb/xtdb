@@ -76,6 +76,7 @@ jobs:
 
       - run:
           command: |
+            rm -rf ~/.m2/juxt/crux-*
             export LEIN_JVM_OPTS=-Xmx2G
             lein sub install
 
@@ -97,7 +98,6 @@ jobs:
       - run: lein do sub test, check
       - store_test_results:
           path: "crux-test/target/test-results"
-      - run: rm -rf ~/.m2/juxt/crux-*
       - save_cache:
           paths:
             - ~/.m2
@@ -119,11 +119,6 @@ jobs:
               - v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
               # fallback to using the latest cache if no exact match is found
               - v1-dataset-
-
-        - run:
-            command: |
-              export LEIN_JVM_OPTS=-Xmx2G
-              lein sub install
 
         - run: sh ./crux-bench/bin/download-dataset.sh
         - run: lein sub -s crux-bench uberjar
