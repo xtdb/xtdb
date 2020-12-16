@@ -5,7 +5,7 @@
             [crux.error :as err]
             [crux.io :as cio]
             [taoensso.nippy :as nippy])
-  (:import [java.io Closeable DataInputStream DataOutputStream File]
+  (:import [java.io Closeable DataInputStream DataOutputStream]
            java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
