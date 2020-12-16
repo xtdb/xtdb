@@ -100,7 +100,7 @@
     (set! chunk nil)
     (cio/try-close allocator)))
 
-(defn ->bump-allocator ^crux.memory.Allocator [allocator chunk-size]
+(defn ->bump-allocator ^crux.memory.Allocator [allocator ^long chunk-size]
   (->BumpAllocator allocator chunk-size (quot chunk-size 4) nil 0))
 
 (def ^crux.memory.Allocator root-allocator (->direct-root-allocator))
