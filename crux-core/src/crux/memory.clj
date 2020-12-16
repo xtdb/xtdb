@@ -102,7 +102,7 @@
 (defn ->bump-allocator ^crux.memory.Allocator [allocator ^long chunk-size]
   (->BumpAllocator allocator chunk-size (quot chunk-size 4) nil 0))
 
-(def ^:private ^:const default-chunk-size page-size)
+(def ^:private ^:const default-chunk-size (* 128 1024))
 
 (def ^crux.memory.Allocator root-allocator (->direct-root-allocator))
 (def ^ThreadLocal allocator-tl (ThreadLocal/withInitial
