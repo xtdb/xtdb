@@ -376,7 +376,7 @@
 ;;;; tx-id/tx-time mappings
 
 (def tx-time-mapping-prefix
-  (doto ^MutableDirectBuffer (mem/allocate-buffer c/index-id-size)
+  (doto ^MutableDirectBuffer (mem/allocate-root-buffer c/index-id-size)
     (.putByte 0 c/tx-time-mapping-id)))
 
 (defn- encode-tx-time-mapping-key-to [to tx-time tx-id]

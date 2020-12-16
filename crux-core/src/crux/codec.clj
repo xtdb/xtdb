@@ -100,7 +100,7 @@
     (aset 0 (byte id-value-type-id))))
 
 (def nil-id-buffer
-  (mem/->off-heap nil-id-bytes (mem/allocate-buffer (count nil-id-bytes))))
+  (mem/->off-heap nil-id-bytes (mem/allocate-root-buffer (count nil-id-bytes))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))

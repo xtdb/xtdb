@@ -540,7 +540,7 @@
 (defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn]} index-snapshot {:keys [vars-in-join-order]}]
   (let [order (keep #{e v} vars-in-join-order)
         nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)
-        attr-buffer (c/->id-buffer a)]
+        attr-buffer (mem/copy-buffer-to-root-allocator (c/->id-buffer a))]
     (if (= v (first order))
       (let [v-idx (idx/new-deref-index
                    (idx/new-seek-fn-index
@@ -1358,93 +1358,92 @@
 
 (defn- compile-sub-query [encode-value-fn fn-allow-list where in rule-name->rules stats]
   (try
-    (binding [mem/*allocator* mem/root-allocator]
-      (let [where (-> (expand-rules where rule-name->rules {})
-                      (build-pred-fns fn-allow-list))
-            in-vars (set (find-binding-vars (:bindings in)))
-            [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars stats)
-            {triple-clauses :triple
-             range-clauses :range
-             pred-clauses :pred
-             not-clauses :not
-             not-join-clauses :not-join
-             or-clauses :or
-             or-join-clauses :or-join
-             :as type->clauses} type->clauses
-            {:keys [e-vars
-                    v-vars
-                    range-vars
-                    pred-vars
-                    pred-return-vars]} (collect-vars type->clauses)
-            var->joins {}
-            [triple-join-deps var->joins var->cardinality] (triple-joins triple-clauses
+    (let [where (-> (expand-rules where rule-name->rules {})
+                    (build-pred-fns fn-allow-list))
+          in-vars (set (find-binding-vars (:bindings in)))
+          [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars stats)
+          {triple-clauses :triple
+           range-clauses :range
+           pred-clauses :pred
+           not-clauses :not
+           not-join-clauses :not-join
+           or-clauses :or
+           or-join-clauses :or-join
+           :as type->clauses} type->clauses
+          {:keys [e-vars
+                  v-vars
+                  range-vars
+                  pred-vars
+                  pred-return-vars]} (collect-vars type->clauses)
+          var->joins {}
+          [triple-join-deps var->joins var->cardinality] (triple-joins triple-clauses
+                                                                       var->joins
+                                                                       type->clauses
+                                                                       in-vars
+                                                                       stats)
+          [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
+          [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
+          known-vars (set/union e-vars v-vars in-vars)
+          known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
+          [or-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
+                                                                         :or
+                                                                         or-clauses
                                                                          var->joins
-                                                                         type->clauses
-                                                                         in-vars
-                                                                         stats)
-            [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
-            [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
-            known-vars (set/union e-vars v-vars in-vars)
-            known-vars (add-pred-returns-bound-at-top-level known-vars pred-clauses)
-            [or-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
-                                                                           :or
-                                                                           or-clauses
-                                                                           var->joins
-                                                                           known-vars)
-            [or-join-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
-                                                                                :or-join
-                                                                                or-join-clauses
-                                                                                var->joins
-                                                                                known-vars)
-            or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
-                                                 or-join-clause+idx-id+or-branches)
-            join-depth (count var->joins)
-            vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars)
-            var->values-result-index (zipmap vars-in-join-order (range))
-            v-var->e (build-v-var->e triple-clauses var->values-result-index)
-            e->v-var (set/map-invert v-var->e)
-            v-var->attr (->> (for [{:keys [e a v]} triple-clauses
-                                   :when (and (logic-var? v)
-                                              (= e (get v-var->e v)))]
-                               [v a])
-                             (into {}))
-            e-var->attr (zipmap e-vars (repeat :crux.db/id))
-            var->attr (merge e-var->attr v-var->attr)
-            var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
-                                 (build-pred-return-var-bindings var->values-result-index pred-clauses)
-                                 (build-in-var-bindings var->values-result-index in-vars)
-                                 (build-var-bindings var->attr
-                                                     v-var->e
-                                                     e->v-var
-                                                     var->values-result-index
-                                                     join-depth
-                                                     (keys var->attr)))
-            var->range-constraints (build-var-range-constraints encode-value-fn range-clauses var->bindings)
-            var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns encode-value-fn range-clauses var->bindings)
-            not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
-            not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
-            pred-constraints (build-pred-constraints rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order)
-            or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
-                                                 var->bindings vars-in-join-order stats)
-            depth->constraints (->> (concat pred-constraints
-                                            not-constraints
-                                            not-join-constraints
-                                            or-constraints)
-                                    (update-depth->constraints (vec (repeat (inc join-depth) nil))))
-            in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
-                                   :let [bind-vars (find-binding-vars binding)]]
-                               {:idx-id idx-id
-                                :bind-type bind-type
-                                :tuple-idxs-in-join-order (build-tuple-idxs-in-join-order bind-vars vars-in-join-order)}))]
-        {:depth->constraints depth->constraints
-         :var->range-constraints var->range-constraints
-         :var->logic-var-range-constraint-fns var->logic-var-range-constraint-fns
-         :vars-in-join-order vars-in-join-order
-         :var->joins var->joins
-         :var->bindings var->bindings
-         :var->cardinality var->cardinality
-         :in-bindings in-bindings
-         :attr-stats (select-keys stats (vals var->attr))}))
+                                                                         known-vars)
+          [or-join-clause+idx-id+or-branches known-vars var->joins] (or-joins rule-name->rules
+                                                                              :or-join
+                                                                              or-join-clauses
+                                                                              var->joins
+                                                                              known-vars)
+          or-clause+idx-id+or-branches (concat or-clause+idx-id+or-branches
+                                               or-join-clause+idx-id+or-branches)
+          join-depth (count var->joins)
+          vars-in-join-order (calculate-join-order pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars)
+          var->values-result-index (zipmap vars-in-join-order (range))
+          v-var->e (build-v-var->e triple-clauses var->values-result-index)
+          e->v-var (set/map-invert v-var->e)
+          v-var->attr (->> (for [{:keys [e a v]} triple-clauses
+                                 :when (and (logic-var? v)
+                                            (= e (get v-var->e v)))]
+                             [v a])
+                           (into {}))
+          e-var->attr (zipmap e-vars (repeat :crux.db/id))
+          var->attr (merge e-var->attr v-var->attr)
+          var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
+                               (build-pred-return-var-bindings var->values-result-index pred-clauses)
+                               (build-in-var-bindings var->values-result-index in-vars)
+                               (build-var-bindings var->attr
+                                                   v-var->e
+                                                   e->v-var
+                                                   var->values-result-index
+                                                   join-depth
+                                                   (keys var->attr)))
+          var->range-constraints (build-var-range-constraints encode-value-fn range-clauses var->bindings)
+          var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns encode-value-fn range-clauses var->bindings)
+          not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
+          not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
+          pred-constraints (build-pred-constraints rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order)
+          or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
+                                               var->bindings vars-in-join-order stats)
+          depth->constraints (->> (concat pred-constraints
+                                          not-constraints
+                                          not-join-constraints
+                                          or-constraints)
+                                  (update-depth->constraints (vec (repeat (inc join-depth) nil))))
+          in-bindings (vec (for [[idx-id [bind-type binding]] (map vector in-idx-ids (:bindings in))
+                                 :let [bind-vars (find-binding-vars binding)]]
+                             {:idx-id idx-id
+                              :bind-type bind-type
+                              :tuple-idxs-in-join-order (build-tuple-idxs-in-join-order bind-vars vars-in-join-order)}))]
+      {:depth->constraints depth->constraints
+       :var->range-constraints var->range-constraints
+       :var->logic-var-range-constraint-fns var->logic-var-range-constraint-fns
+       :vars-in-join-order vars-in-join-order
+       :var->joins var->joins
+       :var->bindings var->bindings
+       :var->cardinality var->cardinality
+       :in-bindings in-bindings
+       :attr-stats (select-keys stats (vals var->attr))})
     (catch ExceptionInfo e
       (let [{:keys [reason node dependency] :as cycle} (ex-data e)]
         (if (and (= ::dep/circular-dependency reason)
@@ -1793,31 +1792,16 @@
           db (assoc db :entity-resolver-fn entity-resolver-fn :fn-allow-list fn-allow-list)
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))
-          needs-allocator? (identical? mem/*allocator* mem/root-allocator)
-          close-fn (fn []
-                     (try
-                       (cio/try-close index-snapshot)
-                       (when needs-allocator?
-                         (log/debug :memory-used-by-query (cio/pr-edn-str {:query-id query-id
-                                                                           :off-heap-bytes (.allocatedSize mem/*allocator*)}))
-                         (cio/try-close mem/*allocator*))
-                       (finally
-                         (when needs-allocator?
-                           (pop-thread-bindings)))))]
+          safe-query (-> conformed-query .q-normalized (dissoc :args))]
 
       (when bus
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (when needs-allocator?
-        (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator
-                                                  (mem/->local-allocator)
-                                                  (:query-memory-quota db))}))
       (->> (try
              (crux.query/query db conformed-query args)
              (catch Throwable t
-               (close-fn)
+               (cio/try-close index-snapshot)
                (when bus
                  (bus/send bus {:crux/event-type ::failed-query
                                 ::query safe-query
@@ -1826,7 +1810,7 @@
                                          :message (.getMessage t)}}))
                (throw t)))
            (cio/->cursor (fn []
-                           (close-fn)
+                           #(cio/try-close index-snapshot)
                            (when bus
                              (bus/send bus {:crux/event-type ::completed-query
                                             ::query safe-query
@@ -1840,21 +1824,7 @@
     (if-not tx-id
       cio/empty-cursor
       (let [index-snapshot (open-index-snapshot this)
-            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))
-            needs-allocator? (identical? mem/*allocator* mem/root-allocator)
-            close-fn (fn []
-                       (try
-                         (cio/try-close index-snapshot)
-                         (when needs-allocator?
-                           (log/debug :memory-used-by-history (cio/pr-edn-str {:off-heap-bytes (.allocatedSize mem/*allocator*)}))
-                           (cio/try-close mem/*allocator*))
-                         (finally
-                           (when needs-allocator?
-                             (pop-thread-bindings)))))]
-        (when needs-allocator?
-          (push-thread-bindings {#'mem/*allocator* (mem/->quota-allocator
-                                                    (mem/->local-allocator)
-                                                    (:query-memory-quota this))}))
+            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
         (->> (try
                (->> (db/entity-history index-snapshot eid sort-order opts)
                     (map (fn [^EntityTx etx]
@@ -1865,9 +1835,9 @@
                              with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
                                                                 (get (.content-hash etx))))))))
                (catch Throwable t
-                 (close-fn)
+                 (cio/try-close index-snapshot)
                  (throw t)))
-             (cio/->cursor close-fn)))))
+             (cio/->cursor #(cio/try-close index-snapshot))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
