@@ -6,7 +6,6 @@
             [crux.io :as cio]
             [taoensso.nippy :as nippy])
   (:import [java.io Closeable DataInputStream DataOutputStream File]
-           java.lang.reflect.Constructor
            java.nio.ByteBuffer
            [java.util Comparator HashMap Map]
            java.util.function.Supplier
@@ -103,11 +102,13 @@
 (defn ->bump-allocator ^crux.memory.Allocator [allocator ^long chunk-size]
   (->BumpAllocator allocator chunk-size (quot chunk-size 4) nil 0))
 
+(def ^:private ^:const default-chunk-size (* 32 page-size))
+
 (def ^crux.memory.Allocator root-allocator (->direct-root-allocator))
 (def ^ThreadLocal allocator-tl (ThreadLocal/withInitial
                                 (reify Supplier
                                   (get [_]
-                                    (->bump-allocator root-allocator page-size)))))
+                                    (->bump-allocator root-allocator default-chunk-size)))))
 
 (defn allocate-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (.malloc ^Allocator (.get allocator-tl) size))

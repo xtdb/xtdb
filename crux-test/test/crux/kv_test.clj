@@ -298,25 +298,25 @@
                                 :seek+nexts (with-open [snapshot (kv/new-snapshot kv-store)
                                                         i (kv/new-iterator snapshot)]
                                               (when-let [k (kv/seek i (c/->value-buffer k))]
-                                                (cons [(mem/copy-buffer k)
-                                                       (mem/copy-buffer (kv/value i))]
+                                                (cons [(mem/copy-buffer-to-root-allocator k)
+                                                       (mem/copy-buffer-to-root-allocator (kv/value i))]
                                                       (->> (repeatedly
                                                             (fn []
                                                               (when-let [k (kv/next i)]
-                                                                [(mem/copy-buffer k)
-                                                                 (mem/copy-buffer (kv/value i))])))
+                                                                [(mem/copy-buffer-to-root-allocator k)
+                                                                 (mem/copy-buffer-to-root-allocator (kv/value i))])))
                                                            (take-while identity)
                                                            (vec)))))
                                 :seek+prevs (with-open [snapshot (kv/new-snapshot kv-store)
                                                         i (kv/new-iterator snapshot)]
                                               (when-let [k (kv/seek i (c/->value-buffer k))]
-                                                (cons [(mem/copy-buffer k)
-                                                       (mem/copy-buffer (kv/value i))]
+                                                (cons [(mem/copy-buffer-to-root-allocator k)
+                                                       (mem/copy-buffer-to-root-allocator (kv/value i))]
                                                       (->> (repeatedly
                                                             (fn []
                                                               (when-let [k (kv/prev i)]
-                                                                [(mem/copy-buffer k)
-                                                                 (mem/copy-buffer (kv/value i))])))
+                                                                [(mem/copy-buffer-to-root-allocator k)
+                                                                 (mem/copy-buffer-to-root-allocator (kv/value i))])))
                                                            (take-while identity)
                                                            (vec)))))
                                 :fsync (kv/fsync kv-store)
