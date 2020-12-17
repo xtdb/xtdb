@@ -47,8 +47,9 @@
 
     (t/testing "Eviction"
       (db/submit-docs doc-store [[doc-hash {:crux.db/id :some-id, :crux.db/evicted? true}]])
-      (t/is (nil? (-> (db/fetch-docs doc-store #{doc-hash})
-                      (get doc-hash)))))
+      (t/is (= {:crux.db/id :some-id, :crux.db/evicted? true}
+               (-> (db/-fetch-docs doc-store #{doc-hash})
+                   (get doc-hash)))))
 
     (t/testing "Resurrect Document"
       (fix/submit+await-tx [[:crux.tx/put doc]])

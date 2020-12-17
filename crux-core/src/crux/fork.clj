@@ -213,9 +213,9 @@
   (submit-docs [_ docs]
     (swap! !docs into docs))
 
-  (fetch-docs [_ ids]
+  (-fetch-docs [_ ids]
     (let [overridden-docs (select-keys @!docs ids)]
-      (into overridden-docs (db/fetch-docs doc-store (set/difference (set ids) (set (keys overridden-docs))))))))
+      (into overridden-docs (db/-fetch-docs doc-store (set/difference (set ids) (set (keys overridden-docs))))))))
 
 (defn new-docs [doc-store]
   @(:!docs doc-store))

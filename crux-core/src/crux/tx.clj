@@ -51,19 +51,6 @@
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
 
-(defn- fetch-docs [document-store ids]
-  (let [ids (set ids)]
-    (loop [indexed {}]
-      (let [missing-ids (set/difference ids (set (keys indexed)))
-            indexed (into indexed
-                          (when (seq missing-ids)
-                            (db/fetch-docs document-store missing-ids)))]
-        (if (= (count indexed) (count ids))
-          indexed
-          (do
-            (Thread/sleep 100)
-            (recur indexed)))))))
-
 (defmulti index-tx-event
   (fn [[op :as tx-event] tx tx-ingester]
     op))
@@ -194,7 +181,7 @@
         args-content-hash (c/new-id args-doc)]
     (cond
       tx-events {:tx-events tx-events
-                 :docs (fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
+                 :docs (db/fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
 
       failed? (do
                 (log/warn "Transaction function failed when originally evaluated:"
@@ -299,8 +286,8 @@
   (submit-docs [_ docs]
     (db/submit-docs forked-document-store docs))
 
-  (fetch-docs [_ ids]
-    (db/fetch-docs forked-document-store ids))
+  (-fetch-docs [_ ids]
+    (db/-fetch-docs forked-document-store ids))
 
   api/DBProvider
   (db [ctx] (api/db query-engine tx))
@@ -321,7 +308,7 @@
       (with-open [index-snapshot (db/open-index-snapshot index-store)]
         (let [forked-index-store (assoc forked-index-store :persistent-index-snapshot index-snapshot)]
           (db/index-docs forked-index-store
-                         (-> (fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events))
+                         (-> (db/fetch-docs forked-document-store (txc/tx-events->doc-hashes tx-events))
                              without-tx-fn-docs))
 
           (let [forked-deps {:index-store forked-index-store
@@ -364,10 +351,7 @@
         (throw (IllegalStateException. "Can't commit from fork.")))
 
       (when-let [new-docs (fork/new-docs forked-document-store)]
-        (db/submit-docs document-store new-docs)
-
-        ;; ensure the docs are available before we commit the tx, see #1105
-        (fetch-docs document-store (keys new-docs)))
+        (db/submit-docs document-store new-docs))
 
       (index-docs this (fork/indexed-docs forked-index-store))
 

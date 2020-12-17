@@ -1,6 +1,5 @@
 (ns crux.kafka
   (:require [clojure.java.io :as io]
-            [clojure.set :as set]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
@@ -8,8 +7,7 @@
             [crux.status :as status]
             [crux.system :as sys]
             [crux.tx :as tx])
-  (:import crux.db.DocumentStore
-           [crux.kafka.nippy NippyDeserializer NippySerializer]
+  (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
@@ -247,8 +245,8 @@
   (submit-docs [this id-and-docs]
     (submit-docs id-and-docs this))
 
-  (fetch-docs [this ids]
-    (db/fetch-docs local-document-store ids)))
+  (-fetch-docs [this ids]
+    (db/-fetch-docs local-document-store ids)))
 
 (defn- read-doc-offsets [index-store]
   (->> (db/read-index-meta index-store :crux.tx-log/consumer-state)
@@ -335,7 +333,7 @@
   (submit-docs [this id-and-docs]
     (submit-docs id-and-docs this))
 
-  (fetch-docs [this ids]
+  (-fetch-docs [this ids]
     (throw (UnsupportedOperationException. "Can't fetch docs from ingest-only Kafka document store"))))
 
 (defn ->ingest-only-document-store {::sys/deps {:kafka-config `->kafka-config

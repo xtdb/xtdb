@@ -1065,7 +1065,7 @@
         ->mocked-doc-store (fn [_opts]
                              (reify db/DocumentStore
                                (submit-docs [_ docs])
-                               (fetch-docs [_ ids]
+                               (-fetch-docs [_ ids]
                                  (->> ids
                                       (into {} (map (juxt identity
                                                           (some-fn {(c/new-id put-fn) put-fn
