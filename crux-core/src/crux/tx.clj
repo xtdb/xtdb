@@ -173,12 +173,15 @@
   api/TransactionFnContext
   (indexing-tx [_] indexing-tx))
 
-(defmethod index-tx-event :crux.tx/fn [[op k args-doc :as tx-op]
+(defmethod index-tx-event :crux.tx/fn [[op k args-content-hash :as tx-op]
                                        {:crux.tx/keys [tx-time tx-id] :as tx}
                                        {:keys [query-engine document-store index-snapshot], :as tx-ingester}]
   (let [fn-id (c/new-id k)
-        {args-doc-id :crux.db/id, :crux.db.fn/keys [args tx-events failed?]} args-doc
-        args-content-hash (c/new-id args-doc)]
+        {args-doc-id :crux.db/id,
+         :crux.db.fn/keys [args tx-events failed?]
+         :as args-doc} (when args-content-hash
+                         (-> (db/fetch-docs document-store #{args-content-hash})
+                             (get args-content-hash)))]
     (cond
       tx-events {:tx-events tx-events
                  :docs (db/fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
@@ -265,14 +268,6 @@
                        :av-count (->> (vals indexed-docs) (apply concat) (count))
                        :bytes-indexed bytes-indexed})))))
 
-(defn- with-tx-fn-args [[op & args :as evt] {:keys [document-store]}]
-  (case op
-    :crux.tx/fn (let [[fn-eid arg-doc-id] args]
-                  (cond-> [op fn-eid]
-                    arg-doc-id (conj (-> (db/fetch-docs document-store #{arg-doc-id})
-                                         (get arg-doc-id)))))
-    evt))
-
 (defn- raise-ingester-error! [{:keys [!error bus]} e]
   (reset! !error e)
   (bus/send bus {:crux/event-type ::ingester-error, ::ingester-error e})
@@ -318,10 +313,7 @@
                          (when tx-event
                            (let [{new-tx-events :tx-events, :keys [abort? evict-eids etxs docs]}
                                  (with-open [index-snapshot (db/open-index-snapshot forked-index-store)]
-                                   (index-tx-event (-> tx-event
-                                                       (with-tx-fn-args forked-deps))
-                                                   tx
-                                                   (assoc forked-deps :index-snapshot index-snapshot)))]
+                                   (index-tx-event tx-event tx (assoc forked-deps :index-snapshot index-snapshot)))]
                              (when (seq docs)
                                (db/submit-docs forked-document-store docs))
 
