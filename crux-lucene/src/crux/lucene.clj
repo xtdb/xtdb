@@ -215,8 +215,8 @@
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
                :index-store :crux/index-store
-               :indexer ::indexer
-               :analyzer ::analyzer}}
+               :indexer `->indexer
+               :analyzer `->analyzer}}
   [{:keys [^Path db-dir index-store document-store bus analyzer indexer] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         lucene-store (LuceneNode. directory analyzer indexer)]
