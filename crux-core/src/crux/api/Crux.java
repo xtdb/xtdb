@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
 import clojure.lang.IFn;
+import crux.api.alphav2.NodeConfiguration;
 
 /**
  * Public API entry point for starting an {@link ICruxAPI}.
@@ -101,11 +102,15 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
     @SuppressWarnings("unused")
-    public static ICruxAPI startNode(Consumer<NodeConfigurator> f) throws IndexVersionOutOfSyncException {
-        NodeConfigurator c = new NodeConfigurator();
-        f.accept(c);
-        return startNode(c.modules);
+    public static ICruxAPI startNode(Consumer<NodeConfiguration.Builder> f) throws IndexVersionOutOfSyncException {
+        return startNode(NodeConfiguration.build(f));
     }
+
+    public static ICruxAPI startNode(NodeConfiguration c) throws IndexVersionOutOfSyncException {
+        return startNode(c.getModules());
+    }
+
+
 
     /**
      * Creates a new remote API client.

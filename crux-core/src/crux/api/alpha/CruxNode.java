@@ -4,6 +4,7 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.*;
 import crux.api.HistoryOptions.SortOrder;
+import crux.api.alphav2.NodeConfiguration;
 
 import java.io.IOException;
 import java.time.Duration;
@@ -34,7 +35,7 @@ public class CruxNode implements AutoCloseable {
     }
 
     @SuppressWarnings("unused")
-    public static CruxNode startNode(Consumer<NodeConfigurator> f) {
+    public static CruxNode startNode(Consumer<NodeConfiguration.Builder> f) {
         return new CruxNode(Crux.startNode(f));
     }
 
