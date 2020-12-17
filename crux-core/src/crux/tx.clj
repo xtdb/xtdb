@@ -394,29 +394,33 @@
 
 (defrecord TxIngester [!error index-store document-store bus query-engine ^ExecutorService stats-executor]
   db/TxIngester
-  (begin-tx [_ {:keys [fork-at], ::keys [tx-time] :as tx}]
-    (when-not fork-at
-      (log/debug "Indexing tx-id:" (::tx-id tx))
+  (begin-tx [this {:keys [fork-at], ::keys [tx-time] :as tx}]
+    (try
+      (when-not fork-at
+        (log/debug "Indexing tx-id:" (::tx-id tx))
 
-      (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx}))
+        (bus/send bus {:crux/event-type ::indexing-tx, ::submitted-tx tx}))
 
-    ;; TODO this is the wrong level of abstraction -
-    ;; I'd like to move more of this fork logic to the KV index store,
-    ;; given so much of it is about KVs
-    (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
-                                                                                           :cav-cache (nop-cache/->nop-cache {})
-                                                                                           :canonical-buffer-cache (nop-cache/->nop-cache {})})
-                                                        (::db/valid-time fork-at)
-                                                        (get fork-at ::tx-id (::tx-id tx)))
-          forked-document-store (fork/->forked-document-store document-store)]
-      (->InFlightTx tx (atom :open) (atom []) !error
-                    forked-index-store
-                    forked-document-store
-                    (assoc query-engine
-                           :index-store forked-index-store
-                           :document-store forked-document-store)
-                    index-store document-store bus
-                    stats-executor)))
+      ;; TODO this is the wrong level of abstraction -
+      ;; I'd like to move more of this fork logic to the KV index store,
+      ;; given so much of it is about KVs
+      (let [forked-index-store (fork/->forked-index-store index-store (kvi/->kv-index-store {:kv-store (mut-kv/->mutable-kv-store)
+                                                                                             :cav-cache (nop-cache/->nop-cache {})
+                                                                                             :canonical-buffer-cache (nop-cache/->nop-cache {})})
+                                                          (::db/valid-time fork-at)
+                                                          (get fork-at ::tx-id (::tx-id tx)))
+            forked-document-store (fork/->forked-document-store document-store)]
+        (->InFlightTx tx (atom :open) (atom []) !error
+                      forked-index-store
+                      forked-document-store
+                      (assoc query-engine
+                             :index-store forked-index-store
+                             :document-store forked-document-store)
+                      index-store document-store bus
+                      stats-executor))
+      (catch Throwable t
+        (raise-ingester-error! this t))))
+
   (ingester-error [_] @!error)
 
   Closeable
