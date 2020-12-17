@@ -182,13 +182,12 @@
 
 (defn direct-byte-buffer ^java.nio.ByteBuffer [b]
   (let [b (->off-heap b)
-        offset (- (.addressOffset b)
-                  (BufferUtil/address (.byteBuffer b)))]
+        offset (.wrapAdjustment b)]
     (-> (.byteBuffer b)
         (.duplicate)
         (.clear)
         (.position offset)
-        (.limit (+ offset (.capacity b)))
+        ^ByteBuffer (.limit (+ offset (.capacity b)))
         (.slice))))
 
 (defn on-heap-buffer ^org.agrona.DirectBuffer [^bytes b]
