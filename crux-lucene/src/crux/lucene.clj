@@ -76,15 +76,10 @@
     (IndexWriter. directory, (IndexWriterConfig. analyzer))))
 
 (defn- index-docs! [document-store lucene-store doc-ids]
-  (try
-    (let [docs (vals (db/fetch-docs document-store doc-ids))]
-      (with-open [index-writer (index-writer lucene-store)]
-        (doseq [d docs t (crux-doc->triples d)]
-          (.updateDocument index-writer (triple->term t) (triple->doc t)))))
-    (catch Throwable t
-      ;; TODO until #1275 is fixed
-      (log/error t)
-      (throw t))))
+  (let [docs (vals (db/fetch-docs document-store doc-ids))]
+    (with-open [index-writer (index-writer lucene-store)]
+      (doseq [d docs t (crux-doc->triples d)]
+        (.updateDocument index-writer (triple->term t) (triple->doc t))))))
 
 (defn- evict! [index-store, node, eids]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} node
