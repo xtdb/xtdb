@@ -965,7 +965,8 @@
   (let [parent-rules (:rules (meta rule-name->rules))
         query (cond-> (normalize-query (second arg-bindings))
                 (nil? return-type) (assoc :limit 1)
-                (seq parent-rules) (update :rules (comp vec concat) parent-rules))]
+                (seq parent-rules) (update :rules (comp vec concat) parent-rules))
+        query (assoc query :sync? true)]
     (fn pred-constraint [index-snapshot db idx-id->idx join-keys]
       (let [[_ _ & args] (for [arg-binding arg-bindings]
                            (if (instance? VarBinding arg-binding)
@@ -1118,11 +1119,15 @@
                                           (let [{:keys [n-ary-join
                                                         var->bindings]} (build-sub-query index-snapshot db where or-in-bindings in-args rule-name->rules stats)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
-                                            (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
+                                            (when-let [idx-seq (not-empty
+                                                                (idx/layered-idx->seq n-ary-join
+                                                                                      (fn [^List join-keys]
+                                                                                        (mapv (fn [^VarBinding var-binding]
+                                                                                                (bound-result-for-var index-snapshot var-binding join-keys))
+                                                                                              free-vars-in-join-order-bindings))
+                                                                                      false))]
                                               (if has-free-vars?
-                                                (vec (for [join-keys idx-seq]
-                                                       (vec (for [var-binding free-vars-in-join-order-bindings]
-                                                              (bound-result-for-var index-snapshot var-binding join-keys)))))
+                                                idx-seq
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -1154,7 +1159,7 @@
                              [(vec (for [var-binding not-var-bindings]
                                      (bound-result-for-var index-snapshot var-binding join-keys)))])
                    {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
-               (empty? (idx/layered-idx->seq n-ary-join)))))})))
+               (empty? (idx/layered-idx->seq n-ary-join identity false)))))})))
 
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
@@ -1698,10 +1703,12 @@
                                 {::err/message  (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
-       (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                  (mapv (fn [var-binding]
-                          (bound-result-for-var index-snapshot var-binding join-keys))
-                        var-bindings))
+       (cond->> (idx/layered-idx->seq n-ary-join
+                                      (fn [^List join-keys]
+                                        (mapv (fn [^VarBinding var-binding]
+                                                (bound-result-for-var index-snapshot var-binding join-keys))
+                                              var-bindings))
+                                      (not (:sync? q)))
 
          aggregate? (aggregate-result compiled-find)
          order-by (cio/external-sort (order-by-comparator find order-by))

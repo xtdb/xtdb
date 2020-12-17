@@ -4,6 +4,7 @@
   (:import [clojure.lang Box IDeref IPersistentVector]
            java.util.function.Function
            [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue LinkedBlockingQueue TimeUnit TimeoutException]
            org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -282,7 +283,11 @@
     nil)
 
   (max-depth [this]
-    (alength indexes)))
+    (alength indexes))
+
+  IDeref
+  (deref [this]
+    join-keys))
 
 (defn new-n-ary-join-layered-virtual-index
   ([indexes]
@@ -294,30 +299,76 @@
                                   (doto (ArrayList.)
                                     (.addAll (repeat (count indexes) nil))))))
 
-(defn layered-idx->seq [idx]
-  (when idx
-    (let [max-depth (long (db/max-depth idx))
-          step (fn step [^IPersistentVector max-ks ^long depth needs-seek?]
-                 (when (Thread/interrupted)
-                   (throw (InterruptedException.)))
-                 (if (= depth (dec max-depth))
-                   (concat
-                    (for [v (idx->seq idx)]
-                      (.assocN max-ks depth v))
-                    (when (pos? depth)
-                      (lazy-seq
-                       (db/close-level idx)
-                       (step max-ks (dec depth) false))))
-                   (if-let [v (if needs-seek?
-                                (db/seek-values idx nil)
-                                (db/next-values idx))]
-                     (do (db/open-level idx)
-                         (recur (.assocN max-ks depth v) (inc depth) true))
-                     (when (pos? depth)
-                       (db/close-level idx)
-                       (recur max-ks (dec depth) false)))))]
-      (when (pos? max-depth)
-        (step (vec (repeat max-depth nil)) 0 true)))))
+(defn layered-idx->seq
+  ([idx]
+   (layered-idx->seq idx vec false))
+  ([idx t-fn async?]
+   (when idx
+     (let [^BlockingQueue queue (if async?
+                                  (ArrayBlockingQueue. 128)
+                                  (LinkedBlockingQueue.))
+           max-depth (long (db/max-depth idx))
+           step (fn step [^long depth needs-seek?]
+                  (when (Thread/interrupted)
+                    (throw (InterruptedException.)))
+                  (if (= depth (dec max-depth))
+                    (do (loop [v (db/seek-values idx nil)]
+                          (when v
+                            (.put queue (t-fn @idx))
+                            (recur (db/next-values idx))))
+                        (if (pos? depth)
+                          (do (db/close-level idx)
+                              (recur (dec depth) false))
+                          (when async?
+                            (.put queue ::done))))
+                    (if-let [v (if needs-seek?
+                                 (db/seek-values idx nil)
+                                 (db/next-values idx))]
+                      (do (db/open-level idx)
+                          (recur (inc depth) true))
+                      (if (pos? depth)
+                        (do (db/close-level idx)
+                            (recur (dec depth) false))
+                        (when async?
+                          (.put queue ::done))))))]
+       (when (pos? max-depth)
+         (if async?
+           (let [f (future
+                     (mem/with-region
+                       (step 0 true)))]
+             (try
+               ((fn consume-step [^List acc v]
+                  (when (Thread/interrupted)
+                    (future-cancel f)
+                    (throw (InterruptedException.)))
+                  (cond
+                    (= ::done v)
+                    (do @f
+                        acc)
+
+                    v
+                    (do (doto acc
+                          (.add v))
+                        (.drainTo queue acc)
+                        (if (= ::done (.get acc (dec (.size acc))))
+                          (do @f
+                              (.subList acc 0 (dec (.size acc))))
+                          (recur acc (.poll queue))))
+
+                    :else
+                    (let [tail (lazy-seq (consume-step (ArrayList.)
+                                                       (or (.poll queue 5 TimeUnit/SECONDS)
+                                                           (throw (TimeoutException.)))))]
+                      (if (empty? acc)
+                        tail
+                        (concat acc tail)))))
+                (ArrayList.) (.poll queue))
+               (catch Throwable t
+                 (future-cancel f)
+                 (throw t))))
+           (do (mem/with-region
+                 (step 0 true))
+               (seq queue))))))))
 
 (deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
@@ -373,6 +424,10 @@
 
   (max-depth [_]
     max-depth)
+
+  IDeref
+  (deref [_]
+    (vec path))
 
   IRelationVirtualIndexUpdate
   (updateIndex [_ new-tree root-index]

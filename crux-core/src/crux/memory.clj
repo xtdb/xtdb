@@ -26,31 +26,32 @@
 
   (^long capacity [this]))
 
-(def ^:private ^:const default-chunk-size (* 128 1024))
-(def ^:private ^:const large-buffer-size (quot default-chunk-size 4))
+(def ^:dynamic *chunk-size* (* 128 1024))
 (defonce ^:private pool-allocation-stats (atom {:allocated 0
                                                 :deallocated 0}))
 
 (defn- log-pool-memory [{:keys [allocated deallocated] :as pool-allocation-stats}]
   (log/debug :pool-allocation-stats (assoc pool-allocation-stats :in-use (- (long allocated) (long deallocated)))))
 
-(defn- allocate-pooled-buffer [^long size]
+(defn allocate-pooled-buffer [^long size]
   (let [chunk (ByteBuffer/allocateDirect size)]
     (assert (= size (.capacity chunk)))
     (log-pool-memory (swap! pool-allocation-stats update :allocated + (.capacity chunk)))
     (cio/register-cleaner chunk #(log-pool-memory (swap! pool-allocation-stats update :deallocated + size)))
     chunk))
 
-(def ^:private ^ThreadLocal chunk-tl
-  (ThreadLocal/withInitial
-   (reify Supplier
-     (get [_]
-       (allocate-pooled-buffer default-chunk-size)))))
+(def ^:dynamic *allocate-pooled-buffer* allocate-pooled-buffer)
 
 (defn allocate-unpooled-buffer ^org.agrona.MutableDirectBuffer [^long size]
   (UnsafeBuffer. (ByteBuffer/allocateDirect size) 0 size))
 
 (def empty-buffer (allocate-unpooled-buffer 0))
+
+(def ^:private ^ThreadLocal chunk-tl
+  (ThreadLocal/withInitial
+   (reify Supplier
+     (get [_]
+       (.byteBuffer ^DirectBuffer empty-buffer)))))
 
 (def ^:private ^:const alignment-round-mask 0xf)
 
@@ -60,11 +61,11 @@
         new-aligned-offset (bit-and-not (+ offset size alignment-round-mask)
                                         alignment-round-mask)]
     (cond
-      (> size large-buffer-size)
+      (> size (quot *chunk-size* 4))
       (allocate-unpooled-buffer size)
 
       (> new-aligned-offset (.capacity chunk))
-      (let [chunk (allocate-pooled-buffer default-chunk-size)]
+      (let [chunk (*allocate-pooled-buffer* *chunk-size*)]
         (.set chunk-tl chunk)
         (recur size))
 
@@ -74,6 +75,26 @@
       (let [buffer (.slice (.limit (.duplicate chunk) (+ offset size)))]
         (.position chunk new-aligned-offset)
         (UnsafeBuffer. ^ByteBuffer buffer 0 size)))))
+
+(defmacro with-region [& body]
+  `(let [chunk-tl# ^ThreadLocal @#'chunk-tl
+         prev-chunk# (.get chunk-tl#)
+         buffers# (ArrayList.)]
+     (try
+       (binding [*chunk-size* 2048
+                 *allocate-pooled-buffer* (fn [^long size#]
+                                            (let [buffer# (allocate-pooled-buffer size#)]
+                                              (set! *chunk-size* (* 2 (long *chunk-size*)))
+                                              (.add buffers# (java.lang.ref.WeakReference. buffer#))
+                                              buffer#))]
+         (.set chunk-tl# (.byteBuffer ^DirectBuffer empty-buffer))
+         ~@body)
+       (finally
+         (.set chunk-tl# prev-chunk#)
+         (doseq [ref# buffers#
+                 :let [buffer# (.get ^java.lang.ref.Reference ref#)]
+                 :when buffer#]
+           (org.agrona.BufferUtil/free ^java.nio.ByteBuffer buffer#))))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
