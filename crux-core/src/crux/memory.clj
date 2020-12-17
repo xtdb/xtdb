@@ -14,6 +14,8 @@
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])
 
@@ -63,7 +65,7 @@
         new-aligned-offset (bit-and-not (+ offset size alignment-round-mask)
                                         alignment-round-mask)]
     (cond
-      (> size (quot *chunk-size* 4))
+      (> size (quot (long *chunk-size*) 4))
       (allocate-unpooled-buffer size)
 
       (> new-aligned-offset (.capacity chunk))
