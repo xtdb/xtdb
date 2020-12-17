@@ -299,13 +299,16 @@
                                   (doto (ArrayList.)
                                     (.addAll (repeat (count indexes) nil))))))
 
+(def ^:private ^:const timeout-ms 5000)
+(def ^:private ^:const queue-size 128)
+
 (defn layered-idx->seq
   ([idx]
    (layered-idx->seq idx vec false))
   ([idx t-fn async?]
    (when idx
      (let [^BlockingQueue queue (if async?
-                                  (ArrayBlockingQueue. 128)
+                                  (ArrayBlockingQueue. queue-size)
                                   (LinkedBlockingQueue.))
            max-depth (long (db/max-depth idx))
            step (fn step [^long depth needs-seek?]
@@ -314,13 +317,15 @@
                   (if (= depth (dec max-depth))
                     (do (loop [v (db/seek-values idx nil)]
                           (when v
-                            (.put queue (t-fn @idx))
+                            (when-not (.offer queue (t-fn @idx) timeout-ms TimeUnit/MILLISECONDS)
+                              (throw (TimeoutException.)))
                             (recur (db/next-values idx))))
                         (if (pos? depth)
                           (do (db/close-level idx)
                               (recur (dec depth) false))
                           (when async?
-                            (.put queue ::done))))
+                            (when-not (.offer queue ::done timeout-ms TimeUnit/MILLISECONDS)
+                              (throw (TimeoutException.))))))
                     (if-let [v (if needs-seek?
                                  (db/seek-values idx nil)
                                  (db/next-values idx))]
@@ -330,7 +335,8 @@
                         (do (db/close-level idx)
                             (recur (dec depth) false))
                         (when async?
-                          (.put queue ::done))))))]
+                          (when-not (.offer queue ::done timeout-ms TimeUnit/MILLISECONDS)
+                            (throw (TimeoutException.))))))))]
        (when (pos? max-depth)
          (if async?
            (let [f (future
@@ -356,12 +362,16 @@
                           (recur acc (.poll queue))))
 
                     :else
-                    (let [tail (lazy-seq (consume-step (ArrayList.)
-                                                       (or (.poll queue 5 TimeUnit/SECONDS)
-                                                           (throw (TimeoutException.)))))]
-                      (if (empty? acc)
-                        tail
-                        (concat acc tail)))))
+                    (do (when (future-done? f)
+                          @f)
+                        (let [tail (lazy-seq
+                                    (consume-step (ArrayList.)
+                                                  (or (.poll queue timeout-ms TimeUnit/MILLISECONDS)
+                                                      (do (future-cancel f)
+                                                          (throw (TimeoutException.))))))]
+                          (if (empty? acc)
+                            tail
+                            (concat acc tail))))))
                 (ArrayList.) (.poll queue))
                (catch Throwable t
                  (future-cancel f)

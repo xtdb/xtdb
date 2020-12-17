@@ -8,6 +8,7 @@
            java.nio.ByteBuffer
            java.util.Comparator
            java.util.function.Supplier
+           [java.lang.ref Reference WeakReference]
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
@@ -86,16 +87,16 @@
                  *allocate-pooled-buffer* (fn [^long size#]
                                             (let [buffer# (allocate-pooled-buffer size#)]
                                               (set! *chunk-size* (min max-chunk-size (* 2 (long *chunk-size*))))
-                                              (.add buffers# (java.lang.ref.WeakReference. buffer#))
+                                              (.add buffers# (WeakReference. buffer#))
                                               buffer#))]
          (.set chunk-tl# (.byteBuffer ^DirectBuffer empty-buffer))
          ~@body)
        (finally
          (.set chunk-tl# prev-chunk#)
          (doseq [ref# buffers#
-                 :let [buffer# (.get ^java.lang.ref.Reference ref#)]
+                 :let [buffer# (.get ^Reference ref#)]
                  :when buffer#]
-           (org.agrona.BufferUtil/free ^java.nio.ByteBuffer buffer#))))))
+           (org.agrona.BufferUtil/free ^ByteBuffer buffer#))))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
