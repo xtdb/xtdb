@@ -8,7 +8,7 @@ import java.util.UUID;
 public class CruxId {
     private final Object id;
 
-    private CruxId(Object id) {
+    public CruxId(Object id) {
         this.id = id;
     }
 
@@ -32,7 +32,7 @@ public class CruxId {
         return new CruxId(obj);
     }
 
-    protected Object toEdn() {
+    public Object toEdn() {
         return id;
     }
 }
