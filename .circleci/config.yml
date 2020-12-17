@@ -86,6 +86,12 @@ jobs:
           root: ~/
           paths: ./
 
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
+
+
   test:
     docker:
       - image: circleci/clojure:lein-2.9.3
@@ -98,10 +104,6 @@ jobs:
       - run: lein do sub test, check
       - store_test_results:
           path: "crux-test/target/test-results"
-      - save_cache:
-          paths:
-            - ~/.m2
-          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
 
   deploy-commit:
     docker:
