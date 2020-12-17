@@ -85,7 +85,7 @@
        (binding [*chunk-size* 2048
                  *allocate-pooled-buffer* (fn [^long size#]
                                             (let [buffer# (allocate-pooled-buffer size#)]
-                                              (set! *chunk-size* (min max-chunk-size  (* 2 (long *chunk-size*))))
+                                              (set! *chunk-size* (min max-chunk-size (* 2 (long *chunk-size*))))
                                               (.add buffers# (java.lang.ref.WeakReference. buffer#))
                                               buffer#))]
          (.set chunk-tl# (.byteBuffer ^DirectBuffer empty-buffer))
