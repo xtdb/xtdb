@@ -98,7 +98,7 @@
          (doseq [ref# buffers#
                  :let [buffer# (.get ^Reference ref#)]
                  :when buffer#]
-           (org.agrona.BufferUtil/free ^ByteBuffer buffer#))))))
+           (BufferUtil/free ^ByteBuffer buffer#))))))
 
 (defn copy-buffer
   (^org.agrona.MutableDirectBuffer [^DirectBuffer from]
