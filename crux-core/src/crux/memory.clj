@@ -26,7 +26,8 @@
 
   (^long capacity [this]))
 
-(def ^:dynamic *chunk-size* (* 128 1024))
+(def ^:const max-chunk-size (* 128 1024))
+(def ^:dynamic *chunk-size* max-chunk-size)
 (defonce ^:private pool-allocation-stats (atom {:allocated 0
                                                 :deallocated 0}))
 
@@ -84,7 +85,7 @@
        (binding [*chunk-size* 2048
                  *allocate-pooled-buffer* (fn [^long size#]
                                             (let [buffer# (allocate-pooled-buffer size#)]
-                                              (set! *chunk-size* (* 2 (long *chunk-size*)))
+                                              (set! *chunk-size* (min max-chunk-size  (* 2 (long *chunk-size*))))
                                               (.add buffers# (java.lang.ref.WeakReference. buffer#))
                                               buffer#))]
          (.set chunk-tl# (.byteBuffer ^DirectBuffer empty-buffer))
