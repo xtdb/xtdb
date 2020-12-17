@@ -372,7 +372,7 @@
                           (if (empty? acc)
                             tail
                             (concat acc tail))))))
-                (ArrayList.) (.poll queue))
+                (ArrayList.) (.poll queue timeout-ms TimeUnit/MILLISECONDS))
                (catch Throwable t
                  (future-cancel f)
                  (throw t))))

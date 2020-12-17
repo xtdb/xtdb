@@ -1812,6 +1812,7 @@
       (->> (try
              (crux.query/query db conformed-query args)
              (catch Exception e
+               (cio/try-close index-snapshot)
                (when bus
                  (bus/send bus {:crux/event-type ::failed-query
                                 ::query safe-query
