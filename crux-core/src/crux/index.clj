@@ -315,41 +315,42 @@
            ^BlockingQueue queue (if async?
                                   (ArrayBlockingQueue. queue-size)
                                   (LinkedBlockingQueue.))
-           produced (long-array 1)
            max-depth (long (db/max-depth idx))
            done-fn (if async?
                      #(when-not (.offer queue ::done timeout-ms TimeUnit/MILLISECONDS)
                         (throw (TimeoutException.)))
                      #())
-           produce-step (fn produce-step [^long depth needs-seek?]
-                          (if (< (aget produced 0) limit)
+           produce-step (fn produce-step [^long depth ^long produced needs-seek?]
+                          (if (< produced limit)
                             (if (= depth (dec max-depth))
-                              (do (loop [v (db/seek-values idx nil)]
-                                    (when v
-                                      (when-not (.offer queue (t-fn @idx) timeout-ms TimeUnit/MILLISECONDS)
-                                        (throw (TimeoutException.)))
-                                      (aset produced 0 (inc (aget produced 0)))
-                                      (when (< (aget produced 0) limit)
-                                        (recur (db/next-values idx)))))
+                              (let [produced (loop [v (db/seek-values idx nil)
+                                                    produced produced]
+                                               (if v
+                                                 (do (when-not (.offer queue (t-fn @idx) timeout-ms TimeUnit/MILLISECONDS)
+                                                       (throw (TimeoutException.)))
+                                                     (if (< produced limit)
+                                                       (recur (db/next-values idx) (inc produced))
+                                                       produced))
+                                                 produced))]
                                   (if (pos? depth)
                                     (do (db/close-level idx)
-                                        (recur (dec depth) false))
+                                        (recur (dec depth) (long produced) false))
                                     (done-fn)))
                               (if-let [v (if needs-seek?
                                            (db/seek-values idx nil)
                                            (db/next-values idx))]
                                 (do (db/open-level idx)
-                                    (recur (inc depth) true))
+                                    (recur (inc depth) produced true))
                                 (if (pos? depth)
                                   (do (db/close-level idx)
-                                      (recur (dec depth) false))
+                                      (recur (dec depth) produced false))
                                   (done-fn))))
                             (done-fn)))]
        (when (pos? max-depth)
          (if async?
            (let [f (future
                      (mem/with-region
-                       (produce-step 0 true)))]
+                       (produce-step 0 0 true)))]
              (try
                ((fn consume-step [^List acc v]
                   (cond
@@ -384,7 +385,7 @@
                    (throw (.getCause t))
                    (throw t)))))
            (do (mem/with-region
-                 (produce-step 0 true))
+                 (produce-step 0 0 true))
                (seq queue))))))))
 
 (deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
