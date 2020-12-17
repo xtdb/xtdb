@@ -1124,8 +1124,7 @@
                                                                                       (fn [^List join-keys]
                                                                                         (mapv (fn [^VarBinding var-binding]
                                                                                                 (bound-result-for-var index-snapshot var-binding join-keys))
-                                                                                              free-vars-in-join-order-bindings))
-                                                                                      false))]
+                                                                                              free-vars-in-join-order-bindings))))]
                                               (if has-free-vars?
                                                 idx-seq
                                                 []))))))))]
@@ -1159,7 +1158,7 @@
                              [(vec (for [var-binding not-var-bindings]
                                      (bound-result-for-var index-snapshot var-binding join-keys)))])
                    {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
-               (empty? (idx/layered-idx->seq n-ary-join identity false)))))})))
+               (empty? (idx/layered-idx->seq n-ary-join identity)))))})))
 
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)

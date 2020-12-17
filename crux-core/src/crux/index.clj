@@ -304,7 +304,9 @@
 
 (defn layered-idx->seq
   ([idx]
-   (layered-idx->seq idx vec false))
+   (layered-idx->seq idx vec))
+  ([idx t-fn]
+   (layered-idx->seq idx t-fn false))
   ([idx t-fn async?]
    (layered-idx->seq idx t-fn async? nil))
   ([idx t-fn async? limit]
