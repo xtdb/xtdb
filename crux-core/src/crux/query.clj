@@ -1708,7 +1708,9 @@
                                         (mapv (fn [^VarBinding var-binding]
                                                 (bound-result-for-var index-snapshot var-binding join-keys))
                                               var-bindings))
-                                      (not (:sync? q)))
+                                      (not (:sync? q))
+                                      (when limit
+                                        (+ (long (or offset 0)) (long limit))))
 
          aggregate? (aggregate-result compiled-find)
          order-by (cio/external-sort (order-by-comparator find order-by))

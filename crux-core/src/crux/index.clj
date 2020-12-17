@@ -306,35 +306,43 @@
   ([idx]
    (layered-idx->seq idx vec false))
   ([idx t-fn async?]
+   (layered-idx->seq idx t-fn async? nil))
+  ([idx t-fn async? limit]
    (when idx
-     (let [^BlockingQueue queue (if async?
+     (let [limit (long (or limit Long/MAX_VALUE))
+           ^BlockingQueue queue (if async?
                                   (ArrayBlockingQueue. queue-size)
                                   (LinkedBlockingQueue.))
+           produced (long-array 1)
            max-depth (long (db/max-depth idx))
+           done-fn (if async?
+                     #(when-not (.offer queue ::done timeout-ms TimeUnit/MILLISECONDS)
+                        (throw (TimeoutException.)))
+                     #())
            produce-step (fn produce-step [^long depth needs-seek?]
-                          (if (= depth (dec max-depth))
-                            (do (loop [v (db/seek-values idx nil)]
-                                  (when v
-                                    (when-not (.offer queue (t-fn @idx) timeout-ms TimeUnit/MILLISECONDS)
-                                      (throw (TimeoutException.)))
-                                    (recur (db/next-values idx))))
+                          (if (< (aget produced 0) limit)
+                            (if (= depth (dec max-depth))
+                              (do (loop [v (db/seek-values idx nil)]
+                                    (when v
+                                      (when-not (.offer queue (t-fn @idx) timeout-ms TimeUnit/MILLISECONDS)
+                                        (throw (TimeoutException.)))
+                                      (aset produced 0 (inc (aget produced 0)))
+                                      (when (< (aget produced 0) limit)
+                                        (recur (db/next-values idx)))))
+                                  (if (pos? depth)
+                                    (do (db/close-level idx)
+                                        (recur (dec depth) false))
+                                    (done-fn)))
+                              (if-let [v (if needs-seek?
+                                           (db/seek-values idx nil)
+                                           (db/next-values idx))]
+                                (do (db/open-level idx)
+                                    (recur (inc depth) true))
                                 (if (pos? depth)
                                   (do (db/close-level idx)
                                       (recur (dec depth) false))
-                                  (when async?
-                                    (when-not (.offer queue ::done timeout-ms TimeUnit/MILLISECONDS)
-                                      (throw (TimeoutException.))))))
-                            (if-let [v (if needs-seek?
-                                         (db/seek-values idx nil)
-                                         (db/next-values idx))]
-                              (do (db/open-level idx)
-                                  (recur (inc depth) true))
-                              (if (pos? depth)
-                                (do (db/close-level idx)
-                                    (recur (dec depth) false))
-                                (when async?
-                                  (when-not (.offer queue ::done timeout-ms TimeUnit/MILLISECONDS)
-                                    (throw (TimeoutException.))))))))]
+                                  (done-fn))))
+                            (done-fn)))]
        (when (pos? max-depth)
          (if async?
            (let [f (future
