@@ -460,12 +460,11 @@
 
                                   (s/assert ::txe/tx-events tx-events)
 
-                                  (mem/with-region
-                                    (let [in-flight-tx (db/begin-tx tx-ingester tx)
-                                          res (db/index-tx-events in-flight-tx tx-events)]
-                                      (if res
-                                        (db/commit in-flight-tx)
-                                        (db/abort in-flight-tx))))
+                                  (let [in-flight-tx (db/begin-tx tx-ingester tx)
+                                        res (db/index-tx-events in-flight-tx tx-events)]
+                                    (if res
+                                      (db/commit in-flight-tx)
+                                      (db/abort in-flight-tx)))
 
                                   (when (Thread/interrupted)
                                     (throw (InterruptedException.))))
