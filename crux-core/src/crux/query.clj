@@ -566,7 +566,7 @@
              (get stats a 0)) triple-clauses))
 
 (defn- new-literal-index [index-snapshot v]
-  (let [encode-value-fn (partial db/encode-value index-snapshot)]
+  (let [encode-value-fn #(mem/copy-to-unpooled-buffer (db/encode-value index-snapshot %))]
     (if (c/multiple-values? v)
       (idx/new-relation-virtual-index (mapv vector v) 1 encode-value-fn)
       (idx/new-singleton-virtual-index v encode-value-fn))))
@@ -701,7 +701,7 @@
                  (fn [_ index-snapshot _]
                    (idx/new-relation-virtual-index []
                                                    (count bind-vars)
-                                                   (partial db/encode-value index-snapshot)))}]
+                                                   #(mem/copy-to-unpooled-buffer (db/encode-value index-snapshot %))))}]
        [(conj acc idx-id)
         (->> bind-vars
              (reduce
@@ -1489,7 +1489,7 @@
 (defn- build-sub-query [index-snapshot {:keys [query-cache fn-allow-list] :as db} where in in-args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
-  (let [encode-value-fn (partial db/encode-value index-snapshot)
+  (let [encode-value-fn #(mem/copy-to-unpooled-buffer (db/encode-value index-snapshot %))
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints

@@ -299,7 +299,7 @@
                                   (doto (ArrayList.)
                                     (.addAll (repeat (count indexes) nil))))))
 
-(def ^:private ^:const timeout-ms 5000)
+(def ^:private ^:const timeout-ms 1000)
 (def ^:private ^:const queue-size 128)
 
 (defn layered-idx->seq

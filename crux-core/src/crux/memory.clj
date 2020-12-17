@@ -6,7 +6,7 @@
             [taoensso.nippy :as nippy])
   (:import [java.io DataInputStream DataOutputStream]
            java.nio.ByteBuffer
-           java.util.Comparator
+           [java.util ArrayList Comparator]
            java.util.function.Supplier
            [java.lang.ref Reference WeakReference]
            [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
