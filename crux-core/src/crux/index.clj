@@ -4,7 +4,7 @@
   (:import [clojure.lang Box IDeref IPersistentVector]
            java.util.function.Function
            [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
-           [java.util.concurrent ArrayBlockingQueue BlockingQueue LinkedBlockingQueue TimeUnit TimeoutException]
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue ExecutionException LinkedBlockingQueue TimeUnit TimeoutException]
            org.agrona.DirectBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -370,7 +370,9 @@
                 (ArrayList.) (.poll queue timeout-ms TimeUnit/MILLISECONDS))
                (catch Throwable t
                  (future-cancel f)
-                 (throw t))))
+                 (if (instance? ExecutionException t)
+                   (throw (.getCause t))
+                   (throw t)))))
            (do (mem/with-region
                  (produce-step 0 true))
                (seq queue))))))))
