@@ -1,11 +1,17 @@
 (ns ^:no-doc crux.query-state
-    (:import (crux.api IQueryState IQueryState$IQueryError IQueryState$QueryStatus)))
+  (:import (crux.api IQueryState IQueryState$IQueryError IQueryState$QueryStatus)
+           (java.io Writer)))
 
 (defn ->query-status [status]
   (case status
     :failed IQueryState$QueryStatus/FAILED
     :completed IQueryState$QueryStatus/COMPLETED
     :in-progress IQueryState$QueryStatus/IN_PROGRESS))
+
+(defrecord QueryState$QueryError [type message]
+  IQueryState$IQueryError
+  (getErrorClass [this] type)
+  (getErrorMessage [this] type))
 
 (defrecord QueryState [query-id started-at finished-at status query error]
            IQueryState
@@ -16,10 +22,13 @@
            (getQuery [this] query)
            (getError [this] error))
 
-(defrecord QueryState$QueryError [type message]
-           IQueryState$IQueryError
-           (getErrorClass [this] type)
-           (getErrorMessage [this] type))
+(defmethod print-method QueryState [qs ^Writer w]
+  (.write w "#crux/query-state ")
+  (print-method (into {} qs) w))
+
+(defmethod print-method QueryState$QueryError [qs ^Writer w]
+  (.write w "#crux/query-error ")
+  (print-method (into {} qs) w))
 
 (defn <-QueryState [^QueryState query-state]
       {:status      (case (str (.getStatus query-state))
@@ -33,6 +42,10 @@
        :error       (when-let [error (.getError query-state)]
                               {:type    (.getErrorClass error)
                                :message (.getErrorMessage error)})})
+
+(defn ->QueryError [error]
+  (let [{:keys [type message]} error]
+    (QueryState$QueryError. type message)))
 
 (defn ->QueryState [{:keys [query-id started-at finished-at status error query] :as query-state}]
       (QueryState. query-id

@@ -230,13 +230,13 @@
   (attribute-stats [this] (.attributeStats this))
 
   (active-queries [this]
-    (map qs/<-QueryState (.activeQueries this)))
+    (.activeQueries this))
 
   (recent-queries [this]
-    (map qs/<-QueryState (.recentQueries this)))
+    (.recentQueries this))
 
   (slowest-queries [this]
-    (map qs/<-QueryState (.slowestQueries this))))
+    (.slowestQueries this)))
 
 (extend-protocol PCruxIngestClient
   ICruxIngestAPI
