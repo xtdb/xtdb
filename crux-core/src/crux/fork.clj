@@ -71,7 +71,7 @@
 
   (entity-as-of [this eid valid-time tx-id]
     (->> [(when capped-tx-id
-            (when-not (contains? (into #{} (map #(c/->id-buffer %)) evicted-eids) eid)
+            (when-not (contains? (into #{} (map #(c/->id-buffer %)) evicted-eids) (c/->id-buffer eid))
               (db/entity-as-of persistent-index-snapshot eid
                                (date-min valid-time capped-valid-time)
                                (long-min tx-id capped-tx-id))))

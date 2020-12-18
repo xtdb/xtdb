@@ -139,6 +139,8 @@
       (t/is (= [{::tx/tx-id 0, ::db/doc ivan}] (entity-history db :ivan)))
       (t/is (= [{::tx/tx-id 0, ::db/doc petr}] (entity-history db :petr)))
       (t/is (= [{::tx/tx-id 0, ::db/doc ivan}] (entity-history db+evict :ivan)))
+
+      (t/is (nil? (crux/entity db+evict :petr)))
       (t/is (empty? (entity-history db+evict :petr)))
 
       (t/is (= #{["Ivan"]}
