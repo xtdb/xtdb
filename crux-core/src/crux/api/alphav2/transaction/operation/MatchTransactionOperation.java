@@ -6,6 +6,7 @@ import crux.api.alphav2.CruxDocument;
 import crux.api.alphav2.CruxId;
 import crux.api.alphav2.ICruxDocument;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -50,11 +51,12 @@ public class MatchTransactionOperation extends TransactionOperation {
 
     @Override
     List<Object> getArgs() {
+        ArrayList<Object> ret = new ArrayList<>();
+        ret.add(id.toEdn());
+        ret.add(document.toEdn());
         if (validTime != null) {
-            return List.of(id, document, validTime);
+            ret.add(validTime);
         }
-        else {
-            return List.of(id, document);
-        }
+        return ret;
     }
 }

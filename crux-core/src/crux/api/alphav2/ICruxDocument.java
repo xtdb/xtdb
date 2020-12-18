@@ -10,20 +10,20 @@ import java.util.Map;
 public interface ICruxDocument {
     Keyword idKey = Keyword.intern("crux.db/id");
 
-    CruxId getDocumentId();
+    Object getDocumentId();
     Map<String, Object> getDocumentContents();
 
-    default IPersistentMap generateDocument() throws DocumentIntegrityException {
+    default IPersistentMap toEdn() {
         HashMap<Keyword, Object> document = new HashMap<>();
         Map<String, Object> contents = getDocumentContents();
-        CruxId id = getDocumentId();
+        Object id = getDocumentId();
 
-        document.put(idKey, id.toEdn());
+        document.put(idKey, id);
 
         for (Map.Entry<String, Object> entry: contents.entrySet()) {
             Keyword key = Keyword.intern(entry.getKey());
             if (key.equals(idKey)) {
-                throw new DocumentIntegrityException();
+                throw new RuntimeException("There is a :crux.db/id key in the document body");
             }
             document.put(key, entry.getValue());
         }

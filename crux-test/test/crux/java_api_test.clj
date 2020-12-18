@@ -3,9 +3,13 @@
             [clojure.test :as t]
             [crux.fixtures :as fix]
             [crux.kv :as kv])
+  )
+(comment
   (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator]
-           [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
-           java.util.function.Consumer))
+    [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
+    java.util.function.Consumer)
+
+
 
 (defmacro consume {:style/indent 1} [[binding] & body]
   `(reify Consumer
@@ -130,3 +134,5 @@
         (t/is (thrown-with-msg? IllegalStateException
                                 #"Crux node is closed"
                                 (.db node)))))))
+
+)

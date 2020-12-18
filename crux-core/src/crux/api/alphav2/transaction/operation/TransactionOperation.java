@@ -32,12 +32,13 @@ public abstract class TransactionOperation {
         Keyword typeKeyword = (Keyword) vector.get(0);
         Type type = Type.valueOf(typeKeyword);
         assert type != null;
-        return switch (type) {
-            case PUT -> PutTransactionOperation.factory(vector);
-            case MATCH -> MatchTransactionOperation.factory(vector);
-            case DELETE -> DeleteTransactionOperation.factory(vector);
-            case EVICT -> EvictTransactionOperation.factory(vector);
-        };
+        switch (type) {
+            case PUT: return PutTransactionOperation.factory(vector);
+            case MATCH: return MatchTransactionOperation.factory(vector);
+            case DELETE: return DeleteTransactionOperation.factory(vector);
+            case EVICT: return EvictTransactionOperation.factory(vector);
+        }
+        return null;
     }
 
     private final Type type;

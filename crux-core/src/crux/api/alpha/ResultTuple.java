@@ -6,6 +6,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+/*
 @Deprecated
 public class ResultTuple {
     private Map<Symbol, Object> results;
@@ -33,7 +34,7 @@ public class ResultTuple {
      * Gets a value corresponding to a particular logical variable in the result.
      * @param key A string representing the logical variable
      * @return Value at logical variable
-     */
+
     public Object get(String key) {
         return get(Util.symbol(key));
     }
@@ -42,9 +43,10 @@ public class ResultTuple {
      * Gets a value at a particular index in the result.
      * @param idx Index to retrieve value from
      * @return Value at index.
-     */
+
     public Object get(int idx) {
         return resultArray.get(idx);
     }
 
 }
+*/

@@ -10,9 +10,20 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-
-
+/*
 public class ExampleUsage {
+
+
+    @SuppressWarnings("unchecked")
+    default public Map<Keyword, ?> submitTx(Transaction transaction) {
+        return submitTx(transaction.toEdn());
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    default public Map<Keyword, ?> submitTx(Consumer<Transaction.Builder> f) {
+        return submitTx(Transaction.build(f));
+    }
+
     static void main(String... args) {
         javaBuilderStyle();
         usingConsumersNested();
@@ -109,3 +120,4 @@ public class ExampleUsage {
         System.out.println("Done my submitting");
     }
 }
+*/

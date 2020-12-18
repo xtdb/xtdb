@@ -3,6 +3,7 @@ package crux.api.alphav2.transaction.operation;
 import clojure.lang.PersistentVector;
 import crux.api.alphav2.CruxId;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class EvictTransactionOperation extends TransactionOperation {
@@ -25,6 +26,8 @@ public class EvictTransactionOperation extends TransactionOperation {
 
     @Override
     List<Object> getArgs() {
-        return List.of(id);
+        ArrayList<Object> ret = new ArrayList<>();
+        ret.add(id.toEdn());
+        return ret;
     }
 }

@@ -5,6 +5,7 @@ import clojure.lang.PersistentVector;
 import crux.api.alphav2.CruxDocument;
 import crux.api.alphav2.ICruxDocument;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -52,14 +53,16 @@ public class PutTransactionOperation extends TransactionOperation {
 
     @Override
     List<Object> getArgs() {
+        ArrayList<Object> ret = new ArrayList<>();
+        ret.add(document.toEdn());
         if (endValidTime != null) {
-            return List.of(document, validTime, endValidTime);
+            ret.add(validTime);
+            ret.add(endValidTime);
         }
         else if (validTime != null) {
-            return List.of(document, validTime);
+            ret.add(validTime);
         }
-        else {
-            return List.of(document);
-        }
+
+        return ret;
     }
 }

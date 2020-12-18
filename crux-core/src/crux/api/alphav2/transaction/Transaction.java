@@ -51,8 +51,9 @@ public class Transaction {
         }
 
         public Builder match(ICruxDocument document, Date validTime) {
-            CruxId id = document.getDocumentId();
-            return add(MatchTransactionOperation.factory(id, document, validTime));
+            Object id = document.getDocumentId();
+            CruxId cruxId = CruxId.cruxId(id);
+            return add(MatchTransactionOperation.factory(cruxId, document, validTime));
         }
 
         public Builder empty(CruxId id, Date validTime) {
@@ -64,7 +65,9 @@ public class Transaction {
         }
 
         public Builder delete(ICruxDocument document, Date validTime) {
-            return delete(document.getDocumentId(), validTime);
+            Object id = document.getDocumentId();
+            CruxId cruxId = CruxId.cruxId(id);
+            return delete(cruxId, validTime);
         }
 
         public Builder delete(CruxId id, Date validTime) {
@@ -72,7 +75,9 @@ public class Transaction {
         }
 
         public Builder evict(ICruxDocument document) {
-            return evict(document.getDocumentId());
+            Object id = document.getDocumentId();
+            CruxId cruxId = CruxId.cruxId(id);
+            return evict(cruxId);
         }
 
         public Builder evict(CruxId id) {

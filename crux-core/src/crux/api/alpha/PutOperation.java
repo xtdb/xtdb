@@ -5,6 +5,7 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
+/*
 @Deprecated
 public class PutOperation extends TransactionOperation {
     @Deprecated
@@ -29,4 +30,4 @@ public class PutOperation extends TransactionOperation {
             outputVector = outputVector.cons(validTime);
         return outputVector;
     }
-}
+}*/

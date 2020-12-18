@@ -29,14 +29,5 @@ public interface ICruxIngestAPI extends Closeable {
      * @param withOps   should the operations with documents be included?
      * @return          a lazy sequence of the transaction log.
      */
-
     public ICursor<Map<Keyword, ?>> openTxLog(Long afterTxId, boolean withOps);
-
-    default public Map<Keyword, ?> submitTx(Transaction transaction) {
-        return submitTx(transaction.toEdn());
-    }
-
-    default public Map<Keyword, ?> submitTx(Consumer<Transaction.Builder> f) {
-        return submitTx(Transaction.build(f));
-    }
 }

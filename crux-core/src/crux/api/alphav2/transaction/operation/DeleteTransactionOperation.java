@@ -3,6 +3,7 @@ package crux.api.alphav2.transaction.operation;
 import clojure.lang.PersistentVector;
 import crux.api.alphav2.CruxId;
 
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
@@ -29,6 +30,9 @@ public class DeleteTransactionOperation extends TransactionOperation {
 
     @Override
     List<Object> getArgs() {
-        return List.of(id, validTime);
+        ArrayList<Object> ret = new ArrayList<>();
+        ret.add(id.toEdn());
+        ret.add(validTime);
+        return ret;
     }
 }

@@ -9,6 +9,7 @@ import crux.api.alphav2.CruxId;
 import java.util.*;
 import java.util.stream.Collectors;
 
+/*
 @Deprecated
 public class Database {
     private final ICruxDatasource db;
@@ -34,7 +35,7 @@ public class Database {
      * @param query Query to perform on the Database
      * @return List of ResultTuple objects representing the results from the query
      * @see ResultTuple
-     */
+
     public List<ResultTuple> query(Query query) {
         Collection<List<?>> queryResult = db.query(query.toEdn());
         List<Symbol> symbols = query.findSymbols();
@@ -50,9 +51,10 @@ public class Database {
      * Retrieves a Document for an entity in the Database
      * @param id Id of entity to retrieve
      * @return Document representing the entity
-     */
+
     public Document entity(CruxId id) {
         Map<Keyword, Object> entityDoc = db.entity(id.toEdn());
         return Document.document(entityDoc);
     }
 }
+*/

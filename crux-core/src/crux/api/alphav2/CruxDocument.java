@@ -7,7 +7,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class CruxDocument implements ICruxDocument {
-    private final CruxId id;
+    private final Object id;
     private final Map<String, Object> data;
 
     public CruxDocument(PersistentArrayMap input) {
@@ -29,7 +29,7 @@ public class CruxDocument implements ICruxDocument {
     }
 
     @Override
-    public CruxId getDocumentId() {
+    public Object getDocumentId() {
         return id;
     }
 
