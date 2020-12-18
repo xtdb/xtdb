@@ -4,6 +4,12 @@ import crux.api.Crux;
 import crux.api.ICruxAPI;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 
 public class ExampleUsage {
@@ -11,6 +17,7 @@ public class ExampleUsage {
         javaBuilderStyle();
         usingConsumersNested();
         usingConsumersIndividually();
+        submittingTxNatively();
     }
 
     static void javaBuilderStyle() {
@@ -28,11 +35,11 @@ public class ExampleUsage {
     static void usingConsumersNested() {
         try (ICruxAPI node = Crux.startNode(foo -> {
             foo.with("key", bar -> {
-               bar.set("key", "bar");
-               bar.with("foo", baz -> {
-                  baz.set("key", "baz");
-                  baz.module("waka");
-               });
+                bar.set("key", "bar");
+                bar.with("foo", baz -> {
+                    baz.set("key", "baz");
+                    baz.module("waka");
+                });
             });
         })) {
             System.out.println("Used a nested consumer style");
@@ -61,5 +68,44 @@ public class ExampleUsage {
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    static class Person implements ICruxDocument {
+        private final CruxId id;
+        private final String name;
+        private final String lastName;
+
+        public Person(String name, String lastName) {
+            this.id = CruxId.cruxId(UUID.randomUUID());
+            this.name = name;
+            this.lastName = lastName;
+        }
+
+        @Override
+        public CruxId getDocumentId() {
+            return id;
+        }
+
+        @Override
+        public Map<String, Object> getDocumentContents() {
+            HashMap<String, Object> map = new HashMap<>();
+            map.put("person/name", name);
+            map.put("person/lastName", lastName);
+            return map;
+        }
+    }
+
+    static void submittingTxNatively() {
+        ICruxAPI node = Crux.startNode();
+
+        node.submitTx( tx -> {
+            tx.put(new Person("Ali", "O'Neill"), Date.from(Instant.EPOCH));
+            tx.put(new Person("Alistair", "O'Neill"));
+            tx.put(new Person("James", "Henderson"));
+        });
+
+        node.sync(Duration.ofSeconds(100));
+
+        System.out.println("Done my submitting");
     }
 }

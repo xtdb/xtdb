@@ -3,6 +3,7 @@ package crux.api.alpha;
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
+import crux.api.alphav2.CruxId;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -39,7 +40,7 @@ public class Document {
      * @return CruxId from the Document.
      */
     public CruxId getId() {
-        return crux.api.alpha.CruxId.cruxId(document.get(crux.api.alpha.Util.keyword("crux.db/id")));
+        return CruxId.cruxId(document.get(crux.api.alpha.Util.keyword("crux.db/id")));
     }
 
     /**

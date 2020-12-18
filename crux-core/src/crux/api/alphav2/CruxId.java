@@ -1,19 +1,20 @@
-package crux.api.alpha;
+package crux.api.alphav2;
+
+import clojure.lang.Keyword;
 
 import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
 
-@Deprecated
 public class CruxId {
     private final Object id;
 
-    public CruxId(Object id) {
+    private CruxId(Object id) {
         this.id = id;
     }
 
     public static CruxId cruxId(String name) {
-        return new CruxId(crux.api.alpha.Util.keyword(name));
+        return new CruxId(Keyword.intern(name));
     }
 
     public static CruxId cruxId(UUID uuid) {

@@ -3,7 +3,6 @@ package crux.api.alphav2;
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
-import crux.api.alpha.CruxId;
 
 import java.util.HashMap;
 import java.util.Map;
