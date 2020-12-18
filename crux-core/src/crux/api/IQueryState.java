@@ -1,16 +1,17 @@
 package crux.api;
 
+import clojure.lang.ILookup;
 import clojure.lang.Keyword;
 
 import java.util.Date;
 import java.util.Map;
 
-public interface IQueryState {
+public interface IQueryState extends ILookup {
     enum QueryStatus {
         IN_PROGRESS, COMPLETED, FAILED
     }
 
-    interface IQueryError {
+    interface IQueryError extends ILookup {
         String getErrorClass();
         String getErrorMessage();
     }

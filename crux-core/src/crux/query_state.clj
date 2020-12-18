@@ -1,14 +1,20 @@
 (ns ^:no-doc crux.query-state
     (:import (crux.api IQueryState IQueryState$IQueryError IQueryState$QueryStatus)))
 
+(defn ->query-status [status]
+  (case status
+    :failed IQueryState$QueryStatus/FAILED
+    :completed IQueryState$QueryStatus/COMPLETED
+    :in-progress IQueryState$QueryStatus/IN_PROGRESS))
+
 (defrecord QueryState [query-id started-at finished-at status query error]
            IQueryState
            (getQueryId [this] query-id)
            (getStartedAt [this] started-at)
            (getFinishedAt [this] finished-at)
-           (getStatus ^IQueryState$QueryStatus [this] status)
+           (getStatus [this] (->query-status status))
            (getQuery [this] query)
-           (getError ^IQueryState$IQueryError [this] error))
+           (getError [this] error))
 
 (defrecord QueryState$QueryError [type message]
            IQueryState$IQueryError
@@ -32,10 +38,7 @@
       (QueryState. query-id
                    started-at
                    finished-at
-                   (case status
-                         :failed IQueryState$QueryStatus/FAILED
-                         :completed IQueryState$QueryStatus/COMPLETED
-                         :in-progress IQueryState$QueryStatus/IN_PROGRESS)
+                   status
                    query
                    (when error
                          (let [{:keys [type message]} error]
