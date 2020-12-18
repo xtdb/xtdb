@@ -13,7 +13,7 @@ public class PutTransactionOperation extends TransactionOperation {
     private final Date validTime;
     private final Date endValidTime;
 
-    public PutTransactionOperation(ICruxDocument document, Date validTime, Date endValidTime) {
+    private PutTransactionOperation(ICruxDocument document, Date validTime, Date endValidTime) {
         super(TransactionOperation.Type.PUT);
         this.document = document;
         this.validTime = validTime;
@@ -35,6 +35,18 @@ public class PutTransactionOperation extends TransactionOperation {
             endValidTime = (Date) vector.get(3);
         }
 
+        return new PutTransactionOperation(document, validTime, endValidTime);
+    }
+
+    public static PutTransactionOperation factory(ICruxDocument document) {
+        return new PutTransactionOperation(document, null, null);
+    }
+
+    public static PutTransactionOperation factory(ICruxDocument document, Date validTime) {
+        return new PutTransactionOperation(document, validTime, null);
+    }
+
+    public static PutTransactionOperation factory(ICruxDocument document, Date validTime, Date endValidTime) {
         return new PutTransactionOperation(document, validTime, endValidTime);
     }
 

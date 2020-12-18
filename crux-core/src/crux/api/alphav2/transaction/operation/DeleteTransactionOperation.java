@@ -10,7 +10,7 @@ public class DeleteTransactionOperation extends TransactionOperation {
     private final CruxId id;
     private final Date validTime;
 
-    public DeleteTransactionOperation(CruxId id, Date validTime) {
+    private DeleteTransactionOperation(CruxId id, Date validTime) {
         super(Type.DELETE);
         this.id = id;
         this.validTime = validTime;
@@ -20,6 +20,10 @@ public class DeleteTransactionOperation extends TransactionOperation {
         Object rawId = vector.get(1);
         CruxId id = CruxId.cruxId(rawId);
         Date validTime = (Date) vector.get(2);
+        return new DeleteTransactionOperation(id, validTime);
+    }
+
+    public static DeleteTransactionOperation factory(CruxId id, Date validTime) {
         return new DeleteTransactionOperation(id, validTime);
     }
 

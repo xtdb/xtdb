@@ -1,6 +1,5 @@
 package crux.api.alphav2.transaction.operation;
 
-import clojure.lang.IPersistentMap;
 import clojure.lang.PersistentArrayMap;
 import clojure.lang.PersistentVector;
 import crux.api.alphav2.CruxDocument;
@@ -15,7 +14,7 @@ public class MatchTransactionOperation extends TransactionOperation {
     private final ICruxDocument document;
     private final Date validTime;
 
-    public MatchTransactionOperation(CruxId id, ICruxDocument document, Date validTime) {
+    private MatchTransactionOperation(CruxId id, ICruxDocument document, Date validTime) {
         super(Type.MATCH);
         this.id = id;
         this.document = document;
@@ -37,6 +36,17 @@ public class MatchTransactionOperation extends TransactionOperation {
         return new MatchTransactionOperation(id, document, validTime);
     }
 
+    public static MatchTransactionOperation factoryNotExists(CruxId id, Date validTime) {
+        return new MatchTransactionOperation(id, null, validTime);
+    }
+
+    public static MatchTransactionOperation factory(CruxId id, ICruxDocument document) {
+        return new MatchTransactionOperation(id, document, null);
+    }
+
+    public static MatchTransactionOperation factory(CruxId id, ICruxDocument document, Date validTime) {
+        return new MatchTransactionOperation(id, document, validTime);
+    }
 
     @Override
     List<Object> getArgs() {

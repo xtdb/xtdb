@@ -38,28 +38,29 @@ public class Transaction {
         }
 
         public Builder put(ICruxDocument document) {
-            return put(document, null);
+            return add(PutTransactionOperation.factory(document));
         }
 
         public Builder put(ICruxDocument document, Date validTime) {
-            return put(document, validTime, null);
+
+            return add(PutTransactionOperation.factory(document, validTime));
         }
 
         public Builder put(ICruxDocument document, Date validTime, Date endValidTime) {
-            return add( new PutTransactionOperation(document, validTime, endValidTime));
+            return add( PutTransactionOperation.factory(document, validTime, endValidTime));
         }
 
         public Builder match(ICruxDocument document, Date validTime) {
             CruxId id = document.getDocumentId();
-            return match(id, document, validTime);
+            return add(MatchTransactionOperation.factory(id, document, validTime));
         }
 
         public Builder empty(CruxId id, Date validTime) {
-            return match(id, null, validTime);
+            return add(MatchTransactionOperation.factoryNotExists(id, validTime));
         }
 
         public Builder match(CruxId id, ICruxDocument document, Date validTime) {
-            return add( new MatchTransactionOperation(id, document, validTime));
+            return add( MatchTransactionOperation.factory(id, document, validTime));
         }
 
         public Builder delete(ICruxDocument document, Date validTime) {
@@ -67,7 +68,7 @@ public class Transaction {
         }
 
         public Builder delete(CruxId id, Date validTime) {
-            return add(new DeleteTransactionOperation(id, validTime));
+            return add(DeleteTransactionOperation.factory(id, validTime));
         }
 
         public Builder evict(ICruxDocument document) {
@@ -75,7 +76,7 @@ public class Transaction {
         }
 
         public Builder evict(CruxId id) {
-            return add( new EvictTransactionOperation(id));
+            return add( EvictTransactionOperation.factory(id));
         }
 
         @Override
