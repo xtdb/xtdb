@@ -3,6 +3,7 @@
             [crux.memory :as mem])
   (:import [clojure.lang Box IDeref IPersistentVector]
            java.util.function.Function
+           java.lang.ref.WeakReference
            [java.util ArrayList Arrays Collection Comparator Iterator List NavigableSet NavigableMap TreeMap TreeSet]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue ExecutionException LinkedBlockingQueue TimeUnit TimeoutException]
            org.agrona.DirectBuffer))
