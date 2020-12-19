@@ -316,7 +316,7 @@
            ^BlockingQueue queue (if async?
                                   (ArrayBlockingQueue. queue-size)
                                   (LinkedBlockingQueue.))
-           quere-ref (WeakReference. queue)
+           queue-ref (WeakReference. queue)
            max-depth (long (db/max-depth idx))
            done-fn (if async?
                      (fn [^BlockingQueue queue]
