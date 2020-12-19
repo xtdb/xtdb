@@ -1708,7 +1708,7 @@
                                                 (bound-result-for-var index-snapshot var-binding join-keys))
                                               var-bindings))
                                       (not (:sync? q))
-                                      (when (and limit (not aggregate?))
+                                      (when (and limit (not aggregate?) (not order-by))
                                         (+ (long (or offset 0)) (long limit))))
 
          aggregate? (aggregate-result compiled-find)
