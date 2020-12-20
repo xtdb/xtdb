@@ -16,7 +16,7 @@
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
-           [java.util Collections Comparator Date IdentityHashMap Iterator PriorityQueue Properties]
+           [java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties]
            [java.util.concurrent ThreadFactory]
            java.util.concurrent.locks.StampedLock))
 
@@ -25,7 +25,7 @@
 ;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
 ;; We currently still support Java 8.
 (def ^:private ^ReferenceQueue reference-queue (ReferenceQueue.))
-(def ^:private ^IdentityHashMap ref->cleanup-action (Collections/synchronizedMap (IdentityHashMap.)))
+(def ^:private ^HashMap ref->cleanup-action (Collections/synchronizedMap (IdentityHashMap.)))
 
 (defn- cleanup-loop []
   (try
