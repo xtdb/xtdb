@@ -25,7 +25,7 @@
 ;; TODO: Replace with java.lang.ref.Cleaner in Java 9.
 ;; We currently still support Java 8.
 (def ^:private ^ReferenceQueue reference-queue (ReferenceQueue.))
-(def ^:private ^HashMap ref->cleanup-action (Collections/synchronizedMap (IdentityHashMap.)))
+(def ^:private ^Map ref->cleanup-action (Collections/synchronizedMap (IdentityHashMap.)))
 
 (defn- cleanup-loop []
   (try
