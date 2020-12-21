@@ -30,19 +30,6 @@
   (.write w "#crux/query-error ")
   (print-method (into {} qs) w))
 
-(defn <-QueryState [^QueryState query-state]
-  {:status (case (str (.getStatus query-state))
-                  "FAILED" :failed
-                  "COMPLETED" :completed
-                  "IN_PROGRESS" :in-progress)
-   :query-id (.getQueryId query-state)
-   :query (.getQuery query-state)
-   :started-at (.getStartedAt query-state)
-   :finished-at (.getFinishedAt query-state)
-   :error (when-let [error (.getError query-state)]
-            {:type (.getErrorClass error)
-             :message (.getErrorMessage error)})})
-
 (defn ->QueryError [error]
   (let [{:keys [type message]} error]
     (QueryError. type message)))
