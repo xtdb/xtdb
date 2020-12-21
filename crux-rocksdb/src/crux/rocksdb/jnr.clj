@@ -17,16 +17,18 @@
            java.nio.file.Path
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
-;; NOTE: for this kv store to work all calls to
-;; crux.index-store.kv/key-suffix must be followed by a
-;; crux.memory/copy-buffer:
+;;; ***** N.B. *****
+;; NOTE: This backend doesn't currently work, as it requires
+;; defensive copies in `crux.kv.index-store` after calls to `key-suffix`.
+
+;; This isn't currently done, as this does an needless copy for other stores.
+;; This store is about 10% faster than RocksJava JNI.
+
+;; This backend is about 10% faster than the normal JNI one when defensive copies are made.
 
 ;; // Return the key for the current entry. The underlying storage for
 ;; // the returned slice is valid only until the next modification of
 ;; // the iterator.
-
-;; This isn't currently done, as this does an needless copy for other
-;; stores. This store is about 10% faster than RocksJava JNI.
 
 (set! *unchecked-math* :warn-on-boxed)
 
