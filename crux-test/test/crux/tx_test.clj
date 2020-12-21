@@ -1114,8 +1114,6 @@
                       :where '[[?e :name ?name]]
                       :args [{:?e (int 10)}]})))))
 
-;; TODO fails, see #1337
-#_
 (t/deftest test-put-evict-in-same-transaction-1337
   (t/testing "put then evict"
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test1/a, :test1? true}]])
@@ -1155,6 +1153,8 @@
       (t/is (= {:crux.db/id :test3/b, :test3? true} (crux/entity db :test3/b)))
       (t/is (= #{[:test3/b]} (crux/q db '{:find [?e], :where [[?e :test3? true]]})))))
 
+  ;; TODO fails, see #1337
+  #_
   (t/testing "evict then re-put"
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test4, :test4? true}]])
 

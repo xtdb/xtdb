@@ -8,7 +8,7 @@
            org.agrona.DirectBuffer
            java.util.Date))
 
-(defn- merge-seqs
+(defn merge-seqs
   ([persistent transient] (merge-seqs persistent transient #(.compare mem/buffer-comparator %1 %2)))
   ([persistent transient compare]
    (letfn [(merge-seqs* [persistent transient]
