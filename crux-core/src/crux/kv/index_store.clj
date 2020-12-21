@@ -16,7 +16,7 @@
            crux.api.IndexVersionOutOfSyncException
            java.io.Closeable
            java.nio.ByteOrder
-           [java.util Date HashMap Map NavigableSet TreeSet]
+           [java.util ArrayList Collections Date HashMap List Map NavigableSet TreeSet]
            [java.util.function Function Supplier]
            java.util.concurrent.atomic.AtomicBoolean
            (clojure.lang MapEntry)
@@ -482,6 +482,26 @@
     (and found-k
          (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
+(deftype SortedListSet [^List vs]
+  NavigableSet
+  (tailSet [_ k]
+    (let [i (Collections/binarySearch vs k mem/buffer-comparator)]
+      (SortedListSet. (.subList vs
+                                (if (neg? i)
+                                  (dec (- i))
+                                  i)
+                                (.size vs)))))
+  (contains [_ k]
+    (not (neg? (Collections/binarySearch vs k mem/buffer-comparator))))
+  (first [_]
+    (.get vs 0))
+  (isEmpty [_]
+    (.isEmpty vs))
+  (iterator [_]
+    (.iterator vs))
+  (size [_]
+    (.size vs)))
+
 (defn- cav-cache-lookup ^java.util.NavigableSet [cav-cache cache-i ^DirectBuffer eid-value-buffer
                                                  ^DirectBuffer content-hash-buffer ^DirectBuffer attr-buffer]
   (cache/compute-if-absent cav-cache
@@ -490,7 +510,7 @@
                              (MapEntry/create (mem/ensure-on-heap content-hash-buffer)
                                               (mem/ensure-on-heap attr-buffer)))
                            (fn [_]
-                             (let [vs (TreeSet. mem/buffer-comparator)
+                             (let [vs (ArrayList.)
                                    prefix (encode-ecav-key-to nil
                                                               eid-value-buffer
                                                               content-hash-buffer
@@ -502,7 +522,7 @@
                                          v (mem/ensure-on-heap v)]
                                      (.add vs v)
                                      (recur (kv/next i)))))
-                               vs))))
+                               (->SortedListSet vs)))))
 
 (defn- step-fn [i k-fn seek-k]
   ((fn step [^DirectBuffer k]

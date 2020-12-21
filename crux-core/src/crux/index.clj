@@ -319,6 +319,17 @@
       (when (pos? max-depth)
         (step (vec (repeat max-depth nil)) 0 true)))))
 
+(deftype SingletonVirtualIndex [v]
+  db/Index
+  (seek-values [_ k]
+    (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))
+      v))
+
+  (next-values [_]))
+
+(defn new-singleton-virtual-index [v encode-value-fn]
+  (->SingletonVirtualIndex (encode-value-fn v)))
+
 (deftype SortedVirtualIndex [^NavigableSet s ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
   (seek-values [this k]
@@ -329,8 +340,10 @@
     (when (and iterator (.hasNext iterator))
       (.next iterator))))
 
-(defn- new-sorted-virtual-index [s]
-  (->SortedVirtualIndex s nil))
+(defn- new-sorted-virtual-index [^NavigableSet s]
+  (if (= 1 (.size s))
+    (->SingletonVirtualIndex (.first s))
+    (->SortedVirtualIndex s nil)))
 
 (definterface IRelationVirtualIndexUpdate
   (^void updateIndex [tree rootIndex]))
@@ -418,14 +431,3 @@
                                                           (object-array (long max-depth))
                                                           (object-array (long max-depth)))
                                   tuples))
-
-(deftype SingletonVirtualIndex [v]
-  db/Index
-  (seek-values [_ k]
-    (when-not (pos? (mem/compare-buffers (or k mem/empty-buffer) v))
-      v))
-
-  (next-values [_]))
-
-(defn new-singleton-virtual-index [v encode-value-fn]
-  (->SingletonVirtualIndex (encode-value-fn v)))
