@@ -1,10 +1,9 @@
-package crux.api.alphav2.transaction;
+package crux.api.transaction;
 
 import clojure.lang.PersistentVector;
-import crux.api.alphav2.CruxId;
-import crux.api.alphav2.transaction.operation.*;
-import crux.api.alphav2.IBuilder;
-import crux.api.alphav2.ICruxDocument;
+import crux.api.IBuilder;
+import crux.api.document.ICruxDocument;
+import crux.api.transaction.operation.*;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -50,37 +49,40 @@ public class Transaction {
             return add( PutTransactionOperation.factory(document, validTime, endValidTime));
         }
 
-        public Builder match(ICruxDocument document, Date validTime) {
-            Object id = document.getDocumentId();
-            CruxId cruxId = CruxId.cruxId(id);
-            return add(MatchTransactionOperation.factory(cruxId, document, validTime));
+        public Builder match(ICruxDocument document) {
+            return match(document, null);
         }
 
-        public Builder empty(CruxId id, Date validTime) {
+        public Builder match(ICruxDocument document, Date validTime) {
+            Object id = document.getDocumentId();
+            return add(MatchTransactionOperation.factory(id, document, validTime));
+        }
+
+        public Builder matchNotExists(Object id) {
+            return add(MatchTransactionOperation.factoryNotExists(id));
+        }
+
+        public Builder matchNotExists(Object id, Date validTime) {
             return add(MatchTransactionOperation.factoryNotExists(id, validTime));
         }
 
-        public Builder match(CruxId id, ICruxDocument document, Date validTime) {
-            return add( MatchTransactionOperation.factory(id, document, validTime));
+        public Builder match(Object id, ICruxDocument document, Date validTime) {
+            return add(MatchTransactionOperation.factory(id, document, validTime));
         }
 
-        public Builder delete(ICruxDocument document, Date validTime) {
-            Object id = document.getDocumentId();
-            CruxId cruxId = CruxId.cruxId(id);
-            return delete(cruxId, validTime);
+        public Builder delete(Object id) {
+            return add(DeleteTransactionOperation.factory(id));
         }
 
-        public Builder delete(CruxId id, Date validTime) {
+        public Builder delete(Object id, Date validTime) {
             return add(DeleteTransactionOperation.factory(id, validTime));
         }
 
-        public Builder evict(ICruxDocument document) {
-            Object id = document.getDocumentId();
-            CruxId cruxId = CruxId.cruxId(id);
-            return evict(cruxId);
+        public Builder delete(Object id, Date validTime, Date endValidTime) {
+            return add(DeleteTransactionOperation.factory(id, validTime, endValidTime));
         }
 
-        public Builder evict(CruxId id) {
+        public Builder evict(Object id) {
             return add( EvictTransactionOperation.factory(id));
         }
 

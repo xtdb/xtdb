@@ -1,4 +1,4 @@
-package crux.api.alphav2;
+package crux.api.alpha;
 
 import clojure.lang.Keyword;
 
@@ -6,6 +6,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
 
+/*
 public class CruxId {
     private final Object id;
 
@@ -36,4 +37,4 @@ public class CruxId {
     public Object toEdn() {
         return id;
     }
-}
+}*/

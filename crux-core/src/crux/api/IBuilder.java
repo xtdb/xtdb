@@ -1,4 +1,4 @@
-package crux.api.alphav2;
+package crux.api;
 
 public interface IBuilder<T> {
     T build();

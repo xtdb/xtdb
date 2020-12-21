@@ -6,9 +6,8 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import clojure.java.api.Clojure;
-import clojure.lang.Keyword;
 import clojure.lang.IFn;
-import crux.api.alphav2.NodeConfiguration;
+import crux.api.configuration.NodeConfiguration;
 
 /**
  * Public API entry point for starting an {@link ICruxAPI}.

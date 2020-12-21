@@ -1,10 +1,12 @@
-package crux.api.alphav2;
+package crux.api.configuration;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.PersistentArrayMap;
+import crux.api.IBuilder;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 public class NodeConfiguration {
@@ -20,13 +22,12 @@ public class NodeConfiguration {
         private final HashMap<String, Object> modules = new HashMap<>();
 
         public Builder with(String module, ModuleConfiguration configuration) {
-            modules.put(module, configuration);
+            modules.put(module, configuration.getOpts());
             return this;
         }
 
         public Builder with(String module, Consumer<ModuleConfiguration.Builder> f) {
-            modules.put(module, ModuleConfiguration.build(f));
-            return this;
+            return with(module, ModuleConfiguration.build(f));
         }
 
         @Override
@@ -35,13 +36,26 @@ public class NodeConfiguration {
         }
     }
 
-    final private IPersistentMap modules;
+    final private Map<String, Object> modules;
 
     private NodeConfiguration(Map<String, Object> modules) {
-        this.modules = PersistentArrayMap.create(modules);
+        this.modules = modules;
     }
 
     public IPersistentMap getModules() {
-        return modules;
+        return PersistentArrayMap.create(modules);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        NodeConfiguration that = (NodeConfiguration) o;
+        return modules.equals(that.modules);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(modules);
     }
 }

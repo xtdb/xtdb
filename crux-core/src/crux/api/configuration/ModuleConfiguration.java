@@ -1,10 +1,12 @@
-package crux.api.alphav2;
+package crux.api.configuration;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.PersistentArrayMap;
+import crux.api.IBuilder;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 public class ModuleConfiguration {
@@ -55,13 +57,41 @@ public class ModuleConfiguration {
         }
     }
 
-    private final IPersistentMap opts;
+    private final Map<String, Object> opts;
 
     private ModuleConfiguration(Map<String, Object> opts) {
-        this.opts = PersistentArrayMap.create(opts);
+        this.opts = opts;
     }
 
     public IPersistentMap getOpts() {
-        return opts;
+        return PersistentArrayMap.create(opts);
+    }
+
+    /*@Override
+    public boolean equals(Object other) {
+        if (other == this) {
+            return true;
+        }
+
+        if (!(other instanceof ModuleConfiguration)) {
+            return false;
+        }
+
+        ModuleConfiguration moduleConfiguration = (ModuleConfiguration) other;
+
+        return moduleConfiguration.opts.equals(opts);
+    }*/
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        ModuleConfiguration that = (ModuleConfiguration) o;
+        return opts.equals(that.opts);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(opts);
     }
 }

@@ -1,23 +1,5 @@
 package crux.api.alpha;
 
-import clojure.lang.Keyword;
-import clojure.lang.PersistentVector;
-import crux.api.*;
-import crux.api.HistoryOptions.SortOrder;
-import crux.api.alphav2.NodeConfiguration;
-
-import java.io.IOException;
-import java.time.Duration;
-import java.util.Arrays;
-import java.util.Date;
-import java.util.List;
-import java.util.Map;
-import java.util.Spliterator;
-import java.util.Spliterators;
-import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
-
 /*
 @Deprecated
 public class CruxNode implements AutoCloseable {

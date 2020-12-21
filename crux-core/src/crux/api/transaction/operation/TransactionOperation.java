@@ -1,4 +1,4 @@
-package crux.api.alphav2.transaction.operation;
+package crux.api.transaction.operation;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
@@ -8,7 +8,7 @@ import java.util.List;
 public abstract class TransactionOperation {
     enum Type {
         PUT("crux.tx/put"),
-        MATCH("crux.tx/match)"),
+        MATCH("crux.tx/match"),
         DELETE("crux.tx/delete"),
         EVICT("crux.tx/evict");
 
@@ -50,8 +50,11 @@ public abstract class TransactionOperation {
     abstract List<Object> getArgs();
 
     public PersistentVector toEdn() {
-        PersistentVector ret = PersistentVector.create(type);
-        ret.addAll(getArgs());
+        PersistentVector ret = PersistentVector.create(type.keyword);
+        List<Object> args = getArgs();
+        for (Object arg: args) {
+            ret = ret.cons(arg);
+        }
         return ret;
     }
 }

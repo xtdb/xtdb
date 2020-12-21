@@ -1,9 +1,5 @@
 package crux.api.alpha;
 
-import clojure.lang.Keyword;
-import clojure.lang.PersistentVector;
-import crux.api.alphav2.CruxId;
-
 /*
 @Deprecated
 public class EvictOperation extends TransactionOperation {

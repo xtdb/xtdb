@@ -1,33 +1,31 @@
-package crux.api.alphav2.transaction.operation;
+package crux.api.transaction.operation;
 
 import clojure.lang.PersistentVector;
-import crux.api.alphav2.CruxId;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class EvictTransactionOperation extends TransactionOperation {
-    private final CruxId id;
+    private final Object id;
 
-    private EvictTransactionOperation(CruxId id) {
+    private EvictTransactionOperation(Object id) {
         super(Type.EVICT);
         this.id = id;
     }
 
     public static EvictTransactionOperation factory(PersistentVector vector) {
-        Object rawId = vector.get(1);
-        CruxId id = CruxId.cruxId(rawId);
+        Object id = vector.get(1);
         return new EvictTransactionOperation(id);
     }
 
-    public static EvictTransactionOperation factory(CruxId id) {
+    public static EvictTransactionOperation factory(Object id) {
         return new EvictTransactionOperation(id);
     }
 
     @Override
     List<Object> getArgs() {
         ArrayList<Object> ret = new ArrayList<>();
-        ret.add(id.toEdn());
+        ret.add(id);
         return ret;
     }
 }

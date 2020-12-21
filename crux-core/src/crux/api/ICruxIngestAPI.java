@@ -3,10 +3,8 @@ package crux.api;
 import java.io.Closeable;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import clojure.lang.Keyword;
-import crux.api.alphav2.transaction.Transaction;
 
 /**
  * Provides API access to Crux ingestion.

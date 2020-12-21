@@ -1,14 +1,5 @@
 package crux.api.alpha;
 
-import clojure.lang.Symbol;
-import crux.api.ICruxAPI;
-import crux.api.ICruxDatasource;
-import clojure.lang.Keyword;
-import crux.api.alphav2.CruxId;
-
-import java.util.*;
-import java.util.stream.Collectors;
-
 /*
 @Deprecated
 public class Database {

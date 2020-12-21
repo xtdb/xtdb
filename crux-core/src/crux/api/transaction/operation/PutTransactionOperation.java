@@ -1,9 +1,9 @@
-package crux.api.alphav2.transaction.operation;
+package crux.api.transaction.operation;
 
-import clojure.lang.PersistentArrayMap;
+import clojure.lang.IPersistentMap;
 import clojure.lang.PersistentVector;
-import crux.api.alphav2.CruxDocument;
-import crux.api.alphav2.ICruxDocument;
+import crux.api.document.CruxDocument;
+import crux.api.document.ICruxDocument;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -25,8 +25,8 @@ public class PutTransactionOperation extends TransactionOperation {
         Date validTime = null;
         Date endValidTime = null;
 
-        PersistentArrayMap rawDocument = (PersistentArrayMap) vector.get(1);
-        ICruxDocument document = new CruxDocument(rawDocument);
+        IPersistentMap rawDocument = (IPersistentMap) vector.get(1);
+        ICruxDocument document = CruxDocument.factory(rawDocument);
 
         if (vector.size() > 2) {
             validTime = (Date) vector.get(2);

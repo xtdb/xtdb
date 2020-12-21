@@ -1,14 +1,5 @@
 package crux.api.alpha;
 
-import clojure.lang.IPersistentMap;
-import clojure.lang.Keyword;
-import clojure.lang.PersistentArrayMap;
-import crux.api.alphav2.CruxId;
-
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.Map;
-
 /*
 @Deprecated
 public class Document {
