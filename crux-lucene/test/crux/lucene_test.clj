@@ -1,17 +1,15 @@
 (ns crux.lucene-test
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.test :as t]
             [crux.api :as c]
-            [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
-            [crux.rocksdb :as rocks]
-            [clojure.java.io :as io]
-            [crux.query :as q])
+            [crux.query :as q]
+            [crux.rocksdb :as rocks])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
-           crux.api.ICruxAPI
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]))
 
@@ -319,6 +317,8 @@
                                          :where '[[(or-text-search :name #{"Ivan" "Fred"}) [[?e ?v]]]]})))))
 
 (t/deftest test-cannot-use-multi-field-lucene-queries
+  (require 'crux.lucene.multi-field) ; for defmethods
+
   (t/is (thrown-with-msg? java.lang.IllegalStateException #"Lucene multi field indexer not configured, consult the docs."
                           (with-open [db (c/open-db *api*)]
                             (c/q db {:find '[?e]
