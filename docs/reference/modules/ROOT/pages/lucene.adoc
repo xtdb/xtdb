@@ -1,14 +1,17 @@
 = Lucene
 
-Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
+Lucene module for Crux making use of https://lucene.apache.org/[Apache
+Lucene].
+
+`crux-lucene` runs in-process as part of the Crux node as a Crux
+module. The Lucene index is kept up to date synchronously when Crux
+transactions are processed on a node.
 
 WARNING: This module is in alpha and likely to change. In particular,
 we might rationalize/combine the different query functions available
 (see https://github.com/juxt/crux/issues/1318).
 
 == Setup
-
-`crux-lucene` runs in-process as part of the Crux node as a Crux module.
 
 First, add the `crux-lucene` dependency to your project:
 
@@ -65,6 +68,13 @@ EDN::
  :crux.lucene/lucene-store {:db-dir "lucene-dir"}}
 ----
 ====
+
+WARNING: You must have a fresh node to add Lucene configuration to. If
+you add Lucene configuration to a populated Crux node, you will
+receive an exception when the node starts up: `Lucene store latest tx
+mismatch`. To remedy this, you must wipe the index directories for the
+Crux node and restart. The Lucene index will then be populated as part
+of the normal Crux node ingestion process.
 
 == Querying
 

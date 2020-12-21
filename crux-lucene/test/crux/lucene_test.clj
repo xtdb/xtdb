@@ -228,6 +228,10 @@
     (t/is (latest-tx))))
 
 (t/deftest test-ensure-lucene-store-keeps-up
+  ;; Note, an edge case is if users change Lucene configuration
+  ;; (i.e. indexing strategy) - this start-up check does not account
+  ;; for this:
+
   (fix/with-tmp-dir "rocks" [rocks-tmp-dir]
     (fix/with-tmp-dir "lucene" [lucene-tmp-dir]
       (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
