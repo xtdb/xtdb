@@ -366,7 +366,7 @@
        (ExpandableDirectByteBuffer. 32)))))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
-  (mem/copy-buffer (value->buffer x (.get value-buffer-tl))))
+  (mem/copy-to-unpooled-buffer (value->buffer x (.get value-buffer-tl))))
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/limit-buffer buffer value-type-id-size))
