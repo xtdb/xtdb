@@ -8,51 +8,50 @@
     :completed IQueryState$QueryStatus/COMPLETED
     :in-progress IQueryState$QueryStatus/IN_PROGRESS))
 
-(defrecord QueryState$QueryError [type message]
+(defrecord QueryError [type message]
   IQueryState$IQueryError
   (getErrorClass [this] type)
-  (getErrorMessage [this] type))
+  (getErrorMessage [this] message))
 
 (defrecord QueryState [query-id started-at finished-at status query error]
-           IQueryState
-           (getQueryId [this] query-id)
-           (getStartedAt [this] started-at)
-           (getFinishedAt [this] finished-at)
-           (getStatus [this] (->query-status status))
-           (getQuery [this] query)
-           (getError [this] error))
+  IQueryState
+  (getQueryId [this] query-id)
+  (getStartedAt [this] started-at)
+  (getFinishedAt [this] finished-at)
+  (getStatus [this] (->query-status status))
+  (getQuery [this] query)
+  (getError [this] error))
 
 (defmethod print-method QueryState [qs ^Writer w]
   (.write w "#crux/query-state ")
   (print-method (into {} qs) w))
 
-(defmethod print-method QueryState$QueryError [qs ^Writer w]
+(defmethod print-method QueryError [qs ^Writer w]
   (.write w "#crux/query-error ")
   (print-method (into {} qs) w))
 
 (defn <-QueryState [^QueryState query-state]
-      {:status      (case (str (.getStatus query-state))
-                          "FAILED" :failed
-                          "COMPLETED" :completed
-                          "IN_PROGRESS" :in-progress)
-       :query-id    (.getQueryId query-state)
-       :query       (.getQuery query-state)
-       :started-at  (.getStartedAt query-state)
-       :finished-at (.getFinishedAt query-state)
-       :error       (when-let [error (.getError query-state)]
-                              {:type    (.getErrorClass error)
-                               :message (.getErrorMessage error)})})
+  {:status (case (str (.getStatus query-state))
+                  "FAILED" :failed
+                  "COMPLETED" :completed
+                  "IN_PROGRESS" :in-progress)
+   :query-id (.getQueryId query-state)
+   :query (.getQuery query-state)
+   :started-at (.getStartedAt query-state)
+   :finished-at (.getFinishedAt query-state)
+   :error (when-let [error (.getError query-state)]
+            {:type (.getErrorClass error)
+             :message (.getErrorMessage error)})})
 
 (defn ->QueryError [error]
   (let [{:keys [type message]} error]
-    (QueryState$QueryError. type message)))
+    (QueryError. type message)))
 
 (defn ->QueryState [{:keys [query-id started-at finished-at status error query] :as query-state}]
-      (QueryState. query-id
-                   started-at
-                   finished-at
-                   status
-                   query
-                   (when error
-                         (let [{:keys [type message]} error]
-                              (QueryState$QueryError. type message)))))
+  (QueryState. query-id
+               started-at
+               finished-at
+               status
+               query
+               (when error
+                 (->QueryError error))))

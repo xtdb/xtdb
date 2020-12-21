@@ -156,8 +156,8 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     @SuppressWarnings("unchecked")
     public static final Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
-            .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/tx-indexed"))
-            .assoc(Keyword.intern("with-tx-ops?"), true);
+        .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/tx-indexed"))
+        .assoc(Keyword.intern("with-tx-ops?"), true);
 
     /**
      * Attaches a listener to Crux's event bus.
@@ -174,12 +174,12 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
 
     /**
-     @return the latest transaction to have been indexed by this node.
+     * @return the latest transaction to have been indexed by this node.
      */
     public Map<Keyword, ?> latestCompletedTx();
 
     /**
-     @return the latest transaction to have been submitted to this cluster
+     * @return the latest transaction to have been submitted to this cluster
      */
     public Map<Keyword, ?> latestSubmittedTx();
 
