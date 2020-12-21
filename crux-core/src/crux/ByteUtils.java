@@ -150,7 +150,7 @@ public class ByteUtils {
         final byte[] aByteArray = a.byteArray();
         final byte[] bByteArray = b.byteArray();
 
-        if (COMPARE_UNSIGNED_METHOD_HANDLE != null && aByteArray != null && bByteArray != null) {
+        if (aByteArray != null && bByteArray != null && COMPARE_UNSIGNED_METHOD_HANDLE != null) {
             final int aOffset = a.wrapAdjustment();
             final int bOffset = b.wrapAdjustment();
             try {
