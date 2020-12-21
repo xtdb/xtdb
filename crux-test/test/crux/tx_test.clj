@@ -1114,7 +1114,7 @@
                       :where '[[?e :name ?name]]
                       :args [{:?e (int 10)}]})))))
 
-(t/deftest test-put-evict-in-same-transaction
+(t/deftest test-put-evict-in-same-transaction-1337
   (t/testing "put then evict"
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test1/a, :test1? true}]])
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test1/b, :test1? true, :test1/evicted? true}]
@@ -1163,3 +1163,22 @@
     (let [db (crux/db *api*)]
       (t/is (= {:crux.db/id :test4, :test4? true} (crux/entity db :test4)))
       (t/is (= #{[:test4]} (crux/q db '{:find [?e], :where [[?e :test4? true]]}))))))
+
+
+(t/deftest test-avs-only-shared-by-evicted-entities-1338
+  (t/testing "only one entity, AV removed"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :evict-me? true}]])
+    (fix/submit+await-tx [[:crux.tx/evict :foo]])
+
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
+      (t/is (empty? (db/av index-snapshot :evict-me? nil)))))
+
+  ;; TODO fails, see #1338
+  #_
+  (t/testing "shared by multiple evicted entities"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :evict-me? true}]
+                          [:crux.tx/put {:crux.db/id :bar, :evict-me? true}]])
+    (fix/submit+await-tx [[:crux.tx/evict :foo]
+                          [:crux.tx/evict :bar]])
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
+      (t/is (empty? (db/av index-snapshot :evict-me? nil))))))
