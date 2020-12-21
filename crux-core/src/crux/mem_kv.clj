@@ -26,8 +26,8 @@
 (defn- restore-db [dir]
   (cio/with-nippy-thaw-all
     (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memkv"))]
-           [(mem/->off-heap k)
-            (mem/->off-heap v)])
+           [(mem/as-buffer k)
+            (mem/as-buffer v)])
          (into (sorted-map-by mem/buffer-comparator)))))
 
 ;; NOTE: Using Box here to hide the db from equals/hashCode, otherwise
@@ -79,7 +79,7 @@
                  (reduce (fn [db [k v]]
                            (let [k-buf (mem/as-buffer k)]
                              (if v
-                               (assoc db (mem/copy-to-unpooled-buffer k-buf) (mem/copy-to-unpooled-buffer (mem/as-buffer v)))
+                               (assoc db (mem/ensure-on-heap k-buf) (mem/ensure-on-heap (mem/as-buffer v)))
                                (dissoc db k-buf))))
                          db
                          kvs)))

@@ -2,11 +2,11 @@
   #:clojure.tools.namespace.repl{:load false, :unload false} ; because of the deftypes in here
   (:require [clojure.edn :as edn]
             [crux.error :as err]
-            [crux.hash :as hash]
             [crux.io :as cio]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
   (:import [clojure.lang APersistentMap APersistentSet BigInt IHashEq Keyword]
+           crux.ByteUtils
            crux.codec.MathCodec
            java.io.Writer
            java.math.BigDecimal
@@ -16,7 +16,7 @@
            [java.time LocalDate LocalTime LocalDateTime Instant Duration]
            [java.util Base64 Date Map Set UUID]
            java.util.function.Supplier
-           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [org.agrona DirectBuffer ExpandableArrayBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -57,7 +57,8 @@
 
 (def ^:const value-type-id-size Byte/BYTES)
 
-(def ^:const id-size (+ hash/id-hash-size value-type-id-size))
+(def ^:const id-hash-size 20)
+(def ^:const id-size (+ id-hash-size value-type-id-size))
 
 ;; LMDB #MDB_MAXKEYSIZE 511 (>= 511 (+ value-type-id-size (* 2 (+ value-type-id-size 224)) id-size id-size))
 (def ^:const ^:private max-value-index-length 224)
@@ -95,16 +96,13 @@
 (def ^:private instant-value-type-id 17)
 (def ^:private duration-value-type-id 18)
 
-(def nil-id-bytes
-  (doto (byte-array id-size)
-    (aset 0 (byte id-value-type-id))))
-
 (def nil-id-buffer
-  (mem/->off-heap nil-id-bytes (mem/allocate-unpooled-buffer (count nil-id-bytes))))
+  (mem/as-buffer (doto (byte-array id-size)
+                   (aset 0 (byte id-value-type-id)))))
 
 (defn id-function ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer to bs]
   (.putByte to 0 (byte id-value-type-id))
-  (hash/id-hash (mem/slice-buffer to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
+  (ByteUtils/sha1 (mem/slice-buffer to value-type-id-size id-hash-size) (mem/as-buffer bs))
   (mem/limit-buffer to id-size))
 
 (def ^:dynamic ^:private *sort-unordered-colls* false)
@@ -248,7 +246,7 @@
         (doto (id->buffer this to)
           (.putByte 0 clob-value-type-id))
         (let [offset (byte 2)
-              ub-in (mem/on-heap-buffer bs)
+              ub-in (mem/as-buffer bs)
               length (.capacity ub-in)]
           (.putByte to 0 string-value-type-id)
           (loop [idx 0]
@@ -363,10 +361,10 @@
   (ThreadLocal/withInitial
    (reify Supplier
      (get [_]
-       (ExpandableDirectByteBuffer. 32)))))
+       (ExpandableArrayBuffer. 32)))))
 
 (defn ->value-buffer ^org.agrona.DirectBuffer [x]
-  (mem/copy-to-unpooled-buffer (value->buffer x (.get value-buffer-tl))))
+  (mem/copy-buffer (value->buffer x (.get value-buffer-tl))))
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/limit-buffer buffer value-type-id-size))
@@ -594,7 +592,7 @@
 
   Object
   (toString [this]
-    (mem/buffer->hex (mem/slice-buffer buffer value-type-id-size hash/id-hash-size)))
+    (mem/buffer->hex (mem/slice-buffer buffer value-type-id-size id-hash-size)))
 
   (equals [this that]
     (or (identical? this that)
@@ -658,13 +656,13 @@
 
 (defn safe-id ^crux.codec.Id [^Id id]
   (when id
-    (Id. (mem/copy-to-unpooled-buffer (.buffer id)) 0)))
+    (Id. (mem/ensure-on-heap (.buffer id)) 0)))
 
 (defn hex->id-buffer
   ([hex] (hex->id-buffer hex (mem/allocate-buffer id-size)))
   ([hex to]
    (.putByte ^MutableDirectBuffer to 0 id-value-type-id)
-   (mem/hex->buffer hex (mem/slice-buffer to value-type-id-size hash/id-hash-size))
+   (mem/hex->buffer hex (mem/slice-buffer to value-type-id-size id-hash-size))
    to))
 
 (deftype EDNId [hex original-id]

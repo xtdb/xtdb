@@ -540,7 +540,7 @@
 (defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn]} index-snapshot {:keys [vars-in-join-order]}]
   (let [order (keep #{e v} vars-in-join-order)
         nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)
-        attr-buffer (mem/copy-to-unpooled-buffer (c/->id-buffer a))]
+        attr-buffer (c/->id-buffer a)]
     (if (= v (first order))
       (let [v-idx (idx/new-deref-index
                    (idx/new-seek-fn-index
@@ -1533,7 +1533,7 @@
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
   (let [entity-cache (cache/->cache {:cache-size entity-cache-size})]
     (fn [k]
-      (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
+      (cache/compute-if-absent entity-cache k mem/ensure-on-heap entity-resolver-fn))))
 
 (defn- new-entity-resolver-fn [{:keys [valid-time tx-id index-snapshot] :as db}]
   (with-entity-resolver-cache #(when tx-id (db/entity-as-of-resolver index-snapshot % valid-time tx-id)) db))

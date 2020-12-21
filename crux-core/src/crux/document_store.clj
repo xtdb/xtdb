@@ -58,7 +58,7 @@
           (assoc! acc id (cache/compute-if-absent
                           cache
                           (c/->id-buffer id)
-                          mem/copy-to-unpooled-buffer
+                          mem/ensure-on-heap
                           (fn [_]
                             doc))))
         (transient cached-id->docs)

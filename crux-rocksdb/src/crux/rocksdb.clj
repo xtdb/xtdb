@@ -27,7 +27,9 @@
 (defrecord RocksKvIterator [^RocksIterator i]
   kv/KvIterator
   (seek [this k]
-    (.seek i (mem/direct-byte-buffer k))
+    (if (mem/off-heap? k)
+      (.seek i (mem/direct-byte-buffer k))
+      (.seek i (mem/->on-heap k)))
     (iterator->key i))
 
   (next [this]
@@ -75,8 +77,12 @@
     (with-open [wb (WriteBatch.)]
       (doseq [[k v] kvs]
         (if v
-          (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
-          (.remove wb (mem/direct-byte-buffer k))))
+          (if (and (mem/off-heap? k) (mem/off-heap? v))
+            (.put wb (mem/direct-byte-buffer k) (mem/direct-byte-buffer v))
+            (.put wb (mem/->on-heap k) (mem/->on-heap v)))
+          (if (mem/off-heap? k)
+            (.remove wb (mem/direct-byte-buffer k))
+            (.remove wb (mem/->on-heap k)))))
       (.write db write-options wb)))
 
   (compact [_]

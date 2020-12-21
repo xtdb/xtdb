@@ -310,25 +310,25 @@
                                 :seek+nexts (with-open [snapshot (kv/new-snapshot kv-store)
                                                         i (kv/new-iterator snapshot)]
                                               (when-let [k (kv/seek i (c/->value-buffer k))]
-                                                (cons [(mem/copy-to-unpooled-buffer k)
-                                                       (mem/copy-to-unpooled-buffer (kv/value i))]
+                                                (cons [(mem/ensure-on-heap k)
+                                                       (mem/ensure-on-heap (kv/value i))]
                                                       (->> (repeatedly
                                                             (fn []
                                                               (when-let [k (kv/next i)]
-                                                                [(mem/copy-to-unpooled-buffer k)
-                                                                 (mem/copy-to-unpooled-buffer (kv/value i))])))
+                                                                [(mem/ensure-on-heap k)
+                                                                 (mem/ensure-on-heap (kv/value i))])))
                                                            (take-while identity)
                                                            (vec)))))
                                 :seek+prevs (with-open [snapshot (kv/new-snapshot kv-store)
                                                         i (kv/new-iterator snapshot)]
                                               (when-let [k (kv/seek i (c/->value-buffer k))]
-                                                (cons [(mem/copy-to-unpooled-buffer k)
-                                                       (mem/copy-to-unpooled-buffer (kv/value i))]
+                                                (cons [(mem/ensure-on-heap k)
+                                                       (mem/ensure-on-heap (kv/value i))]
                                                       (->> (repeatedly
                                                             (fn []
                                                               (when-let [k (kv/prev i)]
-                                                                [(mem/copy-to-unpooled-buffer k)
-                                                                 (mem/copy-to-unpooled-buffer (kv/value i))])))
+                                                                [(mem/ensure-on-heap k)
+                                                                 (mem/ensure-on-heap (kv/value i))])))
                                                            (take-while identity)
                                                            (vec)))))
                                 :fsync (kv/fsync kv-store)
