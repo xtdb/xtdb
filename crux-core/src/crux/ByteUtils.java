@@ -1,6 +1,9 @@
 package crux;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
 import java.math.BigInteger;
 import java.nio.ByteOrder;
 import java.util.Arrays;
@@ -23,6 +26,19 @@ public class ByteUtils {
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
+    }
+
+    private static final MethodHandle COMPARE_UNSIGNED_METHOD_HANDLE;
+
+    static {
+        MethodHandle mh = null;
+        try {
+            Method compareUnsigned = Arrays.class.getMethod("compareUnsigned", new Class<?>[] {byte[].class, int.class, int.class,
+                                                                                               byte[].class, int.class, int.class});
+            mh = MethodHandles.lookup().unreflect(compareUnsigned);
+        } catch (Exception jdk8) {
+        }
+        COMPARE_UNSIGNED_METHOD_HANDLE = mh;
     }
 
     private static final char[] TWO_BYTES_TO_HEX = new char[256 * 256 * Character.BYTES * 2];
@@ -133,6 +149,18 @@ public class ByteUtils {
         final int bCapacity = b.capacity();
         final byte[] aByteArray = a.byteArray();
         final byte[] bByteArray = b.byteArray();
+
+        if (aByteArray != null && bByteArray != null) {
+            final int aOffset = a.wrapAdjustment();
+            final int bOffset = b.wrapAdjustment();
+            try {
+                return (int) COMPARE_UNSIGNED_METHOD_HANDLE.invokeExact(aByteArray, aOffset, aOffset + Math.min(aCapacity, maxLength),
+                                                                        bByteArray, bOffset, bOffset + Math.min(bCapacity, maxLength));
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
+        }
+
         final long aOffset = a.addressOffset();
         final long bOffset = b.addressOffset();
         final int length = Math.min(Math.min(aCapacity, bCapacity), maxLength);
@@ -180,8 +208,8 @@ public class ByteUtils {
         return ByteUtils.compareBuffers(a, b, maxLength) == 0;
     }
 
-    public static class UnsignedBufferComparator implements Comparator<DirectBuffer> {
-        public int compare(final DirectBuffer a, final DirectBuffer b) {
+    public static final class UnsignedBufferComparator implements Comparator<DirectBuffer> {
+        public final int compare(final DirectBuffer a, final DirectBuffer b) {
             return ByteUtils.compareBuffers(a, b, Integer.MAX_VALUE);
         }
     }
