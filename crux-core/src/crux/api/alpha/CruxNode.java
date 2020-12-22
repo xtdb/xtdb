@@ -39,7 +39,7 @@ public class CruxNode implements AutoCloseable {
      * @param ops The set of operations to transact
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
-     **/
+     */
 
     @SuppressWarnings("unchecked")
     public TxResult submitTx(Iterable<TransactionOperation> ops) {
@@ -59,7 +59,7 @@ public class CruxNode implements AutoCloseable {
      * @param ops The set of operations to transact
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
-     **/
+     */
 
     @SuppressWarnings("unused")
     public TxResult submitTx(TransactionOperation... ops) {
@@ -70,7 +70,7 @@ public class CruxNode implements AutoCloseable {
      * Gets a Database instance as of now.
      * @return Database instance at the current time
      * @see Database
-     **/
+     */
 
     public Database db() {
         return crux.api.alpha.Database.database(node);
@@ -82,7 +82,7 @@ public class CruxNode implements AutoCloseable {
      * @param validTime The valid time
      * @return Database instance at validTime
      * @see Database
-     **/
+     */
 
     public Database db(Date validTime) {
         return crux.api.alpha.Database.database(node, validTime);
@@ -94,7 +94,7 @@ public class CruxNode implements AutoCloseable {
      * @param validTime The valid time
      * @param transactionTime The transaction time
      * @see Database
-     **/
+     */
 
     public Database db(Date validTime, Date transactionTime) {
         return crux.api.alpha.Database.database(node, validTime, transactionTime);
@@ -104,7 +104,7 @@ public class CruxNode implements AutoCloseable {
      * Blocks until the node has caught up indexing. Will throw an exception on timeout
      * @param timeout Max time to wait, can be null for the default
      * @return Date representing the latest index time when this node has caught up as of this call
-     **/
+     */
 
     @SuppressWarnings("unused")
     public Date sync(Duration timeout) {
