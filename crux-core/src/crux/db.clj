@@ -14,17 +14,20 @@
   (max-depth [this]))
 ;; end::LayeredIndex[]
 
-;; tag::IndexStore[]
-(defprotocol IndexStore
+(defprotocol IndexStoreTx
   (index-docs [this docs])
   (unindex-eids [this eids])
+  (index-entity-txs [this entity-txs])
+  (commit-index-tx [this])
+  (abort-index-tx [this]))
+
+;; tag::IndexStore[]
+(defprotocol IndexStore
   (exclusive-avs [this eids])
-  (index-entity-txs [this tx entity-txs])
-  (mark-tx-as-failed [this tx])
   (store-index-meta [this k v])
   (latest-completed-tx [this])
   (tx-failed? [this tx-id])
-  (open-index-snapshot ^java.io.Closeable [this]))
+  (begin-index-tx [index-store tx fork-at]))
 ;; end::IndexStore[]
 
 (defprotocol IndexMeta
@@ -33,6 +36,9 @@
 (defn read-index-meta
   ([index-meta k] (-read-index-meta index-meta k nil))
   ([index-meta k not-found] (-read-index-meta index-meta k not-found)))
+
+(defprotocol IndexSnapshotFactory
+  (open-index-snapshot ^java.io.Closeable [this]))
 
 ;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot
@@ -57,7 +63,7 @@
 ;; end::TxLog[]
 
 (defprotocol TxIngester
-  (begin-tx [tx-ingester tx])
+  (begin-tx [tx-ingester tx fork-at])
   (ingester-error [tx-ingester]))
 
 (defprotocol InFlightTx

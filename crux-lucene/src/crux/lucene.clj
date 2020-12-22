@@ -233,20 +233,14 @@
         lucene-store (LuceneNode. directory analyzer indexer)]
     (validate-lucene-store-up-to-date index-store lucene-store)
     (alter-var-root #'*lucene-store* (constantly lucene-store))
-    (bus/listen bus {:crux/event-types #{:crux.tx/indexing-tx-pre-commit :crux.tx/indexed-docs :crux.tx/unindexing-eids}
+    (bus/listen bus {:crux/event-types #{:crux.tx/committing-tx}
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
                                             (.run f)))}
                 (fn [ev]
                   (with-open [index-writer (index-writer lucene-store)]
-                    (case (:crux/event-type ev)
-
-                      :crux.tx/indexing-tx-pre-commit
-                      (index-tx! index-writer (:crux.tx/submitted-tx ev))
-
-                      :crux.tx/indexed-docs
-                      (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
-
-                      :crux.tx/unindexing-eids
-                      (evict! indexer index-writer (:eids ev))))))
+                    (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
+                    (when-let [evicting-eids (not-empty (:evicting-eids ev))]
+                      (evict! indexer index-writer evicting-eids))
+                    (index-tx! index-writer (:submitted-tx ev)))))
     lucene-store))

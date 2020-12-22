@@ -8,7 +8,10 @@
 (deftype MutableKvIterator [^NavigableMap db, !tail-seq]
   kv/KvIterator
   (seek [this k]
-    (some-> (reset! !tail-seq (seq (.tailMap db (mem/as-buffer k) true))) first key))
+    (some-> (reset! !tail-seq (->> (.tailMap db (mem/as-buffer k) true)
+                                   (filter val)))
+            first
+            key))
 
   (next [this]
     (some-> (swap! !tail-seq rest) first key))
@@ -16,7 +19,8 @@
   (prev [this]
     (when-let [[[k] :as tail-seq] (seq @!tail-seq)]
       (some-> (reset! !tail-seq (when-let [le (.lowerEntry db k)]
-                                  (cons le tail-seq)))
+                                  (cond->> tail-seq
+                                    (val le) (cons le))))
               first
               key)))
 
@@ -44,9 +48,7 @@
 
   (store [this kvs]
     (doseq [[k v] kvs]
-      (if v
-        (.put db (mem/as-buffer k) (mem/as-buffer v))
-        (.remove db (mem/as-buffer k)))))
+      (.put db (mem/as-buffer k) (some-> v mem/as-buffer))))
 
   (fsync [this])
   (compact [this])
@@ -55,5 +57,5 @@
   (kv-name [this] (str (class this))))
 
 (defn ->mutable-kv-store
-  ([] (->mutable-kv-store {}))
+  ([] (->mutable-kv-store nil))
   ([_] (->MutableKvStore (TreeMap. mem/buffer-comparator))))

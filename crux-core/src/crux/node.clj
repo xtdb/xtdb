@@ -47,8 +47,8 @@
                                              {:ingester-error ingester-error})))
                                       ([{:keys [crux/event-type] :as ev}]
                                        (case event-type
-                                         ::tx/indexed-tx (tx->result (::tx/submitted-tx ev))
-                                         ::tx/ingester-error {:ingester-error (::tx/ingester-error ev)}
+                                         ::tx/indexed-tx (tx->result (:submitted-tx ev))
+                                         ::tx/ingester-error {:ingester-error (:ingester-error ev)}
                                          ::node-closed {:node-closed? true}))))
                         :timeout timeout
                         :timeout-value {:timeout? true}})]
@@ -192,7 +192,7 @@
       :crux/indexed-tx
       (bus/listen bus
                   (assoc event-opts :crux/event-types #{::tx/indexed-tx})
-                  (fn [{:keys [::tx/submitted-tx ::txe/tx-events] :as ev}]
+                  (fn [{:keys [submitted-tx ::txe/tx-events] :as ev}]
                     (.accept ^Consumer consumer
                              (merge {:crux/event-type :crux/indexed-tx}
                                     (select-keys ev [:committed?])

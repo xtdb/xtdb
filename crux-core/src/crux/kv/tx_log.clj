@@ -34,7 +34,7 @@
    :crux.tx/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
 (defn- ingest-tx [tx-ingester tx tx-events]
-  (let [in-flight-tx (db/begin-tx tx-ingester tx)]
+  (let [in-flight-tx (db/begin-tx tx-ingester tx nil)]
     (if (db/index-tx-events in-flight-tx tx-events)
       (db/commit in-flight-tx)
       (db/abort in-flight-tx))))

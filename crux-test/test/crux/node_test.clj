@@ -141,7 +141,7 @@
         tx1 {::tx/tx-id 1
              ::tx/tx-time (Date.)}
         tx-evt {:crux/event-type ::tx/indexed-tx
-                ::tx/submitted-tx tx1
+                :submitted-tx tx1
                 ::txe/tx-events []
                 :committed? true}]
 
@@ -165,7 +165,7 @@
       (let [!latch (promise)]
         (future
           (Thread/sleep 100)
-          (bus/send bus (assoc-in tx-evt [::tx/submitted-tx ::tx/tx-id] 0)))
+          (bus/send bus (assoc-in tx-evt [:submitted-tx ::tx/tx-id] 0)))
 
         (with-latest-tx nil
           (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500)))))))
@@ -174,7 +174,7 @@
       (future
         (Thread/sleep 100)
         (bus/send bus {:crux/event-type ::tx/ingester-error
-                       ::tx/ingester-error (ex-info "Ingester error" {})}))
+                       :ingester-error (ex-info "Ingester error" {})}))
 
       (with-latest-tx nil
         (t/is (thrown-with-msg? Exception #"Transaction ingester aborted."
