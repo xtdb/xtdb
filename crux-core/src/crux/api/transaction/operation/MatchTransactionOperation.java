@@ -24,22 +24,17 @@ public class MatchTransactionOperation extends TransactionOperation {
     }
 
     public static MatchTransactionOperation factory(PersistentVector vector) {
-        //TODO: Make correct after James' fix goes into master
-        Object id = null;
+        Object id = vector.get(1);
         ICruxDocument document = null;
         Date validTime = null;
 
-        Object o1 = vector.get(1);
+        Object o1 = vector.get(2);
         if (o1 instanceof IPersistentMap) {
             document = CruxDocument.factory((IPersistentMap) o1);
-            id = document.getDocumentId();
-        }
-        else {
-            id = o1;
         }
 
-        if (vector.size() > 2) {
-            validTime = (Date) vector.get(2);
+        if (vector.size() > 3) {
+            validTime = (Date) vector.get(3);
         }
 
         return new MatchTransactionOperation(id, document, validTime);
