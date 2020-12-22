@@ -16,7 +16,7 @@
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery]
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery TopDocs]
            [org.apache.lucene.store Directory FSDirectory]))
 
 (def ^:dynamic *lucene-store*)
@@ -76,20 +76,31 @@
 
 (defn search [lucene-store, ^Query q]
   (assert lucene-store)
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store
+  (let [{:keys [^Directory directory]} lucene-store
         directory-reader (DirectoryReader/open directory)
         index-searcher (IndexSearcher. directory-reader)
         q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
-        score-docs (.-scoreDocs (.search index-searcher q 1000))]
+        score-docs (letfn [(docs-page [after]
+                             (lazy-seq
+                              (let [^TopDocs
+                                    top-docs (if after
+                                               (.searchAfter index-searcher after q 100)
+                                               (.search index-searcher q 100))
+                                    score-docs (.-scoreDocs top-docs)]
+                                (concat score-docs
+                                        (when (= 100 (count score-docs))
+                                          (docs-page (last score-docs)))))))]
+                     (docs-page nil))]
 
     (when (seq score-docs)
       (log/debug (.explain index-searcher q (.-doc ^ScoreDoc (first score-docs)))))
 
     (cio/->cursor (fn []
                     (.close directory-reader))
-                  (map (fn [^ScoreDoc d]
-                         (vector (.doc index-searcher (.-doc d))
-                                 (.-score d))) score-docs))))
+                  (->> score-docs
+                       (map (fn [^ScoreDoc d]
+                              (vector (.doc index-searcher (.-doc d))
+                                      (.-score d))))))))
 
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
   (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
