@@ -258,6 +258,12 @@
         (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
           (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
 
+      (t/testing "match includes eid"
+        (let [tx (fix/submit+await-tx [[:crux.tx/match :foo nil]])]
+          (with-open [tx-log (api/open-tx-log *api* (dec (:crux.tx/tx-id tx)) true)]
+            (t/is (= [:crux.tx/match (c/new-id :foo) (c/new-id nil)]
+                     (-> (iterator-seq tx-log) first :crux.api/tx-ops first))))))
+
       ;; Intermittent failure on Kafka, see #1256
       (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
         (t/testing "tx fns return with-ops? correctly"
