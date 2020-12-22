@@ -16,7 +16,8 @@
                  [com.github.jnr/jnr-ffi "2.1.9" :scope "provided"]
                  [edn-query-language/eql "1.0.0"]
                  [junit/junit "4.12"]
-                 [org.hamcrest/hamcrest "2.2"]]
+                 ;;[org.hamcrest/hamcrest "2.2"]
+                 ]
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                             :dependencies [[juxt/crux-http-server "crux-git-version-alpha"]]}
@@ -32,5 +33,6 @@
                   "-Werror"
                   "-proc:none"]
   :junit ["test"]
+  :junit-formatter :summary
   :pedantic? :warn
   :plugins [[lein-junit "1.1.9"]])

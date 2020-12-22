@@ -1,6 +1,7 @@
 package crux.api.transaction.operation;
 
 import clojure.lang.PersistentVector;
+import crux.api.exception.CruxIdException;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -13,6 +14,7 @@ public class DeleteTransactionOperation extends TransactionOperation {
 
     private DeleteTransactionOperation(Object id, Date validTime, Date endValidTime) {
         super(Type.DELETE);
+        CruxIdException.assertValidType(id);
         this.id = id;
         this.validTime = validTime;
         this.endValidTime = endValidTime;

@@ -4,6 +4,7 @@ import clojure.lang.IPersistentMap;
 import clojure.lang.PersistentVector;
 import crux.api.document.CruxDocument;
 import crux.api.document.ICruxDocument;
+import crux.api.exception.CruxIdException;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -16,6 +17,7 @@ public class MatchTransactionOperation extends TransactionOperation {
 
     private MatchTransactionOperation(Object id, ICruxDocument document, Date validTime) {
         super(Type.MATCH);
+        CruxIdException.assertValidType(id);
         this.id = id;
         this.document = document;
         this.validTime = validTime;

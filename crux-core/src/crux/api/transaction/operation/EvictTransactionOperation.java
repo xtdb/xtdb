@@ -1,6 +1,7 @@
 package crux.api.transaction.operation;
 
 import clojure.lang.PersistentVector;
+import crux.api.exception.CruxIdException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -10,6 +11,7 @@ public class EvictTransactionOperation extends TransactionOperation {
 
     private EvictTransactionOperation(Object id) {
         super(Type.EVICT);
+        CruxIdException.assertValidType(id);
         this.id = id;
     }
 

@@ -4,6 +4,7 @@ import clojure.lang.*;
 import crux.api.document.CruxDocument;
 import crux.api.document.ICruxDocument;
 import crux.api.exception.CruxDocumentException;
+import crux.api.exception.CruxIdException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -135,7 +136,7 @@ public class DocumentTest {
         assertIdAllowed(PersistentArrayMap.create(myId));
     }
 
-    @Test(expected = CruxDocumentException.class)
+    @Test(expected = CruxIdException.class)
     public void otherIdsThrow() {
         IPersistentVector myId = PersistentVector.create("foo", "bar");
         MyDocument myDocument = createMyDocument(myId);
