@@ -3,7 +3,7 @@
            [crux.cache.second_chance ConcurrentHashMapTableAccess ValuePointer]
            java.util.function.Function
            [java.util Map$Entry Queue]
-           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue Semaphore]
+           [java.util.concurrent ConcurrentHashMap LinkedBlockingQueue Semaphore ThreadLocalRandom]
            java.util.concurrent.atomic.AtomicReference)
   (:require [crux.system :as sys]
             [crux.cache.nop]))
@@ -15,7 +15,7 @@
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
   (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
     (let [len (alength table)
-          start (long (rand-int len))]
+          start (.nextInt (ThreadLocalRandom/current) len)]
       (loop [i start]
         (if-let [^Map$Entry e (aget table i)]
           e
