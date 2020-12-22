@@ -875,11 +875,11 @@
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
     (fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true
-                                                           cav-cache canonical-buffer-cache temp-hash-cache)
+                                                           cav-cache temp-hash-cache)
                                     (fork/->CappedIndexSnapshot (:crux.db/valid-time fork-at)
                                                                 (get fork-at :crux.tx/tx-id (:crux.tx/tx-id tx))))
                                 (new-kv-index-snapshot (kv/new-snapshot transient-kv-store) true
-                                                       cav-cache canonical-buffer-cache temp-hash-cache)
+                                                       cav-cache temp-hash-cache)
                                 @!evicted-eids)))
 
 (defrecord KvIndexStore [kv-store cav-cache]
