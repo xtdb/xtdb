@@ -8,6 +8,7 @@ import crux.api.document.ICruxDocument;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 
 public class PutTransactionOperation extends TransactionOperation {
     private final ICruxDocument document;
@@ -64,5 +65,21 @@ public class PutTransactionOperation extends TransactionOperation {
         }
 
         return ret;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        PutTransactionOperation that = (PutTransactionOperation) o;
+        return type.equals(that.type)
+                && ICruxDocument.equals(document, that.document)
+                && Objects.equals(validTime, that.validTime)
+                && Objects.equals(endValidTime, that.endValidTime);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type, document, validTime, endValidTime);
     }
 }

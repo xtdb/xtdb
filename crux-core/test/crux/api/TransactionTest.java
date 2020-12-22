@@ -2,11 +2,13 @@ package crux.api;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
+import clojure.lang.LazySeq;
 import crux.api.document.CruxDocument;
 import crux.api.document.ICruxDocument;
 import crux.api.transaction.Transaction;
 import org.junit.*;
 
+import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
@@ -66,7 +68,7 @@ public class TransactionTest {
 
     @After
     public void cleanUp() {
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.evict(pabloId);
         });
 
@@ -83,12 +85,50 @@ public class TransactionTest {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    private Map<Keyword,?> submitTx(Consumer<Transaction.Builder> f) {
+    
+    private Map<Keyword,?> submitTx(boolean shouldAbort, Consumer<Transaction.Builder> f) {
         Transaction transaction = Transaction.build(f);
-        Map<Keyword,?> ret = node.submitTx(transaction.toEdn());
+        return submitTx(shouldAbort, transaction);
+    }
+
+    /**
+     * This will also check that we can successfully rebuild the Transaction from the TxLog
+     */
+    @SuppressWarnings("unchecked")
+    private Map<Keyword,?> submitTx(boolean shouldAbort, Transaction transaction) {
+        Map<Keyword,?> submitted = node.submitTx(transaction.toEdn());
+
         sync();
-        return ret;
+
+        Long txId = (Long) submitted.get(Keyword.intern("crux.tx/tx-id"));
+        ICursor<Map<Keyword, ?>> cursor = node.openTxLog(txId - 1, true);
+        if (shouldAbort) {
+            Assert.assertFalse(cursor.hasNext());
+            return submitted;
+        }
+
+        Assert.assertTrue(cursor.hasNext());
+
+        Map<Keyword, ?> tx = cursor.next();
+
+        Assert.assertFalse(cursor.hasNext());
+        try {
+            cursor.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+            Assert.fail();
+        }
+
+        Assert.assertNotNull(tx);
+
+        LazySeq txOpsSeq = (LazySeq) tx.get(Keyword.intern("crux.api/tx-ops"));
+        Object[] txOps = txOpsSeq.toArray();
+
+        Transaction fromLog = Transaction.factory(txOps);
+
+        Assert.assertEquals(transaction, fromLog);
+
+        return submitted;
     }
 
     private void sync() {
@@ -154,7 +194,7 @@ public class TransactionTest {
 
     @Test
     public void putNow() {
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.put(pablos.get(0));
         });
 
@@ -163,7 +203,7 @@ public class TransactionTest {
 
     @Test
     public void putAtTime() {
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1));
         });
 
@@ -176,7 +216,7 @@ public class TransactionTest {
     @Test
     public void putWithEndValidTime() {
 
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -190,7 +230,7 @@ public class TransactionTest {
 
     @Test
     public void putDifferentVersions() {
-        submitTx ( tx -> {
+        submitTx (false,  tx -> {
             tx.put(pablo(0), time(1));
             tx.put(pablo(1), time(3));
         });
@@ -205,7 +245,7 @@ public class TransactionTest {
 
     @Test
     public void deleteNow() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1));
             tx.delete(pabloId);
         });
@@ -218,7 +258,7 @@ public class TransactionTest {
 
     @Test
     public void deleteAtSpecificTime() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1));
             tx.delete(pabloId, time(3));
         });
@@ -233,7 +273,7 @@ public class TransactionTest {
 
     @Test
     public void deleteWithEndTime() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1));
             tx.delete(pabloId, time(3), time(5));
         });
@@ -250,7 +290,7 @@ public class TransactionTest {
 
     @Test
     public void deleteWithSubsequentChange() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1));
             tx.put(pablo(1), time(5));
         });
@@ -264,7 +304,7 @@ public class TransactionTest {
         assertPabloVersion(1, 6);
         assertPabloVersion(1);
 
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.delete(pabloId, time(3));
         });
 
@@ -280,13 +320,13 @@ public class TransactionTest {
 
     @Test
     public void successfulMatchNow() {
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
-        submitTx( tx -> {
+        submitTx(false, tx -> {
             tx.match(pablo(0));
             tx.put(pablo(1));
         });
@@ -296,13 +336,13 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulMatchNow() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
-        submitTx ( tx -> {
+        submitTx (true, tx -> {
             tx.match(pablo(2));
             tx.put(pablo(3));
         });
@@ -312,7 +352,7 @@ public class TransactionTest {
 
     @Test
     public void successfulMatchWithValidTime() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
            tx.put(pablo(0), time(1), time(3));
         });
 
@@ -323,7 +363,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.match(pablo(0), time(2));
             tx.put(pablo(1), time(3));
         });
@@ -338,7 +378,7 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulMatchWithValidTime() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -349,7 +389,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx ( tx -> {
+        submitTx (true, tx -> {
             tx.match(pablo(0), time(4));
             tx.put(pablo(1), time(3));
         });
@@ -366,7 +406,7 @@ public class TransactionTest {
     public void successfulEmptyMatch() {
         assertNoPablo();
 
-        submitTx ( tx -> {
+        submitTx (false,  tx -> {
             tx.matchNotExists(pabloId);
             tx.put(pablo(0));
         });
@@ -376,13 +416,13 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulEmptyMatch() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
-        submitTx ( tx -> {
+        submitTx (true, tx -> {
             tx.matchNotExists(pabloId);
             tx.put(pablo(0));
         });
@@ -392,7 +432,7 @@ public class TransactionTest {
 
     @Test
     public void successfulEmptyMatchAtTime() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -403,7 +443,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.matchNotExists(pabloId, time(3));
             tx.put(pablo(1), time(3));
         });
@@ -418,7 +458,7 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulEmptyMatchAtTime() {
-        submitTx ( tx -> {
+        submitTx (false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
 
@@ -429,7 +469,7 @@ public class TransactionTest {
         assertNoPablo(4);
         assertNoPablo();
 
-        submitTx ( tx -> {
+        submitTx (true, tx -> {
             tx.matchNotExists(pabloId, time(2));
             tx.put(pablo(1), time(3));
         });

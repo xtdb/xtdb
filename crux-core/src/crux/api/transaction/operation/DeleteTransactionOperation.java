@@ -1,11 +1,13 @@
 package crux.api.transaction.operation;
 
 import clojure.lang.PersistentVector;
+import crux.api.document.CruxId;
 import crux.api.exception.CruxIdException;
 
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Objects;
 
 public class DeleteTransactionOperation extends TransactionOperation {
     private final Object id;
@@ -14,8 +16,7 @@ public class DeleteTransactionOperation extends TransactionOperation {
 
     private DeleteTransactionOperation(Object id, Date validTime, Date endValidTime) {
         super(Type.DELETE);
-        CruxIdException.assertValidType(id);
-        this.id = id;
+        this.id = CruxId.validate(id);
         this.validTime = validTime;
         this.endValidTime = endValidTime;
     }
@@ -58,5 +59,21 @@ public class DeleteTransactionOperation extends TransactionOperation {
             ret.add(validTime);
         }
         return ret;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        DeleteTransactionOperation that = (DeleteTransactionOperation) o;
+        return type.equals(that.type)
+                && CruxId.equals(id, that.id)
+                && Objects.equals(validTime, that.validTime)
+                && Objects.equals(endValidTime, that.endValidTime);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(type, id, validTime, endValidTime);
     }
 }

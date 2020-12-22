@@ -4,6 +4,7 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 
 import java.util.List;
+import java.util.Objects;
 
 public abstract class TransactionOperation {
     enum Type {
@@ -41,7 +42,7 @@ public abstract class TransactionOperation {
         return null;
     }
 
-    private final Type type;
+    protected final Type type;
 
     TransactionOperation(Type type) {
         this.type = type;
