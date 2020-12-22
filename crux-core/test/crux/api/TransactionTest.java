@@ -2,7 +2,6 @@ package crux.api;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
-import clojure.lang.LazySeq;
 import crux.api.document.CruxDocument;
 import crux.api.document.ICruxDocument;
 import crux.api.transaction.Transaction;
@@ -69,10 +68,8 @@ public class TransactionTest {
 
     @After
     public void cleanUp() {
-        submitTx(false, tx -> {
-            tx.evict(pabloId);
-        });
-
+        //Just restart. Makes everything clean.
+        node = Crux.startNode();
         sync();
     }
 
@@ -106,6 +103,12 @@ public class TransactionTest {
         ICursor<TransactionWrapper> cursor = node.openTxLog(txId - 1);
         if (shouldAbort) {
             Assert.assertFalse(cursor.hasNext());
+            try {
+                cursor.close();
+            } catch (IOException e) {
+                e.printStackTrace();
+                Assert.fail();
+            }
             return submitted;
         }
 
@@ -121,9 +124,7 @@ public class TransactionTest {
         }
 
         Assert.assertNotNull(transactionWrapper);
-
         Transaction transactionFromLog = transactionWrapper.getTransaction();
-
         Assert.assertNotNull(transactionFromLog);
         Assert.assertEquals(txId, transactionWrapper.getId());
         Assert.assertEquals(transaction, transactionFromLog);
@@ -210,6 +211,8 @@ public class TransactionTest {
         assertNoPablo(0);
         assertPabloVersion(0, 1);
         assertPabloVersion(0, 2);
+
+        Map<Keyword, Object> entity = node.db().entity(pabloId);
         assertPabloVersion(0);
     }
 
