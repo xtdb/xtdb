@@ -324,6 +324,12 @@
                             (c/q db {:find '[?e]
                                      :where '[[(lucene-text-search "firstname: Fred") [[?e]]]]})))))
 
+(t/deftest results-not-limited-to-1000
+  (submit+await-tx (for [n (range 1001)] [:crux.tx/put {:crux.db/id n, :description (str "Entity " n)}]))
+  (with-open [db (c/open-db *api*)]
+    (t/is (= 1001 (count (c/q db {:find '[?e]
+                                  :where '[[(text-search :description "Entity*") [[?e]]]]}))))))
+
 (comment
   (do
     (import '[ch.qos.logback.classic Level Logger]
