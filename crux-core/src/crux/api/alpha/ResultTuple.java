@@ -35,7 +35,6 @@ public class ResultTuple {
      * @param key A string representing the logical variable
      * @return Value at logical variable
      */
-
     public Object get(String key) {
         return get(Util.symbol(key));
     }
@@ -45,7 +44,6 @@ public class ResultTuple {
      * @param idx Index to retrieve value from
      * @return Value at index.
      */
-
     public Object get(int idx) {
         return resultArray.get(idx);
     }

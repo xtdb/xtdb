@@ -1,6 +1,5 @@
 package crux.api.alpha;
 
-
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 

@@ -22,7 +22,6 @@ public class Document {
      * @param attr The key to extract a value from
      * @return Value at key
      */
-
     public Object get(Keyword attr) {
         return document.get(attr);
     }
@@ -32,7 +31,6 @@ public class Document {
      * @param attr The key to extract a value from
      * @return Value at key
      */
-
     public Object get(String attr) {
         return document.get(crux.api.alpha.Util.keyword(attr));
     }
@@ -41,7 +39,6 @@ public class Document {
      * Returns the CruxId from the Document.
      * @return CruxId from the Document.
      */
-
     public CruxId getId() {
         return CruxId.cruxId(document.get(crux.api.alpha.Util.keyword("crux.db/id")));
     }
@@ -51,7 +48,6 @@ public class Document {
      * @param id Id to put in the document
      * @return An instance of Document
      */
-
     public static Document document(CruxId id) {
         Map<Keyword, Object> initialDoc = Collections.singletonMap(crux.api.alpha.Util.keyword("crux.db/id"), id.toEdn());
         return new Document(initialDoc);
@@ -74,7 +70,6 @@ public class Document {
      * @param attrs Map of keywords and values to add to the document
      * @return Document containing the previous contents of the document and the attributes
      */
-
     public Document with(Map<Keyword, ?> attrs) {
         Map<Keyword, Object> newDoc = new HashMap<>(this.document);
         newDoc.putAll(attrs);
@@ -87,7 +82,6 @@ public class Document {
      * @param value Value to place in the Document
      * @return Document containing the previous contents of the document and the new key-value pair
      */
-
     public Document with(Keyword attr, Object value) {
         Map<Keyword, Object> newDoc = new HashMap<>(this.document);
         newDoc.put(attr, value);
@@ -100,7 +94,6 @@ public class Document {
      * @param value Value to place in the Document
      * @return Document containing the previous contents of the document and the new key-value pair
      */
-
     public Document with(String attr, Object value) {
         return with(crux.api.alpha.Util.keyword(attr), value);
     }
