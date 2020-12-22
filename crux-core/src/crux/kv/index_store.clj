@@ -887,7 +887,7 @@
   (begin-index-tx [_ tx fork-at]
     (->KvIndexStoreTx kv-store (mut-kv/->mutable-kv-store) tx fork-at
                       (atom #{})
-                      (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) (HashMap.)))
+                      (nop-cache/->nop-cache {}) (HashMap.)))
 
   ;; TODO, make use of this fn in unindex-eids
   (exclusive-avs [_ eids]
