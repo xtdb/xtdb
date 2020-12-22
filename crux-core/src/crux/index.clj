@@ -393,16 +393,18 @@
     (set! depth 0)
     (aset indexes 0 root-index)))
 
-(defn- tree-map-put-in [^TreeMap m [k & ks] v]
-  (if ks
-    (doto m
-      (-> (.computeIfAbsent k
-                            (reify Function
-                              (apply [_ k]
-                                (TreeMap. (.comparator m)))))
-          (tree-map-put-in ks v)))
-    (doto m
-      (.put k v))))
+(defn- tree-map-put-in ^java.util.TreeMap [^TreeMap m k-fn ^List ks v]
+  (loop [n 0
+         acc m]
+    (if (< n (dec (.size ks)))
+      (recur (inc n)
+             (.computeIfAbsent acc
+                               (k-fn (.get ks n))
+                               (reify Function
+                                 (apply [_ k]
+                                   (TreeMap. (.comparator m))))))
+      (do (.put acc (k-fn (.get ks n)) v)
+          m))))
 
 (defn update-relation-virtual-index!
   ([^RelationVirtualIndex relation tuples]
@@ -411,14 +413,18 @@
    (let [tree (when-not single-values?
                 (reduce
                  (fn [acc tuple]
-                   (tree-map-put-in acc (mapv encode-value-fn tuple) nil))
+                   (tree-map-put-in acc encode-value-fn tuple nil))
                  (TreeMap. mem/buffer-comparator)
                  tuples))
          root-idx (if single-values?
                     (new-sorted-virtual-index (if (instance? NavigableSet tuples)
                                                 tuples
-                                                (doto (TreeSet. mem/buffer-comparator)
-                                                  (.addAll (mapv encode-value-fn tuples)))))
+                                                (reduce
+                                                 (fn [^NavigableSet acc v]
+                                                   (doto acc
+                                                     (.add (encode-value-fn v))))
+                                                 (TreeSet. mem/buffer-comparator)
+                                                 tuples)))
                     (new-sorted-virtual-index (.navigableKeySet ^NavigableMap tree)))]
      (.updateIndex relation tree root-idx)
      relation)))
