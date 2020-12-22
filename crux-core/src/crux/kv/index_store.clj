@@ -488,7 +488,6 @@
     (and found-k
          (mem/buffers=? found-k hash-cache-prefix-key (.capacity hash-cache-prefix-key)))))
 
-<<<<<<< HEAD
 (deftype SortedListSet [^List vs]
   NavigableSet
   (tailSet [_ k]
