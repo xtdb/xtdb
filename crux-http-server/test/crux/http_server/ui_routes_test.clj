@@ -9,7 +9,8 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
             [crux.http-server.entity-ref :as entity-ref]
-            [jsonista.core :as json])
+            [jsonista.core :as json]
+            [crux.query-state :as cqs])
   (:import java.io.InputStream))
 
 (t/use-fixtures :each
@@ -23,6 +24,8 @@
                                                                                     "crux/base64" (transit/read-handler c/base64-reader)}}))
     "application/json" (json/read-value body)
     "application/edn" (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef
+                                                  'crux/query-state cqs/->QueryState
+                                                  'crux/query-error cqs/->QueryError
                                                   'crux/id str}}
                                        (slurp body))
     "text/csv" (with-open [rdr (io/reader body)]

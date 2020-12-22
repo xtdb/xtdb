@@ -18,7 +18,9 @@
     (condp = (.read in)
       -1 nil
       (int \() (->> (repeatedly #(try
-                                   (edn/read {:readers {'crux/id c/id-edn-reader}
+                                   (edn/read {:readers {'crux/id c/id-edn-reader
+                                                        'crux/query-state qs/->QueryState
+                                                        'crux/query-error qs/->QueryError}
                                               :eof ::eof} in)
                                    (catch RuntimeException e
                                      (if (= "Unmatched delimiter: )" (.getMessage e))
