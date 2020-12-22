@@ -154,19 +154,21 @@
 (def ^:const ^:private chunk-size 8)
 
 (defn idx->seq
-  [idx]
-  (when-let [result (db/seek-values idx nil)]
-    ((fn step [cb v]
-       (if v
-         (do (chunk-append cb v)
-             (if (= (count cb) chunk-size)
-               (chunk-cons (chunk cb)
-                           (lazy-seq
-                            (step (chunk-buffer chunk-size)
-                                  (db/next-values idx))))
-               (recur cb (db/next-values idx))))
-         (chunk-cons (chunk cb) nil)))
-     (chunk-buffer chunk-size) result)))
+  ([idx]
+   (idx->seq idx identity))
+  ([idx v-fn]
+   (when-let [result (db/seek-values idx nil)]
+     ((fn step [cb v]
+        (if v
+          (do (chunk-append cb (v-fn v))
+              (if (= (count cb) chunk-size)
+                (chunk-cons (chunk cb)
+                            (lazy-seq
+                             (step (chunk-buffer chunk-size)
+                                   (db/next-values idx))))
+                (recur cb (db/next-values idx))))
+          (chunk-cons (chunk cb) nil)))
+      (chunk-buffer chunk-size) result))))
 
 ;; Join
 
@@ -282,7 +284,11 @@
     nil)
 
   (max-depth [this]
-    (alength indexes)))
+    (alength indexes))
+
+  IDeref
+  (deref [this]
+    join-keys))
 
 (defn new-n-ary-join-layered-virtual-index
   ([indexes]
@@ -294,30 +300,33 @@
                                   (doto (ArrayList.)
                                     (.addAll (repeat (count indexes) nil))))))
 
-(defn layered-idx->seq [idx]
-  (when idx
-    (let [max-depth (long (db/max-depth idx))
-          step (fn step [^IPersistentVector max-ks ^long depth needs-seek?]
-                 (when (Thread/interrupted)
-                   (throw (InterruptedException.)))
-                 (if (= depth (dec max-depth))
-                   (concat
-                    (for [v (idx->seq idx)]
-                      (.assocN max-ks depth v))
-                    (when (pos? depth)
-                      (lazy-seq
-                       (db/close-level idx)
-                       (step max-ks (dec depth) false))))
-                   (if-let [v (if needs-seek?
-                                (db/seek-values idx nil)
-                                (db/next-values idx))]
-                     (do (db/open-level idx)
-                         (recur (.assocN max-ks depth v) (inc depth) true))
+(defn layered-idx->seq
+  ([idx]
+   (layered-idx->seq idx vec))
+  ([idx tuple-fn]
+   (when idx
+     (let [max-depth (long (db/max-depth idx))
+           step (fn step [^long depth needs-seek?]
+                  (when (Thread/interrupted)
+                    (throw (InterruptedException.)))
+                  (if (= depth (dec max-depth))
+                    (concat
+                     (idx->seq idx (fn [_]
+                                     (tuple-fn @idx)))
                      (when (pos? depth)
-                       (db/close-level idx)
-                       (recur max-ks (dec depth) false)))))]
-      (when (pos? max-depth)
-        (step (vec (repeat max-depth nil)) 0 true)))))
+                       (lazy-seq
+                        (db/close-level idx)
+                        (step (dec depth) false))))
+                    (if-let [v (if needs-seek?
+                                 (db/seek-values idx nil)
+                                 (db/next-values idx))]
+                      (do (db/open-level idx)
+                          (recur (inc depth) true))
+                      (when (pos? depth)
+                        (db/close-level idx)
+                        (recur (dec depth) false)))))]
+       (when (pos? max-depth)
+         (step 0 true))))))
 
 (deftype SingletonVirtualIndex [v]
   db/Index

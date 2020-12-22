@@ -1047,6 +1047,11 @@
         {:join-depth pred-join-depth
          :constraint-fn (pred-constraint clause pred-ctx)})))
 
+(defn- project-join-keys-fn [index-snapshot ^ints var-indexes]
+  (fn [^List join-keys]
+    (persistent! (areduce var-indexes n acc (transient []) (conj! acc (->> (.get join-keys (aget var-indexes n))
+                                                                           (db/decode-value index-snapshot)))))))
+
 ;; TODO: For or (but not or-join) it might be possible to embed the
 ;; entire or expression into the parent join via either OrVirtualIndex
 ;; (though as all joins now are binary they have variable order
@@ -1117,12 +1122,14 @@
                                                                       *recursion-table*)]
                                           (let [{:keys [n-ary-join
                                                         var->bindings]} (build-sub-query index-snapshot db where or-in-bindings in-args rule-name->rules stats)
-                                                free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
-                                            (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
+                                                var-indexes (int-array (map (comp :result-index var->bindings) free-vars-in-join-order))]
+                                            (when-let [idx-seq (seq (idx/layered-idx->seq
+                                                                     n-ary-join
+                                                                     (if has-free-vars?
+                                                                       (project-join-keys-fn index-snapshot var-indexes)
+                                                                       (constantly nil))))]
                                               (if has-free-vars?
-                                                (vec (for [join-keys idx-seq]
-                                                       (vec (for [var-binding free-vars-in-join-order-bindings]
-                                                              (bound-result-for-var index-snapshot var-binding join-keys)))))
+                                                (vec idx-seq)
                                                 []))))))))]
              (when (seq (remove nil? branch-results))
                (when has-free-vars?
@@ -1154,7 +1161,7 @@
                              [(vec (for [var-binding not-var-bindings]
                                      (bound-result-for-var index-snapshot var-binding join-keys)))])
                    {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
-               (empty? (idx/layered-idx->seq n-ary-join)))))})))
+               (empty? (idx/layered-idx->seq n-ary-join (constantly nil))))))})))
 
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
   (let [g (->> (keys var->joins)
@@ -1686,8 +1693,7 @@
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
-          project? (or (contains? var-types :project) full-results?)
-          var-bindings (mapv :var-binding compiled-find)]
+          project? (or (contains? var-types :project) full-results?)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
         (throw (err/illegal-arg :find-unknown-var
@@ -1698,10 +1704,8 @@
                                 {::err/message  (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
       (lazy-seq
-       (cond->> (for [join-keys (idx/layered-idx->seq n-ary-join)]
-                  (mapv (fn [var-binding]
-                          (bound-result-for-var index-snapshot var-binding join-keys))
-                        var-bindings))
+       (cond->> (let [var-indexes (int-array (map (comp :result-index :var-binding) compiled-find))]
+                  (idx/layered-idx->seq n-ary-join (project-join-keys-fn index-snapshot var-indexes)))
 
          aggregate? (aggregate-result compiled-find)
          order-by (cio/external-sort (order-by-comparator find order-by))
