@@ -2,10 +2,6 @@
 
 A https://opencrux.com[Crux] library that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
 
-WIP! TODO:
-
-* allow user to override document mapping
-
 Things of interest:
 
 `crux-corda` library::
@@ -42,8 +38,25 @@ data class IOUState(val value: Int,
 class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializeAsToken() {
 
     val node = serviceHub.startCruxNode {
-        // this :: crux.api.NodeConfigurator
+        // configure node
     }
+}
+----
++
+By default, Crux looks out for Corda states that implement `CruxState`, but you can manually specify this mapping thus:
+[source,kotlin]
+----
+val node = serviceHub.startCruxNode {
+    withCordaTxLog {
+        withDocumentMapping { doc ->
+            // this is the default implementation,
+            // replace it with your own mapping
+            if (doc is CruxState) listOf(doc)
+            else null
+        }
+    }
+
+    // ...
 }
 ----
 * `iou-workflow/src/test/kotlin/com/example/workflow/IOUFlowTests.kt` - E2E test for the IOU app

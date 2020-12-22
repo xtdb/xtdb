@@ -9,6 +9,7 @@ import crux.api.Crux
 import crux.api.ICruxAPI
 import crux.api.ModuleConfigurator
 import crux.api.NodeConfigurator
+import crux.corda.state.CruxState
 import net.corda.core.crypto.SecureHash
 import net.corda.core.node.AppServiceHub
 
@@ -18,10 +19,36 @@ private val CRUX_CORDA_SERVICE = Clojure.`var`("clojure.core", "require")(Clojur
 private val SYNC_TXS = Clojure.`var`("crux.corda/sync-txs")
 private val TO_CRUX_TX = Clojure.`var`("crux.corda/->crux-tx")
 
-fun NodeConfigurator.withCordaTxLog(txLogConfigurator: ModuleConfigurator.() -> Unit = {}) {
+@Suppress("unused")
+data class CruxDoc(
+    override val cruxId: Any,
+    override val cruxDoc: Map<String, Any>
+) : CruxState
+
+@Suppress("unused")
+class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfigurator) {
+    // TODO migrate `ModuleConfigurator` to interface
+    fun set(key: String, value: Any) { moduleConfigurator.set(key, value) }
+    fun set(kvs: Map<String, Any>) { moduleConfigurator.set(kvs) }
+    fun with(module: String) { moduleConfigurator.with(module) }
+    fun with(module: String, ref: String) { moduleConfigurator.with(module, ref) }
+    fun with(module: String, configurator: ModuleConfigurator.() -> Unit) { moduleConfigurator.with(module) { configurator(it) } }
+
+    fun withDocumentMapping(f: (Any) -> Iterable<CruxState>?) {
+        moduleConfigurator.with("document-mapper") {
+            it.set("crux/module", object : AFunction() {
+                override fun invoke(opts: Any) = object : AFunction() {
+                    override fun invoke(cordaState: Any) = f(cordaState)
+                }
+            })
+        }
+    }
+}
+
+fun NodeConfigurator.withCordaTxLog(txLogConfigurator: CordaTxLogConfigurator.() -> Unit = {}) {
     with("crux/tx-log") {
         it.module("crux.corda/->tx-log")
-        txLogConfigurator(it)
+        txLogConfigurator(CordaTxLogConfigurator(it))
     }
 }
 

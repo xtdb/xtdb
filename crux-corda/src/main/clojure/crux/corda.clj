@@ -73,23 +73,21 @@
   (.getTransaction (.getValidatedTransactions service-hub)
                    (SecureHash/parse corda-tx-id)))
 
-(defn- ->crux-doc [^TransactionState tx-state]
-  (when-let [^CruxState
-             crux-state (let [data (.getData tx-state)]
-                          (when (instance? CruxState data)
-                            data))]
+(defn- ->crux-docs [^TransactionState tx-state {:keys [document-mapper]}]
+  (for [^CruxState crux-state (document-mapper (.getData tx-state))
+        :when (instance? CruxState crux-state)]
     (merge {:crux.db/id (.getCruxId crux-state)}
            (->> (.getCruxDoc crux-state)
                 (into {} (map (juxt (comp keyword key) val)))))))
 
-(defn- transform-corda-tx [^SignedTransaction corda-tx service-hub]
+(defn- transform-corda-tx [^SignedTransaction corda-tx {:keys [service-hub] :as opts}]
   (let [ledger-tx (.toLedgerTransaction corda-tx service-hub)
         consumed-ids (->> (.getInputs ledger-tx)
                           (map #(.getState ^StateAndRef %))
-                          (keep ->crux-doc)
+                          (mapcat #(->crux-docs % opts))
                           (into #{} (map :crux.db/id)))
         new-docs (->> (.getOutputs ledger-tx)
-                      (keep ->crux-doc)
+                      (mapcat #(->crux-docs % opts))
                       (into {} (map (juxt c/new-id identity))))]
     {::tx/tx-events (concat (for [deleted-id (set/difference consumed-ids (set (keys new-docs)))]
                               [::tx/delete deleted-id])
@@ -98,7 +96,7 @@
                               [::tx/put (:crux.db/id new-doc) new-doc-id]))
      :docs new-docs}))
 
-(defn- ^ICursor open-tx-log [{:keys [dialect ^AppServiceHub service-hub]} after-tx-id]
+(defn- ^ICursor open-tx-log [{:keys [dialect ^AppServiceHub service-hub] :as tx-log} after-tx-id]
   (let [stmt (jdbc/prepare (.jdbcSession service-hub)
                            (if after-tx-id
                              ["SELECT * FROM crux_txs WHERE crux_tx_id > ? ORDER BY crux_tx_id"
@@ -109,17 +107,17 @@
            (let [{:keys [corda-tx-id] :as tx} (tx-row->tx row dialect)
                  corda-tx (->corda-tx corda-tx-id service-hub)]
              (merge (select-keys tx [::tx/tx-id ::tx/tx-time])
-                    (transform-corda-tx corda-tx service-hub))))
+                    (transform-corda-tx corda-tx tx-log))))
          (cio/->cursor #(run! cio/try-close [rs stmt])))))
 
-(defrecord CordaTxLog [dialect ^AppServiceHub service-hub]
+(defrecord CordaTxLog [dialect ^AppServiceHub service-hub, document-mapper]
   db/TxLog
   (submit-tx [this tx-events]
     (throw (UnsupportedOperationException.
             "CordaTxLog does not support submit-tx - submit transactions directly to Corda")))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id]
-    (let [txs (open-tx-log dialect service-hub after-tx-id)]
+    (let [txs (open-tx-log this after-tx-id)]
       (cio/->cursor #(cio/try-close txs)
                     (->> (iterator-seq txs)
                          (map #(select-keys % [::tx/tx-id ::tx/tx-time ::tx/tx-events]))))))
@@ -145,10 +143,16 @@
             ;; TODO behaviour here? abort consumption entirely?
             ))))))
 
+(defn ->document-mapper [_]
+  (fn [doc]
+    (when (instance? CruxState doc)
+      [doc])))
+
 (defn ->tx-log {::sys/deps {:dialect 'crux.corda.h2/->dialect
                             :tx-ingester :crux/tx-ingester
                             :document-store :crux/document-store
-                            :service-hub ::service-hub}}
+                            :service-hub ::service-hub
+                            :document-mapper `->document-mapper}}
   [{:keys [dialect ^AppServiceHub service-hub] :as opts}]
   (setup-tx-schema! dialect (.jdbcSession service-hub))
   (map->CordaTxLog opts))
