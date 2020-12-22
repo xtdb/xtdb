@@ -39,17 +39,16 @@
     idx
     (->DerefIndex idx nil)))
 
-(deftype SeekFnIndex [seek-fn ^:unsynchronized-mutable xs]
+(deftype SeekFnIndex [seek-fn ^:unsynchronized-mutable ^Iterator iterator]
   db/Index
   (seek-values [this k]
-    (let [[v & vs] (seq (seek-fn k))]
-      (set! xs vs)
-      v))
+    (when-let [xs (seek-fn k)]
+      (set! iterator (.iterator ^Iterable xs))
+      (db/next-values this)))
 
   (next-values [this]
-    (when-let [[v & vs] xs]
-      (set! xs vs)
-      v)))
+    (when (and iterator (.hasNext iterator))
+      (.next iterator))))
 
 (defn new-seek-fn-index ^crux.index.SeekFnIndex [seek-fn]
   (->SeekFnIndex seek-fn nil))
