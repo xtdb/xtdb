@@ -180,26 +180,6 @@
           (finally
             (.shutDown repo)))))))
 
-(t/deftest test-statistics
-  (let [^ExecutorService stats-executor (get-in (or *http-server-api* *api*) [:tx-ingester :stats-executor])]
-    (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-      (api/await-tx *api* submitted-tx))
-
-    @(.submit stats-executor ^Runnable (fn []))
-
-    (let [stats (api/attribute-stats *api*)]
-      (t/is (= 1 (:name stats))))
-
-    (t/testing "updated"
-      (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"}]])]
-        (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
-        (t/is (true? (api/tx-committed? *api* submitted-tx))))
-
-      @(.submit stats-executor ^Runnable (fn []))
-
-      (let [stats (api/attribute-stats *api*)]
-        (t/is (= 2 (:name stats)))))))
-
 (t/deftest test-adding-back-evicted-document
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo))

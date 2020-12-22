@@ -1,28 +1,21 @@
 (ns ^:no-doc crux.tx
-  (:require [clojure.set :as set]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.bus :as bus]
-            [crux.cache.nop :as nop-cache]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.error :as err]
             [crux.fork :as fork]
-            [crux.kv :as kv]
             [crux.io :as cio]
-            [crux.kv.index-store :as kvi]
-            [crux.memory :as mem]
-            [crux.mem-kv :as mem-kv]
-            [crux.kv.mutable-kv :as mut-kv]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
-  (:import crux.codec.EntityTx
+  (:import clojure.lang.MapEntry
+           crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
-           [java.util.concurrent Executors ExecutorService TimeUnit]
-           [java.util Date NavigableMap TreeMap]))
+           java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -237,10 +230,9 @@
 (defn- update-stats [attribute-stats docs]
   (merge-with +
               attribute-stats
-              (->> (for [doc docs
-                         [k v] doc]
-                     [k (count (c/vectorize-value v))])
-                   (into {}))))
+              (for [doc docs
+                    [k v] doc]
+                (MapEntry/create k (count (c/vectorize-value v))))))
 
 (defn- tx-fn-doc? [doc]
   (some #{:crux.db.fn/args
@@ -420,14 +412,9 @@
 (defn ->tx-ingester {::sys/deps {:index-store :crux/index-store
                                  :document-store :crux/document-store
                                  :bus :crux/bus
-                                 :query-engine :crux/query-engine}
-                     ::sys/args {:stats-executor? {:default true
-                                                   :spec ::sys/boolean}}}
-  [{:keys [stats-executor?] :as deps}]
-  (map->TxIngester (assoc deps
-                          :!error (atom nil)
-                          :stats-executor (when stats-executor?
-                                            (Executors/newSingleThreadExecutor (cio/thread-factory "crux.tx.update-stats-thread"))))))
+                                 :query-engine :crux/query-engine}}
+  [deps]
+  (map->TxIngester (assoc deps :!error (atom nil))))
 
 (defn- index-tx-log [{:keys [tx-ingester index-store ^Duration poll-sleep-duration]} open-next-txs]
   (log/info "Started tx-consumer")
