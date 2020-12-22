@@ -99,8 +99,8 @@ public class Transaction {
         this.transactionOperations = transactionOperations;
     }
 
-
-    public PersistentVector toEdn() {
+    @SuppressWarnings("unchecked")
+    public List<List<?>> toEdn() {
         List<PersistentVector> persistentVectors = transactionOperations.stream()
                 .map(TransactionOperation::toEdn)
                 .collect(Collectors.toList());

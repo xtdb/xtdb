@@ -6,6 +6,7 @@ import clojure.lang.LazySeq;
 import crux.api.document.CruxDocument;
 import crux.api.document.ICruxDocument;
 import crux.api.transaction.Transaction;
+import crux.api.transaction.TransactionWrapper;
 import org.junit.*;
 
 import java.io.IOException;
@@ -93,25 +94,25 @@ public class TransactionTest {
 
     /**
      * This will also check that we can successfully rebuild the Transaction from the TxLog
+     * (assuming the transaction is supposed to go through)
      */
     @SuppressWarnings("unchecked")
     private Map<Keyword,?> submitTx(boolean shouldAbort, Transaction transaction) {
-        Map<Keyword,?> submitted = node.submitTx(transaction.toEdn());
+        Map<Keyword,?> submitted = node.submit(transaction);
 
         sync();
 
-        Long txId = (Long) submitted.get(Keyword.intern("crux.tx/tx-id"));
-        ICursor<Map<Keyword, ?>> cursor = node.openTxLog(txId - 1, true);
+        long txId = (long) submitted.get(Keyword.intern("crux.tx/tx-id"));
+        ICursor<TransactionWrapper> cursor = node.openTxLog(txId - 1);
         if (shouldAbort) {
             Assert.assertFalse(cursor.hasNext());
             return submitted;
         }
 
         Assert.assertTrue(cursor.hasNext());
-
-        Map<Keyword, ?> tx = cursor.next();
-
+        TransactionWrapper transactionWrapper = cursor.next();
         Assert.assertFalse(cursor.hasNext());
+
         try {
             cursor.close();
         } catch (IOException e) {
@@ -119,14 +120,13 @@ public class TransactionTest {
             Assert.fail();
         }
 
-        Assert.assertNotNull(tx);
+        Assert.assertNotNull(transactionWrapper);
 
-        LazySeq txOpsSeq = (LazySeq) tx.get(Keyword.intern("crux.api/tx-ops"));
-        Object[] txOps = txOpsSeq.toArray();
+        Transaction transactionFromLog = transactionWrapper.getTransaction();
 
-        Transaction fromLog = Transaction.factory(txOps);
-
-        Assert.assertEquals(transaction, fromLog);
+        Assert.assertNotNull(transactionFromLog);
+        Assert.assertEquals(txId, transactionWrapper.getId());
+        Assert.assertEquals(transaction, transactionFromLog);
 
         return submitted;
     }
@@ -215,7 +215,6 @@ public class TransactionTest {
 
     @Test
     public void putWithEndValidTime() {
-
         submitTx(false, tx -> {
             tx.put(pablo(0), time(1), time(3));
         });
@@ -479,6 +478,70 @@ public class TransactionTest {
         assertPabloVersion(0, 2);
         assertNoPablo(3);
         assertNoPablo(4);
+        assertNoPablo();
+    }
+
+    @Test
+    public void reusingTransactions() {
+        Transaction transaction = Transaction.build( tx -> {
+            tx.delete(pabloId);
+        });
+
+        submitTx(false, tx -> {
+            tx.put(pablo(0));
+        });
+
+        assertPabloVersion(0);
+
+        submitTx(false, transaction);
+
+        assertNoPablo();
+
+        submitTx(false, tx -> {
+            tx.put(pablo(1));
+        });
+
+        assertPabloVersion(1);
+
+        submitTx(false, transaction);
+
+        assertNoPablo();
+    }
+
+    @Test
+    public void usingTransactionsFromLog() {
+        submitTx(false, tx -> {
+            tx.put(pablo(0));
+        });
+
+        assertPabloVersion(0);
+
+        Map<Keyword, ?> txData = submitTx(false, tx -> {
+            tx.delete(pabloId);
+        });
+
+        assertNoPablo();
+
+        submitTx(false, tx -> {
+            tx.put(pablo(0));
+        });
+
+        assertPabloVersion(0);
+
+        long txId = (long) txData.get(Keyword.intern("crux.tx/tx-id"));
+        ICursor<TransactionWrapper> entireHistory = node.openTxLog(null);
+        Transaction transaction = null;
+        while (entireHistory.hasNext()) {
+            TransactionWrapper wrapper = entireHistory.next();
+            if (wrapper.getId() == txId) {
+                transaction = wrapper.getTransaction();
+            }
+        }
+
+        Assert.assertNotNull(transaction);
+
+        submitTx(false, transaction);
+
         assertNoPablo();
     }
 }

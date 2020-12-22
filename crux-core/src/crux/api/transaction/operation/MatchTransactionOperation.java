@@ -24,7 +24,8 @@ public class MatchTransactionOperation extends TransactionOperation {
     }
 
     public static MatchTransactionOperation factory(PersistentVector vector) {
-        Object id;
+        //TODO: Make correct after James' fix goes into master
+        Object id = null;
         ICruxDocument document = null;
         Date validTime = null;
 
