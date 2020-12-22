@@ -59,9 +59,9 @@
 (defn- write-etxs [etxs]
   (doseq [[^long tx-id etxs] (->> (group-by :tx-id etxs)
                                   (sort-by key))]
-    (db/index-entity-txs *index-store*
-                         {:crux.tx/tx-id tx-id, :crux.tx/tx-time (Date. tx-id)}
-                         etxs)))
+    (doto (db/begin-index-tx *index-store* {:crux.tx/tx-id tx-id, :crux.tx/tx-time (Date. tx-id)} nil)
+      (db/index-entity-txs etxs)
+      (db/commit-index-tx))))
 
 (defn- entities-with-range [vt+tid->etx {:keys [start-vt end-vt start-tid end-tid]}]
   (->> (subseq vt+tid->etx >= [(c/date->reverse-time-ms start-vt)
@@ -190,8 +190,12 @@
 
     (let [tx0 {:crux.tx/tx-time #inst "2020", :crux.tx/tx-id 0}
           tx1 {:crux.tx/tx-time #inst "2022", :crux.tx/tx-id 1}]
-      (db/index-entity-txs *index-store* tx0 [])
-      (db/index-entity-txs *index-store* tx1 [])
+      (doto (db/begin-index-tx *index-store* tx0 nil)
+        (db/index-entity-txs [])
+        (db/commit-index-tx))
+      (doto (db/begin-index-tx *index-store* tx1 nil)
+        (db/index-entity-txs [])
+        (db/commit-index-tx))
 
       (t/is (= tx1 (db/latest-completed-tx *index-store*)))
 

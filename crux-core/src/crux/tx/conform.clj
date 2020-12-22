@@ -211,5 +211,10 @@
                               (assoc :crux.api/tx-ops (tx-events->tx-ops document-store tx-events)))
                           arg))
 
+                      :crux.tx/match
+                      (cons id
+                            (for [arg args]
+                              (get docs arg arg)))
+
                       (for [arg args]
                         (get docs arg arg))))))))

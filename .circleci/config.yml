@@ -76,6 +76,7 @@ jobs:
 
       - run:
           command: |
+            rm -rf ~/.m2/juxt/crux-*
             export LEIN_JVM_OPTS=-Xmx2G
             lein sub install
 
@@ -84,6 +85,12 @@ jobs:
       - persist_to_workspace:
           root: ~/
           paths: ./
+
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
+
 
   test:
     docker:
@@ -97,11 +104,6 @@ jobs:
       - run: lein do sub test, check
       - store_test_results:
           path: "crux-test/target/test-results"
-      - run: rm -rf ~/.m2/juxt/crux-*
-      - save_cache:
-          paths:
-            - ~/.m2
-          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
 
   deploy-commit:
     docker:
@@ -119,11 +121,6 @@ jobs:
               - v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
               # fallback to using the latest cache if no exact match is found
               - v1-dataset-
-
-        - run:
-            command: |
-              export LEIN_JVM_OPTS=-Xmx2G
-              lein sub install
 
         - run: sh ./crux-bench/bin/download-dataset.sh
         - run: lein sub -s crux-bench uberjar

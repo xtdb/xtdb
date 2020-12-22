@@ -17,6 +17,19 @@
            java.nio.file.Path
            [jnr.ffi LibraryLoader Memory NativeType Pointer]))
 
+;;; ***** N.B. *****
+;; NOTE: This backend doesn't currently work, as it requires
+;; defensive copies in `crux.kv.index-store` after calls to `key-suffix`.
+
+;; This isn't currently done, as this does an needless copy for other stores.
+;; This store is about 10% faster than RocksJava JNI.
+
+;; This backend is about 10% faster than the normal JNI one when defensive copies are made.
+
+;; // Return the key for the current entry. The underlying storage for
+;; // the returned slice is valid only until the next modification of
+;; // the iterator.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface RocksDB
@@ -25,7 +38,17 @@
                                                 ^byte v])
   (^void rocksdb_options_set_compression [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
                                           ^int t])
+  (^void rocksdb_options_set_block_based_table_factory [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
+                                                        ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} table_options])
   (^void rocksdb_options_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
+
+  (^jnr.ffi.Pointer rocksdb_block_based_options_create [])
+  (^void rocksdb_block_based_options_set_block_cache [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} options
+                                                      ^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} block_cache])
+  (^void rocksdb_block_based_options_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt])
+
+  (^jnr.ffi.Pointer rocksdb_cache_create_lru [^{jnr.ffi.types.size_t true :tag long} capacity])
+  (^void rocksdb_cache_destroy [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} cache])
 
   (^jnr.ffi.Pointer rocksdb_writeoptions_create [])
   (^void rocksdb_writeoptions_disable_WAL [^{jnr.ffi.annotations.In true :tag jnr.ffi.Pointer} opt
@@ -129,9 +152,9 @@
     (check-error errptr)))
 
 ;; From Iterator::key(), value() is the same:
-  ;; // Return the key for the current entry.  The underlying storage for
-  ;; // the returned slice is valid only until the next modification of
-  ;; // the iterator.
+;; // Return the key for the current entry.  The underlying storage for
+;; // the returned slice is valid only until the next modification of
+;; // the iterator.
 (defn- pointer+len->buffer ^org.agrona.DirectBuffer [^Pointer address ^Pointer len-out]
   (let [len (.getInt len-out 0)]
     (UnsafeBuffer. (.address address) len)))
@@ -189,7 +212,7 @@
 
 (def ^:private rocksdb_lz4_compression 4)
 
-(defrecord RocksJNRKv [^Pointer db, ^Pointer options, ^Pointer write-options, db-dir, cp-job]
+(defrecord RocksJNRKv [^Pointer db, ^Pointer options, ^Pointer write-options, ^Pointer block-based-options, db-dir, cp-job]
   kv/KvStore
   (new-snapshot [_]
     (let [snapshot (.rocksdb_create_snapshot rocksdb db)
@@ -260,6 +283,7 @@
   (close [_]
     (.rocksdb_close rocksdb db)
     (.rocksdb_options_destroy rocksdb options)
+    (.rocksdb_block_based_options_destroy rocksdb block-based-options)
     (.rocksdb_writeoptions_destroy rocksdb write-options)
     (cio/try-close cp-job)))
 
@@ -267,21 +291,38 @@
   {:index-version c/index-version
    ::version "6"})
 
-(defn ->kv-store {::sys/deps {:checkpointer (fn [_])}
+(defrecord RocksJNRLRUCache [^Pointer cache]
+  Closeable
+  (close [_]
+    (.rocksdb_cache_destroy rocksdb cache)))
+
+(defn ->lru-block-cache {::sys/args {:cache-size {:doc "Cache size"
+                                                  :default (* 8 1024 1024)
+                                                  :spec ::sys/nat-int}}}
+  [{:keys [cache-size]}]
+  (init-rocksdb-jnr!)
+  (->RocksJNRLRUCache (.rocksdb_cache_create_lru rocksdb cache-size)))
+
+(defn ->kv-store {::sys/deps {:checkpointer (fn [_])
+                              :block-cache `->lru-block-cache}
                   ::sys/args (merge (-> kv/args
                                         (update :db-dir assoc :required? true, :default "data"))
                                     {:db-options {:doc "RocksDB Options"
                                                   :spec ::sys/string}
                                      :disable-wal? {:doc "Disable Write Ahead Log"
                                                     :spec ::sys/boolean}})}
-  [{:keys [^Path db-dir sync? db-options disable-wal? checkpointer]}]
+  [{:keys [^Path db-dir sync? db-options disable-wal? checkpointer ^RocksJNRLRUCache block-cache]}]
   (init-rocksdb-jnr!)
   (let [db-dir (.toFile db-dir)
         _ (some-> checkpointer (cp/try-restore db-dir cp-format))
 
+        block-based-options (.rocksdb_block_based_options_create rocksdb)
+        _ (when (and block-cache (.cache block-cache))
+            (.rocksdb_block_based_options_set_block_cache rocksdb block-based-options (.cache block-cache)))
         opts (.rocksdb_options_create rocksdb)
         _ (.rocksdb_options_set_create_if_missing rocksdb opts 1)
         _ (.rocksdb_options_set_compression rocksdb opts rocksdb_lz4_compression)
+        _ (.rocksdb_options_set_block_based_table_factory rocksdb opts block-based-options)
         errptr-out (make-array String 1)
 
         db (try
@@ -305,6 +346,7 @@
         kv-store (map->RocksJNRKv {:db-dir db-dir
                                    :db db
                                    :options opts
-                                   :write-options write-options})]
+                                   :write-options write-options
+                                   :block-based-options block-based-options})]
     (cond-> kv-store
       checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format})))))

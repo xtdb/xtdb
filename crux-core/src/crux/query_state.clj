@@ -1,28 +1,44 @@
 (ns ^:no-doc crux.query-state
-  (:import (crux.api QueryState QueryState$QueryStatus QueryState$QueryError)))
+  (:import (crux.api IQueryState IQueryState$IQueryError IQueryState$QueryStatus)
+           (java.io Writer)))
 
-(defn <-QueryState [^QueryState query-state]
-  {:status (case (str (.status query-state))
-             "FAILED" :failed
-             "COMPLETED" :completed
-             "IN_PROGRESS" :in-progress)
-   :query-id (.queryId query-state)
-   :query (.query query-state)
-   :started-at (.startedAt query-state)
-   :finished-at (.finishedAt query-state)
-   :error (when-let [error (.error query-state)]
-            {:type (.errorClass error)
-             :message (.errorMessage error)})})
+(defn ->query-status [status]
+  (case status
+    :failed IQueryState$QueryStatus/FAILED
+    :completed IQueryState$QueryStatus/COMPLETED
+    :in-progress IQueryState$QueryStatus/IN_PROGRESS))
+
+(defrecord QueryError [type message]
+  IQueryState$IQueryError
+  (getErrorClass [this] type)
+  (getErrorMessage [this] message))
+
+(defrecord QueryState [query-id started-at finished-at status query error]
+  IQueryState
+  (getQueryId [this] query-id)
+  (getStartedAt [this] started-at)
+  (getFinishedAt [this] finished-at)
+  (getStatus [this] (->query-status status))
+  (getQuery [this] query)
+  (getError [this] error))
+
+(defmethod print-method QueryState [qs ^Writer w]
+  (.write w "#crux/query-state ")
+  (print-method (into {} qs) w))
+
+(defmethod print-method QueryError [qs ^Writer w]
+  (.write w "#crux/query-error ")
+  (print-method (into {} qs) w))
+
+(defn ->QueryError [error]
+  (let [{:keys [type message]} error]
+    (QueryError. type message)))
 
 (defn ->QueryState [{:keys [query-id started-at finished-at status error query] :as query-state}]
   (QueryState. query-id
                started-at
                finished-at
-               (case status
-                 :failed QueryState$QueryStatus/FAILED
-                 :completed QueryState$QueryStatus/COMPLETED
-                 :in-progress QueryState$QueryStatus/IN_PROGRESS)
+               status
                query
                (when error
-                 (let [{:keys [type message]} error]
-                   (QueryState$QueryError. type message)))))
+                 (->QueryError error))))

@@ -83,7 +83,7 @@
       (t/testing ":crux.tx/match"
         (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/match :hello {:crux.db/id :hello}]])]
           (t/is
-           (= [[:crux.tx/match {:crux.db/id :hello} tx-time]]
+           (= [[:crux.tx/match (c/new-id :hello) {:crux.db/id :hello}]]
               (get-tx-from-source-task source-task)))))
       (t/testing ":crux.tx/delete"
         (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/delete :hello]])]
@@ -103,7 +103,7 @@
         (t/is
          (= [[:crux.tx/put {:crux.db/id :bar :age 20} tx-time]
              [:crux.tx/put {:crux.db/id :foo} tx-time]
-             [:crux.tx/match {:crux.db/id :foo} tx-time]]
+             [:crux.tx/match (c/new-id :foo) {:crux.db/id :foo}]]
             (get-tx-from-source-task source-task)))))
 
     (t/testing "CruxSourceTask doesn't break on failed transactions"

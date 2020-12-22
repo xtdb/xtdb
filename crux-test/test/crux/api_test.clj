@@ -180,26 +180,6 @@
           (finally
             (.shutDown repo)))))))
 
-(t/deftest test-statistics
-  (let [^ExecutorService stats-executor (get-in (or *http-server-api* *api*) [:tx-ingester :stats-executor])]
-    (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
-      (api/await-tx *api* submitted-tx))
-
-    @(.submit stats-executor ^Runnable (fn []))
-
-    (let [stats (api/attribute-stats *api*)]
-      (t/is (= 1 (:name stats))))
-
-    (t/testing "updated"
-      (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"}]])]
-        (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
-        (t/is (true? (api/tx-committed? *api* submitted-tx))))
-
-      @(.submit stats-executor ^Runnable (fn []))
-
-      (let [stats (api/attribute-stats *api*)]
-        (t/is (= 2 (:name stats)))))))
-
 (t/deftest test-adding-back-evicted-document
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo))
@@ -257,6 +237,12 @@
       (t/testing "from tx id - doesn't include items <= `after-tx-id`"
         (with-open [tx-log-iterator (api/open-tx-log *api* (::tx/tx-id tx1) false)]
           (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
+
+      (t/testing "match includes eid"
+        (let [tx (fix/submit+await-tx [[:crux.tx/match :foo nil]])]
+          (with-open [tx-log (api/open-tx-log *api* (dec (:crux.tx/tx-id tx)) true)]
+            (t/is (= [:crux.tx/match (c/new-id :foo) (c/new-id nil)]
+                     (-> (iterator-seq tx-log) first :crux.api/tx-ops first))))))
 
       ;; Intermittent failure on Kafka, see #1256
       (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)

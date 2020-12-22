@@ -174,13 +174,13 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
 
     /**
-       @return the latest transaction to have been indexed by this node.
+     * @return the latest transaction to have been indexed by this node.
      */
     public Map<Keyword, ?> latestCompletedTx();
 
     /**
-       @return the latest transaction to have been submitted to this cluster
-    */
+     * @return the latest transaction to have been submitted to this cluster
+     */
     public Map<Keyword, ?> latestSubmittedTx();
 
     /**
@@ -195,19 +195,19 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * @return List containing maps with query information.
      */
-    public List<QueryState> activeQueries();
+    public List<IQueryState> activeQueries();
 
     /**
      * Returns a list of recently completed/failed queries
      *
      * @return List containing maps with query information.
      */
-    public List<QueryState> recentQueries();
+    public List<IQueryState> recentQueries();
 
     /**
      * Returns a list of slowest completed/failed queries ran on the node
      *
      * @return List containing maps with query information.
      */
-    public List<QueryState> slowestQueries();
+    public List<IQueryState> slowestQueries();
 }
