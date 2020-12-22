@@ -305,13 +305,14 @@
   ([idx tuple-fn]
    (when idx
      (let [max-depth (long (db/max-depth idx))
+           v-fn (fn [_]
+                  (tuple-fn @idx))
            step (fn step [^long depth needs-seek?]
                   (when (Thread/interrupted)
                     (throw (InterruptedException.)))
                   (if (= depth (dec max-depth))
                     (concat
-                     (idx->seq idx (fn [_]
-                                     (tuple-fn @idx)))
+                     (idx->seq idx v-fn)
                      (when (pos? depth)
                        (lazy-seq
                         (db/close-level idx)
