@@ -43,19 +43,25 @@ public class TransactionTest {
 
     private static final String pabloId = "PabloPicasso";
     private static List<Date> times;
+    private static List<PersonDocument> pablos;
     private static ICruxAPI node;
 
     @BeforeClass
     public static void setup() {
         node = Crux.startNode();
         ArrayList<Date> times = new ArrayList<>();
+        ArrayList<PersonDocument> pablos = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             //The few hours after Y2K
             long seconds = 946684800 + i * 3600;
             Date time = Date.from(Instant.ofEpochSecond(seconds));
             times.add(time);
+
+            PersonDocument pablo = new PersonDocument(pabloId, "Pablo", "Picasso", i);
+            pablos.add(pablo);
         }
         TransactionTest.times = times;
+        TransactionTest.pablos = pablos;
     }
 
     @After
@@ -89,12 +95,8 @@ public class TransactionTest {
         node.sync(Duration.ofSeconds(10));
     }
 
-    private PersonDocument createPablo(int version) {
-        return new PersonDocument(pabloId, "Pablo", "Picasso", version);
-    }
-
     private IPersistentMap pabloEdn(int version) {
-        return createPablo(version).toEdn();
+        return pablos.get(version).toEdn();
     }
 
     private void assertPabloVersion(int version) {
@@ -102,7 +104,7 @@ public class TransactionTest {
     }
 
     private void assertPabloVersion(int version, int timeIndex) {
-        assertPabloVersion(version, times.get(timeIndex));
+        assertPabloVersion(version, time(timeIndex));
     }
 
     private void assertPabloVersion(int version, Date validTime) {
@@ -127,7 +129,7 @@ public class TransactionTest {
     }
 
     private void assertNoPablo(int timeIndex) {
-        assertNoPablo(times.get(timeIndex));
+        assertNoPablo(time(timeIndex));
     }
 
     private void assertNoPablo(Date validTime) {
@@ -141,13 +143,19 @@ public class TransactionTest {
 
         Assert.assertNull(result);
     }
+    
+    private PersonDocument pablo(int version) {
+        return pablos.get(version);
+    }
+    
+    private Date time(int timeIndex) {
+        return times.get(timeIndex);
+    }
 
     @Test
     public void putNow() {
-        PersonDocument pablo = createPablo(0);
-
         submitTx( tx -> {
-            tx.put(pablo);
+            tx.put(pablos.get(0));
         });
 
         assertPabloVersion(0);
@@ -155,10 +163,8 @@ public class TransactionTest {
 
     @Test
     public void putAtTime() {
-        PersonDocument pablo = createPablo(0);
-
         submitTx( tx -> {
-            tx.put(pablo, times.get(1));
+            tx.put(pablo(0), time(1));
         });
 
         assertNoPablo(0);
@@ -169,10 +175,9 @@ public class TransactionTest {
 
     @Test
     public void putWithEndValidTime() {
-        PersonDocument pablo = createPablo(0);
 
         submitTx( tx -> {
-            tx.put(pablo, times.get(1), times.get(3));
+            tx.put(pablo(0), time(1), time(3));
         });
 
         assertNoPablo(0);
@@ -185,12 +190,9 @@ public class TransactionTest {
 
     @Test
     public void putDifferentVersions() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-            tx.put(pablo0, times.get(1));
-            tx.put(pablo1, times.get(3));
+            tx.put(pablo(0), time(1));
+            tx.put(pablo(1), time(3));
         });
 
         assertNoPablo(0);
@@ -203,10 +205,8 @@ public class TransactionTest {
 
     @Test
     public void deleteNow() {
-        PersonDocument pablo = createPablo(0);
-
         submitTx ( tx -> {
-            tx.put(pablo, times.get(1));
+            tx.put(pablo(0), time(1));
             tx.delete(pabloId);
         });
 
@@ -218,11 +218,9 @@ public class TransactionTest {
 
     @Test
     public void deleteAtSpecificTime() {
-        PersonDocument pablo = createPablo(0);
-
         submitTx ( tx -> {
-            tx.put(pablo, times.get(1));
-            tx.delete(pabloId, times.get(3));
+            tx.put(pablo(0), time(1));
+            tx.delete(pabloId, time(3));
         });
 
         assertNoPablo(0);
@@ -235,11 +233,9 @@ public class TransactionTest {
 
     @Test
     public void deleteWithEndTime() {
-        PersonDocument pablo = createPablo(0);
-
         submitTx ( tx -> {
-            tx.put(pablo, times.get(1));
-            tx.delete(pabloId, times.get(3), times.get(5));
+            tx.put(pablo(0), time(1));
+            tx.delete(pabloId, time(3), time(5));
         });
 
         assertNoPablo(0);
@@ -254,12 +250,9 @@ public class TransactionTest {
 
     @Test
     public void deleteWithSubsequentChange() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-            tx.put(pablo0, times.get(1));
-            tx.put(pablo1, times.get(5));
+            tx.put(pablo(0), time(1));
+            tx.put(pablo(1), time(5));
         });
 
         assertNoPablo(0);
@@ -272,7 +265,7 @@ public class TransactionTest {
         assertPabloVersion(1);
 
         submitTx( tx -> {
-            tx.delete(pabloId, times.get(3));
+            tx.delete(pabloId, time(3));
         });
 
         assertNoPablo(0);
@@ -287,18 +280,15 @@ public class TransactionTest {
 
     @Test
     public void successfulMatchNow() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx( tx -> {
-            tx.put(pablo0);
+            tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
         submitTx( tx -> {
-            tx.match(pablo0);
-            tx.put(pablo1);
+            tx.match(pablo(0));
+            tx.put(pablo(1));
         });
 
         assertPabloVersion(1);
@@ -306,19 +296,15 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulMatchNow() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-        PersonDocument pablo2 = createPablo(2);
-
         submitTx ( tx -> {
-            tx.put(pablo0);
+            tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
         submitTx ( tx -> {
-            tx.match(pablo2);
-            tx.put(pablo1);
+            tx.match(pablo(2));
+            tx.put(pablo(3));
         });
 
         assertPabloVersion(0);
@@ -326,11 +312,8 @@ public class TransactionTest {
 
     @Test
     public void successfulMatchWithValidTime() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-           tx.put(pablo0, times.get(1), times.get(3));
+           tx.put(pablo(0), time(1), time(3));
         });
 
         assertNoPablo(0);
@@ -341,8 +324,8 @@ public class TransactionTest {
         assertNoPablo();
 
         submitTx ( tx -> {
-            tx.match(pablo0, times.get(2));
-            tx.put(pablo1, times.get(3));
+            tx.match(pablo(0), time(2));
+            tx.put(pablo(1), time(3));
         });
 
         assertNoPablo(0);
@@ -355,11 +338,8 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulMatchWithValidTime() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-            tx.put(pablo0, times.get(1), times.get(3));
+            tx.put(pablo(0), time(1), time(3));
         });
 
         assertNoPablo(0);
@@ -370,8 +350,8 @@ public class TransactionTest {
         assertNoPablo();
 
         submitTx ( tx -> {
-            tx.match(pablo0, times.get(4));
-            tx.put(pablo1, times.get(3));
+            tx.match(pablo(0), time(4));
+            tx.put(pablo(1), time(3));
         });
 
         assertNoPablo(0);
@@ -384,13 +364,11 @@ public class TransactionTest {
 
     @Test
     public void successfulEmptyMatch() {
-        PersonDocument pablo = createPablo(0);
-
         assertNoPablo();
 
         submitTx ( tx -> {
             tx.matchNotExists(pabloId);
-            tx.put(pablo);
+            tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
@@ -398,18 +376,15 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulEmptyMatch() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-            tx.put(pablo0);
+            tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
 
         submitTx ( tx -> {
             tx.matchNotExists(pabloId);
-            tx.put(pablo1);
+            tx.put(pablo(0));
         });
 
         assertPabloVersion(0);
@@ -417,11 +392,8 @@ public class TransactionTest {
 
     @Test
     public void successfulEmptyMatchAtTime() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-            tx.put(pablo0, times.get(1), times.get(3));
+            tx.put(pablo(0), time(1), time(3));
         });
 
         assertNoPablo(0);
@@ -432,8 +404,8 @@ public class TransactionTest {
         assertNoPablo();
 
         submitTx ( tx -> {
-            tx.matchNotExists(pabloId, times.get(3));
-            tx.put(pablo1, times.get(3));
+            tx.matchNotExists(pabloId, time(3));
+            tx.put(pablo(1), time(3));
         });
 
         assertNoPablo(0);
@@ -446,11 +418,8 @@ public class TransactionTest {
 
     @Test
     public void unsuccessfulEmptyMatchAtTime() {
-        PersonDocument pablo0 = createPablo(0);
-        PersonDocument pablo1 = createPablo(1);
-
         submitTx ( tx -> {
-            tx.put(pablo0, times.get(1), times.get(3));
+            tx.put(pablo(0), time(1), time(3));
         });
 
         assertNoPablo(0);
@@ -461,8 +430,8 @@ public class TransactionTest {
         assertNoPablo();
 
         submitTx ( tx -> {
-            tx.matchNotExists(pabloId, times.get(2));
-            tx.put(pablo1, times.get(3));
+            tx.matchNotExists(pabloId, time(2));
+            tx.put(pablo(1), time(3));
         });
 
         assertNoPablo(0);

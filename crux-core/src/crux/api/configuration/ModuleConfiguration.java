@@ -67,21 +67,6 @@ public class ModuleConfiguration {
         return PersistentArrayMap.create(opts);
     }
 
-    /*@Override
-    public boolean equals(Object other) {
-        if (other == this) {
-            return true;
-        }
-
-        if (!(other instanceof ModuleConfiguration)) {
-            return false;
-        }
-
-        ModuleConfiguration moduleConfiguration = (ModuleConfiguration) other;
-
-        return moduleConfiguration.opts.equals(opts);
-    }*/
-
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
