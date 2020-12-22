@@ -2,7 +2,7 @@ package crux.api.alpha;
 
 import clojure.lang.PersistentVector;
 
-/*
+
 @Deprecated
 public abstract class TransactionOperation {
     TransactionOperation() {
@@ -26,4 +26,3 @@ public abstract class TransactionOperation {
 
     protected abstract PersistentVector toEdn();
 }
-*/

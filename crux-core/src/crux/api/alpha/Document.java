@@ -1,6 +1,14 @@
 package crux.api.alpha;
 
-/*
+
+import clojure.lang.IPersistentMap;
+import clojure.lang.Keyword;
+import clojure.lang.PersistentArrayMap;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+
 @Deprecated
 public class Document {
     private final Map<Keyword, Object> document;
@@ -13,6 +21,7 @@ public class Document {
      * Gets a value at the key 'attr' from the Document
      * @param attr The key to extract a value from
      * @return Value at key
+     **/
 
     public Object get(Keyword attr) {
         return document.get(attr);
@@ -22,6 +31,7 @@ public class Document {
      * Gets a value at the key 'attr' from the Document
      * @param attr The key to extract a value from
      * @return Value at key
+     **/
 
     public Object get(String attr) {
         return document.get(crux.api.alpha.Util.keyword(attr));
@@ -30,6 +40,7 @@ public class Document {
     /**
      * Returns the CruxId from the Document.
      * @return CruxId from the Document.
+     **/
 
     public CruxId getId() {
         return CruxId.cruxId(document.get(crux.api.alpha.Util.keyword("crux.db/id")));
@@ -39,6 +50,7 @@ public class Document {
      * Construct a Document containing a CruxId
      * @param id Id to put in the document
      * @return An instance of Document
+     **/
 
     public static Document document(CruxId id) {
         Map<Keyword, Object> initialDoc = Collections.singletonMap(crux.api.alpha.Util.keyword("crux.db/id"), id.toEdn());
@@ -61,6 +73,7 @@ public class Document {
      * Put the contents of a map into the Document
      * @param attrs Map of keywords and values to add to the document
      * @return Document containing the previous contents of the document and the attributes
+     **/
 
     public Document with(Map<Keyword, ?> attrs) {
         Map<Keyword, Object> newDoc = new HashMap<>(this.document);
@@ -73,6 +86,7 @@ public class Document {
      * @param attr Key to place the value at
      * @param value Value to place in the Document
      * @return Document containing the previous contents of the document and the new key-value pair
+     **/
 
     public Document with(Keyword attr, Object value) {
         Map<Keyword, Object> newDoc = new HashMap<>(this.document);
@@ -85,6 +99,7 @@ public class Document {
      * @param attr Key to place the value at
      * @param value Value to place in the Document
      * @return Document containing the previous contents of the document and the new key-value pair
+     **/
 
     public Document with(String attr, Object value) {
         return with(crux.api.alpha.Util.keyword(attr), value);
@@ -95,4 +110,3 @@ public class Document {
         return document.toString();
     }
 }
-*/

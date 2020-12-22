@@ -5,6 +5,7 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 @SuppressWarnings("unused") // entry points
+@Deprecated
 public class ModuleConfigurator {
     final Map<String, Object> opts = new HashMap<>();
 

@@ -1,6 +1,11 @@
 package crux.api.alpha;
 
-/*@Deprecated
+import clojure.lang.Keyword;
+import clojure.lang.PersistentVector;
+
+import java.util.Date;
+
+@Deprecated
 public class DeleteOperation extends TransactionOperation {
     private static final Keyword TX_DELETE = crux.api.alpha.Util.keyword("crux.tx/delete");
 
@@ -24,4 +29,3 @@ public class DeleteOperation extends TransactionOperation {
         return outputVector;
     }
 }
-*/

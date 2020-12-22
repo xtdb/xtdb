@@ -1,6 +1,18 @@
 package crux.api.alpha;
 
-/*
+import clojure.lang.Keyword;
+import clojure.lang.PersistentVector;
+import crux.api.Crux;
+import crux.api.ICruxAPI;
+import crux.api.configuration.NodeConfiguration;
+
+import java.io.IOException;
+import java.time.Duration;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.Map;
+import java.util.function.Consumer;
+
 @Deprecated
 public class CruxNode implements AutoCloseable {
     private static final Keyword TX_TIME = crux.api.alpha.Util.keyword("crux.tx/tx-time");
@@ -27,6 +39,7 @@ public class CruxNode implements AutoCloseable {
      * @param ops The set of operations to transact
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
+     **/
 
     @SuppressWarnings("unchecked")
     public TxResult submitTx(Iterable<TransactionOperation> ops) {
@@ -46,6 +59,7 @@ public class CruxNode implements AutoCloseable {
      * @param ops The set of operations to transact
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
+     **/
 
     @SuppressWarnings("unused")
     public TxResult submitTx(TransactionOperation... ops) {
@@ -56,6 +70,7 @@ public class CruxNode implements AutoCloseable {
      * Gets a Database instance as of now.
      * @return Database instance at the current time
      * @see Database
+     **/
 
     public Database db() {
         return crux.api.alpha.Database.database(node);
@@ -67,6 +82,7 @@ public class CruxNode implements AutoCloseable {
      * @param validTime The valid time
      * @return Database instance at validTime
      * @see Database
+     **/
 
     public Database db(Date validTime) {
         return crux.api.alpha.Database.database(node, validTime);
@@ -78,6 +94,7 @@ public class CruxNode implements AutoCloseable {
      * @param validTime The valid time
      * @param transactionTime The transaction time
      * @see Database
+     **/
 
     public Database db(Date validTime, Date transactionTime) {
         return crux.api.alpha.Database.database(node, validTime, transactionTime);
@@ -87,6 +104,7 @@ public class CruxNode implements AutoCloseable {
      * Blocks until the node has caught up indexing. Will throw an exception on timeout
      * @param timeout Max time to wait, can be null for the default
      * @return Date representing the latest index time when this node has caught up as of this call
+     **/
 
     @SuppressWarnings("unused")
     public Date sync(Duration timeout) {
@@ -98,4 +116,3 @@ public class CruxNode implements AutoCloseable {
         node.close();
     }
 }
-*/

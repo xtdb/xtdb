@@ -3,12 +3,10 @@
             [clojure.test :as t]
             [crux.fixtures :as fix]
             [crux.kv :as kv])
-  )
-(comment
-  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator]
+  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI]
     [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
-    java.util.function.Consumer)
-
+    [crux.api.configuration NodeConfiguration$Builder ModuleConfiguration$Builder]
+    java.util.function.Consumer))
 
 
 (defmacro consume {:style/indent 1} [[binding] & body]
@@ -19,42 +17,42 @@
 (defn start-rocks-node ^ICruxAPI [data-dir]
   (Crux/startNode
    (consume [c]
-     (doto ^NodeConfigurator c
+     (doto ^NodeConfiguration$Builder c
        (.with "crux/tx-log"
               (consume [c]
-                (doto ^ModuleConfigurator c
+                (doto ^ModuleConfiguration$Builder c
                   (.with "kv-store"
                          (consume [c]
-                           (doto ^ModuleConfigurator c
+                           (doto ^ModuleConfiguration$Builder c
                              (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "txs"))))))))
        (.with "crux/document-store"
               (consume [c]
-                (doto ^ModuleConfigurator c
+                (doto ^ModuleConfiguration$Builder c
                   (.with "kv-store"
                          (consume [c]
-                           (doto ^ModuleConfigurator c
+                           (doto ^ModuleConfiguration$Builder c
                              (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "docs"))))))))
        (.with "crux/index-store"
               (consume [c]
-                (doto ^ModuleConfigurator c
+                (doto ^ModuleConfiguration$Builder c
                   (.with "kv-store"
                          (consume [c]
-                           (doto ^ModuleConfigurator c
+                           (doto ^ModuleConfiguration$Builder c
                              (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "indexes"))))))))))))
 
 (defn start-rocks-ingest-node ^ICruxAsyncIngestAPI [data-dir]
   (Crux/newIngestClient
    (consume [c]
-     (doto ^NodeConfigurator c
+     (doto ^NodeConfiguration$Builder c
        (.with "crux/document-store"
               (consume [c]
-                (doto ^ModuleConfigurator c
+                (doto ^ModuleConfiguration$Builder c
                   (.with "kv-store"
                          (consume [c]
-                           (doto ^ModuleConfigurator c
+                           (doto ^ModuleConfiguration$Builder c
                              (.module "crux.rocksdb/->kv-store")
                              (.set "db-dir" (io/file data-dir "docs"))))))))))))
 
@@ -134,5 +132,3 @@
         (t/is (thrown-with-msg? IllegalStateException
                                 #"Crux node is closed"
                                 (.db node)))))))
-
-)

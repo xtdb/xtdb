@@ -1,6 +1,17 @@
 package crux.api.alpha;
 
-/*
+
+import clojure.lang.Keyword;
+import clojure.lang.Symbol;
+import crux.api.ICruxAPI;
+import crux.api.ICruxDatasource;
+
+import java.util.Collection;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
+
 @Deprecated
 public class Database {
     private final ICruxDatasource db;
@@ -26,6 +37,7 @@ public class Database {
      * @param query Query to perform on the Database
      * @return List of ResultTuple objects representing the results from the query
      * @see ResultTuple
+     **/
 
     public List<ResultTuple> query(Query query) {
         Collection<List<?>> queryResult = db.query(query.toEdn());
@@ -42,10 +54,10 @@ public class Database {
      * Retrieves a Document for an entity in the Database
      * @param id Id of entity to retrieve
      * @return Document representing the entity
+     **/
 
     public Document entity(CruxId id) {
         Map<Keyword, Object> entityDoc = db.entity(id.toEdn());
         return Document.document(entityDoc);
     }
 }
-*/

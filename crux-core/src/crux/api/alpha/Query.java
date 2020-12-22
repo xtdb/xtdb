@@ -7,7 +7,6 @@ import java.util.List;
 
 // Version of Query which reads strings.
 
-/*
 @Deprecated
 public class Query {
     private static final Keyword FIND = crux.api.alpha.Util.keyword("find");
@@ -133,4 +132,3 @@ public class Query {
         return queryMap;
     }
 }
-*/

@@ -4,6 +4,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Consumer;
 
+@Deprecated
 public class NodeConfigurator {
     final Map<String, Object> modules = new HashMap<>();
 

@@ -176,9 +176,11 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
     @SuppressWarnings("unused")
-    public static ICruxAsyncIngestAPI newIngestClient(Consumer<NodeConfigurator> f) {
-        NodeConfigurator c = new NodeConfigurator();
-        f.accept(c);
-        return newIngestClient(c.modules);
+    public static ICruxAsyncIngestAPI newIngestClient(Consumer<NodeConfiguration.Builder> f) {
+        return newIngestClient(NodeConfiguration.build(f));
+    }
+
+    public static ICruxAsyncIngestAPI newIngestClient(NodeConfiguration configuration) {
+        return newIngestClient((Map<?,?>)configuration.getModules());
     }
 }
