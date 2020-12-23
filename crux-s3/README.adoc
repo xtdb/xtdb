@@ -14,7 +14,7 @@ juxt/crux-s3 {:mvn/version "20.09-1.12.0-beta"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-s3</artifactId>
-    <version>20.09-1.12.1-beta</version>
+    <version>20.12-1.13.0-beta</version>
 </dependency>
 ----
 

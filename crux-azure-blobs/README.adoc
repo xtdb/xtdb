@@ -14,7 +14,7 @@ juxt/crux-azure-blobs {:mvn/version "20.09-1.12.0-alpha"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-azure-blobs</artifactId>
-    <version>20.09-1.12.1-alpha</version>
+    <version>20.12-1.13.0-alpha</version>
 </dependency>
 ----
 
