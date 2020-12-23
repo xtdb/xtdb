@@ -27,6 +27,8 @@ pom.xml::
 ----
 ====
 
+If you're using RocksDB and seeing out-of-memory issues, we recommend setting the environment variable `MALLOC_ARENA_MAX=2` - see link:https://github.com/facebook/rocksdb/issues/4112[this issue] for more details.
+
 == Using RocksDB
 
 Replace the implementation of the desired component with `+crux.rocksdb/->kv-store+`
