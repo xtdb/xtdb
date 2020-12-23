@@ -71,7 +71,7 @@
       :else
       ;; TODO: This slice is safer if the byte buffer itself is used,
       ;; but slower.
-      (let [buffer (.slice (.limit (.duplicate chunk) (+ offset size)))]
+      (let [buffer (.slice ^ByteBuffer (.limit (.duplicate chunk) (+ offset size)))]
         (.position chunk new-aligned-offset)
         (UnsafeBuffer. ^ByteBuffer buffer 0 size)))))
 
