@@ -79,6 +79,17 @@ S3 can be used as a query index xref:checkpointing.adoc[checkpoint store].
 
 Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on your bucket to remove older checkpoints.
 
+[source,clojure]
+----
+;; under :crux/index-store -> :kv-store -> :checkpointer
+;; see the Checkpointing guide for other parameters
+{:checkpointer {...
+                :store {:crux/module 'crux.s3.checkpoint-store/->checkpoint-store
+                        :configurator ...
+                        :bucket "..."
+                        :prefix "..."}}
+----
+
 === Parameters
 
 * `configurator` (xref:#configurator[`S3Configurator`])
