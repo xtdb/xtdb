@@ -211,8 +211,6 @@ public class TransactionTest {
         assertNoPablo(0);
         assertPabloVersion(0, 1);
         assertPabloVersion(0, 2);
-
-        Map<Keyword, Object> entity = node.db().entity(pabloId);
         assertPabloVersion(0);
     }
 
