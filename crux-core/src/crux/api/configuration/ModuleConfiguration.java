@@ -47,7 +47,7 @@ public class ModuleConfiguration {
         }
 
         public Builder with(String module, ModuleConfiguration config) {
-            opts.put(module, config.opts);
+            opts.put(module, config.getOpts());
             return this;
         }
 
