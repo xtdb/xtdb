@@ -10,6 +10,7 @@
 * xref:building.adoc[Building]
 * xref:monitoring.adoc[Monitoring]
 * xref:checkpointing.adoc[Checkpointing]
+* xref:events.adoc[Events]
 * Feature Modules
 ** xref:http.adoc[HTTP]
 ** xref:kafka-connect.adoc[Kafka - Connect]

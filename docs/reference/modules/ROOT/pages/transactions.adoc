@@ -22,14 +22,15 @@ and not when submitting the transaction.
 There are four transaction (write) operations:
 
 .Write Operations
-[cols="d,d"]
+[cols="3,5,^2"]
 |===
-|Operation|Purpose
-|<<#put,`crux.tx/put`>>|Write a version of a document
-|<<#delete,`crux.tx/delete`>>|Deletes a specific document
-|<<#match,`crux.tx/match`>>|Check the document state against the given document
-|<<#evict,`crux.tx/evict`>>|Evicts a document entirely, including all historical versions
-|<<#transaction-functions,`crux.tx/fn`>>|Runs a transaction function
+|Operation|Purpose|Pre-condition?
+
+|<<#put,`crux.tx/put`>>|Write a version of a document|
+|<<#delete,`crux.tx/delete`>>|Deletes a specific document|
+|<<#match,`crux.tx/match`>>|Check the document state against the given document|✓
+|<<#evict,`crux.tx/evict`>>|Evicts a document entirely, including all historical versions|
+|<<#transaction-functions,`crux.tx/fn`>>|Runs a transaction function|✓
 |===
 
 [#put]
@@ -174,10 +175,11 @@ All documents must contain the `:crux.db/id` key.
 
 The following types of `:crux.db/id` are allowed:
 
-.Valid types
+.Valid Id types
 [cols="d,d"]
 |===
 |Type|Example
+
 |Keyword|`:my-id` or `:dbpedia.resource/Pablo-Picasso`
 |String|`"my-id"`
 |Integers/Longs|`42`
@@ -207,38 +209,6 @@ If there is a document, `A`, already present at the given `valid time`, the oper
 === End Valid Time
 
 When both `valid time` and `end valid time` are provided for <<#put,`crux.tx/put`>> and <<#delete,`crux.tx/delete`>>, the operation's affect is valid from `valid time` (inclusive) to `end valid time` (exclusive).
-
-[#events]
-== Events
-
-You can subscribe to Crux events using the `(crux.api/listen node event-opts f)` function.
-Currently we expose one event type, `:crux/indexed-tx`, called when Crux indexes a transaction.
-
-[source,clojure]
-----
-(require '[crux.api :as crux])
-
-(crux/listen node {:crux/event-type :crux/indexed-tx, :with-tx-ops? true}
-  (fn [ev]
-    (println "event received!")
-    (clojure.pprint/pprint ev)))
-
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
-----
-
-prints:
-
-[source,clojure]
-----
-event received!
-{:crux/event-type :crux/indexed-tx,
- :crux.tx/tx-id ...,
- :crux.tx/tx-time #inst "...",
- :committed? true,
- :crux/tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]]}
-----
-
-You can `.close` the return value from `(crux.api/listen ...)` to detach the listener, should you need to.
 
 [#speculative-transactions]
 == Speculative transactions
