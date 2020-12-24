@@ -10,6 +10,9 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.function.Consumer;
 
+import static crux.api.configuration.ModuleConfiguration.configureModule;
+import static crux.api.configuration.NodeConfiguration.configureNode;
+
 public class ConfigurationTest {
     @Test
     public void moduleConfigurationBuilder() {
@@ -26,9 +29,9 @@ public class ConfigurationTest {
             m.module("waka");
         };
 
-        ModuleConfiguration fromExplicitConsumer = ModuleConfiguration.build(consumer);
+        ModuleConfiguration fromExplicitConsumer = configureModule(consumer);
 
-        ModuleConfiguration fromImplicitConsumer = ModuleConfiguration.build ( m -> {
+        ModuleConfiguration fromImplicitConsumer = configureModule ( m -> {
             m.with("foo");
             m.module("waka");
             m.with("bar", "baz");
@@ -68,10 +71,10 @@ public class ConfigurationTest {
             nc.with("foo", foo);
         };
 
-        NodeConfiguration fromExplicitConsumer = NodeConfiguration.build(consumer);
+        NodeConfiguration fromExplicitConsumer = configureNode(consumer);
 
-        NodeConfiguration fromImplicitConsumer = NodeConfiguration.build(nc -> {
-            nc.with("foo", ModuleConfiguration.build(fooConsumer));
+        NodeConfiguration fromImplicitConsumer = configureNode(nc -> {
+            nc.with("foo", configureModule(fooConsumer));
         });
 
         HashMap<String, Object> explicitSubHashMap = new HashMap<>();

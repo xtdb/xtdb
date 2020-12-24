@@ -10,7 +10,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public class ModuleConfiguration {
-    public static ModuleConfiguration build(Consumer<Builder> f) {
+    public static ModuleConfiguration configureModule(Consumer<Builder> f) {
         ModuleConfiguration.Builder b = new ModuleConfiguration.Builder();
         f.accept(b);
         return b.build();
@@ -35,15 +35,11 @@ public class ModuleConfiguration {
         }
 
         public Builder with(String module) {
-            return with(module, c -> {});
+            return with(module, configureModule(c -> {}));
         }
 
         public Builder with(String module, String reference) {
             return set(module, reference);
-        }
-
-        public Builder with(String module, Consumer<ModuleConfiguration.Builder> f) {
-            return with(module, ModuleConfiguration.build(f));
         }
 
         public Builder with(String module, ModuleConfiguration config) {
