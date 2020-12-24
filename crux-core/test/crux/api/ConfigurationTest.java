@@ -71,7 +71,7 @@ public class ConfigurationTest {
         NodeConfiguration fromExplicitConsumer = NodeConfiguration.build(consumer);
 
         NodeConfiguration fromImplicitConsumer = NodeConfiguration.build(nc -> {
-            nc.with("foo", fooConsumer);
+            nc.with("foo", ModuleConfiguration.build(fooConsumer));
         });
 
         HashMap<String, Object> explicitSubHashMap = new HashMap<>();
