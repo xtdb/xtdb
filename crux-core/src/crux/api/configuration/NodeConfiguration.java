@@ -1,6 +1,5 @@
 package crux.api.configuration;
 
-import clojure.lang.IPersistentMap;
 import clojure.lang.PersistentArrayMap;
 import crux.api.IBuilder;
 
@@ -24,10 +23,6 @@ public class NodeConfiguration {
         public Builder with(String module, ModuleConfiguration configuration) {
             modules.put(module, configuration.getOpts());
             return this;
-        }
-
-        public Builder with(String module, Consumer<ModuleConfiguration.Builder> f) {
-            return with(module, ModuleConfiguration.build(f));
         }
 
         @Override
