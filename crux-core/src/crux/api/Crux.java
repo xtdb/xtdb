@@ -88,14 +88,14 @@ public class Crux {
      * Starts a Crux node using the provided configuration.
      * <p>
      * <pre>
-     * ICruxAPI cruxNode = Crux.startNode(n -> {
+     * ICruxAPI cruxNode = Crux.startNode(NodeConfiguration.configureNode(n -> {
      *   // ...
-     * });
+     * }));
      * </pre>
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param f a callback, provided with an object to configure the node before it starts.
+     * @param configuration node configuration options.
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
@@ -158,14 +158,14 @@ public class Crux {
      * running a full local node with index.
      * <p>
      * <pre>
-     * ICruxAPI ingestClient = Crux.newIngestClient(n -> {
+     * ICruxAPI ingestClient = Crux.newIngestClient(NodeConfiguration.configureNode(n -> {
      *   // ...
-     * });
+     * }));
      * </pre>
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param options node configuration options.
+     * @param configuration node configuration options.
      * @return        the started ingest client node.
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
