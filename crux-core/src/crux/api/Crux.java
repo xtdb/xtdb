@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
 import clojure.lang.IFn;
+import crux.api.configuration.NodeConfiguration;
 
 /**
  * Public API entry point for starting an {@link ICruxAPI}.
@@ -36,7 +37,7 @@ public class Crux {
      */
     @SuppressWarnings("unused")
     public static ICruxAPI startNode() {
-        return startNode(c -> {});
+        return startNode(NodeConfiguration.build(c -> {}));
     }
 
     /**
@@ -101,10 +102,8 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
     @SuppressWarnings("unused")
-    public static ICruxAPI startNode(Consumer<NodeConfigurator> f) throws IndexVersionOutOfSyncException {
-        NodeConfigurator c = new NodeConfigurator();
-        f.accept(c);
-        return startNode(c.modules);
+    public static ICruxAPI startNode(NodeConfiguration configuration) throws IndexVersionOutOfSyncException {
+        return startNode(configuration.getModules());
     }
 
     /**
@@ -172,9 +171,7 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
     @SuppressWarnings("unused")
-    public static ICruxAsyncIngestAPI newIngestClient(Consumer<NodeConfigurator> f) {
-        NodeConfigurator c = new NodeConfigurator();
-        f.accept(c);
-        return newIngestClient(c.modules);
+    public static ICruxAsyncIngestAPI newIngestClient(NodeConfiguration configuration) {
+        return newIngestClient(configuration.getModules());
     }
 }
