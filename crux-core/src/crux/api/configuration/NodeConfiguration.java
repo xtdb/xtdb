@@ -9,7 +9,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public class NodeConfiguration {
-    public static NodeConfiguration build(Consumer<Builder> f) {
+    public static NodeConfiguration configureNode(Consumer<Builder> f) {
         Builder b = new Builder();
         f.accept(b);
         return b.build();

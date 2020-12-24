@@ -3,12 +3,12 @@ package crux.api;
 import java.io.File;
 import java.net.URL;
 import java.util.Map;
-import java.util.function.Consumer;
 
 import clojure.java.api.Clojure;
-import clojure.lang.Keyword;
 import clojure.lang.IFn;
 import crux.api.configuration.NodeConfiguration;
+
+import static crux.api.configuration.NodeConfiguration.configureNode;
 
 /**
  * Public API entry point for starting an {@link ICruxAPI}.
@@ -37,7 +37,7 @@ public class Crux {
      */
     @SuppressWarnings("unused")
     public static ICruxAPI startNode() {
-        return startNode(NodeConfiguration.build(c -> {}));
+        return startNode(configureNode(c -> {}));
     }
 
     /**

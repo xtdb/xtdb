@@ -15,35 +15,35 @@
 
 (defn start-rocks-node ^ICruxAPI [data-dir]
   (Crux/startNode
-    (NodeConfiguration/build
+    (NodeConfiguration/configureNode
       (consume [c]
                (doto ^NodeConfiguration$Builder c
                  (.with "crux/tx-log"
-                        (ModuleConfiguration/build
+                        (ModuleConfiguration/configureModule
                           (consume [c]
                                    (doto ^ModuleConfiguration$Builder c
                                      (.with "kv-store"
-                                            (ModuleConfiguration/build
+                                            (ModuleConfiguration/configureModule
                                               (consume [c]
                                                        (doto ^ModuleConfiguration$Builder c
                                                          (.module "crux.rocksdb/->kv-store")
                                                          (.set "db-dir" (io/file data-dir "txs"))))))))))
                  (.with "crux/document-store"
-                        (ModuleConfiguration/build
+                        (ModuleConfiguration/configureModule
                           (consume [c]
                                    (doto ^ModuleConfiguration$Builder c
                                      (.with "kv-store"
-                                            (ModuleConfiguration/build
+                                            (ModuleConfiguration/configureModule
                                               (consume [c]
                                                        (doto ^ModuleConfiguration$Builder c
                                                          (.module "crux.rocksdb/->kv-store")
                                                          (.set "db-dir" (io/file data-dir "docs"))))))))))
                  (.with "crux/index-store"
-                        (ModuleConfiguration/build
+                        (ModuleConfiguration/configureModule
                           (consume [c]
                                    (doto ^ModuleConfiguration$Builder c
                                      (.with "kv-store"
-                                            (ModuleConfiguration/build
+                                            (ModuleConfiguration/configureModule
                                               (consume [c]
                                                        (doto ^ModuleConfiguration$Builder c
                                                          (.module "crux.rocksdb/->kv-store")
@@ -51,15 +51,15 @@
 
 (defn start-rocks-ingest-node ^ICruxAsyncIngestAPI [data-dir]
   (Crux/newIngestClient
-    (NodeConfiguration/build
+    (NodeConfiguration/configureNode
       (consume [c]
                (doto ^NodeConfiguration$Builder c
                  (.with "crux/document-store"
-                        (ModuleConfiguration/build
+                        (ModuleConfiguration/configureModule
                           (consume [c]
                                    (doto ^ModuleConfiguration$Builder c
                                      (.with "kv-store"
-                                            (ModuleConfiguration/build
+                                            (ModuleConfiguration/configureModule
                                               (consume [c]
                                                        (doto ^ModuleConfiguration$Builder c
                                                          (.module "crux.rocksdb/->kv-store")
