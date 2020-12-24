@@ -102,7 +102,7 @@
                                identity)]
 
       (fn [value {:keys [entity-resolver-fn] :as db} recurse-state]
-        (let [content-hash (entity-resolver-fn (c/->id-buffer value))]
+        (when-let [content-hash (entity-resolver-fn (c/->id-buffer value))]
           (let-docs [docs #{content-hash}]
             (let [doc (get docs (c/new-id content-hash))]
               (->> (concat (->> forward-join-child-fns (map (fn [f] (f doc db recurse-state))))

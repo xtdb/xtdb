@@ -176,3 +176,11 @@
              (ffirst (crux/q (crux/db *api*)
                              '{:find [(eql/project ?root [:crux.db/id {:_parent 2}])]
                                :where [[?root :crux.db/id :root]]}))))))
+
+(t/deftest test-doesnt-hang-on-unknown-eid
+  (t/is (= #{[{}]}
+           (crux/q (crux/db *api*)
+                   '{:find [(eql/project ?e [*])]
+                     :in [?e]
+                     :timeout 500}
+                   "doesntexist"))))
