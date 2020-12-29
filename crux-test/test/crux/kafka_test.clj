@@ -9,12 +9,16 @@
             [crux.rdf :as rdf]
             [crux.tx :as tx]
             [crux.kv :as kv]
+            [crux.document :as doc]
             [clojure.java.io :as io])
   (:import java.time.Duration
            [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
            org.apache.kafka.clients.producer.ProducerRecord))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
+
+(defn doc= [expected compare]
+  (= (doc/->Document expected) compare))
 
 (defn compact-doc-messages [docs]
   (->> docs
@@ -44,9 +48,9 @@
               _ (.awaitTx *api* submitted-tx nil)]
 
           (t/testing "querying transacted data"
-            (t/is (= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
+            (t/is (doc= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
             (t/is (nil? (api/entity (api/db *api*) (:crux.db/id :to-be-evicted))))
-            (t/is (= after-evict-doc (api/entity (api/db *api*) :after-evict))))
+            (t/is (doc= after-evict-doc (api/entity (api/db *api*) :after-evict))))
 
           (with-open [doc-consumer (doto (fk/open-consumer)
                                      (#'k/subscribe-consumer #{fk/*doc-topic*} {}))]
@@ -82,9 +86,9 @@
         (with-compacted-node (submit-txs-to-compact)
           (fn []
             (t/testing "querying transacted data"
-              (t/is (= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
+              (t/is (doc= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
               (t/is (nil? (api/entity (api/db *api*) :to-be-evicted)))
-              (t/is (= after-evict-doc (api/entity (api/db *api*) :after-evict))))))))))
+              (t/is (doc= after-evict-doc (api/entity (api/db *api*) :after-evict))))))))))
 
 (t/deftest test-consumer-seeks-after-restart
   (fix/with-tmp-dir "crux-tmp" [tmp]

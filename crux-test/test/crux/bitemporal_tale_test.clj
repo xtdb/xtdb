@@ -1,7 +1,11 @@
 (ns crux.bitemporal-tale-test
   (:require [crux.api :as crux]
+            [crux.document :as doc]
             [clojure.test :as t]
             [clojure.java.io :as io]))
+
+(defn doc= [expected compare]
+  (= (doc/->Document expected) compare))
 
 (t/deftest bitemporal-tale-test
   (with-open [node (crux/start-node {})]
@@ -96,7 +100,7 @@
                               :place/location :ids.places/carribean}
                              #inst "1000-01-01"]]))
     (def db (crux/db node))
-    (t/is (= {:crux.db/id :ids.people/Charles,
+    (t/is (doc= {:crux.db/id :ids.people/Charles,
               :person/str 40,
               :person/dex 40,
               :person/location :ids.places/rarities-shop,
@@ -250,34 +254,33 @@
     (crux/await-tx node (entity-update :ids.people/Charles
                                          {:person/int  50}
                                          #inst "1730-05-18"))
-    (t/is (= (entity :ids.people/Charles)
-             {:person/str 40,
-              :person/dex 40,
-              :person/has #{:ids.artefacts/cozy-mug :ids.artefacts/unknown-key}
-              :person/location :ids.places/rarities-shop,
-              :person/hp 40,
-              :person/int 50,
-              :person/name "Charles",
-              :crux.db/id :ids.people/Charles,
-              :person/gold 10000,
-              :person/born #inst "1700-05-18T00:00:00.000-00:00"}))
+    (t/is (doc= {:person/str 40,
+                 :person/dex 40,
+                 :person/has #{:ids.artefacts/cozy-mug :ids.artefacts/unknown-key}
+                 :person/location :ids.places/rarities-shop,
+                 :person/hp 40,
+                 :person/int 50,
+                 :person/name "Charles",
+                 :crux.db/id :ids.people/Charles,
+                 :person/gold 10000,
+                 :person/born #inst "1700-05-18T00:00:00.000-00:00"}
+                (entity :ids.people/Charles)))
 
-    (t/is (= (entity-with-adjacent :ids.people/Charles [:person/has])
-             {:crux.db/id :ids.people/Charles,
-              :person/str 40,
-              :person/dex 40,
-              :person/has
-              #{{:crux.db/id :ids.artefacts/unknown-key,
-                 :artefact/title "Key from an unknown door"}
-                {:crux.db/id :ids.artefacts/cozy-mug,
-                 :artefact/title "A Rather Cozy Mug",
-                 :artefact.perks/int 3}},
-              :person/location :ids.places/rarities-shop,
-              :person/hp 40,
-              :person/int 50,
-              :person/name "Charles",
-              :person/gold 10000,
-              :person/born #inst "1700-05-18T00:00:00.000-00:00"}))
+    (t/is (doc= {:crux.db/id :ids.people/Charles,
+                 :person/str 40,
+                 :person/dex 40,
+                 :person/has #{(doc/->Document {:crux.db/id :ids.artefacts/unknown-key,
+                                :artefact/title "Key from an unknown door"})
+                               (doc/->Document {:crux.db/id :ids.artefacts/cozy-mug,
+                                :artefact/title "A Rather Cozy Mug",
+                                :artefact.perks/int 3})},
+                 :person/location :ids.places/rarities-shop,
+                 :person/hp 40,
+                 :person/int 50,
+                 :person/name "Charles",
+                 :person/gold 10000,
+                 :person/born #inst "1700-05-18T00:00:00.000-00:00"}
+                (entity-with-adjacent :ids.people/Charles [:person/has])))
 
     (crux/await-tx node (let [theft-date #inst "1740-06-18"]
                             (crux/submit-tx

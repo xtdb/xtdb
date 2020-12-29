@@ -9,7 +9,8 @@
             [crux.fixtures.kafka :as fk]
             [crux.rdf :as rdf]
             [crux.tx :as tx]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [crux.document :as doc])
   (:import crux.api.NodeOutOfSyncException
            java.time.Duration
            java.util.Date
@@ -20,6 +21,9 @@
 
 (t/use-fixtures :once every-api/with-embedded-kafka-cluster)
 (t/use-fixtures :each every-api/with-each-api-implementation)
+
+(defn doc= [expected compare]
+  (= (doc/->Document expected) compare))
 
 (defmacro with-dbs [[db db-args] & body]
   `(do
@@ -41,7 +45,7 @@
         content-ivan {:crux.db/id :ivan :name "Ivan"}]
     (t/testing "put"
       (let [tx (fix/submit+await-tx [[:crux.tx/put content-ivan valid-time]])]
-        (t/is (= {:crux.db/id :ivan :name "Ivan"}
+        (t/is (doc= {:crux.db/id :ivan :name "Ivan"}
                  (api/entity (api/db *api* {:crux.db/valid-time valid-time, :crux.tx/tx tx}) :ivan)))))
 
     (t/testing "delete"
@@ -53,7 +57,7 @@
   (let [empty-db (api/db *api*)]
     (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo} #inst "2020"]])
-    (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo)))
+    (t/is (doc= {:crux.db/id :foo} (api/entity (api/db *api*) :foo)))
 
     ;; TODO we don't currently distinguish between 'give me empty DB'
     ;; and 'give me latest tx-time' on the HTTP API when the tx-time QP is nil/missing
@@ -208,7 +212,7 @@
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
-                             :crux.api/tx-ops [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+                             :crux.api/tx-ops [[:crux.tx/put (doc/->Document {:crux.db/id :ivan :name "Ivan"}) valid-time]])]
                      result))
             (t/is (realized? result)))))
 
@@ -264,14 +268,14 @@
                           (c/new-id :increment-age-2)
                           {:crux.api/tx-ops [[:crux.tx/fn
                                               (c/new-id :increment-age)
-                                              {:crux.api/tx-ops [[:crux.tx/put {:crux.db/id :jack, :age 22}]]}]]}]
+                                              {:crux.api/tx-ops [[:crux.tx/put (doc/->Document {:crux.db/id :jack, :age 22})]]}]]}]
                          (last tx-ops)))))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
             (let [doc (merge {:crux.db/id :ivan, :name "Ivan"} m)]
               (merge (fix/submit+await-tx [[:crux.tx/put doc valid-time]])
-                     {:crux.db/doc doc
+                     {:crux.db/doc (doc/->Document doc)
                       :crux.db/valid-time valid-time
                       :crux.db/content-hash (c/new-id doc)})))]
     (let [v1 (submit-ivan {:version 1} #inst "2019-02-01")
@@ -343,13 +347,13 @@
   (let [tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 0}]])
         db (api/db *api*)]
     (t/is (= tx (:crux.tx/tx (api/db-basis db))))
-    (t/is (= {:crux.db/id :foo, :count 0}
-             (api/entity db :foo)))
+    (t/is (doc= {:crux.db/id :foo, :count 0}
+                (api/entity db :foo)))
 
     (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :count 1}]])
 
-    (t/is (= {:crux.db/id :foo, :count 0}
-             (api/entity db :foo)))))
+    (t/is (doc= {:crux.db/id :foo, :count 0}
+                (api/entity db :foo)))))
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (.latestSubmittedTx *api*)))
@@ -360,7 +364,7 @@
 
   (api/sync *api*)
 
-  (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))
+  (t/is (doc= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))
 
 (t/deftest test-listen-for-indexed-txs
   (when-not (contains? (set t/*testing-contexts*) (str :remote))
@@ -385,11 +389,11 @@
 
         (t/is (= [(merge {:crux/event-type :crux/indexed-tx,
                           :committed? true
-                          :crux/tx-ops [[:crux.tx/put {:crux.db/id :bar}]]}
+                          :crux/tx-ops [[:crux.tx/put (doc/->Document {:crux.db/id :bar})]]}
                          bar-tx)
                   (merge {:crux/event-type :crux/indexed-tx,
                           :committed? true
-                          :crux/tx-ops [[:crux.tx/put {:crux.db/id :baz}]]}
+                          :crux/tx-ops [[:crux.tx/put (doc/->Document {:crux.db/id :baz})]]}
                          baz-tx)]
                  @!events))))))
 
@@ -404,7 +408,7 @@
       (t/testing "replaces args doc with resulting ops"
         (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
 
-        (t/is (= {:crux.db/id :ivan, :name "Ivan"}
+        (t/is (doc= {:crux.db/id :ivan, :name "Ivan"}
                  (api/entity (api/db *api*) :ivan)))
 
         (let [*server-api* (or *http-server-api* *api*)

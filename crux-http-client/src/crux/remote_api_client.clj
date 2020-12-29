@@ -5,7 +5,8 @@
             [crux.error :as err]
             [crux.io :as cio]
             [crux.query-state :as qs]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.document :as doc])
   (:import com.nimbusds.jwt.SignedJWT
            [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
            [java.io Closeable InputStreamReader IOException PushbackReader]
@@ -20,7 +21,8 @@
       (int \() (->> (repeatedly #(try
                                    (edn/read {:readers {'crux/id c/id-edn-reader
                                                         'crux/query-state qs/->QueryState
-                                                        'crux/query-error qs/->QueryError}
+                                                        'crux/query-error qs/->QueryError
+                                                        'crux/document doc/->Document}
                                               :eof ::eof} in)
                                    (catch RuntimeException e
                                      (if (= "Unmatched delimiter: )" (.getMessage e))

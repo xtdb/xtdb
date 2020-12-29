@@ -1,7 +1,8 @@
 (ns ^:no-doc crux.tx.conform
   (:require [crux.codec :as c]
             [crux.db :as db]
-            [crux.error :as err])
+            [crux.error :as err]
+            [crux.document :as doc])
   (:import [java.util Date UUID]))
 
 (defn- check-eid [eid]
@@ -214,7 +215,7 @@
                       :crux.tx/match
                       (cons id
                             (for [arg args]
-                              (get docs arg arg)))
+                              (doc/?->Document (get docs arg arg))))
 
                       (for [arg args]
-                        (get docs arg arg))))))))
+                        (doc/?->Document (get docs arg arg)))))))))

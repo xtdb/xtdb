@@ -7,6 +7,7 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.index :as idx]
             [crux.query :as q]
+            [crux.document :as doc]
             [taoensso.nippy :as nippy])
   (:import java.util.Arrays
            java.util.concurrent.TimeoutException))
@@ -1895,8 +1896,8 @@
 
       (t/is (= tx-id (:crux.tx/tx-id (api/entity-tx (api/db *api* tx-time tx-time) :ivan))))
 
-      (t/is (= {:crux.db/id :ivan
-                :name "Ivan 1st"} (api/entity (api/db *api* tx-time tx-time) :ivan)))))
+      (t/is (= (doc/->Document {:crux.db/id :ivan :name "Ivan 1st"})
+               (api/entity (api/db *api* tx-time tx-time) :ivan)))))
 
   (t/testing "cannot create existing user"
     (let [{:crux.tx/keys [tx-time tx-id] :as submitted-tx}

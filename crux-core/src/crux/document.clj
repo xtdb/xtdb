@@ -2,19 +2,26 @@
   (:import (crux.api IDocument)
            (java.io Writer)))
 
-(defrecord Document [d]
+(defrecord Document []
   IDocument
-  (getDocumentId [this] (:crux.db/id d))
-  (getContents [this] (dissoc d :crux.db/id)))
+  (getDocumentId [this] (:crux.db/id this))
+  (getContents [this] (->> :crux.db/id
+                           (dissoc this)
+                           (into {}))))
 
-(defmethod print-method Document [d ^Writer w]
+(defmethod print-method Document [document ^Writer w]
   (.write w "#crux/document ")
-  (print-method (into {} d) w))
+  (print-method (into {} document) w))
 
 (defn ?->Document [d]
-  (if (and (map? d) (contains? d :crux.db/id))
+  (if (and
+        (map? d)
+        (contains? d :crux.db/id)
+        (not (and
+               (contains? d :crux.db/evicted?)
+               (:crux.db/evicted? d))))
     (->Document d)
     d))
 
 (defn ->Document [d]
-  (Document. d))
+  (map->Document d))

@@ -7,7 +7,8 @@
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
             [crux.query :as q]
-            [crux.rocksdb :as rocks])
+            [crux.rocksdb :as rocks]
+            [crux.document :as doc])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
            org.apache.lucene.queryparser.classic.QueryParser
@@ -267,7 +268,7 @@
       (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
         (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
       (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
-        (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))
+        (t/is (= (c/entity (c/db *api*) :ivan) (doc/->Document {:crux.db/id :ivan :name "Ivan"}))))))
 
   (t/testing "restart with partial indices (> lucene-tx-id tx-id)"
     (fix/with-tmp-dirs #{node-dir lucene-dir index-dir}
@@ -277,8 +278,8 @@
         (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :fred :name "Fred"}]]))
       (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir :index-dir index-dir}
         (let [db (c/db *api*)]
-          (t/is (= (c/entity db :fred) {:crux.db/id :fred :name "Fred"}))
-          (t/is (= (c/entity db :ivan) {:crux.db/id :ivan :name "Ivan"}))
+          (t/is (= (c/entity db :fred) (doc/->Document{:crux.db/id :fred :name "Fred"})))
+          (t/is (= (c/entity db :ivan) (doc/->Document{:crux.db/id :ivan :name "Ivan"})))
           (t/is (= #{[:fred]} (c/q db {:find '[?e]
                                        :where '[[(text-search :name "Fred") [[?e]]]
                                                 [?e :crux.db/id]]})))

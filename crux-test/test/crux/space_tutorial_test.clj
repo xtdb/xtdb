@@ -2,11 +2,15 @@
   (:require [clojure.test :as t]
             [crux.api :as crux]
             [crux.io :as cio]
+            [crux.document :as doc]
             [crux.fixtures :as fix :refer [*api*]]
             [clojure.java.io :as io])
   (:import java.io.Closeable))
 
 (t/use-fixtures :each fix/with-node)
+
+(defn doc= [expected compare]
+  (= (doc/->Document expected) compare))
 
 (def manifest
   {:crux.db/id :manifest
@@ -53,13 +57,13 @@
   (t/testing "earth-test"
     (fix/submit+await-tx [[:crux.tx/put manifest]])
 
-    (t/is (= {:crux.db/id :manifest,
-              :pilot-name "Johanna",
-              :id/rocket "SB002-sol",
-              :id/employee "22910x2",
-              :badges "SETUP",
-              :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest)))
+    (t/is (doc= {:crux.db/id :manifest,
+                 :pilot-name "Johanna",
+                 :id/rocket "SB002-sol",
+                 :id/employee "22910x2",
+                 :badges "SETUP",
+                 :cargo ["stereo" "gold fish" "slippers" "secret note"]}
+                (crux/entity (crux/db *api*) :manifest)))
 
     (t/is (= #{["secret note"]}
              (crux/q (crux/db *api*)
@@ -127,20 +131,20 @@
                            #inst "2115-02-15T18"
                            #inst "2115-02-19T18"]])
 
-    (t/is (= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 21}
-             (crux/entity (crux/db *api* #inst "2115-02-14") :stock/Pu)))
-    (t/is (= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
-             (crux/entity (crux/db *api* #inst "2115-02-18") :stock/Pu)))
+    (t/is (doc= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 21}
+                (crux/entity (crux/db *api* #inst "2115-02-14") :stock/Pu)))
+    (t/is (doc= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
+                (crux/entity (crux/db *api* #inst "2115-02-18") :stock/Pu)))
 
     (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT"])]])
 
-    (t/is (= {:crux.db/id :manifest,
-              :pilot-name "Johanna",
-              :id/rocket "SB002-sol",
-              :id/employee "22910x2",
-              :badges ["SETUP" "PUT"],
-              :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+    (t/is (doc= {:crux.db/id :manifest,
+                 :pilot-name "Johanna",
+                 :id/rocket "SB002-sol",
+                 :id/employee "22910x2",
+                 :badges ["SETUP" "PUT"],
+                 :cargo ["stereo" "gold fish" "slippers" "secret note"]}
+                (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "mercury-tests"
     (put-all! [{:crux.db/id :commodity/Pu
@@ -182,15 +186,15 @@
                 :density 1.73
                 :radioactive false}])
 
-    (t/is (={:crux.db/id :commodity/borax
-             :common-name "Borax"
-             :IUPAC-name "Sodium tetraborate decahydrate"
-             :other-names ["Borax decahydrate" "sodium borate" "sodium tetraborate" "disodium tetraborate"]
-             :type :mineral/solid
-             :appearance "white solid"
-             :density 1.73
-             :radioactive false}
-            (crux/entity (crux/db *api*) :commodity/borax)))
+    (t/is (doc= {:crux.db/id :commodity/borax
+                 :common-name "Borax"
+                 :IUPAC-name "Sodium tetraborate decahydrate"
+                 :other-names ["Borax decahydrate" "sodium borate" "sodium tetraborate" "disodium tetraborate"]
+                 :type :mineral/solid
+                 :appearance "white solid"
+                 :density 1.73
+                 :radioactive false}
+                (crux/entity (crux/db *api*) :commodity/borax)))
     (t/is (= #{[:commodity/Pu] [:commodity/Au]}
              (crux/q (crux/db *api*)
                      '{:find [element]
@@ -247,13 +251,13 @@
 
     (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"])]])
 
-    (t/is (= {:crux.db/id :manifest,
-              :pilot-name "Johanna",
-              :id/rocket "SB002-sol",
-              :id/employee "22910x2",
-              :badges ["SETUP" "PUT" "DATALOG-QUERIES"],
-              :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+    (t/is (doc= {:crux.db/id :manifest,
+                 :pilot-name "Johanna",
+                 :id/rocket "SB002-sol",
+                 :id/employee "22910x2",
+                 :badges ["SETUP" "PUT" "DATALOG-QUERIES"],
+                 :cargo ["stereo" "gold fish" "slippers" "secret note"]}
+                (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "neptune-test"
     (fix/submit+await-tx [[:crux.tx/put
@@ -327,13 +331,13 @@
                            (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"
                                                     "BITEMP"])]])
 
-    (t/is (= {:crux.db/id :manifest,
-              :pilot-name "Johanna",
-              :id/rocket "SB002-sol",
-              :id/employee "22910x2",
-              :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP"],
-              :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+    (t/is (doc= {:crux.db/id :manifest,
+                 :pilot-name "Johanna",
+                 :id/rocket "SB002-sol",
+                 :id/employee "22910x2",
+                 :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP"],
+                 :cargo ["stereo" "gold fish" "slippers" "secret note"]}
+                (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "saturn-tests"
     (put-all! [{:crux.db/id :gold-harmony
@@ -454,12 +458,12 @@
 
     (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"])]])
 
-    (t/is (= {:crux.db/id :manifest,
-              :pilot-name "Johanna",
-              :id/rocket "SB002-sol",
-              :id/employee "22910x2",
-              :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"],
-              :cargo ["stereo" "gold fish" "slippers" "secret note"]}
+    (t/is (doc= {:crux.db/id :manifest,
+                 :pilot-name "Johanna",
+                 :id/rocket "SB002-sol",
+                 :id/employee "22910x2",
+                 :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"],
+                 :cargo ["stereo" "gold fish" "slippers" "secret note"]}
              (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "jupiter-tests"
@@ -483,9 +487,9 @@
                            #inst "2114-01-01T09"
                            #inst "2115-01-01T09"]])
 
-    (t/is (= {:crux.db/id :kaarlang/clients
-              :clients [:blue-energy :gold-harmony :tombaugh-resources]}
-             (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
+    (t/is (doc= {:crux.db/id :kaarlang/clients
+                 :clients [:blue-energy :gold-harmony :tombaugh-resources]}
+                (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
     ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
     (with-open [history (crux/open-entity-history (crux/db *api*) :kaarlang/clients :asc)]

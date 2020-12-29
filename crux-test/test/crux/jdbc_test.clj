@@ -3,6 +3,7 @@
             [crux.api :as api]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.document :as doc]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.lubm :as fl]
@@ -10,6 +11,9 @@
             [next.jdbc.result-set :as jdbcr]))
 
 (t/use-fixtures :each fj/with-each-jdbc-node fix/with-node)
+
+(defn doc= [expected compare]
+  (= (doc/->Document expected) compare))
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
@@ -92,8 +96,8 @@
                     '{:find [(eql/project ?e [*])]
                       :where [[?e :crux.db/id :foo]]})))
 
-    (t/is (= {:crux.db/id :foo, :foo :bar}
-             (api/entity db :foo)))
+    (t/is (doc= {:crux.db/id :foo, :foo :bar}
+                (api/entity db :foo)))
 
     (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
              (api/q db

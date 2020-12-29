@@ -10,7 +10,8 @@
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
             [crux.http-server.entity-ref :as entity-ref]
             [jsonista.core :as json]
-            [crux.query-state :as cqs])
+            [crux.query-state :as cqs]
+            [crux.document :as doc])
   (:import java.io.InputStream))
 
 (t/use-fixtures :each
@@ -26,7 +27,8 @@
     "application/edn" (edn/read-string {:readers {'crux.http/entity-ref entity-ref/->EntityRef
                                                   'crux/query-state cqs/->QueryState
                                                   'crux/query-error cqs/->QueryError
-                                                  'crux/id str}}
+                                                  'crux/id str
+                                                  'crux/document doc/->Document}}
                                        (slurp body))
     "text/csv" (with-open [rdr (io/reader body)]
                  (doall (csv/read-csv rdr)))
@@ -59,7 +61,7 @@
     (t/testing "getting the entity with different types"
       (let [get-entity (fn [accept-type] (-> (get-result-from-path "/_crux/entity?eid-edn=:peter" accept-type)
                                              (parse-body accept-type)))]
-        (t/is (= {:crux.db/id :peter, :name "Peter"}
+        (t/is (= (doc/->Document {:crux.db/id :peter, :name "Peter"})
                  (get-entity "application/edn")))
         (t/is (= {:crux.db/id :peter, :name "Peter"}
                  (get-entity "application/transit+json")))))
@@ -136,7 +138,7 @@
 
 (t/deftest test-string-eid-routes
   (let [{:keys [crux.tx/tx-id] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id "string-id"}]])]
-    (t/is (= {:crux.db/id "string-id"}
+    (t/is (= (doc/->Document {:crux.db/id "string-id"})
              (-> (get-result-from-path "/_crux/entity?eid=string-id" "application/edn")
                  (parse-body "application/edn"))))
     (t/is (= tx-id
