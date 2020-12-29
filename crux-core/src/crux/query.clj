@@ -1833,7 +1833,8 @@
                                            :crux.db/valid-time (.vt etx)
                                            :crux.db/content-hash (.content-hash etx)}
                                     with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
-                                                                       (get (.content-hash etx))))))))))))
+                                                                       (get (.content-hash etx))
+                                                                       (doc/?->Document)))))))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
