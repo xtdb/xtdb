@@ -2,7 +2,8 @@
   (:require [crux.api :as crux]
             [clojure.test :as t]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.db :as db])
+            [crux.db :as db]
+            [crux.document :as doc])
   (:import (java.time Instant Duration)))
 
 (defrecord ECDocStore [!docs]
@@ -29,5 +30,5 @@
 
 (t/deftest test-eventually-consistent-doc-store
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
-  (t/is (= {:crux.db/id :foo}
+  (t/is (= (doc/->Document {:crux.db/id :foo})
            (crux/entity (crux/db *api*) :foo))))

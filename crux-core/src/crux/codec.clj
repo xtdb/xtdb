@@ -4,6 +4,7 @@
             [crux.error :as err]
             [crux.hash :as hash]
             [crux.query-state :as cqs]
+            [crux.document :as doc]
             [crux.io :as cio]
             [crux.memory :as mem]
             [taoensso.nippy :as nippy])
@@ -714,7 +715,8 @@
   (edn/read-string {:readers {'crux/id id-edn-reader
                               'crux/base64 base64-reader
                               'crux/query-state cqs/->QueryState
-                              'crux/query-error cqs/->QueryError}} s))
+                              'crux/query-error cqs/->QueryError
+                              'crux/document doc/->Document}} s))
 
 (def ^:const ^:private base64-print-method-enabled?
   (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_BASE64_PRINT_METHOD")))

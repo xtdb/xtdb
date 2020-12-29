@@ -3,7 +3,8 @@
             [crux.api :as crux]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.document :as doc])
   (:import java.util.Date))
 
 (t/use-fixtures :each fix/with-node)
@@ -11,7 +12,7 @@
 (t/deftest test-empty-fork
   (let [db (-> (crux/db *api*)
                (crux/with-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
-    (t/is (= {:crux.db/id :foo} (crux/entity db :foo)))))
+    (t/is (= (doc/->Document {:crux.db/id :foo}) (crux/entity db :foo)))))
 
 (t/deftest test-simple-fork
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivna"}]])
@@ -76,7 +77,7 @@
                   [[:crux.tx/put {:crux.db/id :petr, :name "Petr"}]])]
 
         (t/is (= (crux/valid-time db0) (crux/valid-time db1)))
-        (t/is (= ivan0 (crux/entity db1 :ivan)))))
+        (t/is (= (doc/->Document ivan0) (crux/entity db1 :ivan)))))
 
     (t/testing "doesn't include original data after the original db cutoff in history"
       (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:crux.db/id :ivan, :name "Ivan0"}}

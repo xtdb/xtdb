@@ -8,7 +8,8 @@
             [clojure.test.check.properties :as prop]
             [crux.api :as crux]
             [taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [crux.document :as doc])
   (:import crux.codec.Id
            java.math.BigDecimal
            org.agrona.MutableDirectBuffer
@@ -199,4 +200,4 @@
                :url (java.net.URL. "https://google.com")
                :uuid (java.util.UUID/randomUUID)}]
       (fix/submit+await-tx node [[:crux.tx/put doc]])
-      (t/is (= doc (crux/entity (crux/db node) :foo))))))
+      (t/is (= (doc/->Document doc) (crux/entity (crux/db node) :foo))))))

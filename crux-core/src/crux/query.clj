@@ -20,7 +20,8 @@
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
             [crux.system :as sys]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [crux.document :as doc])
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
@@ -1714,7 +1715,8 @@
                                   :crux.db/content-hash)]
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
-        (c/keep-non-evicted-doc))))
+        (c/keep-non-evicted-doc)
+        (doc/?->Document))))
 
 (defn- with-history-bounds [{:keys [sort-order start-tx end-tx] :as opts}
                             {:keys [^long tx-id ^Date valid-time]}
