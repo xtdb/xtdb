@@ -133,9 +133,7 @@
                                 (.db node)))))))
 
 (t/deftest test-history-options
-  (let [asc-keyword (his/->history-options :asc)
-        asc-enum (his/->history-options HistoryOptions$SortOrder/ASC)
-        desc-keyword (his/->history-options :desc)
-        desc-enum (his/->history-options HistoryOptions$SortOrder/DESC)]
-    (t/is (= asc-keyword asc-enum))
-    (t/is (= desc-keyword desc-enum))))
+  (t/is (= :asc (his/->history-options :asc)))
+  (t/is (= :asc (his/->history-options HistoryOptions$SortOrder/ASC)))
+  (t/is (= :desc (his/->history-options :desc)))
+  (t/is (= :desc (his/->history-options HistoryOptions$SortOrder/DESC))))
