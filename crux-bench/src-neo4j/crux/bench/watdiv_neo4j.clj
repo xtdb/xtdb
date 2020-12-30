@@ -1,19 +1,14 @@
-(ns ^#:clojure.tools.namespace.repl{:load false, :unload false}
-    crux.bench.watdiv-neo4j
+(ns crux.bench.watdiv-neo4j
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
             [crux.bench :as bench]
             [crux.bench.watdiv :as watdiv]
             [crux.io :as cio]
-            [crux.sparql :as sparql]
             [crux.rdf :as rdf]
-            [clojure.string :as string])
-  (:import java.io.StringReader
-           java.util.concurrent.TimeUnit
-           java.util.HashMap
-           java.util.function.Function
-           [org.neo4j.graphdb Label Node RelationshipType GraphDatabaseService]
-           [org.neo4j.dbms.api DatabaseManagementService DatabaseManagementServiceBuilder]))
+            [crux.sparql :as sparql])
+  (:import java.util.concurrent.TimeUnit
+           org.neo4j.dbms.api.DatabaseManagementServiceBuilder
+           [org.neo4j.graphdb GraphDatabaseService Label RelationshipType]))
 
 (def ^:dynamic ^GraphDatabaseService *neo4j-db*)
 (def neo4j-tx-size 100000)

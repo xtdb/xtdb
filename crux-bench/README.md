@@ -26,4 +26,10 @@ Assuming you have `awscli` and `jq` installed, and you are authenticated with AW
 
 ## Running Non-Crux Benchmarks
 
-There are a number of other benchmarks for Watdiv on different databases, using our benchmark harness. We generally wish to run these on AWS, and use their results for comparison against Crux. They are ran based off of the `latest` docker image pushed to AWS, passing a command to docker to override the default main namespace (which runs the Crux benchmark) with whichever namespace you wish to run. There are scripts to run these task overrides under `bin`.
+There are a number of other benchmarks for Watdiv on different databases, using our benchmark harness.
+We generally wish to run these on AWS, and use their results for comparison against Crux.
+They are ran based off of the `latest` docker image pushed to AWS, passing a command to docker to override the default main namespace (which runs the Crux benchmark) with whichever namespace you wish to run.
+There are scripts to run these task overrides under `bin`.
+
+If running Neo4J, you'll need to include the `with-neo4j` Lein profile.
+Crux supports Java 8, so our CI runs using Java 8, but Neo4J 4.x doesn't - if you're running the Neo4J bench, you'll want to use Java 11, and `lein with-profile +with-neo4j ...`.
