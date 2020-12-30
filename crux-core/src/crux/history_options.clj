@@ -2,9 +2,11 @@
   (:import crux.api.HistoryOptions$SortOrder))
 
 (defn <-sort-order [sort-order]
-  (case sort-order
-    (:asc HistoryOptions$SortOrder/ASC) :asc
-    (:desc HistoryOptions$SortOrder/DESC) :desc))
+  (condp = sort-order
+    :asc :asc
+    HistoryOptions$SortOrder/ASC :asc
+    :desc :desc
+    HistoryOptions$SortOrder/DESC :desc))
 
 (defrecord HistoryOptions [sort-order with-corrections? with-docs?
                            start-valid-time start-tx

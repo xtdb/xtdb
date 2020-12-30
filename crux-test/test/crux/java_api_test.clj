@@ -2,8 +2,9 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [crux.fixtures :as fix]
-            [crux.kv :as kv])
-  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator]
+            [crux.kv :as kv]
+            [crux.history-options :as his])
+  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator HistoryOptions$SortOrder]
            [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
            java.util.function.Consumer))
 
@@ -130,3 +131,9 @@
         (t/is (thrown-with-msg? IllegalStateException
                                 #"Crux node is closed"
                                 (.db node)))))))
+
+(t/deftest test-history-options
+  (t/is (= :asc (his/<-sort-order :asc)))
+  (t/is (= :asc (his/<-sort-order HistoryOptions$SortOrder/ASC)))
+  (t/is (= :desc (his/<-sort-order :desc)))
+  (t/is (= :desc (his/<-sort-order HistoryOptions$SortOrder/DESC))))
