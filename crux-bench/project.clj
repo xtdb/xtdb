@@ -24,9 +24,6 @@
                  [org.eclipse.rdf4j/rdf4j-sail-nativerdf "3.0.0"]
                  [org.eclipse.rdf4j/rdf4j-repository-sail "3.0.0"]
 
-                 ;; neo4j
-                 [org.neo4j/neo4j "4.0.0"]
-
                  ;; cloudwatch metrics deps
                  [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
                  [software.amazon.awssdk/cloudwatch "2.10.61"]
@@ -63,4 +60,8 @@
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]
   :uberjar-name "crux-bench-standalone.jar"
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :profiles {:uberjar [:with-neo4j]
+             :with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]
+                          :source-paths ["src-neo4j"]}})

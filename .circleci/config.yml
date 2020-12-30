@@ -55,7 +55,7 @@ version: 2.1
 jobs:
   build:
     docker:
-      - image: circleci/clojure:lein-2.9.3
+      - image: circleci/clojure:openjdk-8-lein
 
     working_directory: ~/crux
 
@@ -94,7 +94,7 @@ jobs:
 
   test:
     docker:
-      - image: circleci/clojure:lein-2.9.3
+      - image: circleci/clojure:openjdk-8-lein
 
     working_directory: ~/crux
     steps:
@@ -107,7 +107,7 @@ jobs:
 
   deploy-commit:
     docker:
-      - image: circleci/clojure:lein-2.9.3
+      - image: circleci/clojure:openjdk-8-lein
 
     working_directory: ~/crux
     steps:
@@ -147,7 +147,7 @@ jobs:
 
   create-artifacts:
     docker:
-      - image: circleci/clojure:openjdk-8-tools-deps-1.10.1.483
+      - image: circleci/clojure:openjdk-8-tools-deps
     working_directory: ~/crux
     steps:
       - checkout
@@ -161,7 +161,7 @@ jobs:
 
   create-api-docs:
     docker:
-      - image: circleci/clojure:lein-2.9.3
+      - image: circleci/clojure:openjdk-8-lein
     working_directory: ~/crux
     steps:
       - checkout
