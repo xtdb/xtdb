@@ -133,7 +133,7 @@
                                 (.db node)))))))
 
 (t/deftest test-history-options
-  (t/is (= :asc (his/->history-options :asc)))
-  (t/is (= :asc (his/->history-options HistoryOptions$SortOrder/ASC)))
-  (t/is (= :desc (his/->history-options :desc)))
-  (t/is (= :desc (his/->history-options HistoryOptions$SortOrder/DESC))))
+  (t/is (= :asc (his/<-sort-order :asc)))
+  (t/is (= :asc (his/<-sort-order HistoryOptions$SortOrder/ASC)))
+  (t/is (= :desc (his/<-sort-order :desc)))
+  (t/is (= :desc (his/<-sort-order HistoryOptions$SortOrder/DESC))))
