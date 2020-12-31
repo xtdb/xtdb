@@ -17,12 +17,13 @@
     (some-> (swap! !tail-seq rest) first key))
 
   (prev [this]
-    (when-let [[[k] :as tail-seq] (seq @!tail-seq)]
-      (some-> (reset! !tail-seq (when-let [le (.lowerEntry db k)]
-                                  (cond->> tail-seq
-                                    (val le) (cons le))))
-              first
-              key)))
+    (loop []
+      (when-let [[[k _] :as tail-seq] (seq @!tail-seq)]
+        (when-let [[k v :as lower-entry] (.lowerEntry db k)]
+          (reset! !tail-seq (cons lower-entry tail-seq))
+          (if v
+            k
+            (recur))))))
 
   (value [this]
     (some-> (first @!tail-seq) val))

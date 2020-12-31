@@ -317,6 +317,8 @@
                                                               (when-let [k (kv/next i)]
                                                                 [(mem/copy-to-unpooled-buffer k)
                                                                  (mem/copy-to-unpooled-buffer (kv/value i))])))
+                                                           ;; if there's a bug in next, this might be infinite
+                                                           (take (count commands))
                                                            (take-while identity)
                                                            (vec)))))
                                 :seek+prevs (with-open [snapshot (kv/new-snapshot kv-store)
@@ -329,6 +331,7 @@
                                                               (when-let [k (kv/prev i)]
                                                                 [(mem/copy-to-unpooled-buffer k)
                                                                  (mem/copy-to-unpooled-buffer (kv/value i))])))
+                                                           (take (count commands))
                                                            (take-while identity)
                                                            (vec)))))
                                 :fsync (kv/fsync kv-store)
