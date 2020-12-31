@@ -67,18 +67,19 @@
   ([i ^DirectBuffer prefix] (all-keys-in-prefix i prefix (.capacity prefix) {}))
   ([i seek-k prefix-length] (all-keys-in-prefix i seek-k prefix-length {}))
   ([i ^DirectBuffer seek-k, prefix-length {:keys [entries? reverse?]}]
-   (letfn [(step [k]
-             (lazy-seq
-              (when (and k (mem/buffers=? seek-k k prefix-length))
-                (cons (if entries?
-                        (MapEntry/create (mem/copy-to-unpooled-buffer k)
-                                         (mem/copy-to-unpooled-buffer (kv/value i)))
-                        (mem/copy-to-unpooled-buffer k))
-                      (step (if reverse? (kv/prev i) (kv/next i)))))))]
-     (step (if reverse?
-             (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
-               (kv/prev i))
-             (kv/seek i seek-k))))))
+   (lazy-seq
+    (letfn [(step [k]
+              (lazy-seq
+               (when (and k (mem/buffers=? seek-k k prefix-length))
+                 (cons (if entries?
+                         (MapEntry/create (mem/copy-to-unpooled-buffer k)
+                                          (mem/copy-to-unpooled-buffer (kv/value i)))
+                         (mem/copy-to-unpooled-buffer k))
+                       (step (if reverse? (kv/prev i) (kv/next i)))))))]
+      (step (if reverse?
+              (when (kv/seek i (-> seek-k (mem/copy-buffer) (mem/inc-unsigned-buffer!)))
+                (kv/prev i))
+              (kv/seek i seek-k)))))))
 
 (defn- buffer-or-value-buffer [v]
   (cond
