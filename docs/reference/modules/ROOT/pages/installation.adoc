@@ -63,8 +63,8 @@ Kotlin::
 include::example$src/docs/Install.kt[tags=imports]
 
 include::example$src/docs/Install.kt[tags=main,indent=0]
+----
 ====
-
 
 [#uberjar]
 == Using a pre-built Crux JAR

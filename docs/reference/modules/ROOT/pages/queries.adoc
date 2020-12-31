@@ -12,16 +12,13 @@ The central characteristic of a graph database is that it can support arbitrary-
 Crux gives you the ability to construct graph queries via a Datalog query language and uses graph-friendly indexes to provide a powerful set of querying capabilities.
 Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
 
-This page walks through many of the more interesting queries that run as part of Crux's default test suite.
-See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
+//This page walks through many of the more interesting queries that run as part of Crux's default test suite.
+//See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
 
 Extensible Data Notation (edn) is used as the data format for the public Crux APIs.
 To gain an understanding of edn see xref:tutorials::essential-edn[Essential EDN for Crux].
 
 Note that all Crux Datalog queries run using a point-in-time view of the database which means the query capabilities and patterns presented in this section are not aware of valid times or transaction times.
-
-[#basic-query]
-== Basic Query
 
 A Datalog query consists of a set of variables and a set of clauses. The result
 of running a query is a result set of the possible combinations of values that
@@ -39,63 +36,288 @@ the database that match the pattern defined by the clauses. The values within
 these subgraphs are then returned according to the list of return variables
 requested in the `:find` vector within the query.
 
-Our first query runs on a database that contains the following 3 documents
-which get broken apart and indexed as "entities":
+[#anatomy]
+== Query Anatomy
+
+A query in Crux is performed by calling `crux/q` on a Crux database snapshot with a quoted map and, optionally, additional arguments.
+
+[source,clojure]
+----
+(crux/q
+   (crux/db node) <1>
+   '{:find [p1]
+     :where [[p1 :name n]
+             [p1 :last-name n]
+             [p1 :name name]]
+     :in [name]}
+    "Smith")
+----
+<1> Usually, the snapshot view comes from calling `crux/db` on a Crux node
+
+The query map accepts the following Keywords
+
+.Query Keys
+[cols="3,3,8,^2"]
+|===
+|Key|Type|Purpose|Required?
+
+|<<#find,`:find`>>|Vector|Specify values to be returned|✓
+|<<#where,`:where`>>|Vector|Restrict the results of the query|✓
+|<<#in,`:in`>>|Vector|Specify external arguments|
+|<<#ordering-and-pagination,`:order-by`>>|Vector|Control the result order|
+|<<#ordering-and-pagination,`:limit`>>|Int|Specify how many results to return|
+|<<#ordering-and-pagination,`:offset`>>|Int|Specify how many results to discard|
+|<<#rules,`:rules`>>|Vector|Define powerful statements for use in `:where` clauses|
+|===
+
+[#find]
+== Find
+
+The find clause of a query specifies what values to be returned. These will be returned as a list.
+
+[#find-logic-variable]
+=== Logic Variable
+
+You can directly specify a logic variable from your query. The following will return all last names.
+
+[source,clojure]
+----
+'{:find [n]
+  :where [p :last-name n]}
+----
+
+[#find-aggregate]
+=== Aggregates
+
+You can specify an aggregate function to apply to at most one logic variable.
+
+.Built-in Aggregate Functions
+[cols="3,.^8"]
+|===
+|Usage|Description
+|`(sum ?lvar)`| Accumulates as a single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
+|`(min ?lvar)` .2+| Return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operates on many types (integers, strings, collections etc.)
+|`(max ?lvar)`
+|`(count ?lvar)`| Return a single count of all values including any duplicates
+|`(avg ?lvar)`| Return a single value equivalent to `sum / count`
+|`(median ?lvar)` .3+| Return a single value corresponding to the statistical definition
+|`(variance ?lvar)`
+|`(stddev ?lvar)`
+|`(rand N ?lvar)`| Return a vector of exactly N values, where some values may be duplicates if N is larger than the range
+|`(sample N ?lvar)`| Return a vector of at-most N distinct values
+|`(distinct ?lvar)`| Return a set of distinct values
+|===
+
+For example, to find the average `:age` field of all entities, you can do the following:
+[source,clojure]
+----
+'{:find [(avg a)]
+  :where [[p :age a]]}
+----
+
+Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
+
+User-defined aggregates are supported by adding a new method (via Clojure `defmethod`) for `crux.query/aggregate`. For example:
+
+[source,clojure]
+----
+(defmethod crux.query/aggregate 'sort-reverse [_]
+  (fn
+    ([] [])
+    ([acc] (vec (reverse (sort acc))))
+    ([acc x] (conj acc x))))
+----
+
+[#eql-projection]
+=== EQL Projection
+
+// TODO: Not rewriting as this is being actively worked on and changed
+
+*ALPHA* - subject to change without warning between releases.
+
+Crux queries support a 'projection' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries.
+Crux's support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library.
+
+To specify what data you'd like about each entity, include a `(eql/project ?logic-var projection-spec)` entry in the `:find` clause of your query:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=eql-query-1]
+include::example$src/docs/examples.clj[tags=eql-query-1-r]
+
+include::example$src/docs/examples.clj[tags=eql-query-2]
+include::example$src/docs/examples.clj[tags=eql-query-2-r]
+----
+
+We can navigate to other entities (and hence build up nested results) using 'joins'.
+Joins are specified in `{}` braces in the projection-spec - each one maps one join key to its nested spec:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=eql-query-3]
+include::example$src/docs/examples.clj[tags=eql-query-3-r]
+
+include::example$src/docs/examples.clj[tags=eql-query-4]
+include::example$src/docs/examples.clj[tags=eql-query-4-r]
+----
+
+We can also navigate in the reverse direction, looking for entities that refer to this one, by prepending `_` to the attribute name:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=eql-query-5]
+include::example$src/docs/examples.clj[tags=eql-query-5-r]
+----
+
+To rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
+
+[source,clojure]
+----
+{:find [(eql/project ?profession [:profession/name {(:user/_profession {:as :users}) [:user/id :user/name]}])]
+ :where [[?profession :profession/name]]}
+
+;; => [{:profession/name "Doctor",
+;;      :users [{:user/id 1, :user/name "Ivan"},
+;;              {:user/id 3, :user/name "Petr"}]},
+;;     {:profession/name "Lawyer",
+;;      :users [{:user/id 2, :user/name "Sergei"}]}]
+----
+
+You can quickly grab the whole document by specifying `*` in the projection spec:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=eql-query-6]
+include::example$src/docs/examples.clj[tags=eql-query-6-r]
+----
+
+For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
+// TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
+Crux does not (yet) support recursive queries.
+
+[#where]
+== Where
+
+The `:where` section of a query constrains the result set to match only entities (or subgraphs of interconnected entities) which satisfy all clauses.
+Clauses are edn vectors within the `:where` vector.
+
+[#where-existence]
+=== Existence
+
+A clause which consists of a logic variable and a keyword is satisfied if that keyword exists.
+
+[source,clojure]
+----
+`{:find [p]
+  :where [[p :name]]}
+----
+
+This matches all entities, `p`, which have a `:name`
+
+[#where-tuple]
+=== Tuple
+
+A clause which consists of a logic variable, a keyword and a third value is satisfied if that tuple exists.
+
+[source,clojure]
+----
+'{:find [p]
+  :where [[p :name "Smith"]]}
+----
+
+This matches all entities, `p`, which have a `:name` of `"Smith"`.
+
+The third value can be a logic variable which is constrained by other clauses.
+
+[source,clojure]
+----
+'{:find [p]
+  :where [[p :father f]
+          [f :name "Smith"]]}
+----
+
+This matches all entities, `p`, which have a `:father` of `f`.
+
+`f` is restricted to only entities which have a `:name` of `"Smith"`.
+
+So, overall, this returns all people who have a father named Smith.
+
+[#where-predicates]
+=== Predicates
+
+A fully qualified Clojure function that returns a boolean can be used as a predicate clause
+
+[source,clojure]
+----
+'{:find [p]
+  :where [[p :age a]
+          [(>= a 18)]]}
+----
+
+This matches all entities, `p` which have an `:age` of at least 18.
+
+[#where-subqueries]
+=== Subqueries
+
+You can nest a subquery with a `:where` clause to bind the result for further use in the query.
+
+==== Binding results as a scalar
+
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=query-input]
+include::example$src/docs/examples.clj[tags=sub-query-example-1]
 ----
 
-Note that `:ivan`, `:petr` and `:smith` are edn keywords, which may be used as
-document IDs in addition to UUIDs.
+In the above query, we perform a subquery doing some arithmetic operations and returning the result - and bind the resulting relation as a scalar.
 
-The following query has 3 clauses, represented as edn vectors within the
-`:where` vector. These clauses constrain the result set to match only the
-entity (or subgraph of interconnected entities) that satisfy all 3 clauses at
-once:
+Result set:
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=basic-query]
+include::example$src/docs/examples.clj[tags=sub-query-example-1-r]
 ----
 
-Let's try to work out what these 3 clauses do...
-
-`p1` and `n` are logical variables (also referred to as "logic-vars" or simply "lvars"). Logic variables are often prefixed with `?` for clarity but this is optional.
-
-`[p1 :name n]` is looking for all entities that have a value under the
-attribute of `:name` and then binds the corresponding entity ID to `p1` and the
-corresponding value to `n`. Since all 3 entities in our database have a `:name`
-attribute, this clause alone will simply return all 3 entities.
-
-`[p1 :last-name n]` reuses the variable `n` from the previous clause
-which is significant because it constrains the query to only look for entities
-where the value of `:name` (from the first clause) is _equal to_ the value of
-`:last-name` (from the second clause). Looking at documents that were processed
-by our database there is only one possible entity that can be returned, because
-it has the same values `:name` and `:last-name`.
-
-`[p1 :name "Smith"]` only serves to reinforce the conclusion from the previous
-two clauses which is that the variable `n` can only be matched against the
-string `"Smith"` within our database.
-
-...so what is the actual result of the query? Well that is defined by the
-`:find` vector which states that only the values corresponding to `p1` should
-be returned, which in this case is simply `:smith` (the keyword database ID for
-the document relating to our protagonist "Smith Smith"). Results are returned
-as an edn set, which means duplicate results will not appear.
-
-Passing the query into `crux.api/q` (see how to xref:get-started#query[submit a query] in 'Get Started'), you get an edn result set containing the value `:smith`
+==== Binding results as a tuple
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=basic-query-r]
+include::example$src/docs/examples.clj[tags=sub-query-example-2]
 ----
 
-[#arguments]
-== Arguments
+Similar to the previous query, except we bind the resulting relation as a tuple.
 
-Crux queries can take a set of additional arguments, binding them to variables under the `:in` key within the query. Below we have some examples of queries with the various kinds of bindings that `:in` supports (ran on the data as entered into the database above).
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-2-r]
+----
+
+In this example, we bind the results of a subquery and use them to return another result.
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-3]
+----
+
+Result set:
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=sub-query-example-3-r]
+----
+
+[#where-rules]
+=== Rules
+
+<<#rules, See Rules>>
+
+[#in]
+== In
+
+Crux queries can take a set of additional arguments, binding them to variables under the `:in` key within the query.
+
+`:in` supports various kinds of binding.
 
 === Scalar binding
 
@@ -157,333 +379,6 @@ Result Set:
 include::example$src/docs/examples.clj[tags=query-with-arguments4-r]
 ----
 
-[#predicates]
-== Predicates
-
-Something else we can do with arguments is apply *predicates* to them directly within the clauses. Predicates return either `true` or `false` but all predicates used in clauses must return `true` in order for the given combination of field values to be part of the valid result set:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-with-arguments5]
-----
-
-In this case, we have a list of ages as our input, and only `22` satisfies the predicate, `(> age 21)`.
-
-Result set:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-with-arguments5-r]
-----
-
-Any fully qualified Clojure function that returns a boolean can be used in place of `>`, for example:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-with-pred-1]
-----
-
-Result set:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-with-pred-1-r]
-----
-
-[#aggregates]
-== Aggregates
-
-[source,clojure]
-----
-include::example$src/docs/examples.clj[tags=query-aggregates]
-include::example$src/docs/examples.clj[tags=query-aggregates-r]
-----
-
-The following built-in aggregates are provided as additional syntax for use within the `:find` clause and each accept at most one logical variable (e.g. `?lvar` in these examples):
-
-`(sum ?lvar)` accumulates as single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
-
-`(min ?lvar)` and `(max ?lvar)` return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operates on many types (integers, strings, collections etc.)
-
-`(min N ?lvar)` and `(max N ?lvar)` returns a sorted set of the N minimum/maximum items. N must be a positive integer and cannot be referenced via an additional logic-var.
-
-`(count ?lvar)` returns a single count of all values including any duplicates
-
-`(count-distinct ?lvar)` returns a single count of all unique values
-
-`(avg ?lvar) returns a single value equivalent to `sum / count`
-
-`(median ?lvar)`, `(variance ?lvar)` and `(stddev ?lvar)` return single values corresponding to the statistical definitions
-
-`(rand N ?lvar)` returns a vector of exactly N values, where some values may be duplicates if N is larger than the range
-
-`(sample N ?lvar)` returns a vector of at-most N distinct values
-
-`(distinct ?lvar)` returns a set of distinct values
-
-Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
-
-User-defined aggregates are supported by adding a new method (via Clojure `defmethod`) for `crux.query/aggregate`. For example:
-
-[source,clojure]
-----
-(defmethod crux.query/aggregate 'sort-reverse [_]
-  (fn
-    ([] [])
-    ([acc] (vec (reverse (sort acc))))
-    ([acc x] (conj acc x))))
-----
-
-[#valid-time-travel]
-== Valid time travel
-
-Congratulations! You already know enough about queries to build a simple CRUD application with Crux. However, your manager has just told you that the new CRUD application you have been designing needs to backfill the historical document versions from the legacy CRUD application. Luckily Crux makes it easy for your application to both insert and retrieve these old versions.
-
-Here we will see how you are able to run queries at a given point in the valid time axis against, implicitly, the most recent transaction time.
-
-First, we transact a very old document into the database with the ID `:malcolm` and the `:name` `"Malcolm"`, and specify the `valid time` instant at which this document became valid in the legacy system: `#inst "1986-10-22"`.
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-d1]
-----
-
-Next we transact a slightly more recent (though still very old!) revision of that same document where the `:name` has been corrected to `"Malcolma"`, again using a historical timestamp extracted from the legacy system.
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-d2]
-----
-
-We are then able to query at different points in the valid time axis to check for the validity of the correction. We define a query `q`:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-q1]
-----
-
-Firstly we can verify that `"Malcolma"` was unknown at `#inst "1986-10-23"`.
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-q1-q]
-----
-
-Result Set:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-q1-r]
-----
-
-We can then verify that `"Malcolma"` is the currently known `:name` for the entity
-with ID `:malcolm` by simply not specifying a valid time alongside the query.
-This will be the case so long as there are no newer versions (in the valid time axis)
-of the document that affect the current valid time version.
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-q2-q]
-----
-
-Result Set:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=query-at-t-q2-r]
-----
-
-
-[#joins]
-== Joins
-
-=== Query: "Join across entities on a single attribute"
-
-Given the following documents in the database
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=join-d]
-----
-
-We can run a query to return a set of tuples that satisfy the join on the attribute `:name`
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=join-q]
-----
-
-Result Set:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=join-r]
-----
-
-Note that every person joins once, plus 2 more matches.
-
-=== Query: "Join with two attributes, including a multi-valued attribute"
-
-Given the following documents in the database
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=join2-d]
-----
-
-We can run a query to return a set of entities that `:follows` the set of entities with the `:name` value of `"Ivan"`
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=join2-q]
-----
-
-Result Set:
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=join2-r]
-----
-
-Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
-
-[#subqueries]
-== Subqueries
-
-Within Crux queries, you can nest a subquery - and bind the results for further use in the query.
-
-=== Binding results as a scalar
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=sub-query-example-1]
-----
-
-In the above query, we perform a subquery doing some arithmetic operations and returning the result - and bind the resulting relation as a scalar.
-
-Result set:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=sub-query-example-1-r]
-----
-
-=== Binding results as a tuple
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=sub-query-example-2]
-----
-
-Similar to the previous query, except we bind the resulting relation as a tuple.
-
-Result set:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=sub-query-example-2-r]
-----
-
-In this example, we bind the results of a subquery and use them to return another result.
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=sub-query-example-3]
-----
-
-Result set:
-
-[source,clj]
-----
-include::example$src/docs/examples.clj[tags=sub-query-example-3-r]
-----
-
-[#eql-projection]
-== EQL Projection
-
-WARNING: *ALPHA* - subject to change without warning between releases.
-
-Crux queries support a 'projection' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries.
-Crux's support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library.
-
-To specify what data you'd like about each entity, include a `(eql/project ?logic-var projection-spec)` entry in the `:find` clause of your query:
-
-[source,clojure]
-----
-include::example$src/docs/examples.clj[tags=eql-query-1]
-include::example$src/docs/examples.clj[tags=eql-query-1-r]
-
-include::example$src/docs/examples.clj[tags=eql-query-2]
-include::example$src/docs/examples.clj[tags=eql-query-2-r]
-----
-
-If you have the entity ID(s) in hand, you can call `project` or `project-many` directly:
-
-[source,clojure]
-----
-include::example$src/docs/examples.clj[tags=eql-project]
-include::example$src/docs/examples.clj[tags=eql-project-r]
-
-include::example$src/docs/examples.clj[tags=eql-project-many]
-include::example$src/docs/examples.clj[tags=eql-project-many-r]
-----
-
-We can navigate to other entities (and hence build up nested results) using 'joins'.
-Joins are specified in `{}` braces in the projection-spec - each one maps one join key to its nested spec:
-
-[source,clojure]
-----
-include::example$src/docs/examples.clj[tags=eql-query-3]
-include::example$src/docs/examples.clj[tags=eql-query-3-r]
-
-include::example$src/docs/examples.clj[tags=eql-query-4]
-include::example$src/docs/examples.clj[tags=eql-query-4-r]
-----
-
-We can also navigate in the reverse direction, looking for entities that refer to this one, by prepending `_` to the attribute name:
-
-[source,clojure]
-----
-include::example$src/docs/examples.clj[tags=eql-query-5]
-include::example$src/docs/examples.clj[tags=eql-query-5-r]
-----
-
-You can quickly grab the whole document by specifying `*` in the projection spec:
-
-[source,clojure]
-----
-include::example$src/docs/examples.clj[tags=eql-query-6]
-include::example$src/docs/examples.clj[tags=eql-query-6-r]
-----
-
-=== Attribute parameters
-
-Crux supports a handful of custom https://edn-query-language.org/eql/1.0.0/specification.html#_parameters[EQL parameters], specified by wrapping the `:attribute` key in a pair: `(:attribute {:param :value, ...})`.
-
-* `:as` - to rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
-+
-[source,clojure]
-----
-{:find [(eql/project ?profession [:profession/name
-                                  {(:user/_profession {:as :users}) [:user/id :user/name]}])]
- :where [[?profession :profession/name]]}
-
-;; => [{:profession/name "Doctor",
-;;      :users [{:user/id 1, :user/name "Ivan"},
-;;              {:user/id 3, :user/name "Petr"}]},
-;;     {:profession/name "Lawyer",
-;;      :users [{:user/id 2, :user/name "Sergei"}]}]
-----
-* `:limit` - limit the amount of values returned under the given property/join: `(:attribute {:limit 5})`
-* `:default` - specify a default value if the matched document doesn't contain the given attribute: `(:attribute {:default "default"})`
-* `:into` - specify the collection to pour the results into: `(:attribute {:into #{}})`
-+
-[source,clojure]
-----
-{:find [(eql/project ?profession [:profession/name
-                                  {(:user/_profession {:as :users, :into #{}})
-                                   [:user/id :user/name]}])]
- :where [[?profession :profession/name]]}
-
-;; => [{:profession/name "Doctor",
-;;      :users #{{:user/id 1, :user/name "Ivan"},
-;;               {:user/id 3, :user/name "Petr"}}},
-;;     {:profession/name "Lawyer",
-;;      :users #{{:user/id 2, :user/name "Sergei"}}}]
-----
-* `:cardinality` (reverse joins) - by default, reverse joins put their values in a collection - for many-to-one/one-to-one reverse joins, specify `{:cardinality :one}` to return a single value.
-
-For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
-
 [#ordering-and-pagination]
 == Ordering and Pagination
 
@@ -533,13 +428,128 @@ Feel free to open an issue or get in touch to discuss your requirements.
 [#rules]
 == Rules
 
-This example of a rule demonstrates a recursive traversal of entities that are
-connected to a given entity via the `:follow` attribute.
+[source,clojure]
+----
+'{:find [p]
+  :where [(adult? p)] <1>
+  :rules [[(adult? p) <2>
+           [p :age a] <3>
+           [(>= a 18)]]]}
+----
+<1> Usage
+<2> Rule signature
+<3> Clauses
+
+Rules are defined by a signature and then clauses as you would find in a `:where` statement.
+
+They can be used as a shorthand for when you would otherwise be repeating the same restrictions in your `:where` statement.
+
+The clauses in Rules can also use Rules. This allows for the recursive traversal of entities.
+
+[source,clojure]
+----
+'{:find [p2]
+ :where [[p1 :name "Smith"]
+         (follow p1 p2)]
+ :rules [[(follow p1 p2)
+          [p1 :follow p2]]
+         [(follow p1 p2)
+          [p1 :follow t]
+          (follow t p2)]]}
+----
+
+This example finds all entities that the entity with `:name` "Smith" is connected to via `:follow`, even if the connection is via intermediaries.
+
+
+[#valid-time-travel]
+== Valid Time travel
+
+When performing a query, `crux/q` is called on a database snapshot.
+
+To query based on a different Valid Time, create this snapshot by specifying the desired Valid Time when we call `db` on the node.
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=rules]
+(crux/submit-tx
+   node
+   [[:crux.tx/put
+     {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
+     #inst "1986-10-22"]
+    [:crux.tx/put
+     {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
+     #inst "1986-10-24"]])
 ----
+* `:cardinality` (reverse joins) - by default, reverse joins put their values in a collection - for many-to-one/one-to-one reverse joins, specify `{:cardinality :one}` to return a single value.
+
+Here, we have `put` different documents in Crux with different Valid Times.
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=query-at-t-q1]
+----
+
+Here, we have defined a query, `q` to find all entities with a `:name` of "Malcolma" and `:last-name` of "Sparks"
+
+We can run the query at different Valid Times as follows
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=query-at-t-q1-q]
+
+include::example$src/docs/examples.clj[tags=query-at-t-q2-q]
+----
+
+The first query will return an empty result set (`#{}`) because there isn't a document with the `:name` "Malcolma" valid at `#inst "1986-10-23"`
+
+The second query will return `#{[:malcolm]}` because the document with `:name` "Malcolma" _is_ valid at the current time.
+This will be the case so long as there are no newer versions (in the valid time axis) of the document that affect the current valid time version.
+
+[#joins]
+== Joins
+
+=== Query: "Join across entities on a single attribute"
+
+Given the following documents in the database
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=join-d]
+----
+
+We can run a query to return a set of tuples that satisfy the join on the attribute `:name`
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=join-q]
+----
+
+Result Set:
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=join-r]
+----
+
+Note that every person joins once, plus 2 more matches.
+
+=== Query: "Join with two attributes, including a multi-valued attribute"
+
+Given the following documents in the database
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=join2-d]
+----
+
+We can run a query to return a set of entities that `:follows` the set of entities with the `:name` value of `"Ivan"`
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=join2-q]
+----
+
+Result Set:
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=join2-r]
+----
+
+Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
 
 [#streaming-queries]
 == Streaming Queries
@@ -608,7 +618,7 @@ Logic variables used in queries must always be quoted in the `:find` and
 ----
 
 However it is often convenient to quote entire clauses or even the entire query
-map rather than each individual use of every logical variable, for instance:
+map rather than each individual use of every logic variable, for instance:
 
 [source,clj]
 ----
