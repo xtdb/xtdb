@@ -68,6 +68,8 @@ The query map accepts the following Keywords
 |<<#ordering-and-pagination,`:limit`>>|Int|Specify how many results to return|
 |<<#ordering-and-pagination,`:offset`>>|Int|Specify how many results to discard|
 |<<#rules,`:rules`>>|Vector|Define powerful statements for use in `:where` clauses|
+|<<#timeout,`:timeout`>>|Int|Specify maximum query run time in ms
+|<<#full-results,`:full-results?`>>|Boolean|Specify whether to return full documents
 |===
 
 [#find]
@@ -198,63 +200,171 @@ Crux does not (yet) support recursive queries.
 [#where]
 == Where
 
-The `:where` section of a query constrains the result set to match only entities (or subgraphs of interconnected entities) which satisfy all clauses.
-Clauses are edn vectors within the `:where` vector.
+The `:where` section of a query constrains the result set to match only entities (or subgraphs of interconnected entities) which satisfy all terms in the supplied vector.
 
-[#where-existence]
-=== Existence
+.Valid Terms
+[cols="1,4"]
+|===
+|Name|Description
+|<<#term-triple, triple>>| Restrict using EAV facts.
+|<<#term-not, not>>| Negatively restrict
+|<<#term-not-join, not-join>>| Not statement with its own scope
+|<<#term-or, or>>| Restrict on at least on matching term
+|<<#term-or-join, or-join>>| Or statement with its own scope
+|<<#term-range, range>>| Restrict with inequalities
+|<<#term-rule, rule>>| Restrict with a self-defined rule
+|<<#term-pred, pred>>| Restrict with any predicate
+|===
 
-A clause which consists of a logic variable and a keyword is satisfied if that keyword exists.
+[#term-triple]
+=== Triple
+
+A triple is a vector of a logic variable, a document key and (optionally) a value to match which can be a literal or another logic variable.
+
+It restricts results by matching EAV facts
 
 [source,clojure]
 ----
-`{:find [p]
+'{:find [p] <1>
   :where [[p :name]]}
-----
 
-This matches all entities, `p`, which have a `:name`
-
-[#where-tuple]
-=== Tuple
-
-A clause which consists of a logic variable, a keyword and a third value is satisfied if that tuple exists.
-
-[source,clojure]
-----
-'{:find [p]
+'{:find [p] <2>
   :where [[p :name "Smith"]]}
+
+'{:find [p] <3>
+  :where [[q :name n]
+          [p :name n]]}
 ----
+<1> This matches all entities, `p`, which have a `:name` field.
+<2> This matches all entities, `p`, which have a `:name` of `"Smith"`.
+<3> This matches all entities, `p`, which have a `:name` which match the `:name` of `q`.
 
-This matches all entities, `p`, which have a `:name` of `"Smith"`.
+[#term-not]
+=== Not
 
-The third value can be a logic variable which is constrained by other clauses.
+The `not` term rejects a graph if all the terms within it are true.
 
-[source,clojure]
+[source,clj]
 ----
 '{:find [p]
-  :where [[p :father f]
-          [f :name "Smith"]]}
+  :where [[p :crux.db/id]
+          (not [p :name "John"]
+               [p :last-name "Smith"])]}
 ----
 
-This matches all entities, `p`, which have a `:father` of `f`.
+This will match any document which does not have a `:name` of "John" _and_ a `:last-name` of "Smith".
 
-`f` is restricted to only entities which have a `:name` of `"Smith"`.
+It will still return results for `{:name "Alice" :last-name "Smith"}` and `{:name "John" :last-name "Appleseed"}`
 
-So, overall, this returns all people who have a father named Smith.
+[#term-not-join]
+=== Not Join
 
-[#where-predicates]
+The `not-join` term allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of terms.
+
+You declare which logic variables from outside the `not-join` scope are to be used in the join.
+
+Any other logic variables within the not-join are scoped only for the join.
+
+[source,clj]
+----
+'{:find [p]
+  :where [[p :crux.db/id]
+          (not-join [p] <1>
+                    [p :last-name n] <2>
+                    [p :name n])]}
+----
+<1> Declaration of which logic variables need to unify with the rest of the query
+<2> Terms
+
+This will match any entity, `p`, which has different values for the `:name` and `:last-name` field.
+
+Importantly, the logic variable `n` is unbound outside the `not-join` term.
+
+[#term-or]
+=== Or
+
+The `or` term accepts a graph if any of the terms within it are true.
+
+[source,clj]
+----
+'{:find [p]
+  :where [[p :crux.db/id]
+          (or [p :name "John"]
+              [p :name "Jane"])]}
+----
+
+This will match any document, `p`, which has a `:name` of "John" or "Jane"
+
+[#term-or-join]
+=== Or Join
+
+The `or-join` term term allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of terms.
+
+You declare which logic variables from outside the `or-join` scope are to be used in the join.
+
+Any other logic variables within the `or-join` are scoped only for the join.
+
+[source,clj]
+----
+'{:find [p]
+  :where [[p :crux.db/id]
+          (or-join [p] <1>
+                   (and [p :age a]
+                        [(>= a 18)])
+                   [p :name "John"])]}
+----
+<1> Declaration of which logic variables need to unify with the rest of the query
+
+This will match any document, `p` which has an `:age` greater than or equal to 18 _or_ has a `:name` of "John".
+
+Importantly, the logic variable `a` is unbound outside the `or-join` term.
+
+[#term-range]
+=== Range
+
+The `range` term is a vector containing a list of a range operator and then two terms which can be logic variables or literals.
+
+Allowed range operators are `<`, `<=`, `>=`, `>`, and `=`.
+
+[source,clj]
+----
+'{:find [p] <1>
+  :where [[p :age a]
+          [(> a 18)]]}
+
+'{:find [p] <2>
+  :where [[p :age a]
+          [q :age b]
+          [(> a b)]]}
+
+'{:find [p] <3>
+  :where [[p :age a]
+          [(> 18 a)]]}
+----
+<1> Finds any entity, `p`, with an `:age` which is greater than 18
+<2> Finds any entity, `p`, with an `:age` which is greater than the `:age` of any entity
+<3> Finds any entity, `p`, for which 18 is greater than `p`'s `:age`
+
+[#term-rule]
+=== Rules
+
+<<#rules, See Rules>>
+
+[#term-pred]
 === Predicates
 
-A fully qualified Clojure function that returns a boolean can be used as a predicate clause
+A fully qualified Clojure function that returns a boolean can be used as a predicate term.
+
+Predicate terms should be placed in a vector.
 
 [source,clojure]
 ----
 '{:find [p]
   :where [[p :age a]
-          [(>= a 18)]]}
+          [(even? a)]]}
 ----
 
-This matches all entities, `p` which have an `:age` of at least 18.
+This matches all entities, `p` which have an even `:age`.
 
 [#where-subqueries]
 === Subqueries
@@ -306,11 +416,6 @@ Result set:
 ----
 include::example$src/docs/examples.clj[tags=sub-query-example-3-r]
 ----
-
-[#where-rules]
-=== Rules
-
-<<#rules, See Rules>>
 
 [#in]
 == In
@@ -460,6 +565,35 @@ The clauses in Rules can also use Rules. This allows for the recursive traversal
 
 This example finds all entities that the entity with `:name` "Smith" is connected to via `:follow`, even if the connection is via intermediaries.
 
+[#timeout]
+== Timeout
+
+`:timeout` sets the maximum run time of the query (in milliseconds).
+
+If the query has not completed by this time, a `java.util.concurrent.TimeoutException` is thrown.
+
+[#full-results]
+== Full Results
+
+Setting the `:full-results?` flag to true will cause logic variables in the `:find` clause to return the full document
+
+[source,clojure]
+----
+(crux/submit-tx node [[:crux.tx/put {:crux.db/id :foo :bar :baz}]])
+
+(crux/q <1>
+  (crux/db node)
+  '{:find [p]
+    :where [[p :bar :baz]]})
+
+(crux/q <2>
+  (crux/db node)
+  '{:find [p]
+    :where [[p :bar :baz]]
+    :full-results? true})
+----
+<1> returns `#{[:foo]}'
+<2> returns `#{[{:crux.db/id :foo :bar :baz}]}'
 
 [#valid-time-travel]
 == Valid Time travel
