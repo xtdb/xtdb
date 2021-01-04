@@ -176,8 +176,7 @@
                                               :crux.db/id])]
                      :where [[?it :crux.db/id]]}))))
 
-;; TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
-#_(t/deftest test-recursive
+(t/deftest test-recursive
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :root}]
                         [:crux.tx/put {:crux.db/id :a
                                        :parent :root}]
