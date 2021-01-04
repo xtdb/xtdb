@@ -237,3 +237,10 @@
                      :in [?e]
                      :timeout 500}
                    "doesntexist"))))
+
+(t/deftest test-with-speculative-doc-store
+  (let [db (crux/with-tx (crux/db *api*) [[:crux.tx/put {:crux.db/id :foo}]])]
+    (t/is (= #{[{:crux.db/id :foo}]}
+             (crux/q db
+                     '{:find [(eql/project ?e [*])]
+                       :where [[?e :crux.db/id :foo]]})))))
