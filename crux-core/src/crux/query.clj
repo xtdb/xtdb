@@ -1018,7 +1018,7 @@
                :when idx]
            idx))))
 
-(defn- build-pred-constraints [rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order]
+(defn- build-pred-constraints [{:keys [pred-clause+idx-ids var->bindings vars-in-join-order] :as pred-ctx}]
   (for [[{:keys [pred return] :as clause} idx-id] pred-clause+idx-ids
         :let [{:keys [pred-fn args]} pred
               pred-vars (filter logic-var? (cons pred-fn args))
@@ -1031,12 +1031,11 @@
               return-vars (find-binding-vars return)
               return-vars-tuple-idxs-in-join-order (build-tuple-idxs-in-join-order return-vars vars-in-join-order)
               return-type (first return)
-              pred-ctx {:encode-value-fn encode-value-fn
-                        :idx-id idx-id
-                        :arg-bindings arg-bindings
-                        :return-type return-type
-                        :tuple-idxs-in-join-order return-vars-tuple-idxs-in-join-order
-                        :rule-name->rules rule-name->rules}]]
+              pred-ctx (assoc pred-ctx
+                              :idx-id idx-id
+                              :arg-bindings arg-bindings
+                              :return-type return-type
+                              :tuple-idxs-in-join-order return-vars-tuple-idxs-in-join-order)]]
     (do (validate-existing-vars var->bindings clause pred-vars)
         (when-not (= (count return-vars)
                      (count (set return-vars)))
@@ -1356,7 +1355,7 @@
 
 (def ^:private ^:dynamic *broken-cycles* #{})
 
-(defn- compile-sub-query [encode-value-fn fn-allow-list where in rule-name->rules stats]
+(defn- compile-sub-query [encode-value-fn {:keys [fn-allow-list pred-ctx] :as db} where in rule-name->rules stats]
   (try
     (let [where (-> (expand-rules where rule-name->rules {})
                     (build-pred-fns fn-allow-list))
@@ -1370,11 +1369,7 @@
            or-clauses :or
            or-join-clauses :or-join
            :as type->clauses} type->clauses
-          {:keys [e-vars
-                  v-vars
-                  range-vars
-                  pred-vars
-                  pred-return-vars]} (collect-vars type->clauses)
+          {:keys [e-vars v-vars]} (collect-vars type->clauses)
           var->joins {}
           [triple-join-deps var->joins var->cardinality] (triple-joins triple-clauses
                                                                        var->joins
@@ -1422,7 +1417,12 @@
           var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns encode-value-fn range-clauses var->bindings)
           not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
           not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
-          pred-constraints (build-pred-constraints rule-name->rules encode-value-fn pred-clause+idx-ids var->bindings vars-in-join-order)
+          pred-constraints (build-pred-constraints (assoc pred-ctx
+                                                          :rule-name->rules rule-name->rules
+                                                          :encode-value-fn encode-value-fn
+                                                          :pred-clause+idx-ids pred-clause+idx-ids
+                                                          :var->bindings var->bindings
+                                                          :vars-in-join-order vars-in-join-order))
           or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
                                                var->bindings vars-in-join-order stats)
           depth->constraints (->> (concat pred-constraints
@@ -1449,7 +1449,7 @@
         (if (and (= ::dep/circular-dependency reason)
                  (not (contains? *broken-cycles* cycle)))
           (binding [*broken-cycles* (conj *broken-cycles* cycle)]
-            (compile-sub-query encode-value-fn fn-allow-list (break-cycle where cycle) in rule-name->rules stats))
+            (compile-sub-query encode-value-fn db (break-cycle where cycle) in rule-name->rules stats))
           (throw e))))))
 
 (defn- build-idx-id->idx [db index-snapshot {:keys [var->joins] :as compiled-query}]
@@ -1481,7 +1481,7 @@
                                                     logic-var+range-constraint)))))
     compiled-query))
 
-(defn- build-sub-query [index-snapshot {:keys [query-cache fn-allow-list] :as db} where in in-args rule-name->rules stats]
+(defn- build-sub-query [index-snapshot {:keys [query-cache] :as db} where in in-args rule-name->rules stats]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [encode-value-fn (partial db/encode-value index-snapshot)
@@ -1498,7 +1498,7 @@
                                   [where in rule-name->rules]
                                   identity
                                   (fn [_]
-                                    (compile-sub-query encode-value-fn fn-allow-list where in rule-name->rules stats)))
+                                    (compile-sub-query encode-value-fn db where in rule-name->rules stats)))
                                  (add-logic-var-constraints))
         idx-id->idx (build-idx-id->idx db index-snapshot compiled-query)
         unary-join-indexes (for [v vars-in-join-order]
@@ -1872,8 +1872,11 @@
      :crux.tx/tx (or (:crux.tx/tx valid-time-or-basis)
                      (select-keys valid-time-or-basis [:crux.tx/tx-time :crux.tx/tx-id]))}))
 
+(defprotocol PredContext
+  (assoc-pred-ctx! [_ k v]))
+
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
-                        index-store bus
+                        index-store bus !pred-ctx
                         query-cache conform-cache projection-cache]
   api/DBProvider
   (db [this] (api/db this nil))
@@ -1891,6 +1894,7 @@
                                                                    :document-store document-store
                                                                    :bus bus
                                                                    :query-engine this})
+                                   :pred-ctx @!pred-ctx
                                    :valid-time valid-time
                                    :tx-time (:crux.tx/tx-time resolved-tx)
                                    :tx-id (:crux.tx/tx-id resolved-tx)))))
@@ -1904,6 +1908,10 @@
           db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (new-entity-resolver-fn db)]
       (assoc db :entity-resolver-fn entity-resolver-fn)))
+
+  PredContext
+  (assoc-pred-ctx! [_ k v]
+    (swap! !pred-ctx assoc k v))
 
   Closeable
   (close [_]
@@ -1952,4 +1960,6 @@
                                                   :default nil
                                                   :spec ::fn-allow-list}}}
   [opts]
-  (map->QueryEngine (assoc opts :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter")))))
+  (map->QueryEngine (assoc opts
+                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))
+                           :!pred-ctx (atom {}))))

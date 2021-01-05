@@ -12,17 +12,15 @@
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery TopDocs]
            [org.apache.lucene.store Directory FSDirectory]))
 
-(def ^:dynamic *lucene-store*)
-
 (defrecord LuceneNode [directory analyzer indexer]
-  java.io.Closeable
+  Closeable
   (close [this]
     (cio/try-close directory)))
 
@@ -37,11 +35,6 @@
 (def ^:const ^:private field-crux-id "_crux_id")
 (def ^:const ^:private field-crux-val "_crux_val")
 (def ^:const ^:private field-crux-attr "_crux_attr")
-
-(defn doc-count []
-  (let [{:keys [^Directory directory]} *lucene-store*
-        directory-reader (DirectoryReader/open directory)]
-    (.numDocs directory-reader)))
 
 (defn- ^IndexWriter index-writer [lucene-store]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
@@ -102,15 +95,15 @@
                               (vector (.doc index-searcher (.-doc d))
                                       (.-score d))))))))
 
-(defn pred-constraint [query-builder results-resolver {:keys [arg-bindings encode-value-fn idx-id return-type tuple-idxs-in-join-order]}]
+(defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
   (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
     (let [arg-bindings (map (fn [a]
                               (if (instance? VarBinding a)
                                 (q/bound-result-for-var index-snapshot a join-keys)
                                 a))
                             (rest arg-bindings))
-          query (query-builder (:analyzer *lucene-store*) arg-bindings)
-          tuples (with-open [search-results ^crux.api.ICursor (search *lucene-store* query)]
+          query (query-builder (:analyzer lucene-store) arg-bindings)
+          tuples (with-open [search-results ^crux.api.ICursor (search lucene-store query)]
                    (->> search-results
                         iterator-seq
                         (results-resolver index-snapshot db)
@@ -178,7 +171,7 @@
 (defrecord LuceneAvIndexer [index-store]
   LuceneIndexer
 
-  (index! [this index-writer docs]
+  (index! [_ index-writer docs]
     (doseq [crux-doc (vals docs)
             [k v] (->> (dissoc crux-doc :crux.db/id)
                        (mapcat (fn [[k v]]
@@ -226,13 +219,14 @@
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
                :index-store :crux/index-store
+               :query-engine :crux/query-engine
                :indexer `->indexer
                :analyzer `->analyzer}}
-  [{:keys [^Path db-dir index-store document-store bus analyzer indexer] :as opts}]
+  [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         lucene-store (LuceneNode. directory analyzer indexer)]
     (validate-lucene-store-up-to-date index-store lucene-store)
-    (alter-var-root #'*lucene-store* (constantly lucene-store))
+    (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
     (bus/listen bus {:crux/event-types #{:crux.tx/committing-tx}
                      :crux.bus/executor (reify java.util.concurrent.Executor
                                           (execute [_ f]
