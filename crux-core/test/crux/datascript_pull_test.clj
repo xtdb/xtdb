@@ -208,16 +208,13 @@
                           :where [[?e :crux.db/id :lucy]]}))
           "Multiple recursion specs in one pattern")
 
-    ;; TODO recursion cycles
-    #_
-    (let [db (crux/with-tx db [:crux.tx/put [{:crux.db/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
-      (t/is (= (update-in friends (take 8 (cycle [:friend 0]))
-                          assoc :friend [{:name "Lucy" :friend [:elizabeth]}])
+    (let [db (crux/with-tx db [[:crux.tx/put {:crux.db/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
+      (t/is (= #{[(assoc-in friends (take 7 (cycle [:friend 0])) [{:name "Kerri" :friend [{:crux.db/id :lucy}]}])]}
                (crux/q db '{:find [(eql/project ?e [:name {:friend ...}])]
                             :where [[?e :crux.db/id :lucy]]}))
-            "Cycles are handled by returning only the :db/id of entities which have been seen before"))))
+            "Cycles are handled by returning only the :crux.db/id of entities which have been seen before"))))
 
-;; TODO recursion cycles
+;; TODO
 #_
 (t/deftest test-dual-recursion
   (let [db (submit-test-docs [{:crux.db/id 1, :part 2, :spec 2}
