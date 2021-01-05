@@ -240,17 +240,28 @@
                  (db/entity-history index-snapshot :ivan :desc {})))))))
 
 (t/deftest test-can-evict-entity
-  (let [{put-tx-time :crux.tx/tx-time} (api/submit-tx *api* [[:crux.tx/put picasso #inst "2018-05-21"]])
-        {evict-tx-time :crux.tx/tx-time} (fix/submit+await-tx [[:crux.tx/evict picasso-id]])]
+  (t/testing "removes all traces of entity from indices"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :value 0}]])
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :value 1}]])
+    (fix/submit+await-tx [[:crux.tx/evict :foo]])
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-      (let [picasso-history (db/entity-history index-snapshot picasso-id :desc {})]
+      (let [history (db/entity-history index-snapshot :foo :desc {})]
         (t/testing "eviction removes tx history"
-          (t/is (empty? picasso-history)))
+          (t/is (empty? history)))
         (t/testing "eviction removes docs"
-          (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash picasso-history))
+          (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash history))
                              vals
-                             (remove c/evicted-doc?)))))))))
+                             (remove c/evicted-doc?))))))))
+
+  (t/testing "clears entity history for valid-time ranges"
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :bar, :value 0} #inst "2012" #inst "2018"]])
+    (fix/submit+await-tx [[:crux.tx/evict :bar]])
+
+    (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
+      (let [history (db/entity-history index-snapshot :bar :desc {})]
+        (t/testing "eviction removes tx history"
+          (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events]
   (let [{:keys [tx-ingester]} *api*
@@ -1137,7 +1148,8 @@
       (t/is (nil? (crux/entity db :test1/b)))
 
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-        (t/is (empty? (db/av index-snapshot :test1/evicted? nil))))
+        (t/is (empty? (db/av index-snapshot :test1/evicted? nil)))
+        (t/is (empty? (db/entity-history index-snapshot :test1/b :asc {}))))
 
       (t/is (= #{[:test1/a]} (crux/q db '{:find [?e], :where [[?e :test1? true]]})))
       (t/is (= #{} (crux/q db '{:find [?e], :where [[?e :test1/evicted? true]]})))))
@@ -1151,7 +1163,8 @@
       (t/is (= {:crux.db/id :test2/b, :test2? true} (crux/entity db :test2/b)))
 
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-        (t/is (empty? (db/av index-snapshot :test2/evicted? nil))))
+        (t/is (empty? (db/av index-snapshot :test2/evicted? nil)))
+        (t/is (empty? (db/entity-history index-snapshot :test2/a :asc {}))))
 
       (t/is (= #{[:test2/b]} (crux/q db '{:find [?e], :where [[?e :test2? true]]})))
       (t/is (= #{} (crux/q db '{:find [?e], :where [[?e :test2/evicted? true]]})))))
