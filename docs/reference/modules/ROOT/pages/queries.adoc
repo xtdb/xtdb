@@ -369,7 +369,7 @@ This matches all entities, `p` which have an even `:age`.
 [#where-subqueries]
 === Subqueries
 
-You can nest a subquery with a `:where` clause to bind the result for further use in the query.
+You can nest a subquery with a `:where` term to bind the result for further use in the query.
 
 ==== Binding results as a scalar
 
@@ -545,11 +545,11 @@ Feel free to open an issue or get in touch to discuss your requirements.
 <2> Rule signature
 <3> Clauses
 
-Rules are defined by a signature and then clauses as you would find in a `:where` statement.
+Rules are defined by a signature and then terms as you would find in a `:where` statement.
 
 They can be used as a shorthand for when you would otherwise be repeating the same restrictions in your `:where` statement.
 
-The clauses in Rules can also use Rules. This allows for the recursive traversal of entities.
+The terms in Rules can also use Rules. This allows for the recursive traversal of entities.
 
 [source,clojure]
 ----
