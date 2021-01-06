@@ -36,7 +36,7 @@ There are four transaction (write) operations:
 [#put]
 === Put
 
-Put's a document into Crux.
+Put's a document into Crux. If a document already exists with the given `:crux.db/id`, a new version of this document will be created at the supplied `valid time`.
 
 [source,clojure]
 ----
@@ -203,7 +203,7 @@ When an optional `valid time` is omitted from a transaction operation, the Trans
 
 When `valid time` is used as a parameter for <<#put,`crux.tx/put`>> and <<#delete,`crux.tx/delete`>>, it specifies the time from which the change is valid.
 
-If there is a document, `A`, already present at the given `valid time`, the operation's affect is valid from `valid time` to the end of the current validity of `A`.
+If there is a document, `A`, already present at the given `valid time`, the operation's effect is valid from `valid time` to the end of the current validity of `A`.
 
 [#end-valid-time]
 === End Valid Time
