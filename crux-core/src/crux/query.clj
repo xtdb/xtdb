@@ -20,7 +20,8 @@
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
             [crux.system :as sys]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [clojure.string :as string])
   (:import [clojure.lang Box ExceptionInfo]
            (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
@@ -1814,6 +1815,27 @@
                                             ::query safe-query
                                             ::query-id query-id})))))))
 
+  (project [db projection eid]
+    (let [?eid (gensym '?eid)
+          projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
+      (->> (.query db
+                   {:find [(list 'eql/project ?eid projection)]
+                    :in [?eid]}
+                   (object-array [eid]))
+           ffirst)))
+
+  (^java.util.List projectMany [db projection ^Iterable eids]
+   (let [?eid (gensym '?eid)
+         projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
+     (->> (.query db
+                  {:find [(list 'eql/project ?eid projection)]
+                   :in [[?eid '...]]}
+                  (object-array [eids]))
+          (mapv first))))
+
+  (^java.util.List projectMany [db projection ^"[Ljava.lang.Object;" eids]
+   (.projectMany db projection ^Iterable (seq eids)))
+
   (entityHistory [this eid opts]
     (with-open [history (.openEntityHistory this eid opts)]
       (into [] (iterator-seq history))))
@@ -1920,8 +1942,9 @@
         (.shutdown)
         (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
 
-(def default-allow-list (->> (slurp (io/resource "query-allowlist.edn"))
-                             (read-string)))
+(def default-allow-list
+  (->> (slurp (io/resource "query-allowlist.edn"))
+       (read-string)))
 
 (s/def ::fn-allow-list
   (s/and

@@ -51,6 +51,15 @@ public interface ICruxDatasource extends Closeable {
      */
     public ICursor<List<?>> openQuery(Object query, Object... args);
 
+    // TODO doc
+    public Map<Keyword, ?> project(Object projection, Object eid);
+
+    // TODO doc
+    public List<Map<Keyword, ?>> projectMany(Object projection, Iterable<?> eids);
+
+    // TODO doc
+    public List<Map<Keyword, ?>> projectMany(Object projection, Object... eids);
+
     /**
      * Eagerly retrieves entity history for the given entity.
      *

@@ -281,6 +281,12 @@
 
   Once the sequence is closed, attempting to iterate it is undefined.")
 
+  (project [db query eid]
+    "TODO")
+
+  (project-many [db query eids]
+    "TODO")
+
   (entity-history
     [db eid sort-order]
     [db eid sort-order opts]
@@ -373,6 +379,9 @@
 
   (q* [this query args] (.query this query (object-array args)))
   (open-q* [this query args] (.openQuery this query (object-array args)))
+
+  (project [this query eid] (.project this query eid))
+  (project-many [this query eids] (.projectMany this query ^Iterable eids))
 
   ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
   ;; as the new Java ones?
