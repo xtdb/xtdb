@@ -13,6 +13,9 @@
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]))
 
+;; tests in this namespace depend on the `(defmethod q/pred-constraint 'lucene-text-search ...)`
+(require 'crux.lucene.multi-field)
+
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
 (t/deftest test-can-search-string
@@ -168,7 +171,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
 
-    (t/is (= 2 (l/doc-count)))
+    (t/is (= 2 (lf/doc-count)))
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))

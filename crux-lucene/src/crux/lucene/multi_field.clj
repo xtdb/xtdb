@@ -54,8 +54,8 @@
 (defmethod q/pred-args-spec 'lucene-text-search [_]
   (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string? :bindings (s/* :crux.query/binding))) :return (s/? :crux.query/binding)))
 
-(defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
-  (when-not (instance? LuceneMultiFieldIndexer (:indexer l/*lucene-store*))
+(defmethod q/pred-constraint 'lucene-text-search [_ {::l/keys [lucene-store] :as pred-ctx}]
+  (when-not (instance? LuceneMultiFieldIndexer (:indexer lucene-store))
     (throw (IllegalStateException. "Lucene multi field indexer not configured, consult the docs.")))
   (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))
 
