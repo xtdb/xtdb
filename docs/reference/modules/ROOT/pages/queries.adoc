@@ -583,10 +583,11 @@ When performing a query, `crux/q` is called on a database snapshot.
 
 To query based on a different Valid Time, create this snapshot by specifying the desired Valid Time when we call `db` on the node.
 
-[source,clj]
+[source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-at-t-d1]
-include::example$test/crux/docs/examples_test.clj[tags=query-at-t-d2]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-d1,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-d2,indent=0]
 ----
 * `:cardinality` (reverse joins) - by default, reverse joins put their values in a collection - for many-to-one/one-to-one reverse joins, specify `{:cardinality :one}` to return a single value.
 
@@ -594,7 +595,7 @@ Here, we have `put` different documents in Crux with different Valid Times.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-at-t-q1]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-q1,indent=0]
 ----
 
 Here, we have defined a query, `q` to find all entities with a `:name` of "Malcolma" and `:last-name` of "Sparks"
@@ -603,9 +604,9 @@ We can run the query at different Valid Times as follows
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-at-t-q1-q]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-q1-q,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=query-at-t-q2-q]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-q2-q,indent=0]
 ----
 
 The first query will return an empty result set (`#{}`) because there isn't a document with the `:name` "Malcolma" valid at `#inst "1986-10-23"`

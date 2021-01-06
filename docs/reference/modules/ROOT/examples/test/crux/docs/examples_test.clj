@@ -248,60 +248,6 @@
 ;; end::streaming-query[]
 )
 
-(defn query-example-at-time-setup [node]
-;; tag::query-at-t-d1[]
-(crux/submit-tx
- node
- [[:crux.tx/put
-   {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
-   #inst "1986-10-22"]])
-;; end::query-at-t-d1[]
-
-;; tag::query-at-t-d2[]
-(crux/submit-tx
- node
- [[:crux.tx/put
-   {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
-   #inst "1986-10-24"]])
-;; end::query-at-t-d2[]
-)
-
-;; tag::query-at-t-q1[]
-(def q
-  '{:find [e]
-    :where [[e :name "Malcolma"]
-            [e :last-name "Sparks"]]})
-;; end::query-at-t-q1[]
-
-(defn query-example-at-time-q1 [node]
-;; tag::query-at-t-q1-q[]
-(crux/q
- (crux/db
-  node #inst "1986-10-23")
- q)
-;; end::query-at-t-q1-q[]
-)
-
-(def query-example-at-time-q1-result
-;; tag::query-at-t-q1-r[]
-#{}
-;; end::query-at-t-q1-r[]
-)
-
-(defn query-example-at-time-q2 [node]
-;; tag::query-at-t-q2-q[]
-(crux/q
- (crux/db node)
- q)
-;; end::query-at-t-q2-q[]
-)
-
-(def query-example-at-time-q2-result
-;; tag::query-at-t-q2-r[]
-#{[:malcolm]}
-;; end::query-at-t-q2-r[]
-)
-
 #_(comment
 ;; tag::history-full[]
 (api/submit-tx
