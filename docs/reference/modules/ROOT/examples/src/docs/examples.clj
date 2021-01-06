@@ -454,10 +454,10 @@
   ;; with just 'query':
   (crux/q
    (crux/db node)
-   {:find [?uid ?name ?profession]
-    :where [[?user :user/id ?uid]
-            [?user :user/name ?name]
-            [?user :user/profession ?profession]]})
+   '{:find [?uid ?name ?profession]
+     :where [[?user :user/id ?uid]
+             [?user :user/name ?name]
+             [?user :user/profession ?profession]]})
   ;; end::eql-query-1[]
 
   ;; tag::eql-query-1-r[]
@@ -468,25 +468,50 @@
   ;; using `eql/project`:
   (crux/q
    (crux/db node)
-   {:find [(eql/project ?user [:user/name :user/profession])]
-    :where [[?user :user/id ?uid]]})
+   '{:find [(eql/project ?user [:user/name :user/profession])]
+     :where [[?user :user/id ?uid]]})
   ;; end::eql-query-2[]
 
   ;; tag::eql-query-2-r[]
-  ;; => [{:user/id 1, :user/name "Ivan", :user/profession :doctor},
-  ;;     {:user/id 2, :user/name "Sergei", :user/profession :lawyer},
-  ;;     {:user/id 3, :user/name "Petr", :user/profession :doctor}]
+  ;; => [{:user/name "Ivan", :user/profession :doctor},
+  ;;     {:user/name "Sergei", :user/profession :lawyer},
+  ;;     {:user/name "Petr", :user/profession :doctor}]
   ;; end::eql-query-2-r[]
+
+  ;; tag::eql-project[]
+  ;; using `project`:
+  (crux/project
+   (crux/db node)
+   [:user/name :user/profession]
+   :ivan)
+  ;; end::eql-project[]
+
+  ;; tag::eql-project-r[]
+  ;; => {:user/name "Ivan", :user/profession :doctor}
+  ;; end::eql-project-r[]
+
+  ;; tag::eql-project-many[]
+  ;; using `project-many`:
+  (crux/project-many
+   (crux/db node)
+   [:user/name :user/profession]
+   [:ivan :sergei])
+  ;; end::eql-project-many[]
+
+  ;; tag::eql-project-many-r[]
+  ;; => [{:user/name "Ivan", :user/profession :doctor},
+  ;;     {:user/name "Sergei", :user/profession :lawyer}]
+  ;; end::eql-project-many-r[]
 
   ;; tag::eql-query-3[]
   ;; with just 'query':
   (crux/q
    (crux/db node)
-   {:find [?uid ?name ?profession-name]
-    :where [[?user :user/id ?uid]
-            [?user :user/name ?name]
-            [?user :user/profession ?profession]
-            [?profession :profession/name ?profession-name]]})
+   '{:find [?uid ?name ?profession-name]
+     :where [[?user :user/id ?uid]
+             [?user :user/name ?name]
+             [?user :user/profession ?profession]
+             [?profession :profession/name ?profession-name]]})
   ;; end::eql-query-3[]
 
   ;; tag::eql-query-3-r[]
@@ -497,8 +522,8 @@
   ;; using `eql/project`:
   (crux/q
    (crux/db node)
-   {:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}])]
-    :where [[?user :user/id ?uid]]})
+   '{:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}])]
+     :where [[?user :user/id ?uid]]})
   ;; end::eql-query-4[]
 
   ;; tag::eql-query-4-r[]
@@ -510,8 +535,8 @@
   ;; tag::eql-query-5[]
   (crux/q
    (crux/db node)
-   {:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
-    :where [[?profession :profession/name]]})
+   '{:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
+     :where [[?profession :profession/name]]})
   ;; end::eql-query-5[]
 
   ;; tag::eql-query-5-r[]
@@ -525,8 +550,8 @@
   ;; tag::eql-query-6[]
   (crux/q
    (crux/db node)
-   {:find [(eql/project ?user [*])]
-    :where [[?user :user/id 1]]})
+   '{:find [(eql/project ?user [*])]
+     :where [[?user :user/id 1]]})
   ;; end::eql-query-6[]
 
   ;; tag::eql-query-6-r[]

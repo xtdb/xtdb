@@ -51,13 +51,40 @@ public interface ICruxDatasource extends Closeable {
      */
     public ICursor<List<?>> openQuery(Object query, Object... args);
 
-    // TODO doc
+    /**
+     * Returns the requested data for the given entity ID, based on the projection spec
+     *
+     * e.g. `db.project("[:film/name :film/year]", "spectre")`
+     *   => `{:film/name "Spectre", :film/year 2015}`
+     *
+     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#eql-projection
+     * @param eid entity ID
+     * @return the requested projection starting at the given entity
+     */
     public Map<Keyword, ?> project(Object projection, Object eid);
 
-    // TODO doc
+    /**
+     * Returns the requested data for the given entity IDs, based on the projection spec
+     *
+     * e.g. `db.projectMany("[:film/name :film/year]", Arrays.asList("spectre", "skyfall"))`
+     *   => `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
+     *
+     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#eql-projection
+     * @param eids entity IDs
+     * @return the requested projections starting at the given entities
+     */
     public List<Map<Keyword, ?>> projectMany(Object projection, Iterable<?> eids);
 
-    // TODO doc
+    /**
+     * Returns the requested data for the given entity IDs, based on the projection spec
+     *
+     * e.g. `db.projectMany("[:film/name :film/year]", "spectre", "skyfall")`
+     *   => `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
+     *
+     * @param projection An EQL projection spec - see https://opencrux.com/reference/queries.html#eql-projection
+     * @param eids entity IDs
+     * @return the requested projections starting at the given entities
+     */
     public List<Map<Keyword, ?>> projectMany(Object projection, Object... eids);
 
     /**
