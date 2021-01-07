@@ -111,7 +111,8 @@
                "crux-lucene/test"
                "crux-bench/test"
                "crux-test/test"
-               "docs/reference/modules/ROOT/examples/test"]
+               "docs/reference/modules/ROOT/examples/test"
+               "docs/about/modules/ROOT/examples/test"]
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"
