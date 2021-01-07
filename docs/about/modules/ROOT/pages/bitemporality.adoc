@@ -230,7 +230,9 @@ Assuming Day 0 for the investigation period is `#inst "2018-12-31"`, the
 initial documents are ingested using the Day 0 valid time:
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp0]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp0,indent=0]
+
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp1,indent=0]
 ----
 
 The first document shows that `Person 2` was recorded entering via `:SFO` and
@@ -246,7 +248,7 @@ documents available to ingest.
 A single event arrives on Day 2 showing `Person 4` arriving at `:NY`:
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp2]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp2,indent=0]
 ----
 
 ==== Day 3
@@ -255,7 +257,7 @@ Next, we learn on Day 3 that `Person 4` departed from `:NY`, which is
 represented as an update to the existing document using the Day 3 valid time:
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp3]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp3,indent=0]
 ----
 
 ==== Day 4
@@ -267,21 +269,23 @@ First we receive an event showing that `Person 1` entered `:NY` on Day 0 which
 must ingest using the Day 0 valid time `#inst "2018-12-31"`:
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp4]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4,indent=0]
 ----
 
 We then receive an event showing that `Person 1` departed from `:NY` on Day 3,
 so again we ingest this document using the corresponding Day 3 valid time:
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp4b]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4b,indent=0]
 ----
 
 Finally, we receive two events relating to Day 4, which can be ingested using
 the current valid time:
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp4c]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4c,indent=0]
+
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp4d,indent=0]
 ----
 
 ==== Day 5
@@ -290,7 +294,7 @@ On Day 5 there is an event showing that `Person 2`, having arrived on Day 0
 (which we already knew), departed from `:SFO` on Day 5.
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp5]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp5,indent=0]
 ----
 
 ==== Day 6
@@ -306,7 +310,9 @@ error. The second document shows that `Person 3` has only just departed on Day
 7, which is how the previous error was noticed.
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp7]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp7a,indent=0]
+
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp7b,indent=0]
 ----
 
 ==== Day 8
@@ -316,7 +322,9 @@ Two documents have been received relating to new arrivals on Day 8. Note that
 
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp8]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp8a,indent=0]
+
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp8b,indent=0]
 ----
 
 ==== Day 9
@@ -324,7 +332,7 @@ include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp8]
 On Day 9 we learn that `Person 3` also departed on Day 8.
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp9]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp9,indent=0]
 ----
 
 ==== Day 10
@@ -333,7 +341,7 @@ A single document arrives showing that `Person 5` entered at `:LA` earlier that
 day.
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp10]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp10,indent=0]
 ----
 
 ==== Day 11
@@ -342,7 +350,7 @@ Similarly to the previous day, a single document arrives showing that `Person
 7` entered at `:NY` earlier that day.
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp11]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp11,indent=0]
 ----
 
 ==== Day 12
@@ -350,7 +358,7 @@ include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp11]
 Finally, on Day 12 we learn that `Person 6` entered at `:NY` that same day.
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitemp12]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitemp12,indent=0]
 ----
 
 ==== Question Time
@@ -366,7 +374,9 @@ We are able to easily express this as a query in Crux:
 
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitempq]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempq-a,indent=0]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempq-b,indent=12]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempq-c,indent=2]
 ----
 
 The answer given by Crux is a simple set of the three relevant people along
@@ -375,7 +385,7 @@ known to have yet departed at this point:
 
 [source,clj]
 ----
-include::reference::example$test/crux/docs/examples_test.clj[tags=bitempr]
+include::example$test/crux/docs/examples/bitemporality_test.clj[tags=bitempr]
 ----
 
 [#related]

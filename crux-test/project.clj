@@ -41,7 +41,9 @@
                   "-proc:none"]
   :junit ["test"]
   :junit-formatter :brief
-  :test-paths ["test" "../docs/reference/modules/ROOT/examples/test"]
+  :test-paths ["test"
+               "../docs/reference/modules/ROOT/examples/test"
+               "../docs/about/modules/ROOT/examples/test"]
 
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]

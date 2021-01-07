@@ -16,7 +16,7 @@ Additionally, when Crux's indexes are deployed directly alongside your applicati
 //See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
 
 Extensible Data Notation (edn) is used as the data format for the public Crux APIs.
-To gain an understanding of edn see xref:tutorials::essential-edn[Essential EDN for Crux].
+To gain an understanding of edn see xref:tutorials::essential-edn.adoc[Essential EDN for Crux].
 
 Note that all Crux Datalog queries run using a point-in-time view of the database which means the query capabilities and patterns presented in this section are not aware of valid times or transaction times.
 
@@ -43,7 +43,7 @@ A query in Crux is performed by calling `crux/q` on a Crux database snapshot wit
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=anatomy]
+include::example$test/crux/docs/examples/query_test.clj[tags=anatomy,indent=0]
 ----
 <1> Usually, the snapshot view comes from calling `crux/db` on a Crux node
 <2> Query map
@@ -79,7 +79,7 @@ You can directly specify a logic variable from your query. The following will re
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=triple]
+include::example$test/crux/docs/examples/query_test.clj[tags=triple,indent=0]
 ----
 
 [#find-aggregate]
@@ -106,9 +106,9 @@ You can specify an aggregate function to apply to at most one logic variable.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-aggregates]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-aggregates,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=query-aggregates-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-aggregates-r,indent=0]
 ----
 
 Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
@@ -138,11 +138,11 @@ To specify what data you'd like about each entity, include a `(eql/project ?logi
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-1]
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-1-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-1,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-1-r,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-2]
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-2-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-2,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-2-r,indent=0]
 ----
 
 We can navigate to other entities (and hence build up nested results) using 'joins'.
@@ -150,19 +150,19 @@ Joins are specified in `{}` braces in the projection-spec - each one maps one jo
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-3]
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-3-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-3,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-3-r,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-4]
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-4-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-4,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-4-r,indent=0]
 ----
 
 We can also navigate in the reverse direction, looking for entities that refer to this one, by prepending `_` to the attribute name:
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-5]
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-5-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-5,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-5-r,indent=0]
 ----
 
 To rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
@@ -183,8 +183,8 @@ You can quickly grab the whole document by specifying `*` in the projection spec
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-6]
-include::example$test/crux/docs/examples_test.clj[tags=eql-query-6-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6-r,indent=0]
 ----
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
@@ -219,11 +219,11 @@ It restricts results by matching EAV facts
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=double]
+include::example$test/crux/docs/examples/query_test.clj[tags=double,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=triple-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=triple-2,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=triple-3]
+include::example$test/crux/docs/examples/query_test.clj[tags=triple-3,indent=0]
 ----
 <1> This matches all entities, `p`, which have a `:name` field.
 <2> This matches all entities, `p`, which have a `:name` of `"Ivan"`.
@@ -236,11 +236,11 @@ The `not` term rejects a graph if all the terms within it are true.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=not-data]
+include::example$test/crux/docs/examples/query_test.clj[tags=not-data,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=not-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=not-2,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=not-2-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=not-2-r,indent=0]
 ----
 <1> Data
 <2> Query
@@ -259,11 +259,11 @@ Any other logic variables within the not-join are scoped only for the join.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=not-join-data]
+include::example$test/crux/docs/examples/query_test.clj[tags=not-join-data,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=not-join]
+include::example$test/crux/docs/examples/query_test.clj[tags=not-join,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=not-join-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=not-join-r,indent=0]
 ----
 <1> Data
 <2> Declaration of which logic variables need to unify with the rest of the query
@@ -281,11 +281,11 @@ The `or` term accepts a graph if any of the terms within it are true.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=or-data]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-data,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=or-1]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-1,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=or-1-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-1-r,indent=0]
 ----
 <1> Data
 <2> Query
@@ -297,7 +297,7 @@ When within an `or` term, you can use `and` to group terms which must all be tru
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=or-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-2,indent=0]
 ----
 
 [#term-or-join]
@@ -311,11 +311,11 @@ Any other logic variables within the `or-join` are scoped only for the join.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=or-join-data]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-join-data,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=or-join]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-join,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=or-join-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=or-join-r,indent=0]
 ----
 <1> Data
 <2> Declaration of which logic variables need to unify with the rest of the query
@@ -335,11 +335,11 @@ Allowed range operators are `<`, `<=`, `>=`, `>`, and `=`.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=range-1]
+include::example$test/crux/docs/examples/query_test.clj[tags=range-1,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=range-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=range-2,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=range-3]
+include::example$test/crux/docs/examples/query_test.clj[tags=range-3,indent=0]
 ----
 <1> Finds any entity, `p`, with an `:age` which is greater than 18
 <2> Finds any entity, `p`, with an `:age` which is greater than the `:age` of any entity
@@ -359,7 +359,7 @@ Predicate terms should be placed in a vector.
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-pred-1]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-pred-1,indent=0]
 ----
 
 This matches all entities, `p` which have an odd `:age`.
@@ -373,7 +373,7 @@ You can nest a subquery with a `:where` term to bind the result for further use 
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=sub-query-example-1]
+include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-1,indent=0]
 ----
 
 In the above query, we perform a subquery doing some arithmetic operations and returning the result - and bind the resulting relation as a scalar.
@@ -382,14 +382,14 @@ Result set:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=sub-query-example-1-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-1-r,indent=0]
 ----
 
 ==== Binding results as a tuple
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=sub-query-example-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-2,indent=0]
 ----
 
 Similar to the previous query, except we bind the resulting relation as a tuple.
@@ -398,21 +398,21 @@ Result set:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=sub-query-example-2-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-2-r,indent=0]
 ----
 
 In this example, we bind the results of a subquery and use them to return another result.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=sub-query-example-3]
+include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-3,indent=0]
 ----
 
 Result set:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=sub-query-example-3-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-3-r,indent=0]
 ----
 
 [#in]
@@ -426,7 +426,7 @@ Crux queries can take a set of additional arguments, binding them to variables u
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments1]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments1,indent=0]
 ----
 
 In the above query, we parameterize the `first-name` symbol, and pass in "Ivan" as our input, binding "Ivan" to `first-name` in the query.
@@ -434,14 +434,14 @@ In the above query, we parameterize the `first-name` symbol, and pass in "Ivan" 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments1-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments1-r,indent=0]
 ----
 
 === Collection binding
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments2]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments2,indent=0]
 ----
 
 This query shows binding to a collection of inputs - in this case, binding `first-name` to all of the different values in a collection of first-names.
@@ -449,14 +449,14 @@ This query shows binding to a collection of inputs - in this case, binding `firs
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments2-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments2-r,indent=0]
 ----
 
 === Tuple Binding
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments3]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments3,indent=0]
 ----
 
 In this query we are binding a set of variables to a single value each, passing in a collection as our input. In this case, we are passing a collection with a `first-name` followed by a `last-name`.
@@ -464,14 +464,14 @@ In this query we are binding a set of variables to a single value each, passing 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments3-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments3-r,indent=0]
 ----
 
 === Relation Binding
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments4]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments4,indent=0]
 ----
 
 Here we see how we can extend the parameterisation to match using multiple fields at once by passing and destructuring a relation containing multiple tuples.
@@ -479,7 +479,7 @@ Here we see how we can extend the parameterisation to match using multiple field
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=query-with-arguments4-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments4-r,indent=0]
 ----
 
 [#ordering-and-pagination]
@@ -495,7 +495,7 @@ control the result order.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=order-and-pagination-1]
+include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-1,indent=0]
 ----
 
 Use of `:order-by` will typically require that results are fully-realised by
@@ -508,7 +508,7 @@ naively scroll through the initial result set each time.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=order-and-pagination-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-2,indent=0]
 ----
 
 Pagination relies on efficient retrieval of explicitly ordered documents and
@@ -518,7 +518,7 @@ queries to apply range filters using predicates.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=order-and-pagination-3]
+include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-3,indent=0]
 ----
 
 Additionally, since Crux stores documents and can traverse arbitrary keys as
@@ -536,7 +536,7 @@ They can be used as a shorthand for when you would otherwise be repeating the sa
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=rules-1]
+include::example$test/crux/docs/examples/query_test.clj[tags=rules-1,indent=0]
 ----
 <1> Usage
 <2> Rule signature
@@ -548,7 +548,7 @@ The terms in Rules can also use Rules. This allows for the recursive traversal o
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=rules-2]
+include::example$test/crux/docs/examples/query_test.clj[tags=rules-2,indent=0]
 ----
 
 This example finds all entities that the entity with `:name` "Smith" is connected to via `:follow`, even if the connection is via intermediaries.
@@ -567,13 +567,13 @@ Setting the `:full-results?` flag to true will cause logic variables in the `:fi
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=full-results-data]
+include::example$test/crux/docs/examples/query_test.clj[tags=full-results-data,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=full-results-1]
-include::example$test/crux/docs/examples_test.clj[tags=full-results-1-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=full-results-1,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=full-results-1-r,indent=0]
 
-include::example$test/crux/docs/examples_test.clj[tags=full-results-2]
-include::example$test/crux/docs/examples_test.clj[tags=full-results-2-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=full-results-2,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=full-results-2-r,indent=0]
 ----
 
 [#valid-time-travel]
@@ -622,19 +622,19 @@ This will be the case so long as there are no newer versions (in the valid time 
 Given the following documents in the database
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=join-d]
+include::example$test/crux/docs/examples/query_test.clj[tags=join-d,indent=0]
 ----
 
 We can run a query to return a set of tuples that satisfy the join on the attribute `:name`
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=join-q]
+include::example$test/crux/docs/examples/query_test.clj[tags=join-q,indent=0]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=join-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=join-r,indent=0]
 ----
 
 Note that every person joins once, plus 2 more matches.
@@ -644,19 +644,19 @@ Note that every person joins once, plus 2 more matches.
 Given the following documents in the database
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=join2-d]
+include::example$test/crux/docs/examples/query_test.clj[tags=join2-d,indent=0]
 ----
 
 We can run a query to return a set of entities that `:follows` the set of entities with the `:name` value of `"Ivan"`
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=join2-q]
+include::example$test/crux/docs/examples/query_test.clj[tags=join2-q,indent=0]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=join2-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=join2-r,indent=0]
 ----
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
@@ -676,7 +676,7 @@ block) will result in undefined behaviour.
 
 [source,clj,indent=0]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=streaming-query]
+include::example$test/crux/docs/examples/query_test.clj[tags=streaming-query,indent=0]
 ----
 
 [#history-api]
@@ -687,14 +687,14 @@ include::example$test/crux/docs/examples_test.clj[tags=streaming-query]
 Crux allows you to retrieve all versions of a given entity:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=history-full]
+include::example$test/crux/docs/examples_test.clj[tags=history-full,indent=0]
 ----
 
 === Retrieving previous documents
 When retrieving the previous versions of an entity, you have the option to additionally return the documents associated with those versions (by using `:with-docs?` in the additional options map)
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=history-with-docs]
+include::example$test/crux/docs/examples_test.clj[tags=history-with-docs,indent=0]
 ----
 
 [#history-document-history-range]
@@ -709,7 +709,7 @@ Retrievable entity versions can be bounded by four time coordinates:
 All coordinates are inclusive. All coordinates can be null.
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=history-range]
+include::example$test/crux/docs/examples_test.clj[tags=history-range,indent=0]
 ----
 
 [#clojure-tips]
