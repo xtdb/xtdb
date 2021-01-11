@@ -343,7 +343,7 @@ Resources:
       - EC2StartLambda
     Properties:
       Name: "start-bench-instance-scheduler"
-      ScheduleExpression: "cron(55 23 ? * MON-FRI *)"
+      ScheduleExpression: "cron(55 23 ? * * *)"
       State: "ENABLED"
       Targets:
         - Id: "startEC2Instances"
@@ -367,7 +367,7 @@ Resources:
       - BenchTask
     Properties:
       Name: "crux-bench-scheduler"
-      ScheduleExpression: "cron(0 0 ? * MON-FRI *)"
+      ScheduleExpression: "cron(0 0 ? * * *)"
       State: "ENABLED"
       Targets:
         - Id: "crux-bench"
@@ -388,7 +388,7 @@ Resources:
       - EC2StopLambda
     Properties:
       Name: "stop-bench-instance-scheduler"
-      ScheduleExpression: "cron(0 3 ? * MON-FRI *)"
+      ScheduleExpression: "cron(0 3 ? * * *)"
       State: "ENABLED"
       Targets:
         - Id: "stopEC2Instances"
