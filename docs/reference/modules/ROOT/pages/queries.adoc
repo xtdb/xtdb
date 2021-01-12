@@ -406,6 +406,17 @@ include::example$src/docs/examples.clj[tags=eql-query-2]
 include::example$src/docs/examples.clj[tags=eql-query-2-r]
 ----
 
+If you have the entity ID(s) in hand, you can call `project` or `project-many` directly:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=eql-project]
+include::example$src/docs/examples.clj[tags=eql-project-r]
+
+include::example$src/docs/examples.clj[tags=eql-project-many]
+include::example$src/docs/examples.clj[tags=eql-project-many-r]
+----
+
 We can navigate to other entities (and hence build up nested results) using 'joins'.
 Joins are specified in `{}` braces in the projection-spec - each one maps one join key to its nested spec:
 

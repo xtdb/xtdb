@@ -106,7 +106,22 @@
                    :person/name "Daniel Craig",
                    :type :person}]}
                (crux/q db '{:find [(eql/project ?dc [*])]
-                            :where [[?dc :person/name "Daniel Craig"]]}))))))
+                            :where [[?dc :person/name "Daniel Craig"]]}))))
+
+    (t/testing "project fn"
+      (t/is (= #:film{:name "Spectre", :year "2015"}
+               (crux/project db (pr-str [:film/name :film/year]) :spectre)))
+      (t/is (= #:film{:name "Spectre", :year "2015"}
+               (crux/project db [:film/name :film/year] :spectre))))
+
+    (t/testing "projectMany fn"
+      (t/is (= #{#:film{:name "Skyfall", :year "2012"}
+                 #:film{:name "Spectre", :year "2015"}}
+               (set (crux/project-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre}))))
+
+      (t/is (= #{#:film{:name "Skyfall", :year "2012"}
+                 #:film{:name "Spectre", :year "2015"}}
+               (set (crux/project-many db [:film/name :film/year] #{:skyfall :spectre})))))))
 
 (t/deftest test-limit
   (let [db (submit-bond)]
