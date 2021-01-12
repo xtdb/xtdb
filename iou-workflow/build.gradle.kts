@@ -1,8 +1,10 @@
+import dev.clojurephant.plugin.clojure.tasks.ClojureNRepl
+
 plugins {
     kotlin("jvm")
-    id("dev.clojurephant.clojure")
     id("net.corda.plugins.cordapp")
     id("net.corda.plugins.quasar-utils")
+    id("dev.clojurephant.clojure")
 }
 
 val cordaGroup = "net.corda"
@@ -16,18 +18,33 @@ cordapp {
 }
 
 dependencies {
-    implementation("org.clojure", "clojure", "1.10.0")
-    implementation("juxt", "crux-core", "20.09-1.11.0-beta")
-
     cordaCompile(cordaGroup, "corda-core", cordaVersion)
     cordaCompile(cordaGroup, "corda-jackson", cordaVersion)
     cordaCompile(cordaGroup, "corda-rpc", cordaVersion)
     cordaRuntime(cordaGroup, "corda", cordaVersion)
     cordapp(project(":iou-contract"))
-    cordapp(project(":corda-contract"))
-    cordapp(project(":corda-workflow"))
+    cordapp(project(":crux-corda-state"))
+    cordapp(project(":crux-corda"))
+    implementation("juxt", "crux-core", "20.09-1.12.1-beta")
 
     testImplementation("junit", "junit", "4.12")
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)
+    testImplementation("org.clojure", "clojure", "1.10.0")
+
+    testImplementation("com.h2database", "h2", "1.4.199")
+    testImplementation("org.postgresql", "postgresql", "42.2.17")
 }
 
+tasks.withType(Test::class) {
+    enableAssertions = false
+}
+
+tasks.withType(ClojureNRepl::class.java) {
+    forkOptions {
+        jvmArgs!!.add("-javaagent:${project.configurations["quasar"].singleFile}")
+    }
+}
+
+quasar {
+    excludePackages.addAll(file("$projectDir/src/main/resources/quasar-exclude.txt").readLines())
+}
