@@ -36,7 +36,7 @@ There are four transaction (write) operations:
 [#put]
 === Put
 
-Put's a document into Crux. If a document already exists with the given `:crux.db/id`, a new version of this document will be created at the supplied `valid time`.
+Put's a document into Crux. If a document already exists with the given `:crux.db/id`, a new version of this document will be created at the supplied `valid time`. See <<#valid-time, Valid Time>> for more details.
 
 [source,clojure]
 ----
@@ -53,7 +53,7 @@ Put's a document into Crux. If a document already exists with the given `:crux.d
 [#delete]
 === Delete
 
-Deletes a document.
+Deletes a document. See <<#valid-time,Valid Time>> for details on how this interacts with multiple versions of the document.
 
 [source,clojure]
 ----
