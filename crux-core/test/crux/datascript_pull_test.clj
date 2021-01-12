@@ -68,53 +68,6 @@
              (crux/q db '{:find [(eql/project ?e [:name {:_parent [:name]}])]
                           :where [[?e :crux.db/id :petr]]})))))
 
-;; we don't have the concept of 'components'
-#_
-(t/deftest test-pull-component-attr
-  (let [parts {:name "Part A",
-               :part
-               [{:db/id 11
-                 :name "Part A.A",
-                 :part
-                 [{:db/id 12
-                   :name "Part A.A.A",
-                   :part
-                   [{:db/id 13 :name "Part A.A.A.A"}
-                    {:db/id 14 :name "Part A.A.A.B"}]}]}
-                {:db/id 15
-                 :name "Part A.B",
-                 :part
-                 [{:db/id 16
-                   :name "Part A.B.A",
-                   :part
-                   [{:db/id 17 :name "Part A.B.A.A"}
-                    {:db/id 18 :name "Part A.B.A.B"}]}]}]}
-        rpart (update-in parts [:part 0 :part 0 :part]
-                         (partial into [{:db/id 10}]))
-        recdb (d/init-db
-               (concat test-datoms [(d/datom 12 :part 10)])
-               test-schema)
-
-        mutdb (d/init-db
-               (concat test-datoms [(d/datom 12 :part 10)
-                                    (d/datom 12 :spec 10)
-                                    (d/datom 10 :spec 13)
-                                    (d/datom 13 :spec 12)])
-               test-schema)]
-
-    (t/testing "Component entities are expanded recursively"
-      (t/is (= parts (d/pull test-db '[:name :part] 10))))
-
-    (t/testing "Reverse component references yield a single result"
-      (t/is (= {:name "Part A.A" :_part {:db/id 10}}
-               (d/pull test-db [:name :_part] 11)))
-
-      (t/is (= {:name "Part A.A" :_part {:name "Part A"}}
-             (d/pull test-db [:name {:_part [:name]}] 11))))
-
-    (t/testing "Like explicit recursion, expansion will not allow loops"
-      (t/is (= rpart (d/pull recdb '[:name :part] 10))))))
-
 (t/deftest test-pull-wildcard
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{:crux.db/id :petr :name "Petr" :aka #{"Devil" "Tupen"}}]}
@@ -125,37 +78,40 @@
              (crux/q db '{:find [(eql/project ?e [* {:parent [:crux.db/id]}])]
                           :where [[?e :crux.db/id :david]]})))))
 
-;; TODO `:limit`
-#_
 (t/deftest test-pull-limit
-  (let [db (d/init-db
-            (concat
-             test-datoms
-             [(d/datom 4 :friend 5)
-              (d/datom 4 :friend 6)
-              (d/datom 4 :friend 7)
-              (d/datom 4 :friend 8)]
-             (for [idx (range 2000)]
-               (d/datom 8 :aka (str "aka-" idx))))
-            test-schema)]
+  (let [db (submit-test-docs (concat people-docs
+                                     [{:crux.db/id :elizabeth,
+                                       :name "Elizabeth"
+                                       :friend #{:matthew :eunan :kerri :rebecca}
+                                       :aka (into #{} (map #(str "liz-" %)) (range 2000))}]))]
 
+    ;; We don't have a default limit, because our query engine doesn't
+    #_
     (t/testing "Without an explicit limit, the default is 1000"
       (t/is (= 1000 (->> (d/pull db '[:aka] 8) :aka count))))
 
-    (t/testing "Explicit limit can reduce the default"
-      (t/is (= 500 (->> (d/pull db '[(limit :aka 500)] 8) :aka count)))
-      (t/is (= 500 (->> (d/pull db '[[:aka :limit 500]] 8) :aka count))))
-
-    (t/testing "Explicit limit can increase the default"
-      (t/is (= 1500 (->> (d/pull db '[(limit :aka 1500)] 8) :aka count))))
-
+    #_
     (t/testing "A nil limit produces unlimited results"
       (t/is (= 2000 (->> (d/pull db '[(limit :aka nil)] 8) :aka count))))
 
+    (t/testing "Explicit limit can reduce the default"
+      (t/is (= 500 (->> (crux/q db '{:find [(eql/project ?e [(:aka {:limit 500})])]
+                                     :where [[?e :crux.db/id :elizabeth]]})
+                        ffirst
+                        :aka
+                        count))))
+
+    (t/testing "Explicit limit can increase the default"
+      (t/is (= 1500 (->> (crux/q db '{:find [(eql/project ?e [(:aka {:limit 1500})])]
+                                      :where [[?e :crux.db/id :elizabeth]]})
+                         ffirst
+                         :aka
+                         count))))
+
     (t/testing "Limits can be used as map specification keys"
-      (t/is (= {:name "Lucy"
-                :friend [{:name "Elizabeth"} {:name "Matthew"}]}
-               (d/pull db '[:name {(limit :friend 2) [:name]}] 4))))))
+      (t/is (= #{[{:name "Elizabeth", :friend #{{:name "Kerri"} {:name "Matthew"}}}]}
+               (crux/q db '{:find [(eql/project ?e [:name {(:friend {:limit 2, :into #{}}) [:name]}])]
+                            :where [[?e :crux.db/id :elizabeth]]}))))))
 
 (t/deftest test-pull-default
   (let [db (submit-test-docs people-docs)]
@@ -165,8 +121,6 @@
                           :where [[?e :crux.db/id :petr]]}))
           "Missing attrs return empty map")
 
-    ;; TODO `:default`
-    #_
     (t/is (= #{[{:foo "bar"}]}
              (crux/q db '{:find [(eql/project ?e [(:foo {:default "bar"})])]
                           :where [[?e :crux.db/id :petr]]}))
@@ -179,8 +133,6 @@
                                                   (:aka {:as :alias})])]
                           :where [[?e :crux.db/id :petr]]})))))
 
-;; TODO `:default`
-#_
 (t/deftest test-pull-attr-with-opts
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{"Name" "Nothing"}]}
