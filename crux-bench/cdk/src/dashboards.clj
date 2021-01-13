@@ -165,9 +165,9 @@
                         (update-in-grid :alarm-widget  (fn [m] (->alarm-widget m :alarm))))
 
         queries-grid (-> queries-grid
-                         (update-in-grid :cold-metric   (fn [m] (-> (->metric m) (->math "time/6000" "cold time-taken(mins)"))))
+                         (update-in-grid :cold-metric   (fn [m] (-> (->metric m) (->math "time/6000" "warm time-taken(mins)"))))
                          (update-in-grid :warm-metric   (fn [m] (-> (->metric (assoc m :bench-type "queries"))
-                                                                    (->math "warm" "warm/6000" "warm time-taken(mins)"))))
+                                                                    (->math "cold" "cold/6000" "cold time-taken(mins)"))))
                          (update-in-grid :timing-widget (fn [m] (->graph-widget m [:cold-metric :warm-metric])))
                          (update-in-grid :rate-metric   (fn [m] (-> (->metric m) (->math "RATE(time)^2" "rate(time-taken(ms))^2"))))
                          (update-in-grid :alarm         (fn [m] (->alarm stack m :rate-metric)))
