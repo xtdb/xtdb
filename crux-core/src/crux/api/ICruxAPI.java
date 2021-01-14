@@ -11,13 +11,14 @@ import clojure.lang.PersistentArrayMap;
 /**
  *  Provides API access to Crux.
  */
+@SuppressWarnings("unused")
 public interface ICruxAPI extends ICruxIngestAPI, Closeable {
 
     /**
      * Returns a db as of now. Will return the latest consistent snapshot of the
      * db currently known. Does not block.
      */
-    public ICruxDatasource db();
+    ICruxDatasource db();
 
     /**
      * Returns a db as of now. Will return the latest consistent snapshot of the
@@ -26,14 +27,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * This method returns a DB that opens resources shared between method calls
      * - it must be `.close`d when you've finished using it.
      */
-    public ICruxDatasource openDB();
+    ICruxDatasource openDB();
 
     /**
      * Returns a db as of the provided valid time. Will return the latest
      * consistent snapshot of the db currently known, but does not wait for
      * valid time to be current. Does not block.
      */
-    public ICruxDatasource db(Date validTime);
+    ICruxDatasource db(Date validTime);
 
     /**
      * Returns a db as of the provided valid time. Will return the latest
@@ -43,14 +44,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * This method returns a DB that opens resources shared between method calls
      * - it must be `.close`d when you've finished using it.
      */
-    public ICruxDatasource openDB(Date validTime);
+    ICruxDatasource openDB(Date validTime);
 
     /**
      * Returns a db as of valid time and transaction time.
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transactionTime`
      */
-    public ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
+    ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of valid time and transaction time.
@@ -60,7 +61,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transactionTime`
      */
-    public ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
+    ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given valid time and transaction.
@@ -78,7 +79,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    public ICruxDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+    ICruxDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given valid time and transaction.
@@ -99,14 +100,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    public ICruxDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+    ICruxDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns the status of this node as a map.
      *
      * @return the status map.
      */
-    public Map<Keyword, ?> status();
+    Map<Keyword, ?> status();
 
     /**
      * Checks if a submitted tx was successfully committed.
@@ -116,7 +117,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return true if the submitted transaction was committed, false if it was not committed.
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
-    public boolean hasTxCommitted(Map<Keyword, ?> submittedTx) throws NodeOutOfSyncException;
+    boolean hasTxCommitted(Map<Keyword, ?> submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
@@ -128,7 +129,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction time.
      */
-    public Date sync(Duration timeout);
+    Date sync(Duration timeout);
 
     /**
      * Blocks until the node has indexed a transaction that is past the supplied
@@ -139,7 +140,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction time.
      */
-    public Date awaitTxTime(Date txTime, Duration timeout);
+    Date awaitTxTime(Date txTime, Duration timeout);
 
     /**
      * Blocks until the node has indexed a transaction that is at or past the
@@ -150,15 +151,15 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param timeout max time to wait, can be null for the default.
      * @return the latest known transaction.
      */
-    public Map<Keyword, ?> awaitTx(Map<Keyword, ?> tx, Duration timeout);
+    Map<Keyword, ?> awaitTx(Map<Keyword, ?> tx, Duration timeout);
 
     /**
      * Temporary helper value to pass to `listen`, to subscribe to tx-indexed events.
      */
     @SuppressWarnings("unchecked")
-    public static final Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
-        .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/indexed-tx"))
-        .assoc(Keyword.intern("with-tx-ops?"), true);
+    Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
+            .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/indexed-tx"))
+            .assoc(Keyword.intern("with-tx-ops?"), true);
 
     /**
      * Attaches a listener to Crux's event bus.
@@ -172,43 +173,43 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param eventOpts should contain `:crux/event-type`, along with any other options the event-type requires.
      * @return an AutoCloseable - closing the return value detaches the listener.
      */
-    public AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
+    AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);
 
     /**
      * @return the latest transaction to have been indexed by this node.
      */
-    public Map<Keyword, ?> latestCompletedTx();
+    Map<Keyword, ?> latestCompletedTx();
 
     /**
      * @return the latest transaction to have been submitted to this cluster
      */
-    public Map<Keyword, ?> latestSubmittedTx();
+    Map<Keyword, ?> latestSubmittedTx();
 
     /**
      * Return frequencies of indexed attributes.
      *
      * @return         Map containing attribute freqencies.
      */
-    public Map<Keyword, Long> attributeStats();
+    Map<Keyword, Long> attributeStats();
 
     /**
      * Returns a list of currently running queries.
      *
      * @return List containing maps with query information.
      */
-    public List<IQueryState> activeQueries();
+    List<IQueryState> activeQueries();
 
     /**
      * Returns a list of recently completed/failed queries
      *
      * @return List containing maps with query information.
      */
-    public List<IQueryState> recentQueries();
+    List<IQueryState> recentQueries();
 
     /**
      * Returns a list of slowest completed/failed queries ran on the node
      *
      * @return List containing maps with query information.
      */
-    public List<IQueryState> slowestQueries();
+    List<IQueryState> slowestQueries();
 }

@@ -2,12 +2,12 @@ package crux.api;
 
 import java.util.Date;
 import java.util.Map;
-import java.util.HashMap;
 import clojure.lang.IFn;
 import clojure.lang.Keyword;
 import clojure.lang.ILookup;
 import clojure.java.api.Clojure;
 
+@SuppressWarnings("unused")
 public interface HistoryOptions extends ILookup {
     enum SortOrder {
         ASC("asc"),

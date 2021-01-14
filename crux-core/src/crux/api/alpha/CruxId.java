@@ -4,6 +4,7 @@ import java.net.URI;
 import java.net.URL;
 import java.util.UUID;
 
+@SuppressWarnings("unused")
 @Deprecated
 public class CruxId {
     private final Object id;

@@ -5,13 +5,13 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import clojure.lang.Keyword;
 
 /**
  * Represents the database as of a specific valid and
  * transaction time.
  */
+@SuppressWarnings("unused")
 public interface ICruxDatasource extends Closeable {
     /**
      * Returns the document map for an entity.
@@ -19,7 +19,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity document map.
      */
-    public Map<Keyword,Object> entity(Object eid);
+    Map<Keyword,Object> entity(Object eid);
 
     /**
      * Returns the transaction details for an entity. Details
@@ -28,7 +28,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity transaction details.
      */
-    public Map<Keyword,?> entityTx(Object eid);
+    Map<Keyword,?> entityTx(Object eid);
 
     /**
      * Queries the db.
@@ -40,7 +40,7 @@ public interface ICruxDatasource extends Closeable {
      * @param args  bindings for in.
      * @return      a set or vector of result tuples.
      */
-    public Collection<List<?>> query(Object query, Object... args);
+    Collection<List<?>> query(Object query, Object... args);
 
     /**
      * Queries the db lazily.
@@ -49,7 +49,7 @@ public interface ICruxDatasource extends Closeable {
      * @param args  bindings for in.
      * @return      a cursor of result tuples.
      */
-    public ICursor<List<?>> openQuery(Object query, Object... args);
+    ICursor<List<?>> openQuery(Object query, Object... args);
 
     /**
      * Returns the requested data for the given entity ID, based on the projection spec
@@ -61,7 +61,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid entity ID
      * @return the requested projection starting at the given entity
      */
-    public Map<Keyword, ?> project(Object projection, Object eid);
+    Map<Keyword, ?> project(Object projection, Object eid);
 
     /**
      * Returns the requested data for the given entity IDs, based on the projection spec
@@ -73,7 +73,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eids entity IDs
      * @return the requested projections starting at the given entities
      */
-    public List<Map<Keyword, ?>> projectMany(Object projection, Iterable<?> eids);
+    List<Map<Keyword, ?>> projectMany(Object projection, Iterable<?> eids);
 
     /**
      * Returns the requested data for the given entity IDs, based on the projection spec
@@ -85,7 +85,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eids entity IDs
      * @return the requested projections starting at the given entities
      */
-    public List<Map<Keyword, ?>> projectMany(Object projection, Object... eids);
+    List<Map<Keyword, ?>> projectMany(Object projection, Object... eids);
 
     /**
      * Eagerly retrieves entity history for the given entity.
@@ -107,7 +107,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid The entity id to return history for
      * @return an eagerly-evaluated sequence of changes to the given entity.
      */
-    public List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions.SortOrder sortOrder, HistoryOptions options);
+    List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions.SortOrder sortOrder, HistoryOptions options);
     default List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions.SortOrder sortOrder) {
         return entityHistory(eid, sortOrder, HistoryOptions.create());
     }
@@ -120,7 +120,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid The entity id to return history for
      * @return a cursor of changes to the given entity.
      */
-    public ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions.SortOrder sortOrder, HistoryOptions options);
+    ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions.SortOrder sortOrder, HistoryOptions options);
     default ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions.SortOrder sortOrder) {
         return openEntityHistory(eid, sortOrder, HistoryOptions.create());
     }
@@ -132,14 +132,14 @@ public interface ICruxDatasource extends Closeable {
      *
      * @return the valid time of this db.
      */
-    public Date validTime();
+    Date validTime();
 
     /**
      * @return the time of the latest transaction applied to this db value.
      * If a tx time was specified when db value was acquired then returns
      * the specified time.
      */
-    public Date transactionTime();
+    Date transactionTime();
 
     /**
      * Returns the basis of this database snapshot - a map containing
@@ -147,7 +147,7 @@ public interface ICruxDatasource extends Closeable {
      *
      * @return the basis of this database snapshot.
      */
-    public Map<Keyword, ?> dbBasis();
+    Map<Keyword, ?> dbBasis();
 
     /**
      * Returns a new db value with the txOps speculatively applied.
@@ -158,5 +158,5 @@ public interface ICruxDatasource extends Closeable {
      * @param txOps the transaction operations to be applied.
      * @return a new db value with the txOps speculatively applied.
     */
-    public ICruxDatasource withTx(List<List<?>> txOps);
+    ICruxDatasource withTx(List<List<?>> txOps);
 }

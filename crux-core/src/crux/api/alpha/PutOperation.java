@@ -5,6 +5,7 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
+@SuppressWarnings("unused")
 @Deprecated
 public class PutOperation extends TransactionOperation {
     @Deprecated

@@ -8,6 +8,7 @@ import clojure.lang.Keyword;
 /**
  * Provides API access to Crux ingestion.
  */
+@SuppressWarnings("unused")
 public interface ICruxIngestAPI extends Closeable {
     /**
      * Writes transactions to the log for processing.
@@ -15,7 +16,7 @@ public interface ICruxIngestAPI extends Closeable {
      * @param txOps the transactions to be processed.
      * @return      a map with details about the submitted transaction.
      */
-    public Map<Keyword,?> submitTx(List<List<?>> txOps);
+    Map<Keyword,?> submitTx(List<List<?>> txOps);
 
     /**
      * Reads the transaction log. Optionally includes  operations, which allow the contents
@@ -26,6 +27,5 @@ public interface ICruxIngestAPI extends Closeable {
      * @param withOps   should the operations with documents be included?
      * @return          a lazy sequence of the transaction log.
      */
-
-    public ICursor<Map<Keyword, ?>> openTxLog(Long afterTxId, boolean withOps);
+    ICursor<Map<Keyword, ?>> openTxLog(Long afterTxId, boolean withOps);
 }

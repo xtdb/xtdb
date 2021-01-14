@@ -1,9 +1,7 @@
 package crux;
 
 import java.lang.reflect.Field;
-import java.math.BigInteger;
 import java.nio.ByteOrder;
-import java.util.Arrays;
 import java.util.Comparator;
 import org.agrona.DirectBuffer;
 import org.agrona.MutableDirectBuffer;

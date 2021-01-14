@@ -6,15 +6,15 @@ import java.util.Map;
 import java.util.function.Consumer;
 
 import clojure.java.api.Clojure;
-import clojure.lang.Keyword;
 import clojure.lang.IFn;
 
 /**
  * Public API entry point for starting an {@link ICruxAPI}.
  */
+@SuppressWarnings("unused")
 public class Crux {
 
-    private static IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
+    private static final IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
 
     private static IFn resolve(String symbolName) {
         return (IFn) requiringResolve.invoke(Clojure.read(symbolName));
@@ -35,7 +35,6 @@ public class Crux {
      * @return the started node
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
-    @SuppressWarnings("unused")
     public static ICruxAPI startNode() {
         return startNode(c -> {});
     }
@@ -64,7 +63,6 @@ public class Crux {
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
-    @SuppressWarnings("unused")
     public static ICruxAPI startNode(File file) throws IndexVersionOutOfSyncException {
         return startNode((Object) file);
     }
@@ -79,7 +77,6 @@ public class Crux {
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
-    @SuppressWarnings("unused")
     public static ICruxAPI startNode(URL url) throws IndexVersionOutOfSyncException {
         return startNode((Object) url);
     }
@@ -101,7 +98,6 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
-    @SuppressWarnings("unused")
     public static ICruxAPI startNode(Consumer<NodeConfigurator> f) throws IndexVersionOutOfSyncException {
         NodeConfigurator c = new NodeConfigurator();
         f.accept(c);
@@ -118,7 +114,6 @@ public class Crux {
      * @param url the URL to a Crux HTTP end-point.
      * @return    a remote API client.
      */
-    @SuppressWarnings("unused")
     public static ICruxAPI newApiClient(String url) {
         Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url);
         return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(apiClient);
@@ -135,7 +130,6 @@ public class Crux {
      * @param options options for the remote client.
      * @return    a remote API client.
      */
-    @SuppressWarnings("unused")
     public static ICruxAPI newApiClient(String url, RemoteClientOptions options) {
         Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url, options);
         return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(apiClient);
@@ -152,7 +146,6 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
-    @SuppressWarnings("unused")
     public static ICruxAsyncIngestAPI newIngestClient(Map<?,?> options) {
         Object ingestClient = resolve("crux.ingest-client/open-ingest-client").invoke(options);
         return (ICruxAsyncIngestAPI) resolve("crux.api/->JCruxIngestClient").invoke(ingestClient);
@@ -175,7 +168,6 @@ public class Crux {
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
-    @SuppressWarnings("unused")
     public static ICruxAsyncIngestAPI newIngestClient(Consumer<NodeConfigurator> f) {
         NodeConfigurator c = new NodeConfigurator();
         f.accept(c);
