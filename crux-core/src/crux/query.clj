@@ -1846,16 +1846,22 @@
       (let [index-snapshot (open-index-snapshot this)
             {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
         (cio/->cursor #(.close index-snapshot)
-                      (->> (db/entity-history index-snapshot eid sort-order opts)
-                           (map (fn [^EntityTx etx]
-                                  (cond-> {:crux.tx/tx-time (.tt etx)
-                                           :crux.tx/tx-id (.tx-id etx)
-                                           :crux.db/valid-time (.vt etx)
-                                           :crux.db/content-hash (.content-hash etx)}
-                                    with-docs? (assoc :crux.db/doc (when-let [content-hash (.content-hash etx)]
-                                                                     (when-not (= content-hash (c/new-id c/nil-id-buffer))
-                                                                       (-> (db/fetch-docs document-store #{content-hash})
-                                                                           (get content-hash)))))))))))))
+                      (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
+                                                    (partition-all 100))
+                                 :let [docs (when with-docs?
+                                              (db/fetch-docs document-store
+                                                             (->> history-batch
+                                                                  (into #{}
+                                                                        (comp (keep #(.content-hash ^EntityTx %))
+                                                                              (remove #{(c/new-id c/nil-id-buffer)}))))))]]
+                             (->> history-batch
+                                  (map (fn [^EntityTx etx]
+                                         (cond-> {:crux.tx/tx-time (.tt etx)
+                                                  :crux.tx/tx-id (.tx-id etx)
+                                                  :crux.db/valid-time (.vt etx)
+                                                  :crux.db/content-hash (.content-hash etx)}
+                                           with-docs? (assoc :crux.db/doc (get docs (.content-hash etx))))))))
+                           (mapcat seq))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
