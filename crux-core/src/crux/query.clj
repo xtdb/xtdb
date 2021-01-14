@@ -1852,8 +1852,10 @@
                                            :crux.tx/tx-id (.tx-id etx)
                                            :crux.db/valid-time (.vt etx)
                                            :crux.db/content-hash (.content-hash etx)}
-                                    with-docs? (assoc :crux.db/doc (-> (db/fetch-docs document-store #{(.content-hash etx)})
-                                                                       (get (.content-hash etx))))))))))))
+                                    with-docs? (assoc :crux.db/doc (when-let [content-hash (.content-hash etx)]
+                                                                     (when-not (= content-hash (c/new-id c/nil-id-buffer))
+                                                                       (-> (db/fetch-docs document-store #{content-hash})
+                                                                           (get content-hash)))))))))))))
 
   (validTime [_] valid-time)
   (transactionTime [_] tx-time)
