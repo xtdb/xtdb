@@ -3,7 +3,8 @@
             [crux.api :as crux]
             [crux.io :as cio]
             [crux.fixtures :as fix :refer [*api*]]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [crux.codec :as c])
   (:import java.io.Closeable))
 
 (t/use-fixtures :each fix/with-node)
@@ -460,44 +461,43 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (crux/entity (crux/db *api*) :manifest)))))
 
-  (t/testing "jupiter-tests"
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :kaarlang/clients
-                                         :clients [:encompass-trade]}
-                           #inst "2110-01-01T09"
-                           #inst "2111-01-01T09"]
+(t/deftest jupiter-tests
+  (let [doc1 {:crux.db/id :kaarlang/clients, :clients [:encompass-trade]}
+        doc2 {:crux.db/id :kaarlang/clients, :clients [:encompass-trade :blue-energy]}
+        doc3 {:crux.db/id :kaarlang/clients, :clients [:blue-energy]}
+        doc4 {:crux.db/id :kaarlang/clients, :clients [:blue-energy :gold-harmony :tombaugh-resources]}]
+    (fix/submit+await-tx [[:crux.tx/put doc1 #inst "2110-01-01T09" #inst "2111-01-01T09"]
+                          [:crux.tx/put doc2 #inst "2111-01-01T09" #inst "2113-01-01T09"]
+                          [:crux.tx/put doc3 #inst "2113-01-01T09" #inst "2114-01-01T09"]
+                          [:crux.tx/put doc4 #inst "2114-01-01T09" #inst "2115-01-01T09"]])
 
-                          [:crux.tx/put {:crux.db/id :kaarlang/clients
-                                         :clients [:encompass-trade :blue-energy]}
-                           #inst "2111-01-01T09"
-                           #inst "2113-01-01T09"]
+    (t/is (= doc4 (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
-                          [:crux.tx/put {:crux.db/id :kaarlang/clients
-                                         :clients [:blue-energy]}
-                           #inst "2113-01-01T09"
-                           #inst "2114-01-01T09"]
+    (t/is (= [{:crux.tx/tx-id 0, :crux.db/valid-time #inst "2110-01-01T09", :crux.db/content-hash (c/new-id doc1), :crux.db/doc doc1}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2111-01-01T09", :crux.db/content-hash (c/new-id doc2), :crux.db/doc doc2}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2113-01-01T09", :crux.db/content-hash (c/new-id doc3), :crux.db/doc doc3}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2114-01-01T09", :crux.db/content-hash (c/new-id doc4), :crux.db/doc doc4}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2115-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer), :crux.db/doc nil}]
 
-                          [:crux.tx/put {:crux.db/id :kaarlang/clients
-                                         :clients [:blue-energy :gold-harmony :tombaugh-resources]}
-                           #inst "2114-01-01T09"
-                           #inst "2115-01-01T09"]])
-
-    (t/is (= {:crux.db/id :kaarlang/clients
-              :clients [:blue-energy :gold-harmony :tombaugh-resources]}
-             (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
-
-    ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
-    (with-open [history (crux/open-entity-history (crux/db *api*) :kaarlang/clients :asc)]
-      (t/is history))
+             (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
+                  (mapv #(dissoc % :crux.tx/tx-time)))))
 
     (fix/submit+await-tx [[:crux.tx/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
 
     (t/is nil? (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients))
 
-    ;; Check is not nil (that it runs), cannot confirm exact history state as tx-time changing
-    (with-open [history (crux/open-entity-history (crux/db *api*) :kaarlang/clients :asc)]
-      (t/is history))))
+    (t/is (= [{:crux.tx/tx-id 1, :crux.db/valid-time #inst "2110-01-01T00", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
+              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2110-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
+              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2111-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
+              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2113-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
+              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2114-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
+              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2115-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2116-01-01T00", :crux.db/content-hash (c/new-id c/nil-id-buffer)}]
+
+             (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? false})
+                  (mapv #(dissoc % :crux.tx/tx-time)))))))
 
 (t/deftest Oumuamua-test
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :person/kaarlang
