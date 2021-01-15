@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.db
-  (:require [clojure.set :as set]))
+  (:require [clojure.set :as set]
+            [crux.codec :as c]))
 
 ;; tag::Index[]
 (defprotocol Index
@@ -76,7 +77,8 @@
   (-fetch-docs [this ids]))
 
 (defn fetch-docs [document-store ids]
-  (let [ids (set ids)]
+  (let [ids (->> ids
+                 (into #{} (remove (some-fn nil? #{(c/new-id c/nil-id-buffer)}))))]
     (loop [docs {}]
       (let [missing-ids (set/difference ids (set (keys docs)))
             docs (into docs
