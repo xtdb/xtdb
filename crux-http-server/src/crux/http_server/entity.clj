@@ -5,7 +5,6 @@
             [crux.api :as crux]
             [crux.codec :as c]
             [crux.error :as ce]
-            [crux.history-options :as hopts]
             [crux.http-server.entity-ref :as entity-ref]
             [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
@@ -144,19 +143,18 @@
     (let [db (util/db-for-request crux-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})
-          history-opts (hopts/->history-options sort-order
-                                                {:with-corrections? with-corrections
-                                                 :with-docs? with-docs
-                                                 :start-valid-time start-valid-time
-                                                 :start-tx (->> {:crux.tx/tx-time start-tx-time
-                                                                 :crux.tx/tx-id start-tx-id}
-                                                                (into {} (filter val))
-                                                                not-empty)
-                                                 :end-valid-time end-valid-time
-                                                 :end-tx (->> {:crux.tx/tx-time end-tx-time
-                                                               :crux.tx/tx-id end-tx-id}
-                                                              (into {} (filter val))
-                                                              not-empty)})
+          history-opts {:with-corrections? with-corrections
+                        :with-docs? with-docs
+                        :start-valid-time start-valid-time
+                        :start-tx (->> {:crux.tx/tx-time start-tx-time
+                                        :crux.tx/tx-id start-tx-id}
+                                       (into {} (filter val))
+                                       not-empty)
+                        :end-valid-time end-valid-time
+                        :end-tx (->> {:crux.tx/tx-time end-tx-time
+                                     :crux.tx/tx-id end-tx-id}
+                                    (into {} (filter val))
+                                    not-empty)}
           entity-history (crux/open-entity-history db eid sort-order history-opts)]
       {:entity-history entity-history})
     (catch Exception e

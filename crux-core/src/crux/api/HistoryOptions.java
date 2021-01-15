@@ -9,8 +9,19 @@ import clojure.lang.ILookup;
 import clojure.java.api.Clojure;
 
 public interface HistoryOptions extends ILookup {
-    public enum SortOrder {
-        ASC, DESC;
+    enum SortOrder {
+        ASC("asc"),
+        DESC("desc");
+
+        private final Keyword keyword;
+
+        SortOrder(String keyName) {
+            this.keyword = Keyword.intern(keyName);
+        }
+
+        public Keyword getKeyword() {
+            return keyword;
+        }
     }
 
     class Builder {
@@ -21,11 +32,9 @@ public interface HistoryOptions extends ILookup {
             (IFn) REQUIRING_RESOLVE.invoke(Clojure.read("crux.history-options/->history-options"));
     }
 
-    public static HistoryOptions create(SortOrder sortOrder) {
-        return (HistoryOptions) Builder.TO_HISTORY_OPTIONS.invoke(sortOrder);
+    static HistoryOptions create() {
+        return (HistoryOptions) Builder.TO_HISTORY_OPTIONS.invoke();
     }
-
-    public HistoryOptions sortOrder(SortOrder sortOrder);
 
     /**
      * Specifies whether to return bitemporal corrections in the history response.
@@ -33,7 +42,7 @@ public interface HistoryOptions extends ILookup {
      * If this is set to `true`, corrections will be returned within the
      * sequence, sorted first by valid-time, then tx-id.
      */
-    public HistoryOptions withCorrections(boolean withCorrections);
+    HistoryOptions withCorrections(boolean withCorrections);
 
     /**
      * Specifies whether to return documents in the history response.
@@ -41,47 +50,47 @@ public interface HistoryOptions extends ILookup {
      * If this is set to `true`, documents will be included under the
      * `:crux.db/doc` key.
      */
-    public HistoryOptions withDocs(boolean withDocs);
+    HistoryOptions withDocs(boolean withDocs);
 
     /**
      * Sets the starting valid time.
      *
      * The history response will include entries starting at this valid time (inclusive).
      */
-    public HistoryOptions startValidTime(Date validTime);
+    HistoryOptions startValidTime(Date validTime);
 
     /**
      * Sets the starting transaction.
      *
      * The history response will include entries starting at this transaction (inclusive).
      */
-    public HistoryOptions startTransaction(Map<Keyword, ?> startTransaction);
+    HistoryOptions startTransaction(Map<Keyword, ?> startTransaction);
 
     /**
      * Sets the starting transaction time.
      *
      * The history response will include entries starting at this transaction (inclusive).
      */
-    public HistoryOptions startTransactionTime(Date startTransactionTime);
+    HistoryOptions startTransactionTime(Date startTransactionTime);
 
     /**
      * Sets the end valid time.
      *
      * The history response will include entries up to this valid time (exclusive).
      */
-    public HistoryOptions endValidTime(Date endValidTime);
+    HistoryOptions endValidTime(Date endValidTime);
 
     /**
      * Sets the ending transaction.
      *
      * The history response will include entries up to this transaction (exclusive).
      */
-    public HistoryOptions endTransaction(Map<Keyword, ?> endTransaction);
+    HistoryOptions endTransaction(Map<Keyword, ?> endTransaction);
 
     /**
      * Sets the ending transaction time.
      *
      * The history response will include entries up to this transaction (exclusive).
      */
-    public HistoryOptions endTransactionTime(Date endTransactionTime);
+    HistoryOptions endTransactionTime(Date endTransactionTime);
 }

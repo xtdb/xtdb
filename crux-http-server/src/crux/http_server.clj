@@ -34,7 +34,7 @@
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
-           [crux.api ICruxAPI NodeOutOfSyncException]
+           [crux.api NodeOutOfSyncException]
            [java.io Closeable IOException]
            java.time.Duration
            org.eclipse.jetty.server.Server))
@@ -45,7 +45,7 @@
 
 (s/def ::db-spec (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
 
-(defn- db-handler [^ICruxAPI crux-node]
+(defn- db-handler [crux-node]
   (fn [req]
     (let [{:keys [valid-time tx-time tx-id]} (get-in req [:parameters :query])
           db (util/db-for-request crux-node {:valid-time valid-time
@@ -57,7 +57,7 @@
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
 
-(defn- entity-tx [^ICruxAPI crux-node]
+(defn- entity-tx [crux-node]
   (fn [req]
     (let [{:keys [eid eid-edn eid-json valid-time tx-time tx-id]} (get-in req [:parameters :query])
           eid (or eid-edn eid-json eid)
@@ -100,7 +100,7 @@
 (s/def ::tx-ops vector?)
 (s/def ::submit-tx-spec (s/keys :req-un [::tx-ops]))
 
-(defn- submit-tx [^ICruxAPI crux-node]
+(defn- submit-tx [crux-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
           {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
@@ -126,7 +126,7 @@
    (-> (util/->default-muuntaja {:json-encode-fn tx-log-json-encode})
        (assoc :return :output-stream))))
 
-(defn- tx-log [^ICruxAPI crux-node]
+(defn- tx-log [crux-node]
   (fn [req]
     (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])]
       (-> {:status 200
@@ -136,7 +136,7 @@
 
 (s/def ::sync-spec (s/keys :opt-un [::util/tx-time ::util/timeout]))
 
-(defn- sync-handler [^ICruxAPI crux-node]
+(defn- sync-handler [crux-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
@@ -149,7 +149,7 @@
 
 (s/def ::await-tx-time-spec (s/keys :req-un [::util/tx-time] :opt-un [::util/timeout]))
 
-(defn- await-tx-time-handler [^ICruxAPI crux-node]
+(defn- await-tx-time-handler [crux-node]
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))]
@@ -161,7 +161,7 @@
 
 (s/def ::await-tx-spec (s/keys :req-un [::util/tx-id] :opt-un [::util/timeout]))
 
-(defn- await-tx-handler [^ICruxAPI crux-node]
+(defn- await-tx-handler [crux-node]
   (fn [req]
     (let [{:keys [timeout tx-id]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
@@ -169,14 +169,14 @@
       (-> {:status 200, :body tx}
           (add-last-modified tx-time)))))
 
-(defn- attribute-stats [^ICruxAPI crux-node]
+(defn- attribute-stats [crux-node]
   (fn [_]
     {:status 200
      :body (crux/attribute-stats crux-node)}))
 
 (s/def ::tx-committed-spec (s/keys :req-un [::util/tx-id]))
 
-(defn- tx-committed? [^ICruxAPI crux-node]
+(defn- tx-committed? [crux-node]
   (fn [req]
     (try
       (let [tx-id (get-in req [:parameters :query :tx-id])]
@@ -185,7 +185,7 @@
       (catch NodeOutOfSyncException e
         {:status 400, :body e}))))
 
-(defn latest-completed-tx [^ICruxAPI crux-node]
+(defn latest-completed-tx [crux-node]
   (fn [_]
     (if-let [latest-completed-tx (crux/latest-completed-tx crux-node)]
       {:status 200
@@ -193,7 +193,7 @@
       {:status 404
        :body {:error "No latest-completed-tx found."}})))
 
-(defn latest-submitted-tx [^ICruxAPI crux-node]
+(defn latest-submitted-tx [crux-node]
   (fn [_]
     (if-let [latest-submitted-tx (crux/latest-submitted-tx crux-node)]
       {:status 200
@@ -201,17 +201,17 @@
       {:status 404
        :body {:error "No latest-submitted-tx found."}})))
 
-(defn active-queries [^ICruxAPI crux-node]
+(defn active-queries [crux-node]
   (fn [_]
     {:status 200
      :body (crux/active-queries crux-node)}))
 
-(defn recent-queries [^ICruxAPI crux-node]
+(defn recent-queries [crux-node]
   (fn [_]
     {:status 200
      :body (crux/recent-queries crux-node)}))
 
-(defn slowest-queries [^ICruxAPI crux-node]
+(defn slowest-queries [crux-node]
   (fn [_]
     {:status 200
      :body (crux/slowest-queries crux-node)}))
@@ -223,7 +223,7 @@
     (catch IOException _
       false)))
 
-(defn sparqql [^ICruxAPI crux-node]
+(defn sparqql [crux-node]
   (fn [req]
     (when sparql-available?
       ((resolve 'crux.sparql.protocol/sparql-query) crux-node req))))

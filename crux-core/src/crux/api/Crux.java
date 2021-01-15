@@ -23,7 +23,8 @@ public class Crux {
     private Crux() { }
 
     private static ICruxAPI startNode(Object config) {
-        return (ICruxAPI) resolve("crux.api/start-node").invoke(config);
+        Object cruxNode = resolve("crux.api/start-node").invoke(config);
+        return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(cruxNode);
     }
 
     /**
@@ -119,7 +120,8 @@ public class Crux {
      */
     @SuppressWarnings("unused")
     public static ICruxAPI newApiClient(String url) {
-        return (ICruxAPI) resolve("crux.remote-api-client/new-api-client").invoke(url);
+        Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url);
+        return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(apiClient);
     }
 
     /**
@@ -135,7 +137,8 @@ public class Crux {
      */
     @SuppressWarnings("unused")
     public static ICruxAPI newApiClient(String url, RemoteClientOptions options) {
-        return (ICruxAPI) resolve("crux.remote-api-client/new-api-client").invoke(url, options);
+        Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url, options);
+        return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(apiClient);
     }
 
     /**
@@ -151,7 +154,8 @@ public class Crux {
      */
     @SuppressWarnings("unused")
     public static ICruxAsyncIngestAPI newIngestClient(Map<?,?> options) {
-        return (ICruxAsyncIngestAPI) resolve("crux.ingest-client/open-ingest-client").invoke(options);
+        Object ingestClient = resolve("crux.ingest-client/open-ingest-client").invoke(options);
+        return (ICruxAsyncIngestAPI) resolve("crux.api/->JCruxIngestClient").invoke(ingestClient);
     }
 
     /**

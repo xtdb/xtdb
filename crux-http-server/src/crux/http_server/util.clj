@@ -15,7 +15,7 @@
             [spec-tools.core :as st]
             [crux.http-server.entity-ref :as entity-ref]
             [clojure.instant :as inst])
-  (:import [crux.api ICruxAPI ICruxDatasource]
+  (:import [crux.api ICruxDatasource]
            [crux.codec EDNId Id]
            crux.http_server.entity_ref.EntityRef
            [java.io ByteArrayOutputStream OutputStream]
@@ -113,11 +113,11 @@
        (m/install {:name "application/json"
                    :encoder [http-json/->json-encoder opts]}))))
 
-(defn db-for-request ^ICruxDatasource [^ICruxAPI crux-node {:keys [valid-time tx-time tx-id]}]
+(defn db-for-request ^ICruxDatasource [crux-node {:keys [valid-time tx-time tx-id]}]
   (let [^Map db-basis {:crux.db/valid-time valid-time
                        :crux.tx/tx-time tx-time
                        :crux.tx/tx-id tx-id}]
-    (.db crux-node db-basis)))
+    (api/db crux-node db-basis)))
 
 (defn raw-html [{:keys [title crux-node http-options results]}]
   (let [latest-completed-tx (api/latest-completed-tx crux-node)]

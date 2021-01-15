@@ -13,11 +13,11 @@
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
-        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.awaitTx *api* submitted-tx (java.time.Duration/ofSeconds 2))
-    (t/is (.entity (.db *api*) :origin-man))
+        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+    (api/await-tx *api* submitted-tx (java.time.Duration/ofSeconds 2))
+    (t/is (api/entity (api/db *api*) :origin-man))
     (t/testing "Tx log"
-      (with-open [tx-log-iterator (.openTxLog *api* 0 false)]
+      (with-open [tx-log-iterator (api/open-tx-log *api* 0 false)]
         (t/is (= [{:crux.tx/tx-id 2,
                    :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
                    :crux.tx.event/tx-events
@@ -64,10 +64,10 @@
           last-tx (atom nil)]
       (time
        (dotimes [n n]
-         (reset! last-tx (.submitTx *api* [[:crux.tx/put {:crux.db/id (keyword (str n))}]]))))
+         (reset! last-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id (keyword (str n))}]]))))
 
       (time
-       (.awaitTx *api* last-tx nil))))
+       (api/await-tx *api* last-tx nil))))
   (t/is true))
 
 (t/deftest test-ingest-bench

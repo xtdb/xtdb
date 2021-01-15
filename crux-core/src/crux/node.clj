@@ -13,8 +13,9 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
-  (:import [crux.api ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICursor]
+            [crux.tx.event :as txe]
+            [clojure.tools.logging :as log])
+  (:import [crux.api ICruxAsyncIngestAPI ICruxDatasource ICursor ICruxIngestAPI]
            [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
@@ -83,42 +84,35 @@
 
 (defrecord CruxNode [kv-store tx-log document-store index-store tx-ingester bus query-engine
                      !running-queries close-fn !system closed? ^StampedLock lock]
-  ICruxAPI
-  (db [this]
-    (let [^Map basis {}]
-      (.db this basis)))
+  Closeable
+  (close [_]
+    (when close-fn
+      (cio/with-write-lock lock
+        (when (not @closed?)
+          (close-fn)
+          (reset! closed? true)
+          (bus/send bus {:crux/event-type ::node-closed})))))
 
-  (^ICruxDatasource db [this ^Date valid-time]
-   (let [^Map basis {:crux.db/valid-time valid-time}]
-     (.db this basis)))
+  api/DBProvider
+  (db [this] (api/db this {}))
+  (db [this valid-time-or-basis]
+    (if (instance? Date valid-time-or-basis)
+      (api/db this {:crux.db/valid-time valid-time-or-basis})
+      (api/open-db this valid-time-or-basis)))
+  (db [this valid-time tx-time]
+    (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
 
-  (^ICruxDatasource db [this ^Map basis]
-   (cio/with-read-lock lock
-     (ensure-node-open this)
-     (api/db query-engine basis)))
+  (open-db [this] (api/open-db this {}))
+  (open-db [this valid-time tx-time]
+    (api/open-db this {:crux.db/valid-time valid-time :crux.tx/tx-time tx-time}))
+  (open-db [this valid-time-or-basis]
+    (if (instance? Date valid-time-or-basis)
+      (api/open-db this {:crux.db/valid-time valid-time-or-basis})
+      (cio/with-read-lock lock
+        (ensure-node-open this)
+        (api/open-db query-engine valid-time-or-basis))))
 
-  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
-   (let [^Map basis {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}]
-     (.db this basis)))
-
-  (openDB [this]
-    (let [^Map basis {}]
-      (.openDB this basis)))
-
-  (^ICruxDatasource openDB [this ^Date valid-time]
-   (let [^Map basis {:crux.db/valid-time valid-time}]
-     (.openDB this basis)))
-
-  (^ICruxDatasource openDB [this ^Date valid-time ^Date tx-time]
-   (let [^Map basis {:crux.db/valid-time valid-time
-                     :crux.tx/tx-time tx-time}]
-     (.openDB this basis)))
-
-  (^ICruxDatasource openDB [this ^Map basis]
-   (cio/with-read-lock lock
-     (ensure-node-open this)
-     (api/open-db query-engine basis)))
-
+  api/PCruxNode
   (status [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
@@ -129,112 +123,118 @@
         (merge crux-version
                (status (dissoc @!system :crux/node))))))
 
-  (attributeStats [this]
+  (tx-committed? [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
     (cio/with-read-lock lock
-      (ensure-node-open this)
-      (db/read-index-meta index-store :crux/attribute-stats)))
+      (cio/with-read-lock lock
+        (ensure-node-open this)
+        (let [{latest-tx-id ::tx/tx-id, :as latest-tx} (api/latest-completed-tx this)]
+          (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
+            (throw (err/node-out-of-sync {:requested submitted-tx, :available latest-tx}))
+            (not (db/tx-failed? index-store tx-id)))))))
 
-  (submitTx [this tx-ops]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-        (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-        @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
-
-  (hasTxCommitted [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (let [{latest-tx-id ::tx/tx-id, :as latest-tx} (.latestCompletedTx this)]
-        (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
-          (throw (err/node-out-of-sync {:requested submitted-tx, :available latest-tx}))
-          (not (db/tx-failed? index-store tx-id))))))
-
-  (openTxLog ^ICursor [this after-tx-id with-ops?]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
-            (or (nil? latest-submitted-tx-id)
-                (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
-        cio/empty-cursor
-
-        (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
-              tx-log-iterator (db/open-tx-log tx-log after-tx-id)
-              tx-log (->> (iterator-seq tx-log-iterator)
-                          (remove #(db/tx-failed? index-store (:crux.tx/tx-id %)))
-                          (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
-                          (map (if with-ops?
-                                 (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
-                                   (-> tx-log-entry
-                                       (dissoc :crux.tx.event/tx-events)
-                                       (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
-                                 (fn [tx-log-entry]
-                                   (-> tx-log-entry
-                                       (update :crux.tx.event/tx-events
-                                               (fn [evts]
-                                                 (->> evts (mapv #(update % 1 c/new-id))))))))))]
-          (cio/->cursor (fn []
-                          (.close tx-log-iterator))
-                        tx-log)))))
+  (sync [this] (api/sync this nil))
 
   (sync [this timeout]
-    (when-let [tx (db/latest-submitted-tx (:tx-log this))]
+    (when-let [tx (db/latest-submitted-tx tx-log)]
       (-> (api/await-tx this tx timeout)
           :crux.tx/tx-time)))
 
-  (awaitTxTime [this tx-time timeout]
+  (sync [this tx-time timeout]
+    (defonce warn-on-deprecated-sync
+      (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
     (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
 
-  (awaitTx [this submitted-tx timeout]
+  (await-tx [this submitted-tx]
+    (api/await-tx this submitted-tx nil))
+
+  (await-tx [this submitted-tx timeout]
     (await-tx this ::tx/tx-id submitted-tx timeout))
 
-  (listen [this {:crux/keys [event-type] :as event-opts} consumer]
+  (await-tx-time [this tx-time]
+    (api/await-tx-time this tx-time nil))
+
+  (await-tx-time [this tx-time timeout]
+    (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
+
+  (listen [_ {:crux/keys [event-type] :as event-opts} f]
     (case event-type
       :crux/indexed-tx
       (bus/listen bus
                   (assoc event-opts :crux/event-types #{::tx/indexed-tx})
                   (fn [{:keys [submitted-tx ::txe/tx-events] :as ev}]
-                    (.accept ^Consumer consumer
-                             (merge {:crux/event-type :crux/indexed-tx}
-                                    (select-keys ev [:committed?])
-                                    (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
-                                    (when (:with-tx-ops? event-opts)
-                                      {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
+                    (f (merge {:crux/event-type :crux/indexed-tx}
+                              (select-keys ev [:committed?])
+                              (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                              (when (:with-tx-ops? event-opts)
+                                {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
-  (latestCompletedTx [this]
+  (latest-completed-tx [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (db/latest-completed-tx index-store)))
 
-  (latestSubmittedTx [this]
+  (latest-submitted-tx [_]
     (db/latest-submitted-tx tx-log))
 
-  (activeQueries [this]
+  (attribute-stats [this]
+    (cio/with-read-lock lock
+      (ensure-node-open this)
+      (db/read-index-meta index-store :crux/attribute-stats)))
+
+  (active-queries [_]
     (map qs/->QueryState (vals (:in-progress @!running-queries))))
 
-  (recentQueries [this]
+  (recent-queries [this]
     (let [running-queries (swap! !running-queries update :completed clean-completed-queries this)]
       (map qs/->QueryState (:completed running-queries))))
 
-  (slowestQueries [this]
+  (slowest-queries [this]
     (let [running-queries (swap! !running-queries update :slowest clean-slowest-queries this)]
       (map qs/->QueryState (:slowest running-queries))))
 
-  ICruxAsyncIngestAPI
-  (submitTxAsync [this tx-ops]
+  api/PCruxIngestClient
+  (submit-tx [this tx-ops]
+    (let [tx-ops (api/conform-tx-ops tx-ops)]
+      (cio/with-read-lock lock
+        (ensure-node-open this)
+        (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+          (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+          @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
+
+  (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
+    (let [with-ops? (boolean with-ops?)]
+      (cio/with-read-lock lock
+        (ensure-node-open this)
+        (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
+              (or (nil? latest-submitted-tx-id)
+                  (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
+          cio/empty-cursor
+
+          (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
+                tx-log-iterator (db/open-tx-log tx-log after-tx-id)
+                tx-log (->> (iterator-seq tx-log-iterator)
+                            (remove #(db/tx-failed? index-store (:crux.tx/tx-id %)))
+                            (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
+                            (map (if with-ops?
+                                   (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
+                                     (-> tx-log-entry
+                                         (dissoc :crux.tx.event/tx-events)
+                                         (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
+                                   (fn [tx-log-entry]
+                                     (-> tx-log-entry
+                                         (update :crux.tx.event/tx-events
+                                                 (fn [evts]
+                                                   (->> evts (mapv #(update % 1 c/new-id))))))))))]
+            (cio/->cursor (fn []
+                            (.close tx-log-iterator))
+                          tx-log))))))
+  api/PCruxAsyncIngestClient
+  (submit-tx-async [this tx-ops]
     (cio/with-read-lock lock
       (ensure-node-open this)
       (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
         (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
-
-  Closeable
-  (close [_]
-    (when close-fn
-      (cio/with-write-lock lock
-        (when (not @closed?)
-          (close-fn)
-          (reset! closed? true)
-          (bus/send bus {:crux/event-type ::node-closed}))))))
+        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
 (defmethod pp/simple-dispatch CruxNode [it] (print-method it *out*))

@@ -4,16 +4,13 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.history-options :as hopts]
-            [crux.ingest-client :as ic]
             [crux.io :as cio]
-            [crux.query-state :as qs]
             [crux.system :as sys])
-  (:import [crux.api Crux HistoryOptions HistoryOptions$SortOrder ICruxAPI ICruxAsyncIngestAPI ICruxDatasource ICruxIngestAPI RemoteClientOptions]
-           java.lang.AutoCloseable
-           java.time.Duration
-           [java.util Date Map]
-           [java.util.function Consumer Supplier]))
+  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource]
+           [java.lang AutoCloseable]
+           [java.util Map Date]
+           [java.time Duration]
+           [java.util.function Supplier]))
 
 (s/def :crux.db/id c/valid-id?)
 (s/def :crux.db/evicted? boolean?)
@@ -23,71 +20,6 @@
   (s/cat :fn #{'fn}
          :args (s/coll-of symbol? :kind vector? :min-count 1)
          :body (s/* any?)))
-
-(defn- conform-tx-ops [tx-ops]
-  (->> tx-ops
-       (mapv
-        (fn [tx-op]
-          (map #(if (instance? java.util.Map %) (into {} %) %)
-               tx-op)))
-       (mapv vec)))
-
-(defprotocol DBProvider
-  (db
-    ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time-or-basis]
-    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
-    "Returns a DB snapshot at the given time.
-
-  db-basis: (optional map, all keys optional)
-    - `:crux.db/valid-time` (Date):
-        If provided, DB won't return any data with a valid-time greater than the given time.
-        Defaults to now.
-    - `:crux.tx/tx` (Map):
-        If provided, DB will be a snapshot as of the given transaction.
-        Defaults to the latest completed transaction.
-    - `:crux.tx/tx-time` (Date):
-        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
-
-  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
-  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
-
-  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
-
-  (open-db
-    ^crux.api.ICruxDatasource [node]
-    ^crux.api.ICruxDatasource [node valid-time-or-basis]
-    ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time]
-    "Opens a DB snapshot at the given time.
-
-  db-basis: (optional map, all keys optional)
-    - `:crux.db/valid-time` (Date):
-        If provided, DB won't return any data with a valid-time greater than the given time.
-        Defaults to now.
-    - `:crux.tx/tx` (Map):
-        If provided, DB will be a snapshot as of the given transaction.
-        Defaults to the latest completed transaction.
-    - `:crux.tx/tx-time` (Date):
-        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
-
-  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
-  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
-
-  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
-
-  This DB opens up shared resources to make multiple requests faster - it must
-  be `.close`d when you've finished using it (for example, in a `with-open`
-  block)"))
-
-(let [db-args '(^crux.api.ICruxDatasource [node]
-                ^crux.api.ICruxDatasource [node db-basis]
-                ^crux.api.ICruxDatasource ^:deprecated [node valid-time]
-                ^crux.api.ICruxDatasource ^:deprecated [node valid-time tx-time])]
-  (alter-meta! #'db assoc :arglists db-args)
-  (alter-meta! #'open-db assoc :arglists db-args))
-
-(defprotocol TransactionFnContext
-  (indexing-tx [tx-fn-ctx]))
 
 (defprotocol PCruxNode
   "Provides API access to Crux."
@@ -104,6 +36,7 @@
   (sync
     [node]
     [node ^Duration timeout]
+    [node tx-time ^Duration timeout]
     "Blocks until the node has caught up indexing to the latest tx available at
   the time this method is called. Will throw an exception on timeout. The
   returned date is the latest transaction time indexed by this node. This can be
@@ -175,76 +108,6 @@
   with-ops?       should the operations with documents be included?
 
   Returns an iterator of the TxLog"))
-
-(extend-protocol DBProvider
-  ICruxAPI
-  (db
-    ([this] (.db this))
-    ([this valid-time-or-basis]
-     (if (instance? Date valid-time-or-basis)
-       (.db this ^Date valid-time-or-basis)
-       (.openDB this ^Map valid-time-or-basis)))
-    ([this valid-time tx-time]
-     (.db this valid-time tx-time)))
-
-  (open-db
-    ([this] (.openDB this))
-    ([this valid-time-or-basis]
-     (if (instance? Date valid-time-or-basis)
-       (.openDB this ^Date valid-time-or-basis)
-       (.openDB this ^Map valid-time-or-basis)))
-    ([this valid-time tx-time]
-     (.openDB this valid-time tx-time))))
-
-(extend-protocol PCruxNode
-  ICruxAPI
-  (status [this] (.status this))
-
-  (tx-committed? [this submitted-tx] (.hasTxCommitted this submitted-tx))
-
-  (sync
-    ([this] (.sync this nil))
-    ([this timeout] (.sync this timeout))
-
-    ([this tx-time timeout]
-     (defonce warn-on-deprecated-sync
-       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-     (.awaitTxTime this tx-time timeout)))
-
-  (await-tx
-    ([this submitted-tx] (await-tx this submitted-tx nil))
-    ([this submitted-tx timeout] (.awaitTx this submitted-tx timeout)))
-
-  (await-tx-time
-    ([this tx-time] (await-tx-time this tx-time nil))
-    ([this tx-time timeout] (.awaitTxTime this tx-time timeout)))
-
-  (listen [this event-opts f]
-    (.listen this event-opts (reify Consumer
-                               (accept [_ evt]
-                                 (f evt)))))
-
-  (latest-completed-tx [node] (.latestCompletedTx node))
-  (latest-submitted-tx [node] (.latestSubmittedTx node))
-
-  (attribute-stats [this] (.attributeStats this))
-
-  (active-queries [this]
-    (.activeQueries this))
-
-  (recent-queries [this]
-    (.recentQueries this))
-
-  (slowest-queries [this]
-    (.slowestQueries this)))
-
-(extend-protocol PCruxIngestClient
-  ICruxIngestAPI
-  (submit-tx [this tx-ops]
-    (.submitTx this (conform-tx-ops tx-ops)))
-
-  (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
-    (.openTxLog this after-tx-id (boolean with-ops?))))
 
 (defprotocol PCruxDatasource
   "Represents the database as of a specific valid and
@@ -329,7 +192,7 @@
   (valid-time [db]
     "returns the valid time of the db.
   If valid time wasn't specified at the moment of the db value retrieval
-  then valid time will be time of the latest transaction.")
+  then valid time will be time of db value retrieval.")
 
   (transaction-time [db]
     "returns the time of the latest transaction applied to this db value.
@@ -339,75 +202,10 @@
   (db-basis [db]
     "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`")
 
-  (with-tx [db tx-ops]
-    "Returns a new db value with the tx-ops speculatively applied.
+  (^java.io.Closeable with-tx [db tx-ops]
+   "Returns a new db value with the tx-ops speculatively applied.
   The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
   If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil."))
-
-(defn q
-  "q[uery] a Crux db.
-  query param is a datalog query in map, vector or string form.
-  This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
-  otherwise, it will return a vector of result tuples."
-  [db q & args]
-  (q* db q args))
-
-(defn open-q
-  "lazily q[uery] a Crux db.
-  query param is a datalog query in map, vector or string form.
-
-  This function returns a Cursor of result tuples - once you've consumed
-  as much of the sequence as you need to, you'll need to `.close` the sequence.
-  A common way to do this is using `with-open`:
-
-  (with-open [res (crux/open-q db '{:find [...]
-                                    :where [...]})]
-    (doseq [row (iterator-seq res)]
-      ...))
-
-  Once the sequence is closed, attempting to iterate it is undefined."
-  ^crux.api.ICursor [db q & args]
-  (open-q* db q args))
-
-(let [arglists '(^crux.api.ICursor
-                 [db eid sort-order]
-                 ^crux.api.ICursor
-                 [db eid sort-order {:keys [with-docs? with-corrections?]
-                                     {start-vt :crux.db/valid-time
-                                      start-tt :crux.tx/tx-time
-                                      start-tx-id :crux.tx/tx-id} :start
-                                     {end-vt :crux.db/valid-time
-                                      end-tt :crux.tx/tx-time
-                                      end-tx-id :crux.tx/tx-id} :end}])]
-  (alter-meta! #'entity-history assoc :arglists arglists)
-  (alter-meta! #'open-entity-history assoc :arglists arglists))
-
-(extend-protocol PCruxDatasource
-  ICruxDatasource
-  (entity [this eid] (.entity this eid))
-  (entity-tx [this eid] (.entityTx this eid))
-
-  (q* [this query args] (.query this query (object-array args)))
-  (open-q* [this query args] (.openQuery this query (object-array args)))
-
-  (project [this query eid] (.project this query eid))
-  (project-many [this query eids] (.projectMany this query ^Iterable eids))
-
-  ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
-  ;; as the new Java ones?
-  (entity-history
-    ([this eid sort-order] (entity-history this eid sort-order {}))
-    ([this eid sort-order opts] (.entityHistory this eid (hopts/->history-options sort-order opts))))
-
-  (open-entity-history
-    ([this eid sort-order] (open-entity-history this eid sort-order {}))
-    ([this eid sort-order opts] (.openEntityHistory this eid (hopts/->history-options sort-order opts))))
-
-  (valid-time [this] (.validTime this))
-  (transaction-time [this] (.transactionTime this))
-  (db-basis [this] (.dbBasis this))
-
-  (with-tx [this tx-ops] (.withTx this tx-ops)))
 
 (defprotocol PCruxAsyncIngestClient
   "Provides API access to Crux async ingestion."
@@ -417,11 +215,6 @@
   details about the submitted transaction, including tx-time and
   tx-id."))
 
-(extend-protocol PCruxAsyncIngestClient
-  ICruxAsyncIngestAPI
-  (submit-tx-async [this tx-ops]
-    (.submitTxAsync this (conform-tx-ops tx-ops))))
-
 (defn start-node
   "NOTE: requires any dependencies on the classpath that the Crux modules may need.
 
@@ -429,11 +222,12 @@
 
   See https://opencrux.com/reference/configuration.html for details.
 
-  Returns a node which implements ICruxAPI and java.io.Closeable.
+  Returns a node which implements: DBProvider, PCruxNode, PCruxIngestClient, PCruxAsyncIngestClient and java.io.Closeable.
+
   Latter allows the node to be stopped by calling `(.close node)`.
 
   Throws IndexVersionOutOfSyncException if the index needs rebuilding."
-  ^crux.api.ICruxAPI [options]
+  ^java.io.Closeable [options]
   (let [system (-> (sys/prep-system (into [{:crux/node 'crux.node/->node
                                             :crux/index-store 'crux.kv.index-store/->kv-index-store
                                             :crux/bus 'crux.bus/->bus
@@ -457,7 +251,10 @@
                             (get [_] (->jwt-token))))))
 
 (defn new-api-client
-  "Creates a new remote API client ICruxAPI.
+  "Creates a new remote API client.
+
+  This implements: DBProvider, PCruxNode, PCruxIngestClient and java.io.Closeable.
+
   The remote client requires valid and transaction time to be specified for all calls to `db`.
 
   NOTE: Requires either clj-http or http-kit on the classpath,
@@ -467,19 +264,172 @@
   (OPTIONAL) auth-supplier a supplier function which provides an auth token string for the Crux HTTP end-point.
 
   returns a remote API client."
-  (^ICruxAPI [url]
-   (Crux/newApiClient url))
-  (^ICruxAPI [url opts]
-   (Crux/newApiClient url (->RemoteClientOptions opts))))
+  (^java.io.Closeable [url]
+   (:node (Crux/newApiClient url)))
+  (^java.io.Closeable [url opts]
+   (:node (Crux/newApiClient url (->RemoteClientOptions opts)))))
 
 (defn new-ingest-client
   "Starts an ingest client for transacting into Crux without running a full local node with index.
-
   Accepts a map, or a JSON/EDN file or classpath resource.
-
   See https://opencrux.com/reference/configuration.html for details.
-
-  Returns a crux.api.ICruxIngestAPI component that implements java.io.Closeable.
+  Returns a component that implements java.io.Closeable, PCruxIngestClient and PCruxAsyncIngestClient.
   Latter allows the node to be stopped by calling `(.close node)`."
-  ^ICruxAsyncIngestAPI [options]
-  (ic/open-ingest-client options))
+  ^java.io.Closeable [options]
+  (:client (Crux/newIngestClient ^Map options)))
+
+(defn conform-tx-ops [tx-ops]
+  (->> tx-ops
+       (mapv
+        (fn [tx-op]
+          (map #(if (instance? Map %) (into {} %) %)
+               tx-op)))
+       (mapv vec)))
+
+(defprotocol DBProvider
+  (db
+    [node]
+    [node valid-time-or-basis]
+    ^:deprecated [node valid-time tx-time]
+    "Returns a DB snapshot at the given time.
+
+  db-basis: (optional map, all keys optional)
+    - `:crux.db/valid-time` (Date):
+        If provided, DB won't return any data with a valid-time greater than the given time.
+        Defaults to now.
+    - `:crux.tx/tx` (Map):
+        If provided, DB will be a snapshot as of the given transaction.
+        Defaults to the latest completed transaction.
+    - `:crux.tx/tx-time` (Date):
+        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+
+  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
+
+  (open-db
+    ^java.io.Closeable [node]
+    ^java.io.Closeable [node valid-time-or-basis]
+    ^java.io.Closeable ^:deprecated [node valid-time tx-time]
+    "Opens a DB snapshot at the given time.
+
+  db-basis: (optional map, all keys optional)
+    - `:crux.db/valid-time` (Date):
+        If provided, DB won't return any data with a valid-time greater than the given time.
+        Defaults to now.
+    - `:crux.tx/tx` (Map):
+        If provided, DB will be a snapshot as of the given transaction.
+        Defaults to the latest completed transaction.
+    - `:crux.tx/tx-time` (Date):
+        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+
+  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
+
+  If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
+
+  This DB opens up shared resources to make multiple requests faster - it must
+  be `.close`d when you've finished using it (for example, in a `with-open`
+  block)"))
+
+(let [db-args '(^java.io.Closeable [node]
+                ^java.io.Closeable [node db-basis]
+                ^java.io.Closeable ^:deprecated [node valid-time]
+                ^java.io.Closeable ^:deprecated [node valid-time tx-time])]
+  (alter-meta! #'db assoc :arglists db-args)
+  (alter-meta! #'open-db assoc :arglists db-args))
+
+(defn q
+  "q[uery] a Crux db.
+  query param is a datalog query in map, vector or string form.
+  This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
+  otherwise, it will return a vector of result tuples."
+  [db q & args]
+  (q* db q (object-array args)))
+
+(defprotocol TransactionFnContext
+  (indexing-tx [tx-fn-ctx]))
+
+(defn open-q
+  "lazily q[uery] a Crux db.
+  query param is a datalog query in map, vector or string form.
+
+  This function returns a Cursor of result tuples - once you've consumed
+  as much of the sequence as you need to, you'll need to `.close` the sequence.
+  A common way to do this is using `with-open`:
+
+  (with-open [res (crux/open-q db '{:find [...]
+                                    :where [...]})]
+    (doseq [row (iterator-seq res)]
+      ...))
+
+  Once the sequence is closed, attempting to iterate it is undefined."
+  ^crux.api.ICursor [db q & args]
+  (open-q* db q (object-array args)))
+
+(let [arglists '(^crux.api.ICursor
+                 [db eid sort-order]
+                 ^crux.api.ICursor
+                 [db eid sort-order {:keys [with-docs? with-corrections?]
+                                     {start-vt :crux.db/valid-time
+                                      start-tt :crux.tx/tx-time
+                                      start-tx-id :crux.tx/tx-id} :start
+                                     {end-vt :crux.db/valid-time
+                                      end-tt :crux.tx/tx-time
+                                      end-tx-id :crux.tx/tx-id} :end}])]
+  (alter-meta! #'entity-history assoc :arglists arglists)
+  (alter-meta! #'open-entity-history assoc :arglists arglists))
+
+(defrecord JCruxDatasource [^java.io.Closeable datasource]
+  ICruxDatasource
+  (entity [_ eid] (entity datasource eid))
+  (entityTx [_ eid] (entity-tx datasource eid))
+  (query [_ query args] (q* datasource query args))
+  (openQuery [_ query args] (open-q* datasource query args))
+
+  (project [_ projection eid] (project datasource projection eid))
+  (^java.util.List projectMany [_ projection ^Iterable eids] (project-many datasource projection eids))
+  (^java.util.List projectMany [_ projection ^"[Ljava.lang.Object;" eids] (project-many datasource projection (seq eids)))
+
+  (entityHistory [_ eid sort-order opts] (entity-history datasource eid (.getKeyword sort-order) opts))
+  (openEntityHistory [_ eid sort-order opts] (open-entity-history datasource eid (.getKeyword sort-order) opts))
+
+  (validTime [_] (valid-time datasource))
+  (transactionTime [_] (transaction-time datasource))
+  (dbBasis [_] (db-basis datasource))
+  (withTx [_ tx-ops] (with-tx datasource tx-ops))
+  (close [_] (.close datasource)))
+
+(defrecord JCruxNode [^java.io.Closeable node]
+  ICruxAPI
+  (^ICruxDatasource db [_] (->JCruxDatasource (db node)))
+  (^ICruxDatasource db [_ ^Date valid-time] (->JCruxDatasource (db node valid-time)))
+  (^ICruxDatasource db [_ ^Map basis] (->JCruxDatasource (db node basis)))
+  (^ICruxDatasource db [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (db node valid-time tx-time)))
+  (^ICruxDatasource openDB [_] (->JCruxDatasource (open-db node)))
+  (^ICruxDatasource openDB [_ ^Date valid-time] (->JCruxDatasource (open-db node valid-time)))
+  (^ICruxDatasource openDB [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (open-db node valid-time tx-time)))
+  (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (open-db node basis)))
+  (status [_] (status node))
+  (attributeStats [_] (attribute-stats node))
+  (submitTx [_ tx-ops] (submit-tx node tx-ops))
+  (hasTxCommitted [_ transaction] (tx-committed? node transaction))
+  (openTxLog [_ after-tx-id with-ops?] (open-tx-log node after-tx-id with-ops?))
+  (sync [_ timeout] (sync node timeout))
+  (awaitTxTime [_ tx-time timeout] (await-tx-time node tx-time timeout))
+  (awaitTx [_ submitted-tx timeout] (await-tx node submitted-tx timeout))
+  (listen [_ event-opts consumer] (listen node event-opts #(.accept consumer %)))
+  (latestCompletedTx [_] (latest-completed-tx node))
+  (latestSubmittedTx [_] (latest-submitted-tx node))
+  (activeQueries [_] (active-queries node))
+  (recentQueries [_] (recent-queries node))
+  (slowestQueries [_] (slowest-queries node))
+  (close [_] (.close node)))
+
+(defrecord JCruxIngestClient [^java.io.Closeable client]
+  ICruxAsyncIngestAPI
+  (submitTx [_ tx-ops] (submit-tx client tx-ops))
+  (openTxLog [_ after-tx-id with-ops?] (open-tx-log client after-tx-id with-ops?))
+  (submitTxAsync [_ tx-ops] (submit-tx-async client tx-ops))
+  (close [_] (.close client)))
