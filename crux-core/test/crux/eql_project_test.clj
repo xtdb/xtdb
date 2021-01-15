@@ -176,8 +176,7 @@
                                               :crux.db/id])]
                      :where [[?it :crux.db/id]]}))))
 
-;; TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
-#_(t/deftest test-recursive
+(t/deftest test-recursive
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :root}]
                         [:crux.tx/put {:crux.db/id :a
                                        :parent :root}]
@@ -238,3 +237,10 @@
                      :in [?e]
                      :timeout 500}
                    "doesntexist"))))
+
+(t/deftest test-with-speculative-doc-store
+  (let [db (crux/with-tx (crux/db *api*) [[:crux.tx/put {:crux.db/id :foo}]])]
+    (t/is (= #{[{:crux.db/id :foo}]}
+             (crux/q db
+                     '{:find [(eql/project ?e [*])]
+                       :where [[?e :crux.db/id :foo]]})))))
