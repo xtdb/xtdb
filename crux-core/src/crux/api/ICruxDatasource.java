@@ -122,7 +122,7 @@ public interface ICruxDatasource extends Closeable {
     /**
      * The valid time of this db.
      * If valid time wasn't specified at the moment of the db value retrieval
-     * then valid time will be time of the latest transaction.
+     * then valid time will be time the db value was retrieved.
      *
      * @return the valid time of this db.
      */
