@@ -392,8 +392,8 @@
   (^java.util.List projectMany [_ projection ^Iterable eids] (project-many datasource projection eids))
   (^java.util.List projectMany [_ projection ^"[Ljava.lang.Object;" eids] (project-many datasource projection (seq eids)))
 
-  (entityHistory [_ eid sort-order opts] (entity-history datasource eid (.getKeyword sort-order) opts))
-  (openEntityHistory [_ eid sort-order opts] (open-entity-history datasource eid (.getKeyword sort-order) opts))
+  (^java.util.List entityHistory [_ eid ^crux.api.HistoryOptions opts] (entity-history datasource eid (.getSortOrderKey opts) (.toMap opts)))
+  (^crux.api.ICursor openEntityHistory [_ eid ^crux.api.HistoryOptions opts] (open-entity-history datasource eid (.getSortOrderKey opts) (.toMap opts)))
 
   (validTime [_] (valid-time datasource))
   (transactionTime [_] (transaction-time datasource))

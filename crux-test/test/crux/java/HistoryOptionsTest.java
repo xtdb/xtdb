@@ -108,7 +108,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void withCorrections() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().withCorrections(true));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).withCorrections(true));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -118,7 +118,7 @@ public class HistoryOptionsTest {
     @SuppressWarnings("ConstantConditions")
     @Test(timeout = 1000)
     public void withDocs() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().withDocs(true));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).withDocs(true));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH, DOC);
         assertAccurate(history);
@@ -137,7 +137,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void startValidTime() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().startValidTime(date(-50)));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startValidTime(date(-50)));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -147,7 +147,7 @@ public class HistoryOptionsTest {
     @Test
     public void startTransaction() {
         Map<Keyword, ?> tx = transactions.get(2);
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().startTransaction(tx));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startTransaction(tx));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -158,7 +158,7 @@ public class HistoryOptionsTest {
     public void startTransactionTime() {
         Map<Keyword, ?> tx = transactions.get(2);
         Date txTime = (Date) tx.get(TX_TIME);
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().startTransactionTime(txTime));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startTransactionTime(txTime));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -167,7 +167,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void endValidTime() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().endValidTime(date(-50)));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endValidTime(date(-50)));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -177,7 +177,7 @@ public class HistoryOptionsTest {
     @Test
     public void endTransaction() {
         Map<Keyword, ?> tx = transactions.get(2);
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().endTransaction(tx));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endTransaction(tx));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -188,7 +188,7 @@ public class HistoryOptionsTest {
     public void endTransactionTime() {
         Map<Keyword, ?> tx = transactions.get(2);
         Date txTime = (Date) tx.get(TX_TIME);
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC, HistoryOptions.create().endTransactionTime(txTime));
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endTransactionTime(txTime));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);

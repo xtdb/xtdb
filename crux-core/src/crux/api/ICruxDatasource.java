@@ -107,9 +107,9 @@ public interface ICruxDatasource extends Closeable {
      * @param eid The entity id to return history for
      * @return an eagerly-evaluated sequence of changes to the given entity.
      */
-    List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions.SortOrder sortOrder, HistoryOptions options);
+    List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions options);
     default List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions.SortOrder sortOrder) {
-        return entityHistory(eid, sortOrder, HistoryOptions.create());
+        return entityHistory(eid, HistoryOptions.create(sortOrder));
     }
 
     /**
@@ -120,9 +120,9 @@ public interface ICruxDatasource extends Closeable {
      * @param eid The entity id to return history for
      * @return a cursor of changes to the given entity.
      */
-    ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions.SortOrder sortOrder, HistoryOptions options);
+    ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions options);
     default ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions.SortOrder sortOrder) {
-        return openEntityHistory(eid, sortOrder, HistoryOptions.create());
+        return openEntityHistory(eid, HistoryOptions.create(sortOrder));
     }
 
     /**

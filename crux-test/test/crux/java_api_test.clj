@@ -2,9 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [crux.fixtures :as fix]
-            [crux.kv :as kv]
-            [crux.history-options :as his])
-  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator HistoryOptions$SortOrder]
+            [crux.kv :as kv])
+  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator]
            [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
            java.util.function.Consumer))
 
