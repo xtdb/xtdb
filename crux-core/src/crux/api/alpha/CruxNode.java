@@ -8,7 +8,6 @@ import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.Map;
 import java.util.function.Consumer;
 
 @SuppressWarnings("unused")
@@ -35,29 +34,25 @@ public class CruxNode implements AutoCloseable {
      * Submits a set of operations to a Crux node
      * @param ops The set of operations to transact
      * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TxResult
+     * @see TransactionInstant
      */
-    public TxResult submitTx(Iterable<TransactionOperation> ops) {
+    @SuppressWarnings("unchecked")
+    public TransactionInstant submitTx(Iterable<TransactionOperation> ops) {
         PersistentVector txVector = PersistentVector.create();
         for (TransactionOperation op : ops) {
             txVector = txVector.cons(op.toEdn());
         }
 
-        @SuppressWarnings("unchecked")
-        Map<Keyword,Object> result = node.submitTx(txVector);
-
-        Date txTime = (Date) result.get(TX_TIME);
-        long txId = (Long) result.get(TX_ID);
-        return TxResult.txResult(txTime, txId);
+        return node.submitTx(txVector);
     }
 
     /**
      * Submits a set of operations to a Crux node
      * @param ops The set of operations to transact
      * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TxResult
+     * @see TransactionInstant
      */
-    public TxResult submitTx(TransactionOperation... ops) {
+    public TransactionInstant submitTx(TransactionOperation... ops) {
         return submitTx(Arrays.asList(ops));
     }
 
