@@ -14,7 +14,9 @@
                                   [org.clojure/test.check "0.10.0"]
                                   [io.airlift.tpch/tpch "0.10"]
                                   [org.openjdk.jmh/jmh-core "1.27"]
-                                  [org.openjdk.jmh/jmh-generator-annprocess "1.27"]]}}
+                                  [org.openjdk.jmh/jmh-generator-annprocess "1.27"]]
+                   :java-source-paths ["src" "jmh"]}}
+  :aliases {"jmh" ["trampoline" "run" "-m" "org.openjdk.jmh.Main" "-f" "1" "-rf" "json" "-rff" "target/jmh-result.json"]}
   :java-source-paths ["src"]
   :jvm-opts ["-Xmx2G"
              "-XX:MaxDirectMemorySize=2G"
