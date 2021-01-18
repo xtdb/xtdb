@@ -16,3 +16,6 @@ target/
 /.testing-oracle.edn
 /.testing-mysql.edn
 docs/build/
+.calva/
+.lsp/
+.clj-kondo/

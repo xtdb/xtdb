@@ -44,7 +44,7 @@
        {:bench-type "ingest"
         :bench-ns "watdiv-crux"
         :crux-node-type "embedded-kafka-rocksdb"
-        :threshold 0.17}
+        :threshold 0.45}
        {:bench-type "ingest"
         :bench-ns "watdiv-crux"
         :crux-node-type "standalone-rocksdb"
@@ -66,15 +66,15 @@
        {:bench-type "queries-warm"
         :bench-ns "tpch-test"
         :crux-node-type "kafka-rocksdb"
-        :threshold 0.007}]
+        :threshold 0.023}]
       [{:bench-type "queries-warm"
         :bench-ns "tpch-test"
         :crux-node-type "standalone-lmdb"
-        :threshold 0.007}
+        :threshold 0.0025}
        {:bench-type "queries-warm"
         :bench-ns "tpch-test"
         :crux-node-type "standalone-rocksdb"
-        :threshold 0.0014}
+        :threshold 0.003}
        {:bench-type "queries-warm"
         :bench-ns "tpch-test"
         :crux-node-type "standalone-rocksdb-with-metrics"
@@ -88,7 +88,7 @@
                    "crux-node-type" (:crux-node-type m)})
       (metricName "time-taken")
       (statistic "avg")
-      (period (Duration/days 1))
+      (period (Duration/hours 30))
       (build)))
 
 (defn ->math
