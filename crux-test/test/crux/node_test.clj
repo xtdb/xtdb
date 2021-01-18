@@ -11,9 +11,10 @@
             [crux.rocksdb :as rocks]
             [crux.tx :as tx]
             [crux.tx.event :as txe])
-  (:import [crux.api Crux ICruxAPI]
+  (:import [crux.api Crux ICruxAPI CruxDocument]
+           [crux.api.tx Transaction]
            java.time.Duration
-           [java.util Date HashMap]
+           [java.util Date HashMap Map]
            java.util.concurrent.TimeoutException))
 
 (t/deftest test-calling-shutdown-node-fails-gracefully
@@ -82,31 +83,29 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n ^ICruxAPI (api/->JCruxNode (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                              :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                              :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
-                                                              ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
-                                                              :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}))]
+    (with-open [n ^ICruxAPI (Crux/startNode {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                             :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                             :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+                                             ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                                  :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n)
 
       (let [valid-time (Date.)
-            submitted-tx (.submitTx n [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+            submitted-tx (.submitTx n
+                                    (-> (Transaction/builder)
+                                        (.put (CruxDocument/factory {:crux.db/id :ivan :name "Ivan"}) valid-time)
+                                        (.build)))]
         (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
         (t/is (= #{[:ivan]} (.query (.db n)
                                     '{:find [e]
                                       :where [[e :name "Ivan"]]}
                                     (object-array 0)))))
 
-      (t/is (= #{[:ivan]} (.query (.db n)
-                                  '{:find [e]
-                                    :where [[e :name "Ivan"]]}
-                                  (object-array 0))))
-
-      (with-open [n2 ^ICruxAPI (api/->JCruxNode (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                                 :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                                 :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
-                                                                 ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
-                                                                                      :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}))]
+      (with-open [n2 ^ICruxAPI (Crux/startNode {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+                                                ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                                     :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}})]
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]
@@ -114,7 +113,11 @@
                              (object-array 0))))
 
         (let [valid-time (Date.)
-              submitted-tx (.submitTx n2 [[:crux.tx/put {:crux.db/id :ivan :name "Iva"} valid-time]])]
+              submitted-tx (.submitTx
+                             n2
+                             (-> (Transaction/builder)
+                                 (.put (CruxDocument/factory {:crux.db/id :ivan :name "Iva"}) valid-time)
+                                 (.build)))]
           (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
           (t/is (= #{[:ivan]} (.query (.db n2)
                                       '{:find [e]

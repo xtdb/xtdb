@@ -19,7 +19,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity document map.
      */
-    Map<Keyword,Object> entity(Object eid);
+    AbstractCruxDocument entity(Object eid);
 
     /**
      * Returns the transaction details for an entity. Details

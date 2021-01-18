@@ -1,15 +1,16 @@
-package crux.java;
+package crux.api;
 
-import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 
 import clojure.lang.PersistentArrayMap;
 import org.junit.*;
-import crux.api.*;
 
 import java.util.Map;
 
-import static crux.java.TestUtils.*;
+import crux.api.*;
+import crux.api.tx.*;
+
+import static crux.api.TestUtils.*;
 
 public class TransactionInstantTest {
     private static final Keyword TX_ID = Keyword.intern("crux.tx/tx-id");
@@ -93,5 +94,18 @@ public class TransactionInstantTest {
 
         Assert.assertEquals(now, tx.getTime());
         Assert.assertEquals(1L, (long) tx.getId());
+    }
+
+    @Test
+    public void foo() {
+        try (ICruxAPI node = Crux.startNode()) {
+            AbstractCruxDocument document = CruxDocument.create("foo");
+            TransactionInstant transactionInstant = node.submitTx(Transaction.buildTx(tx -> {
+                tx.put(document);
+            }));
+        }
+        catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

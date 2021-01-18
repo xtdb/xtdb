@@ -1,12 +1,10 @@
 package crux.api.alpha;
 
 import clojure.lang.Keyword;
-import clojure.lang.PersistentVector;
 import crux.api.*;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Arrays;
 import java.util.Date;
 import java.util.function.Consumer;
 
@@ -28,32 +26,6 @@ public class CruxNode implements AutoCloseable {
 
     public static CruxNode startNode(Consumer<NodeConfigurator> f) {
         return new CruxNode(Crux.startNode(f));
-    }
-
-    /**
-     * Submits a set of operations to a Crux node
-     * @param ops The set of operations to transact
-     * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TransactionInstant
-     */
-    @SuppressWarnings("unchecked")
-    public TransactionInstant submitTx(Iterable<TransactionOperation> ops) {
-        PersistentVector txVector = PersistentVector.create();
-        for (TransactionOperation op : ops) {
-            txVector = txVector.cons(op.toEdn());
-        }
-
-        return node.submitTx(txVector);
-    }
-
-    /**
-     * Submits a set of operations to a Crux node
-     * @param ops The set of operations to transact
-     * @return Returns a TxResult object, containing a transaction Id and transaction time
-     * @see TransactionInstant
-     */
-    public TransactionInstant submitTx(TransactionOperation... ops) {
-        return submitTx(Arrays.asList(ops));
     }
 
     /**

@@ -1,8 +1,8 @@
-package crux.java;
+package crux.api;
 
 import clojure.lang.Keyword;
 
-import crux.api.*;
+import crux.api.tx.*;
 
 import java.io.Closeable;
 import java.time.Duration;
@@ -30,6 +30,28 @@ class TestUtils {
 
     static final Date now = new Date();
 
+    static class TestDocument extends AbstractCruxDocument {
+        static final Keyword documentId = Keyword.intern("myDoc");
+        static final Keyword versionId = Keyword.intern("version");
+        private final int version;
+
+        TestDocument(int version) {
+            this.version = version;
+        }
+
+        @Override
+        public Object getId() {
+            return documentId;
+        }
+
+        @Override
+        public Map<Keyword, Object> getData() {
+            HashMap<Keyword, Object> ret = new HashMap<>();
+            ret.put(versionId, version);
+            return ret;
+        }
+    }
+
     static void sleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -50,37 +72,42 @@ class TestUtils {
         return now.getTime() - date.getTime();
     }
 
-    static TransactionInstant tx(ICruxAPI node, List<?> txOp) {
-        ArrayList<List<?>> toSubmit = new ArrayList<>();
-        toSubmit.add(txOp);
-        return node.submitTx((List<List<?>>) toSubmit);
+    static TransactionInstant tx(ICruxAPI node, Transaction transaction) {
+        return node.submitTx(transaction);
     }
 
-    static TransactionInstant put(ICruxAPI node, Map<Keyword, ?> document, Date validTime, Date endValidTime) {
-        List<Object> txOp;
+    static TransactionInstant tx(ICruxAPI node, TransactionOperation transactionOperation) {
+        Transaction transaction = Transaction.buildTx(tx -> {
+           tx.add(transactionOperation);
+        });
+        return tx(node, transaction);
+    }
+
+    static TransactionInstant put(ICruxAPI node, AbstractCruxDocument document, Date validTime, Date endValidTime) {
+        TransactionOperation txOp;
         if (endValidTime != null) {
-            txOp = listOf(PUT, document, validTime, endValidTime);
+            txOp = PutTransactionOperation.factory(document, validTime, endValidTime);
         }
         else if (validTime != null) {
-            txOp = listOf(PUT, document, validTime);
+            txOp = PutTransactionOperation.factory(document, validTime);
         }
         else {
-            txOp = listOf(PUT, document);
+            txOp = PutTransactionOperation.factory(document);
         }
 
         return tx(node, txOp);
     }
 
     static TransactionInstant delete(ICruxAPI node, Object documentId, Date validTime, Date endValidTime) {
-        List<Object> txOp;
+        TransactionOperation txOp;
         if (endValidTime != null) {
-            txOp = listOf(DELETE, documentId, validTime, endValidTime);
+            txOp = DeleteTransactionOperation.factory(documentId, validTime, endValidTime);
         }
         else if (validTime != null) {
-            txOp = listOf(DELETE, documentId, validTime);
+            txOp = DeleteTransactionOperation.factory(documentId, validTime);
         }
         else {
-            txOp = listOf(DELETE, documentId);
+            txOp = DeleteTransactionOperation.factory(documentId);
         }
 
         return tx(node, txOp);
@@ -111,5 +138,17 @@ class TestUtils {
 
     static <T> T last(List<T> list) {
         return list.get(list.size() - 1);
+    }
+
+    static void awaitTx(ICruxAPI node, TransactionInstant tx) {
+        node.awaitTx(tx, duration);
+    }
+
+    static Object getTransaction(Map<Keyword, ?> logEntry) {
+        return logEntry.get(TX_OPS);
+    }
+
+    static TransactionInstant getTransactionInstant(Map<Keyword, ?> logEntry) {
+        return TransactionInstant.factory(logEntry);
     }
 }

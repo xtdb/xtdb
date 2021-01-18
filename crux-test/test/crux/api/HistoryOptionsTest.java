@@ -1,22 +1,18 @@
-package crux.java;
+package crux.api;
 
 import clojure.lang.Keyword;
 import org.junit.*;
-import crux.api.*;
-import static crux.java.TestUtils.*;
+
+import static crux.api.TestUtils.*;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
 public class HistoryOptionsTest {
-    private static final Keyword documentId = Keyword.intern("myDoc");
-    private static final Keyword versionId = Keyword.intern("version");
-
-    private static List<Map<Keyword, Object>> documents;
+    private static List<TestDocument> documents;
     private static List<TransactionInstant> transactions;
     private static ICruxAPI node;
-    private static Date now = new Date();
 
     private ICruxDatasource db;
 
@@ -24,12 +20,9 @@ public class HistoryOptionsTest {
     public static void beforeClass() {
         node = Crux.startNode();
 
-        ArrayList<Map<Keyword, Object>> _documents = new ArrayList<>();
+        ArrayList<TestDocument> _documents = new ArrayList<>();
         for (int i=0; i<5; i++) {
-            HashMap<Keyword, Object> document = new HashMap<>();
-            document.put(DB_ID, documentId);
-            document.put(versionId, i);
-            _documents.add(document);
+            _documents.add(new TestDocument(i));
         }
         documents = _documents;
 
@@ -60,7 +53,6 @@ public class HistoryOptionsTest {
         node = null;
         documents = null;
         transactions = null;
-        now = null;
     }
 
     @Before
@@ -81,7 +73,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void ascending() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC);
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.SortOrder.ASC);
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -94,7 +86,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void descending() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.DESC);
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.SortOrder.DESC);
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -108,7 +100,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void withCorrections() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).withCorrections(true));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).withCorrections(true));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -118,7 +110,7 @@ public class HistoryOptionsTest {
     @SuppressWarnings("ConstantConditions")
     @Test(timeout = 1000)
     public void withDocs() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).withDocs(true));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).withDocs(true));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH, DOC);
         assertAccurate(history);
@@ -137,7 +129,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void startValidTime() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startValidTime(date(-50)));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startValidTime(date(-50)));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -147,7 +139,7 @@ public class HistoryOptionsTest {
     @Test
     public void startTransaction() {
         TransactionInstant tx = transactions.get(2);
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startTransaction(tx));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startTransaction(tx));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -158,7 +150,7 @@ public class HistoryOptionsTest {
     public void startTransactionTime() {
         TransactionInstant tx = transactions.get(2);
         Date txTime = tx.getTime();
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startTransactionTime(txTime));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).startTransactionTime(txTime));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -167,7 +159,7 @@ public class HistoryOptionsTest {
 
     @Test
     public void endValidTime() {
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endValidTime(date(-50)));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endValidTime(date(-50)));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -177,7 +169,7 @@ public class HistoryOptionsTest {
     @Test
     public void endTransaction() {
         TransactionInstant tx = transactions.get(2);
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endTransaction(tx));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endTransaction(tx));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -188,7 +180,7 @@ public class HistoryOptionsTest {
     public void endTransactionTime() {
         TransactionInstant tx = transactions.get(2);
         Date txTime = tx.getTime();
-        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endTransactionTime(txTime));
+        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.create(HistoryOptions.SortOrder.ASC).endTransactionTime(txTime));
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
@@ -210,11 +202,11 @@ public class HistoryOptionsTest {
     }
 
     private static TransactionInstant d(Date validTime, Date endValidTime) {
-        return delete(node, documentId, validTime, endValidTime);
+        return delete(node, TestDocument.documentId, validTime, endValidTime);
     }
 
     private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
-        Map<Keyword, Object> document = documents.get(documentIndex);
+        AbstractCruxDocument document = documents.get(documentIndex);
         return put(node, document, validTime, endValidTime);
     }
 }

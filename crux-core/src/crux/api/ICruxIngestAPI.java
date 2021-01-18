@@ -1,9 +1,10 @@
 package crux.api;
 
 import java.io.Closeable;
-import java.util.List;
 import java.util.Map;
+
 import clojure.lang.Keyword;
+import crux.api.tx.Transaction;
 
 /**
  * Provides API access to Crux ingestion.
@@ -16,7 +17,7 @@ public interface ICruxIngestAPI extends Closeable {
      * @param txOps the transactions to be processed.
      * @return      a map with details about the submitted transaction.
      */
-    TransactionInstant submitTx(List<List<?>> txOps);
+    TransactionInstant submitTx(Transaction txOps);
 
     /**
      * Reads the transaction log. Optionally includes  operations, which allow the contents
