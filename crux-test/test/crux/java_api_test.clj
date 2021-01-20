@@ -2,9 +2,8 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [crux.fixtures :as fix]
-            [crux.kv :as kv]
-            [crux.history-options :as his])
-  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator HistoryOptions$SortOrder]
+            [crux.kv :as kv])
+  (:import [crux.api Crux ICruxAsyncIngestAPI ICruxAPI ModuleConfigurator NodeConfigurator]
            [crux.api.alpha CasOperation CruxId CruxNode DeleteOperation Document EvictOperation PutOperation Query]
            java.util.function.Consumer))
 
@@ -59,17 +58,17 @@
   (fix/with-tmp-dirs #{data-dir}
     (with-open [node (start-rocks-node data-dir)]
       (t/is (= "crux.rocksdb.RocksKv"
-               (kv/kv-name (get-in node [:tx-log :kv-store]))
-               (kv/kv-name (get-in node [:document-store :document-store :kv-store]))
-               (kv/kv-name (get-in node [:index-store :kv-store]))))
+               (kv/kv-name (get-in node [:node :tx-log :kv-store]))
+               (kv/kv-name (get-in node [:node :document-store :document-store :kv-store]))
+               (kv/kv-name (get-in node [:node :index-store :kv-store]))))
       (t/is (= (.toPath (io/file data-dir "txs"))
-               (get-in node [:tx-log :kv-store :db-dir]))))))
+               (get-in node [:node :tx-log :kv-store :db-dir]))))))
 
 (t/deftest test-configure-rocks-ingest
   (fix/with-tmp-dirs #{data-dir}
     (with-open [node (start-rocks-ingest-node data-dir)]
       (t/is (= "crux.rocksdb.RocksKv"
-               (kv/kv-name (get-in node [:document-store :document-store :kv-store])))))))
+               (kv/kv-name (get-in node [:client :document-store :document-store :kv-store])))))))
 
 (t/deftest test-java-api
   (t/testing "Can create node, transact to node, and query node"
@@ -131,9 +130,3 @@
         (t/is (thrown-with-msg? IllegalStateException
                                 #"Crux node is closed"
                                 (.db node)))))))
-
-(t/deftest test-history-options
-  (t/is (= :asc (his/<-sort-order :asc)))
-  (t/is (= :asc (his/<-sort-order HistoryOptions$SortOrder/ASC)))
-  (t/is (= :desc (his/<-sort-order :desc)))
-  (t/is (= :desc (his/<-sort-order HistoryOptions$SortOrder/DESC))))

@@ -3,20 +3,15 @@ package crux.api.alpha;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.*;
-import crux.api.HistoryOptions.SortOrder;
 
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.List;
 import java.util.Map;
-import java.util.Spliterator;
-import java.util.Spliterators;
 import java.util.function.Consumer;
-import java.util.stream.Collectors;
-import java.util.stream.StreamSupport;
 
+@SuppressWarnings("unused")
 @Deprecated
 public class CruxNode implements AutoCloseable {
     private static final Keyword TX_TIME = crux.api.alpha.Util.keyword("crux.tx/tx-time");
@@ -28,12 +23,10 @@ public class CruxNode implements AutoCloseable {
         this.node = node;
     }
 
-    @SuppressWarnings("unused")
     public static CruxNode startNode() {
         return new CruxNode(Crux.startNode());
     }
 
-    @SuppressWarnings("unused")
     public static CruxNode startNode(Consumer<NodeConfigurator> f) {
         return new CruxNode(Crux.startNode(f));
     }
@@ -44,17 +37,18 @@ public class CruxNode implements AutoCloseable {
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
      */
-    @SuppressWarnings("unchecked")
     public TxResult submitTx(Iterable<TransactionOperation> ops) {
         PersistentVector txVector = PersistentVector.create();
         for (TransactionOperation op : ops) {
             txVector = txVector.cons(op.toEdn());
         }
 
+        @SuppressWarnings("unchecked")
         Map<Keyword,Object> result = node.submitTx(txVector);
+
         Date txTime = (Date) result.get(TX_TIME);
         long txId = (Long) result.get(TX_ID);
-        return crux.api.alpha.TxResult.txResult(txTime, txId);
+        return TxResult.txResult(txTime, txId);
     }
 
     /**
@@ -63,7 +57,6 @@ public class CruxNode implements AutoCloseable {
      * @return Returns a TxResult object, containing a transaction Id and transaction time
      * @see TxResult
      */
-    @SuppressWarnings("unused")
     public TxResult submitTx(TransactionOperation... ops) {
         return submitTx(Arrays.asList(ops));
     }

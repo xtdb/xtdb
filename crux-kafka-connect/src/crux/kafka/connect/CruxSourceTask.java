@@ -1,11 +1,13 @@
 package crux.kafka.connect;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
+import clojure.lang.Keyword;
 import crux.api.Crux;
 import crux.api.ICruxAPI;
 
@@ -14,7 +16,7 @@ import org.apache.kafka.connect.source.SourceTask;
 
 public class CruxSourceTask extends SourceTask {
     private Map<String,String> props;
-    private ICruxAPI api;
+    private Closeable api;
     private Map<String,?> sourceOffset;
 
     private static IFn pollSourceRecords;
@@ -32,7 +34,7 @@ public class CruxSourceTask extends SourceTask {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        this.api = Crux.newApiClient(props.get(CruxSourceConnector.URL_CONFIG));
+        this.api = (Closeable) Clojure.var("crux.api/new-api-client").invoke(props.get(CruxSinkConnector.URL_CONFIG));
     }
 
     @Override

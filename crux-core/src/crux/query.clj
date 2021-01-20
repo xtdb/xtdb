@@ -20,10 +20,9 @@
             [taoensso.nippy :as nippy]
             [edn-query-language.core :as eql]
             [crux.system :as sys]
-            [clojure.pprint :as pp]
-            [clojure.string :as string])
+            [clojure.pprint :as pp])
   (:import [clojure.lang Box ExceptionInfo]
-           (crux.api ICruxDatasource HistoryOptions HistoryOptions$SortOrder)
+           (crux.api HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
            (java.io Closeable Writer)
            (java.util Collection Comparator Date List UUID)
@@ -972,7 +971,7 @@
                            (if (instance? VarBinding arg-binding)
                              (bound-result-for-var index-snapshot arg-binding join-keys)
                              arg-binding))]
-        (with-open [pred-result (.openQuery ^ICruxDatasource db query (object-array args))]
+        (with-open [pred-result (api/open-q* db query (object-array args))]
           (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
@@ -1749,17 +1748,17 @@
     (when index-snapshot
       (.close ^Closeable index-snapshot)))
 
-  ICruxDatasource
+  api/PCruxDatasource
   (entity [this eid]
     (with-open [index-snapshot (open-index-snapshot this)]
       (entity this index-snapshot eid)))
 
-  (entityTx [this eid]
+  (entity-tx [this eid]
     (with-open [index-snapshot (open-index-snapshot this)]
       (entity-tx this index-snapshot eid)))
 
-  (query [this query args]
-    (with-open [res (.openQuery this query args)]
+  (q* [this query args]
+    (with-open [res (api/open-q* this query args)]
       (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)
             !timed-out? (atom false)
             ^Future
@@ -1782,13 +1781,14 @@
             (when interrupt-job
               (.cancel interrupt-job false)))))))
 
-  (openQuery [db query args]
-    (let [index-snapshot (open-index-snapshot db)
-          db (assoc db :index-snapshot index-snapshot)
+
+  (open-q* [this query args]
+    (let [index-snapshot (open-index-snapshot this)
+          db (assoc this :index-snapshot index-snapshot)
           entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
           db (assoc db
-                    :entity-resolver-fn entity-resolver-fn
-                    :fn-allow-list fn-allow-list)
+               :entity-resolver-fn entity-resolver-fn
+               :fn-allow-list fn-allow-list)
 
           conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
@@ -1818,33 +1818,37 @@
   (project [db projection eid]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-      (->> (.query db
-                   {:find [(list 'eql/project ?eid projection)]
-                    :in [?eid]}
-                   (object-array [eid]))
+      (->> (api/q db
+                  {:find [(list 'eql/project ?eid projection)]
+                   :in [?eid]}
+                  eid)
            ffirst)))
 
-  (^java.util.List projectMany [db projection ^Iterable eids]
-   (let [?eid (gensym '?eid)
-         projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-     (->> (.query db
+  (project-many [db projection eids]
+    (let [?eid (gensym '?eid)
+          projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
+      (->> (api/q db
                   {:find [(list 'eql/project ?eid projection)]
                    :in [[?eid '...]]}
-                  (object-array [eids]))
-          (mapv first))))
+                  eids)
+           (mapv first))))
 
-  (^java.util.List projectMany [db projection ^"[Ljava.lang.Object;" eids]
-   (.projectMany db projection ^Iterable (seq eids)))
+  ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
+  ;; as the new Java ones?
+  (entity-history [this eid sort-order] (api/entity-history this eid sort-order {}))
 
-  (entityHistory [this eid opts]
-    (with-open [history (.openEntityHistory this eid opts)]
+  (entity-history [this eid sort-order opts]
+    (with-open [history (api/open-entity-history this eid sort-order opts)]
       (into [] (iterator-seq history))))
 
-  (openEntityHistory [this eid opts]
+  (open-entity-history [this eid sort-order] (api/open-entity-history this eid sort-order {}))
+
+  (open-entity-history [this eid sort-order opts]
     (if-not tx-id
       cio/empty-cursor
-      (let [index-snapshot (open-index-snapshot this)
-            {:keys [sort-order with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
+      (let [opts (assoc opts :sort-order sort-order)
+            index-snapshot (open-index-snapshot this)
+            {:keys [with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
         (cio/->cursor #(.close index-snapshot)
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))
@@ -1863,16 +1867,16 @@
                                            with-docs? (assoc :crux.db/doc (get docs (.content-hash etx))))))))
                            (mapcat seq))))))
 
-  (validTime [_] valid-time)
-  (transactionTime [_] tx-time)
-
-  (dbBasis [_]
+  (valid-time [_] valid-time)
+  (transaction-time [_] tx-time)
+  (db-basis [_]
     {:crux.db/valid-time valid-time
      :crux.tx/tx {:crux.tx/tx-time tx-time,
                   :crux.tx/tx-id tx-id}})
 
-  (withTx [this tx-ops]
-    (let [tx (merge {::db/valid-time valid-time}
+  (with-tx [_ tx-ops]
+    (let [valid-time valid-time
+          tx (merge {::db/valid-time valid-time}
                     (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
                       {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
                        ::tx/tx-time (Date. (max (System/currentTimeMillis)
@@ -1887,7 +1891,8 @@
       (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
-        (api/db in-flight-tx valid-time)))))
+        (api/db in-flight-tx valid-time))))
+  )
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
   (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-id tx-id}))))

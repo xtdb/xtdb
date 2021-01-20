@@ -1,5 +1,6 @@
 package crux.kafka.connect;
 
+import clojure.lang.Keyword;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
@@ -9,6 +10,7 @@ import clojure.lang.IFn;
 import crux.api.Crux;
 import crux.api.ICruxAPI;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Map;
@@ -16,7 +18,7 @@ import java.util.Map;
 
 public class CruxSinkTask extends SinkTask {
     private Map<String,String> props;
-    private ICruxAPI api;
+    private Closeable api;
     private static IFn submitSinkRecords;
 
     static {
@@ -32,7 +34,7 @@ public class CruxSinkTask extends SinkTask {
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        this.api = Crux.newApiClient(props.get(CruxSinkConnector.URL_CONFIG));
+        this.api = (Closeable) Clojure.var("crux.api/new-api-client").invoke(props.get(CruxSinkConnector.URL_CONFIG));
     }
 
     @Override

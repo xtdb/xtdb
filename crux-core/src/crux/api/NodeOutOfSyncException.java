@@ -1,6 +1,5 @@
 package crux.api;
 
-import java.util.Date;
 import clojure.lang.IExceptionInfo;
 import clojure.lang.IPersistentMap;
 

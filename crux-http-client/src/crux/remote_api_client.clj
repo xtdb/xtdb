@@ -1,11 +1,13 @@
 (ns ^:no-doc crux.remote-api-client
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
+            [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.error :as err]
             [crux.io :as cio]
             [crux.query-state :as qs]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.api :as api])
   (:import com.nimbusds.jwt.SignedJWT
            [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
            [java.io Closeable InputStreamReader IOException PushbackReader]
@@ -114,137 +116,236 @@
   Closeable
   (close [_])
 
-  ICruxDatasource
+  api/PCruxDatasource
   (entity [this eid]
     (api-request-sync (str url "/_crux/entity")
                       {:->jwt-token ->jwt-token
                        :http-opts {:method :get
                                    :query-params (merge (temporal-qps this)
                                                         {:eid-edn (pr-str eid)})}}))
-
-  (entityTx [this eid]
+  (entity-tx [this eid]
     (api-request-sync (str url "/_crux/entity-tx")
                       {:http-opts {:method :get
                                    :query-params (merge (temporal-qps this)
                                                         {:eid-edn (pr-str eid)})}
                        :->jwt-token ->jwt-token}))
 
-  (query [this q args]
-    (with-open [res (.openQuery this q args)]
-      (if (:order-by q)
+  (q* [this query args]
+    (with-open [res (api/open-q* this query args)]
+      (if (:order-by query)
         (vec (iterator-seq res))
         (set (iterator-seq res)))))
 
-  (openQuery [this q args]
+  (open-q* [this query args]
     (let [in (api-request-sync (str url "/_crux/query")
                                {:->jwt-token ->jwt-token
                                 :http-opts {:as :stream
                                             :method :post
                                             :query-params (temporal-qps this)}
-                                :body {:query (pr-str q)
+                                :body {:query (pr-str query)
                                        :args (vec args)}})]
       (cio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
 
-  (entityHistory [this eid opts]
-    (with-open [history (.openEntityHistory this eid opts)]
-      (vec (iterator-seq history))))
+  (project [this projection eid]
+    (let [?eid (gensym '?eid)
+          projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
+      (->> (api/q this
+                  {:find [(list 'eql/project ?eid projection)]
+                   :in [?eid]}
+                  eid)
+           ffirst)))
 
-  (openEntityHistory [this eid opts]
-    (let [qps (merge (temporal-qps this)
-                     {:eid-edn (pr-str eid)
-                      :history true
+  (project-many [this projection eids]
+    (let [?eid (gensym '?eid)
+          projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
+      (->> (api/q this
+                  {:find [(list 'eql/project ?eid projection)]
+                   :in [[?eid '...]]}
+                  this)
+           (mapv first))))
 
-                      :sort-order (name (:sort-order opts))
-                      :with-corrections (:with-corrections? opts)
-                      :with-docs (:with-docs? opts)
+  ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
+  ;; as the new Java ones?
+  (entity-history [this eid sort-order] (api/entity-history this eid sort-order {}))
 
-                      :start-valid-time (some-> (:start-valid-time opts) (cio/format-rfc3339-date))
-                      :start-tx-time (some-> (get-in opts [:start-tx ::tx/tx-time])
-                                             (cio/format-rfc3339-date))
-                      :start-tx-id (get-in opts [:start-tx ::tx/tx-id])
+  (entity-history [this eid sort-order opts]
+   (with-open [history (api/open-entity-history this eid sort-order opts)]
+     (vec (iterator-seq history))))
 
-                      :end-valid-time (some-> (:end-valid-time opts) (cio/format-rfc3339-date))
-                      :end-tx-time (some-> (get-in opts [:end-tx ::tx/tx-time])
-                                           (cio/format-rfc3339-date))
-                      :end-tx-id (get-in opts [:end-tx ::tx/tx-id])})]
-      (if-let [in (api-request-sync (str url "/_crux/entity")
-                                    {:http-opts {:as :stream
-                                                 :method :get
-                                                 :query-params qps}
-                                     :->jwt-token ->jwt-token})]
-        (cio/->cursor #(.close ^java.io.Closeable in) (edn-list->lazy-seq in))
-        cio/empty-cursor)))
+  (open-entity-history [this eid sort-order] (api/open-entity-history this eid sort-order {}))
 
-  (validTime [_] valid-time)
-  (transactionTime [_] tx-time)
-  (dbBasis [this]
+  (open-entity-history [this eid sort-order opts]
+   (let [opts (assoc opts :sort-order sort-order)
+         qps (merge (temporal-qps this)
+                    {:eid-edn (pr-str eid)
+                     :history true
+
+                     :sort-order (name sort-order)
+                     :with-corrections (:with-corrections? opts)
+                     :with-docs (:with-docs? opts)
+
+                     :start-valid-time (some-> (:start-valid-time opts) (cio/format-rfc3339-date))
+                     :start-tx-time (some-> (get-in opts [:start-tx ::tx/tx-time])
+                                            (cio/format-rfc3339-date))
+                     :start-tx-id (get-in opts [:start-tx ::tx/tx-id])
+
+                     :end-valid-time (some-> (:end-valid-time opts) (cio/format-rfc3339-date))
+                     :end-tx-time (some-> (get-in opts [:end-tx ::tx/tx-time])
+                                          (cio/format-rfc3339-date))
+                     :end-tx-id (get-in opts [:end-tx ::tx/tx-id])})]
+     (if-let [in (api-request-sync (str url "/_crux/entity")
+                                   {:http-opts {:as :stream
+                                                :method :get
+                                                :query-params qps}
+                                    :->jwt-token ->jwt-token})]
+       (cio/->cursor #(.close ^java.io.Closeable in) (edn-list->lazy-seq in))
+       cio/empty-cursor)))
+
+  (valid-time [this] valid-time)
+
+  (transaction-time [this] tx-time)
+
+  (db-basis [this]
     {:crux.db/valid-time valid-time
-     :crux.tx/tx {:crux.tx/tx-time tx-time, :crux.tx/tx-id tx-id}}))
+     :crux.tx/tx {:crux.tx/tx-time tx-time
+                  :crux.tx/tx-id tx-id}}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
-  ICruxAPI
-  (db [this] (let [^Map db-basis {}] (.db this db-basis)))
-  (^ICruxDatasource db [this ^Date valid-time]
-   (let [^Map db-basis {:crux.db/valid-time valid-time}]
-     (.db this db-basis)))
+  Closeable
+  (close [_])
 
-  (^ICruxDatasource db [this ^Date valid-time ^Date tx-time]
-   (let [^Map db-basis {:crux.db/valid-time valid-time
-                        :crux.tx/tx-time tx-time}]
-     (.db this db-basis)))
+  api/DBProvider
+  (db [this] (api/db this {}))
 
-  (^ICruxDatasource db [this ^Map db-basis]
-   (let [qps (temporal-qps {:valid-time (:crux.db/valid-time db-basis)
-                            :tx-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
-                                         (:crux.tx/tx-time db-basis))
-                            :tx-id (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-id])
-                                       (:crux.tx/tx-id db-basis))})
-         resolved-tx (api-request-sync (str url "/_crux/db")
-                                       {:http-opts {:method :get
-                                                    :query-params qps}
-                                        :->jwt-token ->jwt-token})]
-     (->RemoteDatasource url
-                         (:crux.db/valid-time resolved-tx)
-                         (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-time])
-                         (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-id])
-                         ->jwt-token)))
+  (db [this valid-time tx-time]
+   (api/db this {:crux.db/valid-time valid-time
+                 :crux.tx/tx-time tx-time}))
 
-  (openDB [this] (.db this))
-  (^crux.api.ICruxDatasource openDB [this ^Date valid-time] (.db this valid-time))
-  (^crux.api.ICruxDatasource openDB [this ^Date valid-time ^Date tx-time] (.db this valid-time tx-time))
-  (^crux.api.ICruxDatasource openDB [this ^Map db-basis] (.db this db-basis))
+  (db [this valid-time-or-basis]
+   (if (instance? Date valid-time-or-basis)
+     (api/db this {:crux.db/valid-time valid-time-or-basis})
+     (let [db-basis valid-time-or-basis
+           qps (temporal-qps {:valid-time (:crux.db/valid-time db-basis)
+                              :tx-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
+                                           (:crux.tx/tx-time db-basis))
+                              :tx-id (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-id])
+                                         (:crux.tx/tx-id db-basis))})
+           resolved-tx (api-request-sync (str url "/_crux/db")
+                                         {:http-opts {:method :get
+                                                      :query-params qps}
+                                          :->jwt-token ->jwt-token})]
+       (->RemoteDatasource url
+                           (:crux.db/valid-time resolved-tx)
+                           (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-time])
+                           (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-id])
+                           ->jwt-token))))
 
-  (status [_]
+  (open-db [this] (api/db this))
+
+  (open-db [this valid-time-or-basis] (api/db this valid-time-or-basis))
+
+  (open-db [this valid-time tx-time] (api/db this valid-time tx-time))
+
+  api/PCruxNode
+  (status [this]
     (api-request-sync (str url "/_crux/status")
                       {:http-opts {:method :get}
                        :->jwt-token ->jwt-token}))
 
-  (attributeStats [_]
-    (api-request-sync (str url "/_crux/attribute-stats")
-                      {:http-opts {:method :get}
-                       :->jwt-token ->jwt-token}))
-
-  (submitTx [_ tx-ops]
-    (try
-      (api-request-sync (str url "/_crux/submit-tx")
-                        {:body {:tx-ops tx-ops}
-                         :->jwt-token ->jwt-token})
-      (catch Exception e
-        (let [data (ex-data e)]
-          (when (and (= 403 (:status data))
-                     (string/includes? (:body data) "read-only HTTP node"))
-            (throw (UnsupportedOperationException. "read-only HTTP node")))
-          (throw e)))))
-
-  (hasTxCommitted [_ submitted-tx]
+  (tx-committed? [this submitted-tx]
     (-> (api-request-sync (str url "/_crux/tx-committed")
                           {:http-opts {:method :get
                                        :query-params {:tx-id (:crux.tx/tx-id submitted-tx)}}
                            :->jwt-token ->jwt-token})
         (get :tx-committed?)))
 
-  (openTxLog [this after-tx-id with-ops?]
-    (let [in (api-request-sync (str url "/_crux/tx-log")
+  (sync [this] (api/sync this nil))
+
+  (sync [this timeout]
+   (-> (api-request-sync (str url "/_crux/sync")
+                         {:http-opts {:method :get
+                                      :query-params {:timeout (some-> timeout (cio/format-duration-millis))}}
+                          :->jwt-token ->jwt-token})
+       (get :crux.tx/tx-time)))
+
+  (sync [this tx-time timeout]
+   (defonce warn-on-deprecated-sync
+            (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
+   (api/await-tx-time this tx-time timeout))
+
+  (await-tx [this submitted-tx] (api/await-tx this submitted-tx nil))
+  (await-tx [this submitted-tx timeout]
+    (api-request-sync (str url "/_crux/await-tx")
+                      {:http-opts {:method :get
+                                   :query-params {:tx-id (:crux.tx/tx-id submitted-tx)
+                                                 :timeout (some-> timeout (cio/format-duration-millis))}}
+                       :->jwt-token ->jwt-token}))
+
+  (await-tx-time [this tx-time] (api/await-tx-time this tx-time nil))
+  (await-tx-time [this tx-time timeout]
+    (-> (api-request-sync (str url "/_crux/await-tx-time" )
+                          {:http-opts {:method :get
+                                       :query-params {:tx-time (cio/format-rfc3339-date tx-time)
+                                                     :timeout (some-> timeout (cio/format-duration-millis))}}
+                           :->jwt-token ->jwt-token})
+        (get :crux.tx/tx-time)))
+
+  (listen [this event-opts f]
+    (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))
+
+  (latest-completed-tx [this]
+    (api-request-sync (str url "/_crux/latest-completed-tx")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
+
+
+
+  (latest-submitted-tx [this]
+    (api-request-sync (str url "/_crux/latest-submitted-tx")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
+
+  (attribute-stats [this]
+    (api-request-sync (str url "/_crux/attribute-stats")
+                      {:http-opts {:method :get}
+                       :->jwt-token ->jwt-token}))
+
+  (active-queries [this]
+    (->> (api-request-sync (str url "/_crux/active-queries")
+                           {:http-opts {:method :get}
+                            :->jwt-token ->jwt-token})
+         (map qs/->QueryState)))
+
+  (recent-queries [this]
+    (->> (api-request-sync (str url "/_crux/recent-queries")
+                           {:http-opts {:method :get}
+                            :->jwt-token ->jwt-token})
+         (map qs/->QueryState)))
+
+  (slowest-queries [this]
+    (->> (api-request-sync (str url "/_crux/slowest-queries")
+                           {:http-opts {:method :get}
+                            :->jwt-token ->jwt-token})
+         (map qs/->QueryState)))
+
+  api/PCruxIngestClient
+  (submit-tx [this tx-ops]
+    (let [tx-ops (api/conform-tx-ops tx-ops)]
+      (try
+        (api-request-sync (str url "/_crux/submit-tx")
+                          {:body {:tx-ops tx-ops}
+                           :->jwt-token ->jwt-token})
+        (catch Exception e
+          (let [data (ex-data e)]
+            (when (and (= 403 (:status data))
+                       (string/includes? (:body data) "read-only HTTP node"))
+              (throw (UnsupportedOperationException. "read-only HTTP node")))
+            (throw e))))
+      ))
+
+  (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
+    (let [with-ops? (boolean with-ops?)
+          in (api-request-sync (str url "/_crux/tx-log")
                                {:http-opts {:method :get
                                             :as :stream
                                             :query-params {:after-tx-id after-tx-id
@@ -252,63 +353,7 @@
                                 :->jwt-token ->jwt-token})]
 
       (cio/->cursor #(.close ^Closeable in)
-                    (edn-list->lazy-seq in))))
-
-  (sync [_ timeout]
-    (-> (api-request-sync (str url "/_crux/sync")
-                          {:http-opts {:method :get
-                                       :query-params {:timeout (some-> timeout (cio/format-duration-millis))}}
-                           :->jwt-token ->jwt-token})
-        (get :crux.tx/tx-time)))
-
-  (awaitTxTime [_ tx-time timeout]
-    (-> (api-request-sync (str url "/_crux/await-tx-time" )
-                          {:http-opts {:method :get
-                                       :query-params {:tx-time (cio/format-rfc3339-date tx-time)
-                                                      :timeout (some-> timeout (cio/format-duration-millis))}}
-                           :->jwt-token ->jwt-token})
-        (get :crux.tx/tx-time)))
-
-  (awaitTx [_ tx timeout]
-    (api-request-sync (str url "/_crux/await-tx")
-                      {:http-opts {:method :get
-                                   :query-params {:tx-id (:crux.tx/tx-id tx)
-                                                  :timeout (some-> timeout (cio/format-duration-millis))}}
-                       :->jwt-token ->jwt-token}))
-
-  (listen [_ opts f]
-    (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))
-
-  (latestCompletedTx [_]
-    (api-request-sync (str url "/_crux/latest-completed-tx")
-                      {:http-opts {:method :get}
-                       :->jwt-token ->jwt-token}))
-
-  (latestSubmittedTx [_]
-    (api-request-sync (str url "/_crux/latest-submitted-tx")
-                      {:http-opts {:method :get}
-                       :->jwt-token ->jwt-token}))
-
-  (activeQueries [_]
-    (->> (api-request-sync (str url "/_crux/active-queries")
-                           {:http-opts {:method :get}
-                            :->jwt-token ->jwt-token})
-         (map qs/->QueryState)))
-
-  (recentQueries [_]
-    (->> (api-request-sync (str url "/_crux/recent-queries")
-                           {:http-opts {:method :get}
-                            :->jwt-token ->jwt-token})
-         (map qs/->QueryState)))
-
-  (slowestQueries [_]
-    (->> (api-request-sync (str url "/_crux/slowest-queries")
-                           {:http-opts {:method :get}
-                            :->jwt-token ->jwt-token})
-         (map qs/->QueryState)))
-
-  Closeable
-  (close [_]))
+                    (edn-list->lazy-seq in)))))
 
 (defn- ^:dynamic *now* ^Instant []
   (Instant/now))
@@ -329,7 +374,7 @@
             (reset! !token-cache {:token new-token :token-expiration new-token-exp})
             new-token)))))
 
-(defn new-api-client ^ICruxAPI
+(defn new-api-client
   ([url]
    (new-api-client url nil))
   ([url ^RemoteClientOptions options]

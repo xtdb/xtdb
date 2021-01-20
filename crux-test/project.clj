@@ -29,12 +29,23 @@
                  [org.apache.commons/commons-lang3 "3.9"]
                  [org.eclipse.jetty/jetty-server "9.4.22.v20191022"]
                  [org.eclipse.jetty/jetty-io "9.4.30.v20200611"]
-                 [javax.servlet/javax.servlet-api "4.0.1"]]
+                 [javax.servlet/javax.servlet-api "4.0.1"]
 
+                 ;; Junit Tests
+                 [junit/junit "4.12"]]
+  :java-source-paths ["test"]
+  :javac-options ["-source" "8" "-target" "8"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
+  :junit ["test"]
+  :junit-formatter :brief
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]
   :global-vars {*warn-on-reflection* true}
   :pedantic? :warn
+  :plugins [[lein-junit "1.1.9"]]
 
   :profiles {:test {:dependencies [[juxt/crux-rocksdb "crux-git-version-beta"]
                                    [juxt/crux-lmdb "crux-git-version-alpha"]

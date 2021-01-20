@@ -6,9 +6,9 @@
             [crux.sparql :as sparql]
             [ring.util.request :as req]
             [ring.util.time :as rt]
-            [crux.io :as cio])
-  (:import [org.eclipse.rdf4j.model BNode IRI Literal]
-           crux.api.ICruxAPI))
+            [crux.io :as cio]
+            [crux.api :as api])
+  (:import [org.eclipse.rdf4j.model BNode IRI Literal]))
 
 ;; TODO: This is a bit ad-hoc.
 (defn- edn->sparql-type+value+dt [x]
@@ -74,7 +74,7 @@
             (str/join ", "))
        "]}}"))
 
-(defn sparql-query [^ICruxAPI crux-node request]
+(defn sparql-query [crux-node request]
   (if-let [query (case (:request-method request)
                    :get
                    (get-in request [:query-params "query"])
@@ -89,21 +89,21 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
-          db (.db crux-node)
-          results (.query db query-map (object-array 0))]
+          db (api/db crux-node)
+          results (api/q db query-map (object-array 0))]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond
         (str/index-of accept "application/sparql-results+xml")
         {:status 200
          :headers {"Content-Type" "application/sparql-results+xml"
-                   "Last-Modified" (rt/format-date (.transactionTime db))}
+                   "Last-Modified" (rt/format-date (api/transaction-time db))}
          :body (sparql-xml-response find results)}
 
         (str/index-of accept "application/sparql-results+json")
         {:status 200
          :headers {"Content-Type" "application/sparql-results+json"
-                   "Last-Modified" (rt/format-date (.transactionTime db))}
+                   "Last-Modified" (rt/format-date (api/transaction-time db))}
          :body (sparql-json-response find results)}
 
         :else

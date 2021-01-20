@@ -28,12 +28,12 @@ import org.apache.calcite.DataContext;
 import org.apache.calcite.linq4j.function.Function;
 
 public class CruxTable extends AbstractQueryableTable implements TranslatableTable {
-    ICruxAPI node;
-    public Map<Keyword, Object> schema;
+    private final Object node;
+    public final Map<Keyword, Object> schema;
     private final IFn scanFn;
     private final boolean scanOnly;
 
-    public CruxTable (ICruxAPI node, Map<Keyword, Object> schema, boolean scanOnly) {
+    public CruxTable (Object node, Map<Keyword, Object> schema, boolean scanOnly) {
         super(Object[].class);
         this.node = node;
         this.schema = schema;

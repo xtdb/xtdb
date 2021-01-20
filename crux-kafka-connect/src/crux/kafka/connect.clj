@@ -5,7 +5,8 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.error :as err]
-            [cognitect.transit :as transit])
+            [cognitect.transit :as transit]
+            [crux.api :as api])
   (:import [org.apache.kafka.connect.data Schema Schema$Type Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
@@ -14,8 +15,7 @@
            [com.fasterxml.jackson.core JsonGenerator JsonParseException]
            crux.kafka.connect.CruxSinkConnector
            crux.kafka.connect.CruxSourceConnector
-           crux.codec.EDNId
-           crux.api.ICruxAPI))
+           crux.codec.EDNId))
 
 (cheshire.generate/add-encoder
  EDNId
@@ -111,10 +111,10 @@
     (log/info "tx op:" tx-op)
     tx-op))
 
-(defn submit-sink-records [^ICruxAPI api props records]
+(defn submit-sink-records [api props records]
   (when (seq records)
-    (.submitTx api (vec (for [record records]
-                          (transform-sink-record props record))))))
+    (api/submit-tx api (vec (for [record records]
+                               (transform-sink-record props record))))))
 
 (defn- write-transit [x]
   (with-open [out (ByteArrayOutputStream.)]
@@ -199,7 +199,7 @@
                    (some-> doc (formatter))
                    (inst-ms tx-time))))
 
-(defn poll-source-records [^ICruxAPI api source-offset props]
+(defn poll-source-records [api source-offset props]
   (let [url (get props CruxSourceConnector/URL_CONFIG)
         topic (get props CruxSourceConnector/TOPIC_CONFIG)
         format (get props CruxSourceConnector/FORMAT_CONFIG)
@@ -214,7 +214,7 @@
                                        "tx" tx-log-entry->tx-source-records
                                        "doc" tx-log-entry->doc-source-records)
         after-tx-id (some-> (get source-offset "offset") long)]
-    (with-open [tx-log-iterator (.openTxLog api after-tx-id true)]
+    (with-open [tx-log-iterator (api/open-tx-log api after-tx-id true)]
       (log/info "source offset:" source-offset "tx-id:" after-tx-id "format:" format "mode:" mode)
       (let [records (->> (iterator-seq tx-log-iterator)
                          (take (Long/parseLong batch-size))

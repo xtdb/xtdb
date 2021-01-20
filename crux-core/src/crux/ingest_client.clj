@@ -3,30 +3,40 @@
             [crux.error :as err]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
-            [clojure.pprint :as pp])
+            [clojure.pprint :as pp]
+            [crux.api :as api])
   (:import crux.api.ICruxAsyncIngestAPI
            [java.io Closeable Writer]
            java.lang.AutoCloseable))
 
 (defrecord CruxIngestClient [tx-log document-store close-fn]
   ICruxAsyncIngestAPI
-  (submitTxAsync [_ tx-ops]
-    (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-      (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))
-
-  (submitTx [this tx-ops]
-    @(.submitTxAsync this tx-ops))
-
-  (openTxLog ^crux.api.ICursor [_ after-tx-id with-ops?]
-    (when with-ops?
-      (throw (err/illegal-arg :with-opts-not-supported
-                              {::err/message "with-ops? not supported"})))
-    (db/open-tx-log tx-log after-tx-id))
+  (submitTxAsync [this tx-ops] (api/submit-tx-async this tx-ops))
+  (submitTx [this tx-ops] (api/submit-tx this tx-ops))
+  (openTxLog ^crux.api.ICursor [this after-tx-id with-ops?] (api/open-tx-log this after-tx-id with-ops?))
 
   Closeable
   (close [_]
     (when close-fn (close-fn))))
+
+(extend-protocol api/PCruxIngestClient
+  CruxIngestClient
+  (submit-tx [this tx-ops]
+    @(api/submit-tx-async this tx-ops))
+
+  (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
+    (when with-ops?
+      (throw (err/illegal-arg :with-opts-not-supported
+                              {::err/message "with-ops? not supported"})))
+    (db/open-tx-log (:tx-log this) after-tx-id)))
+
+(extend-protocol api/PCruxAsyncIngestClient
+  CruxIngestClient
+  (submit-tx-async [this tx-ops]
+    (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+      (db/submit-docs (:document-store this) (into {} (mapcat :docs) conformed-tx-ops))
+      (db/submit-tx (:tx-log this) (mapv txc/->tx-event conformed-tx-ops)))))
+
 
 (defmethod print-method CruxIngestClient [_ ^Writer w] (.write w "#<CruxIngestClient>"))
 (defmethod pp/simple-dispatch CruxIngestClient [it] (print-method it *out*))

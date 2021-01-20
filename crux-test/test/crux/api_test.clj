@@ -10,7 +10,7 @@
             [crux.rdf :as rdf]
             [crux.tx :as tx]
             [crux.tx.event :as txe])
-  (:import crux.api.NodeOutOfSyncException
+  (:import [crux.api NodeOutOfSyncException ICruxAPI]
            java.time.Duration
            java.util.Date
            java.util.concurrent.ExecutorService
@@ -76,11 +76,12 @@
       (t/is (= submitted-tx (api/latest-completed-tx *api*))))))
 
 (t/deftest test-can-use-crux-ids
-  (let [id #crux/id "https://adam.com"
+  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)
+        id #crux/id "https://adam.com"
         doc {:crux.db/id id, :name "Adam"}
-        submitted-tx (.submitTx *api* [[:crux.tx/put doc]])]
-    (.awaitTx *api* submitted-tx nil)
-    (t/is (.entity (.db *api*) id))))
+        submitted-tx (.submitTx jnode [[:crux.tx/put doc]])]
+    (.awaitTx jnode submitted-tx nil)
+    (t/is (.entity (.db jnode) id))))
 
 (t/deftest test-query
   (let [valid-time (Date.)
@@ -152,11 +153,12 @@
                  (api/submit-tx *api* [[:crux.tx/put {}]]))))
 
 (t/deftest test-content-hash-invalid
-  (let [valid-time (Date.)
+  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)
+        valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}
         content-hash (str (c/new-id content-ivan))]
     (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
-                            (.submitTx *api* [[:crux.tx/put content-hash valid-time]])))))
+                            (.submitTx jnode [[:crux.tx/put content-hash valid-time]])))))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
@@ -191,11 +193,12 @@
   (t/is (api/entity (api/db *api*) :foo)))
 
 (t/deftest test-tx-log
-  (let [valid-time (Date.)
+  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)
+        valid-time (Date.)
         tx1 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
 
     (t/testing "tx-log"
-      (with-open [tx-log-iterator (.openTxLog *api* nil false)]
+      (with-open [tx-log-iterator (.openTxLog jnode nil false)]
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (not (realized? result)))
           (t/is (= [(assoc tx1
@@ -204,7 +207,7 @@
           (t/is (realized? result))))
 
       (t/testing "with ops"
-        (with-open [tx-log-iterator (.openTxLog *api* nil true)]
+        (with-open [tx-log-iterator (.openTxLog jnode nil true)]
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
@@ -352,15 +355,16 @@
              (api/entity db :foo)))))
 
 (t/deftest test-latest-submitted-tx
-  (t/is (nil? (.latestSubmittedTx *api*)))
+  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)]
+    (t/is (nil? (.latestSubmittedTx jnode)))
 
-  (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
-    (t/is (= {:crux.tx/tx-id tx-id}
-             (.latestSubmittedTx *api*))))
+    (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+      (t/is (= {:crux.tx/tx-id tx-id}
+               (.latestSubmittedTx jnode))))
 
-  (api/sync *api*)
+    (api/sync *api*)
 
-  (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))
+    (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo)))))
 
 (t/deftest test-listen-for-indexed-txs
   (when-not (contains? (set t/*testing-contexts*) (str :remote))

@@ -1,10 +1,7 @@
 package crux.codec;
 
 import org.agrona.DirectBuffer;
-import org.agrona.ExpandableArrayBuffer;
-import org.agrona.ExpandableDirectByteBuffer;
 import org.agrona.MutableDirectBuffer;
-import org.agrona.concurrent.UnsafeBuffer;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;

@@ -5,6 +5,7 @@ import clojure.lang.PersistentVector;
 
 import java.util.Date;
 
+@SuppressWarnings("unused")
 @Deprecated
 public class CasOperation extends TransactionOperation {
     private static final Keyword TX_CAS = crux.api.alpha.Util.keyword("crux.tx/cas");
