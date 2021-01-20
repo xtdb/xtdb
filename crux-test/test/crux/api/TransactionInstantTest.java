@@ -1,15 +1,16 @@
 package crux.api;
 
 import clojure.lang.Keyword;
-
 import clojure.lang.PersistentArrayMap;
-import org.junit.*;
 
 import java.util.Map;
 
 import crux.api.*;
 import crux.api.tx.*;
 
+import org.junit.*;
+
+import static org.junit.Assert.*;
 import static crux.api.TestUtils.*;
 
 public class TransactionInstantTest {
@@ -19,28 +20,28 @@ public class TransactionInstantTest {
     @Test
     public void nullFactoryTest() {
         TransactionInstant tx = TransactionInstant.factory((Map<Keyword, ?>)null);
-        Assert.assertNull(tx);
+        assertNull(tx);
     }
 
     @Test
     public void onlyTimeTest() {
         TransactionInstant tx = TransactionInstant.factory(now);
-        Assert.assertNull(tx.getId());
-        Assert.assertEquals(now, tx.getTime());
+        assertNull(tx.getId());
+        assertEquals(now, tx.getTime());
     }
 
     @Test
     public void onlyIdTest() {
         TransactionInstant tx = TransactionInstant.factory(1L);
-        Assert.assertNull(tx.getTime());
-        Assert.assertEquals(1L, (long) tx.getId());
+        assertNull(tx.getTime());
+        assertEquals(1L, (long) tx.getId());
     }
 
     @Test
     public void bothTest() {
         TransactionInstant tx = TransactionInstant.factory(1L, now);
-        Assert.assertEquals(now, tx.getTime());
-        Assert.assertEquals(1L, (long) tx.getId());
+        assertEquals(now, tx.getTime());
+        assertEquals(1L, (long) tx.getId());
     }
 
     @SuppressWarnings("unchecked")
@@ -48,7 +49,7 @@ public class TransactionInstantTest {
     public void mapNeitherTest() {
         Map<Keyword, ?> map = PersistentArrayMap.EMPTY;
         TransactionInstant tx = TransactionInstant.factory(map);
-        Assert.assertNull(tx);
+        assertNull(tx);
     }
 
     @SuppressWarnings("unchecked")
@@ -56,8 +57,8 @@ public class TransactionInstantTest {
     public void mapTimeTest() {
         Map<Keyword, ?> map = (Map<Keyword, ?>) PersistentArrayMap.EMPTY.assoc(TX_TIME, now);
         TransactionInstant tx = TransactionInstant.factory(map);
-        Assert.assertNull(tx.getId());
-        Assert.assertEquals(now, tx.getTime());
+        assertNull(tx.getId());
+        assertEquals(now, tx.getTime());
     }
 
     @SuppressWarnings("unchecked")
@@ -65,8 +66,8 @@ public class TransactionInstantTest {
     public void mapIdTest() {
         Map<Keyword, ?> map = (Map<Keyword, ?>) PersistentArrayMap.EMPTY.assoc(TX_ID, 1L);
         TransactionInstant tx = TransactionInstant.factory(map);
-        Assert.assertNull(tx.getTime());
-        Assert.assertEquals(1L, (long) tx.getId());
+        assertNull(tx.getTime());
+        assertEquals(1L, (long) tx.getId());
     }
 
     @SuppressWarnings("unchecked")
@@ -78,8 +79,8 @@ public class TransactionInstantTest {
 
         TransactionInstant tx = TransactionInstant.factory(map);
 
-        Assert.assertEquals(now, tx.getTime());
-        Assert.assertEquals(1L, (long) tx.getId());
+        assertEquals(now, tx.getTime());
+        assertEquals(1L, (long) tx.getId());
     }
 
     @SuppressWarnings("unchecked")
@@ -92,8 +93,8 @@ public class TransactionInstantTest {
 
         TransactionInstant tx = TransactionInstant.factory(map);
 
-        Assert.assertEquals(now, tx.getTime());
-        Assert.assertEquals(1L, (long) tx.getId());
+        assertEquals(now, tx.getTime());
+        assertEquals(1L, (long) tx.getId());
     }
 
     @Test

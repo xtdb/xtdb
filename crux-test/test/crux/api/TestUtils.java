@@ -2,13 +2,13 @@ package crux.api;
 
 import clojure.lang.Keyword;
 
-import crux.api.tx.*;
-
 import java.io.Closeable;
 import java.time.Duration;
 import java.util.*;
 
-import org.junit.*;
+import crux.api.tx.*;
+
+import static org.junit.Assert.*;
 
 class TestUtils {
     static final Keyword PUT = Keyword.intern("crux.tx/put");
@@ -118,7 +118,7 @@ class TestUtils {
             closeable.close();
         }
         catch (Exception e) {
-            Assert.fail();
+            fail();
         }
     }
 
@@ -130,10 +130,10 @@ class TestUtils {
 
     static void assertHasKeys(Map<Keyword, ?> map, Keyword... keys) {
         for (Keyword key: keys) {
-            Assert.assertTrue(map.containsKey(key));
+            assertTrue(map.containsKey(key));
         }
 
-        Assert.assertEquals(keys.length, map.size());
+        assertEquals(keys.length, map.size());
     }
 
     static <T> T last(List<T> list) {

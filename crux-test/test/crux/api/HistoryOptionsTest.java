@@ -1,13 +1,15 @@
 package crux.api;
 
 import clojure.lang.Keyword;
-import org.junit.*;
-
-import static crux.api.TestUtils.*;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import org.junit.*;
+
+import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
 
 public class HistoryOptionsTest {
     private static List<TestDocument> documents;
@@ -66,7 +68,7 @@ public class HistoryOptionsTest {
             db.close();
         }
         catch (Exception e) {
-            Assert.fail();
+            fail();
         }
         db = null;
     }
@@ -80,8 +82,8 @@ public class HistoryOptionsTest {
 
         List<Long> times = history.stream().map(keywordMap -> ((Date) keywordMap.get(VALID_TIME)).getTime()).collect(Collectors.toList());
         List<Long> compare = times.stream().sorted().collect(Collectors.toList());
-        Assert.assertEquals(compare, times);
-        Assert.assertEquals(6, history.size());
+        assertEquals(compare, times);
+        assertEquals(6, history.size());
     }
 
     @Test
@@ -94,8 +96,8 @@ public class HistoryOptionsTest {
         List<Long> times = history.stream().map(keywordMap -> ((Date) keywordMap.get(VALID_TIME)).getTime()).collect(Collectors.toList());
         List<Long> compare = times.stream().sorted().collect(Collectors.toList());
         Collections.reverse(compare);
-        Assert.assertEquals(compare, times);
-        Assert.assertEquals(6, history.size());
+        assertEquals(compare, times);
+        assertEquals(6, history.size());
     }
 
     @Test
@@ -104,7 +106,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(10, history.size());
+        assertEquals(10, history.size());
     }
 
     @SuppressWarnings("ConstantConditions")
@@ -119,10 +121,10 @@ public class HistoryOptionsTest {
             Object contentHash = entry.get(CONTENT_HASH);
             Object document = entry.get(DOC);
             if (contentHash.equals(null)) {
-                Assert.assertNull(document);
+                assertNull(document);
             }
             else {
-                Assert.assertNotNull(document);
+                assertNotNull(document);
             }
         }
     }
@@ -133,7 +135,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     @Test
@@ -143,7 +145,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(5, history.size());
+        assertEquals(5, history.size());
     }
 
     @Test
@@ -154,7 +156,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(5, history.size());
+        assertEquals(5, history.size());
     }
 
     @Test
@@ -163,7 +165,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     @Test
@@ -173,7 +175,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     @Test
@@ -184,7 +186,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     /*
@@ -196,8 +198,8 @@ public class HistoryOptionsTest {
             long txId = (Long) map.get(TX_ID);
 
             TransactionInstant tx = transactions.get((int) txId);
-            Assert.assertEquals((long) tx.getId(), txId);
-            Assert.assertEquals(tx.getTime(), txTime);
+            assertEquals((long) tx.getId(), txId);
+            assertEquals(tx.getTime(), txTime);
         }
     }
 

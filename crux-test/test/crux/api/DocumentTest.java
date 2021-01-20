@@ -1,15 +1,16 @@
 package crux.api;
 
 import clojure.lang.Keyword;
-import org.junit.Assert;
-import org.junit.Test;
 
 import crux.api.tx.*;
 
 import java.util.HashMap;
 import java.util.Map;
 
+import org.junit.Test;
+
 import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
 
 public class DocumentTest {
 
@@ -35,7 +36,7 @@ public class DocumentTest {
         compare.put(Keyword.intern("bar"), "baz");
         document.put("bar", "baz");
 
-        Assert.assertEquals(compare, document.toMap());
+        assertEquals(compare, document.toMap());
 
         assertSameAfterPut(document);
     }
@@ -59,7 +60,7 @@ public class DocumentTest {
         CruxDocument document = CruxDocument.create("foo");
         document.put("bar", "baz");
 
-        Assert.assertEquals(document, myDocument);
+        assertEquals(document, myDocument);
 
         assertSameAfterPut(document);
         assertSameAfterPut(myDocument);
@@ -72,10 +73,10 @@ public class DocumentTest {
             }));
             awaitTx(node, transaction);
             AbstractCruxDocument compare = node.db().entity(document.getId());
-            Assert.assertEquals(document, compare);
+            assertEquals(document, compare);
         }
         catch (Exception e) {
-            Assert.fail();
+            fail();
         }
     }
 }

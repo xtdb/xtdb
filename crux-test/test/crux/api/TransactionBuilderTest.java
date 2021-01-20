@@ -1,16 +1,17 @@
 package crux.api;
 
 import clojure.lang.Keyword;
-import org.junit.Assert;
-import org.junit.Test;
-
-import crux.api.tx.*;
 
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
+import crux.api.tx.*;
+
+import org.junit.Test;
+
 import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
 
 public class TransactionBuilderTest {
     /**
@@ -43,7 +44,7 @@ public class TransactionBuilderTest {
             tx.put(document);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -56,7 +57,7 @@ public class TransactionBuilderTest {
             tx.put(document, validTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -69,7 +70,7 @@ public class TransactionBuilderTest {
             tx.put(document, validTime, endValidTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -82,7 +83,7 @@ public class TransactionBuilderTest {
             tx.delete(documentId);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -95,7 +96,7 @@ public class TransactionBuilderTest {
             tx.delete(documentId, validTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -108,7 +109,7 @@ public class TransactionBuilderTest {
             tx.delete(documentId, validTime, endValidTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -121,7 +122,7 @@ public class TransactionBuilderTest {
             tx.match(document);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -134,7 +135,7 @@ public class TransactionBuilderTest {
             tx.match(document, validTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -147,7 +148,7 @@ public class TransactionBuilderTest {
             tx.matchNotExists(documentId);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -160,7 +161,7 @@ public class TransactionBuilderTest {
             tx.matchNotExists(documentId, validTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -173,7 +174,7 @@ public class TransactionBuilderTest {
             tx.evict(documentId);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -190,7 +191,7 @@ public class TransactionBuilderTest {
             tx.delete(document, validTime, endValidTime);
         });
 
-        Assert.assertEquals(direct, indirect);
+        assertEquals(direct, indirect);
     }
 
     @Test
@@ -207,6 +208,6 @@ public class TransactionBuilderTest {
             tx.put(document, validTime);
         });
 
-        Assert.assertNotEquals(direct, indirect);
+        assertNotEquals(direct, indirect);
     }
 }

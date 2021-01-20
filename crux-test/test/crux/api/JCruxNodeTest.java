@@ -1,14 +1,17 @@
 package crux.api;
 
 import clojure.lang.*;
-import org.junit.*;
-import crux.api.tx.*;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.TimeoutException;
 
+import crux.api.tx.*;
+
+import org.junit.*;
+
 import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
 
 public class JCruxNodeTest {
     private static final Keyword versionId = Keyword.intern("version");
@@ -47,8 +50,8 @@ public class JCruxNodeTest {
     public void submitTxTest() {
         TransactionInstant tx = p();
 
-        Assert.assertEquals(0L, (long) tx.getId());
-        Assert.assertNotNull(tx.getTime());
+        assertEquals(0L, (long) tx.getId());
+        assertNotNull(tx.getTime());
     }
 
     @Test
@@ -57,20 +60,20 @@ public class JCruxNodeTest {
         sync();
 
         ICursor<Map<Keyword, ?>> txLog = node.openTxLog(-1L, false);
-        Assert.assertTrue(txLog.hasNext());
+        assertTrue(txLog.hasNext());
         Map<Keyword, ?> txLogEntry = txLog.next();
-        Assert.assertFalse(txLog.hasNext());
+        assertFalse(txLog.hasNext());
 
-        Assert.assertNull(getTransaction(txLogEntry));
-        Assert.assertEquals(tx, getTransactionInstant(txLogEntry));
+        assertNull(getTransaction(txLogEntry));
+        assertEquals(tx, getTransactionInstant(txLogEntry));
 
         txLog = node.openTxLog(-1L, true);
-        Assert.assertTrue(txLog.hasNext());
+        assertTrue(txLog.hasNext());
         txLogEntry = txLog.next();
-        Assert.assertFalse(txLog.hasNext());
+        assertFalse(txLog.hasNext());
 
-        Assert.assertEquals(tx, getTransactionInstant(txLogEntry));
-        Assert.assertNotNull(getTransaction(txLogEntry));
+        assertEquals(tx, getTransactionInstant(txLogEntry));
+        assertNotNull(getTransaction(txLogEntry));
     }
 
     /*
@@ -80,7 +83,7 @@ public class JCruxNodeTest {
     @Test
     public void statusTest() {
         Map<Keyword, ?> status = node.status();
-        Assert.assertNotNull(status);
+        assertNotNull(status);
         assertContains(status, false,"crux.version/version");
         assertContains(status, true, "crux.version/revision");
         assertContains(status, false,"crux.kv/kv-store");
@@ -101,7 +104,7 @@ public class JCruxNodeTest {
     public void hasTxCommittedTest() {
         TransactionInstant tx = p();
         sync();
-        Assert.assertTrue(node.hasTxCommitted(tx));
+        assertTrue(node.hasTxCommitted(tx));
     }
 
     @Test(expected = TimeoutException.class)
@@ -117,7 +120,7 @@ public class JCruxNodeTest {
         TransactionInstant tx = p();
         Date txTime = tx.getTime();
         Date fromSync = sync();
-        Assert.assertEquals(txTime, fromSync);
+        assertEquals(txTime, fromSync);
     }
 
     @Test(expected = TimeoutException.class)
@@ -138,7 +141,7 @@ public class JCruxNodeTest {
         Date txTime = tx.getTime();
         Date past = Date.from(txTime.toInstant().minusMillis(100));
         Date fromAwait = node.awaitTxTime(past, duration);
-        Assert.assertEquals(txTime, fromAwait);
+        assertEquals(txTime, fromAwait);
     }
 
     @Test(expected = TimeoutException.class)
@@ -167,12 +170,12 @@ public class JCruxNodeTest {
         sleep(100);
         @SuppressWarnings("unchecked")
         Map<Keyword, ?> event = (Map<Keyword, ?>) events[0];
-        Assert.assertNotNull(event);
-        Assert.assertEquals(5, event.size());
-        Assert.assertEquals(Keyword.intern("crux/indexed-tx"), event.get(Keyword.intern("crux/event-type")));
-        Assert.assertTrue((Boolean) event.get(Keyword.intern("committed?")));
-        Assert.assertEquals(tx.getTime(), event.get(TX_TIME));
-        Assert.assertEquals(0L, event.get(TX_ID));
+        assertNotNull(event);
+        assertEquals(5, event.size());
+        assertEquals(Keyword.intern("crux/indexed-tx"), event.get(Keyword.intern("crux/event-type")));
+        assertTrue((Boolean) event.get(Keyword.intern("committed?")));
+        assertEquals(tx.getTime(), event.get(TX_TIME));
+        assertEquals(0L, event.get(TX_ID));
 
         //TODO: Reassert
         //assertTxOps((LazySeq) event.get(Keyword.intern("crux/tx-ops")));
@@ -180,7 +183,7 @@ public class JCruxNodeTest {
         try {
             listener.close();
         } catch (Exception e) {
-            Assert.fail();
+            fail();
         }
 
         events[0] = null;
@@ -189,7 +192,7 @@ public class JCruxNodeTest {
         sync();
         sleep(100);
 
-        Assert.assertNull(events[0]);
+        assertNull(events[0]);
     }
 
     @Test
@@ -197,17 +200,17 @@ public class JCruxNodeTest {
         TransactionInstant tx = p();
         sync();
         TransactionInstant latest = node.latestCompletedTx();
-        Assert.assertEquals(tx, latest);
+        assertEquals(tx, latest);
     }
 
     @Test
     public void latestSubmittedTxTest() {
-        Assert.assertNull(node.latestSubmittedTx());
+        assertNull(node.latestSubmittedTx());
         TransactionInstant tx = p();
         TransactionInstant latest = node.latestSubmittedTx();
         //Latest Submitted doesn't give us the TxTime
         TransactionInstant compare = TransactionInstant.factory(tx.getId());
-        Assert.assertEquals(compare, latest);
+        assertEquals(compare, latest);
     }
 
     @Test
@@ -215,15 +218,15 @@ public class JCruxNodeTest {
         p();
         sync();
         Map<Keyword, ?> stats = node.attributeStats();
-        Assert.assertEquals(1, stats.get(DB_ID));
-        Assert.assertEquals(1, stats.get(versionId));
-        Assert.assertEquals(2, stats.size());
+        assertEquals(1, stats.get(DB_ID));
+        assertEquals(1, stats.get(versionId));
+        assertEquals(2, stats.size());
     }
 
     @Test
     public void activeQueriesTest() {
         List<IQueryState> active = node.activeQueries();
-        Assert.assertEquals(0, active.size());
+        assertEquals(0, active.size());
     }
 
     @Test
@@ -233,7 +236,7 @@ public class JCruxNodeTest {
         query();
         sleep(10);
         List<IQueryState> recent = node.recentQueries();
-        Assert.assertEquals(1, recent.size());
+        assertEquals(1, recent.size());
     }
 
     @Test
@@ -243,7 +246,7 @@ public class JCruxNodeTest {
         query();
         sleep(10);
         List<IQueryState> slowest = node.slowestQueries();
-        Assert.assertEquals(1, slowest.size());
+        assertEquals(1, slowest.size());
     }
 
     /*
@@ -252,10 +255,10 @@ public class JCruxNodeTest {
     private void assertContains(Map<Keyword, ?> map, boolean canBeNull, String string) {
         Keyword keyword = Keyword.intern(string);
         if (canBeNull) {
-            Assert.assertTrue(map.containsKey(keyword));
+            assertTrue(map.containsKey(keyword));
         }
         else {
-            Assert.assertNotNull(map.get(keyword));
+            assertNotNull(map.get(keyword));
         }
     }
 

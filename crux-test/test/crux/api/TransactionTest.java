@@ -1,9 +1,6 @@
 package crux.api;
 
-import org.junit.Assert;
-
 import clojure.lang.Keyword;
-import org.junit.*;
 
 import java.time.Instant;
 import java.util.*;
@@ -11,7 +8,10 @@ import java.util.function.Consumer;
 
 import crux.api.tx.*;
 
+import org.junit.*;
+
 import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
 
 public class TransactionTest {
     private static class PersonDocument extends AbstractCruxDocument {
@@ -34,7 +34,7 @@ public class TransactionTest {
 
         @Override
         public Map<Keyword, Object> getData() {
-            HashMap<Keyword, Object> ret = new HashMap<Keyword, Object>();
+            HashMap<Keyword, Object> ret = new HashMap<>();
             ret.put(Keyword.intern("person/name"), name);
             ret.put(Keyword.intern("person/lastName"), lastName);
             ret.put(Keyword.intern("person/version"), version);
@@ -438,20 +438,20 @@ public class TransactionTest {
 
         ICursor<Map<Keyword, ?>> cursor = node.openTxLog(submitted.getId() - 1, true);
         if (shouldAbort) {
-            Assert.assertFalse(cursor.hasNext());
+            assertFalse(cursor.hasNext());
             close(cursor);
             return;
         }
 
-        Assert.assertTrue(cursor.hasNext());
+        assertTrue(cursor.hasNext());
         Map<Keyword, ?> transactionLogEntry = cursor.next();
-        Assert.assertFalse(cursor.hasNext());
+        assertFalse(cursor.hasNext());
 
         close(cursor);
 
-        Assert.assertNotNull(transactionLogEntry);
+        assertNotNull(transactionLogEntry);
 
-        Assert.assertEquals(submitted, getTransactionInstant(transactionLogEntry));
+        assertEquals(submitted, getTransactionInstant(transactionLogEntry));
     }
 
     private void assertPabloVersion(int version) {
@@ -472,10 +472,10 @@ public class TransactionTest {
         }
 
         if (fromDb == null) {
-            Assert.fail();
+            fail();
         }
 
-        Assert.assertEquals(pablo(version), fromDb);
+        assertEquals(pablo(version), fromDb);
     }
 
     private Date time(int timeIndex) {
@@ -503,6 +503,6 @@ public class TransactionTest {
             result = node.db(validTime).entity(pabloId);
         }
 
-        Assert.assertNull(result);
+        assertNull(result);
     }
 }
