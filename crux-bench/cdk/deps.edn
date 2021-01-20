@@ -1,0 +1,6 @@
+{:deps
+ {software.amazon.awscdk/core {:mvn/version "1.84.0"}
+  software.amazon.awscdk/cloudwatch {:mvn/version "1.84.0"}
+  software.amazon.awscdk/cloudwatch-actions {:mvn/version "1.84.0"}
+  software.amazon.awscdk/sns {:mvn/version "1.84.0"}
+  software.amazon.awscdk/sns-subscriptions {:mvn/version "1.84.0"}}}
