@@ -3,15 +3,31 @@
             [clojure.java.io :as io]
             [clojure.instant :as inst]
             [clojure.string :as str])
-  (:import [java.io Closeable File]
+  (:import [clojure.lang Keyword]
+           [java.io Closeable File]
            [java.nio.channels FileChannel]
            [java.nio.file OpenOption StandardOpenOption]
-           [java.util HashMap Map]
+           [java.util Date HashMap Map]
            [java.util.function Function]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector FieldVector Float8Vector VarCharVector ValueVector VectorSchemaRoot]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter JsonFileReader JsonFileWriter]
+           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter]
            [org.apache.arrow.vector.util Text]))
+
+(def device-info-csv-resource
+  (io/resource "devices_small_device_info.csv"))
+
+(def !info-docs
+  (delay
+    (when device-info-csv-resource
+      (with-open [rdr (io/reader device-info-csv-resource)]
+        (vec (for [device-info (line-seq rdr)
+                   :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")]]
+               {:crux.db/id (keyword "device-info" device-id)
+                :device-info/api-version api-version
+                :device-info/manufacturer manufacturer
+                :device-info/model model
+                :device-info/os-name os-name}))))))
 
 (def readings-csv-resource
   (io/resource "devices_small_readings.csv"))
@@ -24,23 +40,22 @@
                 cpu-avg-1min cpu-avg-5min cpu-avg-15min
                 mem-free mem-used rssi ssid]
                (csv/read-csv rdr)]
-           (-> {:time (inst/read-instant-date
-                       (-> time
-                           (str/replace " " "T")
-                           (str/replace #"-(\d\d)$" ".000-$1:00")))
-                :device-id device-id
-                :battery-level (Double/parseDouble battery-level)
-                :battery-status (keyword battery-status)
-                :battery-temperature (Double/parseDouble battery-temperature)
-                :bssid bssid
-                :cpu-avg-1min (Double/parseDouble cpu-avg-1min)
-                :cpu-avg-5min (Double/parseDouble cpu-avg-5min)
-                :cpu-avg-15min (Double/parseDouble cpu-avg-15min)
-                :mem-free (Double/parseDouble mem-free)
-                :mem-used (Double/parseDouble mem-used)
-                :rssi (Double/parseDouble rssi)
-                :ssid ssid}
-               (select-keys [:device-id #_:time #_:bssid :battery-level])))))))
+           {:time (inst/read-instant-date
+                   (-> time
+                       (str/replace " " "T")
+                       (str/replace #"-(\d\d)$" ".000-$1:00")))
+            :device-id device-id
+            :battery-level (Double/parseDouble battery-level)
+            :battery-status (keyword battery-status)
+            :battery-temperature (Double/parseDouble battery-temperature)
+            :bssid bssid
+            :cpu-avg-1min (Double/parseDouble cpu-avg-1min)
+            :cpu-avg-5min (Double/parseDouble cpu-avg-5min)
+            :cpu-avg-15min (Double/parseDouble cpu-avg-15min)
+            :mem-free (Double/parseDouble mem-free)
+            :mem-used (Double/parseDouble mem-used)
+            :rssi (Double/parseDouble rssi)
+            :ssid ssid})))))
 
 (comment
   (defonce foo-rows
@@ -50,13 +65,15 @@
 
 ;; Writer API?
 
-;; TODO
-;; 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
-;;    1m total, 1k per transaction, 10 transactions per block, 10 blocks per chunk, 10 chunks
-;; 1b. writer?
-;; 2. more than one block per chunk - 'seal' a block, starting a new live block
-;; 3. dynamic documents - atm we've hardcoded cols and types
-;; 4. metadata - minmax, bloom at chunk/file and block/record-batch
+;;
+;; DONE 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
+;; TODO 1b. writer?
+;; TODO 2. more than one block per chunk - 'seal' a block, starting a new live block
+;; DONE 3. dynamic documents - atm we've hardcoded cols and types
+;; TODO 3b. union types, or keying the block by the type of the value too
+;; TODO 3c. intermingle devices with readings
+;; TODO 4. metadata - minmax, bloom at chunk/file and block/record-batch
+;; TODO 5. dictionaries
 
 ;; once we've sealed a _chunk_ (/ block?), throw away in-memory? mmap or load
 ;; abstract over this - we don't need to know whether it's mmap'd or in-memory
@@ -74,6 +91,44 @@
 (def max-block-size 10000)
 (def max-blocks-per-chunk 10)
 
+(defprotocol VectorFactory
+  (->vector [_ k ^BufferAllocator allocator]))
+
+(extend-protocol VectorFactory
+  Double
+  (->vector [_ ^String k ^BufferAllocator allocator]
+    (Float8Vector. k allocator))
+
+  String
+  (->vector [_ ^String k ^BufferAllocator allocator]
+    (VarCharVector. k allocator))
+
+  Keyword
+  (->vector [_ ^String k ^BufferAllocator allocator]
+    (VarCharVector. k allocator))
+
+  Date
+  (->vector [_ ^String k ^BufferAllocator allocator]
+    (DateMilliVector. k allocator)))
+
+(defprotocol SetSafe
+  (set-safe! [_ idx v]))
+
+(extend-protocol SetSafe
+  Float8Vector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx ^double v))
+
+  VarCharVector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx (Text. (str v))))
+
+  DateMilliVector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx (.getTime ^Date v))))
+
+(declare close-writers!)
+
 (do
   (deftype Ingester [^BufferAllocator allocator
                      ^File arrow-dir
@@ -82,7 +137,7 @@
                      ^:unsynchronized-mutable ^long chunk-idx]
 
     TransactionIngester
-    (index-tx [this docs]
+    (index-tx [this docs] ; TODO eventually docs :: List<ArrowSomething> rather than List<IPersistentMap>
       (doseq [doc docs]
         (let [key-set (set (keys doc))
 
@@ -91,9 +146,8 @@
                                      key-set
                                      (reify Function
                                        (apply [_ _]
-                                         (let [battery-levels (Float8Vector. "battery-level" allocator)
-                                               device-ids (VarCharVector. "device-id" allocator)
-                                               ^Iterable vecs [battery-levels device-ids]]
+                                         (let [^Iterable vecs (for [[k v] doc]
+                                                                (->vector v (str k) allocator))]
                                            (VectorSchemaRoot. vecs)))))
 
               ^ArrowFileWriter
@@ -108,13 +162,11 @@
                                                        (doto (ArrowFileWriter. root nil file-ch)
                                                          (.start))))))
 
-              row-count (.getRowCount root)
-              ^Float8Vector battery-levels (.getVector root "battery-level")
-              ^VarCharVector device-ids (.getVector root "device-id")]
+              row-count (.getRowCount root)]
 
-          ;; TODO make dynamic (#3)
-          (.setSafe battery-levels row-count ^double (:battery-level doc))
-          (.setSafe device-ids row-count (Text. ^String (:device-id doc)))
+          (doseq [[k v] doc]
+            (set-safe! (.getVector root (str k)) row-count v))
+
           (.setRowCount root (inc row-count))
 
           (when (>= (.getRowCount root) max-block-size)
@@ -125,27 +177,40 @@
 
             (.setRowCount root 0))))
 
+      ;; TODO better metric here?
       (when (>= (->> (vals file-writers)
                      (transduce (map (fn [^ArrowFileWriter file-writer]
                                        (count (.getRecordBlocks file-writer))))
                                 +))
                 max-blocks-per-chunk)
-        (doseq [^ArrowFileWriter file-writer (vals file-writers)]
-          (.close file-writer))
-
-        (.clear file-writers)
+        (close-writers! this)
 
         (set! (.chunk-idx this) (inc chunk-idx))))
 
     Closeable
-    (close [_]
+    (close [this]
       ;; we don't want to close a chunk just because this node's shutting down?
       ;; will make the ingester non-deterministic...
-      (doseq [^ArrowFileWriter file-writer (vals file-writers)]
-        (.close file-writer))
+      (close-writers! this)
 
       (doseq [^VectorSchemaRoot root (vals roots)]
         (.close root))))
+
+  (defn- close-writers! [^Ingester ingester]
+    (let [^Map file-writers (.file-writers ingester)]
+      (doseq [[k ^ArrowFileWriter file-writer] file-writers]
+        (let [^VectorSchemaRoot root (get (.roots ingester) k)]
+          (when (pos? (.getRowCount root))
+            (.writeBatch file-writer)
+
+            (doseq [^FieldVector field-vector (.getFieldVectors root)]
+              (.reset field-vector))
+
+            (.setRowCount root 0)))
+
+        (.close file-writer))
+
+      (.clear file-writers)))
 
   #_
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)
@@ -154,17 +219,21 @@
                                   (HashMap.)
                                   (HashMap.)
                                   0)]
-    (with-readings-docs
-      (fn [readings]
-        (doseq [tx (partition-all 1000 readings)]
-          (index-tx ingester tx))))))
+    (let [info-docs @!info-docs]
+      (with-readings-docs
+        (fn [readings]
+          (doseq [tx (->> (concat (interleave info-docs
+                                              (take (count info-docs) readings))
+                                  (drop (count info-docs) readings))
+                          (partition-all 1000))]
+            (index-tx ingester tx)))))))
 
 (comment
   (with-open []
     (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-                file-ch (FileChannel/open (.toPath (io/file "/tmp/readings.arrow"))
+                file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/chunk-00000000-da8dfa70.arrow"))
                                           (into-array OpenOption #{StandardOpenOption/READ}))
                 file-reader (ArrowFileReader. file-ch allocator)
                 root (.getVectorSchemaRoot file-reader)]
-      (while (.loadNextBatch file-reader)
-        (println (.getRowCount root))))))
+      (.getSchema root)
+      )))
