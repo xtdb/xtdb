@@ -1,7 +1,6 @@
 package crux.api;
 
 import java.util.Date;
-import java.util.Map;
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
@@ -35,10 +34,9 @@ public class HistoryOptions {
     private boolean withCorrections = false;
     private boolean withDocs = false;
     private Date startValidTime = null;
-    private Map<Keyword, ?> startTransaction = null;
+    private TransactionInstant startTransaction = null;
     private Date endValidTime = null;
-
-    private Map<Keyword, ?> endTransaction = null;
+    private TransactionInstant endTransaction = null;
 
     private HistoryOptions(SortOrder sortOrder) {
         this.sortOrder = sortOrder;
@@ -46,13 +44,6 @@ public class HistoryOptions {
 
     public static HistoryOptions create(SortOrder sortOrder) {
         return new HistoryOptions(sortOrder);
-    }
-
-    //TODO: Move these to a better place when making transactions concretely typed
-    private static final Keyword TX_TIME = Keyword.intern("crux.tx/tx-time");
-    @SuppressWarnings("unchecked")
-    private static Map<Keyword, ?> transaction(Date transactionTime) {
-        return (Map<Keyword, ?>) PersistentArrayMap.EMPTY.assoc(TX_TIME, transactionTime);
     }
 
     public HistoryOptions sortOrder(SortOrder sortOrder) {
@@ -97,7 +88,7 @@ public class HistoryOptions {
      *
      * The history response will include entries starting at this transaction (inclusive).
      */
-    public HistoryOptions startTransaction(Map<Keyword, ?> startTransaction) {
+    public HistoryOptions startTransaction(TransactionInstant startTransaction) {
         this.startTransaction = startTransaction;
         return this;
     }
@@ -108,7 +99,7 @@ public class HistoryOptions {
      * The history response will include entries starting at this transaction (inclusive).
      */
     public HistoryOptions startTransactionTime(Date startTransactionTime) {
-        this.startTransaction = transaction(startTransactionTime);
+        this.startTransaction = TransactionInstant.factory(startTransactionTime);
         return this;
     }
 
@@ -127,7 +118,7 @@ public class HistoryOptions {
      *
      * The history response will include entries up to this transaction (exclusive).
      */
-    public HistoryOptions endTransaction(Map<Keyword, ?> endTransaction) {
+    public HistoryOptions endTransaction(TransactionInstant endTransaction) {
         this.endTransaction = endTransaction;
         return this;
     }
@@ -138,7 +129,7 @@ public class HistoryOptions {
      * The history response will include entries up to this transaction (exclusive).
      */
     public HistoryOptions endTransactionTime(Date endTransactionTime) {
-        this.endTransaction = transaction(endTransactionTime);
+        this.endTransaction = TransactionInstant.factory(endTransactionTime);
         return this;
     }
 
@@ -158,7 +149,7 @@ public class HistoryOptions {
         return startValidTime;
     }
 
-    public Map<Keyword, ?> getStartTransaction() {
+    public TransactionInstant getStartTransaction() {
         return startTransaction;
     }
 
@@ -166,7 +157,7 @@ public class HistoryOptions {
         return endValidTime;
     }
 
-    public Map<Keyword, ?> getEndTransaction() {
+    public TransactionInstant getEndTransaction() {
         return endTransaction;
     }
 
@@ -175,13 +166,21 @@ public class HistoryOptions {
     }
 
     public IPersistentMap toMap() {
-        return PersistentArrayMap.EMPTY
+        IPersistentMap ret = PersistentArrayMap.EMPTY
                 .assoc(SORT_ORDER, sortOrder.keyword)
                 .assoc(WITH_CORRECTIONS, withCorrections)
                 .assoc(WITH_DOCS, withDocs)
                 .assoc(START_VALID_TIME, startValidTime)
-                .assoc(START_TX, startTransaction)
-                .assoc(END_VALID_TIME, endValidTime)
-                .assoc(END_TX, endTransaction);
+                .assoc(END_VALID_TIME, endValidTime);
+
+        if (startTransaction != null) {
+            ret = ret.assoc(START_TX, startTransaction.toMap());
+        }
+
+        if (endTransaction != null) {
+            ret = ret.assoc(END_TX, endTransaction.toMap());
+        }
+
+        return ret;
     }
 }

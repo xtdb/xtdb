@@ -6,7 +6,7 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.system :as sys])
-  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource]
+  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource TransactionInstant]
            [java.lang AutoCloseable]
            [java.util Map Date]
            [java.time Duration]
@@ -413,15 +413,15 @@
   (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (open-db node basis)))
   (status [_] (status node))
   (attributeStats [_] (attribute-stats node))
-  (submitTx [_ tx-ops] (submit-tx node tx-ops))
-  (hasTxCommitted [_ transaction] (tx-committed? node transaction))
+  (submitTx [_ tx-ops] (TransactionInstant/factory ^Map (submit-tx node tx-ops)))
+  (hasTxCommitted [_ transaction] (tx-committed? node (.toMap transaction)))
   (openTxLog [_ after-tx-id with-ops?] (open-tx-log node after-tx-id with-ops?))
   (sync [_ timeout] (sync node timeout))
   (awaitTxTime [_ tx-time timeout] (await-tx-time node tx-time timeout))
-  (awaitTx [_ submitted-tx timeout] (await-tx node submitted-tx timeout))
+  (awaitTx [_ submitted-tx timeout] (TransactionInstant/factory ^Map (await-tx node (.toMap submitted-tx) timeout)))
   (listen [_ event-opts consumer] (listen node event-opts #(.accept consumer %)))
-  (latestCompletedTx [_] (latest-completed-tx node))
-  (latestSubmittedTx [_] (latest-submitted-tx node))
+  (latestCompletedTx [_] (TransactionInstant/factory ^Map (latest-completed-tx node)))
+  (latestSubmittedTx [_] (TransactionInstant/factory ^Map (latest-submitted-tx node)))
   (activeQueries [_] (active-queries node))
   (recentQueries [_] (recent-queries node))
   (slowestQueries [_] (slowest-queries node))

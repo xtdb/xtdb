@@ -14,7 +14,7 @@ public class JCruxDatasourceTest {
     private static final Keyword documentId = Keyword.intern("myDoc");
     private static final Keyword versionId = Keyword.intern("version");
     private static List<Map<Keyword, Object>> documents;
-    private static List<Map<Keyword, ?>> transactions;
+    private static List<TransactionInstant> transactions;
 
     private static final Keyword projectId1 = Keyword.intern("project1");
     private static final Keyword projectId2 = Keyword.intern("project2");
@@ -51,8 +51,7 @@ public class JCruxDatasourceTest {
         _projectDocument2.put(barId, 2);
         projectDocument2 = _projectDocument2;
 
-        ArrayList<Map<Keyword, ?>> _transactions = new ArrayList<>();
-
+        ArrayList<TransactionInstant> _transactions = new ArrayList<TransactionInstant>();
 
         put(node, projectDocument1, null, null);
         put(node, projectDocument2, null, null);
@@ -63,7 +62,7 @@ public class JCruxDatasourceTest {
         sleep(20);
         _transactions.add(d(date(-9000), date(-8500)));
         sleep(20);
-        Map<Keyword, ?> last = p(2, date(1000000), null);
+        TransactionInstant last = p(2, date(1000000), null);
         _transactions.add(last);
 
         node.awaitTx(last, Duration.ofSeconds(10));
@@ -108,7 +107,7 @@ public class JCruxDatasourceTest {
     @Test
     public void differentValidTimeDifferentTransactionTime() {
         Date validTime = date(-7500);
-        Date transactionTime = (Date) transactions.get(0).get(TX_TIME);
+        Date transactionTime = transactions.get(0).getTime();
         checkEntity(node.db(validTime, transactionTime), 0);
         checkEntity(node.openDB(validTime, transactionTime), 0);
         HashMap<Keyword, Object> basis = new HashMap<>();
@@ -178,9 +177,9 @@ public class JCruxDatasourceTest {
 
         long txId = (Long) tx.get(TX_ID);
 
-        Map<Keyword, ?> submittedTx = null;
-        for (Map<Keyword, ?> transaction: transactions) {
-            long transactionId = (Long) transaction.get(TX_ID);
+        TransactionInstant submittedTx = null;
+        for (TransactionInstant transaction: transactions) {
+            long transactionId = transaction.getId();
             if (txId == transactionId) {
                 submittedTx = transaction;
             }
@@ -191,7 +190,7 @@ public class JCruxDatasourceTest {
             return;
         }
 
-        Assert.assertEquals((Date) submittedTx.get(TX_TIME), (Date) tx.get(TX_TIME));
+        Assert.assertEquals(submittedTx.getTime(), (Date) tx.get(TX_TIME));
         close(db);
     }
 
@@ -368,7 +367,7 @@ public class JCruxDatasourceTest {
         Assert.assertEquals(getLastTransactionTime(), transactionTime);
 
         long txId = (Long) tx.get(TX_ID);
-        long lastTxId = (Long) last(transactions).get(TX_ID);
+        long lastTxId = last(transactions).getId();
 
         Assert.assertEquals(lastTxId, txId);
 
@@ -379,7 +378,7 @@ public class JCruxDatasourceTest {
     Utils
      */
     private long getLastTransactionTime() {
-        return ((Date) last(transactions).get(TX_TIME)).getTime();
+        return last(transactions).getTime().getTime();
     }
 
     private void checkEntity(ICruxDatasource db, int documentIndex) {
@@ -393,11 +392,11 @@ public class JCruxDatasourceTest {
         close(db);
     }
 
-    private static Map<Keyword, ?> d(Date validTime, Date endValidTime) {
+    private static TransactionInstant d(Date validTime, Date endValidTime) {
         return delete(node, documentId, validTime, endValidTime);
     }
 
-    private static Map<Keyword, ?> p(int documentIndex, Date validTime, Date endValidTime) {
+    private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
         Map<Keyword, Object> document = documents.get(documentIndex);
         return put(node, document, validTime, endValidTime);
     }

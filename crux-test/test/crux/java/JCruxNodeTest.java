@@ -48,16 +48,15 @@ public class JCruxNodeTest {
      */
     @Test
     public void submitTxTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
 
-        Assert.assertEquals(0L, tx.get(TX_ID));
-        Assert.assertNotNull(tx.get(TX_TIME));
-        Assert.assertEquals(2, tx.size());
+        Assert.assertEquals(0L, (long) tx.getId());
+        Assert.assertNotNull(tx.getTime());
     }
 
     @Test
     public void openTxLogTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
         sync();
 
         ICursor<Map<Keyword, ?>> txLog = node.openTxLog(-1L, false);
@@ -65,8 +64,8 @@ public class JCruxNodeTest {
         Map<Keyword, ?> txLogEntry = txLog.next();
         Assert.assertFalse(txLog.hasNext());
 
-        Assert.assertEquals(tx.get(TX_ID), txLogEntry.get(TX_ID));
-        Assert.assertEquals(tx.get(TX_TIME), txLogEntry.get(TX_TIME));
+        Assert.assertEquals(tx.getId(), txLogEntry.get(TX_ID));
+        Assert.assertEquals(tx.getTime(), txLogEntry.get(TX_TIME));
         Assert.assertEquals(3, txLogEntry.size());
 
         @SuppressWarnings("unchecked")
@@ -81,8 +80,8 @@ public class JCruxNodeTest {
         txLogEntry = txLog.next();
         Assert.assertFalse(txLog.hasNext());
 
-        Assert.assertEquals(tx.get(TX_ID), txLogEntry.get(TX_ID));
-        Assert.assertEquals(tx.get(TX_TIME), txLogEntry.get(TX_TIME));
+        Assert.assertEquals(tx.getId(), txLogEntry.get(TX_ID));
+        Assert.assertEquals(tx.getTime(), txLogEntry.get(TX_TIME));
         Assert.assertEquals(3, txLogEntry.size());
 
         assertTxOps((LazySeq) txLogEntry.get(TX_OPS));
@@ -108,13 +107,13 @@ public class JCruxNodeTest {
 
     @Test(expected = NodeOutOfSyncException.class)
     public void hasTxCommittedThrowsTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
         node.hasTxCommitted(tx);
     }
 
     @Test
     public void hasTxCommittedTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
         sync();
         Assert.assertTrue(node.hasTxCommitted(tx));
     }
@@ -129,8 +128,8 @@ public class JCruxNodeTest {
 
     @Test
     public void syncTest() {
-        Map<Keyword,?> tx = put();
-        Date txTime = (Date) tx.get(TX_TIME);
+        TransactionInstant tx = put();
+        Date txTime = tx.getTime();
         Date fromSync = sync();
         Assert.assertEquals(txTime, fromSync);
     }
@@ -140,17 +139,17 @@ public class JCruxNodeTest {
         for (int i=0; i<100; i++) {
             put();
         }
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
 
-        Date txTime = (Date) tx.get(TX_TIME);
+        Date txTime = tx.getTime();
         node.awaitTxTime(txTime, Duration.ZERO);
     }
 
     @Test
     public void awaitTxTimeTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
 
-        Date txTime = (Date) tx.get(TX_TIME);
+        Date txTime = tx.getTime();
         Date past = Date.from(txTime.toInstant().minusMillis(100));
         Date fromAwait = node.awaitTxTime(past, duration);
         Assert.assertEquals(txTime, fromAwait);
@@ -161,13 +160,13 @@ public class JCruxNodeTest {
         for (int i=0; i<100; i++) {
             put();
         }
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
         node.awaitTx(tx, Duration.ZERO);
     }
 
     @Test
     public void awaitTxTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
         node.awaitTx(tx, duration);
     }
 
@@ -177,7 +176,7 @@ public class JCruxNodeTest {
         AutoCloseable listener = node.listen(ICruxAPI.TX_INDEXED_EVENT_OPTS, (Map<Keyword,?> e) -> {
             events[0] = e;
         });
-        Map<Keyword, ?> tx = put();
+        TransactionInstant tx = put();
         sync();
         sleep(100);
         @SuppressWarnings("unchecked")
@@ -186,7 +185,7 @@ public class JCruxNodeTest {
         Assert.assertEquals(5, event.size());
         Assert.assertEquals(Keyword.intern("crux/indexed-tx"), event.get(Keyword.intern("crux/event-type")));
         Assert.assertTrue((Boolean) event.get(Keyword.intern("committed?")));
-        Assert.assertEquals(tx.get(TX_TIME), event.get(TX_TIME));
+        Assert.assertEquals(tx.getTime(), event.get(TX_TIME));
         Assert.assertEquals(0L, event.get(TX_ID));
         assertTxOps((LazySeq) event.get(Keyword.intern("crux/tx-ops")));
 
@@ -207,17 +206,20 @@ public class JCruxNodeTest {
 
     @Test
     public void latestCompletedTxTest() {
-        Map<Keyword,?> tx = put();
+        TransactionInstant tx = put();
         sync();
-        Map<Keyword,?> latest = node.latestCompletedTx();
+        TransactionInstant latest = node.latestCompletedTx();
         Assert.assertEquals(tx, latest);
     }
 
     @Test
     public void latestSubmittedTxTest() {
-        Map<Keyword, ?> tx = put();
-        Map<Keyword,?> latest = node.latestSubmittedTx();
-        Assert.assertEquals(tx.get(TX_ID), latest.get(TX_ID));
+        Assert.assertNull(node.latestSubmittedTx());
+        TransactionInstant tx = put();
+        TransactionInstant latest = node.latestSubmittedTx();
+        //Latest Submitted doesn't give us the TxTime
+        TransactionInstant compare = TransactionInstant.factory(tx.getId());
+        Assert.assertEquals(compare, latest);
     }
 
     @Test
@@ -269,7 +271,7 @@ public class JCruxNodeTest {
         }
     }
 
-    private Map<Keyword, ?> put() {
+    private TransactionInstant put() {
         ArrayList<List<?>> tx = new ArrayList<>();
         ArrayList<Object> txOp = new ArrayList<>();
         txOp.add(PUT);

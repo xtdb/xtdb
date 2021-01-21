@@ -355,16 +355,14 @@
              (api/entity db :foo)))))
 
 (t/deftest test-latest-submitted-tx
-  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)]
-    (t/is (nil? (.latestSubmittedTx jnode)))
-
+    (t/is (nil? (api/latest-submitted-tx *api*)))
     (let [{:keys [crux.tx/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
       (t/is (= {:crux.tx/tx-id tx-id}
-               (.latestSubmittedTx jnode))))
+               (api/latest-submitted-tx *api*))))
 
     (api/sync *api*)
 
-    (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo)))))
+    (t/is (= {:crux.db/id :foo} (api/entity (api/db *api*) :foo))))
 
 (t/deftest test-listen-for-indexed-txs
   (when-not (contains? (set t/*testing-contexts*) (str :remote))

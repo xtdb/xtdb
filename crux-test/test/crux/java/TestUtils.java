@@ -50,13 +50,13 @@ class TestUtils {
         return now.getTime() - date.getTime();
     }
 
-    static Map<Keyword, ?> tx(ICruxAPI node, List<?> txOp) {
+    static TransactionInstant tx(ICruxAPI node, List<?> txOp) {
         ArrayList<List<?>> toSubmit = new ArrayList<>();
         toSubmit.add(txOp);
         return node.submitTx((List<List<?>>) toSubmit);
     }
 
-    static Map<Keyword, ?> put(ICruxAPI node, Map<Keyword, ?> document, Date validTime, Date endValidTime) {
+    static TransactionInstant put(ICruxAPI node, Map<Keyword, ?> document, Date validTime, Date endValidTime) {
         List<Object> txOp;
         if (endValidTime != null) {
             txOp = listOf(PUT, document, validTime, endValidTime);
@@ -71,7 +71,7 @@ class TestUtils {
         return tx(node, txOp);
     }
 
-    static Map<Keyword, ?> delete(ICruxAPI node, Object documentId, Date validTime, Date endValidTime) {
+    static TransactionInstant delete(ICruxAPI node, Object documentId, Date validTime, Date endValidTime) {
         List<Object> txOp;
         if (endValidTime != null) {
             txOp = listOf(DELETE, documentId, validTime, endValidTime);
