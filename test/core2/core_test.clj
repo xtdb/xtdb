@@ -5,8 +5,10 @@
             [clojure.string :as str])
   (:import [java.io Closeable File]
            [java.nio.channels FileChannel]
-           [java.nio.file Path OpenOption StandardOpenOption]
-           org.apache.arrow.memory.RootAllocator
+           [java.nio.file OpenOption StandardOpenOption]
+           [java.util HashMap Map]
+           [java.util.function Function]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FieldVector Float8Vector VarCharVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter JsonFileReader JsonFileWriter]
            [org.apache.arrow.vector.util Text]))
@@ -73,65 +75,85 @@
 (def max-blocks-per-chunk 10)
 
 (do
-  (deftype Ingester [^File arrow-dir
-                     ^VectorSchemaRoot live-block
-                     ^:unsynchronized-mutable ^long chunk-idx
-                     ^:unsynchronized-mutable ^ArrowFileWriter live-file-writer]
+  (deftype Ingester [^BufferAllocator allocator
+                     ^File arrow-dir
+                     ^Map roots ; (hash keys) -> VectorSchemaRoot
+                     ^Map file-writers ; (hash keys) -> ArrowFileWriter
+                     ^:unsynchronized-mutable ^long chunk-idx]
 
     TransactionIngester
     (index-tx [this docs]
-      (when-not live-file-writer
-        (let [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x.arrow" chunk-idx)))
-                                        (into-array OpenOption #{StandardOpenOption/CREATE
-                                                                 StandardOpenOption/WRITE
-                                                                 StandardOpenOption/TRUNCATE_EXISTING}))]
-          (set! (.live-file-writer this)
-                (doto (ArrowFileWriter. live-block nil file-ch)
-                  (.start)))))
+      (doseq [doc docs]
+        (let [key-set (set (keys doc))
 
-      (let [row-count (.getRowCount live-block)
-            ^Float8Vector battery-levels (.getVector live-block "battery-level")
-            ^VarCharVector device-ids (.getVector live-block "device-id")]
+              ^VectorSchemaRoot
+              root (.computeIfAbsent roots
+                                     key-set
+                                     (reify Function
+                                       (apply [_ _]
+                                         (let [battery-levels (Float8Vector. "battery-level" allocator)
+                                               device-ids (VarCharVector. "device-id" allocator)
+                                               ^Iterable vecs [battery-levels device-ids]]
+                                           (VectorSchemaRoot. vecs)))))
 
-        (doseq [[^int idx {:keys [^double battery-level ^String device-id]}] (map vector (range row-count (+ row-count (count docs))) docs)]
+              ^ArrowFileWriter
+              live-file-writer (.computeIfAbsent file-writers
+                                                 key-set
+                                                 (reify Function
+                                                   (apply [_ _]
+                                                     (let [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%08x.arrow" chunk-idx (hash key-set))))
+                                                                                     (into-array OpenOption #{StandardOpenOption/CREATE
+                                                                                                              StandardOpenOption/WRITE
+                                                                                                              StandardOpenOption/TRUNCATE_EXISTING}))]
+                                                       (doto (ArrowFileWriter. root nil file-ch)
+                                                         (.start))))))
+
+              row-count (.getRowCount root)
+              ^Float8Vector battery-levels (.getVector root "battery-level")
+              ^VarCharVector device-ids (.getVector root "device-id")]
+
           ;; TODO make dynamic (#3)
-          (.setSafe battery-levels idx battery-level)
-          (.setSafe device-ids idx (Text. device-id)))
+          (.setSafe battery-levels row-count ^double (:battery-level doc))
+          (.setSafe device-ids row-count (Text. ^String (:device-id doc)))
+          (.setRowCount root (inc row-count))
 
-        (let [row-count (+ row-count (count docs))]
-          (.setRowCount live-block row-count)
-
-          (when (>= row-count max-block-size)
+          (when (>= (.getRowCount root) max-block-size)
             (.writeBatch live-file-writer)
 
-            (doseq [^FieldVector field-vector (.getFieldVectors live-block)]
+            (doseq [^FieldVector field-vector (.getFieldVectors root)]
               (.reset field-vector))
 
-            (.setRowCount live-block 0)
+            (.setRowCount root 0))))
 
-            (when (>= (count (.getRecordBlocks live-file-writer)) max-blocks-per-chunk)
-              (.close live-file-writer)
-              (set! (.live-file-writer this) nil)
-              (set! (.chunk-idx this) (inc chunk-idx)))))))
+      (when (>= (->> (vals file-writers)
+                     (transduce (map (fn [^ArrowFileWriter file-writer]
+                                       (count (.getRecordBlocks file-writer))))
+                                +))
+                max-blocks-per-chunk)
+        (doseq [^ArrowFileWriter file-writer (vals file-writers)]
+          (.close file-writer))
+
+        (.clear file-writers)
+
+        (set! (.chunk-idx this) (inc chunk-idx))))
 
     Closeable
     (close [_]
       ;; we don't want to close a chunk just because this node's shutting down?
       ;; will make the ingester non-deterministic...
-      (when live-file-writer
-        (.close live-file-writer))))
+      (doseq [^ArrowFileWriter file-writer (vals file-writers)]
+        (.close file-writer))
+
+      (doseq [^VectorSchemaRoot root (vals roots)]
+        (.close root))))
 
   #_
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-              battery-levels (Float8Vector. "battery-level" allocator)
-              device-ids (VarCharVector. "device-id" allocator)
-              root (let [^Iterable vecs [battery-levels device-ids]]
-                     (VectorSchemaRoot. vecs))
-
-              ingester (Ingester. (io/file "/tmp/arrow")
-                                  root
-                                  0
-                                  nil)]
+              ingester (Ingester. allocator
+                                  (io/file "/tmp/arrow")
+                                  (HashMap.)
+                                  (HashMap.)
+                                  0)]
     (with-readings-docs
       (fn [readings]
         (doseq [tx (partition-all 1000 readings)]
