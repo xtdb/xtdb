@@ -43,43 +43,64 @@
   (defonce foo-rows
     (with-readings-docs
       (fn [rows]
-        (doall (take 10 rows)))))
+        (doall (take 10 rows))))))
 
-  ;; Writer API?
-  ;; IPC API
+;; Writer API?
 
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+;; TODO
+;; let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
+;; 1m total, 1k per transaction, 10 transactions per block, 10 blocks per chunk, 10 chunks
+;; more than one block per chunk - 'seal' a block, starting a new live block
+;; dynamic documents - atm we've hardcoded cols and types
+;; metadata - minmax, bloom at chunk/file and block/record-batch
+
+;; once we've sealed a _chunk_ (/ block?), throw away in-memory? mmap or load
+;; abstract over this - we don't need to know whether it's mmap'd or in-memory
+
+;; reading a block before it's sealed?
+;; theory: if we're only appending, we should be ok?
+
+;; two different cases:
+;; live chunk, reading sealed block (maybe) written to disk
+;; live chunk, reading unsealed block in memory
+
+(comment
+  (with-readings-docs
+    (fn [readings]
+      (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+        (with-open [battery-levels (Float8Vector. "battery-level" allocator)
+                    device-ids (VarCharVector. "device-id" allocator)
+                    root (let [^Iterable vecs [battery-levels device-ids]]
+                           (VectorSchemaRoot. vecs))]
 
 
-    (with-open [battery-levels (Float8Vector. "battery-level" allocator)
-                device-ids (VarCharVector. "device-id" allocator)
-                root (let [^Iterable vecs [battery-levels device-ids]]
-                       (VectorSchemaRoot. vecs))
-                file-ch (FileChannel/open (.toPath (io/file "/tmp/foo.arrow"))
-                                          (into-array OpenOption #{StandardOpenOption/CREATE
-                                                                   StandardOpenOption/WRITE
-                                                                   StandardOpenOption/TRUNCATE_EXISTING}))
-                arrow-file-writer (ArrowFileWriter. root nil file-ch)
-                json-file-writer (JsonFileWriter. (io/file "/tmp/foo.json"))]
+          (doseq [[chunk-idx chunk-readings] (map-indexed vector (partition-all 100000 readings))]
+            (with-open [file-ch (FileChannel/open (.toPath (io/file (format "/tmp/arrow/readings-%d.arrow" chunk-idx)))
+                                                  (into-array OpenOption #{StandardOpenOption/CREATE
+                                                                           StandardOpenOption/WRITE
+                                                                           StandardOpenOption/TRUNCATE_EXISTING}))
+                        arrow-file-writer (ArrowFileWriter. root nil file-ch)]
+              (.start arrow-file-writer)
 
-      (.start arrow-file-writer)
-      (.start json-file-writer (.getSchema root) nil)
+              (doseq [block-readings (partition-all 10000 chunk-readings)]
+                (.reset battery-levels)
+                (.reset device-ids)
 
-      (doseq [[^int idx {:keys [^double battery-level ^String device-id]}] (map-indexed vector foo-rows)]
-        (.setSafe battery-levels idx battery-level)
-        (.setSafe device-ids idx (Text. device-id)))
+                (doseq [[^int idx {:keys [^double battery-level ^String device-id]}] (map-indexed vector block-readings)]
+                  (.setSafe battery-levels idx battery-level)
+                  (.setSafe device-ids idx (Text. device-id)))
 
-      (.setRowCount root (count foo-rows))
+                (.setRowCount root (count block-readings))
 
-      (.writeBatch arrow-file-writer)
-      (.end arrow-file-writer)
+                (.writeBatch arrow-file-writer))
 
-      (.write json-file-writer root))
+              (.end arrow-file-writer))))
 
-    (with-open [file-ch (FileChannel/open (.toPath (io/file "/tmp/foo.arrow"))
-                                          (into-array OpenOption #{StandardOpenOption/READ}))
-                file-reader (ArrowFileReader. file-ch allocator)
-                root (.getVectorSchemaRoot file-reader)]
-      (while (.loadNextBatch file-reader)
-        (println (.contentToTSVString root))))
-    ))
+        #_
+        (with-open [file-ch (FileChannel/open (.toPath (io/file "/tmp/readings.arrow"))
+                                              (into-array OpenOption #{StandardOpenOption/READ}))
+                    file-reader (ArrowFileReader. file-ch allocator)
+                    root (.getVectorSchemaRoot file-reader)]
+          (while (.loadNextBatch file-reader)
+            (println (.getRowCount root))))
+        ))))
