@@ -10,8 +10,9 @@
            [java.util Date HashMap Map]
            [java.util.function Function]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorSchemaRoot]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter]
+           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ReadChannel]
+           [org.apache.arrow.vector.ipc.message ArrowBlock MessageSerializer]
            [org.apache.arrow.vector.util Text]))
 
 (def device-info-csv-resource
@@ -65,15 +66,25 @@
 
 ;; Writer API?
 
-;;
 ;; DONE 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
 ;; TODO 1b. writer?
-;; TODO 2. more than one block per chunk - 'seal' a block, starting a new live block
+;; DONE 2. more than one block per chunk - 'seal' a block, starting a new live block
 ;; DONE 3. dynamic documents - atm we've hardcoded cols and types
 ;; TODO 3b. union types, or keying the block by the type of the value too
-;; TODO 3c. intermingle devices with readings
+;; DONE 3c. intermingle devices with readings
 ;; TODO 4. metadata - minmax, bloom at chunk/file and block/record-batch
 ;; TODO 5. dictionaries
+;; TODO 6. consider eviction
+;; TODO 7. reading any blocks - select battery_level from db
+;; TODO 8. reading live blocks
+;; DONE 8a. reading chunks already written to disk
+;; DONE 8b. reading blocks already written to disk
+;; TODO 8c. reading current block not yet written to disk
+
+;; directions?
+;; 1. e2e? submit-tx + some code-level queries
+;;    transactions, evictions, timelines, etc.
+;; 2. quickly into JMH, experimentation
 
 ;; once we've sealed a _chunk_ (/ block?), throw away in-memory? mmap or load
 ;; abstract over this - we don't need to know whether it's mmap'd or in-memory
@@ -215,7 +226,7 @@
   #_
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)
               ingester (Ingester. allocator
-                                  (io/file "/tmp/arrow")
+                                  (doto (io/file "/tmp/arrow") .mkdirs)
                                   (HashMap.)
                                   (HashMap.)
                                   0)]
@@ -225,15 +236,47 @@
           (doseq [tx (->> (concat (interleave info-docs
                                               (take (count info-docs) readings))
                                   (drop (count info-docs) readings))
+                          (take 12234)
                           (partition-all 1000))]
-            (index-tx ingester tx)))))))
+            (index-tx ingester tx)))))
+
+    (let [key-set #{:cpu-avg-15min :device-id :rssi :cpu-avg-5min :battery-status :ssid :time :battery-level :bssid :battery-temperature :cpu-avg-1min :mem-free :mem-used}
+          live-root (-> ^Map (.roots ingester)
+                        ^VectorSchemaRoot (.get key-set))]
+      [(.refCnt (.getDataBuffer (.getVector live-root ":cpu-avg-15min")))
+       (.memoryAddress (.getDataBuffer (.getVector live-root ":cpu-avg-15min")))
+       (with-open [live-root-slice (.slice live-root 0 (/ (.getRowCount live-root) 2))]
+         [(.refCnt (.getDataBuffer (.getVector live-root-slice ":cpu-avg-15min")))
+          (.memoryAddress (.getDataBuffer (.getVector live-root-slice ":cpu-avg-15min")))])]
+
+      #_(with-open [file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/chunk-00000001-da8dfa70.arrow"))
+                                            (into-array OpenOption #{StandardOpenOption/READ}))
+                  read-ch (ReadChannel. file-ch)]
+
+        (.position file-ch 8)
+
+        (let [schema (MessageSerializer/deserializeSchema read-ch)]
+          (with-open [read-root (VectorSchemaRoot/create schema allocator)]
+            (let [loader (VectorLoader. read-root)
+
+                  ^ArrowBlock
+                  block (-> ^Map (.file-writers ingester)
+                            ^ArrowFileWriter
+                            (.get key-set)
+                            (.getRecordBlocks)
+                            first)]
+
+              (.position file-ch (.getOffset block))
+
+              (with-open [record-batch (MessageSerializer/deserializeRecordBatch read-ch block allocator)]
+                (.load loader record-batch)
+                (.get ^Float8Vector (.getVector read-root ":battery-level") 0)))))))
+    ))
 
 (comment
-  (with-open []
-    (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-                file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/chunk-00000000-da8dfa70.arrow"))
-                                          (into-array OpenOption #{StandardOpenOption/READ}))
-                file-reader (ArrowFileReader. file-ch allocator)
-                root (.getVectorSchemaRoot file-reader)]
-      (.getSchema root)
-      )))
+  (with-open [allocator (RootAllocator. Long/MAX_VALUE)
+              file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/chunk-00000001-da8dfa70.arrow"))
+                                        (into-array OpenOption #{StandardOpenOption/READ}))
+              file-reader (ArrowFileReader. file-ch allocator)
+              root (.getVectorSchemaRoot file-reader)]
+    ))
