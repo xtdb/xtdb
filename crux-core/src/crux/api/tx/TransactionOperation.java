@@ -8,7 +8,8 @@ public abstract class TransactionOperation {
         PUT("crux.tx/put"),
         DELETE("crux.tx/delete"),
         EVICT("crux.tx/evict"),
-        MATCH("crux.tx/match");
+        MATCH("crux.tx/match"),
+        FN("crux.tx/fn");
 
         private final Keyword keyword;
 

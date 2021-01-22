@@ -82,6 +82,10 @@ public final class Transaction {
             return add(MatchOperation.create(document, validTime));
         }
 
+        public final Builder function(Object id, Object... arguments) {
+            return add(FunctionOperation.create(id, arguments));
+        }
+
         public Transaction build() {
             return new Transaction(operations);
         }

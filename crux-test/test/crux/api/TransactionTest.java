@@ -1,5 +1,6 @@
 package crux.api;
 
+import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
 
 import java.time.Instant;
@@ -18,9 +19,9 @@ public class TransactionTest {
         private final String id;
         private final String name;
         private final String lastName;
-        private final int version;
+        private final long version;
 
-        private PersonDocument(String id, String name, String lastName, int version) {
+        private PersonDocument(String id, String name, String lastName, long version) {
             this.id = id;
             this.name = name;
             this.lastName = lastName;
@@ -81,6 +82,7 @@ public class TransactionTest {
         pablos = null;
     }
 
+    /*
     @Test
     public void putNow() {
         submitTx(false, tx -> {
@@ -421,6 +423,70 @@ public class TransactionTest {
         assertNoPablo(3);
         assertNoPablo(4);
         assertNoPablo();
+    }
+
+    */
+
+    @Test
+    public void transactionFunctionNoArgs() {
+        AbstractCruxDocument function = new AbstractCruxDocument() {
+            @Override
+            public Object getId() {
+                return "incVersion";
+            }
+
+            @Override
+            public Map<Keyword, Object> getData() {
+                HashMap<Keyword, Object> ret = new HashMap<>();
+                ret.put(Keyword.intern("crux.db/fn"),
+                        Clojure.read("(fn [ctx] (let [db (crux.api/db ctx) entity (crux.api/entity db \"PabloPicasso\")] [[:crux.tx/put (update entity :person/version inc)]]))"));
+                return ret;
+            }
+        };
+
+        submitTx(false, tx -> {
+            tx.put(pablo(0));
+            tx.put(function);
+        });
+
+        assertPabloVersion(0);
+
+        submitTx(false, tx -> {
+            tx.function("incVersion");
+        });
+
+        assertPabloVersion(1);
+    }
+
+    @Test
+    public void transactionFunctionArgs() {
+        AbstractCruxDocument function = new AbstractCruxDocument() {
+            @Override
+            public Object getId() {
+                return "incVersion";
+            }
+
+            @Override
+            public Map<Keyword, Object> getData() {
+                HashMap<Keyword, Object> ret = new HashMap<>();
+                ret.put(Keyword.intern("crux.db/fn"),
+                        Clojure.read("(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:crux.tx/put (update entity :person/version inc)]]))"));
+                return ret;
+            }
+        };
+
+        submitTx(false, tx -> {
+            tx.put(pablo(0));
+            tx.put(function);
+        });
+
+        assertPabloVersion(0);
+
+        submitTx(false, tx -> {
+            tx.function("incVersion", pabloId);
+        });
+
+        assertPabloVersion(1);
     }
 
     private void submitTx(boolean shouldAbort, Consumer<Transaction.Builder> f) {

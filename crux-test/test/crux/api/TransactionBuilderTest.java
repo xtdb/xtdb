@@ -12,6 +12,7 @@ import org.junit.Test;
 
 import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
+import static crux.api.tx.Transaction.buildTx;
 
 public class TransactionBuilderTest {
     /**
@@ -40,7 +41,7 @@ public class TransactionBuilderTest {
                 .put(document)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.put(document);
         });
 
@@ -53,7 +54,7 @@ public class TransactionBuilderTest {
                 .put(document, validTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.put(document, validTime);
         });
 
@@ -66,7 +67,7 @@ public class TransactionBuilderTest {
                 .put(document, validTime, endValidTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.put(document, validTime, endValidTime);
         });
 
@@ -79,7 +80,7 @@ public class TransactionBuilderTest {
                 .delete(documentId)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.delete(documentId);
         });
 
@@ -92,7 +93,7 @@ public class TransactionBuilderTest {
                 .delete(documentId, validTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.delete(documentId, validTime);
         });
 
@@ -105,7 +106,7 @@ public class TransactionBuilderTest {
                 .delete(documentId, validTime, endValidTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.delete(documentId, validTime, endValidTime);
         });
 
@@ -118,7 +119,7 @@ public class TransactionBuilderTest {
                 .match(document)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.match(document);
         });
 
@@ -131,7 +132,7 @@ public class TransactionBuilderTest {
                 .match(document, validTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.match(document, validTime);
         });
 
@@ -144,7 +145,7 @@ public class TransactionBuilderTest {
                 .matchNotExists(documentId)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.matchNotExists(documentId);
         });
 
@@ -157,7 +158,7 @@ public class TransactionBuilderTest {
                 .matchNotExists(documentId, validTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.matchNotExists(documentId, validTime);
         });
 
@@ -170,8 +171,34 @@ public class TransactionBuilderTest {
                 .evict(documentId)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.evict(documentId);
+        });
+
+        assertEquals(direct, indirect);
+    }
+
+    @Test
+    public void functionNoArgs() {
+        Transaction direct = Transaction.builder()
+                .function(documentId)
+                .build();
+
+        Transaction indirect = buildTx(tx -> {
+            tx.function(documentId);
+        });
+
+        assertEquals(direct, indirect);
+    }
+
+    @Test
+    public void functionWithArgs() {
+        Transaction direct = Transaction.builder()
+                .function(documentId, "foo", 1, 3)
+                .build();
+
+        Transaction indirect = buildTx(tx -> {
+            tx.function(documentId, "foo", 1, 3);
         });
 
         assertEquals(direct, indirect);
@@ -185,7 +212,7 @@ public class TransactionBuilderTest {
                 .delete(document, validTime, endValidTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.put(document);
             tx.put(document, validTime);
             tx.delete(document, validTime, endValidTime);
@@ -202,7 +229,7 @@ public class TransactionBuilderTest {
                 .delete(document, validTime, endValidTime)
                 .build();
 
-        Transaction indirect = Transaction.buildTx(tx -> {
+        Transaction indirect = buildTx(tx -> {
             tx.put(document);
             tx.delete(document, validTime, endValidTime);
             tx.put(document, validTime);
