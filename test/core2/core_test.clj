@@ -13,6 +13,8 @@
            [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter JsonFileReader JsonFileWriter JsonFileWriter$JSONWriteConfig ReadChannel]
            [org.apache.arrow.vector.ipc.message ArrowBlock MessageSerializer]
+           [org.apache.arrow.vector.types Types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo Field]
            [org.apache.arrow.vector.util Text]))
 
 (def device-info-csv-resource
@@ -75,11 +77,11 @@
 ;; TODO 4. metadata - minmax, bloom at chunk/file and block/record-batch
 ;; TODO 5. dictionaries
 ;; TODO 6. consider eviction
-;; TODO 7. reading any blocks - select battery_level from db
-;; TODO 8. reading live blocks
+;; TODO 7. reading any blocks - select battery_level from db (simple code-level query)
+;; DONE 8. reading live blocks
 ;; DONE 8a. reading chunks already written to disk
 ;; DONE 8b. reading blocks already written to disk
-;; TODO 8c. reading current block not yet written to disk
+;; DONE 8c. reading current block not yet written to disk
 
 ;; directions?
 ;; 1. e2e? submit-tx + some code-level queries
@@ -102,25 +104,11 @@
 (def max-block-size 10000)
 (def max-blocks-per-chunk 10)
 
-(defprotocol VectorFactory
-  (->vector [_ k ^BufferAllocator allocator]))
-
-(extend-protocol VectorFactory
-  Double
-  (->vector [_ ^String k ^BufferAllocator allocator]
-    (Float8Vector. k allocator))
-
-  String
-  (->vector [_ ^String k ^BufferAllocator allocator]
-    (VarCharVector. k allocator))
-
-  Keyword
-  (->vector [_ ^String k ^BufferAllocator allocator]
-    (VarCharVector. k allocator))
-
-  Date
-  (->vector [_ ^String k ^BufferAllocator allocator]
-    (DateMilliVector. k allocator)))
+(def ->arrow-type
+  {Double (.getType Types$MinorType/FLOAT8)
+   String (.getType Types$MinorType/VARCHAR)
+   Keyword (.getType Types$MinorType/VARCHAR)
+   Date (.getType Types$MinorType/DATEMILLI)})
 
 (defprotocol SetSafe
   (set-safe! [_ idx v]))
@@ -150,23 +138,22 @@
     TransactionIngester
     (index-tx [this docs] ; TODO eventually docs :: List<ArrowSomething> rather than List<IPersistentMap>
       (doseq [doc docs]
-        (let [key-set (set (keys doc))
+        (let [schema (Schema. (for [[k v] (sort-by key doc)]
+                                (Field/nullable (str k) (->arrow-type (type v)))))
 
               ^VectorSchemaRoot
               root (.computeIfAbsent roots
-                                     key-set
+                                     schema
                                      (reify Function
                                        (apply [_ _]
-                                         (let [^Iterable vecs (for [[k v] doc]
-                                                                (->vector v (str k) allocator))]
-                                           (VectorSchemaRoot. vecs)))))
+                                         (VectorSchemaRoot/create schema allocator))))
 
               ^ArrowFileWriter
               live-file-writer (.computeIfAbsent file-writers
-                                                 key-set
+                                                 schema
                                                  (reify Function
                                                    (apply [_ _]
-                                                     (let [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%08x.arrow" chunk-idx (hash key-set))))
+                                                     (let [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%08x.arrow" chunk-idx (hash schema))))
                                                                                      (into-array OpenOption #{StandardOpenOption/CREATE
                                                                                                               StandardOpenOption/WRITE
                                                                                                               StandardOpenOption/TRUNCATE_EXISTING}))]
@@ -230,16 +217,17 @@
                                   (HashMap.)
                                   (HashMap.)
                                   0)]
+
     (let [info-docs @!info-docs]
       (with-readings-docs
         (fn [readings]
           (doseq [tx (->> (concat (interleave info-docs
                                               (take (count info-docs) readings))
                                   (drop (count info-docs) readings))
-                          (take 12234)
                           (partition-all 1000))]
             (index-tx ingester tx)))))
 
+    #_
     (let [key-set #{:cpu-avg-15min :device-id :rssi :cpu-avg-5min :battery-status :ssid :time :battery-level :bssid :battery-temperature :cpu-avg-1min :mem-free :mem-used}
           live-root (-> ^Map (.roots ingester)
                         ^VectorSchemaRoot (.get key-set))]
