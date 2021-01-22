@@ -21,13 +21,6 @@ public final class EvictOperation extends TransactionOperation {
     }
 
     @Override
-    public final IPersistentVector toVector() {
-        return PersistentVector.EMPTY
-                .cons(Type.EVICT.getKeyword())
-                .cons(id);
-    }
-
-    @Override
     public final Type getType() {
         return Type.EVICT;
     }

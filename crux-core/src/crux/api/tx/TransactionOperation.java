@@ -1,6 +1,5 @@
 package crux.api.tx;
 
-import clojure.lang.IPersistentVector;
 import clojure.lang.Keyword;
 
 public abstract class TransactionOperation {
@@ -30,7 +29,6 @@ public abstract class TransactionOperation {
         void visit(FunctionOperation operation);
     }
 
-    public abstract IPersistentVector toVector();
     public abstract Type getType();
     public abstract void accept(Visitor visitor);
 }

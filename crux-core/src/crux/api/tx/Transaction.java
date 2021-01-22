@@ -91,14 +91,109 @@ public final class Transaction {
         }
     }
 
-    public final IPersistentVector toVector() {
-        return PersistentVector.create(
-                operations.stream().map(TransactionOperation::toVector)
-                        .collect(Collectors.toList())
-        );
+    private static class EdnVisitor implements TransactionOperation.Visitor {
+        private IPersistentVector vector = PersistentVector.EMPTY;
+
+        private void add(IPersistentVector toAdd) {
+            vector = vector.cons(toAdd);
+        }
+
+        @Override
+        public void visit(PutOperation operation) {
+            IPersistentVector toAdd = PersistentVector.EMPTY
+                    .cons(TransactionOperation.Type.PUT.getKeyword())
+                    .cons(operation.getDocument().toMap());
+
+            Date startValidTime = operation.getStartValidTime();
+            if (startValidTime == null) {
+                add(toAdd);
+                return;
+            }
+
+            toAdd = toAdd.cons(startValidTime);
+
+            Date endValidTime = operation.getEndValidTime();
+            if (endValidTime == null) {
+                add(toAdd);
+                return;
+            }
+            add(toAdd.cons(endValidTime));
+        }
+
+        @Override
+        public void visit(DeleteOperation operation) {
+            IPersistentVector toAdd = PersistentVector.EMPTY
+                    .cons(TransactionOperation.Type.DELETE.getKeyword())
+                    .cons(operation.getId());
+
+            Date startValidTime = operation.getStartValidTime();
+            if (startValidTime == null) {
+                add(toAdd);
+                return;
+            }
+
+            toAdd = toAdd.cons(startValidTime);
+
+            Date endValidTime = operation.getEndValidTime();
+            if (endValidTime == null) {
+                add(toAdd);
+                return;
+            }
+            add(toAdd.cons(endValidTime));
+        }
+
+        @Override
+        public void visit(EvictOperation operation) {
+            IPersistentVector toAdd = PersistentVector.EMPTY
+                    .cons(TransactionOperation.Type.EVICT.getKeyword())
+                    .cons(operation.getId());
+            add(toAdd);
+        }
+
+        @Override
+        public void visit(MatchOperation operation) {
+            IPersistentVector toAdd = PersistentVector.EMPTY
+                    .cons(TransactionOperation.Type.MATCH.getKeyword())
+                    .cons(operation.getId());
+
+            CruxDocument compare = operation.getCompare();
+            if (compare == null) {
+                toAdd = toAdd.cons(null);
+            }
+            else {
+                toAdd = toAdd.cons(compare.toMap());
+            }
+
+            Date validTime = operation.getValidTime();
+            if (validTime == null) {
+                add(toAdd);
+                return;
+            }
+
+            add(toAdd.cons(validTime));
+        }
+
+        @Override
+        public void visit(FunctionOperation operation) {
+            IPersistentVector toAdd = PersistentVector.EMPTY
+                    .cons(TransactionOperation.Type.FN.getKeyword())
+                    .cons(operation.getId());
+
+            for (Object argument: operation.getArguments()) {
+                toAdd = toAdd.cons(argument);
+            }
+
+            add(toAdd);
+        }
     }
 
-    public void visit(TransactionOperation.Visitor visitor) {
+    public final IPersistentVector toVector() {
+        EdnVisitor visitor = new EdnVisitor();
+        accept(visitor);
+        return visitor.vector;
+    }
+
+    public void accept(TransactionOperation.Visitor visitor) {
         for (TransactionOperation operation: operations) {
             operation.accept(visitor);
         }

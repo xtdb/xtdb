@@ -1,7 +1,5 @@
 package crux.api.tx;
 
-import clojure.lang.IPersistentVector;
-import clojure.lang.PersistentVector;
 import crux.api.CruxDocument;
 
 import java.util.Date;
@@ -40,17 +38,6 @@ public final class PutOperation extends TransactionOperation {
         this.document = document;
         this.startValidTime = startValidTime;
         this.endValidTime = endValidTime;
-    }
-
-    @Override
-    public final IPersistentVector toVector() {
-        IPersistentVector ret = PersistentVector.EMPTY
-                .cons(Type.PUT.getKeyword())
-                .cons(document.toMap());
-        if (startValidTime == null) return ret;
-        ret = ret.cons(startValidTime);
-        if (endValidTime == null) return ret;
-        return ret.cons(endValidTime);
     }
 
     @Override

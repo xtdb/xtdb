@@ -1,8 +1,5 @@
 package crux.api.tx;
 
-import clojure.lang.IPersistentVector;
-import clojure.lang.PersistentVector;
-
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -25,17 +22,6 @@ public final class FunctionOperation extends TransactionOperation {
     private FunctionOperation(Object id, Object[] arguments) {
         this.id = id;
         this.arguments = arguments;
-    }
-
-    @Override
-    public IPersistentVector toVector() {
-        IPersistentVector ret = PersistentVector.EMPTY
-                .cons(Type.FN.getKeyword())
-                .cons(id);
-        for (Object argument: arguments) {
-            ret = ret.cons(argument);
-        }
-        return ret;
     }
 
     @Override

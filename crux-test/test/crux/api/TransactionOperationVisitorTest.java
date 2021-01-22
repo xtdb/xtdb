@@ -72,7 +72,7 @@ public class TransactionOperationVisitorTest {
            tx.put(document);
         });
 
-        transaction.visit(visitor);
+        transaction.accept(visitor);
 
         assertEquals(document, visitor.get());
     }
@@ -90,7 +90,7 @@ public class TransactionOperationVisitorTest {
             tx.delete("foo");
         });
 
-        transaction.visit(visitor);
+        transaction.accept(visitor);
 
         assertEquals("foo", visitor.get());
     }
@@ -108,7 +108,7 @@ public class TransactionOperationVisitorTest {
             tx.evict("foo");
         });
 
-        transaction.visit(visitor);
+        transaction.accept(visitor);
 
         assertEquals("foo", visitor.get());
     }
@@ -126,7 +126,7 @@ public class TransactionOperationVisitorTest {
             tx.match(document);
         });
 
-        transaction.visit(visitor);
+        transaction.accept(visitor);
 
         assertEquals(document, visitor.get());
     }
@@ -144,7 +144,7 @@ public class TransactionOperationVisitorTest {
             tx.function("foo");
         });
 
-        transaction.visit(visitor);
+        transaction.accept(visitor);
 
         assertEquals("foo", visitor.get());
     }
@@ -157,6 +157,6 @@ public class TransactionOperationVisitorTest {
             tx.put(document);
         });
 
-        transaction.visit(visitor);
+        transaction.accept(visitor);
     }
 }

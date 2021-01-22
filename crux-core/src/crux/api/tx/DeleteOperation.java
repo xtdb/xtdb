@@ -1,8 +1,5 @@
 package crux.api.tx;
 
-import clojure.lang.IPersistentVector;
-import clojure.lang.PersistentVector;
-
 import java.util.Date;
 import java.util.Objects;
 
@@ -39,17 +36,6 @@ public final class DeleteOperation extends TransactionOperation {
         this.id = id;
         this.startValidTime = startValidTime;
         this.endValidTime = endValidTime;
-    }
-
-    @Override
-    public final IPersistentVector toVector() {
-        IPersistentVector ret = PersistentVector.EMPTY
-                .cons(Type.DELETE.getKeyword())
-                .cons(id);
-        if (startValidTime == null) return ret;
-        ret = ret.cons(startValidTime);
-        if (endValidTime == null) return ret;
-        return ret.cons(endValidTime);
     }
 
     @Override
