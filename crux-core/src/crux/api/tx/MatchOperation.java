@@ -7,28 +7,28 @@ import crux.api.AbstractCruxDocument;
 import java.util.Date;
 import java.util.Objects;
 
-public final class MatchTransactionOperation extends TransactionOperation {
-    public static MatchTransactionOperation factory(Object id) {
-        return new MatchTransactionOperation(id, null, null);
+public final class MatchOperation extends TransactionOperation {
+    public static MatchOperation create(Object id) {
+        return new MatchOperation(id, null, null);
     }
 
-    public static MatchTransactionOperation factory(Object id, Date validTime) {
-        return new MatchTransactionOperation(id, null, validTime);
+    public static MatchOperation create(Object id, Date validTime) {
+        return new MatchOperation(id, null, validTime);
     }
 
-    public static MatchTransactionOperation factory(AbstractCruxDocument document) {
-        return new MatchTransactionOperation(document.getId(), document, null);
+    public static MatchOperation create(AbstractCruxDocument document) {
+        return new MatchOperation(document.getId(), document, null);
     }
 
-    public static MatchTransactionOperation factory(AbstractCruxDocument document, Date validTime) {
-        return new MatchTransactionOperation(document.getId(), document, validTime);
+    public static MatchOperation create(AbstractCruxDocument document, Date validTime) {
+        return new MatchOperation(document.getId(), document, validTime);
     }
 
     private final Object id;
     private final AbstractCruxDocument compare;
     private final Date validTime;
 
-    private MatchTransactionOperation(Object id, AbstractCruxDocument compare, Date validTime) {
+    private MatchOperation(Object id, AbstractCruxDocument compare, Date validTime) {
         this.id = id;
         this.compare = compare;
         this.validTime = validTime;
@@ -60,7 +60,7 @@ public final class MatchTransactionOperation extends TransactionOperation {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        MatchTransactionOperation that = (MatchTransactionOperation) o;
+        MatchOperation that = (MatchOperation) o;
         return id.equals(that.id)
                 && Objects.equals(compare, that.compare)
                 && Objects.equals(validTime, that.validTime);

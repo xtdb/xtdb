@@ -86,13 +86,13 @@ class TestUtils {
     static TransactionInstant put(ICruxAPI node, AbstractCruxDocument document, Date validTime, Date endValidTime) {
         TransactionOperation txOp;
         if (endValidTime != null) {
-            txOp = PutTransactionOperation.factory(document, validTime, endValidTime);
+            txOp = PutOperation.create(document, validTime, endValidTime);
         }
         else if (validTime != null) {
-            txOp = PutTransactionOperation.factory(document, validTime);
+            txOp = PutOperation.create(document, validTime);
         }
         else {
-            txOp = PutTransactionOperation.factory(document);
+            txOp = PutOperation.create(document);
         }
 
         return tx(node, txOp);
@@ -101,13 +101,13 @@ class TestUtils {
     static TransactionInstant delete(ICruxAPI node, Object documentId, Date validTime, Date endValidTime) {
         TransactionOperation txOp;
         if (endValidTime != null) {
-            txOp = DeleteTransactionOperation.factory(documentId, validTime, endValidTime);
+            txOp = DeleteOperation.create(documentId, validTime, endValidTime);
         }
         else if (validTime != null) {
-            txOp = DeleteTransactionOperation.factory(documentId, validTime);
+            txOp = DeleteOperation.create(documentId, validTime);
         }
         else {
-            txOp = DeleteTransactionOperation.factory(documentId);
+            txOp = DeleteOperation.create(documentId);
         }
 
         return tx(node, txOp);

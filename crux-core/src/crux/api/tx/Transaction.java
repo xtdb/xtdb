@@ -39,47 +39,47 @@ public final class Transaction {
         }
 
         public final Builder put(AbstractCruxDocument document) {
-            return add(PutTransactionOperation.factory(document));
+            return add(PutOperation.create(document));
         }
 
         public final Builder put(AbstractCruxDocument document, Date validTime) {
-            return add(PutTransactionOperation.factory(document, validTime));
+            return add(PutOperation.create(document, validTime));
         }
 
         public final Builder put(AbstractCruxDocument document, Date validTime, Date endValidTime) {
-            return add(PutTransactionOperation.factory(document, validTime, endValidTime));
+            return add(PutOperation.create(document, validTime, endValidTime));
         }
 
         public final Builder delete(Object id) {
-            return add(DeleteTransactionOperation.factory(id));
+            return add(DeleteOperation.create(id));
         }
 
         public final Builder delete(Object id, Date validTime) {
-            return add(DeleteTransactionOperation.factory(id, validTime));
+            return add(DeleteOperation.create(id, validTime));
         }
 
         public final Builder delete(Object id, Date validTime, Date endValidTime) {
-            return add(DeleteTransactionOperation.factory(id, validTime, endValidTime));
+            return add(DeleteOperation.create(id, validTime, endValidTime));
         }
 
         public final Builder evict(Object id) {
-            return add(EvictTransactionOperation.factory(id));
+            return add(EvictOperation.create(id));
         }
 
         public final Builder matchNotExists(Object id) {
-            return add(MatchTransactionOperation.factory(id));
+            return add(MatchOperation.create(id));
         }
 
         public final Builder match(AbstractCruxDocument document) {
-            return add(MatchTransactionOperation.factory(document));
+            return add(MatchOperation.create(document));
         }
 
         public final Builder matchNotExists(Object id, Date validTime) {
-            return add(MatchTransactionOperation.factory(id, validTime));
+            return add(MatchOperation.create(id, validTime));
         }
 
         public final Builder match(AbstractCruxDocument document, Date validTime) {
-            return add(MatchTransactionOperation.factory(document, validTime));
+            return add(MatchOperation.create(document, validTime));
         }
 
         public Transaction build() {

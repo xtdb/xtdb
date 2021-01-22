@@ -5,14 +5,14 @@ import clojure.lang.PersistentVector;
 
 import java.util.Objects;
 
-public final class EvictTransactionOperation extends TransactionOperation {
-    public static EvictTransactionOperation factory(Object id) {
-        return new EvictTransactionOperation(id);
+public final class EvictOperation extends TransactionOperation {
+    public static EvictOperation create(Object id) {
+        return new EvictOperation(id);
     }
 
     private final Object id;
 
-    private EvictTransactionOperation(Object id) {
+    private EvictOperation(Object id) {
         this.id = id;
     }
 
@@ -32,7 +32,7 @@ public final class EvictTransactionOperation extends TransactionOperation {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        EvictTransactionOperation that = (EvictTransactionOperation) o;
+        EvictOperation that = (EvictOperation) o;
         return id.equals(that.id);
     }
 

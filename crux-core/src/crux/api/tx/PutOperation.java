@@ -7,26 +7,26 @@ import crux.api.AbstractCruxDocument;
 import java.util.Date;
 import java.util.Objects;
 
-public final class PutTransactionOperation extends TransactionOperation {
-    public static PutTransactionOperation factory(AbstractCruxDocument document) {
-        return new PutTransactionOperation(document, null, null);
+public final class PutOperation extends TransactionOperation {
+    public static PutOperation create(AbstractCruxDocument document) {
+        return new PutOperation(document, null, null);
     }
 
-    public static PutTransactionOperation factory(AbstractCruxDocument document, Date validTime) {
-        return new PutTransactionOperation(document, validTime, null);
+    public static PutOperation create(AbstractCruxDocument document, Date startValidTime) {
+        return new PutOperation(document, startValidTime, null);
     }
 
-    public static PutTransactionOperation factory(AbstractCruxDocument document, Date validTime, Date endValidTime) {
-        return new PutTransactionOperation(document, validTime, endValidTime);
+    public static PutOperation create(AbstractCruxDocument document, Date startValidTime, Date endValidTime) {
+        return new PutOperation(document, startValidTime, endValidTime);
     }
 
     private final AbstractCruxDocument document;
-    private final Date validTime;
+    private final Date startValidTime;
     private final Date endValidTime;
 
-    private PutTransactionOperation(AbstractCruxDocument document, Date validTime, Date endValidTime) {
+    private PutOperation(AbstractCruxDocument document, Date startValidTime, Date endValidTime) {
         this.document = document;
-        this.validTime = validTime;
+        this.startValidTime = startValidTime;
         this.endValidTime = endValidTime;
     }
 
@@ -35,8 +35,8 @@ public final class PutTransactionOperation extends TransactionOperation {
         IPersistentVector ret = PersistentVector.EMPTY
                 .cons(Type.PUT.getKeyword())
                 .cons(document.toMap());
-        if (validTime == null) return ret;
-        ret = ret.cons(validTime);
+        if (startValidTime == null) return ret;
+        ret = ret.cons(startValidTime);
         if (endValidTime == null) return ret;
         return ret.cons(endValidTime);
     }
@@ -50,14 +50,14 @@ public final class PutTransactionOperation extends TransactionOperation {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        PutTransactionOperation that = (PutTransactionOperation) o;
+        PutOperation that = (PutOperation) o;
         return document.equals(that.document)
-                && Objects.equals(validTime, that.validTime)
+                && Objects.equals(startValidTime, that.startValidTime)
                 && Objects.equals(endValidTime, that.endValidTime);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.PUT, document, validTime, endValidTime);
+        return Objects.hash(Type.PUT, document, startValidTime, endValidTime);
     }
 }

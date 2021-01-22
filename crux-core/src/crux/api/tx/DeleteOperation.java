@@ -6,26 +6,26 @@ import clojure.lang.PersistentVector;
 import java.util.Date;
 import java.util.Objects;
 
-public final class DeleteTransactionOperation extends TransactionOperation {
-    public static DeleteTransactionOperation factory(Object id) {
-        return new DeleteTransactionOperation(id, null, null);
+public final class DeleteOperation extends TransactionOperation {
+    public static DeleteOperation create(Object id) {
+        return new DeleteOperation(id, null, null);
     }
 
-    public static DeleteTransactionOperation factory(Object id, Date validTime) {
-        return new DeleteTransactionOperation(id, validTime, null);
+    public static DeleteOperation create(Object id, Date startValidTime) {
+        return new DeleteOperation(id, startValidTime, null);
     }
 
-    public static DeleteTransactionOperation factory(Object id, Date validTime, Date endValidTime) {
-        return new DeleteTransactionOperation(id, validTime, endValidTime);
+    public static DeleteOperation create(Object id, Date startValidTime, Date endValidTime) {
+        return new DeleteOperation(id, startValidTime, endValidTime);
     }
 
     private final Object id;
-    private final Date validTime;
+    private final Date startValidTime;
     private final Date endValidTime;
 
-    private DeleteTransactionOperation(Object id, Date validTime, Date endValidTime) {
+    private DeleteOperation(Object id, Date startValidTime, Date endValidTime) {
         this.id = id;
-        this.validTime = validTime;
+        this.startValidTime = startValidTime;
         this.endValidTime = endValidTime;
     }
 
@@ -34,8 +34,8 @@ public final class DeleteTransactionOperation extends TransactionOperation {
         IPersistentVector ret = PersistentVector.EMPTY
                 .cons(Type.DELETE.getKeyword())
                 .cons(id);
-        if (validTime == null) return ret;
-        ret = ret.cons(validTime);
+        if (startValidTime == null) return ret;
+        ret = ret.cons(startValidTime);
         if (endValidTime == null) return ret;
         return ret.cons(endValidTime);
     }
@@ -49,14 +49,14 @@ public final class DeleteTransactionOperation extends TransactionOperation {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        DeleteTransactionOperation that = (DeleteTransactionOperation) o;
+        DeleteOperation that = (DeleteOperation) o;
         return id.equals(that.id)
-                && Objects.equals(validTime, that.validTime)
+                && Objects.equals(startValidTime, that.startValidTime)
                 && Objects.equals(endValidTime, that.endValidTime);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.DELETE, id, validTime, endValidTime);
+        return Objects.hash(Type.DELETE, id, startValidTime, endValidTime);
     }
 }
