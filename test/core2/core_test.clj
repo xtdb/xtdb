@@ -11,7 +11,7 @@
            [java.util.function Function]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ReadChannel]
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter JsonFileReader JsonFileWriter JsonFileWriter$JSONWriteConfig ReadChannel]
            [org.apache.arrow.vector.ipc.message ArrowBlock MessageSerializer]
            [org.apache.arrow.vector.util Text]))
 
@@ -274,9 +274,15 @@
     ))
 
 (comment
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-              file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/chunk-00000001-da8dfa70.arrow"))
-                                        (into-array OpenOption #{StandardOpenOption/READ}))
-              file-reader (ArrowFileReader. file-ch allocator)
-              root (.getVectorSchemaRoot file-reader)]
-    ))
+  ;; converting Arrow to JSON
+  (let [file-name "chunk-00000000-ba085ddb"]
+    (with-open [allocator (RootAllocator. Long/MAX_VALUE)
+                file-ch (FileChannel/open (.toPath (io/file (format "/tmp/arrow/%s.arrow" file-name)))
+                                          (into-array OpenOption #{StandardOpenOption/READ}))
+                file-reader (ArrowFileReader. file-ch allocator)
+                file-writer (JsonFileWriter. (io/file (format "/tmp/arrow/%s.json" file-name))
+                                             (.. (JsonFileWriter/config) (pretty true)))]
+      (let [root (.getVectorSchemaRoot file-reader)]
+        (.start file-writer (.getSchema root) nil)
+        (while (.loadNextBatch file-reader)
+          (.write file-writer root))))))
