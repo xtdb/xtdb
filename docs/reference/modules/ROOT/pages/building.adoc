@@ -11,11 +11,11 @@
 
 === `crux-in-memory`
 
-Crux's in-memory artifacts start up a basic, in-memory Crux node, with an HTTP server.
+The `crux-in-memory` artifact starts up a basic, in-memory Crux node, with both a HTTP Server _(open on port 3000)_ and the xref:sql.adoc[Crux SQL] module with a SQL server _(open on port 1501)_.
 
-They can be downloaded:
+It can be downloaded:
 
-* as a Docker image from https://hub.docker.com/r/juxt/[JUXT's Docker Hub]
+* as a Docker image from https://hub.docker.com/repository/docker/juxt/crux-in-memory[JUXT's Docker Hub]
 * as an uberjar, `crux-in-memory.jar`, from the relevant https://github.com/juxt/crux/releases[GitHub release]
 
 Communication with the node is done via the Crux REST API - see the xref:http.adoc[HTTP docs] for more information.
