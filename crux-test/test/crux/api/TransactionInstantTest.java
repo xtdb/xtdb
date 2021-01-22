@@ -100,7 +100,7 @@ public class TransactionInstantTest {
     @Test
     public void foo() {
         try (ICruxAPI node = Crux.startNode()) {
-            AbstractCruxDocument document = CruxDocument.create("foo");
+            CruxDocument document = CruxDocument.create("foo");
             TransactionInstant transactionInstant = node.submitTx(Transaction.buildTx(tx -> {
                 tx.put(document);
             }));

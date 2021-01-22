@@ -1,7 +1,7 @@
 package crux.api.alpha;
 
 import clojure.lang.Symbol;
-import crux.api.AbstractCruxDocument;
+import crux.api.CruxDocument;
 import crux.api.ICruxAPI;
 import crux.api.ICruxDatasource;
 
@@ -50,7 +50,7 @@ public class Database {
      * @param id Id of entity to retrieve
      * @return Document representing the entity
      */
-    public AbstractCruxDocument entity(CruxId id) {
+    public CruxDocument entity(CruxId id) {
         return db.entity(id.toEdn());
     }
 }

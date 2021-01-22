@@ -2,7 +2,7 @@ package crux.api.tx;
 
 import clojure.lang.IPersistentVector;
 import clojure.lang.PersistentVector;
-import crux.api.AbstractCruxDocument;
+import crux.api.CruxDocument;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -38,15 +38,15 @@ public final class Transaction {
             return this;
         }
 
-        public final Builder put(AbstractCruxDocument document) {
+        public final Builder put(CruxDocument document) {
             return add(PutOperation.create(document));
         }
 
-        public final Builder put(AbstractCruxDocument document, Date validTime) {
+        public final Builder put(CruxDocument document, Date validTime) {
             return add(PutOperation.create(document, validTime));
         }
 
-        public final Builder put(AbstractCruxDocument document, Date validTime, Date endValidTime) {
+        public final Builder put(CruxDocument document, Date validTime, Date endValidTime) {
             return add(PutOperation.create(document, validTime, endValidTime));
         }
 
@@ -70,7 +70,7 @@ public final class Transaction {
             return add(MatchOperation.create(id));
         }
 
-        public final Builder match(AbstractCruxDocument document) {
+        public final Builder match(CruxDocument document) {
             return add(MatchOperation.create(document));
         }
 
@@ -78,7 +78,7 @@ public final class Transaction {
             return add(MatchOperation.create(id, validTime));
         }
 
-        public final Builder match(AbstractCruxDocument document, Date validTime) {
+        public final Builder match(CruxDocument document, Date validTime) {
             return add(MatchOperation.create(document, validTime));
         }
 

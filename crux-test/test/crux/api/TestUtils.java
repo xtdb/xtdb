@@ -30,26 +30,12 @@ class TestUtils {
 
     static final Date now = new Date();
 
-    static class TestDocument extends AbstractCruxDocument {
-        static final Keyword documentId = Keyword.intern("myDoc");
-        static final Keyword versionId = Keyword.intern("version");
-        private final int version;
+    static final String documentId = "myDoc";
+    static final String versionId = "version";
 
-        TestDocument(int version) {
-            this.version = version;
-        }
-
-        @Override
-        public Object getId() {
-            return documentId;
-        }
-
-        @Override
-        public Map<Keyword, Object> getData() {
-            HashMap<Keyword, Object> ret = new HashMap<>();
-            ret.put(versionId, version);
-            return ret;
-        }
+    static CruxDocument testDocument(int version) {
+        CruxDocument document = CruxDocument.create(documentId);
+        return document.put(versionId, version);
     }
 
     static void sleep(long millis) {
@@ -83,7 +69,7 @@ class TestUtils {
         return tx(node, transaction);
     }
 
-    static TransactionInstant put(ICruxAPI node, AbstractCruxDocument document, Date validTime, Date endValidTime) {
+    static TransactionInstant put(ICruxAPI node, CruxDocument document, Date validTime, Date endValidTime) {
         TransactionOperation txOp;
         if (endValidTime != null) {
             txOp = PutOperation.create(document, validTime, endValidTime);

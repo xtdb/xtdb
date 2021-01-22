@@ -11,43 +11,14 @@ import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
 
 public class JCruxDatasourceTest {
-    private static List<TestDocument> documents;
+    private static List<CruxDocument> documents;
     private static List<TransactionInstant> transactions;
 
     private static final Keyword projectId1 = Keyword.intern("project1");
     private static final Keyword projectId2 = Keyword.intern("project2");
-    private static final Keyword fooId = Keyword.intern("foo");
-    private static final Keyword barId = Keyword.intern("bar");
 
-    private static final AbstractCruxDocument projectDocument1 = new AbstractCruxDocument() {
-        @Override
-        public Object getId() {
-            return projectId1;
-        }
-
-        @Override
-        public Map<Keyword, Object> getData() {
-            HashMap<Keyword, Object> ret = new HashMap<>();
-            ret.put(fooId, "foo");
-            ret.put(barId, 1);
-            return ret;
-        }
-    };
-
-    private static final AbstractCruxDocument projectDocument2 = new AbstractCruxDocument() {
-        @Override
-        public Object getId() {
-            return projectId2;
-        }
-
-        @Override
-        public Map<Keyword, Object> getData() {
-            HashMap<Keyword, Object> ret = new HashMap<>();
-            ret.put(fooId, "bar");
-            ret.put(barId, 2);
-            return ret;
-        }
-    };
+    private static final CruxDocument projectDocument1 = CruxDocument.create(projectId1).put("foo", "foo").put("bar", 1);
+    private static final CruxDocument projectDocument2 = CruxDocument.create(projectId2).put("foo", "bar").put("bar", 2);
 
     private static ICruxAPI node;
 
@@ -55,9 +26,9 @@ public class JCruxDatasourceTest {
     public static void beforeClass() {
         node = Crux.startNode();
 
-        ArrayList<TestDocument> _documents = new ArrayList<>();
+        ArrayList<CruxDocument> _documents = new ArrayList<>();
         for (int i=0; i<3; i++) {
-            _documents.add(new TestDocument(i));
+            _documents.add(testDocument(i));
         }
         documents = _documents;
 
@@ -181,7 +152,7 @@ public class JCruxDatasourceTest {
     @Test
     public void entityTxTest() {
         ICruxDatasource db = node.db();
-        Map<Keyword,?> tx = db.entityTx(TestDocument.documentId);
+        Map<Keyword,?> tx = db.entityTx(documentId);
 
         assertHasKeys(tx, DB_ID, CONTENT_HASH, VALID_TIME, TX_TIME, TX_ID);
 
@@ -254,8 +225,8 @@ public class JCruxDatasourceTest {
         if (resultRaw.isPresent()) {
             List<?> result = resultRaw.get();
             assertEquals(1, result.size());
-            Keyword id = (Keyword) result.get(0);
-            assertEquals(TestDocument.documentId, id);
+            String id = (String) result.get(0);
+            assertEquals(documentId, id);
         }
         else {
             fail();
@@ -280,8 +251,8 @@ public class JCruxDatasourceTest {
         close(results);
 
         assertEquals(1, result.size());
-        Keyword id = (Keyword) result.get(0);
-        assertEquals(TestDocument.documentId, id);
+        String id = (String) result.get(0);
+        assertEquals(documentId, id);
 
         results = db.openQuery(query, 1);
         assertFalse(results.hasNext());
@@ -293,8 +264,8 @@ public class JCruxDatasourceTest {
     @Test
     public void entityHistoryTest() {
         ICruxDatasource db = node.db();
-        List<Map<Keyword, ?>> history = db.entityHistory(TestDocument.documentId, HistoryOptions.SortOrder.ASC);
-        ICursor<Map<Keyword, ?>> openHistory = db.openEntityHistory(TestDocument.documentId, HistoryOptions.SortOrder.ASC);
+        List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC);
+        ICursor<Map<Keyword, ?>> openHistory = db.openEntityHistory(documentId, HistoryOptions.SortOrder.ASC);
 
         long time = -1;
         for (Map<Keyword, ?> fromHistory: history) {
@@ -392,7 +363,7 @@ public class JCruxDatasourceTest {
     }
 
     private void checkEntity(ICruxDatasource db, int documentIndex) {
-        AbstractCruxDocument document = db.entity(TestDocument.documentId);
+        CruxDocument document = db.entity(documentId);
         if (documentIndex >= 0) {
             assertEquals(documents.get(documentIndex), document);
         }
@@ -403,11 +374,11 @@ public class JCruxDatasourceTest {
     }
 
     private static TransactionInstant d(Date validTime, Date endValidTime) {
-        return delete(node, TestDocument.documentId, validTime, endValidTime);
+        return delete(node, documentId, validTime, endValidTime);
     }
 
     private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
-        AbstractCruxDocument document = documents.get(documentIndex);
+        CruxDocument document = documents.get(documentIndex);
         return put(node, document, validTime, endValidTime);
     }
 }

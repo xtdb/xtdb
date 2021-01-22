@@ -20,19 +20,7 @@ public class TransactionBuilderTest {
      * as well as ensuring the .equals method behaves as intended.
      */
     private final static Object documentId = "foo";
-    private final static AbstractCruxDocument document = new AbstractCruxDocument() {
-        @Override
-        public Object getId() {
-            return documentId;
-        }
-
-        @Override
-        public Map<Keyword, Object> getData() {
-            HashMap<Keyword, Object> ret = new HashMap<Keyword, Object>();
-            ret.put(Keyword.intern("bar"), "baz");
-            return ret;
-        }
-    };
+    private final static CruxDocument document = CruxDocument.create(documentId).put("bar", "baz");
     private final static Date validTime = now;
     private final static Date endValidTime = date(500);
     @Test

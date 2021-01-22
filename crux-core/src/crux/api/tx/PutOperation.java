@@ -2,25 +2,25 @@ package crux.api.tx;
 
 import clojure.lang.IPersistentVector;
 import clojure.lang.PersistentVector;
-import crux.api.AbstractCruxDocument;
+import crux.api.CruxDocument;
 
 import java.util.Date;
 import java.util.Objects;
 
 public final class PutOperation extends TransactionOperation {
-    public static PutOperation create(AbstractCruxDocument document) {
+    public static PutOperation create(CruxDocument document) {
         return new PutOperation(document, null, null);
     }
 
-    public static PutOperation create(AbstractCruxDocument document, Date startValidTime) {
+    public static PutOperation create(CruxDocument document, Date startValidTime) {
         return new PutOperation(document, startValidTime, null);
     }
 
-    public static PutOperation create(AbstractCruxDocument document, Date startValidTime, Date endValidTime) {
+    public static PutOperation create(CruxDocument document, Date startValidTime, Date endValidTime) {
         return new PutOperation(document, startValidTime, endValidTime);
     }
 
-    public AbstractCruxDocument getDocument() {
+    public CruxDocument getDocument() {
         return document;
     }
 
@@ -32,11 +32,11 @@ public final class PutOperation extends TransactionOperation {
         return endValidTime;
     }
 
-    private final AbstractCruxDocument document;
+    private final CruxDocument document;
     private final Date startValidTime;
     private final Date endValidTime;
 
-    private PutOperation(AbstractCruxDocument document, Date startValidTime, Date endValidTime) {
+    private PutOperation(CruxDocument document, Date startValidTime, Date endValidTime) {
         this.document = document;
         this.startValidTime = startValidTime;
         this.endValidTime = endValidTime;

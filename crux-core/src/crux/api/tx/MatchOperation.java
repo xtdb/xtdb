@@ -2,7 +2,7 @@ package crux.api.tx;
 
 import clojure.lang.IPersistentVector;
 import clojure.lang.PersistentVector;
-import crux.api.AbstractCruxDocument;
+import crux.api.CruxDocument;
 
 import java.util.Date;
 import java.util.Objects;
@@ -16,11 +16,11 @@ public final class MatchOperation extends TransactionOperation {
         return new MatchOperation(id, null, validTime);
     }
 
-    public static MatchOperation create(AbstractCruxDocument document) {
+    public static MatchOperation create(CruxDocument document) {
         return new MatchOperation(document.getId(), document, null);
     }
 
-    public static MatchOperation create(AbstractCruxDocument document, Date validTime) {
+    public static MatchOperation create(CruxDocument document, Date validTime) {
         return new MatchOperation(document.getId(), document, validTime);
     }
 
@@ -28,7 +28,7 @@ public final class MatchOperation extends TransactionOperation {
         return id;
     }
 
-    public AbstractCruxDocument getCompare() {
+    public CruxDocument getCompare() {
         return compare;
     }
 
@@ -37,10 +37,10 @@ public final class MatchOperation extends TransactionOperation {
     }
 
     private final Object id;
-    private final AbstractCruxDocument compare;
+    private final CruxDocument compare;
     private final Date validTime;
 
-    private MatchOperation(Object id, AbstractCruxDocument compare, Date validTime) {
+    private MatchOperation(Object id, CruxDocument compare, Date validTime) {
         this.id = id;
         this.compare = compare;
         this.validTime = validTime;

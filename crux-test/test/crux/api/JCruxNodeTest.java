@@ -16,7 +16,7 @@ import static org.junit.Assert.*;
 public class JCruxNodeTest {
     private static final Keyword versionId = Keyword.intern("version");
     private static Map<Keyword, Object> config;
-    private static final TestDocument document = new TestDocument(0);
+    private static final CruxDocument document = testDocument(0);
     private static final Transaction putTransaction = Transaction.buildTx(tx -> {
        tx.put(document);
     });

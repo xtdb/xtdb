@@ -15,51 +15,25 @@ import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
 
 public class TransactionTest {
-    private static class PersonDocument extends AbstractCruxDocument {
-        private final String id;
-        private final String name;
-        private final String lastName;
-        private final long version;
-
-        private PersonDocument(String id, String name, String lastName, long version) {
-            this.id = id;
-            this.name = name;
-            this.lastName = lastName;
-            this.version = version;
-        }
-
-        @Override
-        public Object getId() {
-            return id;
-        }
-
-        @Override
-        public Map<Keyword, Object> getData() {
-            HashMap<Keyword, Object> ret = new HashMap<>();
-            ret.put(Keyword.intern("person/name"), name);
-            ret.put(Keyword.intern("person/lastName"), lastName);
-            ret.put(Keyword.intern("person/version"), version);
-            return ret;
-        }
+    private static CruxDocument personDocument(String id, String name, String lastName, long version) {
+        return CruxDocument.create(id).put("person/name", name).put("person/lastName", lastName).put("person/version", version);
     }
 
     private static final String pabloId = "PabloPicasso";
     private static List<Date> times;
-    private static List<PersonDocument> pablos;
+    private static List<CruxDocument> pablos;
     private static ICruxAPI node = null;
 
     @BeforeClass
     public static void beforeClass() {
         ArrayList<Date> _times = new ArrayList<>();
-        ArrayList<PersonDocument> _pablos = new ArrayList<>();
+        ArrayList<CruxDocument> _pablos = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             //The few hours after Y2K
             long seconds = 946684800 + i * 3600;
             Date time = Date.from(Instant.ofEpochSecond(seconds));
             _times.add(time);
-
-            PersonDocument pablo = new PersonDocument(pabloId, "Pablo", "Picasso", i);
-            _pablos.add(pablo);
+            _pablos.add(personDocument(pabloId, "Pablo", "Picasso", i));
         }
         times = _times;
         pablos = _pablos;
@@ -82,7 +56,6 @@ public class TransactionTest {
         pablos = null;
     }
 
-    /*
     @Test
     public void putNow() {
         submitTx(false, tx -> {
@@ -425,24 +398,9 @@ public class TransactionTest {
         assertNoPablo();
     }
 
-    */
-
     @Test
     public void transactionFunctionNoArgs() {
-        AbstractCruxDocument function = new AbstractCruxDocument() {
-            @Override
-            public Object getId() {
-                return "incVersion";
-            }
-
-            @Override
-            public Map<Keyword, Object> getData() {
-                HashMap<Keyword, Object> ret = new HashMap<>();
-                ret.put(Keyword.intern("crux.db/fn"),
-                        Clojure.read("(fn [ctx] (let [db (crux.api/db ctx) entity (crux.api/entity db \"PabloPicasso\")] [[:crux.tx/put (update entity :person/version inc)]]))"));
-                return ret;
-            }
-        };
+        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx] (let [db (crux.api/db ctx) entity (crux.api/entity db \"PabloPicasso\")] [[:crux.tx/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));
@@ -460,20 +418,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionArgs() {
-        AbstractCruxDocument function = new AbstractCruxDocument() {
-            @Override
-            public Object getId() {
-                return "incVersion";
-            }
-
-            @Override
-            public Map<Keyword, Object> getData() {
-                HashMap<Keyword, Object> ret = new HashMap<>();
-                ret.put(Keyword.intern("crux.db/fn"),
-                        Clojure.read("(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:crux.tx/put (update entity :person/version inc)]]))"));
-                return ret;
-            }
-        };
+        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:crux.tx/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));
@@ -529,7 +474,7 @@ public class TransactionTest {
     }
 
     private void assertPabloVersion(int version, Date validTime) {
-        AbstractCruxDocument fromDb;
+        CruxDocument fromDb;
         if (validTime == null) {
             fromDb = node.db().entity(pabloId);
         }
@@ -548,7 +493,7 @@ public class TransactionTest {
         return times.get(timeIndex);
     }
 
-    private PersonDocument pablo(int version) {
+    private CruxDocument pablo(int version) {
         return pablos.get(version);
     }
 
