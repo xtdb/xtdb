@@ -24,6 +24,18 @@ public final class MatchOperation extends TransactionOperation {
         return new MatchOperation(document.getId(), document, validTime);
     }
 
+    public Object getId() {
+        return id;
+    }
+
+    public AbstractCruxDocument getCompare() {
+        return compare;
+    }
+
+    public Date getValidTime() {
+        return validTime;
+    }
+
     private final Object id;
     private final AbstractCruxDocument compare;
     private final Date validTime;
@@ -54,6 +66,11 @@ public final class MatchOperation extends TransactionOperation {
     @Override
     public final Type getType() {
         return Type.MATCH;
+    }
+
+    @Override
+    public void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     @Override

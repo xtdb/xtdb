@@ -10,6 +10,14 @@ public final class FunctionOperation extends TransactionOperation {
     private final Object id;
     private final Object[] arguments;
 
+    public Object getId() {
+        return id;
+    }
+
+    public Object[] getArguments() {
+        return arguments;
+    }
+
     public static FunctionOperation create(Object id, Object... arguments) {
         return new FunctionOperation(id, arguments);
     }
@@ -33,6 +41,11 @@ public final class FunctionOperation extends TransactionOperation {
     @Override
     public Type getType() {
         return Type.FN;
+    }
+
+    @Override
+    public void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     @Override

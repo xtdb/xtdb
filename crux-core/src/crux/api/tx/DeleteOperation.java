@@ -19,6 +19,18 @@ public final class DeleteOperation extends TransactionOperation {
         return new DeleteOperation(id, startValidTime, endValidTime);
     }
 
+    public Object getId() {
+        return id;
+    }
+
+    public Date getStartValidTime() {
+        return startValidTime;
+    }
+
+    public Date getEndValidTime() {
+        return endValidTime;
+    }
+
     private final Object id;
     private final Date startValidTime;
     private final Date endValidTime;
@@ -43,6 +55,11 @@ public final class DeleteOperation extends TransactionOperation {
     @Override
     public final Type getType() {
         return Type.DELETE;
+    }
+
+    @Override
+    public void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     @Override

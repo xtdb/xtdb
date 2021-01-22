@@ -10,6 +10,10 @@ public final class EvictOperation extends TransactionOperation {
         return new EvictOperation(id);
     }
 
+    public Object getId() {
+        return id;
+    }
+
     private final Object id;
 
     private EvictOperation(Object id) {
@@ -26,6 +30,11 @@ public final class EvictOperation extends TransactionOperation {
     @Override
     public final Type getType() {
         return Type.EVICT;
+    }
+
+    @Override
+    public void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     @Override

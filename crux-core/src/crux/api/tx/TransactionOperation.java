@@ -22,6 +22,15 @@ public abstract class TransactionOperation {
         }
     }
 
+    public interface Visitor {
+        void visit(PutOperation operation);
+        void visit(DeleteOperation operation);
+        void visit(EvictOperation operation);
+        void visit(MatchOperation operation);
+        void visit(FunctionOperation operation);
+    }
+
     public abstract IPersistentVector toVector();
     public abstract Type getType();
+    public abstract void accept(Visitor visitor);
 }

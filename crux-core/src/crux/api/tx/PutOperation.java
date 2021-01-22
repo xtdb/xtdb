@@ -20,6 +20,18 @@ public final class PutOperation extends TransactionOperation {
         return new PutOperation(document, startValidTime, endValidTime);
     }
 
+    public AbstractCruxDocument getDocument() {
+        return document;
+    }
+
+    public Date getStartValidTime() {
+        return startValidTime;
+    }
+
+    public Date getEndValidTime() {
+        return endValidTime;
+    }
+
     private final AbstractCruxDocument document;
     private final Date startValidTime;
     private final Date endValidTime;
@@ -44,6 +56,11 @@ public final class PutOperation extends TransactionOperation {
     @Override
     public final Type getType() {
         return Type.PUT;
+    }
+
+    @Override
+    public void accept(Visitor visitor) {
+        visitor.visit(this);
     }
 
     @Override

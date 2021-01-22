@@ -98,6 +98,12 @@ public final class Transaction {
         );
     }
 
+    public void visit(TransactionOperation.Visitor visitor) {
+        for (TransactionOperation operation: operations) {
+            operation.accept(visitor);
+        }
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
