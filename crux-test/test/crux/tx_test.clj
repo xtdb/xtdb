@@ -17,9 +17,11 @@
             [clojure.string :as string]
             [crux.tx.conform :as txc]
             [crux.api :as crux])
-  (:import [java.util Date]
+  (:import [java.util Date UUID Collections HashMap HashSet]
            [java.time Duration]
-           [crux.codec EntityTx]))
+           [crux.codec EntityTx]
+           [clojure.lang Keyword PersistentArrayMap]
+           [java.net URL URI]))
 
 (t/use-fixtures :each fix/with-node fix/with-silent-test-check
   (fn [f]
@@ -827,6 +829,105 @@
       (t/is (= #{[foo]}
                (api/q (api/db *api*) '{:find [(pull ?e [*])]
                                        :where [[?e :foo {{:foo 2} :foo2, {:foo 1} :foo1}]]}))))))
+
+(t/deftest test-java-ids-and-values-1398
+  (letfn [(test-id [id]
+            (t/testing "As ID"
+              (with-open [node (crux/start-node {})]
+                (let [doc {:crux.db/id id}]
+                  (fix/submit+await-tx node [[:crux.tx/put doc]])
+                  (t/is (= doc (crux/entity (crux/db node) id)))
+                  (t/is #{[id]} (crux/q (crux/db node) '{:find [?id]
+                                                         :where [[?id :crux.db/id]]}))))))
+          (test-value [value]
+            (t/testing "As Value"
+              (with-open [node (crux/start-node {})]
+                (let [doc {:crux.db/id :foo :bar value}]
+                  (fix/submit+await-tx node [[:crux.tx/put doc]])
+                  (t/is (= doc (crux/entity (crux/db node) :foo)))
+                  (t/is #{[value]} (crux/q (crux/db node) '{:find [?val]
+                                                            :where [[?id :bar ?val]]}))))))]
+
+    (t/testing "Keyword"
+      (doto (Keyword/intern "foo")
+        (test-id) (test-value)))
+
+    (t/testing "String"
+      (doto "foo"
+        (test-id) (test-value)))
+
+    (t/testing "Long"
+      (doto 100
+        (test-id) (test-value)))
+
+    (t/testing "UUID"
+      (doto (UUID/randomUUID)
+        (test-id) (test-value)))
+
+    (t/testing "URI"
+      (doto (URI/create "mailto:crux@juxt.pro")
+        (test-id) (test-value)))
+
+    (t/testing "URL"
+      (doto (URL. "https://github.com/juxt/crux")
+        (test-id) (test-value)))
+
+    (t/testing "IPersistentMap"
+      (doto (-> (PersistentArrayMap/EMPTY)
+                (.assoc "foo" "bar"))
+        (test-id) (test-value)))))
+
+(comment
+  ;;TODO: Test failing. When issue fixed, migrate these into the above
+  (t/testing "Set"
+    (doto (HashSet.)
+      (.add "foo")
+      (.add "bar")
+      (test-value)))
+
+  (t/testing "Singleton Map"
+    (doto (Collections/singletonMap "foo" "bar")
+      (test-id) (test-value)))
+
+  (t/testing "HashMap with single entry"
+    (doto (HashMap.)
+      (.put "foo" "bar")
+      (test-id) (test-value)))
+
+  (t/testing "HashMap with multiple entries"
+    (doto (HashMap.)
+      (.put "foo" "bar")
+      (.put "baz" "waka")
+      (test-id) (test-value)))
+
+  (t/testing "HashMap with entries added in different order"
+    (let [val1 (doto (HashMap.)
+                 (.put "foo" "bar")
+                 (.put "baz" "waka"))
+          val2 (doto (HashMap.)
+                 (.put "baz" "waka")
+                 (.put "foo" "bar"))]
+
+      (t/is (= val1 val2))
+      (t/testing "As ID"
+        (with-open [node (crux/start-node {})]
+          (let [doc {:crux.db/id val1}]
+            (fix/submit+await-tx node [[:crux.tx/put doc]])
+            (t/is (= doc (crux/entity (crux/db node) val2)))
+            (let [result (crux/q (crux/db node) '{:find [?id]
+                                                  :where [[?id :crux.db/id]]})]
+              (t/is #{[val1]} result)
+              (t/is #{[val2]} result)))))
+
+      (t/testing "As Value"
+        (with-open [node (crux/start-node {})]
+          (let [doc {:crux.db/id :foo :bar val1}]
+            (fix/submit+await-tx node [[:crux.tx/put doc]])
+            (t/is (= doc (crux/entity (crux/db node) :foo)))
+            (let [result (crux/q (crux/db node) '{:find [?val]
+                                                  :where [[?id :bar ?val]]})]
+              (t/is #{[val1]} result)
+              (t/is #{[val2]} result))))))))
 
 (t/deftest overlapping-valid-time-ranges-434
   (let [_ (fix/submit+await-tx
