@@ -17,9 +17,11 @@
             [clojure.string :as string]
             [crux.tx.conform :as txc]
             [crux.api :as crux])
-  (:import [java.util Date]
+  (:import [java.util Date UUID Collections HashMap HashSet]
            [java.time Duration]
-           [crux.codec EntityTx]))
+           [crux.codec EntityTx]
+           [clojure.lang Keyword PersistentArrayMap]
+           [java.net URL URI]))
 
 (t/use-fixtures :each fix/with-node fix/with-silent-test-check
   (fn [f]
@@ -840,6 +842,93 @@
       (t/is (= #{[foo]}
                (api/q (api/db *api*) '{:find [(eql/project ?e [*])]
                                        :where [[?e :foo {{:foo 2} :foo2, {:foo 1} :foo1}]]}))))))
+
+(defn test-putting-retrieving-querying-id [id]
+  (with-open [node (crux/start-node {})]
+    (let [doc {:crux.db/id id}]
+      (fix/submit+await-tx node [[:crux.tx/put doc]])
+      (t/is (= doc (crux/entity (crux/db node) id)))
+      (t/is #{[id]} (crux/q (crux/db node) '{:find [?id]
+                                             :where [[?id :crux.db/id]]})))))
+
+(defn test-putting-retrieving-querying-value [value]
+  (with-open [node (crux/start-node {})]
+    (let [doc {:crux.db/id :foo :bar value}]
+      (fix/submit+await-tx node [[:crux.tx/put doc]])
+      (t/is (= doc (crux/entity (crux/db node) :foo)))
+      (t/is #{[value]} (crux/q (crux/db node) '{:find [?val]
+                                                :where [[?id :bar ?val]]})))))
+
+(defn test-putting-retrieving-querying-id-and-value [id-or-value]
+  (do
+    (t/testing "As ID"
+      (test-putting-retrieving-querying-id id-or-value))
+    (t/testing "As Value"
+      (test-putting-retrieving-querying-value id-or-value))))
+
+(t/deftest test-java-ids-and-values-1398
+  (t/testing "Keyword"
+    (test-putting-retrieving-querying-id-and-value (Keyword/intern "foo")))
+  (t/testing "String"
+    (test-putting-retrieving-querying-id-and-value "foo"))
+  (t/testing "Long"
+    (test-putting-retrieving-querying-id-and-value 100))
+  (t/testing "UUID"
+    (test-putting-retrieving-querying-id-and-value (UUID/randomUUID)))
+  (t/testing "URI"
+    (test-putting-retrieving-querying-id-and-value (URI/create "mailto:crux@juxt.pro")))
+  (t/testing "URL"
+    (test-putting-retrieving-querying-id-and-value (URL. "https://github.com/juxt/crux")))
+  (t/testing "IPersistentMap"
+    (test-putting-retrieving-querying-id-and-value (.assoc (PersistentArrayMap/EMPTY) "foo" "bar")))
+  (t/testing "Set"
+    (let [set (HashSet.)]
+      (.add set "foo")
+      (.add set "bar")
+      (test-putting-retrieving-querying-value set))))
+
+(comment                                               ;;TODO: Test failing. When issue fixed, migrate these into the above
+  (t/deftest test-java-map-ids-and-values
+    (t/testing "Singleton Map"
+      (test-putting-retrieving-querying-id-and-value (Collections/singletonMap "foo" "bar")))
+
+    (t/testing "HashMap with single entry"
+      (let [id (HashMap.)]
+        (.put id "foo" "bar")
+        (test-putting-retrieving-querying-id-and-value id)))
+
+    (t/testing "HashMap with multiple entries"
+      (let [id (HashMap.)]
+        (.put id "foo" "bar")
+        (.put id "baz" "waka")
+        (test-putting-retrieving-querying-id-and-value id)))
+
+    (t/testing "HashMap with entries added in different order"
+      (let [val1 (HashMap.)
+            val2 (HashMap.)]
+        (.put val1 "foo" "bar")
+        (.put val1 "baz" "waka")
+        (.put val2 "baz" "waka")
+        (.put val2 "foo" "bar")
+        (t/is val1 val2)
+        (t/testing "As ID"
+          (with-open [node (crux/start-node {})]
+            (let [doc {:crux.db/id val1}]
+              (fix/submit+await-tx node [[:crux.tx/put doc]])
+              (t/is (= doc (crux/entity (crux/db node) val2)))
+              (let [result (crux/q (crux/db node) '{:find [?id]
+                                                    :where [[?id :crux.db/id]]})]
+                (t/is #{[val1]} result)
+                (t/is #{[val2]} result)))))
+        (t/testing "As Value"
+          (with-open [node (crux/start-node {})]
+            (let [doc {:crux.db/id :foo :bar val1}]
+              (fix/submit+await-tx node [[:crux.tx/put doc]])
+              (t/is (= doc (crux/entity (crux/db node) :foo)))
+              (let [result (crux/q (crux/db node) '{:find [?val]
+                                                    :where [[?id :bar ?val]]})]
+                (t/is #{[val1]} result)
+                (t/is #{[val2]} result)))))))))
 
 (t/deftest overlapping-valid-time-ranges-434
   (let [_ (fix/submit+await-tx
