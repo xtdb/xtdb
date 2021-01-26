@@ -1,4 +1,4 @@
-package docs
+package crux.docs
 
 // tag::imports[]
 import crux.api.Crux

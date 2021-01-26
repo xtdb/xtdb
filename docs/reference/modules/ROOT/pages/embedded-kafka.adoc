@@ -17,14 +17,14 @@ juxt/crux-kafka-embedded {:mvn/version "{crux_version}-beta"}
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=require-ek]
+include::example$test/crux/docs/examples_test.clj[tags=require-ek]
 
-include::example$src/docs/examples.clj[tags=ek-example]
+include::example$test/crux/docs/examples_test.clj[tags=ek-example]
 ----
 
 You can later stop the Embedded Kafka if you wish:
 
 [source,clj]
 ----
-include::example$src/docs/examples.clj[tags=ek-close]
+include::example$test/crux/docs/examples_test.clj[tags=ek-close]
 ----

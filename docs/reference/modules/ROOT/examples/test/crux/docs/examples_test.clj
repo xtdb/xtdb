@@ -1,4 +1,4 @@
-(ns docs.examples
+(ns crux.docs.examples-test
   (:require [clojure.java.io :as io]
             [crux.api :as crux]))
 

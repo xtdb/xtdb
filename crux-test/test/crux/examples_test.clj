@@ -1,8 +1,9 @@
+;; TODO kill this namespace
 (ns crux.examples-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
             [crux.fixtures :as fix]
-            [docs.examples :as ex]))
+            [crux.docs.examples :as ex]))
 
 (def ^:dynamic *storage-dir*)
 
