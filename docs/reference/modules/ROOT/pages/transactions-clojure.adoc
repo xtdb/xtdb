@@ -1,0 +1,194 @@
+= Transactions (Clojure)
+
+[#overview]
+== Overview
+
+A transaction is performed by calling `crux.db/submit-tx` on a node with a list of transaction operations.
+
+[source,clj]
+----
+(crux/submit-tx node
+                [
+                ;; Operations
+                ])
+----
+
+If the transaction contains pre-conditions, all pre-conditions must pass, or the
+entire transaction is aborted. This happens at the query node during indexing,
+and not when submitting the transaction.
+
+[#operations]
+== Operations
+There are five transaction (write) operations:
+
+.Write Operations
+[cols="3,5,^2"]
+|===
+|Operation|Purpose|Pre-condition?
+
+|<<#put,`crux.tx/put`>>|Write a version of a document|
+|<<#delete,`crux.tx/delete`>>|Deletes a specific document|
+|<<#match,`crux.tx/match`>>|Check the document state against the given document|✓
+|<<#evict,`crux.tx/evict`>>|Evicts a document entirely, including all historical versions|
+|<<#transaction-functions,`crux.tx/fn`>>|Runs a transaction function|✓
+|===
+
+[#put]
+=== Put
+
+Put's a document into Crux. If a document already exists with the given `:crux.db/id`, a new version of this document will be created at the supplied `valid time`. See <<transactions.adoc#valid-time, Valid Time>> for more details.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=put,indent=0]
+----
+<1> Document to add
+<2> (optional) <<transactions.adoc#valid-time,`valid time`>>
+<3> (optional) <<transactions.adoc#end-valid-time,`end valid time`>>
+
+[#delete]
+=== Delete
+
+Deletes a document. See <<transactions.adoc#valid-time,Valid Time>> for details on how this interacts with multiple versions of the document.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=delete,indent=0]
+----
+<1> Document ID to be deleted
+<2> (optional) <<transactions.adoc#valid-time,`valid time`>>
+<3> (optional) <<transactions.adoc#end-valid-time,`end valid time`>>
+
+[#match]
+=== Match
+
+Match checks the state of an entity - if the entity doesn't match the provided doc, the transaction will not continue.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=match,indent=0]
+----
+
+<1> ID to be matched (for an entity which may or may not exist)
+<2> A specific document revision (or `nil`)
+<3> (optional) <<transactions.adoc#valid-time,`valid time`>>
+<4> Operation(s) to perform if the document is matched
+
+If the document supplied is `nil`, the match only passes if there does not exist a Document with the given ID.
+
+[#evict]
+=== Evict
+
+Evicts a document from Crux. Historical versions of the document will no longer be available.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=evict,indent=0]
+----
+
+Evict is primarily used for GDPR Right to Erasure compliance.
+
+It is important to note that Evict is the only operation which will have effects on the results returned when querying against an earlier Transaction Time.
+
+[#transaction-functions]
+=== Transaction Functions
+
+Transaction functions are user-supplied functions that run on the individual Crux nodes when a transaction is being ingested.
+
+Transaction functions can be used, for example, to safely check the current database state before applying a transaction, for integrity checks, or to patch an entity.
+
+[#transaction-functions-anatomy]
+==== Anatomy
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-anatomy,indent=0]
+----
+<1> Transaction functions are passed a `context` parameter and any number of other parameters.
+<2> The `context` parameter can be used to obtain a database value using `db` or `open-db`.
+<3> Transaction functions should return a list of transaction operations or `false`
+
+If a list of transaction operations is returned, these are indexed as part of the transaction.
+
+If `false` is returned, or an exception is thrown, the whole transaction will roll back.
+
+==== Creating / Updating
+
+Transaction functions are created/updated by submitting a document to Crux with a `crux.db/fn` key.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-put,indent=0]
+----
+<1> Note that the function itself is quoted
+
+==== Usage
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-use,indent=0]
+----
+<1> Function ID
+<2> Parameter(s)
+
+[#document]
+== Documents
+
+A document is a map from keywords to values.
+
+[source,clj]
+----
+{:crux.db/id :dbpedia.resource/Pablo-Picasso
+ :name "Pablo"
+ :last-name "Picasso"}
+----
+
+For operations containing documents, the id and the document are
+hashed, and the operation and hash is submitted to the `tx-topic` in
+the event log. The document itself is submitted to the `doc-topic`,
+using its content hash as key. In Kafka, the `doc-topic` is compacted,
+which enables later deletion of documents.
+
+All documents must contain the `:crux.db/id` key.
+
+[#valid-ids]
+=== Valid IDs
+
+The following types of `:crux.db/id` are allowed:
+
+.Valid Id types
+[cols="d,d"]
+|===
+|Type|Example
+
+|Keyword|`:my-id` or `:dbpedia.resource/Pablo-Picasso`
+|String|`"my-id"`
+|Integers/Longs|`42`
+|UUID|`#uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"`
+|URI|`#crux/id "mailto:crux@juxt.pro"`
+|URL|`#crux/id "https://github.com/juxt/crux"`
+|Maps|`{:this :id-field}`
+|===
+
+The `#crux/id` reader literal will take URI/URL strings and attempt to coerce them into valid IDs.
+
+URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
+
+[#speculative-transactions]
+== Speculative transactions
+
+You can submit speculative transactions to Crux, to see what the results of your queries would be if a new transaction were to be applied.
+This is particularly useful for forecasting/projections or further integrity checks, without persisting the changes or affecting other users of the database.
+
+You'll receive a new database value, against which you can make queries and entity requests as you would any normal database value.
+Only you will see the effect of these transactions - they're not submitted to the cluster, and they're not visible to any other database value in your application.
+
+We submit these transactions to a database value using `with-tx`:
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-0,indent=0]
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-1,indent=5]
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-2,indent=5]
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-3,indent=5]
+----
+
+The entities submitted by the speculative `:crux.tx/put` take their valid time (if not explicitly specified) from the valid time of the `db` from which they were forked.

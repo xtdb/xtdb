@@ -53,7 +53,8 @@ Java::
 ----
 include::example$test/crux/docs/Install.java[tag=imports]
 
-include::example$test/crux/docs/Install.java[tag=main,indent=0]
+include::example$test/crux/docs/Install.java[tag=main-0,indent=0]
+include::example$test/crux/docs/Install.java[tag=main-1,indent=0]
 ----
 
 Kotlin::

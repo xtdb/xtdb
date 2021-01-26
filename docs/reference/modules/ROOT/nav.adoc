@@ -3,6 +3,8 @@
 * xref:configuration.adoc[Configuration]
 ** xref:query-configuration.adoc[Query Engine]
 * xref:transactions.adoc[Transactions]
+** xref:transactions-clojure.adoc[Clojure]
+** xref:transactions-java.adoc[Java]
 * xref:queries.adoc[Queries]
 * Core API
 ** xref:clojure-api.adoc[Clojure]
