@@ -10,7 +10,7 @@
            [java.util Date HashMap Map]
            [java.util.function Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector ValueVector VarCharVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector]
            [org.apache.arrow.vector.complex.impl VarCharWriterImpl DenseUnionWriter]
            [org.apache.arrow.vector.holders DateMilliHolder Float8Holder VarCharHolder UInt8Holder]
@@ -152,13 +152,19 @@
   (def tx-arrow-schema
     (Schema. [(->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) true
                        (->field "put" (.getType Types$MinorType/STRUCT) false
-                                (->field "document" ArrowType$List/INSTANCE false
-                                         (->field "entries" (.getType Types$MinorType/STRUCT) false
-                                                  (->field "key" (.getType Types$MinorType/VARCHAR) false)
-                                                  (->field "value" (.getType Types$MinorType/VARCHAR) false)))
+                                (->field "document" (ArrowType$Union. UnionMode/Dense nil) false)
                                 (->field "from-valid-time" (.getType Types$MinorType/DATEMILLI) true)
                                 (->field "to-valid-time" (.getType Types$MinorType/DATEMILLI) true))
                        (->field "delete" (.getType Types$MinorType/NULL) true))]))
+
+  (defn- add-element! [^DenseUnionVector duv type-id parent-offset child-offset]
+    (while (< (.getValueCapacity duv) (inc parent-offset))
+      (.reAlloc duv))
+
+    (.setTypeId duv parent-offset type-id)
+    (.setInt (.getOffsetBuffer duv)
+             (* DenseUnionVector/OFFSET_WIDTH parent-offset)
+             child-offset))
 
   (defn tx->tx-arrow [tx-ops ^RootAllocator allocator]
     (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
@@ -171,25 +177,17 @@
             put-type-id (get union-type-ids "put")
 
             ^StructVector put-vec (.getStruct tx-op-vec put-type-id)
-            ^ListVector put-doc-vec (.getChild put-vec "document" ListVector)
-            ^StructVector put-doc-entry-vec (.getDataVector put-doc-vec)
-            ^VarCharVector put-doc-entry-k-vec (.getChild put-doc-entry-vec "key" VarCharVector)
-            ^VarCharVector put-doc-entry-v-vec (.getChild put-doc-entry-vec "value" VarCharVector)
             ^DateMilliVector start-vt-vec (.getChild put-vec "from-valid-time" DateMilliVector)
-            ^DateMilliVector end-vt-vec (.getChild put-vec "to-valid-time" DateMilliVector)]
+            ^DateMilliVector end-vt-vec (.getChild put-vec "to-valid-time" DateMilliVector)
 
-        (.setRowCount root 1)
-        (.setValueCount tx-op-vec (count tx-ops))
+            ^DenseUnionVector put-doc-vec (.getChild put-vec "document" DenseUnionVector)]
 
         (->> (map-indexed vector tx-ops)
-             (reduce (fn [op-offsets [op-idx tx-op]]
+             (reduce (fn [{:keys [op-offsets put-doc-struct-offsets] :as acc} [op-idx doc]]
                        (let [op-type "put"
-                             ^int op-offset (get op-offsets op-type)]
+                             ^int op-offset (get op-offsets op-type 0)]
 
-                         (.setTypeId tx-op-vec op-idx (get union-type-ids op-type))
-                         (.setInt (.getOffsetBuffer tx-op-vec)
-                                  (* DenseUnionVector/OFFSET_WIDTH op-idx)
-                                  op-offset)
+                         (add-element! tx-op-vec (get union-type-ids op-type) op-idx op-offset)
 
                          (case op-type
                            "put" (do
@@ -197,21 +195,41 @@
                                    (.setSafe start-vt-vec op-offset (.getTime (java.util.Date.)))
                                    (.setSafe end-vt-vec op-offset (.getTime (java.util.Date.)))
 
-                                   (let [doc-offset (.startNewValue put-doc-vec op-offset)]
-                                     (doseq [[kv-idx [k v]] (map-indexed vector tx-op)
-                                             :let [^int kv-idx (+ doc-offset kv-idx)]]
-                                       (.setNotNull put-doc-vec op-idx)
-                                       (.setIndexDefined put-doc-entry-vec kv-idx)
-                                       (.setSafe put-doc-entry-k-vec kv-idx (Text. (name k)))
-                                       (.setSafe put-doc-entry-v-vec kv-idx (Text. (pr-str v))))
-                                     (.endValue put-doc-vec op-idx (count tx-op)))))
+                                   (let [doc-fields (->> (for [[k v] (sort-by key doc)]
+                                                           [k (Field/nullable (str k) (->arrow-type (type v)))])
+                                                         (into (sorted-map)))
+                                         field-k (format "%08x" (hash doc-fields))
+                                         doc-field (apply ->field field-k (.getType Types$MinorType/STRUCT) true (vals doc-fields))
+                                         field-type-id (or (->> (map-indexed vector (.getChildren (.getField put-doc-vec)))
+                                                                (some (fn [[idx field]]
+                                                                        (when (= doc-field field)
+                                                                          idx))))
+                                                           (.registerNewTypeId put-doc-vec doc-field))
+                                         struct-vec (.getStruct put-doc-vec field-type-id)
+                                         struct-offset (get put-doc-struct-offsets doc-field 0)]
 
-                         (update op-offsets op-type inc)))
-                     {"put" 0, "delete" 0}))
+                                     (.setIndexDefined struct-vec struct-offset)
 
-        (.setValueCount tx-op-vec (count tx-ops))
+                                     (add-element! put-doc-vec field-type-id op-offset struct-offset)
 
-        (.getObject tx-op-vec 0))))
+                                     (doseq [[k v] doc
+                                             :let [^Field field (get doc-fields k)]]
+                                       (set-safe! (.addOrGet struct-vec (name k) (.getFieldType field) ValueVector)
+                                                  struct-offset
+                                                  v))
+
+                                     (-> acc
+                                         (assoc-in [:op-offsets op-type] (inc op-offset))
+                                         (assoc-in [:put-doc-struct-offsets doc-field] (inc struct-offset))))))))
+                     {}))
+
+        (.setRowCount root (count tx-ops))
+
+        (.syncSchema root)
+
+        [(.getObject tx-op-vec 0)
+         (.getObject tx-op-vec 6)
+         (.getObject tx-op-vec 9)])))
 
   (defn tx-arrow->ingest-log-arrow []
     )
@@ -220,7 +238,9 @@
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
     (with-readings-docs
       (fn [readings]
-        (tx->tx-arrow (take 10 readings) allocator)))))
+        (tx->tx-arrow (interleave (take 10 @!info-docs)
+                                  (take 10 readings))
+                      allocator)))))
 
 ;; idea: tx-log only needs to store row-ids, can then be re-created from the content indices if required
 
