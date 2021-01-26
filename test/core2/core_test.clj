@@ -150,21 +150,19 @@
 
 (do
   (def tx-arrow-schema
-    (Schema. [(->field "tx-ops" ArrowType$List/INSTANCE false
-                       (->field "tx-op" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) true
-                                (->field "put" (.getType Types$MinorType/STRUCT) false
-                                         (->field "document" ArrowType$List/INSTANCE false
-                                                  (->field "entries" (.getType Types$MinorType/STRUCT) false
-                                                           (->field "key" (.getType Types$MinorType/VARCHAR) false)
-                                                           (->field "value" (.getType Types$MinorType/VARCHAR) false)))
-                                         (->field "from-valid-time" (.getType Types$MinorType/DATEMILLI) true)
-                                         (->field "to-valid-time" (.getType Types$MinorType/DATEMILLI) true))
-                                (->field "delete" (.getType Types$MinorType/NULL) true)))]))
+    (Schema. [(->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) true
+                       (->field "put" (.getType Types$MinorType/STRUCT) false
+                                (->field "document" ArrowType$List/INSTANCE false
+                                         (->field "entries" (.getType Types$MinorType/STRUCT) false
+                                                  (->field "key" (.getType Types$MinorType/VARCHAR) false)
+                                                  (->field "value" (.getType Types$MinorType/VARCHAR) false)))
+                                (->field "from-valid-time" (.getType Types$MinorType/DATEMILLI) true)
+                                (->field "to-valid-time" (.getType Types$MinorType/DATEMILLI) true))
+                       (->field "delete" (.getType Types$MinorType/NULL) true))]))
 
   (defn tx->tx-arrow [tx-ops ^RootAllocator allocator]
     (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
-      (let [^ListVector tx-ops-vec (.getVector root "tx-ops")
-            ^DenseUnionVector tx-op-vec (.getDataVector tx-ops-vec)
+      (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
 
             union-type-ids (into {} (map vector
                                          (->> (.getChildren (.getField tx-op-vec))
@@ -181,46 +179,39 @@
             ^DateMilliVector end-vt-vec (.getChild put-vec "to-valid-time" DateMilliVector)]
 
         (.setRowCount root 1)
+        (.setValueCount tx-op-vec (count tx-ops))
 
-        (let [tx-ops-offset (.startNewValue tx-ops-vec 0)]
-          (.setValueCount tx-op-vec (count tx-ops))
-          (doseq [[op-type tx-ops] (->> (map-indexed vector tx-ops)
-                                        (group-by (comp (fn [_]
-                                                          (rand-nth ["put" "delete"]))
-                                                        second)))
-                  [union-offset-idx [tx-op-idx tx-op]] (map-indexed vector tx-ops)
-                  :let [^int op-idx (+ tx-ops-offset tx-op-idx)]]
+        (->> (map-indexed vector tx-ops)
+             (reduce (fn [op-offsets [op-idx tx-op]]
+                       (let [op-type "put"
+                             ^int op-offset (get op-offsets op-type)]
 
-            (.setTypeId tx-op-vec op-idx (get union-type-ids op-type))
-            (.setInt (.getOffsetBuffer tx-op-vec) (* DenseUnionVector/OFFSET_WIDTH tx-op-idx) union-offset-idx)
+                         (.setTypeId tx-op-vec op-idx (get union-type-ids op-type))
+                         (.setInt (.getOffsetBuffer tx-op-vec)
+                                  (* DenseUnionVector/OFFSET_WIDTH op-idx)
+                                  op-offset)
 
-            (when (= op-type "put")
-              (.setIndexDefined put-vec op-idx)
+                         (case op-type
+                           "put" (do
+                                   (.setIndexDefined put-vec op-offset)
+                                   (.setSafe start-vt-vec op-offset (.getTime (java.util.Date.)))
+                                   (.setSafe end-vt-vec op-offset (.getTime (java.util.Date.)))
 
-              (.setSafe start-vt-vec op-idx (.getTime (java.util.Date.)))
-              (.setSafe end-vt-vec op-idx (.getTime (java.util.Date.)))
+                                   (let [doc-offset (.startNewValue put-doc-vec op-offset)]
+                                     (doseq [[kv-idx [k v]] (map-indexed vector tx-op)
+                                             :let [^int kv-idx (+ doc-offset kv-idx)]]
+                                       (.setNotNull put-doc-vec op-idx)
+                                       (.setIndexDefined put-doc-entry-vec kv-idx)
+                                       (.setSafe put-doc-entry-k-vec kv-idx (Text. (name k)))
+                                       (.setSafe put-doc-entry-v-vec kv-idx (Text. (pr-str v))))
+                                     (.endValue put-doc-vec op-idx (count tx-op)))))
 
-              (let [doc-offset (.startNewValue put-doc-vec op-idx)]
-                (doseq [[kv-idx [k v]] (map-indexed vector tx-op)
-                        :let [^int kv-idx (+ doc-offset kv-idx)]]
-                  (.setNotNull put-doc-vec op-idx)
-                  (.setIndexDefined put-doc-entry-vec kv-idx)
-                  (.setSafe put-doc-entry-k-vec kv-idx (Text. (name k)))
-                  (.setSafe put-doc-entry-v-vec kv-idx (Text. (pr-str v))))
-                (.endValue put-doc-vec op-idx (count tx-op)))))
-          #_
-          (.endValue tx-ops-vec 0 (count tx-ops)))
-        #_
-        (.getObject tx-ops-vec put-type-id))
+                         (update op-offsets op-type inc)))
+                     {"put" 0, "delete" 0}))
 
-      ;; TODO DenseUnionVector isn't setting the offset buffer without writers. sad.
+        (.setValueCount tx-op-vec (count tx-ops))
 
-      #_
-      (with-open [augmented-root (VectorSchemaRoot. (concat (.getFieldVectors root)
-                                                            [(.createVector (->field "tx-time" (.getType Types$MinorType/DATEMILLI) false))
-                                                             (.createVector (->field "tx-id" (.getType Types$MinorType/UINT8) false))
-                                                             ]))]
-        augmented-root)))
+        (.getObject tx-op-vec 0))))
 
   (defn tx-arrow->ingest-log-arrow []
     )
