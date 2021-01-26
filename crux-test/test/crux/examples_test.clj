@@ -13,50 +13,18 @@
 
 (t/use-fixtures :each with-storage-dir)
 
-(t/deftest test-example-basic-queries
+(t/deftest basic-test-examples
+  (doseq [tg ex/basic-tests]
+    (t/testing (:n tg)
+      (with-open [node (crux/start-node {})]
+        (crux/await-tx node ((:s tg) node) nil)
+        (doseq [t (:t tg)]
+          (t/testing (:d t)
+            (t/is (= (:e t) ((:q t) node)))))))))
+
+(t/deftest test-streaming-queries
   (with-open [node (crux/start-node {})]
     (crux/await-tx node (ex/query-example-setup node) nil)
-    (t/is (= #{[:smith]} (ex/query-example-basic-query node)))
-    (t/is (= #{[:ivan]} (ex/query-example-with-arguments-1 node)))
-    (t/is (= #{[:petr] [:ivan]} (ex/query-example-with-arguments-2 node)))
-    (t/is (= #{[:ivan]} (ex/query-example-with-arguments-3 node)))
-    (t/is (= #{[:petr] [:smith]} (ex/query-example-with-arguments-4 node)))
-    (t/is (= #{[22]} (ex/query-example-with-arguments-5 node)))
-    (t/is (= #{[21]} (ex/query-example-with-predicate-1 node)))
-
     (let [!results (atom [])]
       (ex/query-example-streaming node #(swap! !results conj %))
       (t/is (= [[:smith]] @!results)))))
-
-(t/deftest test-example-sub-queries
-  (with-open [node (crux/start-node {})]
-    (t/is (= #{[[[4]]]} (ex/query-example-subquery-1 node)))
-    (t/is (= #{[4]} (ex/query-example-subquery-2 node)))
-    (t/is (= #{[2 4 8]} (ex/query-example-subquery-3 node)))))
-
-(t/deftest test-example-aggregate-queries
-  (with-open [node (crux/start-node {})]
-    (t/is (= #{[6 1 3 4 2]} (ex/query-example-aggregates node)))))
-
-(t/deftest test-example-time-queries
-  (with-open [node (crux/start-node {})]
-    (crux/await-tx node (ex/query-example-at-time-setup node) nil)
-    (t/is (= #{} (ex/query-example-at-time-q1 node)))
-    (t/is (= #{[:malcolm]} (ex/query-example-at-time-q2 node)))))
-
-(t/deftest test-example-join-queries
-  (with-open [node (crux/start-node {})]
-    (crux/await-tx node (ex/query-example-join-q1-setup node) nil)
-
-    (t/is (= #{[:ivan :ivan]
-               [:petr :petr]
-               [:sergei :sergei]
-               [:denis-a :denis-a]
-               [:denis-b :denis-b]
-               [:denis-a :denis-b]
-               [:denis-b :denis-a]}
-             (ex/query-example-join-q1 node)))
-
-    (crux/await-tx node (ex/query-example-join-q2-setup node) nil)
-    (t/is (= #{[:petr]}
-             (ex/query-example-join-q2 node)))))

@@ -43,31 +43,26 @@ A query in Crux is performed by calling `crux/q` on a Crux database snapshot wit
 
 [source,clojure]
 ----
-(crux/q
-   (crux/db node) <1>
-   '{:find [p1]
-     :where [[p1 :name n]
-             [p1 :last-name n]
-             [p1 :name name]]
-     :in [name]}
-    "Smith")
+include::example$src/docs/examples.clj[tags=anatomy]
 ----
 <1> Usually, the snapshot view comes from calling `crux/db` on a Crux node
+<2> Query map
+<3> Argument(s)
 
 The query map accepts the following Keywords
 
 .Query Keys
-[cols="3,3,8,^2"]
+[cols="3,3,8"]
 |===
-|Key|Type|Purpose|Required?
+|Key|Type|Purpose
 
-|<<#find,`:find`>>|Vector|Specify values to be returned|✓
-|<<#where,`:where`>>|Vector|Restrict the results of the query|✓
-|<<#in,`:in`>>|Vector|Specify external arguments|
-|<<#ordering-and-pagination,`:order-by`>>|Vector|Control the result order|
-|<<#ordering-and-pagination,`:limit`>>|Int|Specify how many results to return|
-|<<#ordering-and-pagination,`:offset`>>|Int|Specify how many results to discard|
-|<<#rules,`:rules`>>|Vector|Define powerful statements for use in `:where` clauses|
+|<<#find,`:find`>>|Vector|Specify values to be returned
+|<<#where,`:where`>>|Vector|Restrict the results of the query
+|<<#in,`:in`>>|Vector|Specify external arguments
+|<<#ordering-and-pagination,`:order-by`>>|Vector|Control the result order
+|<<#ordering-and-pagination,`:limit`>>|Int|Specify how many results to return
+|<<#ordering-and-pagination,`:offset`>>|Int|Specify how many results to discard
+|<<#rules,`:rules`>>|Vector|Define powerful statements for use in `:where` clauses
 |<<#timeout,`:timeout`>>|Int|Specify maximum query run time in ms
 |<<#full-results,`:full-results?`>>|Boolean|Specify whether to return full documents
 |===
@@ -82,10 +77,9 @@ The find clause of a query specifies what values to be returned. These will be r
 
 You can directly specify a logic variable from your query. The following will return all last names.
 
-[source,clojure]
+[source,clj]
 ----
-'{:find [n]
-  :where [p :last-name n]}
+include::example$src/docs/examples.clj[tags=triple]
 ----
 
 [#find-aggregate]
@@ -110,11 +104,11 @@ You can specify an aggregate function to apply to at most one logic variable.
 |`(distinct ?lvar)`| Return a set of distinct values
 |===
 
-For example, to find the average `:age` field of all entities, you can do the following:
-[source,clojure]
+[source,clj]
 ----
-'{:find [(avg a)]
-  :where [[p :age a]]}
+include::example$src/docs/examples.clj[tags=query-aggregates]
+
+include::example$src/docs/examples.clj[tags=query-aggregates-r]
 ----
 
 Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
@@ -223,21 +217,17 @@ A triple is a vector of a logic variable, a document key and (optionally) a valu
 
 It restricts results by matching EAV facts
 
-[source,clojure]
+[source,clj]
 ----
-'{:find [p] <1>
-  :where [[p :name]]}
+include::example$src/docs/examples.clj[tags=double]
 
-'{:find [p] <2>
-  :where [[p :name "Smith"]]}
+include::example$src/docs/examples.clj[tags=triple-2]
 
-'{:find [p] <3>
-  :where [[q :name n]
-          [p :name n]]}
+include::example$src/docs/examples.clj[tags=triple-3]
 ----
 <1> This matches all entities, `p`, which have a `:name` field.
-<2> This matches all entities, `p`, which have a `:name` of `"Smith"`.
-<3> This matches all entities, `p`, which have a `:name` which match the `:name` of `q`.
+<2> This matches all entities, `p`, which have a `:name` of `"Ivan"`.
+<3> This matches all entities, `p`, which have a `:name` which match the `:last-name` of `q`.
 
 [#term-not]
 === Not
@@ -246,15 +236,17 @@ The `not` term rejects a graph if all the terms within it are true.
 
 [source,clj]
 ----
-'{:find [p]
-  :where [[p :crux.db/id]
-          (not [p :name "John"]
-               [p :last-name "Smith"])]}
+include::example$src/docs/examples.clj[tags=not-data]
+
+include::example$src/docs/examples.clj[tags=not-2]
+
+include::example$src/docs/examples.clj[tags=not-2-r]
 ----
+<1> Data
+<2> Query
+<3> Result
 
-This will match any document which does not have a `:name` of "John" _and_ a `:last-name` of "Smith".
-
-It will still return results for `{:name "Alice" :last-name "Smith"}` and `{:name "John" :last-name "Appleseed"}`
+This will match any document which does not have a `:name` of "Ivan" _and_ a `:last-name` of "Ivanov".
 
 [#term-not-join]
 === Not Join
@@ -267,14 +259,16 @@ Any other logic variables within the not-join are scoped only for the join.
 
 [source,clj]
 ----
-'{:find [p]
-  :where [[p :crux.db/id]
-          (not-join [p] <1>
-                    [p :last-name n] <2>
-                    [p :name n])]}
+include::example$src/docs/examples.clj[tags=not-join-data]
+
+include::example$src/docs/examples.clj[tags=not-join]
+
+include::example$src/docs/examples.clj[tags=not-join-r]
 ----
-<1> Declaration of which logic variables need to unify with the rest of the query
-<2> Terms
+<1> Data
+<2> Declaration of which logic variables need to unify with the rest of the query
+<3> Terms
+<4> Result
 
 This will match any entity, `p`, which has different values for the `:name` and `:last-name` field.
 
@@ -287,13 +281,24 @@ The `or` term accepts a graph if any of the terms within it are true.
 
 [source,clj]
 ----
-'{:find [p]
-  :where [[p :crux.db/id]
-          (or [p :name "John"]
-              [p :name "Jane"])]}
-----
+include::example$src/docs/examples.clj[tags=or-data]
 
-This will match any document, `p`, which has a `:name` of "John" or "Jane"
+include::example$src/docs/examples.clj[tags=or-1]
+
+include::example$src/docs/examples.clj[tags=or-1-r]
+----
+<1> Data
+<2> Query
+<3> Result
+
+This will match any document, `p`, which has a `:last-name` of "Ivanov" or "Ivannotov".
+
+When within an `or` term, you can use `and` to group terms which must all be true.
+
+[source,clj]
+----
+include::example$src/docs/examples.clj[tags=or-2]
+----
 
 [#term-or-join]
 === Or Join
@@ -306,16 +311,18 @@ Any other logic variables within the `or-join` are scoped only for the join.
 
 [source,clj]
 ----
-'{:find [p]
-  :where [[p :crux.db/id]
-          (or-join [p] <1>
-                   (and [p :age a]
-                        [(>= a 18)])
-                   [p :name "John"])]}
-----
-<1> Declaration of which logic variables need to unify with the rest of the query
+include::example$src/docs/examples.clj[tags=or-join-data]
 
-This will match any document, `p` which has an `:age` greater than or equal to 18 _or_ has a `:name` of "John".
+include::example$src/docs/examples.clj[tags=or-join]
+
+include::example$src/docs/examples.clj[tags=or-join-r]
+----
+<1> Data
+<2> Declaration of which logic variables need to unify with the rest of the query
+<3> Terms
+<4> Result
+
+This will match any document, `p` which has an `:age` greater than or equal to 18 _or_ has a `:name` of "Ivan".
 
 Importantly, the logic variable `a` is unbound outside the `or-join` term.
 
@@ -328,18 +335,11 @@ Allowed range operators are `<`, `<=`, `>=`, `>`, and `=`.
 
 [source,clj]
 ----
-'{:find [p] <1>
-  :where [[p :age a]
-          [(> a 18)]]}
+include::example$src/docs/examples.clj[tags=range-1]
 
-'{:find [p] <2>
-  :where [[p :age a]
-          [q :age b]
-          [(> a b)]]}
+include::example$src/docs/examples.clj[tags=range-2]
 
-'{:find [p] <3>
-  :where [[p :age a]
-          [(> 18 a)]]}
+include::example$src/docs/examples.clj[tags=range-3]
 ----
 <1> Finds any entity, `p`, with an `:age` which is greater than 18
 <2> Finds any entity, `p`, with an `:age` which is greater than the `:age` of any entity
@@ -359,12 +359,10 @@ Predicate terms should be placed in a vector.
 
 [source,clojure]
 ----
-'{:find [p]
-  :where [[p :age a]
-          [(even? a)]]}
+include::example$src/docs/examples.clj[tags=query-with-pred-1]
 ----
 
-This matches all entities, `p` which have an even `:age`.
+This matches all entities, `p` which have an odd `:age`.
 
 [#where-subqueries]
 === Subqueries
@@ -532,35 +530,25 @@ Feel free to open an issue or get in touch to discuss your requirements.
 
 [#rules]
 == Rules
+Rules are defined by a signature and then terms as you would find in a `:where` statement.
+
+They can be used as a shorthand for when you would otherwise be repeating the same restrictions in your `:where` statement.
 
 [source,clojure]
 ----
-'{:find [p]
-  :where [(adult? p)] <1>
-  :rules [[(adult? p) <2>
-           [p :age a] <3>
-           [(>= a 18)]]]}
+include::example$src/docs/examples.clj[tags=rules-1]
 ----
 <1> Usage
 <2> Rule signature
 <3> Clauses
 
-Rules are defined by a signature and then terms as you would find in a `:where` statement.
-
-They can be used as a shorthand for when you would otherwise be repeating the same restrictions in your `:where` statement.
+The above defines the rule `adult?` which checks that the supplied entity has an `:age` which is `>=` 18
 
 The terms in Rules can also use Rules. This allows for the recursive traversal of entities.
 
 [source,clojure]
 ----
-'{:find [p2]
- :where [[p1 :name "Smith"]
-         (follow p1 p2)]
- :rules [[(follow p1 p2)
-          [p1 :follow p2]]
-         [(follow p1 p2)
-          [p1 :follow t]
-          (follow t p2)]]}
+include::example$src/docs/examples.clj[tags=rules-2]
 ----
 
 This example finds all entities that the entity with `:name` "Smith" is connected to via `:follow`, even if the connection is via intermediaries.
@@ -579,21 +567,14 @@ Setting the `:full-results?` flag to true will cause logic variables in the `:fi
 
 [source,clojure]
 ----
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :foo :bar :baz}]])
+include::example$src/docs/examples.clj[tags=full-results-data]
 
-(crux/q <1>
-  (crux/db node)
-  '{:find [p]
-    :where [[p :bar :baz]]})
+include::example$src/docs/examples.clj[tags=full-results-1]
+include::example$src/docs/examples.clj[tags=full-results-1-r]
 
-(crux/q <2>
-  (crux/db node)
-  '{:find [p]
-    :where [[p :bar :baz]]
-    :full-results? true})
+include::example$src/docs/examples.clj[tags=full-results-2]
+include::example$src/docs/examples.clj[tags=full-results-2-r]
 ----
-<1> returns `#{[:foo]}'
-<2> returns `#{[{:crux.db/id :foo :bar :baz}]}'
 
 [#valid-time-travel]
 == Valid Time travel
@@ -604,14 +585,8 @@ To query based on a different Valid Time, create this snapshot by specifying the
 
 [source,clj]
 ----
-(crux/submit-tx
-   node
-   [[:crux.tx/put
-     {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
-     #inst "1986-10-22"]
-    [:crux.tx/put
-     {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
-     #inst "1986-10-24"]])
+include::example$src/docs/examples.clj[tags=query-at-t-d1]
+include::example$src/docs/examples.clj[tags=query-at-t-d2]
 ----
 * `:cardinality` (reverse joins) - by default, reverse joins put their values in a collection - for many-to-one/one-to-one reverse joins, specify `{:cardinality :one}` to return a single value.
 
