@@ -9,12 +9,15 @@
            [java.nio.file OpenOption StandardOpenOption]
            [java.util Date HashMap Map]
            [java.util.function Function]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector VarCharVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector]
+           [org.apache.arrow.vector.complex.impl VarCharWriterImpl DenseUnionWriter]
+           [org.apache.arrow.vector.holders DateMilliHolder Float8Holder VarCharHolder UInt8Holder]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter JsonFileReader JsonFileWriter JsonFileWriter$JSONWriteConfig ReadChannel]
            [org.apache.arrow.vector.ipc.message ArrowBlock MessageSerializer]
-           [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo Field]
+           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List ArrowType$Map ArrowType$Union Field FieldType Schema]
            [org.apache.arrow.vector.util Text]))
 
 (def device-info-csv-resource
@@ -70,10 +73,12 @@
 
 ;; DONE 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
 ;; TODO 1b. writer?
+;; TODO 1c. row-ids
 ;; DONE 2. more than one block per chunk - 'seal' a block, starting a new live block
 ;; DONE 3. dynamic documents - atm we've hardcoded cols and types
 ;; TODO 3b. union types, or keying the block by the type of the value too
 ;; DONE 3c. intermingle devices with readings
+;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions)
 ;; TODO 4. metadata - minmax, bloom at chunk/file and block/record-batch
 ;; TODO 5. dictionaries
 ;; TODO 6. consider eviction
@@ -108,7 +113,8 @@
   {Double (.getType Types$MinorType/FLOAT8)
    String (.getType Types$MinorType/VARCHAR)
    Keyword (.getType Types$MinorType/VARCHAR)
-   Date (.getType Types$MinorType/DATEMILLI)})
+   Date (.getType Types$MinorType/DATEMILLI)
+   nil (.getType Types$MinorType/NULL)})
 
 (defprotocol SetSafe
   (set-safe! [_ idx v]))
@@ -127,6 +133,67 @@
     (.setSafe this ^int idx (.getTime ^Date v))))
 
 (declare close-writers!)
+
+;; submit-tx - function from tx-ops to Arrow
+
+(defn- ^Field ->field [^String field-name ^ArrowType arrow-type nullable & children]
+  (Field. field-name
+          (FieldType. nullable arrow-type nil nil)
+          children))
+
+(do
+  (def tx-arrow-schema
+    (Schema. [(->field "tx-ops" (ArrowType$Union. UnionMode/Dense nil) true
+                       (->field "put" (.getType Types$MinorType/STRUCT) false
+                                (->field "document" ArrowType$List/INSTANCE false
+                                         (->field "entries" (.getType Types$MinorType/STRUCT) false
+                                                  (->field "key" (.getType Types$MinorType/VARCHAR) false)
+                                                  (->field "value" (.getType Types$MinorType/VARCHAR) false)))
+                                (->field "from-valid-time" (.getType Types$MinorType/DATEMILLI) true)
+                                (->field "to-valid-time" (.getType Types$MinorType/DATEMILLI) true))
+                       (->field "delete" (.getType Types$MinorType/NULL) true))]))
+
+  (defn tx->tx-arrow [tx-ops ^RootAllocator allocator]
+    (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
+      (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
+            ^StructVector put-vec (.getStruct tx-op-vec 0)
+            ^ListVector put-doc-vec (.getChild put-vec "document" ListVector)
+            ^StructVector put-doc-entry-vec (.getDataVector put-doc-vec)
+            ^VarCharVector put-doc-entry-k-vec (.getChild put-doc-entry-vec "key" VarCharVector)
+            ^VarCharVector put-doc-entry-v-vec (.getChild put-doc-entry-vec "value" VarCharVector)
+            ^DateMilliVector start-vt-vec (.getChild put-vec "from-valid-time" DateMilliVector)
+            ^DateMilliVector end-vt-vec (.getChild put-vec "to-valid-time" DateMilliVector)]
+
+        (.setRowCount root (count tx-ops))
+
+        (doseq [[op-idx tx-op] (map-indexed vector tx-ops)]
+          (.setTypeId tx-op-vec op-idx 0)
+          (.setIndexDefined put-vec op-idx)
+          (.setSafe start-vt-vec ^int op-idx (.getTime (java.util.Date.)))
+          (.setSafe end-vt-vec ^int op-idx (.getTime (java.util.Date.)))
+          (let [doc-offset (.startNewValue put-doc-vec op-idx)]
+            (doseq [[kv-idx [k v]] (map-indexed vector tx-op)
+                    :let [^int kv-idx (+ doc-offset kv-idx)]]
+              (.setNotNull put-doc-vec op-idx)
+              (.setIndexDefined put-doc-entry-vec kv-idx)
+              (.setSafe put-doc-entry-k-vec kv-idx (Text. (name k)))
+              (.setSafe put-doc-entry-v-vec kv-idx (Text. (pr-str v))))
+            (.endValue put-doc-vec op-idx (count tx-op))))
+
+        (.syncSchema root)
+
+        ;; TODO DenseUnionVector isn't setting the offset buffer without writers. sad.
+        (.getObject tx-op-vec 0))))
+
+  (defn tx-arrow->ingest-log-arrow []
+    )
+
+  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+    (with-readings-docs
+      (fn [readings]
+        (tx->tx-arrow (take 10 readings) allocator)))))
+
+;; idea: tx-log only needs to store row-ids, can then be re-created from the content indices if required
 
 (do
   (deftype Ingester [^BufferAllocator allocator

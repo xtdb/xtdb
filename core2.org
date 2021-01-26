@@ -351,7 +351,54 @@ questions from above:
 Problem: how do we efficiently intersect content + bitemporal?
 Rocks had compaction - there'd only be one entry for one AVE - we have them spread over many chunks
 We don't have an easy way of knowing whether the entry in one chunk is the same entity as we've already seen, albeit with a different row id
+How do we know what row-ids are visible?
+
+idea: reducing resolution/low fidelity of the timeline index - hopefully rule out many row ids early
 
 idea: metadata - current vs historical?
 - would mean revisions to metadata
 - revisions would be heavy, they'd need to scan the whole block.
+
+assumption: 'this would be easy in Postgres' - why?
+- sorted local indexes
+- co-located content + bitemporal - start/end cols, update in place
+
+cpuavg-1m, 5m, 15m, add row 6
+valid-time V1, T1 - valid from, tt from
+missing valid-to, tt-to
+replaces row 4
+one row can be replaced more than once, at different VTs
+- say put R1 01-10, put R2 06-07, put R3 05-08
+- in this example, R1 then has two validity periods
+  - how does timeline index deal with this?
+  - could always split and create a new row-id, I guess
+    - this would then mean a row can only ever have one validity period?
+      - nope - R1 in the above example would still have vt-end 10 up to R2, 06 up to R3, and 05 thereafter
+      - in a 2D graph, its validity would be quite the polygon
+      - we could start looking from the latest TT with -1 though
+
+to invalidate this using metadata alone:
+- -6 is in this chunk - can we do this with bloom filters?
+- I have minmax valid-time/tt for this chunk
+
+'tri-temporal'? - temporal table in an append-only fashion
+need to supersede old row
+a change results in more than one row - closes old row
+does this make things easier in the vt=tt area?
+two indices/bloom filters - one for vt=tt, one for vt!=tt
+
+assumption: we're going to need to look through _every_ block that contains a given AV to find RIDs/Es, if that's what we're searching for (i.e. =[?e :name "James"]=)
+if not, we'd need to know that, for a given AV, the only Es are ones we've already seen, which would involve putting AVE in the metadata, in some form?
+k-d tree might be a good solution here to say 'definitely not'
+  even then, though, we could only ever say 'probably', unless the tree were known to be complete.
+maybe we could, 'every now and again', have a complete AVE for certain values, as a checkpoint - would need to be adaptive, though
+to get around this assumption, we'd be looking for a magical bloom-like filter where you could query for 'this V but not this E'
+
+append only KD-tree - binary tree, but change sorting per level https://en.wikipedia.org/wiki/Implicit_k-d_tree
+K2 trees - succinct quad tree - https://www.researchgate.net/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation
+'Advanced Indexing for Temporal Data' - https://www.researchgate.net/publication/50370124_Advanced_Indexing_Technique_for_Temporal_Data/fulltext/0e60c876f0c493afa4b73b5e/Advanced-Indexing-Technique-for-Temporal-Data.pdf
+
+idea: tiered metadata
+this is arguably the same as adaptive indexing, in that we may not choose to make all the indexes for all the data AoT
+
+apache data sketches? https://datasketches.apache.org/
