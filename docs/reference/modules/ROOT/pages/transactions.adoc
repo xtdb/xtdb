@@ -3,113 +3,74 @@
 [#overview]
 == Overview
 
-There are four transaction (write) operations:
-
-.Write Operations
-[#table-conversion%header,cols="d,d"]
-|===
-|Operation|Purpose
-|`crux.tx/put`|Write a version of a document
-|`crux.tx/delete`|Deletes the specific document at a given `valid time`
-|`crux.tx/match`|Check the document state against the given document
-|`crux.tx/evict`|Evicts a document entirely, including all historical versions
-|===
-
-A document looks like this:
+A transaction is performed by calling `crux.db/submit-tx` on a node with a list of transaction operations.
 
 [source,clj]
 ----
-{:crux.db/id :dbpedia.resource/Pablo-Picasso
- :name "Pablo"
- :last-name "Picasso"}
+(crux/submit-tx node
+                [
+                ;; Operations
+                ])
 ----
 
-In practice when using Crux, one calls `crux.db/submit-tx` with a
-sequence of transaction operations:
-
-[source,clj]
-----
-[[:crux.tx/put
- {:crux.db/id :dbpedia.resource/Pablo-Picasso
-  :name "Pablo"
-  :last-name "Picasso"}
- #inst "2018-05-18T09:20:27.966-00:00"]]
-----
-
-If the transaction contains pre-conditions, all pre-conditions must pass or the
+If the transaction contains pre-conditions, all pre-conditions must pass, or the
 entire transaction is aborted. This happens at the query node during indexing,
 and not when submitting the transaction.
 
-For operations containing documents, the id and the document are
-hashed, and the operation and hash is submitted to the `tx-topic` in
-the event log. The document itself is submitted to the `doc-topic`,
-using its content hash as key. In Kafka, the `doc-topic` is compacted,
-which enables later deletion of documents.
-
-[#valid-ids]
-== Valid IDs
-
-The following types of `:crux.db/id` are allowed:
-
-* Keyword (e.g. `{:crux.db/id :my-id}` or `{:crux.db/id :dbpedia.resource/Pablo-Picasso}`)
-* String (e.g. `{:crux.db/id "my-id"}`)
-* Integers/Longs (e.g. `{:crux.db/id 42}`)
-* UUID (e.g. `{:crux.db/id #uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"}`)
-* URI (e.g. `{:crux.db/id #crux/id "mailto:crux@juxt.pro"}`)
-* URL (e.g. `{:crux.db/id #crux/id "https://github.com/juxt/crux"}`), including `http`, `https`, `ftp` and `file` protocols
-* Maps (e.g. `{:crux.db/id {:this :id-field}}`) (Note: see https://github.com/juxt/crux/issues/362[issue #362]).
-
-The `#crux/id` reader literal will take URI/URL strings and attempt to coerce them into valid IDs.
-
-URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
-
 [#operations]
 == Operations
+There are four transaction (write) operations:
+
+.Write Operations
+[cols="3,5,^2"]
+|===
+|Operation|Purpose|Pre-condition?
+
+|<<#put,`crux.tx/put`>>|Write a version of a document|
+|<<#delete,`crux.tx/delete`>>|Deletes a specific document|
+|<<#match,`crux.tx/match`>>|Check the document state against the given document|✓
+|<<#evict,`crux.tx/evict`>>|Evicts a document entirely, including all historical versions|
+|<<#transaction-functions,`crux.tx/fn`>>|Runs a transaction function|✓
+|===
 
 [#put]
 === Put
 
-Put's a document into Crux. If a document already exists with the
-given `:crux.db/id`, a new version of this document will be created at
-the supplied `valid time`.
+Put's a document into Crux. If a document already exists with the given `:crux.db/id`, a new version of this document will be created at the supplied `valid time`. See <<#valid-time, Valid Time>> for more details.
 
 [source,clojure]
 ----
 [:crux.tx/put
  {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} <1>
- #inst "2018-05-18T09:20:27.966-00:00"] <2>
+ #inst "2018-05-18T09:20:27.966-00:00" <2>
+ #inst "2018-05-19T08:31:15.966-00:00"] <3>
 ----
 
-<1> The document itself. Note that the ID must be included as part of the
-document.
-<2> `valid time`
-
-Note that `valid time` is optional and defaults to transaction time,
-which is taken from the Kafka log.
-
-Crux `puts` into the past at a single point by default, so to overwrite several
-versions across a range in valid time, you can either submit a transaction
-containing several operations or supply a third argument to specify an `end
-valid time`. This period is inclusive-exclusive, such that the start of the
-validity period is included in the validity range, while the end is excluded.
+<1> Document to add
+<2> (optional) <<#valid-time,`valid time`>>
+<3> (optional) <<#end-valid-time,`end valid time`>>
 
 [#delete]
 === Delete
 
-Deletes a document at a given `valid time`.
-Historical versions of the document will still be available.
+Deletes a document. See <<#valid-time,Valid Time>> for details on how this interacts with multiple versions of the document.
 
 [source,clojure]
 ----
-[:crux.tx/delete :dbpedia.resource/Pablo-Picasso
-#inst "2018-05-18T09:21:52.151-00:00"]
+[:crux.tx/delete
+ :dbpedia.resource/Pablo-Picasso <1>
+ #inst "2018-05-18T09:20:27.966-00:00" <2>
+ #inst "2018-05-19T08:31:15.966-00:00"] <3>
 ----
+
+<1> Document ID to be deleted
+<2> (optional) <<#valid-time,`valid time`>>
+<3> (optional) <<#end-valid-time,`end valid time`>>
 
 [#match]
 === Match
 
-Match operations check the current state of an entity - if the entity doesn't match the provided doc, the transaction will not continue.
-You can also pass `nil` to check that the entity doesn't exist prior to your transaction.
+Match checks the state of an entity - if the entity doesn't match the provided doc, the transaction will not continue.
 
 [source,clojure]
 ----
@@ -119,10 +80,11 @@ You can also pass `nil` to check that the entity doesn't exist prior to your tra
  #inst "2018-05-18T09:21:31.846-00:00"] <3>
 ----
 
-<1> Entity id
-<2> Document (or nil)
-<3> (optional) `valid time`
+<1> ID to be matched (for an entity which may or may not exist)
+<2> A specific document revision (or `nil`)
+<3> (optional) <<valid-time,`valid time`>>
 
+If the document supplied is `nil`, the match only passes if there does not exist a Document with the given ID.
 
 [#evict]
 === Evict
@@ -134,72 +96,119 @@ Evicts a document from Crux. Historical versions of the document will no longer 
 [:crux.tx/evict :dbpedia.resource/Pablo-Picasso]
 ----
 
+Evict is primarily used for GDPR Right to Erasure compliance.
+
+It is important to note that Evict is the only operation which will have effects on the results returned when querying against an earlier Transaction Time.
+
 [#transaction-functions]
-== Transaction functions
+=== Transaction Functions
 
 Transaction functions are user-supplied functions that run on the individual Crux nodes when a transaction is being ingested.
-They can take any number of parameters, and return normal transaction operations which are then indexed as above.
-If they return `false` or throw an exception, the whole transaction will roll back.
 
 Transaction functions can be used, for example, to safely check the current database state before applying a transaction, for integrity checks, or to patch an entity.
 
+==== Anatomy
+[source,clojure]
+----
+(fn [ctx eid] <1>
+    (let [db (crux.api/db ctx) <2>
+          entity (crux.api/entity db eid)]
+      [[:crux.tx/put (update entity :age inc)]])) <3>
+----
+
+<1> Transaction functions are passed a `context` parameter and any number of other parameters.
+<2> The `context` parameter can be used to obtain a database value using `db` or `open-db`.
+<3> Transaction functions should return a list of transaction operations or `false`
+
+If a list of transaction operations is returned, these are indexed as part of the transaction.
+
+If `false` is returned, or an exception is thrown, the whole transaction will roll back.
+
+==== Creating / Updating
+
 Transaction functions are created/updated by submitting a document to Crux with a `crux.db/fn` key.
-These functions are passed a 'context' parameter, which can be used to obtain a database value using `db` or `open-db`.
 
 [source,clojure]
 ----
 (crux/submit-tx node [[:crux.tx/put {:crux.db/id :increment-age
-                                     ;; note that the function body is quoted.
-                                     :crux.db/fn '(fn [ctx eid]
+                                     :crux.db/fn '(fn [ctx eid] <1>
                                                     (let [db (crux.api/db ctx)
                                                           entity (crux.api/entity db eid)]
                                                       [[:crux.tx/put (update entity :age inc)]]))}]])
 ----
 
-You can then invoke these transaction functions by submitting a `:crux.tx/fn` operation:
+<1> Note that the function itself is quoted
 
+==== Usage
 [source,clojure]
 ----
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :age 40}]])
-(crux/submit-tx node [[:crux.tx/fn :increment-age :ivan]])
-
-;; once those transactions have been indexed
-
-(crux/entity (crux/db node) :ivan)
-;; => {:crux.db/id :ivan, :age 41}
+[:crux.tx/fn
+ :increment-age <1>
+ :ivan] <2>
 ----
 
-[#events]
-== Events
+<1> Function ID
+<2> Parameter(s)
 
-You can subscribe to Crux events using the `(crux.api/listen node event-opts f)` function.
-Currently we expose one event type, `:crux/indexed-tx`, called when Crux indexes a transaction.
+[#document]
+== Documents
 
-[source,clojure]
+A document is a map from keywords to values.
+
+[source,clj]
 ----
-(require '[crux.api :as crux])
-
-(crux/listen node {:crux/event-type :crux/indexed-tx, :with-tx-ops? true}
-  (fn [ev]
-    (println "event received!")
-    (clojure.pprint/pprint ev)))
-
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
+{:crux.db/id :dbpedia.resource/Pablo-Picasso
+ :name "Pablo"
+ :last-name "Picasso"}
 ----
 
-prints:
+For operations containing documents, the id and the document are
+hashed, and the operation and hash is submitted to the `tx-topic` in
+the event log. The document itself is submitted to the `doc-topic`,
+using its content hash as key. In Kafka, the `doc-topic` is compacted,
+which enables later deletion of documents.
 
-[source,clojure]
-----
-event received!
-{:crux/event-type :crux/indexed-tx,
- :crux.tx/tx-id ...,
- :crux.tx/tx-time #inst "...",
- :committed? true,
- :crux/tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]]}
-----
+All documents must contain the `:crux.db/id` key.
 
-You can `.close` the return value from `(crux.api/listen ...)` to detach the listener, should you need to.
+[#valid-ids]
+=== Valid IDs
+
+The following types of `:crux.db/id` are allowed:
+
+.Valid Id types
+[cols="d,d"]
+|===
+|Type|Example
+
+|Keyword|`:my-id` or `:dbpedia.resource/Pablo-Picasso`
+|String|`"my-id"`
+|Integers/Longs|`42`
+|UUID|`#uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"`
+|URI|`#crux/id "mailto:crux@juxt.pro"`
+|URL|`#crux/id "https://github.com/juxt/crux"`
+|Maps|`{:this :id-field}`
+|===
+
+The `#crux/id` reader literal will take URI/URL strings and attempt to coerce them into valid IDs.
+
+URIs and URLs are interpreted using Java classes (java.net.URI and java.net.URL respectively) and therefore you can also use these directly.
+
+[#valid-times]
+== Valid Times
+
+When an optional `valid time` is omitted from a transaction operation, the Transaction Time will be used as `valid time`.
+
+[#valid-time]
+=== Only Valid Time Provided
+
+When `valid time` is used as a parameter for <<#put,`crux.tx/put`>> and <<#delete,`crux.tx/delete`>>, it specifies the time from which the change is valid.
+
+If there is a document, `A`, already present at the given `valid time`, the operation's effect is valid from `valid time` to the end of the current validity of `A`.
+
+[#end-valid-time]
+=== End Valid Time
+
+When both `valid time` and `end valid time` are provided for <<#put,`crux.tx/put`>> and <<#delete,`crux.tx/delete`>>, the operation's affect is valid from `valid time` (inclusive) to `end valid time` (exclusive).
 
 [#speculative-transactions]
 == Speculative transactions
