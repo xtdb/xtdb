@@ -6,7 +6,6 @@ import crux.api.*;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Date;
-import java.util.function.Consumer;
 
 @SuppressWarnings("unused")
 @Deprecated
@@ -22,10 +21,6 @@ public class CruxNode implements AutoCloseable {
 
     public static CruxNode startNode() {
         return new CruxNode(Crux.startNode());
-    }
-
-    public static CruxNode startNode(Consumer<NodeConfigurator> f) {
-        return new CruxNode(Crux.startNode(f));
     }
 
     /**
