@@ -100,9 +100,9 @@
 
 ;; tag::history-range[]
 
-; Passing the aditional 'opts' map with the start/end bounds.
-; As we are returning results in :asc order, the :start map contains the earlier co-ordinates -
-; If returning history range in descending order, we pass the later co-ordinates to the :start map
+; Passing the additional 'opts' map with the start/end bounds.
+; As we are returning results in :asc order, the :start map contains the earlier coordinates -
+; If returning history range in descending order, we pass the later coordinates to the :start map
 (api/entity-history
  (api/db node)
  :ids.persons/Jeff

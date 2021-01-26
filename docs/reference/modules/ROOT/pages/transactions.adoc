@@ -80,8 +80,8 @@ Match checks the state of an entity - if the entity doesn't match the provided d
  #inst "2018-05-18T09:21:31.846-00:00"] <3>
 ----
 
-<1> Document ID to be deleted.
-<2> Document (or `nil`).
+<1> ID to be matched (for an entity which may or may not exist)
+<2> A specific document revision (or `nil`)
 <3> (optional) <<valid-time,`valid time`>>
 
 If the document supplied is `nil`, the match only passes if there does not exist a Document with the given ID.

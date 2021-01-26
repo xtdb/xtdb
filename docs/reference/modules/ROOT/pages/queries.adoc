@@ -36,8 +36,8 @@ the database that match the pattern defined by the clauses. The values within
 these subgraphs are then returned according to the list of return variables
 requested in the `:find` vector within the query.
 
-[#anatomy]
-== Query Anatomy
+[#structure]
+== Basic Structure
 
 A query in Crux is performed by calling `crux/q` on a Crux database snapshot with a quoted map and, optionally, additional arguments.
 
@@ -45,9 +45,9 @@ A query in Crux is performed by calling `crux/q` on a Crux database snapshot wit
 ----
 include::example$test/crux/docs/examples/query_test.clj[tags=anatomy,indent=0]
 ----
-<1> Usually, the snapshot view comes from calling `crux/db` on a Crux node
-<2> Query map
-<3> Argument(s)
+<1> Database value. Usually, the snapshot view comes from calling `crux/db` on a Crux node
+<2> Query map (vector style queries are also supported)
+<3> Argument(s) supplied to the `:in` relations
 
 The query map accepts the following Keywords
 
@@ -92,7 +92,7 @@ You can specify an aggregate function to apply to at most one logic variable.
 |===
 |Usage|Description
 |`(sum ?lvar)`| Accumulates as a single value via the Clojure https://clojuredocs.org/clojure.core/+[`&#43;`] function
-|`(min ?lvar)` .2+| Return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operates on many types (integers, strings, collections etc.)
+|`(min ?lvar)` .2+| Return a single value via the Clojure https://clojuredocs.org/clojure.core/compare[`compare`] function which may operate on many types (integers, strings, collections etc.)
 |`(max ?lvar)`
 |`(count ?lvar)`| Return a single count of all values including any duplicates
 |`(avg ?lvar)`| Return a single value equivalent to `sum / count`
@@ -126,8 +126,6 @@ User-defined aggregates are supported by adding a new method (via Clojure `defme
 
 [#eql-projection]
 === EQL Projection
-
-// TODO: Not rewriting as this is being actively worked on and changed
 
 *ALPHA* - subject to change without warning between releases.
 
@@ -188,32 +186,34 @@ include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6-r,inden
 ----
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
-// TODO temporarily feature flagging recursion until it passes Datascript tests, see #1220
-Crux does not (yet) support recursive queries.
 
 [#where]
 == Where
 
-The `:where` section of a query constrains the result set to match only entities (or subgraphs of interconnected entities) which satisfy all terms in the supplied vector.
+The `:where` section of a query limits the combinations of possible results by satisfying all clauses and rules in the supplied vector against the database (and any `:in` relations).
 
-.Valid Terms
+.Valid Clauses
 [cols="1,4"]
 |===
 |Name|Description
-|<<#term-triple, triple>>| Restrict using EAV facts.
-|<<#term-not, not>>| Negatively restrict
-|<<#term-not-join, not-join>>| Not statement with its own scope
-|<<#term-or, or>>| Restrict on at least on matching term
-|<<#term-or-join, or-join>>| Or statement with its own scope
-|<<#term-range, range>>| Restrict with inequalities
-|<<#term-rule, rule>>| Restrict with a self-defined rule
-|<<#term-pred, pred>>| Restrict with any predicate
+|<<#clause-triple, triple clause>>| Restrict using EAV indexes
+|<<#clause-pred, predicate>>| Restrict with any predicate
+|<<#clause-range, range predicate>>| Restrict with any of `< <= >= > =` 
+|<<#clause-unification, unification predicate>>| Unify two distinct logic variables with `!=` or `==`
+|<<#clause-not, not rule>>| Negate a list of clauses
+|<<#clause-not-join, not-join rule>>| Not rule with its own scope
+|<<#clause-or, or rule>>| Restrict on at least one matching clause
+|<<#clause-or-join, or-join rule>>| Or with its own scope
+|<<#clause-rule, defined rule>>| Restrict with a user-defined rule
 |===
 
-[#term-triple]
+// TODO
+// get-attr ?
+
+[#clause-triple]
 === Triple
 
-A triple is a vector of a logic variable, a document key and (optionally) a value to match which can be a literal or another logic variable.
+A triple clause is a vector of a logic variable, a document key and (optionally) a value to match which can be a literal or another logic variable.
 
 It restricts results by matching EAV facts
 
@@ -229,133 +229,12 @@ include::example$test/crux/docs/examples/query_test.clj[tags=triple-3,indent=0]
 <2> This matches all entities, `p`, which have a `:name` of `"Ivan"`.
 <3> This matches all entities, `p`, which have a `:name` which match the `:last-name` of `q`.
 
-[#term-not]
-=== Not
-
-The `not` term rejects a graph if all the terms within it are true.
-
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=not-data,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=not-2,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=not-2-r,indent=0]
-----
-<1> Data
-<2> Query
-<3> Result
-
-This will match any document which does not have a `:name` of "Ivan" _and_ a `:last-name` of "Ivanov".
-
-[#term-not-join]
-=== Not Join
-
-The `not-join` term allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of terms.
-
-You declare which logic variables from outside the `not-join` scope are to be used in the join.
-
-Any other logic variables within the not-join are scoped only for the join.
-
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=not-join-data,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=not-join,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=not-join-r,indent=0]
-----
-<1> Data
-<2> Declaration of which logic variables need to unify with the rest of the query
-<3> Terms
-<4> Result
-
-This will match any entity, `p`, which has different values for the `:name` and `:last-name` field.
-
-Importantly, the logic variable `n` is unbound outside the `not-join` term.
-
-[#term-or]
-=== Or
-
-The `or` term accepts a graph if any of the terms within it are true.
-
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-data,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=or-1,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=or-1-r,indent=0]
-----
-<1> Data
-<2> Query
-<3> Result
-
-This will match any document, `p`, which has a `:last-name` of "Ivanov" or "Ivannotov".
-
-When within an `or` term, you can use `and` to group terms which must all be true.
-
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-2,indent=0]
-----
-
-[#term-or-join]
-=== Or Join
-
-The `or-join` term term allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of terms.
-
-You declare which logic variables from outside the `or-join` scope are to be used in the join.
-
-Any other logic variables within the `or-join` are scoped only for the join.
-
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-join-data,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=or-join,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=or-join-r,indent=0]
-----
-<1> Data
-<2> Declaration of which logic variables need to unify with the rest of the query
-<3> Terms
-<4> Result
-
-This will match any document, `p` which has an `:age` greater than or equal to 18 _or_ has a `:name` of "Ivan".
-
-Importantly, the logic variable `a` is unbound outside the `or-join` term.
-
-[#term-range]
-=== Range
-
-The `range` term is a vector containing a list of a range operator and then two terms which can be logic variables or literals.
-
-Allowed range operators are `<`, `<=`, `>=`, `>`, and `=`.
-
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=range-1,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=range-2,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=range-3,indent=0]
-----
-<1> Finds any entity, `p`, with an `:age` which is greater than 18
-<2> Finds any entity, `p`, with an `:age` which is greater than the `:age` of any entity
-<3> Finds any entity, `p`, for which 18 is greater than `p`'s `:age`
-
-[#term-rule]
-=== Rules
-
-<<#rules, See Rules>>
-
-[#term-pred]
+[#clause-pred]
 === Predicates
 
-A fully qualified Clojure function that returns a boolean can be used as a predicate term.
+Any fully qualified Clojure function that returns a boolean can be used as a "filter" predicate clause.
 
-Predicate terms should be placed in a vector.
+Predicate clauses must be placed in a clause, i.e. with a surrounding vector.
 
 [source,clojure]
 ----
@@ -367,7 +246,7 @@ This matches all entities, `p` which have an odd `:age`.
 [#where-subqueries]
 === Subqueries
 
-You can nest a subquery with a `:where` term to bind the result for further use in the query.
+You can nest a subquery with a `:where` clause to bind the result for further use in the query.
 
 ==== Binding results as a scalar
 
@@ -415,6 +294,160 @@ Result set:
 include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-3-r,indent=0]
 ----
 
+Any fully qualified Clojure function can also be used to return relation bindings in this way, by returning a list, set or vector.
+
+[#clause-range]
+=== Range Predicate
+
+A `range predicate` is a vector containing a list of a range operator and then two logic variables or literals.
+
+Allowed range operators are `<`, `<=`, `>=`, `>`, and `=`.
+
+[source,clj]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=range-1,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=range-2,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=range-3,indent=0]
+----
+<1> Finds any entity, `p`, with an `:age` which is greater than 18
+<2> Finds any entity, `p`, with an `:age` which is greater than the `:age` of any entity
+<3> Finds any entity, `p`, for which 18 is greater than `p`'s `:age`
+
+[#clause-unification]
+=== Unification Predicate
+
+Use a unification predicate, either `==` or `!=`, to constrain two independent logic variables. Literals (and sets of literals) can also be used in place of one of the logic variables.
+
+[source,clj]
+----
+;; Find all pairs of people with the same age:
+
+[[p :age a]
+ [p2 :age a2]
+ [(== a a2)]]
+
+;; ...is approximately equivalent to...
+
+[[p :age a]
+ [p2 :age a]]
+
+;; Find all pairs of people with different ages:
+
+[[p :age a]
+ [p2 :age a2]
+ [(!= a a2)]]
+
+;; ...is approximately equivalent to...
+
+[[p :age a]
+ [p2 :age a2]
+ (not [(= a a2]])]
+----
+
+[#clause-not]
+=== Not
+
+The `not` clause rejects a graph if all the clauses within it are true.
+
+[source,clj]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=not-data,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=not-2,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=not-2-r,indent=0]
+----
+<1> Data
+<2> Query
+<3> Result
+
+This will match any document which does not have a `:name` of "Ivan" _and_ a `:last-name` of "Ivanov".
+
+[#clause-not-join]
+=== Not Join
+
+The `not-join` rule allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of clauses.
+
+You declare which logic variables from outside the `not-join` scope are to be used in the join.
+
+Any other logic variables within the not-join are scoped only for the join.
+
+[source,clj]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=not-join-data,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=not-join,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=not-join-r,indent=0]
+----
+<1> Data
+<2> Declaration of which logic variables need to unify with the rest of the query
+<3> Clauses
+<4> Result
+
+This will match any entity, `p`, which has different values for the `:name` and `:last-name` field.
+
+Importantly, the logic variable `n` is unbound outside the `not-join` clause.
+
+[#clause-or]
+=== Or
+
+An `or` clause is satisfied if any of its legs are satisfied.
+
+[source,clj]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=or-data,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=or-1,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=or-1-r,indent=0]
+----
+<1> Data
+<2> Query
+<3> Result
+
+This will match any document, `p`, which has a `:last-name` of "Ivanov" or "Ivannotov".
+
+When within an `or` rule, you can use `and` to group clauses into a single leg (which must all be true).
+
+[source,clj]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=or-2,indent=0]
+----
+
+[#clause-or-join]
+=== Or Join
+
+The `or-join` clause allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of clauses.
+
+You declare which logic variables from outside the `or-join` scope are to be used in the join.
+
+Any other logic variables within the `or-join` are scoped only for the join.
+
+[source,clj]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=or-join-data,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=or-join,indent=0]
+
+include::example$test/crux/docs/examples/query_test.clj[tags=or-join-r,indent=0]
+----
+<1> Data
+<2> Declaration of which logic variables need to unify with the rest of the query
+<3> Clauses
+<4> Result
+
+This will match any document, `p` which has an `:age` greater than or equal to 18 _or_ has a `:name` of "Ivan".
+
+Importantly, the logic variable `a` is unbound outside the `or-join` clauses.
+
+[#clause-rule]
+=== Rules
+
+<<#rules, See Rules>>
+
 [#in]
 == In
 
@@ -452,7 +485,7 @@ Result Set:
 include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments2-r,indent=0]
 ----
 
-=== Tuple Binding
+=== Tuple binding
 
 [source,clj]
 ----
@@ -467,7 +500,7 @@ Result Set:
 include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments3-r,indent=0]
 ----
 
-=== Relation Binding
+=== Relation binding
 
 [source,clj]
 ----
@@ -530,7 +563,7 @@ Feel free to open an issue or get in touch to discuss your requirements.
 
 [#rules]
 == Rules
-Rules are defined by a signature and then terms as you would find in a `:where` statement.
+Rules are defined by a rule head and then clauses as you would find in a `:where` statement.
 
 They can be used as a shorthand for when you would otherwise be repeating the same restrictions in your `:where` statement.
 
@@ -538,13 +571,15 @@ They can be used as a shorthand for when you would otherwise be repeating the sa
 ----
 include::example$test/crux/docs/examples/query_test.clj[tags=rules-1,indent=0]
 ----
-<1> Usage
-<2> Rule signature
-<3> Clauses
+<1> Rule usage clause (i.e. invocation)
+<2> Rule head (i.e. signature)
+<3> Rule body containing one or more clauses
 
 The above defines the rule `adult?` which checks that the supplied entity has an `:age` which is `>=` 18
 
-The terms in Rules can also use Rules. This allows for the recursive traversal of entities.
+Multiple rule bodies may be defined for a single rule (i.e. with matching rule heads) which works in a similar fashion to an `or-join`.
+
+The clauses within Rules can also be further Rule invocation clauses. This allows for the recursive traversal of entities.
 
 [source,clojure]
 ----
@@ -737,20 +772,6 @@ map rather than each individual use of every logic variable, for instance:
     :where [[?e :event/employee-code ?code]]}))
 ----
 
-Confusion may arise when you later attempt to introduce references to Clojure
-variables within your query map, such as when using `:args`. This can be
-resolved by introducing more granular quoting for specific parts of the query
-map:
-
-[source,clj]
-----
-(let [my-code 101214]
-  (crux/q db
-    {:find '[?e]
-     :where '[[?e :event/employee-code ?code]]
-     :args [{'?code my-code}]}))
-----
-
 === Maps and Vectors in data
 
 Say you have a document like so and you want to add it to a Crux db:
@@ -792,12 +813,14 @@ To query inside these vectors the code would be:
 ----
 (crux/q (crux/db node) '{:find [e l]
                          :where [[e :list l]]
-                         :args [{l "carrots"}]})
+                         :in [l]}
+                       "carrots")
 ;; => #{[:you "carrots"] [:me "carrots"]}
 
 (crux/q (crux/db node) '{:find [e p]
                          :where [[e :pockets/left p]]
-                         :args [{p "watch"}]})
+                         :in [p]}
+                       "watch")
 ;; => #{[:you "watch"]}
 ----
 
@@ -823,3 +846,8 @@ Crux does _not yet_ support:
 Note that many advanced query features can be achieved via custom predicate function calls since you can currently reference any fully qualified function that is loaded. In future, limitations on available functions may be introduced to enforce security restrictions for remote query execution.
 
 Test queries from DataScript such as "Rule with branches" and "Mutually recursive rules" work correctly with Crux and demonstrate advanced query patterns. See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[Crux query tests] for details.
+
+[#query-tests]
+== Query tests (advanced)
+
+See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests, which showcase many combinations of the query capabilities.
