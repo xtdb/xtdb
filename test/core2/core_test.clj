@@ -148,101 +148,98 @@
                   :end-vts [...]}]
            :delete []}}
 
-(do
-  (def tx-arrow-schema
-    (Schema. [(->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) true
-                       (->field "put" (.getType Types$MinorType/STRUCT) false
-                                (->field "document" (ArrowType$Union. UnionMode/Dense nil) false)
-                                (->field "from-valid-time" (.getType Types$MinorType/DATEMILLI) true)
-                                (->field "to-valid-time" (.getType Types$MinorType/DATEMILLI) true))
-                       (->field "delete" (.getType Types$MinorType/NULL) true))]))
+(def ^:private tx-arrow-schema
+  (Schema. [(->field "tx-ops" (.getType Types$MinorType/DENSEUNION) true
+                     (->field "put" (.getType Types$MinorType/STRUCT) false
+                              (->field "document" (.getType Types$MinorType/DENSEUNION) false)
+                              (->field "from-valid-time" (.getType Types$MinorType/DATEMILLI) true)
+                              (->field "to-valid-time" (.getType Types$MinorType/DATEMILLI) true))
+                     (->field "delete" (.getType Types$MinorType/NULL) true))]))
 
-  (defn- add-element! [^DenseUnionVector duv type-id parent-offset child-offset]
-    (while (< (.getValueCapacity duv) (inc parent-offset))
-      (.reAlloc duv))
+(defn- add-element-to-union! [^DenseUnionVector duv type-id parent-offset child-offset]
+  (while (< (.getValueCapacity duv) (inc parent-offset))
+    (.reAlloc duv))
 
-    (.setTypeId duv parent-offset type-id)
-    (.setInt (.getOffsetBuffer duv)
-             (* DenseUnionVector/OFFSET_WIDTH parent-offset)
-             child-offset))
+  (.setTypeId duv parent-offset type-id)
+  (.setInt (.getOffsetBuffer duv)
+           (* DenseUnionVector/OFFSET_WIDTH parent-offset)
+           child-offset))
 
-  (defn tx->tx-arrow [tx-ops ^RootAllocator allocator]
-    (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
-      (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
+(defn tx->tx-arrow ^VectorSchemaRoot [tx-ops ^RootAllocator allocator]
+  (let [root (VectorSchemaRoot/create tx-arrow-schema allocator)
+        ^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
 
-            union-type-ids (into {} (map vector
-                                         (->> (.getChildren (.getField tx-op-vec))
-                                              (map #(.getName ^Field %)))
-                                         (range)))
-            put-type-id (get union-type-ids "put")
+        union-type-ids (into {} (map vector
+                                     (->> (.getChildren (.getField tx-op-vec))
+                                          (map #(.getName ^Field %)))
+                                     (range)))]
 
-            ^StructVector put-vec (.getStruct tx-op-vec put-type-id)
-            ^DateMilliVector start-vt-vec (.getChild put-vec "from-valid-time" DateMilliVector)
-            ^DateMilliVector end-vt-vec (.getChild put-vec "to-valid-time" DateMilliVector)
+    (->> (map-indexed vector tx-ops)
+         (reduce (fn [acc [op-idx doc]]
+                   (let [op-type "put"
+                         ^int per-op-offset (get-in acc [:per-op-offsets op-type] 0)]
 
-            ^DenseUnionVector put-doc-vec (.getChild put-vec "document" DenseUnionVector)]
+                     (add-element-to-union! tx-op-vec (get union-type-ids op-type) op-idx per-op-offset)
 
-        (->> (map-indexed vector tx-ops)
-             (reduce (fn [{:keys [op-offsets put-doc-struct-offsets] :as acc} [op-idx doc]]
-                       (let [op-type "put"
-                             ^int op-offset (get op-offsets op-type 0)]
+                     (case op-type
+                       "put" (let [put-type-id (get union-type-ids "put")
 
-                         (add-element! tx-op-vec (get union-type-ids op-type) op-idx op-offset)
+                                   ^StructVector put-vec (.getStruct tx-op-vec put-type-id)
+                                   ^DateMilliVector start-vt-vec (.getChild put-vec "from-valid-time" DateMilliVector)
+                                   ^DateMilliVector end-vt-vec (.getChild put-vec "to-valid-time" DateMilliVector)
 
-                         (case op-type
-                           "put" (do
-                                   (.setIndexDefined put-vec op-offset)
-                                   (.setSafe start-vt-vec op-offset (.getTime (java.util.Date.)))
-                                   (.setSafe end-vt-vec op-offset (.getTime (java.util.Date.)))
+                                   ^DenseUnionVector put-doc-vec (.getChild put-vec "document" DenseUnionVector)]
 
-                                   (let [doc-fields (->> (for [[k v] (sort-by key doc)]
-                                                           [k (Field/nullable (str k) (->arrow-type (type v)))])
-                                                         (into (sorted-map)))
-                                         field-k (format "%08x" (hash doc-fields))
-                                         doc-field (apply ->field field-k (.getType Types$MinorType/STRUCT) true (vals doc-fields))
-                                         field-type-id (or (->> (map-indexed vector (.getChildren (.getField put-doc-vec)))
-                                                                (some (fn [[idx field]]
-                                                                        (when (= doc-field field)
-                                                                          idx))))
-                                                           (.registerNewTypeId put-doc-vec doc-field))
-                                         struct-vec (.getStruct put-doc-vec field-type-id)
-                                         struct-offset (get put-doc-struct-offsets doc-field 0)]
+                               (.setIndexDefined put-vec per-op-offset)
+                               (.setSafe start-vt-vec per-op-offset (.getTime (java.util.Date.)))
+                               (.setSafe end-vt-vec per-op-offset (.getTime (java.util.Date.)))
 
-                                     (.setIndexDefined struct-vec struct-offset)
+                               (let [doc-fields (->> (for [[k v] (sort-by key doc)]
+                                                       [k (Field/nullable (pr-str k) (->arrow-type (type v)))])
+                                                     (into (sorted-map)))
+                                     field-k (format "%08x" (hash doc-fields))
+                                     ^Field doc-field (apply ->field field-k (.getType Types$MinorType/STRUCT) true (vals doc-fields))
+                                     field-type-id (or (->> (map-indexed vector (keys (get-in acc [:put :per-struct-offsets])))
+                                                            (some (fn [[idx ^Field field]]
+                                                                    (when (= doc-field field)
+                                                                      idx))))
+                                                       (.registerNewTypeId put-doc-vec doc-field))
+                                     struct-vec (.getStruct put-doc-vec field-type-id)
+                                     per-struct-offset (get-in acc [:put :per-struct-offsets doc-field] 0)]
 
-                                     (add-element! put-doc-vec field-type-id op-offset struct-offset)
+                                 (.setIndexDefined struct-vec per-struct-offset)
 
-                                     (doseq [[k v] doc
-                                             :let [^Field field (get doc-fields k)]]
-                                       (set-safe! (.addOrGet struct-vec (name k) (.getFieldType field) ValueVector)
-                                                  struct-offset
-                                                  v))
+                                 (add-element-to-union! put-doc-vec field-type-id per-op-offset per-struct-offset)
 
-                                     (-> acc
-                                         (assoc-in [:op-offsets op-type] (inc op-offset))
-                                         (assoc-in [:put-doc-struct-offsets doc-field] (inc struct-offset))))))))
-                     {}))
+                                 (doseq [[k v] doc
+                                         :let [^Field field (get doc-fields k)]]
+                                   (set-safe! (.addOrGet struct-vec (pr-str k) (.getFieldType field) ValueVector)
+                                              per-struct-offset
+                                              v))
 
-        (.setRowCount root (count tx-ops))
+                                 (-> acc
+                                     (assoc-in [:per-op-offsets op-type] (inc per-op-offset))
+                                     (assoc-in [:put :per-struct-offsets doc-field] (inc per-struct-offset))))))))
+                 {}))
 
-        (.syncSchema root)
+    (doto root
+      (.setRowCount (count tx-ops))
+      (.syncSchema))))
 
-        [(.getObject tx-op-vec 0)
-         (.getObject tx-op-vec 6)
-         (.getObject tx-op-vec 9)])))
-
-  (defn tx-arrow->ingest-log-arrow []
-    )
-
-  #_
+(comment
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
     (with-readings-docs
       (fn [readings]
-        (tx->tx-arrow (interleave (take 10 @!info-docs)
-                                  (take 10 readings))
-                      allocator)))))
-
-;; idea: tx-log only needs to store row-ids, can then be re-created from the content indices if required
+        (with-open [root (tx->tx-arrow (interleave (take 10 @!info-docs)
+                                                   (take 10 readings))
+                                       allocator)]
+          (let [file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/tx.arrow"))
+                                          (into-array OpenOption #{StandardOpenOption/CREATE
+                                                                   StandardOpenOption/WRITE
+                                                                   StandardOpenOption/TRUNCATE_EXISTING}))]
+            (with-open [fw (doto (ArrowFileWriter. root nil file-ch)
+                             (.start))]
+              (.writeBatch fw))))))))
 
 (do
   (deftype Ingester [^BufferAllocator allocator
@@ -379,7 +376,7 @@
 
 (comment
   ;; converting Arrow to JSON
-  (let [file-name "chunk-00000000-ba085ddb"]
+  (let [file-name "tx"]
     (with-open [allocator (RootAllocator. Long/MAX_VALUE)
                 file-ch (FileChannel/open (.toPath (io/file (format "/tmp/arrow/%s.arrow" file-name)))
                                           (into-array OpenOption #{StandardOpenOption/READ}))
