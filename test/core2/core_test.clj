@@ -403,11 +403,20 @@
 
             (.setRowCount root 0))
           (finally
-            (.close file-writer)
-            (.close root))))
+            (try
+              (.close file-writer)
+              (catch Exception e
+                (.printStackTrace e))))))
 
-      (.clear file-writers)
-      (.clear ^Map (.content-roots ingester))))
+      (.clear file-writers))
+
+    (let [^Map roots (.content-roots ingester)]
+      (doseq [^VectorSchemaRoot root (vals roots)]
+        (try
+          (.close root)
+          (catch Exception e
+            (.printStackTrace e))))
+      (.clear roots)))
 
   #_
   (let [arrow-dir (doto (io/file "/tmp/arrow")
