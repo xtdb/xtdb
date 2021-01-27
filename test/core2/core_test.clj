@@ -81,12 +81,9 @@
             (.write file-writer root)))))))
 
 ;;; ingest
-;; DONE 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
-;; DONE 2. more than one block per chunk - 'seal' a block, starting a new live block
 ;; TODO 11. figure out last tx-id/row-id from latest chunk and resume ingest on start.
 ;; TODO 12. object store protocol, store chunks and metadata. File implementation.
 ;; TODO 13. log protocol. File implementation.
-;; TODO 14. tx-time/tx-id cols
 
 ;;; + metadata
 ;; TODO 4. writing metadata - minmax, bloom at chunk/file and block/record-batch
@@ -123,7 +120,7 @@
 ;; live chunk, reading unsealed block in memory
 
 (defprotocol TransactionIngester
-  (index-tx [ingester docs]))
+  (index-tx [ingester tx docs]))
 
 (def max-block-size 10000)
 (def max-blocks-per-chunk 10)
@@ -168,6 +165,10 @@
 
   VarCharVector
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
+  (set-null! [this idx] (.setNull this ^int idx))
+
+  UInt8Vector
+  (set-safe! [this idx v] (.setSafe this ^int idx ^long v))
   (set-null! [this idx] (.setNull this ^int idx)))
 
 (declare close-writers!)
@@ -295,7 +296,7 @@
 
     TransactionIngester
     ;; aim: content-indices
-    (index-tx [this tx-bytes]
+    (index-tx [this {:keys [tx-time tx-id]} tx-bytes]
       (with-open [bais (ByteArrayInputStream. tx-bytes)
                   sr (doto (ArrowStreamReader. bais allocator)
                        (.loadNextBatch))
@@ -316,7 +317,7 @@
                            struct-type-id (.getTypeId document-vec per-op-offset)
                            per-struct-offset (.getOffset document-vec per-op-offset)]
                        (doseq [^ValueVector kv-vec (.getChildrenFromFields (.getStruct document-vec struct-type-id))]
-                         (let [^Field field (.getField kv-vec)
+                         (let [field (.getField kv-vec)
                                row-id-field (->field "_row-id" (.getType Types$MinorType/UINT8) false) ; TODO re-use
                                ^VectorSchemaRoot
                                content-root (.computeIfAbsent content-roots field
@@ -328,6 +329,22 @@
                                ^UInt8Vector row-id-vec (.getVector content-root row-id-field)]
 
                            (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
+                           (.setSafe row-id-vec value-count (+ next-row-id tx-op-idx))
+                           (.setRowCount content-root (inc value-count))))
+
+                       (doseq [[^Field field field-val] [[(->field "_tx-time" (.getType Types$MinorType/DATEMILLI) false) tx-time]
+                                                         [(->field "_tx-id" (.getType Types$MinorType/UINT8) false) tx-id]]]
+                         (let [row-id-field (->field "_row-id" (.getType Types$MinorType/UINT8) false) ; TODO re-use
+                               ^VectorSchemaRoot
+                               content-root (.computeIfAbsent content-roots field
+                                                              (reify Function
+                                                                (apply [_ _]
+                                                                  (VectorSchemaRoot/create (Schema. [row-id-field field]) allocator))))
+                               value-count (.getRowCount content-root)
+                               field-vec (.getVector content-root field)
+                               ^UInt8Vector row-id-vec (.getVector content-root row-id-field)]
+
+                           (set-safe! field-vec value-count field-val)
                            (.setSafe row-id-vec value-count (+ next-row-id tx-op-idx))
                            (.setRowCount content-root (inc value-count))))))))
 
@@ -403,8 +420,8 @@
                                     0
                                     0)]
 
-      (doseq [tx-bytes foo-tx-bytes]
-        (index-tx ingester tx-bytes)))
+      (doseq [[tx-id tx-bytes] (map-indexed vector foo-tx-bytes)]
+        (index-tx ingester {:tx-id tx-id, :tx-time (Date.)} tx-bytes)))
 
     (write-arrow-json-files arrow-dir)))
 
