@@ -8,15 +8,12 @@
            [java.nio.file OpenOption StandardOpenOption]
            [java.util Date HashMap Map]
            [java.util.function Function]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector ValueVector VarCharVector VectorLoader VectorSchemaRoot UInt8Vector]
-           [org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector]
-           [org.apache.arrow.vector.complex.impl VarCharWriterImpl DenseUnionWriter]
-           [org.apache.arrow.vector.holders DateMilliHolder Float8Holder VarCharHolder UInt8Holder]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector DateMilliVector Float8Vector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot UInt8Vector]
+           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamReader ArrowStreamWriter JsonFileReader JsonFileWriter JsonFileWriter$JSONWriteConfig ReadChannel]
-           [org.apache.arrow.vector.ipc.message ArrowBlock MessageSerializer]
-           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List ArrowType$Map ArrowType$Union Field FieldType Schema]
+           [org.apache.arrow.vector.types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]
            [org.apache.arrow.vector.util Text]))
 
 (def device-info-csv-resource
@@ -89,7 +86,6 @@
 ;; TODO 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
 ;; DONE 1c. row-ids
 ;; TODO 2. more than one block per chunk - 'seal' a block, starting a new live block
-;; TODO 9. add few more raw types to map + protocol: Long->Int8, BigDecimal->Decimal128, Boolean->Bit, Bytes->VarBinary
 ;; TODO 10. handle nulls via setting null in column.
 ;; TODO 11. figure out last tx-id from latest chunk and resume ingest on start.
 ;; TODO 12. object store protocol, store chunks and metadata. File implementation.
@@ -135,7 +131,10 @@
 (def max-blocks-per-chunk 10)
 
 (def ->arrow-type
-  {Double (.getType Types$MinorType/FLOAT8)
+  {Boolean (.getType Types$MinorType/BIT)
+   (Class/forName "[B") (.getType Types$MinorType/VARBINARY)
+   Double (.getType Types$MinorType/FLOAT8)
+   Long (.getType Types$MinorType/BIGINT)
    String (.getType Types$MinorType/VARCHAR)
    Date (.getType Types$MinorType/DATEMILLI)
    nil (.getType Types$MinorType/NULL)})
@@ -144,17 +143,29 @@
   (set-safe! [_ idx v]))
 
 (extend-protocol SetSafe
+  BigIntVector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx ^long v))
+
+  BitVector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx ^int (if v 1 0)))
+
+  DateMilliVector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx (.getTime ^Date v)))
+
   Float8Vector
   (set-safe! [this idx v]
     (.setSafe this ^int idx ^double v))
 
+  VarBinaryVector
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx ^bytes v))
+
   VarCharVector
   (set-safe! [this idx v]
-    (.setSafe this ^int idx (Text. (str v))))
-
-  DateMilliVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (.getTime ^Date v))))
+    (.setSafe this ^int idx (Text. (str v)))))
 
 (declare close-writers!)
 
