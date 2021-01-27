@@ -69,6 +69,21 @@
       (fn [rows]
         (doall (take 10 rows))))))
 
+(defn write-arrow-json-files [^File arrow-dir]
+  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+    (doseq [^File
+            file (->> (.listFiles arrow-dir)
+                      (filter #(.endsWith (.getName ^File %) ".arrow")))]
+      (with-open [file-ch (FileChannel/open (.toPath file)
+                                            (into-array OpenOption #{StandardOpenOption/READ}))
+                  file-reader (ArrowFileReader. file-ch allocator)
+                  file-writer (JsonFileWriter. (io/file arrow-dir (format "%s.json" (.getName file)))
+                                               (.. (JsonFileWriter/config) (pretty true)))]
+        (let [root (.getVectorSchemaRoot file-reader)]
+          (.start file-writer (.getSchema root) nil)
+          (while (.loadNextBatch file-reader)
+            (.write file-writer root)))))))
+
 ;; Writer API?
 
 ;;; ingest
@@ -243,7 +258,7 @@
         (.toByteArray baos)))))
 
 #_
-(defonce foo-tx-bytes
+(def foo-tx-bytes
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
     (with-readings-docs
       (fn [readings]
@@ -385,29 +400,19 @@
 
       (.clear file-writers)))
 
-  #_
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-              ingester (Ingester. allocator
-                                  (doto (io/file "/tmp/arrow") .mkdirs)
-                                  (HashMap.)
-                                  (HashMap.)
-                                  0)]
+  (let [arrow-dir (doto (io/file "/tmp/arrow")
+                    .mkdirs)]
+    (with-open [allocator (RootAllocator. Long/MAX_VALUE)
+                ingester (Ingester. allocator
+                                    arrow-dir
+                                    (HashMap.)
+                                    (HashMap.)
+                                    0)]
 
-    (index-tx ingester foo-tx-bytes)))
+      (index-tx ingester foo-tx-bytes))
+
+    (write-arrow-json-files arrow-dir)))
 
 (comment
   ;; converting Arrow to JSON
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
-
-    (doseq [^File
-            file (->> (.listFiles (io/file "/tmp/arrow"))
-                      (filter #(.endsWith (.getName ^File %) ".arrow")))]
-      (with-open [file-ch (FileChannel/open (.toPath file)
-                                            (into-array OpenOption #{StandardOpenOption/READ}))
-                  file-reader (ArrowFileReader. file-ch allocator)
-                  file-writer (JsonFileWriter. (io/file (format "/tmp/arrow/%s.json" (.getName file)))
-                                               (.. (JsonFileWriter/config) (pretty true)))]
-        (let [root (.getVectorSchemaRoot file-reader)]
-          (.start file-writer (.getSchema root) nil)
-          (while (.loadNextBatch file-reader)
-            (.write file-writer root)))))))
+  )
