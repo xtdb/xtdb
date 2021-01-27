@@ -3,8 +3,7 @@
             [clojure.java.io :as io]
             [clojure.instant :as inst]
             [clojure.string :as str])
-  (:import [clojure.lang Keyword]
-           [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
+  (:import [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
            [java.nio.channels FileChannel Channels]
            [java.nio.file OpenOption StandardOpenOption]
            [java.util Date HashMap Map]
@@ -29,11 +28,11 @@
       (with-open [rdr (io/reader device-info-csv-resource)]
         (vec (for [device-info (line-seq rdr)
                    :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")]]
-               {:crux.db/id (keyword "device-info" device-id)
-                :device-info/api-version api-version
-                :device-info/manufacturer manufacturer
-                :device-info/model model
-                :device-info/os-name os-name}))))))
+               {:_id (str "device-info-" device-id)
+                :api-version api-version
+                :manufacturer manufacturer
+                :model model
+                :os-name os-name}))))))
 
 (def readings-csv-resource
   (io/resource "devices_small_readings.csv"))
@@ -50,9 +49,9 @@
                    (-> time
                        (str/replace " " "T")
                        (str/replace #"-(\d\d)$" ".000-$1:00")))
-            :crux.db/id device-id
+            :_id (str "reading-" device-id)
             :battery-level (Double/parseDouble battery-level)
-            :battery-status (keyword battery-status)
+            :battery-status battery-status
             :battery-temperature (Double/parseDouble battery-temperature)
             :bssid bssid
             :cpu-avg-1min (Double/parseDouble cpu-avg-1min)
@@ -95,7 +94,6 @@
 ;; TODO 11. figure out last tx-id from latest chunk and resume ingest on start.
 ;; TODO 12. object store protocol, store chunks and metadata. File implementation.
 ;; TODO 13. log protocol. File implementation.
-;; TODO 14. de-keywordify field names - no namespace, no colon - JSON-ify.
 
 ;;; + metadata
 ;; TODO 4. writing metadata - minmax, bloom at chunk/file and block/record-batch
@@ -139,7 +137,6 @@
 (def ->arrow-type
   {Double (.getType Types$MinorType/FLOAT8)
    String (.getType Types$MinorType/VARCHAR)
-   Keyword (.getType Types$MinorType/VARCHAR)
    Date (.getType Types$MinorType/DATEMILLI)
    nil (.getType Types$MinorType/NULL)})
 
@@ -219,7 +216,7 @@
                                 (.setIndexDefined put-vec per-op-offset)
 
                                 (let [doc-fields (->> (for [[k v] (sort-by key doc)]
-                                                        [k (Field/nullable (pr-str k) (->arrow-type (type v)))])
+                                                        [k (Field/nullable (name k) (->arrow-type (type v)))])
                                                       (into (sorted-map)))
                                       field-k (format "%08x" (hash doc-fields))
                                       ^Field doc-field (apply ->field field-k (.getType Types$MinorType/STRUCT) true (vals doc-fields))
@@ -237,7 +234,7 @@
 
                                   (doseq [[k v] doc
                                           :let [^Field field (get doc-fields k)]]
-                                    (set-safe! (.addOrGet struct-vec (pr-str k) (.getFieldType field) ValueVector)
+                                    (set-safe! (.addOrGet struct-vec (name k) (.getFieldType field) ValueVector)
                                                per-struct-offset
                                                v))
 
@@ -297,10 +294,9 @@
                            document-vec (.addOrGet op-vec "document" (FieldType. false (.getType Types$MinorType/DENSEUNION) nil nil) DenseUnionVector)
                            struct-type-id (.getTypeId document-vec per-op-offset)
                            per-struct-offset (.getOffset document-vec per-op-offset)]
-                       ;; TODO change to doseq
                        (doseq [^ValueVector kv-vec (.getChildrenFromFields (.getStruct document-vec struct-type-id))]
                          (let [^Field field (.getField kv-vec)
-                               row-id-field (->field ":crux/row-id" (.getType Types$MinorType/UINT8) false) ; TODO re-use
+                               row-id-field (->field "_row-id" (.getType Types$MinorType/UINT8) false) ; TODO re-use
                                ^VectorSchemaRoot
                                target-root (.computeIfAbsent roots field
                                                              (reify Function
@@ -315,7 +311,7 @@
 
         ;; TODO build up files over multiple transactions
         (doseq [^VectorSchemaRoot target-root (vals roots)]
-          (with-open [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (name (read-string (.getName ^Field (first (.getFields (.getSchema target-root)))))))))
+          (with-open [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (.getName ^Field (first (.getFields (.getSchema target-root)))))))
                                                 (into-array OpenOption #{StandardOpenOption/CREATE
                                                                          StandardOpenOption/WRITE
                                                                          StandardOpenOption/TRUNCATE_EXISTING}))
