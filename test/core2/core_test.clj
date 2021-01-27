@@ -71,22 +71,34 @@
 
 ;; Writer API?
 
-;; DONE 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
-;; TODO 1b. writer?
-;; TODO 1c. row-ids
-;; DONE 2. more than one block per chunk - 'seal' a block, starting a new live block
-;; DONE 3. dynamic documents - atm we've hardcoded cols and types
+;;; ingest
+;; TODO 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
+;; DONE 1c. row-ids
+;; TODO 2. more than one block per chunk - 'seal' a block, starting a new live block
+;; TODO 9. add few more raw types to map + protocol: Long->Int8, BigDecimal->Decimal128, Boolean->Bit, Bytes->VarBinary
+;; TODO 10. handle nulls via setting null in column.
+;; TODO 11. figure out last tx-id from latest chunk and resume ingest on start.
+;; TODO 12. object store protocol, store chunks and metadata. File implementation.
+;; TODO 13. log protocol. File implementation.
+;; TODO 14. de-keywordify field names - no namespace, no colon - JSON-ify.
+
+;;; + metadata
+;; TODO 4. writing metadata - minmax, bloom at chunk/file and block/record-batch
+;; TODO 7b. fetch metadata and find further chunks based on metadata.
+
+;;; query
+;; TODO 7. reading any blocks - select battery_level from db (simple code-level query)
+;; TODO 8. reading live blocks
+;; TODO 8a. reading chunks already written to disk
+;; TODO 8b. reading blocks already written to disk
+;; TODO 8c. reading current block not yet written to disk
+
+;;; future
 ;; TODO 3b. union types, or keying the block by the type of the value too
-;; DONE 3c. intermingle devices with readings
 ;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions)
-;; TODO 4. metadata - minmax, bloom at chunk/file and block/record-batch
 ;; TODO 5. dictionaries
 ;; TODO 6. consider eviction
-;; TODO 7. reading any blocks - select battery_level from db (simple code-level query)
-;; DONE 8. reading live blocks
-;; DONE 8a. reading chunks already written to disk
-;; DONE 8b. reading blocks already written to disk
-;; DONE 8c. reading current block not yet written to disk
+;; TODO 1b. writer?
 
 ;; directions?
 ;; 1. e2e? submit-tx + some code-level queries
