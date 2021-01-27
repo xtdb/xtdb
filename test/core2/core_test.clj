@@ -10,7 +10,7 @@
            [java.util Date HashMap Map]
            [java.util.function Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector ValueVector VarCharVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector FieldVector DateMilliVector Float8Vector ValueVector VarCharVector VectorLoader VectorSchemaRoot UInt8Vector]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector MapVector StructVector]
            [org.apache.arrow.vector.complex.impl VarCharWriterImpl DenseUnionWriter]
            [org.apache.arrow.vector.holders DateMilliHolder Float8Holder VarCharHolder UInt8Holder]
@@ -50,7 +50,7 @@
                    (-> time
                        (str/replace " " "T")
                        (str/replace #"-(\d\d)$" ".000-$1:00")))
-            :device-id device-id
+            :crux.db/id device-id
             :battery-level (Double/parseDouble battery-level)
             :battery-status (keyword battery-status)
             :battery-temperature (Double/parseDouble battery-temperature)
@@ -230,70 +230,114 @@
           (.end))
         (.toByteArray baos)))))
 
-(comment
+#_
+(defonce foo-tx-bytes
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
     (with-readings-docs
       (fn [readings]
-        (let [bytes (submit-tx (for [doc (interleave (take 10 @!info-docs)
-                                                     (take 10 readings))]
-                                 {:op :put
-                                  :doc doc})
-                               allocator)]
-
-          (with-open [bais (ByteArrayInputStream. bytes)
-                      sr (ArrowStreamReader. bais allocator)
-                      root (.getVectorSchemaRoot sr)]
-            (.loadNextBatch sr)
-            (println (.contentToTSVString root))))))))
+        (submit-tx (for [doc (interleave (take 10 @!info-docs)
+                                         (take 10 readings))]
+                     {:op :put
+                      :doc doc})
+                   allocator)))))
 
 (do
   (deftype Ingester [^BufferAllocator allocator
                      ^File arrow-dir
-                     ^Map roots ; (hash keys) -> VectorSchemaRoot
-                     ^Map file-writers ; (hash keys) -> ArrowFileWriter
+                     ^Map roots ; Field -> VectorSchemaRoot
+                     ^Map file-writers ; Field -> ArrowFileWriter
                      ^:unsynchronized-mutable ^long chunk-idx]
 
     TransactionIngester
-    (index-tx [this docs] ; TODO eventually docs :: List<ArrowSomething> rather than List<IPersistentMap>
-      (doseq [doc docs]
-        (let [schema (Schema. (for [[k v] (sort-by key doc)]
-                                (Field/nullable (str k) (->arrow-type (type v)))))
+    ;; aim: content-indices
+    (index-tx [this tx-bytes]
+      (with-open [bais (ByteArrayInputStream. tx-bytes)
+                  sr (doto (ArrowStreamReader. bais allocator)
+                       (.loadNextBatch))
+                  root (.getVectorSchemaRoot sr)]
 
-              ^VectorSchemaRoot
-              root (.computeIfAbsent roots
-                                     schema
-                                     (reify Function
-                                       (apply [_ _]
-                                         (VectorSchemaRoot/create schema allocator))))
+        (let [^DenseUnionVector tx-ops-vec (.getVector root "tx-ops")
+              op-type-ids (->> (.getChildren (.getField tx-ops-vec))
+                               (into {} (map-indexed (fn [idx ^Field field]
+                                                       [idx (keyword (.getName field))])) ))]
 
-              ^ArrowFileWriter
-              live-file-writer (.computeIfAbsent file-writers
-                                                 schema
-                                                 (reify Function
-                                                   (apply [_ _]
-                                                     (let [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%08x.arrow" chunk-idx (hash schema))))
-                                                                                     (into-array OpenOption #{StandardOpenOption/CREATE
-                                                                                                              StandardOpenOption/WRITE
-                                                                                                              StandardOpenOption/TRUNCATE_EXISTING}))]
-                                                       (doto (ArrowFileWriter. root nil file-ch)
-                                                         (.start))))))
+          (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+            (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
+                  op-vec (.getStruct tx-ops-vec op-type-id)
+                  per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
+              (case (get op-type-ids op-type-id)
+                :put (let [^DenseUnionVector
+                           document-vec (.addOrGet op-vec "document" (FieldType. false (.getType Types$MinorType/DENSEUNION) nil nil) DenseUnionVector)
+                           struct-type-id (.getTypeId document-vec per-op-offset)
+                           per-struct-offset (.getOffset document-vec per-op-offset)]
+                       ;; TODO change to doseq
+                       (doseq [^ValueVector kv-vec (.getChildrenFromFields (.getStruct document-vec struct-type-id))]
+                         (let [^Field field (.getField kv-vec)
+                               row-id-field (->field ":crux/row-id" (.getType Types$MinorType/UINT8) false) ; TODO re-use
+                               ^VectorSchemaRoot
+                               target-root (.computeIfAbsent roots field
+                                                             (reify Function
+                                                               (apply [_ _]
+                                                                 (VectorSchemaRoot/create (Schema. [field row-id-field]) allocator))))
+                               value-count (.getRowCount target-root)
+                               field-vec (.getVector target-root field)
+                               ^UInt8Vector row-id-vec (.getVector target-root row-id-field)]
+                           (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
+                           (.setSafe row-id-vec value-count tx-op-idx)
+                           (.setRowCount target-root (inc value-count)))))))))
 
-              row-count (.getRowCount root)]
+        ;; TODO build up files over multiple transactions
+        (doseq [^VectorSchemaRoot target-root (vals roots)]
+          (with-open [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (name (read-string (.getName ^Field (first (.getFields (.getSchema target-root)))))))))
+                                                (into-array OpenOption #{StandardOpenOption/CREATE
+                                                                         StandardOpenOption/WRITE
+                                                                         StandardOpenOption/TRUNCATE_EXISTING}))
+                      fw (ArrowFileWriter. target-root nil file-ch)]
+            (doto fw
+              (.start)
+              (.writeBatch)
+              (.end))))
+        #_
+        (doseq [doc docs]
+          (let [schema (Schema. (for [[k v] (sort-by key doc)]
+                                  (Field/nullable (str k) (->arrow-type (type v)))))
 
-          (doseq [[k v] doc]
-            (set-safe! (.getVector root (str k)) row-count v))
+                ^VectorSchemaRoot
+                root (.computeIfAbsent roots
+                                       schema
+                                       (reify Function
+                                         (apply [_ _]
+                                           (VectorSchemaRoot/create schema allocator))))
 
-          (.setRowCount root (inc row-count))
+                ^ArrowFileWriter
+                live-file-writer (.computeIfAbsent file-writers
+                                                   schema
+                                                   (reify Function
+                                                     (apply [_ _]
+                                                       (let [file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%08x.arrow" chunk-idx (hash schema))))
+                                                                                       (into-array OpenOption #{StandardOpenOption/CREATE
+                                                                                                                StandardOpenOption/WRITE
+                                                                                                                StandardOpenOption/TRUNCATE_EXISTING}))]
+                                                         (doto (ArrowFileWriter. root nil file-ch)
+                                                           (.start))))))
 
-          (when (>= (.getRowCount root) max-block-size)
-            (.writeBatch live-file-writer)
+                row-count (.getRowCount root)]
 
-            (doseq [^FieldVector field-vector (.getFieldVectors root)]
-              (.reset field-vector))
+            (doseq [[k v] doc]
+              (set-safe! (.getVector root (str k)) row-count v))
 
-            (.setRowCount root 0))))
+            (.setRowCount root (inc row-count))
+
+            (when (>= (.getRowCount root) max-block-size)
+              (.writeBatch live-file-writer)
+
+              (doseq [^FieldVector field-vector (.getFieldVectors root)]
+                (.reset field-vector))
+
+              (.setRowCount root 0)))))
 
       ;; TODO better metric here?
+      #_
       (when (>= (->> (vals file-writers)
                      (transduce (map (fn [^ArrowFileWriter file-writer]
                                        (count (.getRecordBlocks file-writer))))
@@ -305,6 +349,7 @@
 
     Closeable
     (close [this]
+      #_
       ;; we don't want to close a chunk just because this node's shutting down?
       ;; will make the ingester non-deterministic...
       (close-writers! this)
@@ -336,59 +381,21 @@
                                   (HashMap.)
                                   0)]
 
-    (let [info-docs @!info-docs]
-      (with-readings-docs
-        (fn [readings]
-          (doseq [tx (->> (concat (interleave info-docs
-                                              (take (count info-docs) readings))
-                                  (drop (count info-docs) readings))
-                          (partition-all 1000))]
-            (index-tx ingester tx)))))
-
-    #_
-    (let [key-set #{:cpu-avg-15min :device-id :rssi :cpu-avg-5min :battery-status :ssid :time :battery-level :bssid :battery-temperature :cpu-avg-1min :mem-free :mem-used}
-          live-root (-> ^Map (.roots ingester)
-                        ^VectorSchemaRoot (.get key-set))]
-      [(.refCnt (.getDataBuffer (.getVector live-root ":cpu-avg-15min")))
-       (.memoryAddress (.getDataBuffer (.getVector live-root ":cpu-avg-15min")))
-       (with-open [live-root-slice (.slice live-root 0 (/ (.getRowCount live-root) 2))]
-         [(.refCnt (.getDataBuffer (.getVector live-root-slice ":cpu-avg-15min")))
-          (.memoryAddress (.getDataBuffer (.getVector live-root-slice ":cpu-avg-15min")))])]
-
-      #_(with-open [file-ch (FileChannel/open (.toPath (io/file "/tmp/arrow/chunk-00000001-da8dfa70.arrow"))
-                                            (into-array OpenOption #{StandardOpenOption/READ}))
-                  read-ch (ReadChannel. file-ch)]
-
-        (.position file-ch 8)
-
-        (let [schema (MessageSerializer/deserializeSchema read-ch)]
-          (with-open [read-root (VectorSchemaRoot/create schema allocator)]
-            (let [loader (VectorLoader. read-root)
-
-                  ^ArrowBlock
-                  block (-> ^Map (.file-writers ingester)
-                            ^ArrowFileWriter
-                            (.get key-set)
-                            (.getRecordBlocks)
-                            first)]
-
-              (.position file-ch (.getOffset block))
-
-              (with-open [record-batch (MessageSerializer/deserializeRecordBatch read-ch block allocator)]
-                (.load loader record-batch)
-                (.get ^Float8Vector (.getVector read-root ":battery-level") 0)))))))
-    ))
+    (index-tx ingester foo-tx-bytes)))
 
 (comment
   ;; converting Arrow to JSON
-  (let [file-name "tx"]
-    (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-                file-ch (FileChannel/open (.toPath (io/file (format "/tmp/arrow/%s.arrow" file-name)))
-                                          (into-array OpenOption #{StandardOpenOption/READ}))
-                file-reader (ArrowFileReader. file-ch allocator)
-                file-writer (JsonFileWriter. (io/file (format "/tmp/arrow/%s.json" file-name))
-                                             (.. (JsonFileWriter/config) (pretty true)))]
-      (let [root (.getVectorSchemaRoot file-reader)]
-        (.start file-writer (.getSchema root) nil)
-        (while (.loadNextBatch file-reader)
-          (.write file-writer root))))))
+  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+
+    (doseq [^File
+            file (->> (.listFiles (io/file "/tmp/arrow"))
+                      (filter #(.endsWith (.getName ^File %) ".arrow")))]
+      (with-open [file-ch (FileChannel/open (.toPath file)
+                                            (into-array OpenOption #{StandardOpenOption/READ}))
+                  file-reader (ArrowFileReader. file-ch allocator)
+                  file-writer (JsonFileWriter. (io/file (format "/tmp/arrow/%s.json" (.getName file)))
+                                               (.. (JsonFileWriter/config) (pretty true)))]
+        (let [root (.getVectorSchemaRoot file-reader)]
+          (.start file-writer (.getSchema root) nil)
+          (while (.loadNextBatch file-reader)
+            (.write file-writer root)))))))
