@@ -169,11 +169,11 @@ public class TransactionBuilderTest {
     @Test
     public void functionNoArgs() {
         Transaction direct = Transaction.builder()
-                .function(documentId)
+                .invokeFunction(documentId)
                 .build();
 
         Transaction indirect = buildTx(tx -> {
-            tx.function(documentId);
+            tx.invokeFunction(documentId);
         });
 
         assertEquals(direct, indirect);
@@ -182,11 +182,11 @@ public class TransactionBuilderTest {
     @Test
     public void functionWithArgs() {
         Transaction direct = Transaction.builder()
-                .function(documentId, "foo", 1, 3)
+                .invokeFunction(documentId, "foo", 1, 3)
                 .build();
 
         Transaction indirect = buildTx(tx -> {
-            tx.function(documentId, "foo", 1, 3);
+            tx.invokeFunction(documentId, "foo", 1, 3);
         });
 
         assertEquals(direct, indirect);

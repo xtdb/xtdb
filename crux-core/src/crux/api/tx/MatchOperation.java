@@ -18,30 +18,30 @@ public final class MatchOperation extends TransactionOperation {
         return new MatchOperation(document.getId(), document, null);
     }
 
-    public static MatchOperation create(CruxDocument document, Date validTime) {
-        return new MatchOperation(document.getId(), document, validTime);
+    public static MatchOperation create(CruxDocument document, Date atValidTime) {
+        return new MatchOperation(document.getId(), document, atValidTime);
     }
 
     public Object getId() {
         return id;
     }
 
-    public CruxDocument getCompare() {
-        return compare;
+    public CruxDocument getDocument() {
+        return document;
     }
 
-    public Date getValidTime() {
-        return validTime;
+    public Date getAtValidTime() {
+        return atValidTime;
     }
 
     private final Object id;
-    private final CruxDocument compare;
-    private final Date validTime;
+    private final CruxDocument document;
+    private final Date atValidTime;
 
-    private MatchOperation(Object id, CruxDocument compare, Date validTime) {
+    private MatchOperation(Object id, CruxDocument document, Date atValidTime) {
         this.id = id;
-        this.compare = compare;
-        this.validTime = validTime;
+        this.document = document;
+        this.atValidTime = atValidTime;
     }
 
     @Override
@@ -60,12 +60,12 @@ public final class MatchOperation extends TransactionOperation {
         if (o == null || getClass() != o.getClass()) return false;
         MatchOperation that = (MatchOperation) o;
         return id.equals(that.id)
-                && Objects.equals(compare, that.compare)
-                && Objects.equals(validTime, that.validTime);
+                && Objects.equals(document, that.document)
+                && Objects.equals(atValidTime, that.atValidTime);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.MATCH, id, compare, validTime);
+        return Objects.hash(Type.MATCH, id, document, atValidTime);
     }
 }

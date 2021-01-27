@@ -413,13 +413,7 @@
   (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (open-db node basis)))
   (status [_] (status node))
   (attributeStats [_] (attribute-stats node))
-
-  (submitTx [_ tx]
-    (->> tx
-         .toVector
-         ^Map (submit-tx node)
-         TransactionInstant/factory))
-
+  (submitTx [_ tx] (TransactionInstant/factory ^Map (submit-tx node (.toVector tx))))
   (hasTxCommitted [_ transaction] (tx-committed? node (.toMap transaction)))
   (openTxLog [_ after-tx-id with-ops?] (open-tx-log node after-tx-id with-ops?))
   (sync [_ timeout] (sync node timeout))

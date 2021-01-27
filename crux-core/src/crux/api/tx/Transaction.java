@@ -42,24 +42,24 @@ public final class Transaction {
             return add(PutOperation.create(document));
         }
 
-        public final Builder put(CruxDocument document, Date validTime) {
-            return add(PutOperation.create(document, validTime));
+        public final Builder put(CruxDocument document, Date startValidTime) {
+            return add(PutOperation.create(document, startValidTime));
         }
 
-        public final Builder put(CruxDocument document, Date validTime, Date endValidTime) {
-            return add(PutOperation.create(document, validTime, endValidTime));
+        public final Builder put(CruxDocument document, Date startValidTime, Date endValidTime) {
+            return add(PutOperation.create(document, startValidTime, endValidTime));
         }
 
         public final Builder delete(Object id) {
             return add(DeleteOperation.create(id));
         }
 
-        public final Builder delete(Object id, Date validTime) {
-            return add(DeleteOperation.create(id, validTime));
+        public final Builder delete(Object id, Date startValidTime) {
+            return add(DeleteOperation.create(id, startValidTime));
         }
 
-        public final Builder delete(Object id, Date validTime, Date endValidTime) {
-            return add(DeleteOperation.create(id, validTime, endValidTime));
+        public final Builder delete(Object id, Date startValidTime, Date endValidTime) {
+            return add(DeleteOperation.create(id, startValidTime, endValidTime));
         }
 
         public final Builder evict(Object id) {
@@ -74,16 +74,16 @@ public final class Transaction {
             return add(MatchOperation.create(document));
         }
 
-        public final Builder matchNotExists(Object id, Date validTime) {
-            return add(MatchOperation.create(id, validTime));
+        public final Builder matchNotExists(Object id, Date atValidTime) {
+            return add(MatchOperation.create(id, atValidTime));
         }
 
-        public final Builder match(CruxDocument document, Date validTime) {
-            return add(MatchOperation.create(document, validTime));
+        public final Builder match(CruxDocument document, Date atValidTime) {
+            return add(MatchOperation.create(document, atValidTime));
         }
 
-        public final Builder function(Object id, Object... arguments) {
-            return add(FunctionOperation.create(id, arguments));
+        public final Builder invokeFunction(Object id, Object... arguments) {
+            return add(InvokeFunctionOperation.create(id, arguments));
         }
 
         public Transaction build() {
@@ -156,25 +156,25 @@ public final class Transaction {
                     .cons(TransactionOperation.Type.MATCH.getKeyword())
                     .cons(operation.getId());
 
-            CruxDocument compare = operation.getCompare();
-            if (compare == null) {
+            CruxDocument document = operation.getDocument();
+            if (document == null) {
                 toAdd = toAdd.cons(null);
             }
             else {
-                toAdd = toAdd.cons(compare.toMap());
+                toAdd = toAdd.cons(document.toMap());
             }
 
-            Date validTime = operation.getValidTime();
-            if (validTime == null) {
+            Date atValidTime = operation.getAtValidTime();
+            if (atValidTime == null) {
                 add(toAdd);
                 return;
             }
 
-            add(toAdd.cons(validTime));
+            add(toAdd.cons(atValidTime));
         }
 
         @Override
-        public void visit(FunctionOperation operation) {
+        public void visit(InvokeFunctionOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
                     .cons(TransactionOperation.Type.FN.getKeyword())
                     .cons(operation.getId());

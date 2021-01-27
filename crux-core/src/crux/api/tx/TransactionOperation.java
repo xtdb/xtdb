@@ -26,7 +26,7 @@ public abstract class TransactionOperation {
         void visit(DeleteOperation operation);
         void visit(EvictOperation operation);
         void visit(MatchOperation operation);
-        void visit(FunctionOperation operation);
+        void visit(InvokeFunctionOperation operation);
     }
 
     public abstract Type getType();

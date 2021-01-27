@@ -34,7 +34,7 @@ public class TransactionOperationVisitorTest {
         }
 
         @Override
-        public void visit(FunctionOperation operation) {
+        public void visit(InvokeFunctionOperation operation) {
             throwRuntime();
         }
 
@@ -44,18 +44,6 @@ public class TransactionOperationVisitorTest {
 
         Object get() {
             return object;
-        }
-    }
-
-    private static class ObjectWrapper {
-        private Object object = null;
-
-        Object get() {
-            return object;
-        }
-
-        void set(Object object) {
-            this.object = object;
         }
     }
 
@@ -118,7 +106,7 @@ public class TransactionOperationVisitorTest {
         TestVisitor visitor = new TestVisitor() {
             @Override
             public void visit(MatchOperation operation) {
-                object = operation.getCompare();
+                object = operation.getDocument();
             }
         };
 
@@ -135,13 +123,13 @@ public class TransactionOperationVisitorTest {
     public void functionOnlyHitsFunction() {
         TestVisitor visitor = new TestVisitor() {
             @Override
-            public void visit(FunctionOperation operation) {
+            public void visit(InvokeFunctionOperation operation) {
                 object = operation.getId();
             }
         };
 
         Transaction transaction = buildTx(tx -> {
-            tx.function("foo");
+            tx.invokeFunction("foo");
         });
 
         transaction.accept(visitor);

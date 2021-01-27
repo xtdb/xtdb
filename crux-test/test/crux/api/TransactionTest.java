@@ -410,7 +410,7 @@ public class TransactionTest {
         assertPabloVersion(0);
 
         submitTx(false, tx -> {
-            tx.function("incVersion");
+            tx.invokeFunction("incVersion");
         });
 
         assertPabloVersion(1);
@@ -428,7 +428,7 @@ public class TransactionTest {
         assertPabloVersion(0);
 
         submitTx(false, tx -> {
-            tx.function("incVersion", pabloId);
+            tx.invokeFunction("incVersion", pabloId);
         });
 
         assertPabloVersion(1);

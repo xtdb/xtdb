@@ -96,17 +96,4 @@ public class TransactionInstantTest {
         assertEquals(now, tx.getTime());
         assertEquals(1L, (long) tx.getId());
     }
-
-    @Test
-    public void foo() {
-        try (ICruxAPI node = Crux.startNode()) {
-            CruxDocument document = CruxDocument.create("foo");
-            TransactionInstant transactionInstant = node.submitTx(Transaction.buildTx(tx -> {
-                tx.put(document);
-            }));
-        }
-        catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
 }

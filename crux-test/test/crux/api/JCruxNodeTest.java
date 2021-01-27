@@ -48,7 +48,7 @@ public class JCruxNodeTest {
      */
     @Test
     public void submitTxTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
 
         assertEquals(0L, (long) tx.getId());
         assertNotNull(tx.getTime());
@@ -56,7 +56,7 @@ public class JCruxNodeTest {
 
     @Test
     public void openTxLogTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         sync();
 
         ICursor<Map<Keyword, ?>> txLog = node.openTxLog(-1L, false);
@@ -96,13 +96,13 @@ public class JCruxNodeTest {
 
     @Test(expected = NodeOutOfSyncException.class)
     public void hasTxCommittedThrowsTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         node.hasTxCommitted(tx);
     }
 
     @Test
     public void hasTxCommittedTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         sync();
         assertTrue(node.hasTxCommitted(tx));
     }
@@ -110,14 +110,14 @@ public class JCruxNodeTest {
     @Test(expected = TimeoutException.class)
     public void syncThrowsTest() {
         for (int i=0; i<100; i++) {
-            p();
+            put();
         }
         node.sync(Duration.ZERO);
     }
 
     @Test
     public void syncTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         Date txTime = tx.getTime();
         Date fromSync = sync();
         assertEquals(txTime, fromSync);
@@ -126,9 +126,9 @@ public class JCruxNodeTest {
     @Test(expected = TimeoutException.class)
     public void awaitTxTimeThrowsTest() {
         for (int i=0; i<100; i++) {
-            p();
+            put();
         }
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
 
         Date txTime = tx.getTime();
         node.awaitTxTime(txTime, Duration.ZERO);
@@ -136,7 +136,7 @@ public class JCruxNodeTest {
 
     @Test
     public void awaitTxTimeTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
 
         Date txTime = tx.getTime();
         Date past = Date.from(txTime.toInstant().minusMillis(100));
@@ -147,15 +147,15 @@ public class JCruxNodeTest {
     @Test(expected = TimeoutException.class)
     public void awaitTxThrowsTest() {
         for (int i=0; i<100; i++) {
-            p();
+            put();
         }
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         node.awaitTx(tx, Duration.ZERO);
     }
 
     @Test
     public void awaitTxTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         node.awaitTx(tx, duration);
     }
 
@@ -165,7 +165,7 @@ public class JCruxNodeTest {
         AutoCloseable listener = node.listen(ICruxAPI.TX_INDEXED_EVENT_OPTS, (Map<Keyword,?> e) -> {
             events[0] = e;
         });
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         sync();
         sleep(100);
         @SuppressWarnings("unchecked")
@@ -188,7 +188,7 @@ public class JCruxNodeTest {
 
         events[0] = null;
 
-        p();
+        put();
         sync();
         sleep(100);
 
@@ -197,7 +197,7 @@ public class JCruxNodeTest {
 
     @Test
     public void latestCompletedTxTest() {
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         sync();
         TransactionInstant latest = node.latestCompletedTx();
         assertEquals(tx, latest);
@@ -206,7 +206,7 @@ public class JCruxNodeTest {
     @Test
     public void latestSubmittedTxTest() {
         assertNull(node.latestSubmittedTx());
-        TransactionInstant tx = p();
+        TransactionInstant tx = put();
         TransactionInstant latest = node.latestSubmittedTx();
         //Latest Submitted doesn't give us the TxTime
         TransactionInstant compare = TransactionInstant.factory(tx.getId());
@@ -215,7 +215,7 @@ public class JCruxNodeTest {
 
     @Test
     public void attributeStatsTest() {
-        p();
+        put();
         sync();
         Map<Keyword, ?> stats = node.attributeStats();
         assertEquals(1, stats.get(DB_ID));
@@ -231,7 +231,7 @@ public class JCruxNodeTest {
 
     @Test
     public void recentQueriesTest() {
-        p();
+        put();
         sync();
         query();
         sleep(10);
@@ -241,7 +241,7 @@ public class JCruxNodeTest {
 
     @Test
     public void slowestQueriesTest() {
-        p();
+        put();
         sync();
         query();
         sleep(10);
@@ -262,7 +262,7 @@ public class JCruxNodeTest {
         }
     }
 
-    private TransactionInstant p() {
+    private TransactionInstant put() {
         return tx(node, putTransaction);
     }
 

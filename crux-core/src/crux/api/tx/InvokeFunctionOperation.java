@@ -3,7 +3,7 @@ package crux.api.tx;
 import java.util.Arrays;
 import java.util.Objects;
 
-public final class FunctionOperation extends TransactionOperation {
+public final class InvokeFunctionOperation extends TransactionOperation {
     private final Object id;
     private final Object[] arguments;
 
@@ -15,11 +15,11 @@ public final class FunctionOperation extends TransactionOperation {
         return arguments;
     }
 
-    public static FunctionOperation create(Object id, Object... arguments) {
-        return new FunctionOperation(id, arguments);
+    public static InvokeFunctionOperation create(Object id, Object... arguments) {
+        return new InvokeFunctionOperation(id, arguments);
     }
 
-    private FunctionOperation(Object id, Object[] arguments) {
+    private InvokeFunctionOperation(Object id, Object[] arguments) {
         this.id = id;
         this.arguments = arguments;
     }
@@ -38,7 +38,7 @@ public final class FunctionOperation extends TransactionOperation {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        FunctionOperation that = (FunctionOperation) o;
+        InvokeFunctionOperation that = (InvokeFunctionOperation) o;
         return id.equals(that.id)
                 && Arrays.equals(arguments, that.arguments);
     }
