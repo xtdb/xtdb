@@ -17,15 +17,14 @@ For a Java in-process node, the modules are configured using the supplied Config
 
 [source,java]
 ----
-import crux.api.Crux;
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=import,indent=0]
 
-ICruxAPI cruxNode = Crux.startNode(new File(...));
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-file-0,indent=0]
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-file-1,indent=0]
 
-ICruxAPI cruxNode = Crux.startNode(MyApp.class.getResource(...));
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-resource,indent=0]
 
-ICruxAPI cruxNode = Crux.startNode(n -> {
-   // ...
-});
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-configurator,indent=0]
 ----
 --
 Kotlin::
@@ -35,15 +34,13 @@ For a Kotlin in-process node, the modules are configured using the supplied Conf
 
 [source,kotlin]
 ----
-import crux.api.Crux
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=import,indent=0]
 
-val cruxNode = Crux.startNode(File(...))
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=from-file,indent=0]
 
-val cruxNode = Crux.startNode(MyApp::class.java.getResource(...))
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=from-resource,indent=0]
 
-val cruxNode = Crux.startNode { n ->
-    // ...
-}
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=from-configurator,indent=0]
 ----
 --
 Clojure::
@@ -53,12 +50,13 @@ For a Clojure in-process node, the `start-node` function accepts a module tree, 
 
 [source,clojure]
 ----
-(require '[crux.api :as crux]
-         '[clojure.java.io :as io])
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=import,indent=0]
 
-(crux/start-node {...}) ; module tree
-(crux/start-node (io/file ...))
-(crux/start-node (io/resource ...))
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=from-file,indent=0]
+
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=from-resource,indent=0]
+
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=from-explicit,indent=0]
 ----
 --
 ====
@@ -100,47 +98,35 @@ Java::
 +
 [source,java]
 ----
-ICruxAPI cruxNode = Crux.startNode(n -> {
-   n.with("crux.http-server/server", http -> {
-     http.set("port", 3000);
-   });
-});
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=http-server,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-val cruxNode = Crux.startNode { n ->
-    n.with("crux.http-server/server") { http ->
-        http["port"] = 3000
-    }
-}
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=http-server,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-{
-  "crux.http-server/server": {
-    "port": 3000
-  }
-}
+include::example$test/crux/docs/examples/configuration/config.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000}}
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=http-server,indent=0]
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000}}
+include::example$test/crux/docs/examples/configuration/config.edn[indent=0]
 ----
 ====
 
@@ -155,57 +141,35 @@ Java::
 +
 [source,java]
 ----
-ICruxAPI cruxNode = Crux.startNode(n -> {
-   n.with("crux/document-store", docStore -> {
-     docStore.module("crux.s3/->document-store");
-     docStore.set("bucket", "my-bucket");
-     docStore.set("prefix", "my-prefix");
-   });
-});
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=override-module,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-val cruxNode = Crux.startNode { n ->
-    n.with("crux/document-store") { docStore ->
-        docStore.module("crux.s3/->document-store")
-        docStore["bucket"] = "my-bucket"
-        docStore["prefix"] = "my-prefix"
-    }
-}
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=override-module,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-{
-  "crux/document-store": {
-    "crux/module": "crux.s3/->document-store",
-    "bucket": "my-bucket",
-    "prefix": "my-prefix"
-  }
-}
+include::example$test/crux/docs/examples/configuration/config_override.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.s3/->document-store
-                       :bucket "my-bucket"
-                       :prefix "my-prefix"}}
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=override-module,indent=0]
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.s3/->document-store
-                       :bucket "my-bucket"
-                       :prefix "my-prefix"}}
+include::example$test/crux/docs/examples/configuration/config_override.edn[indent=0]
 ----
 ====
 
@@ -222,69 +186,41 @@ Java::
 +
 [source,java]
 ----
-ICruxAPI cruxNode = Crux.startNode(n -> {
-  n.with("crux/tx-log", txLog -> {
-     txLog.with("kv-store", kv -> {
-       kv.module("crux.rocksdb/->kv-store");
-       kv.set("db-dir", new File("/tmp/rocksdb"));
-    });
-  });
-  n.with("crux/document-store", docStore -> { ... });
-  n.with("crux/index-store", indexStore -> { ... });
-});
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-0,indent=0]
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-1,indent=4]
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-2,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-val cruxNode = Crux.startNode{ n ->
-    n.with("crux/tx-log") { txLog ->
-        txLog.with("kv-store") { kv ->
-            kv.module("crux.rocksdb/->kv-store")
-            kv["db-dir"] = File("/tmp/rocksdb")
-        }
-    }
-    n.with("crux/document-store") { docStore -> ... }
-    n.with("crux/index-store") { indexStore -> ... }
-}
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-0,indent=0]
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-1,indent=4]
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-2,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-{
-  "crux/tx-log": {
-    "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
-      "db-dir": "/tmp/txs"
-    }
-  },
-
-  "crux/document-store": { ... },
-  "crux/index-store": { ... }
-}
+include::example$test/crux/docs/examples/configuration/config_nested.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                          :db-dir (io/file "/tmp/txs")}}
- :crux/document-store {...}
- :crux/index-store {...}}
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=nested-modules-0,indent=0]
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=nested-modules-1,indent=18]
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=nested-modules-2,indent=0]
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store
-                          :db-dir "/tmp/txs"}}
- :crux/document-store {...}
- :crux/index-store {...}}
+include::example$test/crux/docs/examples/configuration/config_nested.edn[indent=0]
 ----
 ====
 
@@ -309,20 +245,7 @@ For example, if we were to write the following, the transaction log and the docu
 
 [source,json]
 ----
-{
-  "crux/tx-log": {
-    "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
-      "db-dir": "/tmp/txs"
-    }
-  },
-  "crux/document-store": {
-    "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
-      "db-dir": "/tmp/docs"
-    }
-  }
-}
+include::example$test/crux/docs/examples/configuration/sharing_modules_naive.json[indent=0]
 ----
 
 We can store both the transaction log and the document store in the same KV store, to save ourselves some hassle.
@@ -335,64 +258,28 @@ Java::
 +
 [source,java]
 ----
-ICruxAPI cruxNode = Crux.startNode(n -> {
-   n.with("my-rocksdb", rocks -> {
-     rocks.module("crux.rocksdb/->kv-store");
-     rocks.set("db-dir", new File("/tmp/rocksdb"));
-   });
-   n.with("crux/document-store", docStore -> {
-     docStore.with("kv-store", "my-rocksdb");
-   });
-   n.with("crux/tx-log", txLog -> {
-     txLog.with("kv-store", "my-rocksdb");
-   });
-});
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=sharing-modules,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-val cruxNode = Crux.startNode { n ->
-    n.with("my-rocksdb") { rocks ->
-        rocks.module("crux.rocksdb/->kv-store")
-        rocks["db-dir"] = File("/tmp/rocksdb")
-    }
-    n.with("crux/document-store") { docStore ->
-        docStore["kv-store"] = "my-rocksdb"
-    }
-    n.with("crux/tx-log") { txLog ->
-        txLog["kv-store"] = "my-rocksdb"
-    }
-}
+include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=sharing-modules,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-{
-  "my-rocksdb": {
-    "crux/module": "crux.rocksdb/->kv-store",
-    "db-dir": "/tmp/txs"
-  },
-  "crux/tx-log": {
-    "kv-store": "my-rocksdb"
-  },
-  "crux/document-store": {
-    "kv-store": "my-rocksdb"
-  }
-}
+include::example$test/crux/docs/examples/configuration/config_shared.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-{:my-rocksdb {:crux/module 'crux.rocksdb/->kv-store
-              :db-dir (io/file "/tmp/rocksdb")}
- :crux/tx-log {:kv-store :my-rocksdb}
- :crux/document-store {:kv-store :my-rocksdb}}
+include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=sharing-modules,indent=0]
 ----
 
 
@@ -400,10 +287,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:my-rocksdb {:crux/module crux.rocksdb/->kv-store
-              :db-dir "/tmp/rocksdb"}
- :crux/tx-log {:kv-store :my-rocksdb}
- :crux/document-store {:kv-store :my-rocksdb}}
+include::example$test/crux/docs/examples/configuration/config_shared.edn[indent=0]
 ----
 ====
 

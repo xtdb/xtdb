@@ -1,0 +1,7 @@
+{
+  "crux/document-store": {
+    "crux/module": "crux.s3/->document-store",
+    "bucket": "my-bucket",
+    "prefix": "my-prefix"
+  }
+}

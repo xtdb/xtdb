@@ -32,7 +32,8 @@
                  [javax.servlet/javax.servlet-api "4.0.1"]
 
                  ;; Junit Tests
-                 [junit/junit "4.12"]]
+                 [junit/junit "4.12"]
+                 [juxt/crux-rocksdb "crux-git-version-beta"]]
   :java-source-paths ["test"
                       "../docs/reference/modules/ROOT/examples/test"]
   :javac-options ["-source" "8" "-target" "8"
