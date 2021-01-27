@@ -9,7 +9,7 @@
            [java.util Date HashMap Map]
            [java.util.function Function]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector DateMilliVector Float8Vector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot UInt8Vector]
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector DateMilliVector Float8Vector NullVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot UInt8Vector]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamReader ArrowStreamWriter JsonFileReader JsonFileWriter JsonFileWriter$JSONWriteConfig ReadChannel]
            [org.apache.arrow.vector.types Types$MinorType]
@@ -86,7 +86,6 @@
 ;; TODO 1. let's just get a chunk on disk, forget 'live' blocks - many blocks to a chunk, many chunks
 ;; DONE 1c. row-ids
 ;; TODO 2. more than one block per chunk - 'seal' a block, starting a new live block
-;; TODO 10. handle nulls via setting null in column.
 ;; TODO 11. figure out last tx-id from latest chunk and resume ingest on start.
 ;; TODO 12. object store protocol, store chunks and metadata. File implementation.
 ;; TODO 13. log protocol. File implementation.
@@ -104,7 +103,7 @@
 
 ;;; future
 ;; TODO 3b. union types, or keying the block by the type of the value too
-;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions)
+;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions, including nulls)
 ;; TODO 5. dictionaries
 ;; TODO 6. consider eviction
 ;; TODO 1b. writer?
@@ -140,32 +139,37 @@
    nil (.getType Types$MinorType/NULL)})
 
 (defprotocol SetSafe
-  (set-safe! [_ idx v]))
+  (set-safe! [_ idx v])
+  (set-null! [_ idx]))
 
 (extend-protocol SetSafe
   BigIntVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx ^long v))
+  (set-safe! [this idx v] (.setSafe this ^int idx ^long v))
+  (set-null! [this idx] (.setNull this ^int idx))
 
   BitVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx ^int (if v 1 0)))
+  (set-safe! [this idx v] (.setSafe this ^int idx ^int (if v 1 0)))
+  (set-null! [this idx] (.setNull this ^int idx))
 
   DateMilliVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (.getTime ^Date v)))
+  (set-safe! [this idx v] (.setSafe this ^int idx (.getTime ^Date v)))
+  (set-null! [this idx] (.setNull this ^int idx))
 
   Float8Vector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx ^double v))
+  (set-safe! [this idx v] (.setSafe this ^int idx ^double v))
+  (set-null! [this idx] (.setNull this ^int idx))
+
+  NullVector
+  (set-safe! [this idx v])
+  (set-null! [this idx])
 
   VarBinaryVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx ^bytes v))
+  (set-safe! [this idx v] (.setSafe this ^int idx ^bytes v))
+  (set-null! [this idx] (.setNull this ^int idx))
 
   VarCharVector
-  (set-safe! [this idx v]
-    (.setSafe this ^int idx (Text. (str v)))))
+  (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
+  (set-null! [this idx] (.setNull this ^int idx)))
 
 (declare close-writers!)
 
@@ -226,6 +230,8 @@
 
                                 (.setIndexDefined put-vec per-op-offset)
 
+                                ;; TODO we could/should key this just by the field name, and have a promotable union in the value.
+                                ;; but, for now, it's keyed by both field name and type.
                                 (let [doc-fields (->> (for [[k v] (sort-by key doc)]
                                                         [k (Field/nullable (name k) (->arrow-type (type v)))])
                                                       (into (sorted-map)))
@@ -244,10 +250,11 @@
                                   (add-element-to-union! put-doc-vec field-type-id per-op-offset per-struct-offset)
 
                                   (doseq [[k v] doc
-                                          :let [^Field field (get doc-fields k)]]
-                                    (set-safe! (.addOrGet struct-vec (name k) (.getFieldType field) ValueVector)
-                                               per-struct-offset
-                                               v))
+                                          :let [^Field field (get doc-fields k)
+                                                field-vec (.addOrGet struct-vec (name k) (.getFieldType field) ValueVector)]]
+                                    (if (some? v)
+                                      (set-safe! field-vec per-struct-offset v)
+                                      (set-null! field-vec per-struct-offset)))
 
                                   (-> acc
                                       (assoc-in [:per-op-offsets :put] (inc per-op-offset))
