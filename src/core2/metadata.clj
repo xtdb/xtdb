@@ -18,15 +18,14 @@
                       ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
-    (let [^BitVector field-vector field-vector]
+    (let [^BitVector field-vector field-vector
+          value (.get field-vector idx)]
       (set! (.cnt this) (inc cnt))
 
-      (when (or (zero? (.isSet min-val))
-                (neg? (Integer/compare (.get field-vector idx) (.value min-val))))
+      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
         (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val))
-                (pos? (Integer/compare (.get field-vector idx) (.value max-val))))
+      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
         (.get field-vector idx max-val))))
 
   (writeMetadata [_ metadata-vector idx]
@@ -42,15 +41,14 @@
                          ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
-    (let [^BigIntVector field-vector field-vector]
+    (let [^BigIntVector field-vector field-vector
+          value (.get field-vector idx)]
       (set! (.cnt this) (inc cnt))
 
-      (when (or (zero? (.isSet min-val))
-                (neg? (Long/compare (.get field-vector idx) (.value min-val))))
+      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
         (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val))
-                (pos? (Long/compare (.get field-vector idx) (.value max-val))))
+      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
         (.get field-vector idx max-val))))
 
   (writeMetadata [_ metadata-vector idx]
@@ -66,15 +64,14 @@
                             ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
-    (let [^DateMilliVector field-vector field-vector]
+    (let [^DateMilliVector field-vector field-vector
+          value (.get field-vector idx)]
       (set! (.cnt this) (inc cnt))
 
-      (when (or (zero? (.isSet min-val))
-                (neg? (Long/compare (.get field-vector idx) (.value min-val))))
+      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
         (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val))
-                (pos? (Long/compare (.get field-vector idx) (.value max-val))))
+      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
         (.get field-vector idx max-val))))
 
   (writeMetadata [_ metadata-vector idx]
@@ -90,17 +87,14 @@
                          ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
-    (let [^Float8Vector field-vector field-vector]
+    (let [^Float8Vector field-vector field-vector
+          value (.get field-vector idx)]
       (set! (.cnt this) (inc cnt))
 
-      (when (or (zero? (.isSet min-val))
-                (neg? (Double/compare (.get field-vector idx)
-                                      (.value min-val))))
+      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
         (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val))
-                (pos? (Double/compare (.get field-vector idx)
-                                      (.value max-val))))
+      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
         (.get field-vector idx max-val))))
 
   (writeMetadata [_ metadata-vector idx]
@@ -117,15 +111,15 @@
                             ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
-    (let [^VarBinaryVector field-vector field-vector]
+    (let [^VarBinaryVector field-vector field-vector
+          value (.getObject field-vector idx)]
       (set! (.cnt this) (inc cnt))
 
-      (let [value (.getObject field-vector idx)]
-        (when (or (nil? min-val) (neg? (Arrays/compareUnsigned value min-val)))
-          (set! (.min-val this) value))
+      (when (or (nil? min-val) (neg? (Arrays/compareUnsigned value min-val)))
+        (set! (.min-val this) value))
 
-        (when (or (nil? max-val) (pos? (Arrays/compareUnsigned value max-val)))
-          (set! (.max-val this) value)))))
+      (when (or (nil? max-val) (pos? (Arrays/compareUnsigned value max-val)))
+        (set! (.max-val this) value))))
 
   (writeMetadata [_ metadata-vector idx]
     (let [^StructVector metadata-vector metadata-vector]
@@ -141,15 +135,15 @@
                           ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
-    (let [^VarCharVector field-vector field-vector]
+    (let [^VarCharVector field-vector field-vector
+          value (str (.getObject field-vector idx))]
       (set! (.cnt this) (inc cnt))
 
-      (let [value (str (.getObject field-vector idx))]
-        (when (or (nil? min-val) (neg? (compare value min-val)))
-          (set! (.min-val this) value))
+      (when (or (nil? min-val) (neg? (compare value min-val)))
+        (set! (.min-val this) value))
 
-        (when (or (nil? max-val) (pos? (compare value max-val)))
-          (set! (.max-val this) value)))))
+      (when (or (nil? max-val) (pos? (compare value max-val)))
+        (set! (.max-val this) value))))
 
   (writeMetadata [_ metadata-vector idx]
     (.setSafe ^VarCharVector (.getChild metadata-vector "min" VarCharVector) idx (Text. min-val))
