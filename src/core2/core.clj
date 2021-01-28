@@ -118,7 +118,7 @@
           (str (Types/getMinorTypeForArrowType (.getType field)))
           (hash field)))
 
-(defn- open-write-file-ch [^File file]
+(defn- open-write-file-ch ^java.nio.channels.FileChannel [^File file]
   (FileChannel/open (.toPath file)
                     (into-array OpenOption #{StandardOpenOption/CREATE
                                              StandardOpenOption/WRITE
@@ -232,10 +232,10 @@
                                      (.getType Types$MinorType/STRUCT)
                                      false
                                      (meta/->metadata-field t/row-id-field)
-                                     (meta/->metadata-field field))))
-        metadata-file-ch (open-write-file-ch (io/file (.arrow-dir ingester) (format "metadata-%08x.arrow" chunk-idx)))]
+                                     (meta/->metadata-field field))))]
 
-    (with-open [metadata-root (VectorSchemaRoot/create schema (.allocator ingester))
+    (with-open [metadata-file-ch (open-write-file-ch (io/file (.arrow-dir ingester) (format "metadata-%08x.arrow" chunk-idx)))
+                metadata-root (VectorSchemaRoot/create schema (.allocator ingester))
                 metadata-fw (doto (ArrowFileWriter. metadata-root nil metadata-file-ch)
                               (.start))]
 
