@@ -291,6 +291,32 @@
 
 (deftype LiveColumn [^VectorSchemaRoot content-root, ^ArrowFileWriter file-writer, !metadata])
 
+(def ^:private metadata-schema
+  (Schema. [(->)]))
+
+'{:file-name ["name.arrow" "age.arrow"]
+  :field-name ["name" "age"]
+  :field-metadata [{:min 4 :max 2300 :count 100}
+                   {:min "Aaron" :max "Zach" :count 1000}]
+  :row-id-metadata [{:min 4 :max 2300 :count 100}
+                    {:min 10 :max 30 :count 1000}]}
+
+'{:metadata [{:chunk_00000_age {:_row-id {:min 4 :max 2300 :count 100}
+                                :age {:min 10 :max 30 :count 1000}}
+              :chunk_00000_name {:_row-id {:min 4 :max 2300 :count 100}
+                                 :name {:min "Aaron" :max "Zach" :count 1000}}}]}
+
+'{:chunk_00000_age [{:_row-id {:min 4 :max 2300 :count 100}
+                     :age {:min 10 :max 30 :count 1000}}]
+  :chunk_00000_name [{:_row-id {:min 4 :max 2300 :count 100}
+                      :name {:min "Aaron" :max "Zach" :count 1000}}]}
+
+(defn field->file-name [^Field field]
+  (format "%s-%s-%08x"
+          (.getName field)
+          (str (Types/getMinorTypeForArrowType (.getType field)))
+          (hash field)))
+
 (do
   ;; aim: one metadata file per chunk with:
   ;; - count per column
@@ -308,18 +334,14 @@
                        (apply [_ field]
                          (let [^Field field field
                                content-root (VectorSchemaRoot/create (Schema. [row-id-field field]) allocator)
-                               file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s-%s-%08x.arrow"
-                                                                                             chunk-idx
-                                                                                             (.getName field)
-                                                                                             (str (Types/getMinorTypeForArrowType (.getType field)))
-                                                                                             (hash field))))
+                               file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field))))
                                                          (into-array OpenOption #{StandardOpenOption/CREATE
                                                                                   StandardOpenOption/WRITE
                                                                                   StandardOpenOption/TRUNCATE_EXISTING}))]
                            (LiveColumn. content-root
                                         (doto (ArrowFileWriter. content-root nil file-ch)
                                           (.start))
-                                        (atom {})))))]
+                                        (atom {row-id-field {:count 0}, field {:count 0}})))))]
         (with-open [bais (ByteArrayInputStream. tx-bytes)
                     sr (doto (ArrowStreamReader. bais allocator)
                          (.loadNextBatch))
@@ -341,9 +363,15 @@
                            (let [field (.getField kv-vec)
                                  ^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
                                  ^VectorSchemaRoot content-root (.content-root live-column)
+                                 !metadata (.!metadata live-column)
                                  value-count (.getRowCount content-root)
                                  field-vec (.getVector content-root field)
                                  ^BigIntVector row-id-vec (.getVector content-root row-id-field)]
+
+                             (swap! !metadata (fn [metadata]
+                                                (-> metadata
+                                                    (update-in [row-id-field :count] inc)
+                                                    (update-in [field :count] inc))))
 
                              (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
                              (.setSafe row-id-vec value-count (+ next-row-id tx-op-idx))
@@ -382,15 +410,15 @@
                             (count (.getRecordBlocks ^ArrowFileWriter (.file-writer live-column)))))
                      (apply max))
                 max-blocks-per-chunk)
-        (close-writers! this)
+        (close-writers! this chunk-idx)
 
         (set! (.chunk-idx this) next-row-id)))
 
     Closeable
     (close [this]
-      (close-writers! this)))
+      (close-writers! this chunk-idx)))
 
-  (defn- close-writers! [^Ingester ingester]
+  (defn- close-writers! [^Ingester ingester chunk-idx]
     (let [^Map field->live-column (.field->live-column ingester)]
       (doseq [^LiveColumn live-column (vals field->live-column)
               :let [^VectorSchemaRoot root (.content-root live-column)
@@ -410,6 +438,22 @@
               (catch Exception e
                 (.printStackTrace e))))))
 
+      ;; TODO remove
+      '{:chunk_00000_age [{:_row-id {:min 4 :max 2300 :count 100}
+                           :age {:min 10 :max 30 :count 1000}}]
+        :chunk_00000_name [{:_row-id {:min 4 :max 2300 :count 100}
+                            :name {:min "Aaron" :max "Zach" :count 1000}}]}
+
+      (let [metadata-file (io/file (.arrow-dir ingester)
+                                   (format "metadata-%08x.edn" chunk-idx))]
+        (spit metadata-file
+              (pr-str (into {}
+                            (for [[^Field field, ^LiveColumn live-column] field->live-column
+                                  :let [metadata @(.!metadata live-column)]]
+                              [(format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field))
+                               (into {} (for [[^Field field, field-metadata] metadata]
+                                          [(.getName field) field-metadata]))])))))
+
       (.clear field->live-column)))
 
   #_
@@ -422,7 +466,8 @@
                                     0
                                     0)]
 
-      (doseq [[tx-id tx-bytes] (map-indexed vector foo-tx-bytes)]
+      (doseq [[tx-id tx-bytes] (->> (map-indexed vector foo-tx-bytes)
+                                    (take 15))]
         (index-tx ingester {:tx-id tx-id, :tx-time (Date.)} tx-bytes)))
 
     (write-arrow-json-files arrow-dir)))
