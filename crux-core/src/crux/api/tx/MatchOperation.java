@@ -50,8 +50,8 @@ public final class MatchOperation extends TransactionOperation {
     }
 
     @Override
-    public void accept(Visitor visitor) {
-        visitor.visit(this);
+    public <E> E accept(Visitor<E> visitor) {
+        return visitor.visit(this);
     }
 
     @Override

@@ -7,10 +7,11 @@ import java.time.Duration;
 import java.util.*;
 
 import crux.api.tx.*;
+import crux.api.*;
 
 import static org.junit.Assert.*;
 
-class TestUtils {
+public class TestUtils {
     static final Keyword PUT = Keyword.intern("crux.tx/put");
     static final Keyword DELETE = Keyword.intern("crux.tx/delete");
 

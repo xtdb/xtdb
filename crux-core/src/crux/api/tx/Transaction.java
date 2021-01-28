@@ -91,67 +91,58 @@ public final class Transaction {
         }
     }
 
-    private static class EdnVisitor implements TransactionOperation.Visitor {
-        private IPersistentVector vector = PersistentVector.EMPTY;
-
-        private void add(IPersistentVector toAdd) {
-            vector = vector.cons(toAdd);
-        }
-
+    private static class EdnVisitor implements TransactionOperation.Visitor<IPersistentVector> {
         @Override
-        public void visit(PutOperation operation) {
+        public IPersistentVector visit(PutOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
                     .cons(TransactionOperation.Type.PUT.getKeyword())
                     .cons(operation.getDocument().toMap());
 
             Date startValidTime = operation.getStartValidTime();
             if (startValidTime == null) {
-                add(toAdd);
-                return;
+                return toAdd;
             }
 
             toAdd = toAdd.cons(startValidTime);
 
             Date endValidTime = operation.getEndValidTime();
             if (endValidTime == null) {
-                add(toAdd);
-                return;
+                return toAdd;
             }
-            add(toAdd.cons(endValidTime));
+
+            return toAdd.cons(endValidTime);
         }
 
         @Override
-        public void visit(DeleteOperation operation) {
+        public IPersistentVector visit(DeleteOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
                     .cons(TransactionOperation.Type.DELETE.getKeyword())
                     .cons(operation.getId());
 
             Date startValidTime = operation.getStartValidTime();
             if (startValidTime == null) {
-                add(toAdd);
-                return;
+                return toAdd;
             }
 
             toAdd = toAdd.cons(startValidTime);
 
             Date endValidTime = operation.getEndValidTime();
             if (endValidTime == null) {
-                add(toAdd);
-                return;
+                return toAdd;
             }
-            add(toAdd.cons(endValidTime));
+
+            return toAdd.cons(endValidTime);
         }
 
         @Override
-        public void visit(EvictOperation operation) {
-            IPersistentVector toAdd = PersistentVector.EMPTY
+        public IPersistentVector visit(EvictOperation operation) {
+            return PersistentVector.EMPTY
                     .cons(TransactionOperation.Type.EVICT.getKeyword())
                     .cons(operation.getId());
-            add(toAdd);
         }
 
         @Override
-        public void visit(MatchOperation operation) {
+        public IPersistentVector visit(MatchOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
                     .cons(TransactionOperation.Type.MATCH.getKeyword())
                     .cons(operation.getId());
@@ -166,15 +157,14 @@ public final class Transaction {
 
             Date atValidTime = operation.getAtValidTime();
             if (atValidTime == null) {
-                add(toAdd);
-                return;
+                return toAdd;
             }
 
-            add(toAdd.cons(atValidTime));
+            return toAdd.cons(atValidTime);
         }
 
         @Override
-        public void visit(InvokeFunctionOperation operation) {
+        public IPersistentVector visit(InvokeFunctionOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
                     .cons(TransactionOperation.Type.FN.getKeyword())
                     .cons(operation.getId());
@@ -183,20 +173,16 @@ public final class Transaction {
                 toAdd = toAdd.cons(argument);
             }
 
-            add(toAdd);
+            return toAdd;
         }
     }
 
     public final IPersistentVector toVector() {
-        EdnVisitor visitor = new EdnVisitor();
-        accept(visitor);
-        return visitor.vector;
+        return PersistentVector.create(accept(new EdnVisitor()));
     }
 
-    public void accept(TransactionOperation.Visitor visitor) {
-        for (TransactionOperation operation: operations) {
-            operation.accept(visitor);
-        }
+    public <E> List<E> accept(TransactionOperation.Visitor<E> visitor) {
+        return operations.stream().map(it -> it.accept(visitor)).collect(Collectors.toList());
     }
 
     @Override

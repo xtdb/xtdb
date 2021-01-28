@@ -2,6 +2,8 @@ package crux.api.tx;
 
 import clojure.lang.Keyword;
 
+import java.util.List;
+
 public abstract class TransactionOperation {
     enum Type {
         PUT("crux.tx/put"),
@@ -21,14 +23,16 @@ public abstract class TransactionOperation {
         }
     }
 
-    public interface Visitor {
-        void visit(PutOperation operation);
-        void visit(DeleteOperation operation);
-        void visit(EvictOperation operation);
-        void visit(MatchOperation operation);
-        void visit(InvokeFunctionOperation operation);
+    public interface Visitor<E> {
+        E visit(PutOperation operation);
+        E visit(DeleteOperation operation);
+        E visit(EvictOperation operation);
+        E visit(MatchOperation operation);
+        E visit(InvokeFunctionOperation operation);
     }
 
     public abstract Type getType();
-    public abstract void accept(Visitor visitor);
+    public abstract <E> E accept(Visitor<E> visitor);
+
+
 }

@@ -1,8 +1,5 @@
 package crux.api.tx;
 
-import clojure.lang.IPersistentVector;
-import clojure.lang.PersistentVector;
-
 import java.util.Objects;
 
 public final class EvictOperation extends TransactionOperation {
@@ -26,8 +23,8 @@ public final class EvictOperation extends TransactionOperation {
     }
 
     @Override
-    public void accept(Visitor visitor) {
-        visitor.visit(this);
+    public <E> E accept(Visitor<E> visitor) {
+        return visitor.visit(this);
     }
 
     @Override
