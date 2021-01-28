@@ -289,10 +289,16 @@
 (def ^:private ^Field tx-id-field
   (->field "_tx-id" (.getType Types$MinorType/BIGINT) false))
 
+(deftype LiveColumn [^VectorSchemaRoot content-root, ^ArrowFileWriter file-writer, !metadata])
+
 (do
+  ;; aim: one metadata file per chunk with:
+  ;; - count per column
+  ;; - min-max per column
+
   (deftype Ingester [^BufferAllocator allocator
                      ^File arrow-dir
-                     ^Map field->column ; Field -> [VectorSchemaRoot ArrowFileWriter]
+                     ^Map field->live-column
                      ^:unsynchronized-mutable ^long chunk-idx
                      ^:unsynchronized-mutable ^long next-row-id]
 
@@ -310,9 +316,10 @@
                                                          (into-array OpenOption #{StandardOpenOption/CREATE
                                                                                   StandardOpenOption/WRITE
                                                                                   StandardOpenOption/TRUNCATE_EXISTING}))]
-                           [content-root
-                            (doto (ArrowFileWriter. content-root nil file-ch)
-                              (.start))])))]
+                           (LiveColumn. content-root
+                                        (doto (ArrowFileWriter. content-root nil file-ch)
+                                          (.start))
+                                        (atom {})))))]
         (with-open [bais (ByteArrayInputStream. tx-bytes)
                     sr (doto (ArrowStreamReader. bais allocator)
                          (.loadNextBatch))
@@ -332,7 +339,8 @@
                              per-struct-offset (.getOffset document-vec per-op-offset)]
                          (doseq [^ValueVector kv-vec (.getChildrenFromFields (.getStruct document-vec struct-type-id))]
                            (let [field (.getField kv-vec)
-                                 [^VectorSchemaRoot content-root _] (.computeIfAbsent field->column field ->column)
+                                 ^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
+                                 ^VectorSchemaRoot content-root (.content-root live-column)
                                  value-count (.getRowCount content-root)
                                  field-vec (.getVector content-root field)
                                  ^BigIntVector row-id-vec (.getVector content-root row-id-field)]
@@ -342,7 +350,8 @@
                              (.setRowCount content-root (inc value-count))))
 
                          (letfn [(set-tx-field! [^Field field field-val]
-                                   (let [[^VectorSchemaRoot content-root _] (.computeIfAbsent field->column field ->column)
+                                   (let [^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
+                                         ^VectorSchemaRoot content-root (.content-root live-column)
                                          value-count (.getRowCount content-root)
                                          field-vec (.getVector content-root field)
                                          ^BigIntVector row-id-vec (.getVector content-root row-id-field)]
@@ -355,7 +364,9 @@
 
             (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec))))
 
-          (doseq [[^VectorSchemaRoot content-root, ^ArrowFileWriter file-writer] (vals field->column)]
+          (doseq [^LiveColumn live-column (vals field->live-column)
+                  :let [^VectorSchemaRoot content-root (.content-root live-column)
+                        ^ArrowFileWriter file-writer (.file-writer live-column)]]
             (when (>= (.getRowCount content-root) max-block-size)
               (.writeBatch file-writer)
 
@@ -366,9 +377,9 @@
 
       ;; TODO better metric here?
       ;; row-id? bytes? tx-id?
-      (when (>= (->> (vals field->column)
-                     (map (fn [[_ ^ArrowFileWriter file-writer]]
-                            (count (.getRecordBlocks file-writer))))
+      (when (>= (->> (vals field->live-column)
+                     (map (fn [^LiveColumn live-column]
+                            (count (.getRecordBlocks ^ArrowFileWriter (.file-writer live-column)))))
                      (apply max))
                 max-blocks-per-chunk)
         (close-writers! this)
@@ -380,8 +391,10 @@
       (close-writers! this)))
 
   (defn- close-writers! [^Ingester ingester]
-    (let [^Map field->column (.field->column ingester)]
-      (doseq [[^VectorSchemaRoot root, ^ArrowFileWriter file-writer] (vals field->column)]
+    (let [^Map field->live-column (.field->live-column ingester)]
+      (doseq [^LiveColumn live-column (vals field->live-column)
+              :let [^VectorSchemaRoot root (.content-root live-column)
+                    ^ArrowFileWriter file-writer (.file-writer live-column)]]
         (try
           (when (pos? (.getRowCount root))
             (.writeBatch file-writer)
@@ -397,7 +410,7 @@
               (catch Exception e
                 (.printStackTrace e))))))
 
-      (.clear field->column)))
+      (.clear field->live-column)))
 
   #_
   (let [arrow-dir (doto (io/file "/tmp/arrow")
