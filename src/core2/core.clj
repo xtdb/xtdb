@@ -3,7 +3,7 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
            [java.nio.channels FileChannel Channels]
            [java.nio.file OpenOption StandardOpenOption]
-           [java.util Date HashMap Map]
+           [java.util Arrays Date HashMap Map]
            [java.util.function Function]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector BitVector FieldVector DateMilliVector Float8Vector NullVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
@@ -183,23 +183,28 @@
 
 (defn- update-metadata [metadata field value]
   (let [less-than? (fn [x y]
-                     (neg? (if (instance? Text x)
-                             (compare (str x) (str y))
-                             (compare x y))))]
+                     (neg? (cond
+                             (bytes? x) (Arrays/compareUnsigned ^bytes x ^bytes y)
+                             (instance? Text x) (compare (str x) (str y))
+                             :else (compare x y))))]
     (-> metadata
-        (update-in [field :min] (fn [x y]
-                                  (if x
-                                    (if (less-than? x y)
-                                      x
-                                      y)
-                                    y)) value)
-        (update-in [field :max] (fn [x y]
-                                  (if x
-                                    (if (less-than? x y)
-                                      y
-                                      x)
-                                    y)) value)
-        (update-in [field :count] inc))))
+        (update field (fn [field-metadata]
+                        (-> field-metadata
+                            (update :min
+                                    (fn [min-value]
+                                      (if min-value
+                                        (if (less-than? min-value value)
+                                          min-value
+                                          value)
+                                        value)))
+                            (update :max
+                                    (fn [max-value]
+                                      (if max-value
+                                        (if (less-than? max-value value)
+                                          value
+                                          max-value)
+                                        value)))
+                            (update :count inc)))))))
 
 (deftype Ingester [^BufferAllocator allocator
                    ^File arrow-dir
@@ -322,6 +327,7 @@
 
     (let [metadata-file (io/file (.arrow-dir ingester)
                                  (format "metadata-%08x.edn" chunk-idx))]
+      ;; TODO: next: metadata -> arrow
       (spit metadata-file
             (pr-str (into {}
                           (for [[^Field field, ^LiveColumn live-column] field->live-column

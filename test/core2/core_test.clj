@@ -1,14 +1,11 @@
 (ns core2.core-test
   (:require [clojure.data.csv :as csv]
-            [clojure.java.io :as io]
             [clojure.instant :as inst]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [core2.core :as c2])
-  (:import [java.io Closeable File]
-           [java.util Date HashMap Map]
-           [java.util.function Function]
-           [org.apache.arrow.memory RootAllocator]
-           [core2.core Ingester]))
+  (:import java.util.Date
+           org.apache.arrow.memory.RootAllocator))
 
 (def device-info-csv-resource
   (io/resource "devices_small_device_info.csv"))
@@ -52,12 +49,6 @@
             :rssi (Double/parseDouble rssi)
             :ssid ssid})))))
 
-(comment
-  (defonce foo-rows
-    (with-readings-docs
-      (fn [rows]
-        (doall (take 10 rows))))))
-
 ;;; ingest
 ;; TODO 4. writing metadata - minmax, bloom at chunk/file and block/record-batch
 ;; TODO 11. figure out last tx-id/row-id from latest chunk and resume ingest on start.
@@ -95,33 +86,19 @@
 ;; live chunk, reading sealed block (maybe) written to disk
 ;; live chunk, reading unsealed block in memory
 
-'{:tx-time 'date-milli
-  :tx-id 'uint8
-  :tx-ops {:put [{:documents []
-                  :start-vts [...]
-                  :end-vts [...]}]
-           :delete []}}
-
-;; submit-tx :: ops -> Arrow bytes
-;; Kafka mock - Arrow * tx-time/tx-id
-;; ingester :: Arrow bytes * tx-time * tx-id -> indices
-
-
-#_(def foo-tx-bytes
-    (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
-      (with-readings-docs
-        (fn [readings]
-          (let [info-docs @!info-docs]
-            (vec (for [tx-batch (->> (concat (interleave info-docs
-                                                         (take (count info-docs) readings))
-                                             (drop (count info-docs) readings))
-                                     (partition-all 1000))]
-                   (c2/submit-tx (for [doc tx-batch]
-                                   {:op :put, :doc doc})
-                                 allocator))))))))
-
-#_(def ^:private metadata-schema
-    (Schema. [(->)]))
+#_
+(def foo-tx-bytes
+  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+    (with-readings-docs
+      (fn [readings]
+        (let [info-docs @!info-docs]
+          (vec (for [tx-batch (->> (concat (interleave info-docs
+                                                       (take (count info-docs) readings))
+                                           (drop (count info-docs) readings))
+                                   (partition-all 1000))]
+                 (c2/submit-tx (for [doc tx-batch]
+                                 {:op :put, :doc doc})
+                               allocator))))))))
 
 '{:file-name ["name.arrow" "age.arrow"]
   :field-name ["name" "age"]
@@ -143,7 +120,6 @@
 ;; aim: one metadata file per chunk with:
 ;; - count per column
 ;; - min-max per column
-
 
 (comment
   (let [arrow-dir (doto (io/file "/tmp/arrow")
