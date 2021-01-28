@@ -16,7 +16,7 @@ import static org.junit.Assert.*;
 
 public class TransactionTest {
     private static CruxDocument personDocument(String id, String name, String lastName, long version) {
-        return CruxDocument.create(id).put("person/name", name).put("person/lastName", lastName).put("person/version", version);
+        return CruxDocument.create(id).plus("person/name", name).plus("person/lastName", lastName).plus("person/version", version);
     }
 
     private static final String pabloId = "PabloPicasso";

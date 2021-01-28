@@ -20,7 +20,7 @@ public class TransactionBuilderTest {
      * as well as ensuring the .equals method behaves as intended.
      */
     private final static Object documentId = "foo";
-    private final static CruxDocument document = CruxDocument.create(documentId).put("bar", "baz");
+    private final static CruxDocument document = CruxDocument.create(documentId).plus("bar", "baz");
     private final static Date validTime = now;
     private final static Date endValidTime = date(500);
     @Test

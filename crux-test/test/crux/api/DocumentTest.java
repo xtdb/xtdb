@@ -26,10 +26,16 @@ public class DocumentTest {
         CruxDocument.factory(data);
     }
 
-    @Test(expected = RuntimeException.class)
+    @Test(expected = IllegalArgumentException.class)
     public void reassigningId() {
         CruxDocument document = CruxDocument.create("foo");
-        document.put("crux.db/id", "bar");
+        document.plus("crux.db/id", "bar");
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void reassigningFnId() {
+        CruxDocument document = CruxDocument.create("foo");
+        document.plus("crux.db/fn", "bar");
     }
 
     @Test
@@ -67,13 +73,13 @@ public class DocumentTest {
     }
 
     @Test
-    public void put() {
+    public void plus() {
         HashMap<Keyword, Object> compare = new HashMap<>();
 
         compare.put(DB_ID, documentId);
         compare.put(foo, "bar");
 
-        CruxDocument document = CruxDocument.create(documentId).put("foo", "bar");
+        CruxDocument document = CruxDocument.create(documentId).plus("foo", "bar");
         CruxDocument builtDocument = buildDoc(documentId, doc -> {
             doc.put("foo", "bar");
         });
@@ -85,7 +91,7 @@ public class DocumentTest {
     }
 
     @Test
-    public void putAll() {
+    public void plusAll() {
         HashMap<Keyword, Object> compare = new HashMap<>();
         HashMap<String, Object> data = new HashMap<>();
 
@@ -96,7 +102,7 @@ public class DocumentTest {
         compare.put(bar, 0);
         data.put("bar", 0);
 
-        CruxDocument document = CruxDocument.create(documentId).putAll(data);
+        CruxDocument document = CruxDocument.create(documentId).plusAll(data);
         CruxDocument builtDocument = buildDoc(documentId, doc -> {
             doc.putAll(data);
         });
@@ -108,7 +114,7 @@ public class DocumentTest {
     }
 
     @Test
-    public void remove() {
+    public void minus() {
         HashMap<Keyword, Object> compare = new HashMap<>();
         HashMap<String, Object> data = new HashMap<>();
         compare.put(DB_ID, documentId);
@@ -118,7 +124,7 @@ public class DocumentTest {
 
         data.put("bar", 0);
 
-        CruxDocument document = CruxDocument.create(documentId, data).remove("bar");
+        CruxDocument document = CruxDocument.create(documentId, data).minus("bar");
         CruxDocument builtDocument = buildDoc(documentId, doc -> {
             doc.putAll(data);
             doc.remove("bar");
@@ -131,7 +137,7 @@ public class DocumentTest {
     }
 
     @Test
-    public void removeAll() {
+    public void minusAll() {
         HashMap<Keyword, Object> compare = new HashMap<>();
         HashMap<String, Object> data = new HashMap<>();
 
@@ -140,7 +146,7 @@ public class DocumentTest {
         data.put("foo", "bar");
         data.put("bar", 0);
 
-        CruxDocument document = CruxDocument.create(documentId, data).removeAll(data.keySet());
+        CruxDocument document = CruxDocument.create(documentId, data).minusAll(data.keySet());
         CruxDocument builtDocument = buildDoc(documentId, doc -> {
             doc.putAll(data);
             doc.removeAll(data.keySet());
@@ -162,14 +168,20 @@ public class DocumentTest {
     @Test
     public void immutibility() {
         CruxDocument document1 = CruxDocument.create(documentId);
-        CruxDocument document2 = document1.put("foo", "bar");
-        CruxDocument document3 = document2.put("bar", 0);
-        CruxDocument document4 = document2.remove("foo");
+        CruxDocument document2 = document1.plus("foo", "bar");
+        CruxDocument document3 = document2.plus("bar", 0);
+        CruxDocument document4 = document2.minus("foo");
 
         assertNotEquals(document1, document2);
         assertNotEquals(document1, document3);
         assertEquals(document1, document4);
         assertNotEquals(document2, document3);
+    }
+
+    @Test
+    public void havingAFunctionDocumentWontBreakPlussing() {
+        CruxDocument document = CruxDocument.createFunction("foo", "bar");
+        document.plus("baz", 7);
     }
 
     private void assertSameAfterPut(CruxDocument document) {

@@ -36,7 +36,7 @@ public class TestUtils {
 
     static CruxDocument testDocument(int version) {
         CruxDocument document = CruxDocument.create(documentId);
-        return document.put(versionId, version);
+        return document.plus(versionId, version);
     }
 
     static void sleep(long millis) {

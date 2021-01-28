@@ -42,42 +42,54 @@ public final class CruxDocument {
 
     public static class Builder {
         private final Object id;
-        private final Map<String, Object> map = new HashMap<>();
+        private final Map<Keyword, Object> data = new HashMap<>();
 
         private Builder(Object id) {
             this.id = id;
         }
 
+        @SuppressWarnings("unchecked")
+        private Builder(Object id, IPersistentMap data) {
+            this.id = id;
+            this.data.putAll((Map<Keyword, Object>) data);
+        }
+
         public Builder put(String key, Object value) {
-            map.put(key, value);
+            return put(Keyword.intern(key), value);
+        }
+
+        private Builder put(Keyword key, Object value) {
+            assertNotReserved(key);
+            data.put(key, value);
             return this;
         }
 
         public Builder putAll(Map<String, Object> data) {
-            map.putAll(data);
+            for (Map.Entry<String, Object> entry: data.entrySet()) {
+                put(entry.getKey(), entry.getValue());
+            }
             return this;
         }
 
         public Builder remove(String key) {
-            map.remove(key);
+            return remove(Keyword.intern(key));
+        }
+
+        private Builder remove(Keyword key) {
+            assertNotReserved(key);
+            data.remove(key);
             return this;
         }
 
         public Builder removeAll(Iterable<String> keys) {
             for (String key: keys) {
-                map.remove(key);
+                remove(key);
             }
             return this;
         }
 
         public CruxDocument build() {
-            IPersistentMap data = PersistentArrayMap.EMPTY;
-            for (Map.Entry<String, Object> entry: map.entrySet()) {
-                Keyword key = Keyword.intern(entry.getKey());
-                assertNotReserved(key);
-                data = data.assoc(key, entry.getValue());
-            }
-            return new CruxDocument(id, data);
+            return new CruxDocument(id, PersistentArrayMap.create(data));
         }
     }
 
@@ -90,37 +102,23 @@ public final class CruxDocument {
     }
 
     public static CruxDocument create(Object id, Map<String, Object> data) {
-        return create(id).putAll(data);
+        return create(id).plusAll(data);
     }
 
-    public CruxDocument put(String key, Object value) {
-        Keyword keyword = Keyword.intern(key);
-        assertNotReserved(keyword);
-        return new CruxDocument(id, data.assoc(keyword, value));
+    public CruxDocument plus(String key, Object value) {
+        return toBuilder().put(key, value).build();
     }
 
-    public CruxDocument putAll(Map<String, Object> entries) {
-        IPersistentMap data = this.data;
-        for (Map.Entry<String, Object> entry: entries.entrySet()) {
-            Keyword key = Keyword.intern(entry.getKey());
-            assertNotReserved(key);
-            data = data.assoc(key, entry.getValue());
-        }
-        return new CruxDocument(id, data);
+    public CruxDocument plusAll(Map<String, Object> entries) {
+        return toBuilder().putAll(entries).build();
     }
 
-    public CruxDocument remove(String key) {
-        return new CruxDocument(id, data.without(Keyword.intern(key)));
+    public CruxDocument minus(String key) {
+        return toBuilder().remove(key).build();
     }
 
-    public CruxDocument removeAll(Iterable<String> keys) {
-        IPersistentMap data = this.data;
-        for (String rawKey: keys) {
-            Keyword key = Keyword.intern(rawKey);
-            assertNotReserved(key);
-            data = data.without(key);
-        }
-        return new CruxDocument(id, data);
+    public CruxDocument minusAll(Iterable<String> keys) {
+        return toBuilder().removeAll(keys).build();
     }
 
     public Object get(String key) {
@@ -136,8 +134,12 @@ public final class CruxDocument {
     }
 
     private static void assertNotReserved(Keyword key) {
-        if (DB_ID.equals(key)) throw new RuntimeException(":crux.db/id is a reserved key");
-        if (FN_ID.equals(key)) throw new RuntimeException(":crux.db/fn is a reserved key");
+        if (DB_ID.equals(key)) throw new IllegalArgumentException(":crux.db/id is a reserved key");
+        if (FN_ID.equals(key)) throw new IllegalArgumentException(":crux.db/fn is a reserved key");
+    }
+
+    private Builder toBuilder() {
+        return new Builder(id, data);
     }
 
     @Override

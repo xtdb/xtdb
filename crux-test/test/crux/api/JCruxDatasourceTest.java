@@ -17,8 +17,8 @@ public class JCruxDatasourceTest {
     private static final Keyword projectId1 = Keyword.intern("project1");
     private static final Keyword projectId2 = Keyword.intern("project2");
 
-    private static final CruxDocument projectDocument1 = CruxDocument.create(projectId1).put("foo", "foo").put("bar", 1);
-    private static final CruxDocument projectDocument2 = CruxDocument.create(projectId2).put("foo", "bar").put("bar", 2);
+    private static final CruxDocument projectDocument1 = CruxDocument.create(projectId1).plus("foo", "foo").plus("bar", 1);
+    private static final CruxDocument projectDocument2 = CruxDocument.create(projectId2).plus("foo", "bar").plus("bar", 2);
 
     private static ICruxAPI node;
 
