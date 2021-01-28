@@ -9,6 +9,7 @@ import org.junit.*;
 
 import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
+import static crux.api.tx.Transaction.buildTx;
 
 public class JCruxDatasourceTest {
     private static List<CruxDocument> documents;
@@ -34,16 +35,16 @@ public class JCruxDatasourceTest {
 
         ArrayList<TransactionInstant> _transactions = new ArrayList<TransactionInstant>();
 
-        put(node, projectDocument1, null, null);
-        put(node, projectDocument2, null, null);
+        TestUtils.put(node, projectDocument1, null, null);
+        TestUtils.put(node, projectDocument2, null, null);
         sleep(20);
-        _transactions.add(p(0, date(-10000), null));
+        _transactions.add(put(0, date(-10000), null));
         sleep(20);
-        _transactions.add(p(1, date(-8000), date(-7000)));
+        _transactions.add(put(1, date(-8000), date(-7000)));
         sleep(20);
-        _transactions.add(d(date(-9000), date(-8500)));
+        _transactions.add(delete(date(-9000), date(-8500)));
         sleep(20);
-        TransactionInstant last = p(2, date(1000000), null);
+        TransactionInstant last = put(2, date(1000000), null);
         _transactions.add(last);
 
         node.awaitTx(last, Duration.ofSeconds(10));
@@ -329,7 +330,6 @@ public class JCruxDatasourceTest {
         ICruxDatasource db = node.db();
         long upperBound = (new Date()).getTime();
 
-        long lastTransactionTime = getLastTransactionTime();
         Map<Keyword, ?> basis = db.dbBasis();
 
         assertHasKeys(basis, VALID_TIME, TX);
@@ -355,6 +355,23 @@ public class JCruxDatasourceTest {
         close(db);
     }
 
+    @Test
+    public void withTxTest() {
+        ICruxDatasource db = node.db();
+        assertNotNull(db.entity(documentId));
+
+        ICruxDatasource dbWithTx = db.withTx(buildTx(tx -> {
+            tx.evict(documentId);
+        }));
+
+        assertNull(dbWithTx.entity(documentId));
+        //Check we haven't impacted the original snapshot
+        assertNotNull(db.entity(documentId));
+
+        close(db);
+        close(dbWithTx);
+    }
+
     /*
     Utils
      */
@@ -373,12 +390,12 @@ public class JCruxDatasourceTest {
         close(db);
     }
 
-    private static TransactionInstant d(Date validTime, Date endValidTime) {
-        return delete(node, documentId, validTime, endValidTime);
+    private static TransactionInstant delete(Date validTime, Date endValidTime) {
+        return TestUtils.delete(node, documentId, validTime, endValidTime);
     }
 
-    private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
+    private static TransactionInstant put(int documentIndex, Date validTime, Date endValidTime) {
         CruxDocument document = documents.get(documentIndex);
-        return put(node, document, validTime, endValidTime);
+        return TestUtils.put(node, document, validTime, endValidTime);
     }
 }

@@ -10,8 +10,8 @@ public final class MatchOperation extends TransactionOperation {
         return new MatchOperation(id, null, null);
     }
 
-    public static MatchOperation create(Object id, Date validTime) {
-        return new MatchOperation(id, null, validTime);
+    public static MatchOperation create(Object id, Date atValidTime) {
+        return new MatchOperation(id, null, atValidTime);
     }
 
     public static MatchOperation create(CruxDocument document) {

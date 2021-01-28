@@ -398,7 +398,7 @@
   (validTime [_] (valid-time datasource))
   (transactionTime [_] (transaction-time datasource))
   (dbBasis [_] (db-basis datasource))
-  (withTx [_ tx-ops] (with-tx datasource tx-ops))
+  (withTx [_ tx] (->JCruxDatasource (with-tx datasource (.toVector tx))))
   (close [_] (.close datasource)))
 
 (defrecord JCruxNode [^java.io.Closeable node]
@@ -429,12 +429,7 @@
 
 (defrecord JCruxIngestClient [^java.io.Closeable client]
   ICruxAsyncIngestAPI
-  (submitTx [_ tx]
-    (->> tx
-         .toVector
-         ^Map (submit-tx client)
-         TransactionInstant/factory))
-
+  (submitTx [_ tx] (TransactionInstant/factory ^Map (submit-tx client (.toVector tx))))
   (openTxLog [_ after-tx-id with-ops?] (open-tx-log client after-tx-id with-ops?))
   (submitTxAsync [_ tx-ops] (submit-tx-async client tx-ops))
   (close [_] (.close client)))
