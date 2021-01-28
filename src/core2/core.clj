@@ -12,7 +12,8 @@
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader ArrowStreamWriter]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo Field FieldType Schema]))
+           [org.apache.arrow.vector.types.pojo Field Schema]
+           core2.metadata.IColumnMetadata))
 
 (defprotocol TransactionIngester
   (index-tx [ingester tx docs]))
@@ -48,15 +49,15 @@
 
       (->> (map-indexed vector tx-ops)
            (reduce (fn [acc [op-idx {:keys [op] :as tx-op}]]
-                     (let [^int per-op-offset (get-in acc [:per-op-offsets op] 0)]
+                     (let [^int per-op-offset (get-in acc [:per-op-offsets op] 0)
+                           ^int op-type-id (get union-type-ids op)]
 
-                       (add-element-to-union! tx-op-vec (get union-type-ids op) op-idx per-op-offset)
+                       (add-element-to-union! tx-op-vec op-type-id op-idx per-op-offset)
 
                        (case op
                          :put (let [{:keys [doc]} tx-op
-                                    put-type-id (get union-type-ids :put)
 
-                                    ^StructVector put-vec (.getStruct tx-op-vec put-type-id)
+                                    ^StructVector put-vec (.getStruct tx-op-vec op-type-id)
                                     ^DenseUnionVector put-doc-vec (.getChild put-vec "document" DenseUnionVector)]
 
                                 (.setIndexDefined put-vec per-op-offset)
@@ -158,7 +159,7 @@
                   op-vec (.getStruct tx-ops-vec op-type-id)
                   per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
               (case (aget op-type-ids op-type-id)
-                :put (let [^DenseUnionVector document-vec (.addOrGet op-vec "document" (FieldType. false (.getType Types$MinorType/DENSEUNION) nil nil) DenseUnionVector)
+                :put (let [^DenseUnionVector document-vec (.addOrGet op-vec "document" (t/->field-type (.getType Types$MinorType/DENSEUNION) false) DenseUnionVector)
                            struct-type-id (.getTypeId document-vec per-op-offset)
                            per-struct-offset (.getOffset document-vec per-op-offset)]
                        ;; TODO duplication here between KV and tx metadata? `copyFromSafe` vs `set-safe!`
@@ -176,8 +177,8 @@
                            (.setSafe row-id-vec value-count row-id)
                            (.setRowCount content-root (inc value-count))
 
-                           (meta/update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
-                           (meta/update-metadata! (.field-metadata live-column) field-vec value-count)))
+                           (.updateMetadata ^IColumnMetadata (.row-id-metadata live-column) row-id-vec value-count)
+                           (.updateMetadata ^IColumnMetadata (.field-metadata live-column) field-vec value-count)))
 
                        (letfn [(set-tx-field! [^Field field field-value]
                                  (let [^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
@@ -191,8 +192,8 @@
                                    (.setSafe row-id-vec value-count row-id)
                                    (.setRowCount content-root (inc value-count))
 
-                                   (meta/update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
-                                   (meta/update-metadata! (.field-metadata live-column) field-vec value-count)))]
+                                   (.updateMetadata ^IColumnMetadata (.row-id-metadata live-column) row-id-vec value-count)
+                                   (.updateMetadata ^IColumnMetadata (.field-metadata live-column) field-vec value-count)))]
 
                          (set-tx-field! t/tx-time-field tx-time)
                          (set-tx-field! t/tx-id-field tx-id))))))
@@ -225,7 +226,7 @@
   (close [this]
     (close-writers! this chunk-idx)))
 
-(defn- write-metadata! [^Ingester ingester, chunk-idx]
+(defn- write-metadata! [^Ingester ingester, ^long chunk-idx]
   (let [^Map field->live-column (.field->live-column ingester)
         schema (Schema. (for [[^Field field, ^LiveColumn live-column] field->live-column]
                           (t/->field (.getName ^File (.file live-column))
@@ -241,16 +242,16 @@
 
       (doseq [[^Field field, ^LiveColumn live-column] field->live-column]
         (let [^StructVector file-vec (.getVector metadata-root (.getName ^File (.file live-column)))]
-          (meta/write-metadata! (.field-metadata live-column)
-                                (.getChild file-vec (.getName field))
-                                0)
-          (meta/write-metadata! (.row-id-metadata live-column)
-                                (.getChild file-vec (.getName t/row-id-field))
-                                0)))
+          (.writeMetadata ^IColumnMetadata (.field-metadata live-column)
+                          (.getChild file-vec (.getName field))
+                          0)
+          (.writeMetadata ^IColumnMetadata (.row-id-metadata live-column)
+                          (.getChild file-vec (.getName t/row-id-field))
+                          0)))
       (.setRowCount metadata-root 1)
       (.writeBatch metadata-fw))))
 
-(defn- close-writers! [^Ingester ingester, chunk-idx]
+(defn- close-writers! [^Ingester ingester, ^long chunk-idx]
   (let [^Map field->live-column (.field->live-column ingester)]
     (try
       (doseq [^LiveColumn live-column (vals field->live-column)

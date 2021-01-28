@@ -14,10 +14,11 @@
    Date (.getType Types$MinorType/DATEMILLI)
    nil (.getType Types$MinorType/NULL)})
 
+(defn ->field-type ^org.apache.arrow.vector.types.pojo.FieldType [^ArrowType arrow-type nullable]
+  (FieldType. nullable arrow-type nil nil))
+
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
-  (Field. field-name
-          (FieldType. nullable arrow-type nil nil)
-          children))
+  (Field. field-name (->field-type arrow-type nullable) children))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" (.getType Types$MinorType/BIGINT) false))
