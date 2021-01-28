@@ -3,6 +3,7 @@ package crux.api;
 import java.io.File;
 import java.net.URL;
 import java.util.Map;
+import java.util.function.Consumer;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
@@ -91,12 +92,15 @@ public class Crux {
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param configuration node configuration options.
+     * @param f a callback, provided with an object to configure the node before it starts.
      * @return the started node.
      * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
+    public static ICruxAPI startNode(Consumer<NodeConfiguration.Builder> f) throws IndexVersionOutOfSyncException {
+        return startNode(NodeConfiguration.buildNode(f));
+    }
     public static ICruxAPI startNode(NodeConfiguration configuration) throws IndexVersionOutOfSyncException {
         return startNode(configuration.toMap());
     }
@@ -160,11 +164,14 @@ public class Crux {
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
-     * @param configuration node configuration options.
+     * @param f a callback, provided with an object to configure the node before it starts.
      * @return the started ingest client node.
      * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
      * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
      */
+    public static ICruxAsyncIngestAPI newIngestClient(Consumer<NodeConfiguration.Builder> f) {
+        return newIngestClient(NodeConfiguration.buildNode(f));
+    }
     public static ICruxAsyncIngestAPI newIngestClient(NodeConfiguration configuration) {
         return newIngestClient(configuration.toMap());
     }

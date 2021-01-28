@@ -43,6 +43,11 @@ public final class NodeConfiguration {
             return with(name, ModuleConfiguration.EMPTY);
         }
 
+        public Builder with(String name, Consumer<ModuleConfiguration.Builder> f) {
+            modules.put(name, ModuleConfiguration.buildModule(f));
+            return this;
+        }
+
         public NodeConfiguration build() {
             return new NodeConfiguration(modules);
         }
