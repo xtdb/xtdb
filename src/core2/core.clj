@@ -103,7 +103,7 @@
           (.end))
         (.toByteArray baos)))))
 
-(deftype LiveColumn [^VectorSchemaRoot content-root, ^ArrowFileWriter file-writer
+(deftype LiveColumn [^VectorSchemaRoot content-root, ^File file, ^ArrowFileWriter file-writer
                      ^Closeable row-id-metadata, ^Closeable field-metadata]
   Closeable
   (close [_]
@@ -118,6 +118,12 @@
           (str (Types/getMinorTypeForArrowType (.getType field)))
           (hash field)))
 
+(defn- open-write-file-ch [^File file]
+  (FileChannel/open (.toPath file)
+                    (into-array OpenOption #{StandardOpenOption/CREATE
+                                             StandardOpenOption/WRITE
+                                             StandardOpenOption/TRUNCATE_EXISTING})))
+
 (deftype Ingester [^BufferAllocator allocator
                    ^File arrow-dir
                    ^Map field->live-column
@@ -130,11 +136,10 @@
                      (apply [_ field]
                        (let [^Field field field
                              content-root (VectorSchemaRoot/create (Schema. [t/row-id-field field]) allocator)
-                             file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field))))
-                                                       (into-array OpenOption #{StandardOpenOption/CREATE
-                                                                                StandardOpenOption/WRITE
-                                                                                StandardOpenOption/TRUNCATE_EXISTING}))]
+                             file (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))
+                             file-ch (open-write-file-ch file)]
                          (LiveColumn. content-root
+                                      file
                                       (doto (ArrowFileWriter. content-root nil file-ch)
                                         (.start))
                                       (meta/->metadata (.getType t/row-id-field))
@@ -220,7 +225,32 @@
   (close [this]
     (close-writers! this chunk-idx)))
 
-(defn- close-writers! [^Ingester ingester chunk-idx]
+(defn- write-metadata! [^Ingester ingester, chunk-idx]
+  (let [^Map field->live-column (.field->live-column ingester)
+        schema (Schema. (for [[^Field field, ^LiveColumn live-column] field->live-column]
+                          (t/->field (.getName ^File (.file live-column))
+                                     (.getType Types$MinorType/STRUCT)
+                                     false
+                                     (meta/->metadata-field t/row-id-field)
+                                     (meta/->metadata-field field))))
+        metadata-file-ch (open-write-file-ch (io/file (.arrow-dir ingester) (format "metadata-%08x.arrow" chunk-idx)))]
+
+    (with-open [metadata-root (VectorSchemaRoot/create schema (.allocator ingester))
+                metadata-fw (doto (ArrowFileWriter. metadata-root nil metadata-file-ch)
+                              (.start))]
+
+      (doseq [[^Field field, ^LiveColumn live-column] field->live-column]
+        (let [^StructVector file-vec (.getVector metadata-root (.getName ^File (.file live-column)))]
+          (meta/write-metadata! (.field-metadata live-column)
+                                (.getChild file-vec (.getName field))
+                                0)
+          (meta/write-metadata! (.row-id-metadata live-column)
+                                (.getChild file-vec (.getName t/row-id-field))
+                                0)))
+      (.setRowCount metadata-root 1)
+      (.writeBatch metadata-fw))))
+
+(defn- close-writers! [^Ingester ingester, chunk-idx]
   (let [^Map field->live-column (.field->live-column ingester)]
     (try
       (doseq [^LiveColumn live-column (vals field->live-column)
@@ -234,15 +264,8 @@
 
           (.setRowCount root 0)))
 
-      (let [metadata-file (io/file (.arrow-dir ingester)
-                                   (format "metadata-%08x.edn" chunk-idx))]
-        ;; TODO: next: metadata -> arrow
-        (spit metadata-file
-              (pr-str (into {}
-                            (for [[^Field field, ^LiveColumn live-column] field->live-column]
-                              [(format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field))
-                               {"_row-id" (meta/metadata->edn (.row-id-metadata live-column))
-                                (.getName field) (meta/metadata->edn (.field-metadata live-column))}])))))
+      (write-metadata! ingester chunk-idx)
+
       (finally
         (doseq [^LiveColumn live-column (vals field->live-column)]
           (.close live-column))
