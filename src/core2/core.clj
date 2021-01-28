@@ -17,21 +17,6 @@
            [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]
            [org.apache.arrow.vector.util Text]))
 
-(defn write-arrow-json-files [^File arrow-dir]
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
-    (doseq [^File
-            file (->> (.listFiles arrow-dir)
-                      (filter #(.endsWith (.getName ^File %) ".arrow")))]
-      (with-open [file-ch (FileChannel/open (.toPath file)
-                                            (into-array OpenOption #{StandardOpenOption/READ}))
-                  file-reader (ArrowFileReader. file-ch allocator)
-                  file-writer (JsonFileWriter. (io/file arrow-dir (format "%s.json" (.getName file)))
-                                               (.. (JsonFileWriter/config) (pretty true)))]
-        (let [root (.getVectorSchemaRoot file-reader)]
-          (.start file-writer (.getSchema root) nil)
-          (while (.loadNextBatch file-reader)
-            (.write file-writer root)))))))
-
 (defprotocol TransactionIngester
   (index-tx [ingester tx docs]))
 

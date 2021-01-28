@@ -3,7 +3,8 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [core2.core :as c2])
+            [core2.core :as c2]
+            [core2.json :as c2-json])
   (:import java.util.Date
            org.apache.arrow.memory.RootAllocator))
 
@@ -131,4 +132,4 @@
                                     (take 15))]
         (c2/index-tx ingester {:tx-id tx-id, :tx-time (Date.)} tx-bytes)))
 
-    (c2/write-arrow-json-files arrow-dir)))
+    (c2-json/write-arrow-json-files arrow-dir)))
