@@ -181,6 +181,26 @@
           (str (Types/getMinorTypeForArrowType (.getType field)))
           (hash field)))
 
+(defn- update-metadata [metadata field value]
+  (let [less-than? (fn [x y]
+                     (neg? (if (instance? Text x)
+                             (compare (str x) (str y))
+                             (compare x y))))]
+    (-> metadata
+        (update-in [field :min] (fn [x y]
+                                  (if x
+                                    (if (less-than? x y)
+                                      x
+                                      y)
+                                    y)) value)
+        (update-in [field :max] (fn [x y]
+                                  (if x
+                                    (if (less-than? x y)
+                                      y
+                                      x)
+                                    y)) value)
+        (update-in [field :count] inc))))
+
 (deftype Ingester [^BufferAllocator allocator
                    ^File arrow-dir
                    ^Map field->live-column
@@ -224,28 +244,31 @@
                                ^VectorSchemaRoot content-root (.content-root live-column)
                                !metadata (.!metadata live-column)
                                value-count (.getRowCount content-root)
-                               field-vec (.getVector content-root field)
-                               ^BigIntVector row-id-vec (.getVector content-root row-id-field)]
-
-                           (swap! !metadata (fn [metadata]
-                                              (-> metadata
-                                                  (update-in [row-id-field :count] inc)
-                                                  (update-in [field :count] inc))))
+                               ^FieldVector field-vec (.getVector content-root field)
+                               ^BigIntVector row-id-vec (.getVector content-root row-id-field)
+                               row-id (+ next-row-id tx-op-idx)]
 
                            (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
-                           (.setSafe row-id-vec value-count (+ next-row-id tx-op-idx))
-                           (.setRowCount content-root (inc value-count))))
+                           (.setSafe row-id-vec value-count row-id)
+                           (.setRowCount content-root (inc value-count))
 
-                       (letfn [(set-tx-field! [^Field field field-val]
+                           (swap! (.!metadata live-column) update-metadata row-id-field row-id)
+                           (swap! (.!metadata live-column) update-metadata field (.getObject field-vec value-count))))
+
+                       (letfn [(set-tx-field! [^Field field field-value]
                                  (let [^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
                                        ^VectorSchemaRoot content-root (.content-root live-column)
                                        value-count (.getRowCount content-root)
                                        field-vec (.getVector content-root field)
-                                       ^BigIntVector row-id-vec (.getVector content-root row-id-field)]
+                                       ^BigIntVector row-id-vec (.getVector content-root row-id-field)
+                                       row-id (+ next-row-id tx-op-idx)]
 
-                                   (set-safe! field-vec value-count field-val)
-                                   (.setSafe row-id-vec value-count (+ next-row-id tx-op-idx))
-                                   (.setRowCount content-root (inc value-count))))]
+                                   (set-safe! field-vec value-count field-value)
+                                   (.setSafe row-id-vec value-count row-id)
+                                   (.setRowCount content-root (inc value-count))
+
+                                   (swap! (.!metadata live-column) update-metadata row-id-field row-id)
+                                   (swap! (.!metadata live-column) update-metadata field field-value)))]
                          (set-tx-field! tx-time-field tx-time)
                          (set-tx-field! tx-id-field tx-id))))))
 
