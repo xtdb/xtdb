@@ -43,6 +43,8 @@ Connection pools require a JDBC 'dialect' - out of the box, Crux supports the fo
 
 Each of these also require an additional dependency to pull in the relevant JDBC driver - see the Crux JDBC https://github.com/juxt/crux/blob/master/crux-jdbc/project.clj[project.clj] for our latest dependencies.
 
+NOTE: The `crux-jdbc` module uses an embedded PostgreSQL instance and JDBC driver to support it. If you are connecting to an external PostgreSQL database, you should use the `org.postgresql/postgresql` JDBC driver.
+
 [#db-spec]
 The connection pool also requires a `db-spec` - a map containing either a full `jdbcUrl` or its component parts, including `dbtype` (provided by the dialect by default), `host`, `port`, `dbname`.
 Any other attributes supplied (`user`, `password`, say) are appended to the URL as query parameters - see your individual JDBC driver for full details.
