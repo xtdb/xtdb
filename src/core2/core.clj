@@ -1,21 +1,18 @@
 (ns core2.core
-  (:require [core2.metadata :as meta]
-            [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [core2.metadata :as meta]
+            [core2.types :as t])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
-           [java.nio.channels FileChannel Channels]
+           [java.nio.channels Channels FileChannel]
            [java.nio.file OpenOption StandardOpenOption]
-           [java.nio.charset StandardCharsets]
-           [java.util Arrays Base64 Date HashMap Map]
-           [java.util.function Function]
+           [java.util Date HashMap Map]
+           java.util.function.Function
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.memory.util ByteFunctionHelpers]
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector DateMilliVector Float8Vector NullVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector FieldVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.holders NullableBitHolder NullableBigIntHolder NullableFloat8Holder NullableDateMilliHolder NullableVarBinaryHolder NullableVarCharHolder]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamReader ArrowStreamWriter JsonFileReader JsonFileWriter JsonFileWriter$JSONWriteConfig ReadChannel]
+           [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader ArrowStreamWriter]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]
-           [org.apache.arrow.vector.util Text]))
+           [org.apache.arrow.vector.types.pojo Field FieldType Schema]))
 
 (defprotocol TransactionIngester
   (index-tx [ingester tx docs]))
@@ -23,60 +20,13 @@
 (def max-block-size 10000)
 (def max-blocks-per-chunk 10)
 
-(def ->arrow-type
-  {Boolean (.getType Types$MinorType/BIT)
-   (Class/forName "[B") (.getType Types$MinorType/VARBINARY)
-   Double (.getType Types$MinorType/FLOAT8)
-   Long (.getType Types$MinorType/BIGINT)
-   String (.getType Types$MinorType/VARCHAR)
-   Date (.getType Types$MinorType/DATEMILLI)
-   nil (.getType Types$MinorType/NULL)})
-
-(defprotocol PValueVector
-  (set-safe! [value-vector idx v])
-  (set-null! [value-vector idx]))
-
-(extend-protocol PValueVector
-  BigIntVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^long v))
-  (set-null! [this idx] (.setNull this ^int idx))
-
-  BitVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^int (if v 1 0)))
-  (set-null! [this idx] (.setNull this ^int idx))
-
-  DateMilliVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (.getTime ^Date v)))
-  (set-null! [this idx] (.setNull this ^int idx))
-
-  Float8Vector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^double v))
-  (set-null! [this idx] (.setNull this ^int idx))
-
-  NullVector
-  (set-safe! [this idx v])
-  (set-null! [this idx])
-
-  VarBinaryVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^bytes v))
-  (set-null! [this idx] (.setNull this ^int idx))
-
-  VarCharVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
-  (set-null! [this idx] (.setNull this ^int idx)))
-
 (declare close-writers!)
 
-(defn- ->field ^Field [^String field-name ^ArrowType arrow-type nullable & children]
-  (Field. field-name
-          (FieldType. nullable arrow-type nil nil)
-          children))
-
 (def ^:private tx-arrow-schema
-  (Schema. [(->field "tx-ops" (.getType Types$MinorType/DENSEUNION) true
-                     (->field "put" (.getType Types$MinorType/STRUCT) false
-                              (->field "document" (.getType Types$MinorType/DENSEUNION) false))
-                     (->field "delete" (.getType Types$MinorType/STRUCT) true))]))
+  (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) true
+                       (t/->field "put" (.getType Types$MinorType/STRUCT) false
+                                  (t/->field "document" (.getType Types$MinorType/DENSEUNION) false))
+                       (t/->field "delete" (.getType Types$MinorType/STRUCT) true))]))
 
 (defn- add-element-to-union! [^DenseUnionVector duv type-id parent-offset child-offset]
   (while (< (.getValueCapacity duv) (inc parent-offset))
@@ -114,10 +64,10 @@
                                 ;; TODO we could/should key this just by the field name, and have a promotable union in the value.
                                 ;; but, for now, it's keyed by both field name and type.
                                 (let [doc-fields (->> (for [[k v] (sort-by key doc)]
-                                                        [k (Field/nullable (name k) (->arrow-type (type v)))])
+                                                        [k (t/->field (name k) (t/->arrow-type (type v)) true)])
                                                       (into (sorted-map)))
                                       field-k (format "%08x" (hash doc-fields))
-                                      ^Field doc-field (apply ->field field-k (.getType Types$MinorType/STRUCT) true (vals doc-fields))
+                                      ^Field doc-field (apply t/->field field-k (.getType Types$MinorType/STRUCT) true (vals doc-fields))
                                       field-type-id (or (->> (map-indexed vector (keys (get-in acc [:put :per-struct-offsets])))
                                                              (some (fn [[idx ^Field field]]
                                                                      (when (= doc-field field)
@@ -134,8 +84,8 @@
                                           :let [^Field field (get doc-fields k)
                                                 field-vec (.addOrGet struct-vec (name k) (.getFieldType field) ValueVector)]]
                                     (if (some? v)
-                                      (set-safe! field-vec per-struct-offset v)
-                                      (set-null! field-vec per-struct-offset)))
+                                      (t/set-safe! field-vec per-struct-offset v)
+                                      (t/set-null! field-vec per-struct-offset)))
 
                                   (-> acc
                                       (assoc-in [:per-op-offsets :put] (inc per-op-offset))
@@ -152,15 +102,6 @@
           (.writeBatch)
           (.end))
         (.toByteArray baos)))))
-
-(def ^:private ^Field row-id-field
-  (->field "_row-id" (.getType Types$MinorType/BIGINT) false))
-
-(def ^:private ^Field tx-time-field
-  (->field "_tx-time" (.getType Types$MinorType/DATEMILLI) false))
-
-(def ^:private ^Field tx-id-field
-  (->field "_tx-id" (.getType Types$MinorType/BIGINT) false))
 
 (deftype LiveColumn [^VectorSchemaRoot content-root, ^ArrowFileWriter file-writer
                      ^Closeable row-id-metadata, ^Closeable field-metadata]
@@ -188,7 +129,7 @@
     (let [->column (reify Function
                      (apply [_ field]
                        (let [^Field field field
-                             content-root (VectorSchemaRoot/create (Schema. [row-id-field field]) allocator)
+                             content-root (VectorSchemaRoot/create (Schema. [t/row-id-field field]) allocator)
                              file-ch (FileChannel/open (.toPath (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field))))
                                                        (into-array OpenOption #{StandardOpenOption/CREATE
                                                                                 StandardOpenOption/WRITE
@@ -196,7 +137,7 @@
                          (LiveColumn. content-root
                                       (doto (ArrowFileWriter. content-root nil file-ch)
                                         (.start))
-                                      (meta/->metadata (.getType row-id-field))
+                                      (meta/->metadata (.getType t/row-id-field))
                                       (meta/->metadata (.getType field))))))]
       (with-open [bais (ByteArrayInputStream. tx-bytes)
                   sr (doto (ArrowStreamReader. bais allocator)
@@ -223,7 +164,7 @@
                                ^VectorSchemaRoot content-root (.content-root live-column)
                                value-count (.getRowCount content-root)
                                ^FieldVector field-vec (.getVector content-root field)
-                               ^BigIntVector row-id-vec (.getVector content-root row-id-field)
+                               ^BigIntVector row-id-vec (.getVector content-root t/row-id-field)
                                row-id (+ next-row-id tx-op-idx)]
 
                            (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
@@ -238,18 +179,18 @@
                                        ^VectorSchemaRoot content-root (.content-root live-column)
                                        value-count (.getRowCount content-root)
                                        field-vec (.getVector content-root field)
-                                       ^BigIntVector row-id-vec (.getVector content-root row-id-field)
+                                       ^BigIntVector row-id-vec (.getVector content-root t/row-id-field)
                                        row-id (+ next-row-id tx-op-idx)]
 
-                                   (set-safe! field-vec value-count field-value)
+                                   (t/set-safe! field-vec value-count field-value)
                                    (.setSafe row-id-vec value-count row-id)
                                    (.setRowCount content-root (inc value-count))
 
                                    (meta/update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
                                    (meta/update-metadata! (.field-metadata live-column) field-vec value-count)))]
 
-                         (set-tx-field! tx-time-field tx-time)
-                         (set-tx-field! tx-id-field tx-id))))))
+                         (set-tx-field! t/tx-time-field tx-time)
+                         (set-tx-field! t/tx-id-field tx-id))))))
 
           (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec))))
 
