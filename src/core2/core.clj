@@ -1,5 +1,6 @@
 (ns core2.core
-  (:require [clojure.java.io :as io])
+  (:require [core2.metadata :as meta]
+            [clojure.java.io :as io])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
            [java.nio.channels FileChannel Channels]
            [java.nio.file OpenOption StandardOpenOption]
@@ -78,168 +79,6 @@
   VarCharVector
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
   (set-null! [this idx] (.setNull this ^int idx)))
-
-(defprotocol ColumnMetadata
-  (update-metadata! [column-metadata field-vector idx])
-  (metadata->edn [column-metadata]))
-
-(deftype BitMetadata [^NullableBitHolder min-val, ^NullableBitHolder max-val, ^:unsynchronized-mutable ^long cnt]
-  ColumnMetadata
-  (update-metadata! [this field-vector idx]
-    (let [^BitVector field-vector field-vector
-          ^int idx idx]
-      (set! (.cnt this) (inc cnt))
-
-      (when (or (zero? (.isSet min-val))
-                (neg? (Integer/compare (.get field-vector idx)
-                                       (.value min-val))))
-        (.get field-vector idx min-val))
-
-      (when (or (zero? (.isSet max-val))
-                (pos? (Integer/compare (.get field-vector idx)
-                                       (.value max-val))))
-        (.get field-vector idx max-val))))
-
-  (metadata->edn [_]
-    {:min (when (pos? (.isSet min-val)) (.value min-val))
-     :max (when (pos? (.isSet max-val)) (.value max-val))
-     :count cnt})
-
-  Closeable
-  (close [_]))
-
-(deftype BigIntMetadata [^NullableBigIntHolder min-val, ^NullableBigIntHolder max-val, ^:unsynchronized-mutable ^long cnt]
-  ColumnMetadata
-  (update-metadata! [this field-vector idx]
-    (let [^BigIntVector field-vector field-vector
-          ^int idx idx]
-      (set! (.cnt this) (inc cnt))
-
-      (when (or (zero? (.isSet min-val))
-                (neg? (Long/compare (.get field-vector idx)
-                                    (.value min-val))))
-        (.get field-vector idx min-val))
-
-      (when (or (zero? (.isSet max-val))
-                (pos? (Long/compare (.get field-vector idx)
-                                    (.value max-val))))
-        (.get field-vector idx max-val))))
-
-  (metadata->edn [_]
-    {:min (when (pos? (.isSet min-val)) (.value min-val))
-     :max (when (pos? (.isSet max-val)) (.value max-val))
-     :count cnt})
-
-  Closeable
-  (close [_]))
-
-(deftype DateMilliMetadata [^NullableDateMilliHolder min-val, ^NullableDateMilliHolder max-val, ^:unsynchronized-mutable ^long cnt]
-  ColumnMetadata
-  (update-metadata! [this field-vector idx]
-    (let [^DateMilliVector field-vector field-vector
-          ^int idx idx]
-      (set! (.cnt this) (inc cnt))
-
-      (when (or (zero? (.isSet min-val))
-                (neg? (Long/compare (.get field-vector idx)
-                                    (.value min-val))))
-        (.get field-vector idx min-val))
-
-      (when (or (zero? (.isSet max-val))
-                (pos? (Long/compare (.get field-vector idx)
-                                    (.value max-val))))
-        (.get field-vector idx max-val))))
-
-  (metadata->edn [_]
-    {:min (when (pos? (.isSet min-val)) (Date. (.value min-val)))
-     :max (when (pos? (.isSet max-val)) (Date. (.value max-val)))
-     :count cnt})
-
-  Closeable
-  (close [_]))
-
-(deftype Float8Metadata [^NullableFloat8Holder min-val, ^NullableFloat8Holder max-val, ^:unsynchronized-mutable ^long cnt]
-  ColumnMetadata
-  (update-metadata! [this field-vector idx]
-    (let [^Float8Vector field-vector field-vector
-          ^int idx idx]
-      (set! (.cnt this) (inc cnt))
-
-      (when (or (zero? (.isSet min-val))
-                (neg? (Double/compare (.get field-vector idx)
-                                      (.value min-val))))
-        (.get field-vector idx min-val))
-
-      (when (or (zero? (.isSet max-val))
-                (pos? (Double/compare (.get field-vector idx)
-                                      (.value max-val))))
-        (.get field-vector idx max-val))))
-
-  (metadata->edn [_]
-    {:min (when (pos? (.isSet min-val)) (.value min-val))
-     :max (when (pos? (.isSet max-val)) (.value max-val))
-     :count cnt})
-
-  Closeable
-  (close [_]))
-
-(deftype VarBinaryMetadata [^:unsynchronized-mutable ^bytes min-val,
-                            ^:unsynchronized-mutable ^bytes max-val,
-                            ^:unsynchronized-mutable ^long cnt]
-  ColumnMetadata
-  (update-metadata! [this field-vector idx]
-    (let [^VarBinaryVector field-vector field-vector
-          ^int idx idx]
-      (set! (.cnt this) (inc cnt))
-
-      (let [value (.getObject field-vector idx)]
-        (when (or (nil? min-val) (neg? (Arrays/compareUnsigned value min-val)))
-          (set! (.min-val this) value))
-
-        (when (or (nil? max-val) (pos? (Arrays/compareUnsigned value max-val)))
-          (set! (.max-val this) value)))))
-
-  (metadata->edn [_]
-    {:min (when min-val (.encodeToString (Base64/getEncoder) min-val))
-     :max (when max-val (.encodeToString (Base64/getEncoder) max-val))
-     :count cnt})
-
-  Closeable
-  (close [_]))
-
-(deftype VarCharMetadata [^:unsynchronized-mutable min-val,
-                          ^:unsynchronized-mutable max-val,
-                          ^:unsynchronized-mutable ^long cnt]
-  ColumnMetadata
-  (update-metadata! [this field-vector idx]
-    (let [^VarCharVector field-vector field-vector
-          ^int idx idx]
-      (set! (.cnt this) (inc cnt))
-
-      (let [value (str (.getObject field-vector idx))]
-        (when (or (nil? min-val) (neg? (compare value min-val)))
-          (set! (.min-val this) value))
-
-        (when (or (nil? max-val) (pos? (compare value max-val)))
-          (set! (.max-val this) value)))))
-
-  (metadata->edn [_]
-    {:min min-val
-     :max max-val
-     :count cnt})
-
-  Closeable
-  (close [_]))
-
-(defn ->metadata [^ArrowType arrow-type]
-  (condp = (Types/getMinorTypeForArrowType arrow-type)
-    Types$MinorType/BIT (->BitMetadata (NullableBitHolder.) (NullableBitHolder.) 0)
-    Types$MinorType/BIGINT (->BigIntMetadata (NullableBigIntHolder.) (NullableBigIntHolder.) 0)
-    Types$MinorType/DATEMILLI (->DateMilliMetadata (NullableDateMilliHolder.) (NullableDateMilliHolder.) 0)
-    Types$MinorType/FLOAT8 (->Float8Metadata (NullableFloat8Holder.) (NullableFloat8Holder.) 0)
-    Types$MinorType/VARBINARY (->VarBinaryMetadata nil nil 0)
-    Types$MinorType/VARCHAR (->VarCharMetadata nil nil 0)
-    (throw (UnsupportedOperationException.))))
 
 (declare close-writers!)
 
@@ -372,8 +211,8 @@
                          (LiveColumn. content-root
                                       (doto (ArrowFileWriter. content-root nil file-ch)
                                         (.start))
-                                      (->metadata (.getType row-id-field))
-                                      (->metadata (.getType field))))))]
+                                      (meta/->metadata (.getType row-id-field))
+                                      (meta/->metadata (.getType field))))))]
       (with-open [bais (ByteArrayInputStream. tx-bytes)
                   sr (doto (ArrowStreamReader. bais allocator)
                        (.loadNextBatch))
@@ -406,8 +245,8 @@
                            (.setSafe row-id-vec value-count row-id)
                            (.setRowCount content-root (inc value-count))
 
-                           (update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
-                           (update-metadata! (.field-metadata live-column) field-vec value-count)))
+                           (meta/update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
+                           (meta/update-metadata! (.field-metadata live-column) field-vec value-count)))
 
                        (letfn [(set-tx-field! [^Field field field-value]
                                  (let [^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
@@ -421,8 +260,8 @@
                                    (.setSafe row-id-vec value-count row-id)
                                    (.setRowCount content-root (inc value-count))
 
-                                   (update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
-                                   (update-metadata! (.field-metadata live-column) field-vec value-count)))]
+                                   (meta/update-metadata! (.row-id-metadata live-column) row-id-vec value-count)
+                                   (meta/update-metadata! (.field-metadata live-column) field-vec value-count)))]
 
                          (set-tx-field! tx-time-field tx-time)
                          (set-tx-field! tx-id-field tx-id))))))
@@ -476,8 +315,8 @@
               (pr-str (into {}
                             (for [[^Field field, ^LiveColumn live-column] field->live-column]
                               [(format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field))
-                               {"_row-id" (metadata->edn (.row-id-metadata live-column))
-                                (.getName field) (metadata->edn (.field-metadata live-column))}])))))
+                               {"_row-id" (meta/metadata->edn (.row-id-metadata live-column))
+                                (.getName field) (meta/metadata->edn (.field-metadata live-column))}])))))
       (finally
         (doseq [^LiveColumn live-column (vals field->live-column)]
           (.close live-column))
