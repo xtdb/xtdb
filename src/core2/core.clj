@@ -38,7 +38,7 @@
            (* DenseUnionVector/OFFSET_WIDTH parent-offset)
            child-offset))
 
-(defn submit-tx ^VectorSchemaRoot [tx-ops ^RootAllocator allocator]
+(defn submit-tx ^bytes [tx-ops ^RootAllocator allocator]
   (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
     (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
 
