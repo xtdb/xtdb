@@ -1,10 +1,13 @@
 (ns core2.json
   (:require [clojure.java.io :as io])
-  (:import java.io.File
-           java.nio.channels.FileChannel
+  (:import [java.io ByteArrayInputStream File]
+           [java.nio.channels Channels FileChannel]
            [java.nio.file OpenOption StandardOpenOption]
            org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector.ipc ArrowFileReader JsonFileWriter]))
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamReader JsonFileWriter]))
+
+(defn- file->json-file ^java.io.File [^File file]
+  (io/file (.getParentFile file) (format "%s.json" (.getName file))))
 
 (defn write-arrow-json-files [^File arrow-dir]
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
@@ -14,9 +17,25 @@
       (with-open [file-ch (FileChannel/open (.toPath file)
                                             (into-array OpenOption #{StandardOpenOption/READ}))
                   file-reader (ArrowFileReader. file-ch allocator)
-                  file-writer (JsonFileWriter. (io/file arrow-dir (format "%s.json" (.getName file)))
+                  file-writer (JsonFileWriter. (file->json-file file)
                                                (.. (JsonFileWriter/config) (pretty true)))]
         (let [root (.getVectorSchemaRoot file-reader)]
           (.start file-writer (.getSchema root) nil)
           (while (.loadNextBatch file-reader)
             (.write file-writer root)))))))
+
+
+(defn arrow-streaming->json ^String [^bytes bs]
+  (let [json-file (File/createTempFile "arrow" "json")]
+    (try
+      (with-open [allocator (RootAllocator. Long/MAX_VALUE)
+                  in-ch (Channels/newChannel (ByteArrayInputStream. bs))
+                  file-reader (ArrowStreamReader. in-ch allocator)
+                  file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]
+        (let [root (.getVectorSchemaRoot file-reader)]
+          (.start file-writer (.getSchema root) nil)
+          (while (.loadNextBatch file-reader)
+            (.write file-writer root))))
+      (slurp json-file)
+      (finally
+        (.delete json-file)))))
