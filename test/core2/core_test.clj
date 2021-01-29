@@ -1,20 +1,14 @@
 (ns core2.core-test
-  (:require [clojure.data.csv :as csv]
-            [clojure.instant :as inst]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
+  (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.core :as c2]
-            [core2.json :as c2-json])
-  (:import java.io.File
-           [java.nio.channels FileChannel]
-           [java.nio.file Files OpenOption StandardOpenOption]
-           java.util.Date
-           org.apache.arrow.memory.RootAllocator))
+            [core2.json :as c2-json]
+            [cheshire.core :as json])
+  (:import org.apache.arrow.memory.RootAllocator))
 
 (t/deftest can-write-tx-to-arrow-ipc-format
   (with-open [a (RootAllocator. Long/MAX_VALUE)]
-    (t/is (= (slurp (io/resource "tx-ipc.json"))
+    (t/is (= (json/parse-string (slurp (io/resource "tx-ipc.json")))
              (-> (c2/submit-tx [{:op :put
                                  :doc {:_id "device-info-demo000000",
                                        :api-version "23",
@@ -36,4 +30,5 @@
                                        :mem-free 4.10011078E8,
                                        :mem-used 5.89988922E8}}]
                                a)
-                 (c2-json/arrow-streaming->json))))))
+                 (c2-json/arrow-streaming->json)
+                 (json/parse-string))))))

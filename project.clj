@@ -15,7 +15,8 @@
                                   [io.airlift.tpch/tpch "0.10"]
                                   [org.openjdk.jmh/jmh-core "1.27"]
                                   [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
-                                  [org.clojure/data.csv "1.0.0"]]
+                                  [org.clojure/data.csv "1.0.0"]
+                                  [cheshire "5.10.0"]]
                    :java-source-paths ["src" "jmh"]
                    :resource-paths ["test-resources" "data"]}}
   :aliases {"jmh" ["trampoline" "run" "-m" "org.openjdk.jmh.Main" "-f" "1" "-rf" "json" "-rff" "target/jmh-result.json"]}
