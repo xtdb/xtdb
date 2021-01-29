@@ -37,6 +37,7 @@ dependencies {
 sourceSets {
     main {
         resources.srcDir("src")
+        resources.srcDir("data")
     }
     test {
         resources.srcDir("test")
