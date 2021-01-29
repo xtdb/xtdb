@@ -17,7 +17,7 @@
                                   [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
                                   [org.clojure/data.csv "1.0.0"]]
                    :java-source-paths ["src" "jmh"]
-                   :resource-paths ["data"]}}
+                   :resource-paths ["test-resources" "data"]}}
   :aliases {"jmh" ["trampoline" "run" "-m" "org.openjdk.jmh.Main" "-f" "1" "-rf" "json" "-rff" "target/jmh-result.json"]}
   :java-source-paths ["src"]
   :jvm-opts ["-Xmx2G"
