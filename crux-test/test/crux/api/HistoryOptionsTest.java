@@ -1,22 +1,20 @@
-package crux.java;
+package crux.api;
 
 import clojure.lang.Keyword;
-import org.junit.*;
-import crux.api.*;
-import static crux.java.TestUtils.*;
 
 import java.time.Duration;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class HistoryOptionsTest {
-    private static final Keyword documentId = Keyword.intern("myDoc");
-    private static final Keyword versionId = Keyword.intern("version");
+import org.junit.*;
 
-    private static List<Map<Keyword, Object>> documents;
+import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
+
+public class HistoryOptionsTest {
+    private static List<CruxDocument> documents;
     private static List<TransactionInstant> transactions;
     private static ICruxAPI node;
-    private static Date now = new Date();
 
     private ICruxDatasource db;
 
@@ -24,12 +22,9 @@ public class HistoryOptionsTest {
     public static void beforeClass() {
         node = Crux.startNode();
 
-        ArrayList<Map<Keyword, Object>> _documents = new ArrayList<>();
+        ArrayList<CruxDocument> _documents = new ArrayList<>();
         for (int i=0; i<5; i++) {
-            HashMap<Keyword, Object> document = new HashMap<>();
-            document.put(DB_ID, documentId);
-            document.put(versionId, i);
-            _documents.add(document);
+            _documents.add(testDocument(i));
         }
         documents = _documents;
 
@@ -60,7 +55,6 @@ public class HistoryOptionsTest {
         node = null;
         documents = null;
         transactions = null;
-        now = null;
     }
 
     @Before
@@ -74,7 +68,7 @@ public class HistoryOptionsTest {
             db.close();
         }
         catch (Exception e) {
-            Assert.fail();
+            fail();
         }
         db = null;
     }
@@ -88,8 +82,8 @@ public class HistoryOptionsTest {
 
         List<Long> times = history.stream().map(keywordMap -> ((Date) keywordMap.get(VALID_TIME)).getTime()).collect(Collectors.toList());
         List<Long> compare = times.stream().sorted().collect(Collectors.toList());
-        Assert.assertEquals(compare, times);
-        Assert.assertEquals(6, history.size());
+        assertEquals(compare, times);
+        assertEquals(6, history.size());
     }
 
     @Test
@@ -102,8 +96,8 @@ public class HistoryOptionsTest {
         List<Long> times = history.stream().map(keywordMap -> ((Date) keywordMap.get(VALID_TIME)).getTime()).collect(Collectors.toList());
         List<Long> compare = times.stream().sorted().collect(Collectors.toList());
         Collections.reverse(compare);
-        Assert.assertEquals(compare, times);
-        Assert.assertEquals(6, history.size());
+        assertEquals(compare, times);
+        assertEquals(6, history.size());
     }
 
     @Test
@@ -112,7 +106,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(10, history.size());
+        assertEquals(10, history.size());
     }
 
     @SuppressWarnings("ConstantConditions")
@@ -127,10 +121,10 @@ public class HistoryOptionsTest {
             Object contentHash = entry.get(CONTENT_HASH);
             Object document = entry.get(DOC);
             if (contentHash.equals(null)) {
-                Assert.assertNull(document);
+                assertNull(document);
             }
             else {
-                Assert.assertNotNull(document);
+                assertNotNull(document);
             }
         }
     }
@@ -141,7 +135,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     @Test
@@ -151,7 +145,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(5, history.size());
+        assertEquals(5, history.size());
     }
 
     @Test
@@ -162,7 +156,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(5, history.size());
+        assertEquals(5, history.size());
     }
 
     @Test
@@ -171,7 +165,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     @Test
@@ -181,7 +175,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     @Test
@@ -192,7 +186,7 @@ public class HistoryOptionsTest {
 
         assertHasKeys(history, TX_TIME, TX_ID, VALID_TIME, CONTENT_HASH);
         assertAccurate(history);
-        Assert.assertEquals(3, history.size());
+        assertEquals(3, history.size());
     }
 
     /*
@@ -204,8 +198,8 @@ public class HistoryOptionsTest {
             long txId = (Long) map.get(TX_ID);
 
             TransactionInstant tx = transactions.get((int) txId);
-            Assert.assertEquals((long) tx.getId(), txId);
-            Assert.assertEquals(tx.getTime(), txTime);
+            assertEquals((long) tx.getId(), txId);
+            assertEquals(tx.getTime(), txTime);
         }
     }
 
@@ -214,7 +208,7 @@ public class HistoryOptionsTest {
     }
 
     private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
-        Map<Keyword, Object> document = documents.get(documentIndex);
+        CruxDocument document = documents.get(documentIndex);
         return put(node, document, validTime, endValidTime);
     }
 }

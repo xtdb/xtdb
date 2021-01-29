@@ -6,7 +6,7 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.system :as sys])
-  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource TransactionInstant]
+  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource TransactionInstant CruxDocument]
            [java.lang AutoCloseable]
            [java.util Map Date]
            [java.time Duration]
@@ -383,7 +383,7 @@
 
 (defrecord JCruxDatasource [^java.io.Closeable datasource]
   ICruxDatasource
-  (entity [_ eid] (entity datasource eid))
+  (entity [_ eid] (CruxDocument/factory (entity datasource eid)))
   (entityTx [_ eid] (entity-tx datasource eid))
   (query [_ query args] (q* datasource query args))
   (openQuery [_ query args] (open-q* datasource query args))
@@ -398,7 +398,7 @@
   (validTime [_] (valid-time datasource))
   (transactionTime [_] (transaction-time datasource))
   (dbBasis [_] (db-basis datasource))
-  (withTx [_ tx-ops] (with-tx datasource tx-ops))
+  (withTx [_ tx] (->JCruxDatasource (with-tx datasource (.toVector tx))))
   (close [_] (.close datasource)))
 
 (defrecord JCruxNode [^java.io.Closeable node]
@@ -413,7 +413,7 @@
   (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (open-db node basis)))
   (status [_] (status node))
   (attributeStats [_] (attribute-stats node))
-  (submitTx [_ tx-ops] (TransactionInstant/factory ^Map (submit-tx node tx-ops)))
+  (submitTx [_ tx] (TransactionInstant/factory ^Map (submit-tx node (.toVector tx))))
   (hasTxCommitted [_ transaction] (tx-committed? node (.toMap transaction)))
   (openTxLog [_ after-tx-id with-ops?] (open-tx-log node after-tx-id with-ops?))
   (sync [_ timeout] (sync node timeout))
@@ -429,7 +429,7 @@
 
 (defrecord JCruxIngestClient [^java.io.Closeable client]
   ICruxAsyncIngestAPI
-  (submitTx [_ tx-ops] (submit-tx client tx-ops))
+  (submitTx [_ tx] (TransactionInstant/factory ^Map (submit-tx client (.toVector tx))))
   (openTxLog [_ after-tx-id with-ops?] (open-tx-log client after-tx-id with-ops?))
   (submitTxAsync [_ tx-ops] (submit-tx-async client tx-ops))
   (close [_] (.close client)))

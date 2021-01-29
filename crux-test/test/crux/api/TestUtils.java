@@ -1,16 +1,17 @@
-package crux.java;
+package crux.api;
 
 import clojure.lang.Keyword;
-
-import crux.api.*;
 
 import java.io.Closeable;
 import java.time.Duration;
 import java.util.*;
 
-import org.junit.*;
+import crux.api.tx.*;
+import crux.api.*;
 
-class TestUtils {
+import static org.junit.Assert.*;
+
+public class TestUtils {
     static final Keyword PUT = Keyword.intern("crux.tx/put");
     static final Keyword DELETE = Keyword.intern("crux.tx/delete");
 
@@ -29,6 +30,14 @@ class TestUtils {
     static final Duration duration = Duration.ofSeconds(10);
 
     static final Date now = new Date();
+
+    static final String documentId = "myDoc";
+    static final String versionId = "version";
+
+    static CruxDocument testDocument(int version) {
+        CruxDocument document = CruxDocument.create(documentId);
+        return document.plus(versionId, version);
+    }
 
     static void sleep(long millis) {
         try {
@@ -50,37 +59,42 @@ class TestUtils {
         return now.getTime() - date.getTime();
     }
 
-    static TransactionInstant tx(ICruxAPI node, List<?> txOp) {
-        ArrayList<List<?>> toSubmit = new ArrayList<>();
-        toSubmit.add(txOp);
-        return node.submitTx((List<List<?>>) toSubmit);
+    static TransactionInstant tx(ICruxAPI node, Transaction transaction) {
+        return node.submitTx(transaction);
     }
 
-    static TransactionInstant put(ICruxAPI node, Map<Keyword, ?> document, Date validTime, Date endValidTime) {
-        List<Object> txOp;
+    static TransactionInstant tx(ICruxAPI node, TransactionOperation transactionOperation) {
+        Transaction transaction = Transaction.buildTx(tx -> {
+           tx.add(transactionOperation);
+        });
+        return tx(node, transaction);
+    }
+
+    static TransactionInstant put(ICruxAPI node, CruxDocument document, Date validTime, Date endValidTime) {
+        TransactionOperation txOp;
         if (endValidTime != null) {
-            txOp = listOf(PUT, document, validTime, endValidTime);
+            txOp = PutOperation.create(document, validTime, endValidTime);
         }
         else if (validTime != null) {
-            txOp = listOf(PUT, document, validTime);
+            txOp = PutOperation.create(document, validTime);
         }
         else {
-            txOp = listOf(PUT, document);
+            txOp = PutOperation.create(document);
         }
 
         return tx(node, txOp);
     }
 
     static TransactionInstant delete(ICruxAPI node, Object documentId, Date validTime, Date endValidTime) {
-        List<Object> txOp;
+        TransactionOperation txOp;
         if (endValidTime != null) {
-            txOp = listOf(DELETE, documentId, validTime, endValidTime);
+            txOp = DeleteOperation.create(documentId, validTime, endValidTime);
         }
         else if (validTime != null) {
-            txOp = listOf(DELETE, documentId, validTime);
+            txOp = DeleteOperation.create(documentId, validTime);
         }
         else {
-            txOp = listOf(DELETE, documentId);
+            txOp = DeleteOperation.create(documentId);
         }
 
         return tx(node, txOp);
@@ -91,7 +105,7 @@ class TestUtils {
             closeable.close();
         }
         catch (Exception e) {
-            Assert.fail();
+            fail();
         }
     }
 
@@ -103,13 +117,25 @@ class TestUtils {
 
     static void assertHasKeys(Map<Keyword, ?> map, Keyword... keys) {
         for (Keyword key: keys) {
-            Assert.assertTrue(map.containsKey(key));
+            assertTrue(map.containsKey(key));
         }
 
-        Assert.assertEquals(keys.length, map.size());
+        assertEquals(keys.length, map.size());
     }
 
     static <T> T last(List<T> list) {
         return list.get(list.size() - 1);
+    }
+
+    static void awaitTx(ICruxAPI node, TransactionInstant tx) {
+        node.awaitTx(tx, duration);
+    }
+
+    static Object getTransaction(Map<Keyword, ?> logEntry) {
+        return logEntry.get(TX_OPS);
+    }
+
+    static TransactionInstant getTransactionInstant(Map<Keyword, ?> logEntry) {
+        return TransactionInstant.factory(logEntry);
     }
 }

@@ -1,28 +1,25 @@
-package crux.java;
+package crux.api;
 
 import clojure.lang.Keyword;
-
-import org.junit.*;
-import crux.api.*;
 
 import java.time.Duration;
 import java.util.*;
 
-import static crux.java.TestUtils.*;
+import org.junit.*;
+
+import static crux.api.TestUtils.*;
+import static org.junit.Assert.*;
+import static crux.api.tx.Transaction.buildTx;
 
 public class JCruxDatasourceTest {
-    private static final Keyword documentId = Keyword.intern("myDoc");
-    private static final Keyword versionId = Keyword.intern("version");
-    private static List<Map<Keyword, Object>> documents;
+    private static List<CruxDocument> documents;
     private static List<TransactionInstant> transactions;
 
     private static final Keyword projectId1 = Keyword.intern("project1");
     private static final Keyword projectId2 = Keyword.intern("project2");
-    private static final Keyword fooId = Keyword.intern("foo");
-    private static final Keyword barId = Keyword.intern("bar");
 
-    private static Map<Keyword, Object> projectDocument1;
-    private static Map<Keyword, Object> projectDocument2;
+    private static final CruxDocument projectDocument1 = CruxDocument.create(projectId1).plus("foo", "foo").plus("bar", 1);
+    private static final CruxDocument projectDocument2 = CruxDocument.create(projectId2).plus("foo", "bar").plus("bar", 2);
 
     private static ICruxAPI node;
 
@@ -30,39 +27,24 @@ public class JCruxDatasourceTest {
     public static void beforeClass() {
         node = Crux.startNode();
 
-        ArrayList<Map<Keyword, Object>> _documents = new ArrayList<>();
+        ArrayList<CruxDocument> _documents = new ArrayList<>();
         for (int i=0; i<3; i++) {
-            HashMap<Keyword, Object> document = new HashMap<>();
-            document.put(DB_ID, documentId);
-            document.put(versionId, i);
-            _documents.add(document);
+            _documents.add(testDocument(i));
         }
         documents = _documents;
 
-        HashMap<Keyword, Object> _projectDocument1 = new HashMap<>();
-        _projectDocument1.put(DB_ID, projectId1);
-        _projectDocument1.put(fooId, "foo");
-        _projectDocument1.put(barId, 1);
-        projectDocument1 = _projectDocument1;
-
-        HashMap<Keyword, Object> _projectDocument2 = new HashMap<>();
-        _projectDocument2.put(DB_ID, projectId2);
-        _projectDocument2.put(fooId, "bar");
-        _projectDocument2.put(barId, 2);
-        projectDocument2 = _projectDocument2;
-
         ArrayList<TransactionInstant> _transactions = new ArrayList<TransactionInstant>();
 
-        put(node, projectDocument1, null, null);
-        put(node, projectDocument2, null, null);
+        TestUtils.put(node, projectDocument1, null, null);
+        TestUtils.put(node, projectDocument2, null, null);
         sleep(20);
-        _transactions.add(p(0, date(-10000), null));
+        _transactions.add(put(0, date(-10000), null));
         sleep(20);
-        _transactions.add(p(1, date(-8000), date(-7000)));
+        _transactions.add(put(1, date(-8000), date(-7000)));
         sleep(20);
-        _transactions.add(d(date(-9000), date(-8500)));
+        _transactions.add(delete(date(-9000), date(-8500)));
         sleep(20);
-        TransactionInstant last = p(2, date(1000000), null);
+        TransactionInstant last = put(2, date(1000000), null);
         _transactions.add(last);
 
         node.awaitTx(last, Duration.ofSeconds(10));
@@ -76,7 +58,7 @@ public class JCruxDatasourceTest {
             node.close();
         }
         catch (Exception e) {
-            Assert.fail();
+            fail();
         }
 
         node = null;
@@ -132,7 +114,7 @@ public class JCruxDatasourceTest {
 
         Map<Keyword, ?> result = db.project(projection, projectId1);
 
-        Assert.assertEquals(projectDocument1, result);
+        assertEquals(projectDocument1.toMap(), result);
 
         close(db);
     }
@@ -144,9 +126,9 @@ public class JCruxDatasourceTest {
 
         List<Map<Keyword, ?>> results = db.projectMany(projection, projectId1, projectId2);
 
-        Assert.assertEquals(2, results.size());
-        Assert.assertTrue(results.contains(projectDocument1));
-        Assert.assertTrue(results.contains(projectDocument2));
+        assertEquals(2, results.size());
+        assertTrue(results.contains(projectDocument1.toMap()));
+        assertTrue(results.contains(projectDocument2.toMap()));
 
         close(db);
     }
@@ -161,9 +143,9 @@ public class JCruxDatasourceTest {
 
         List<Map<Keyword, ?>> results = db.projectMany(projection, ids);
 
-        Assert.assertEquals(2, results.size());
-        Assert.assertTrue(results.contains(projectDocument1));
-        Assert.assertTrue(results.contains(projectDocument2));
+        assertEquals(2, results.size());
+        assertTrue(results.contains(projectDocument1.toMap()));
+        assertTrue(results.contains(projectDocument2.toMap()));
 
         close(db);
     }
@@ -186,11 +168,11 @@ public class JCruxDatasourceTest {
         }
 
         if (submittedTx == null) {
-            Assert.fail();
+            fail();
             return;
         }
 
-        Assert.assertEquals(submittedTx.getTime(), (Date) tx.get(TX_TIME));
+        assertEquals(submittedTx.getTime(), (Date) tx.get(TX_TIME));
         close(db);
     }
 
@@ -200,16 +182,16 @@ public class JCruxDatasourceTest {
         ICruxDatasource db = node.db();
         Collection<List<?>> results = db.query(query);
 
-        Assert.assertEquals(1, results.size());
+        assertEquals(1, results.size());
         Optional<List<?>> resultRaw = results.stream().findFirst();
         if (resultRaw.isPresent()) {
             List<?> result = resultRaw.get();
-            Assert.assertEquals(1, result.size());
+            assertEquals(1, result.size());
             long version = (Long) result.get(0);
-            Assert.assertEquals(0L, version);
+            assertEquals(0L, version);
         }
         else {
-            Assert.fail();
+            fail();
         }
 
         close(db);
@@ -221,14 +203,14 @@ public class JCruxDatasourceTest {
         ICruxDatasource db = node.db();
         ICursor<List<?>> results = db.openQuery(query);
 
-        Assert.assertTrue(results.hasNext());
+        assertTrue(results.hasNext());
         List<?> result = results.next();
-        Assert.assertFalse(results.hasNext());
+        assertFalse(results.hasNext());
         close(results);
 
-        Assert.assertEquals(1, result.size());
+        assertEquals(1, result.size());
         long version = (Long) result.get(0);
-        Assert.assertEquals(0L, version);
+        assertEquals(0L, version);
 
         close(db);
     }
@@ -239,20 +221,20 @@ public class JCruxDatasourceTest {
         ICruxDatasource db = node.db();
 
         Collection<List<?>> results = db.query(query, 0);
-        Assert.assertEquals(1, results.size());
+        assertEquals(1, results.size());
         Optional<List<?>> resultRaw = results.stream().findFirst();
         if (resultRaw.isPresent()) {
             List<?> result = resultRaw.get();
-            Assert.assertEquals(1, result.size());
-            Keyword id = (Keyword) result.get(0);
-            Assert.assertEquals(documentId, id);
+            assertEquals(1, result.size());
+            String id = (String) result.get(0);
+            assertEquals(documentId, id);
         }
         else {
-            Assert.fail();
+            fail();
         }
 
         results = db.query(query, 1);
-        Assert.assertEquals(0, results.size());
+        assertEquals(0, results.size());
 
         close(db);
     }
@@ -264,17 +246,17 @@ public class JCruxDatasourceTest {
 
         ICursor<List<?>> results = db.openQuery(query, 0);
 
-        Assert.assertTrue(results.hasNext());
+        assertTrue(results.hasNext());
         List<?> result = results.next();
-        Assert.assertFalse(results.hasNext());
+        assertFalse(results.hasNext());
         close(results);
 
-        Assert.assertEquals(1, result.size());
-        Keyword id = (Keyword) result.get(0);
-        Assert.assertEquals(documentId, id);
+        assertEquals(1, result.size());
+        String id = (String) result.get(0);
+        assertEquals(documentId, id);
 
         results = db.openQuery(query, 1);
-        Assert.assertFalse(results.hasNext());
+        assertFalse(results.hasNext());
 
         close(results);
         close(db);
@@ -288,19 +270,19 @@ public class JCruxDatasourceTest {
 
         long time = -1;
         for (Map<Keyword, ?> fromHistory: history) {
-            Assert.assertTrue(openHistory.hasNext());
+            assertTrue(openHistory.hasNext());
             Map<Keyword, ?> fromOpenHistory = openHistory.next();
 
-            Assert.assertEquals(fromHistory, fromOpenHistory);
+            assertEquals(fromHistory, fromOpenHistory);
             long validTime = ((Date) fromHistory.get(VALID_TIME)).getTime();
             if (time != -1) {
-                Assert.assertTrue(validTime > time);
+                assertTrue(validTime > time);
             }
 
             time = validTime;
         }
-        Assert.assertFalse(openHistory.hasNext());
-        Assert.assertEquals(5, history.size());
+        assertFalse(openHistory.hasNext());
+        assertEquals(5, history.size());
 
         close(openHistory);
         close(db);
@@ -313,8 +295,8 @@ public class JCruxDatasourceTest {
         long upperBound = (new Date()).getTime();
         long validTime = db.validTime().getTime();
 
-        Assert.assertTrue(lowerBound <= validTime);
-        Assert.assertTrue(upperBound >= validTime);
+        assertTrue(lowerBound <= validTime);
+        assertTrue(upperBound >= validTime);
 
         close(db);
     }
@@ -323,14 +305,14 @@ public class JCruxDatasourceTest {
     public void validTimeSpecifiedTest() {
         Date validTime = new Date();
         ICruxDatasource db = node.db(validTime);
-        Assert.assertEquals(validTime.getTime(), db.validTime().getTime());
+        assertEquals(validTime.getTime(), db.validTime().getTime());
         close(db);
     }
 
     @Test
     public void transactionTimeUnspecifiedTest() {
         ICruxDatasource db = node.db();
-        Assert.assertEquals(getLastTransactionTime(), db.transactionTime().getTime());
+        assertEquals(getLastTransactionTime(), db.transactionTime().getTime());
         close(db);
     }
 
@@ -338,7 +320,7 @@ public class JCruxDatasourceTest {
     public void transactionTimeSpecifiedTest() {
         Date transactionTime = date(-50);
         ICruxDatasource db = node.db(date(-100), transactionTime);
-        Assert.assertEquals(transactionTime.getTime(), db.transactionTime().getTime());
+        assertEquals(transactionTime.getTime(), db.transactionTime().getTime());
         close(db);
     }
 
@@ -348,15 +330,14 @@ public class JCruxDatasourceTest {
         ICruxDatasource db = node.db();
         long upperBound = (new Date()).getTime();
 
-        long lastTransactionTime = getLastTransactionTime();
         Map<Keyword, ?> basis = db.dbBasis();
 
         assertHasKeys(basis, VALID_TIME, TX);
 
         long validTime = ((Date) basis.get(VALID_TIME)).getTime();
 
-        Assert.assertTrue(lowerBound <= validTime);
-        Assert.assertTrue(upperBound >= validTime);
+        assertTrue(lowerBound <= validTime);
+        assertTrue(upperBound >= validTime);
 
         @SuppressWarnings("unchecked")
         Map<Keyword, ?> tx = (Map<Keyword, ?>) basis.get(TX);
@@ -364,14 +345,31 @@ public class JCruxDatasourceTest {
         assertHasKeys(tx, TX_TIME, TX_ID);
 
         long transactionTime = ((Date) tx.get(TX_TIME)).getTime();
-        Assert.assertEquals(getLastTransactionTime(), transactionTime);
+        assertEquals(getLastTransactionTime(), transactionTime);
 
         long txId = (Long) tx.get(TX_ID);
         long lastTxId = last(transactions).getId();
 
-        Assert.assertEquals(lastTxId, txId);
+        assertEquals(lastTxId, txId);
 
         close(db);
+    }
+
+    @Test
+    public void withTxTest() {
+        ICruxDatasource db = node.db();
+        assertNotNull(db.entity(documentId));
+
+        ICruxDatasource dbWithTx = db.withTx(buildTx(tx -> {
+            tx.evict(documentId);
+        }));
+
+        assertNull(dbWithTx.entity(documentId));
+        //Check we haven't impacted the original snapshot
+        assertNotNull(db.entity(documentId));
+
+        close(db);
+        close(dbWithTx);
     }
 
     /*
@@ -382,22 +380,22 @@ public class JCruxDatasourceTest {
     }
 
     private void checkEntity(ICruxDatasource db, int documentIndex) {
-        Map<Keyword, Object> document = db.entity(documentId);
+        CruxDocument document = db.entity(documentId);
         if (documentIndex >= 0) {
-            Assert.assertEquals(documents.get(documentIndex), document);
+            assertEquals(documents.get(documentIndex), document);
         }
         else {
-            Assert.assertNull(document);
+            assertNull(document);
         }
         close(db);
     }
 
-    private static TransactionInstant d(Date validTime, Date endValidTime) {
-        return delete(node, documentId, validTime, endValidTime);
+    private static TransactionInstant delete(Date validTime, Date endValidTime) {
+        return TestUtils.delete(node, documentId, validTime, endValidTime);
     }
 
-    private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
-        Map<Keyword, Object> document = documents.get(documentIndex);
-        return put(node, document, validTime, endValidTime);
+    private static TransactionInstant put(int documentIndex, Date validTime, Date endValidTime) {
+        CruxDocument document = documents.get(documentIndex);
+        return TestUtils.put(node, document, validTime, endValidTime);
     }
 }

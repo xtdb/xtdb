@@ -6,6 +6,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.Map;
 import clojure.lang.Keyword;
+import crux.api.tx.Transaction;
 
 /**
  * Represents the database as of a specific valid and
@@ -19,7 +20,7 @@ public interface ICruxDatasource extends Closeable {
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity document map.
      */
-    Map<Keyword,Object> entity(Object eid);
+    CruxDocument entity(Object eid);
 
     /**
      * Returns the transaction details for an entity. Details
@@ -155,8 +156,8 @@ public interface ICruxDatasource extends Closeable {
      *
      * If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil.
      *
-     * @param txOps the transaction operations to be applied.
-     * @return a new db value with the txOps speculatively applied.
+     * @param transaction the transaction to be applied.
+     * @return a new db value with the transaction speculatively applied.
     */
-    ICruxDatasource withTx(List<List<?>> txOps);
+    ICruxDatasource withTx(Transaction transaction);
 }

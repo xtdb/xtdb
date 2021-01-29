@@ -76,12 +76,11 @@
       (t/is (= submitted-tx (api/latest-completed-tx *api*))))))
 
 (t/deftest test-can-use-crux-ids
-  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)
-        id #crux/id "https://adam.com"
+  (let [id #crux/id "https://adam.com"
         doc {:crux.db/id id, :name "Adam"}
-        submitted-tx (.submitTx jnode [[:crux.tx/put doc]])]
-    (.awaitTx jnode submitted-tx nil)
-    (t/is (.entity (.db jnode) id))))
+        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+    (api/await-tx *api* submitted-tx nil)
+    (t/is (api/entity (api/db *api*) id))))
 
 (t/deftest test-query
   (let [valid-time (Date.)
@@ -153,12 +152,11 @@
                  (api/submit-tx *api* [[:crux.tx/put {}]]))))
 
 (t/deftest test-content-hash-invalid
-  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)
-        valid-time (Date.)
+  (let [valid-time (Date.)
         content-ivan {:crux.db/id :ivan :name "Ivan"}
         content-hash (str (c/new-id content-ivan))]
     (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
-                            (.submitTx jnode [[:crux.tx/put content-hash valid-time]])))))
+                            (api/submit-tx *api* [[:crux.tx/put content-hash valid-time]])))))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
@@ -193,12 +191,11 @@
   (t/is (api/entity (api/db *api*) :foo)))
 
 (t/deftest test-tx-log
-  (let [jnode ^ICruxAPI (api/->JCruxNode *api*)
-        valid-time (Date.)
+  (let [valid-time (Date.)
         tx1 (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
 
     (t/testing "tx-log"
-      (with-open [tx-log-iterator (.openTxLog jnode nil false)]
+      (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (not (realized? result)))
           (t/is (= [(assoc tx1
@@ -207,7 +204,7 @@
           (t/is (realized? result))))
 
       (t/testing "with ops"
-        (with-open [tx-log-iterator (.openTxLog jnode nil true)]
+        (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
