@@ -41,6 +41,7 @@
                    (-> time
                        (str/replace " " "T")
                        (str/replace #"-(\d\d)$" ".000-$1:00")))
+            :device-id (str "device-info-" device-id)
             :battery-level (Double/parseDouble battery-level)
             :battery-status battery-status
             :battery-temperature (Double/parseDouble battery-temperature)
