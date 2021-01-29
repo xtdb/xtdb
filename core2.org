@@ -402,3 +402,41 @@ idea: tiered metadata
 this is arguably the same as adaptive indexing, in that we may not choose to make all the indexes for all the data AoT
 
 apache data sketches? https://datasketches.apache.org/
+
+** Object stores <2021-01-29 Fri>
+
+Categories of OS: Memory, Local FS, Memcached, S3
+
+Scenarios:
+- start node
+  - fetch all metadata chunks (probably via 'list')
+- ingest
+  - upload me a chunk (many files + metadata)
+    - parallel upload of all chunks (except metadata?)
+    - then, when they're all successful, upload metadata as 'done'/'committed' marker
+- temporal indexing
+  - to update the temporal index (simple one-dimensional put-only timeline)
+    - find current/superseded row-id for this entity-id
+    -
+- query
+  - all time
+    - doesn't require temporal indexing - just scan content indices
+      - read metadata, find chunks/blocks that match
+  - at tt=TT (maybe tt=now)
+    - find users where name = "James"
+      - skip to TT, backward scan for name="James" (using metadata), forward scan eid (using metadata) to see if it's been replaced before TT
+      - skip to TT, backward scan all names, track (name, eid, tx-id)
+
+What is 'committed'?
+- (crux/db node {:tx-time "12:07"})
+  - any queries I make of that DB need to be replayable
+    - no transactions going to be inserted _before_ {:tx-time "12:07"}
+      - node's indexed to 12:04
+      - as-yet unindexed transaction at 12:06, so I can't accept this yet
+      - I need to have seen a transaction at 12:07 or later
+- 'seen a transaction'
+  - we'll increase an offset - all transactions below the offset are readable
+  - if I do make a query that requires temporal data - wait for temporal indexing?
+- 'written to object store' might be much later than 'committed'
+- 'can reliably reproduce this state from the log' -> committed
+  - I need to know that no more transactions can now be inserted _before_ this watermark

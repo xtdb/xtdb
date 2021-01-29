@@ -55,9 +55,11 @@
 
 ;;; ingest
 ;; TODO 4. writing metadata - minmax, bloom at chunk/file and block/record-batch
-;; TODO 11. figure out last tx-id/row-id from latest chunk and resume ingest on start.
+;; TODO 4b. columnar metadata?
+;; TODO 4c. batched metadata?
+;; TODO 11. (solo) figure out last tx-id/row-id from latest chunk and resume ingest on start.
+;; TODO 13. (solo) log protocol. File implementation.
 ;; TODO 12. object store protocol, store chunks and metadata. File implementation.
-;; TODO 13. log protocol. File implementation.
 
 ;;; query
 ;; TODO 7. reading any blocks - select battery_level from db (simple code-level query)
@@ -70,10 +72,13 @@
 
 ;;; future
 ;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions, including nulls)
+;; TODO 4d. block-level metadata - where do we store it?
 ;; TODO 5. dictionaries
 ;; TODO 6. consider eviction
 ;; TODO 1b. writer?
 ;; TODO 15. handle deletes
+;; TODO 16. JMH + JSON tests
+;; TODO 17. vectorised operations in the ingester
 
 ;; directions?
 ;; 1. e2e? submit-tx + some code-level queries
