@@ -5,7 +5,10 @@
             [clojure.string :as str]
             [core2.core :as c2]
             [core2.json :as c2-json])
-  (:import java.util.Date
+  (:import java.io.File
+           [java.nio.channels FileChannel]
+           [java.nio.file Files OpenOption StandardOpenOption]
+           java.util.Date
            org.apache.arrow.memory.RootAllocator))
 
 (def device-info-csv-resource
@@ -87,19 +90,23 @@
 ;; live chunk, reading sealed block (maybe) written to disk
 ;; live chunk, reading unsealed block in memory
 
-#_
-(def foo-tx-bytes
+(defn write-tx-bytes [^File dir]
   (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
     (with-readings-docs
       (fn [readings]
         (let [info-docs @!info-docs]
-          (vec (for [tx-batch (->> (concat (interleave info-docs
-                                                       (take (count info-docs) readings))
-                                           (drop (count info-docs) readings))
-                                   (partition-all 1000))]
-                 (c2/submit-tx (for [doc tx-batch]
-                                 {:op :put, :doc doc})
-                               allocator))))))))
+          (doseq [[idx tx-batch] (->> (concat (interleave info-docs
+                                                          (take (count info-docs) readings))
+                                              (drop (count info-docs) readings))
+                                      (partition-all 1000)
+                                      (map-indexed vector))]
+            (io/copy (c2/submit-tx (for [doc tx-batch]
+                                     {:op :put, :doc doc})
+                                   allocator)
+                     (io/file (doto dir .mkdirs) (format "%08x.stream.arrow" idx)))))))))
+
+#_
+(write-tx-bytes (io/file "data/tx-log"))
 
 '{:file-name ["name.arrow" "age.arrow"]
   :field-name ["name" "age"]
@@ -127,9 +134,10 @@
                     .mkdirs)]
     (with-open [allocator (RootAllocator. Long/MAX_VALUE)
                 ingester (c2/->ingester allocator arrow-dir)]
-
-      (doseq [[tx-id tx-bytes] (->> (map-indexed vector foo-tx-bytes)
-                                    (take 15))]
-        (c2/index-tx ingester {:tx-id tx-id, :tx-time (Date.)} tx-bytes)))
+      (doseq [[tx-id ^File file] (->> (sort (.listFiles (io/file "data/tx-log")))
+                                      (map-indexed vector))]
+        (c2/index-tx ingester
+                     {:tx-id tx-id, :tx-time (Date.)}
+                     (Files/readAllBytes (.toPath file)))))
 
     (c2-json/write-arrow-json-files arrow-dir)))
