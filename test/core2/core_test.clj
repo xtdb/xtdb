@@ -4,7 +4,8 @@
             [core2.core :as c2]
             [core2.json :as c2-json]
             [cheshire.core :as json])
-  (:import org.apache.arrow.memory.RootAllocator))
+  (:import java.io.File
+           org.apache.arrow.memory.RootAllocator))
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (with-open [a (RootAllocator. Long/MAX_VALUE)]

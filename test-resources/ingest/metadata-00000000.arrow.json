@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "chunk-00000000-cpu-avg-15min-FLOAT8-55197058.arrow",
+      "name" : "chunk-00000000-_id-VARCHAR-01217599.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -41,299 +41,7 @@
           "children" : [ ]
         }]
       },{
-        "name" : "cpu-avg-15min",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-battery-temperature-FLOAT8-83966772.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "battery-temperature",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-cpu-avg-1min-FLOAT8-b1207825.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "cpu-avg-1min",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-time-DATEMILLI-8081e524.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "time",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "date",
-            "unit" : "MILLISECOND"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "date",
-            "unit" : "MILLISECOND"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-device-id-VARCHAR-01bbec3e.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "device-id",
+        "name" : "_id",
         "nullable" : false,
         "type" : {
           "name" : "struct"
@@ -364,153 +72,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-mem-free-FLOAT8-09ab5fc2.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "mem-free",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-mem-used-FLOAT8-1fda3511.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "mem-used",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-_tx-id-BIGINT-92498a62.arrow",
+      "name" : "chunk-00000000-_tx-id-BIGINT-8621105f.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -585,295 +147,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-api-version-VARCHAR-c66043eb.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "api-version",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-battery-level-FLOAT8-226eab62.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "battery-level",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-rssi-FLOAT8-63035eaf.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "rssi",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "floatingpoint",
-            "precision" : "DOUBLE"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-bssid-VARCHAR-9ebef433.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "bssid",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-_tx-time-DATEMILLI-3c117800.arrow",
+      "name" : "chunk-00000000-_tx-time-DATEMILLI-e979ae8f.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -946,7 +220,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-manufacturer-VARCHAR-ff0e4bbf.arrow",
+      "name" : "chunk-00000000-api-version-VARCHAR-ae538d2d.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -986,7 +260,7 @@
           "children" : [ ]
         }]
       },{
-        "name" : "manufacturer",
+        "name" : "api-version",
         "nullable" : false,
         "type" : {
           "name" : "struct"
@@ -1017,7 +291,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-os-name-VARCHAR-e66ffc9c.arrow",
+      "name" : "chunk-00000000-battery-level-FLOAT8-e8fcb016.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -1057,7 +331,7 @@
           "children" : [ ]
         }]
       },{
-        "name" : "os-name",
+        "name" : "battery-level",
         "nullable" : false,
         "type" : {
           "name" : "struct"
@@ -1066,14 +340,16 @@
           "name" : "min",
           "nullable" : false,
           "type" : {
-            "name" : "utf8"
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
           },
           "children" : [ ]
         },{
           "name" : "max",
           "nullable" : false,
           "type" : {
-            "name" : "utf8"
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
           },
           "children" : [ ]
         },{
@@ -1088,78 +364,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-ssid-VARCHAR-1aa1a655.arrow",
-      "nullable" : false,
-      "type" : {
-        "name" : "struct"
-      },
-      "children" : [{
-        "name" : "_row-id",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      },{
-        "name" : "ssid",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [{
-          "name" : "min",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "max",
-          "nullable" : false,
-          "type" : {
-            "name" : "utf8"
-          },
-          "children" : [ ]
-        },{
-          "name" : "count",
-          "nullable" : false,
-          "type" : {
-            "name" : "int",
-            "bitWidth" : 64,
-            "isSigned" : true
-          },
-          "children" : [ ]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-battery-status-VARCHAR-5628207e.arrow",
+      "name" : "chunk-00000000-battery-status-VARCHAR-c5497c7b.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -1230,7 +435,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-model-VARCHAR-f0b14b67.arrow",
+      "name" : "chunk-00000000-battery-temperature-FLOAT8-49d42f1d.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -1270,7 +475,7 @@
           "children" : [ ]
         }]
       },{
-        "name" : "model",
+        "name" : "battery-temperature",
         "nullable" : false,
         "type" : {
           "name" : "struct"
@@ -1279,14 +484,16 @@
           "name" : "min",
           "nullable" : false,
           "type" : {
-            "name" : "utf8"
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
           },
           "children" : [ ]
         },{
           "name" : "max",
           "nullable" : false,
           "type" : {
-            "name" : "utf8"
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
           },
           "children" : [ ]
         },{
@@ -1301,7 +508,7 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-_id-VARCHAR-624c4776.arrow",
+      "name" : "chunk-00000000-bssid-VARCHAR-63f8a6c1.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -1341,7 +548,7 @@
           "children" : [ ]
         }]
       },{
-        "name" : "_id",
+        "name" : "bssid",
         "nullable" : false,
         "type" : {
           "name" : "struct"
@@ -1372,7 +579,153 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-cpu-avg-5min-FLOAT8-02323429.arrow",
+      "name" : "chunk-00000000-cpu-avg-15min-FLOAT8-28c3e032.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "cpu-avg-15min",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-cpu-avg-1min-FLOAT8-5d468bad.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "cpu-avg-1min",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-cpu-avg-5min-FLOAT8-cc682bd4.arrow",
       "nullable" : false,
       "type" : {
         "name" : "struct"
@@ -1444,838 +797,659 @@
           "children" : [ ]
         }]
       }]
+    },{
+      "name" : "chunk-00000000-device-id-VARCHAR-7ea3cc93.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "device-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-manufacturer-VARCHAR-a5c8825f.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "manufacturer",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-mem-free-FLOAT8-24e6f0aa.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "mem-free",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-mem-used-FLOAT8-f827ba43.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "mem-used",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-model-VARCHAR-3cc79fee.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "model",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-os-name-VARCHAR-c2acf3db.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "os-name",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-rssi-FLOAT8-08f16daf.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "rssi",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "floatingpoint",
+            "precision" : "DOUBLE"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-ssid-VARCHAR-d41f5e15.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "ssid",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "utf8"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-time-DATEMILLI-974933d1.arrow",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "_row-id",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      },{
+        "name" : "time",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "date",
+            "unit" : "MILLISECOND"
+          },
+          "children" : [ ]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "date",
+            "unit" : "MILLISECOND"
+          },
+          "children" : [ ]
+        },{
+          "name" : "count",
+          "nullable" : false,
+          "type" : {
+            "name" : "int",
+            "bitWidth" : 64,
+            "isSigned" : true
+          },
+          "children" : [ ]
+        }]
+      }]
     }]
   },
   "batches" : [{
     "count" : 1,
     "columns" : [{
-      "name" : "chunk-00000000-cpu-avg-15min-FLOAT8-55197058.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "cpu-avg-15min",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [8.654]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [8.822]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-battery-temperature-FLOAT8-83966772.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "battery-temperature",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [89.5]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [93.7]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-cpu-avg-1min-FLOAT8-b1207825.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "cpu-avg-1min",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [4.93]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [24.81]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-time-DATEMILLI-8081e524.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "time",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [1479211200000]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [1479211200000]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-device-id-VARCHAR-01bbec3e.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "device-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,22],
-          "DATA" : ["device-info-demo000000"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,22],
-          "DATA" : ["device-info-demo000001"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-mem-free-FLOAT8-09ab5fc2.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "mem-free",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [4.10011078E8]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [7.20742332E8]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-mem-used-FLOAT8-1fda3511.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "mem-used",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [2.79257668E8]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [5.89988922E8]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-_tx-id-BIGINT-92498a62.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["0"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["4"]
-        }]
-      },{
-        "name" : "_tx-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["4"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-api-version-VARCHAR-c66043eb.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["0"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "api-version",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,2],
-          "DATA" : ["23"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,2],
-          "DATA" : ["23"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-battery-level-FLOAT8-226eab62.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "battery-level",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [59.0]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [86.0]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-rssi-FLOAT8-63035eaf.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "rssi",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [-61.0]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [-50.0]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-bssid-VARCHAR-9ebef433.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "bssid",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,17],
-          "DATA" : ["01:02:03:04:05:06"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,17],
-          "DATA" : ["A0:B1:C5:D2:E0:F3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-_tx-time-DATEMILLI-3c117800.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["0"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["4"]
-        }]
-      },{
-        "name" : "_tx-time",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [1577836800000]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : [1577923200000]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["4"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-manufacturer-VARCHAR-ff0e4bbf.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["0"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "manufacturer",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,6],
-          "DATA" : ["iobeam"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,6],
-          "DATA" : ["iobeam"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-os-name-VARCHAR-e66ffc9c.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["0"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "os-name",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,5],
-          "DATA" : ["6.0.1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,5],
-          "DATA" : ["6.0.1"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-ssid-VARCHAR-1aa1a655.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "ssid",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,8],
-          "DATA" : ["demo-net"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,11],
-          "DATA" : ["stealth-net"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-battery-status-VARCHAR-5628207e.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["1"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["3"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "battery-status",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,11],
-          "DATA" : ["discharging"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,11],
-          "DATA" : ["discharging"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-model-VARCHAR-f0b14b67.arrow",
-      "count" : 1,
-      "VALIDITY" : [0],
-      "children" : [{
-        "name" : "_row-id",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["0"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      },{
-        "name" : "model",
-        "count" : 1,
-        "VALIDITY" : [0],
-        "children" : [{
-          "name" : "min",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,7],
-          "DATA" : ["mustang"]
-        },{
-          "name" : "max",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "OFFSET" : [0,5],
-          "DATA" : ["pinto"]
-        },{
-          "name" : "count",
-          "count" : 1,
-          "VALIDITY" : [1],
-          "DATA" : ["2"]
-        }]
-      }]
-    },{
-      "name" : "chunk-00000000-_id-VARCHAR-624c4776.arrow",
+      "name" : "chunk-00000000-_id-VARCHAR-01217599.arrow",
       "count" : 1,
       "VALIDITY" : [0],
       "children" : [{
@@ -2322,7 +1496,418 @@
         }]
       }]
     },{
-      "name" : "chunk-00000000-cpu-avg-5min-FLOAT8-02323429.arrow",
+      "name" : "chunk-00000000-_tx-id-BIGINT-8621105f.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["4"]
+        }]
+      },{
+        "name" : "_tx-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["4"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-_tx-time-DATEMILLI-e979ae8f.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["4"]
+        }]
+      },{
+        "name" : "_tx-time",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [1577836800000]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [1577923200000]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["4"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-api-version-VARCHAR-ae538d2d.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "api-version",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,2],
+          "DATA" : ["23"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,2],
+          "DATA" : ["23"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-battery-level-FLOAT8-e8fcb016.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "battery-level",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [59.0]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [86.0]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-battery-status-VARCHAR-c5497c7b.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "battery-status",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,11],
+          "DATA" : ["discharging"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,11],
+          "DATA" : ["discharging"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-battery-temperature-FLOAT8-49d42f1d.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "battery-temperature",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [89.5]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [93.7]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-bssid-VARCHAR-63f8a6c1.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "bssid",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,17],
+          "DATA" : ["01:02:03:04:05:06"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,17],
+          "DATA" : ["A0:B1:C5:D2:E0:F3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-cpu-avg-15min-FLOAT8-28c3e032.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "cpu-avg-15min",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [8.654]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [8.822]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-cpu-avg-1min-FLOAT8-5d468bad.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "cpu-avg-1min",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [4.93]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [24.81]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-cpu-avg-5min-FLOAT8-cc682bd4.arrow",
       "count" : 1,
       "VALIDITY" : [0],
       "children" : [{
@@ -2359,6 +1944,421 @@
           "count" : 1,
           "VALIDITY" : [1],
           "DATA" : [10.802]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-device-id-VARCHAR-7ea3cc93.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "device-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,22],
+          "DATA" : ["device-info-demo000000"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,22],
+          "DATA" : ["device-info-demo000001"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-manufacturer-VARCHAR-a5c8825f.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "manufacturer",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,6],
+          "DATA" : ["iobeam"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,6],
+          "DATA" : ["iobeam"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-mem-free-FLOAT8-24e6f0aa.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "mem-free",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [4.10011078E8]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [7.20742332E8]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-mem-used-FLOAT8-f827ba43.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "mem-used",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [2.79257668E8]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [5.89988922E8]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-model-VARCHAR-3cc79fee.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "model",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,7],
+          "DATA" : ["mustang"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,5],
+          "DATA" : ["pinto"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-os-name-VARCHAR-c2acf3db.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["0"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "os-name",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,5],
+          "DATA" : ["6.0.1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,5],
+          "DATA" : ["6.0.1"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-rssi-FLOAT8-08f16daf.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "rssi",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [-61.0]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [-50.0]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-ssid-VARCHAR-d41f5e15.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "ssid",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,8],
+          "DATA" : ["demo-net"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "OFFSET" : [0,11],
+          "DATA" : ["stealth-net"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      }]
+    },{
+      "name" : "chunk-00000000-time-DATEMILLI-974933d1.arrow",
+      "count" : 1,
+      "VALIDITY" : [0],
+      "children" : [{
+        "name" : "_row-id",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["1"]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["3"]
+        },{
+          "name" : "count",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : ["2"]
+        }]
+      },{
+        "name" : "time",
+        "count" : 1,
+        "VALIDITY" : [0],
+        "children" : [{
+          "name" : "min",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [1479211200000]
+        },{
+          "name" : "max",
+          "count" : 1,
+          "VALIDITY" : [1],
+          "DATA" : [1479211200000]
         },{
           "name" : "count",
           "count" : 1,

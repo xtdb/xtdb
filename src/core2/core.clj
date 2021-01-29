@@ -114,7 +114,7 @@
   (format "%s-%s-%08x"
           (.getName field)
           (str (Types/getMinorTypeForArrowType (.getType field)))
-          (hash field)))
+          (hash (str field))))
 
 (defn- open-write-file-ch ^java.nio.channels.FileChannel [^File file]
   (FileChannel/open (.toPath file)
@@ -227,7 +227,9 @@
 
 (defn- write-metadata! [^Ingester ingester, ^long chunk-idx]
   (let [^Map field->live-column (.field->live-column ingester)
-        schema (Schema. (for [[^Field field, ^LiveColumn live-column] field->live-column]
+        field->live-column-sorted (sort-by (comp str key) field->live-column)
+
+        schema (Schema. (for [[^Field field, ^LiveColumn live-column] field->live-column-sorted]
                           (t/->field (.getName ^File (.file live-column))
                                      (.getType Types$MinorType/STRUCT)
                                      false
@@ -239,7 +241,7 @@
                 metadata-fw (doto (ArrowFileWriter. metadata-root nil metadata-file-ch)
                               (.start))]
 
-      (doseq [[^Field field, ^LiveColumn live-column] field->live-column]
+      (doseq [[^Field field, ^LiveColumn live-column] field->live-column-sorted]
         (let [^StructVector file-vec (.getVector metadata-root (.getName ^File (.file live-column)))]
           (.writeMetadata ^IColumnMetadata (.field-metadata live-column)
                           (.getChild file-vec (.getName field))
