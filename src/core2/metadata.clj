@@ -1,7 +1,8 @@
 (ns core2.metadata
   (:require [core2.types :as t])
   (:import java.io.Closeable
-           [java.util Arrays]
+           org.apache.arrow.memory.util.ArrowBufPointer
+           org.apache.arrow.memory.util.ByteFunctionHelpers
            [org.apache.arrow.vector BigIntVector BitVector DateMilliVector FieldVector Float8Vector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.StructVector
            [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableDateMilliHolder NullableFloat8Holder]
@@ -108,18 +109,29 @@
 
 (deftype VarBinaryMetadata [^:unsynchronized-mutable ^bytes min-val
                             ^:unsynchronized-mutable ^bytes max-val
-                            ^:unsynchronized-mutable ^long cnt]
+                            ^:unsynchronized-mutable ^long cnt
+                            ^ArrowBufPointer arrow-buf-pointer]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
     (let [^VarBinaryVector field-vector field-vector
-          value (.getObject field-vector idx)]
+          arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)]
       (set! (.cnt this) (inc cnt))
 
-      (when (or (nil? min-val) (neg? (Arrays/compareUnsigned value min-val)))
-        (set! (.min-val this) value))
+      (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                  (.getOffset arrow-buf-pointer)
+                                                                  (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
+                                                                  min-val
+                                                                  0
+                                                                  (alength min-val))))
+        (set! (.min-val this) (.get field-vector idx)))
 
-      (when (or (nil? max-val) (pos? (Arrays/compareUnsigned value max-val)))
-        (set! (.max-val this) value))))
+      (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                  (.getOffset arrow-buf-pointer)
+                                                                  (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
+                                                                  max-val
+                                                                  0
+                                                                  (alength max-val))))
+        (set! (.max-val this) (.get field-vector idx)))))
 
   (writeMetadata [_ metadata-vector idx]
     (let [^StructVector metadata-vector metadata-vector]
@@ -130,20 +142,32 @@
   Closeable
   (close [_]))
 
-(deftype VarCharMetadata [^:unsynchronized-mutable ^String min-val
-                          ^:unsynchronized-mutable ^String max-val
-                          ^:unsynchronized-mutable ^long cnt]
+(deftype VarCharMetadata [^:unsynchronized-mutable ^bytes min-val
+                          ^:unsynchronized-mutable ^bytes max-val
+                          ^:unsynchronized-mutable ^long cnt
+                          ^ArrowBufPointer arrow-buf-pointer]
   IColumnMetadata
   (updateMetadata [this field-vector idx]
     (let [^VarCharVector field-vector field-vector
-          value (str (.getObject field-vector idx))]
+          arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)
+          end-offset (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))]
       (set! (.cnt this) (inc cnt))
 
-      (when (or (nil? min-val) (neg? (compare value min-val)))
-        (set! (.min-val this) value))
+      (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                  (.getOffset arrow-buf-pointer)
+                                                                  end-offset
+                                                                  min-val
+                                                                  0
+                                                                  (alength min-val))))
+        (set! (.min-val this) (.get field-vector idx)))
 
-      (when (or (nil? max-val) (pos? (compare value max-val)))
-        (set! (.max-val this) value))))
+      (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                  (.getOffset arrow-buf-pointer)
+                                                                  end-offset
+                                                                  max-val
+                                                                  0
+                                                                  (alength max-val))))
+        (set! (.max-val this) (.get field-vector idx)))))
 
   (writeMetadata [_ metadata-vector idx]
     (.setSafe ^VarCharVector (.getChild metadata-vector "min" VarCharVector) idx (Text. min-val))
@@ -159,8 +183,8 @@
     Types$MinorType/BIGINT (->BigIntMetadata (NullableBigIntHolder.) (NullableBigIntHolder.) 0)
     Types$MinorType/DATEMILLI (->DateMilliMetadata (NullableDateMilliHolder.) (NullableDateMilliHolder.) 0)
     Types$MinorType/FLOAT8 (->Float8Metadata (NullableFloat8Holder.) (NullableFloat8Holder.) 0)
-    Types$MinorType/VARBINARY (->VarBinaryMetadata nil nil 0)
-    Types$MinorType/VARCHAR (->VarCharMetadata nil nil 0)
+    Types$MinorType/VARBINARY (->VarBinaryMetadata nil nil 0 (ArrowBufPointer.))
+    Types$MinorType/VARCHAR (->VarCharMetadata nil nil 0 (ArrowBufPointer.))
     (throw (UnsupportedOperationException.))))
 
 (defn ->metadata-field ^org.apache.arrow.vector.types.pojo.Field [^Field field]
