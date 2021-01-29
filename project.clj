@@ -3,7 +3,7 @@
   :url "https://github.com/juxt/crux-rnd"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.2"]
                  [org.clojure/tools.logging "0.6.0"]
                  [org.clojure/spec.alpha "0.2.194"]
                  [org.apache.arrow/arrow-vector "3.0.0"]
