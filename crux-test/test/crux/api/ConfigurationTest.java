@@ -2,6 +2,7 @@ package crux.api;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
+import clojure.lang.ILookup;
 import clojure.lang.Keyword;
 import org.junit.*;
 import org.junit.rules.TemporaryFolder;
@@ -18,7 +19,6 @@ import crux.api.*;
 
 public class ConfigurationTest {
     private static final IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
-    private static final IFn unwrap = (IFn) requiringResolve.invoke(Clojure.read("crux.java-api-test/unwrap"));
     private static final IFn getKvName = (IFn) requiringResolve.invoke(Clojure.read("crux.kv/kv-name"));
 
     @Rule
@@ -44,11 +44,16 @@ public class ConfigurationTest {
         }
     }
 
+    private Object unwrap(Object object, String keyword) {
+        ILookup lookup = (ILookup) object;
+        Keyword key = Keyword.intern(keyword);
+        return lookup.valAt(key);
+    }
+
     private Object unwrap(Object api, String... keywords) {
         Object item = api;
         for (String keyword: keywords) {
-            Keyword key = Keyword.intern(keyword);
-            item = unwrap.invoke(item, key);
+            item = unwrap(item, keyword);
         }
         return item;
     }
