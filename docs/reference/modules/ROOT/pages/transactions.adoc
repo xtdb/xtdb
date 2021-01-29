@@ -2,6 +2,8 @@
 
 Transactions are how you modify data within Crux.
 
+They are comprised of a series of Transaction Operations to be performed.
+
 See the pages for <<transactions-clojure.adoc#,Clojure>> and <<transactions-java.adoc#,Java>> for their respective syntax.
 
 [#transaction-time]
@@ -25,3 +27,37 @@ If there is a document, `A`, already present at the given `valid time`, the oper
 === End Valid Time
 
 When both `valid time` and `end valid time` are provided for Put or Delete, the operation's effect is valid from `valid time` (inclusive) to `end valid time` (exclusive).
+
+[#await]
+== Awaiting Transactions
+
+After a transaction is submitted, it needs to be indexed before it is visible in Crux DB snapshots.
+
+The return value from submitting the transaction can be used to wait for the transaction to be indexed.
+
+This return value holds both the ID of the transaction, and the Transaction Time
+
+[tabs]
+====
+Java::
++
+--
+In Java, you receive a `TransactionInstant` from the `submitTx` call.
+
+[source,java]
+----
+include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=ti,indent=0]
+----
+--
+
+Clojure::
++
+--
+In Clojure, you receive a map from `submit-tx` containing `:crux.tx/tx-id` and `:crux.tx/tx-time`
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=ti,indent=0]
+----
+--
+====

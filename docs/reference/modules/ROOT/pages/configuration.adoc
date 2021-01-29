@@ -2,7 +2,7 @@
 
 A Crux node consists of a number of modules, which can be independently configured and augmented.
 
-Once you have an xref:installation.adoc[in-memory Crux node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programatically:
+Once you have an xref:installation.adoc[in-memory Crux node] set up, you can then start to configure the various modules - either through a JSON config file, EDN config file, or programmatically:
 
 [tabs]
 ====
@@ -19,8 +19,7 @@ For a Java in-process node, the modules are configured using the supplied Config
 ----
 include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=import,indent=0]
 
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-file-0,indent=0]
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-file-1,indent=0]
+include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-file,indent=0]
 
 include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-resource,indent=0]
 

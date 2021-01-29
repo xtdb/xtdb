@@ -17,7 +17,7 @@ include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags
 
 include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=creating-2,indent=0]
 
-//To run the transaction:
+// To run the transaction:
 include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=using-0,indent=0]
 
 // To run a transaction directly:
@@ -101,7 +101,7 @@ Evict is primarily used for GDPR Right to Erasure compliance.
 
 It is important to note that Evict is the only operation which will have effects on the results returned when querying against an earlier Transaction Time.
 
-[#transaction-functions]
+[#function]
 === Transaction Functions
 
 Transaction functions are user-supplied functions that run on the individual Crux nodes when a transaction is being ingested.
@@ -120,16 +120,16 @@ For information about creating these functions, see <<transactions-clojure#trans
 
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-put,indent=0]
+include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=fn-put,indent=0]
 ----
 
 ==== Usage
+
+When invoking a transaction function, you specify its ID and (optionally) other arguments
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-use,indent=0]
+include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=fn-use,indent=0]
 ----
-<1> Function ID
-<2> Parameter(s)
 
 [#document]
 == Documents
@@ -167,19 +167,6 @@ The following types of document IDs are allowed:
 |URL|`new URL("https://github.com/juxt/crux")`
 |IPersistentMap|`PersistentArrayMap.EMPTY.assoc("foo", "bar")`
 |===
-
-== TransactionInstant
-
-When calling `submitTx`, the return value is a `TransactionInstant`.
-
-This `TransactionInstant` can be used for checking whether a given Transaction has been indexed yet, or for waiting until it has been indexed.
-
-It contains the `transactionId` and `transactionTime` of the submitted Transaction.
-
-[source,java]
-----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=ti,indent=0]
-----
 
 [#speculative-transactions]
 == Speculative transactions

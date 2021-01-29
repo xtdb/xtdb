@@ -1,6 +1,5 @@
 package crux.docs.examples.transactions;
 
-/*
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
@@ -13,9 +12,11 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
+import java.time.Duration;
 
 import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
+import static crux.api.CruxDocument.buildDoc;
 
 // tag::creating-0[]
 import static crux.api.tx.Transaction.buildTx;
@@ -40,9 +41,7 @@ public class TransactionsTest {
     private final ICruxAPI node = Crux.startNode();
 
     private static CruxDocument createDocument(int version) {
-        CruxDocument ret = CruxDocument.create(documentId);
-        ret.put("version", version);
-        return ret;
+        return CruxDocument.create(documentId).plus("version", version);
     }
 
     @BeforeClass
@@ -242,7 +241,7 @@ public class TransactionsTest {
         node.awaitTx(ti, null);
 
         ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("ivan").put("age", 0);
+            tx.put(CruxDocument.create("ivan").plus("age", 0L));
         }));
 
         node.awaitTx(ti, null);
@@ -250,29 +249,29 @@ public class TransactionsTest {
         ti =
         // tag::fn-use[]
         node.submitTx(buildTx(tx -> {
-            tx.function("incAge", "ivan");
+            tx.invokeFunction("incAge", "ivan");
         }));
         // end::fn-use[]
 
         node.awaitTx(ti, null);
 
-        CruxDocument compare = CruxDocument.create("ivan").put("age", 1);
+        CruxDocument compare = CruxDocument.create("ivan").plus("age", 1L);
 
-        assertEquals(compare, node.db().entity("ivan");
+        assertEquals(compare, node.db().entity("ivan"));
     }
 
     @Test
     public void transactionInstant() {
         // tag::ti[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("Ivan");
+            tx.put(CruxDocument.create("Ivan"));
         }));
 
         // This will be null because the transaction won't have been indexed yet
         assertNull(node.db().entity("Ivan"));
 
         // Here we will wait until it has been indexed
-        node.awaitTx(ti, null);
+        node.awaitTx(ti, Duration.ofSeconds(5));
 
         // And now our new document will be in the DB snapshot
         assertNotNull(node.db().entity("Ivan"));
@@ -286,7 +285,7 @@ public class TransactionsTest {
         CruxDocument.builder("pablo-picasso")
             .put("name", "Pablo")
             .put("lastName", "Picasso")
-            .build()
+            .build();
         // end::doc-builder[]
 
         CruxDocument fromConsumer =
@@ -300,8 +299,8 @@ public class TransactionsTest {
         CruxDocument direct =
         // tag::doc-direct[]
         CruxDocument.create("pablo-picasso")
-            .put("name", "Pablo")
-            .put("lastName", "Picasso")
+            .plus("name", "Pablo")
+            .plus("lastName", "Picasso");
         // end::doc-direct[]
 
         assertEquals(fromBuilder, fromConsumer);
@@ -312,10 +311,10 @@ public class TransactionsTest {
     public void withTransactions() {
         // tag::with-tx[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("Ivan");
-        });
+            tx.put(CruxDocument.create("Ivan"));
+        }));
 
-        node.awaitTx(tx);
+        awaitTx(node, ti);
 
         ICruxDatasource db = node.db();
 
@@ -324,7 +323,7 @@ public class TransactionsTest {
 
         ICruxDatasource speculativeDb = db.withTx(buildTx(tx -> {
             tx.put(CruxDocument.create("Petr"));
-        });
+        }));
 
         // Petr is in our speculative db
         assertNotNull(speculativeDb.entity("Ivan"));
@@ -340,33 +339,15 @@ public class TransactionsTest {
         // end::with-tx[]
     }
 
-    @Test
-    public void defaultDocument() {
-        // tag::default-doc[]
-        CruxDocument pabDoc = CruxDocument.create("PabloPicasso");
-        pabDoc.put("name", "Pablo");
-        pabDoc.put("last-name", "Picasso");
-        pabDoc.put("height", 163);
-
-        node.submitTx(buildTx(tx -> {
-            tx.put(pabDoc);
-        }));
-        // end::default-doc[]
-
-        sync(node);
-
-        assertEquals(pabDoc, node.db().entity("PabloPicasso"));
-    }
-
-    private void assertDocument(AbstractCruxDocument document) {
+    private void assertDocument(CruxDocument document) {
         assertDocument(document, node.db());
     }
 
-    private void assertDocument(AbstractCruxDocument document, Date validTime) {
+    private void assertDocument(CruxDocument document, Date validTime) {
         assertDocument(document, node.db(validTime));
     }
 
-    private void assertDocument(AbstractCruxDocument document, ICruxDatasource db) {
+    private void assertDocument(CruxDocument document, ICruxDatasource db) {
         assertEquals(document, db.entity(documentId));
     }
 
@@ -390,4 +371,3 @@ public class TransactionsTest {
         return db.entity(documentId) != null;
     }
 }
-*/

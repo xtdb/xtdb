@@ -155,3 +155,18 @@
          )
     ;; end::speculative-3[]
     ))
+
+(t/deftest awaiting
+  (let [node *api*]
+    ;; tag::ti[]
+    (let [tx (crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan}]])]
+         ;; The transaction won't have indexed yet so :ivan won't exist in a snapshot
+         (crux/entity (crux/db node) :ivan) ;; => nil
+
+         ;; Wait for the transaction to be indexed
+         (crux/await-tx node tx)
+
+         ;; Now :ivan will exist in a snapshot
+         (crux/entity (crux/db node) :ivan)) ;; => {:crux.db/id :ivan}
+    ;; end::ti[]
+  ))

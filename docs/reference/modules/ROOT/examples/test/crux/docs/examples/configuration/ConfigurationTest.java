@@ -14,17 +14,12 @@ import crux.api.ICruxAPI;
 
 public class ConfigurationTest {
 
-    @Test
+    // Not testing this as relative filepaths change based on if you run
+    // "lein test" in crux/crux-test or "lein sub test" in crux
     public void fromFile() {
-        // tag::from-file-0[]
-        File file = new File("config.json");
-        // end::from-file-0[]
-        // Actually use the real file ;)
-        file = new File("../docs/reference/modules/ROOT/examples/test/crux/docs/examples/configuration/config.json");
-        assertTrue(file.exists());
-        // tag::from-file-1[]
-        ICruxAPI cruxNode = Crux.startNode(file);
-        // end::from-file-1[]
+        // tag::from-file[]
+        ICruxAPI cruxNode = Crux.startNode(new File("config.json"));
+        // end::from-file[]
 
         close(cruxNode);
     }
