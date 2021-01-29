@@ -79,7 +79,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    ICruxDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+    ICruxDatasource db(DBBasis dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given valid time and transaction.
@@ -100,7 +100,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    ICruxDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+    ICruxDatasource openDB(DBBasis dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns the status of this node as a map.

@@ -148,7 +148,7 @@ public interface ICruxDatasource extends Closeable {
      *
      * @return the basis of this database snapshot.
      */
-    Map<Keyword, ?> dbBasis();
+    DBBasis dbBasis();
 
     /**
      * Returns a new db value with the txOps speculatively applied.

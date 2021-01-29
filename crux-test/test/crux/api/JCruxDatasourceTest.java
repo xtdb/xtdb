@@ -70,7 +70,7 @@ public class JCruxDatasourceTest {
     public void current() {
         checkEntity(node.db(), 0);
         checkEntity(node.openDB(), 0);
-        HashMap<Keyword, Object> basis = new HashMap<>();
+        DBBasis basis = new DBBasis(null, null);
         checkEntity(node.db(basis), 0);
         checkEntity(node.openDB(basis), 0);
     }
@@ -80,8 +80,7 @@ public class JCruxDatasourceTest {
         Date validTime = date(-7500);
         checkEntity(node.db(validTime), 1);
         checkEntity(node.openDB(validTime), 1);
-        HashMap<Keyword, Object> basis = new HashMap<>();
-        basis.put(VALID_TIME, validTime);
+        DBBasis basis = new DBBasis(validTime, null);
         checkEntity(node.db(basis), 1);
         checkEntity(node.openDB(basis), 1);
     }
@@ -92,11 +91,21 @@ public class JCruxDatasourceTest {
         Date transactionTime = transactions.get(0).getTime();
         checkEntity(node.db(validTime, transactionTime), 0);
         checkEntity(node.openDB(validTime, transactionTime), 0);
-        HashMap<Keyword, Object> basis = new HashMap<>();
-        basis.put(VALID_TIME, validTime);
-        basis.put(TX_TIME, transactionTime);
+        DBBasis basis = new DBBasis(validTime, TransactionInstant.factory(transactionTime));
         checkEntity(node.db(basis), 0);
         checkEntity(node.openDB(basis), 0);
+    }
+
+    @Test
+    public void usingJustTransactionId() {
+        Date validTime = date(-7500);
+        DBBasis basis = new DBBasis(validTime, TransactionInstant.factory(transactions.get(0).getId()));
+        checkEntity(node.db(basis), 0);
+        checkEntity(node.openDB(basis), 0);
+
+        basis = new DBBasis(validTime, TransactionInstant.factory(transactions.get(1).getId()));
+        checkEntity(node.db(basis), 1);
+        checkEntity(node.openDB(basis), 1);
     }
 
     @Test
@@ -325,34 +334,35 @@ public class JCruxDatasourceTest {
     }
 
     @Test
-    public void basisTest() {
+    public void defaultBasisTest() {
         long lowerBound = (new Date()).getTime();
         ICruxDatasource db = node.db();
         long upperBound = (new Date()).getTime();
 
-        Map<Keyword, ?> basis = db.dbBasis();
+        DBBasis basis = db.dbBasis();
 
-        assertHasKeys(basis, VALID_TIME, TX);
-
-        long validTime = ((Date) basis.get(VALID_TIME)).getTime();
+        long validTime = basis.getValidTime().getTime();
 
         assertTrue(lowerBound <= validTime);
         assertTrue(upperBound >= validTime);
 
-        @SuppressWarnings("unchecked")
-        Map<Keyword, ?> tx = (Map<Keyword, ?>) basis.get(TX);
+        TransactionInstant transactionInstant = basis.getTransactionInstant();
 
-        assertHasKeys(tx, TX_TIME, TX_ID);
-
-        long transactionTime = ((Date) tx.get(TX_TIME)).getTime();
-        assertEquals(getLastTransactionTime(), transactionTime);
-
-        long txId = (Long) tx.get(TX_ID);
-        long lastTxId = last(transactions).getId();
-
-        assertEquals(lastTxId, txId);
+        assertEquals(last(transactions), transactionInstant);
 
         close(db);
+    }
+
+    @Test
+    public void customBasisTest() {
+        Date validTime = date(-80);
+        Date transactionTime = date(90);
+
+        ICruxDatasource db = node.db(validTime, transactionTime);
+        DBBasis basis = db.dbBasis();
+
+        assertEquals(validTime, basis.getValidTime());
+        assertEquals(transactionTime, basis.getTransactionInstant().getTime());
     }
 
     @Test
