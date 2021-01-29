@@ -18,9 +18,6 @@
 (defprotocol TransactionIngester
   (index-tx [ingester tx docs]))
 
-(def max-block-size 10000)
-(def max-blocks-per-chunk 10)
-
 (declare close-writers!)
 
 (def ^:private tx-arrow-schema
@@ -128,6 +125,8 @@
 (deftype Ingester [^BufferAllocator allocator
                    ^File arrow-dir
                    ^Map field->live-column
+                   ^long max-block-size
+                   ^long max-blocks-per-chunk
                    ^:unsynchronized-mutable ^long chunk-idx
                    ^:unsynchronized-mutable ^long next-row-id]
 
@@ -273,9 +272,16 @@
 
         (.clear field->live-column)))))
 
-(defn ->ingester ^core2.core.Ingester [^BufferAllocator allocator ^File arrow-dir]
-  (Ingester. allocator
-             arrow-dir
-             (HashMap.)
-             0
-             0))
+(defn ->ingester
+  (^core2.core.Ingester [^BufferAllocator allocator ^File arrow-dir]
+   (->ingester allocator arrow-dir {}))
+  (^core2.core.Ingester [^BufferAllocator allocator ^File arrow-dir {:keys [max-block-size max-blocks-per-chunk]
+                                                                     :or {max-block-size 10000
+                                                                          max-blocks-per-chunk 10}}]
+   (Ingester. allocator
+              arrow-dir
+              (HashMap.)
+              max-block-size
+              max-blocks-per-chunk
+              0
+              0)))
