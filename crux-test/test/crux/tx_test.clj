@@ -880,37 +880,37 @@
   (t/testing "URL"
     (test-putting-retrieving-querying-id-and-value (URL. "https://github.com/juxt/crux")))
   (t/testing "IPersistentMap"
-    (test-putting-retrieving-querying-id-and-value (.assoc (PersistentArrayMap/EMPTY) "foo" "bar")))
+    (test-putting-retrieving-querying-id-and-value (-> (PersistentArrayMap/EMPTY)
+                                                       (.assoc "foo" "bar"))))
   (t/testing "Set"
-    (let [set (HashSet.)]
-      (.add set "foo")
-      (.add set "bar")
-      (test-putting-retrieving-querying-value set))))
+    (test-putting-retrieving-querying-value (doto (HashSet.)
+                                              (.add "foo")
+                                              (.add "bar")))))
 
-(comment                                               ;;TODO: Test failing. When issue fixed, migrate these into the above
+;;TODO: Test failing. When issue fixed, migrate these into the above
+(comment
   (t/deftest test-java-map-ids-and-values
     (t/testing "Singleton Map"
       (test-putting-retrieving-querying-id-and-value (Collections/singletonMap "foo" "bar")))
 
     (t/testing "HashMap with single entry"
-      (let [id (HashMap.)]
-        (.put id "foo" "bar")
-        (test-putting-retrieving-querying-id-and-value id)))
+      (test-putting-retrieving-querying-id-and-value (doto (HashMap.)
+                                                       (.put "foo" "bar"))))
 
     (t/testing "HashMap with multiple entries"
-      (let [id (HashMap.)]
-        (.put id "foo" "bar")
-        (.put id "baz" "waka")
-        (test-putting-retrieving-querying-id-and-value id)))
+      (test-putting-retrieving-querying-id-and-value (doto (HashMap.)
+                                                       (.put "foo" "bar")
+                                                       (.put "baz" "waka"))))
 
     (t/testing "HashMap with entries added in different order"
-      (let [val1 (HashMap.)
-            val2 (HashMap.)]
-        (.put val1 "foo" "bar")
-        (.put val1 "baz" "waka")
-        (.put val2 "baz" "waka")
-        (.put val2 "foo" "bar")
-        (t/is val1 val2)
+      (let [val1 (doto (HashMap.)
+                   (.put "foo" "bar")
+                   (.put "baz" "waka"))
+            val2 (doto (HashMap.)
+                   (.put "baz" "waka")
+                   (.put "foo" "bar"))]
+
+        (t/is (= val1 val2))
         (t/testing "As ID"
           (with-open [node (crux/start-node {})]
             (let [doc {:crux.db/id val1}]
