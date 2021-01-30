@@ -6,7 +6,7 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.system :as sys])
-  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource TransactionInstant CruxDocument]
+  (:import [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource TransactionInstant CruxDocument DBBasis]
            [java.lang AutoCloseable]
            [java.util Map Date]
            [java.time Duration]
@@ -387,17 +387,14 @@
   (entityTx [_ eid] (entity-tx datasource eid))
   (query [_ query args] (q* datasource query args))
   (openQuery [_ query args] (open-q* datasource query args))
-
   (project [_ projection eid] (project datasource projection eid))
   (^java.util.List projectMany [_ projection ^Iterable eids] (project-many datasource projection eids))
   (^java.util.List projectMany [_ projection ^"[Ljava.lang.Object;" eids] (project-many datasource projection (seq eids)))
-
   (^java.util.List entityHistory [_ eid ^crux.api.HistoryOptions opts] (entity-history datasource eid (.getSortOrderKey opts) (.toMap opts)))
   (^crux.api.ICursor openEntityHistory [_ eid ^crux.api.HistoryOptions opts] (open-entity-history datasource eid (.getSortOrderKey opts) (.toMap opts)))
-
   (validTime [_] (valid-time datasource))
   (transactionTime [_] (transaction-time datasource))
-  (dbBasis [_] (db-basis datasource))
+  (dbBasis [_] (DBBasis/factory (db-basis datasource)))
   (withTx [_ tx] (->JCruxDatasource (with-tx datasource (.toVector tx))))
   (close [_] (.close datasource)))
 
@@ -405,12 +402,12 @@
   ICruxAPI
   (^ICruxDatasource db [_] (->JCruxDatasource (db node)))
   (^ICruxDatasource db [_ ^Date valid-time] (->JCruxDatasource (db node valid-time)))
-  (^ICruxDatasource db [_ ^Map basis] (->JCruxDatasource (db node basis)))
+  (^ICruxDatasource db [_ ^DBBasis basis] (->JCruxDatasource (db node (.toMap basis))))
   (^ICruxDatasource db [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (db node valid-time tx-time)))
   (^ICruxDatasource openDB [_] (->JCruxDatasource (open-db node)))
   (^ICruxDatasource openDB [_ ^Date valid-time] (->JCruxDatasource (open-db node valid-time)))
   (^ICruxDatasource openDB [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (open-db node valid-time tx-time)))
-  (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (open-db node basis)))
+  (^ICruxDatasource openDB [_ ^DBBasis basis] (->JCruxDatasource (open-db node (.toMap basis))))
   (status [_] (status node))
   (attributeStats [_] (attribute-stats node))
   (submitTx [_ tx] (TransactionInstant/factory ^Map (submit-tx node (.toVector tx))))
