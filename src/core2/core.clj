@@ -5,7 +5,7 @@
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
            [java.nio.channels Channels FileChannel]
            [java.nio.file OpenOption StandardOpenOption]
-           [java.util Date HashMap Map]
+           [java.util Date HashMap List Map]
            java.util.function.Function
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector ValueVector VectorSchemaRoot]
@@ -101,12 +101,11 @@
           (.end))
         (.toByteArray baos)))))
 
-(deftype LiveColumn [^VectorSchemaRoot content-root, ^File file, ^ArrowFileWriter file-writer
-                     ^Closeable row-id-metadata, ^Closeable field-metadata]
+(deftype LiveColumn [^VectorSchemaRoot content-root, ^File file, ^ArrowFileWriter file-writer, ^List field-metadata]
   Closeable
   (close [_]
-    (.close row-id-metadata)
-    (.close field-metadata)
+    (doseq [^Closeable metadata field-metadata]
+      (.close metadata))
     (.close file-writer)
     (.close content-root)))
 
@@ -122,6 +121,20 @@
                                              StandardOpenOption/WRITE
                                              StandardOpenOption/TRUNCATE_EXISTING})))
 
+(defn- write-live-column [^LiveColumn live-column]
+  (let [^VectorSchemaRoot content-root (.content-root live-column)]
+    (.writeBatch ^ArrowFileWriter (.file-writer live-column))
+
+    (dotimes [n (count (.getFieldVectors content-root))]
+      (let [field-vector (.getVector content-root n)]
+        (.updateMetadata ^IColumnMetadata (get (.field-metadata live-column) n) field-vector)
+        (.reset field-vector)))
+
+    (.setRowCount content-root 0)))
+
+(defn- ->column-schema ^org.apache.arrow.vector.types.pojo.Schema [^Field field]
+  (Schema. [t/row-id-field field]))
+
 (deftype Ingester [^BufferAllocator allocator
                    ^File arrow-dir
                    ^Map field->live-column
@@ -135,15 +148,17 @@
     (let [->column (reify Function
                      (apply [_ field]
                        (let [^Field field field
-                             content-root (VectorSchemaRoot/create (Schema. [t/row-id-field field]) allocator)
+                             schema (->column-schema field)
+                             field-metadata (vec (for [^Field field (.getFields schema)]
+                                                   (meta/->metadata (.getType field))))
+                             content-root (VectorSchemaRoot/create schema allocator)
                              file (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))
                              file-ch (open-write-file-ch file)]
                          (LiveColumn. content-root
                                       file
                                       (doto (ArrowFileWriter. content-root nil file-ch)
                                         (.start))
-                                      (meta/->metadata (.getType t/row-id-field))
-                                      (meta/->metadata (.getType field))))))]
+                                      field-metadata))))]
       (with-open [bais (ByteArrayInputStream. tx-bytes)
                   sr (doto (ArrowStreamReader. bais allocator)
                        (.loadNextBatch))
@@ -168,31 +183,25 @@
                                ^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
                                ^VectorSchemaRoot content-root (.content-root live-column)
                                value-count (.getRowCount content-root)
-                               ^FieldVector field-vec (.getVector content-root field)
                                ^BigIntVector row-id-vec (.getVector content-root t/row-id-field)
+                               ^FieldVector field-vec (.getVector content-root field)
                                row-id (+ next-row-id tx-op-idx)]
 
-                           (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
                            (.setSafe row-id-vec value-count row-id)
-                           (.setRowCount content-root (inc value-count))
-
-                           (.updateMetadata ^IColumnMetadata (.row-id-metadata live-column) row-id-vec value-count)
-                           (.updateMetadata ^IColumnMetadata (.field-metadata live-column) field-vec value-count)))
+                           (.copyFromSafe field-vec per-struct-offset value-count kv-vec)
+                           (.setRowCount content-root (inc value-count))))
 
                        (letfn [(set-tx-field! [^Field field field-value]
                                  (let [^LiveColumn live-column (.computeIfAbsent field->live-column field ->column)
                                        ^VectorSchemaRoot content-root (.content-root live-column)
                                        value-count (.getRowCount content-root)
-                                       field-vec (.getVector content-root field)
                                        ^BigIntVector row-id-vec (.getVector content-root t/row-id-field)
+                                       field-vec (.getVector content-root field)
                                        row-id (+ next-row-id tx-op-idx)]
 
-                                   (t/set-safe! field-vec value-count field-value)
                                    (.setSafe row-id-vec value-count row-id)
-                                   (.setRowCount content-root (inc value-count))
-
-                                   (.updateMetadata ^IColumnMetadata (.row-id-metadata live-column) row-id-vec value-count)
-                                   (.updateMetadata ^IColumnMetadata (.field-metadata live-column) field-vec value-count)))]
+                                   (t/set-safe! field-vec value-count field-value)
+                                   (.setRowCount content-root (inc value-count))))]
 
                          (set-tx-field! t/tx-time-field tx-time)
                          (set-tx-field! t/tx-id-field tx-id))))))
@@ -200,15 +209,9 @@
           (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec))))
 
         (doseq [^LiveColumn live-column (vals field->live-column)
-                :let [^VectorSchemaRoot content-root (.content-root live-column)
-                      ^ArrowFileWriter file-writer (.file-writer live-column)]]
+                :let [^VectorSchemaRoot content-root (.content-root live-column)]]
           (when (>= (.getRowCount content-root) max-block-size)
-            (.writeBatch file-writer)
-
-            (doseq [^FieldVector field-vector (.getFieldVectors content-root)]
-              (.reset field-vector))
-
-            (.setRowCount content-root 0)))))
+            (write-live-column live-column)))))
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
@@ -225,16 +228,16 @@
   (close [this]
     (close-writers! this chunk-idx)))
 
+;; TODO: flat metadata schema based on sparse unions.
 (defn- write-metadata! [^Ingester ingester, ^long chunk-idx]
   (let [^Map field->live-column (.field->live-column ingester)
         field->live-column-sorted (sort-by (comp str key) field->live-column)
 
         schema (Schema. (for [[^Field field, ^LiveColumn live-column] field->live-column-sorted]
-                          (t/->field (.getName ^File (.file live-column))
-                                     (.getType Types$MinorType/STRUCT)
-                                     false
-                                     (meta/->metadata-field t/row-id-field)
-                                     (meta/->metadata-field field))))]
+                          (apply t/->field (.getName ^File (.file live-column))
+                                 (.getType Types$MinorType/STRUCT)
+                                 false
+                                 (map meta/->metadata-field (.getFields (->column-schema field))))))]
 
     (with-open [metadata-file-ch (open-write-file-ch (io/file (.arrow-dir ingester) (format "metadata-%08x.arrow" chunk-idx)))
                 metadata-root (VectorSchemaRoot/create schema (.allocator ingester))
@@ -243,12 +246,10 @@
 
       (doseq [[^Field field, ^LiveColumn live-column] field->live-column-sorted]
         (let [^StructVector file-vec (.getVector metadata-root (.getName ^File (.file live-column)))]
-          (.writeMetadata ^IColumnMetadata (.field-metadata live-column)
-                          (.getChild file-vec (.getName field))
-                          0)
-          (.writeMetadata ^IColumnMetadata (.row-id-metadata live-column)
-                          (.getChild file-vec (.getName t/row-id-field))
-                          0)))
+          (dotimes [n (.size file-vec)]
+            (.writeMetadata ^IColumnMetadata (get (.field-metadata live-column) n)
+                            (.getChildByOrdinal file-vec n)
+                            0))))
       (.setRowCount metadata-root 1)
       (.writeBatch metadata-fw))))
 
@@ -256,15 +257,9 @@
   (let [^Map field->live-column (.field->live-column ingester)]
     (try
       (doseq [^LiveColumn live-column (vals field->live-column)
-              :let [^VectorSchemaRoot root (.content-root live-column)
-                    ^ArrowFileWriter file-writer (.file-writer live-column)]]
-        (when (pos? (.getRowCount root))
-          (.writeBatch file-writer)
-
-          (doseq [^FieldVector field-vector (.getFieldVectors root)]
-            (.reset field-vector))
-
-          (.setRowCount root 0)))
+              :let [^VectorSchemaRoot content-root (.content-root live-column)]]
+        (when (pos? (.getRowCount content-root))
+          (write-live-column live-column)))
 
       (write-metadata! ingester chunk-idx)
 

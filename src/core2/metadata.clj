@@ -11,23 +11,24 @@
            org.apache.arrow.vector.util.Text))
 
 (definterface IColumnMetadata
-  (^void updateMetadata [^org.apache.arrow.vector.FieldVector field-vector ^int idx])
+  (^void updateMetadata [^org.apache.arrow.vector.FieldVector field-vector])
   (^void writeMetadata [^org.apache.arrow.vector.complex.StructVector metadata-vector ^int idx]))
 
 (deftype BitMetadata [^NullableBitHolder min-val
                       ^NullableBitHolder max-val
                       ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
-  (updateMetadata [this field-vector idx]
-    (let [^BitVector field-vector field-vector
-          value (.get field-vector idx)]
-      (set! (.cnt this) (inc cnt))
+  (updateMetadata [this field-vector]
+    (let [^BitVector field-vector field-vector]
+      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
-      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-        (.get field-vector idx min-val))
+      (dotimes [idx (.getValueCount field-vector)]
+        (let [value (.get field-vector idx)]
+          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
+            (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-        (.get field-vector idx max-val))))
+          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
+            (.get field-vector idx max-val))))))
 
   (writeMetadata [_ metadata-vector idx]
     (.setSafe ^BitVector (.getChild metadata-vector "min" BitVector) idx min-val)
@@ -41,16 +42,17 @@
                          ^NullableBigIntHolder max-val
                          ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
-  (updateMetadata [this field-vector idx]
-    (let [^BigIntVector field-vector field-vector
-          value (.get field-vector idx)]
-      (set! (.cnt this) (inc cnt))
+  (updateMetadata [this field-vector]
+    (let [^BigIntVector field-vector field-vector]
+      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
-      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-        (.get field-vector idx min-val))
+      (dotimes [idx (.getValueCount field-vector)]
+        (let [value (.get field-vector idx)]
+          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
+            (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-        (.get field-vector idx max-val))))
+          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
+            (.get field-vector idx max-val))))))
 
   (writeMetadata [_ metadata-vector idx]
     (.setSafe ^BigIntVector (.getChild metadata-vector "min" BigIntVector) idx min-val)
@@ -64,16 +66,17 @@
                             ^NullableDateMilliHolder max-val
                             ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
-  (updateMetadata [this field-vector idx]
-    (let [^DateMilliVector field-vector field-vector
-          value (.get field-vector idx)]
-      (set! (.cnt this) (inc cnt))
+  (updateMetadata [this field-vector]
+    (let [^DateMilliVector field-vector field-vector]
+      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
-      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-        (.get field-vector idx min-val))
+      (dotimes [idx (.getValueCount field-vector)]
+        (let [value (.get field-vector idx)]
+          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
+            (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-        (.get field-vector idx max-val))))
+          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
+            (.get field-vector idx max-val))))))
 
   (writeMetadata [_ metadata-vector idx]
     (.setSafe ^DateMilliVector (.getChild metadata-vector "min" DateMilliVector) idx min-val)
@@ -87,16 +90,17 @@
                          ^NullableFloat8Holder max-val
                          ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
-  (updateMetadata [this field-vector idx]
-    (let [^Float8Vector field-vector field-vector
-          value (.get field-vector idx)]
-      (set! (.cnt this) (inc cnt))
+  (updateMetadata [this field-vector]
+    (let [^Float8Vector field-vector field-vector]
+      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
-      (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-        (.get field-vector idx min-val))
+      (dotimes [idx (.getValueCount field-vector)]
+        (let [value (.get field-vector idx)]
+          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
+            (.get field-vector idx min-val))
 
-      (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-        (.get field-vector idx max-val))))
+          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
+            (.get field-vector idx max-val))))))
 
   (writeMetadata [_ metadata-vector idx]
     (let [^StructVector metadata-vector metadata-vector]
@@ -112,26 +116,27 @@
                             ^:unsynchronized-mutable ^long cnt
                             ^ArrowBufPointer arrow-buf-pointer]
   IColumnMetadata
-  (updateMetadata [this field-vector idx]
-    (let [^VarBinaryVector field-vector field-vector
-          arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)]
-      (set! (.cnt this) (inc cnt))
+  (updateMetadata [this field-vector]
+    (let [^VarBinaryVector field-vector field-vector]
+      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
-      (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                  (.getOffset arrow-buf-pointer)
-                                                                  (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
-                                                                  min-val
-                                                                  0
-                                                                  (alength min-val))))
-        (set! (.min-val this) (.get field-vector idx)))
+      (dotimes [idx (.getValueCount field-vector)]
+        (let [arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)]
+          (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                      (.getOffset arrow-buf-pointer)
+                                                                      (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
+                                                                      min-val
+                                                                      0
+                                                                      (alength min-val))))
+            (set! (.min-val this) (.get field-vector idx)))
 
-      (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                  (.getOffset arrow-buf-pointer)
-                                                                  (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
-                                                                  max-val
-                                                                  0
-                                                                  (alength max-val))))
-        (set! (.max-val this) (.get field-vector idx)))))
+          (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                      (.getOffset arrow-buf-pointer)
+                                                                      (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
+                                                                      max-val
+                                                                      0
+                                                                      (alength max-val))))
+            (set! (.max-val this) (.get field-vector idx)))))))
 
   (writeMetadata [_ metadata-vector idx]
     (let [^StructVector metadata-vector metadata-vector]
@@ -147,27 +152,27 @@
                           ^:unsynchronized-mutable ^long cnt
                           ^ArrowBufPointer arrow-buf-pointer]
   IColumnMetadata
-  (updateMetadata [this field-vector idx]
-    (let [^VarCharVector field-vector field-vector
-          arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)
-          end-offset (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))]
-      (set! (.cnt this) (inc cnt))
+  (updateMetadata [this field-vector]
+    (let [^VarCharVector field-vector field-vector]
+      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
-      (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                  (.getOffset arrow-buf-pointer)
-                                                                  end-offset
-                                                                  min-val
-                                                                  0
-                                                                  (alength min-val))))
-        (set! (.min-val this) (.get field-vector idx)))
+      (dotimes [idx (.getValueCount field-vector)]
+        (let [arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)]
+          (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                      (.getOffset arrow-buf-pointer)
+                                                                      (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
+                                                                      min-val
+                                                                      0
+                                                                      (alength min-val))))
+            (set! (.min-val this) (.get field-vector idx)))
 
-      (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                  (.getOffset arrow-buf-pointer)
-                                                                  end-offset
-                                                                  max-val
-                                                                  0
-                                                                  (alength max-val))))
-        (set! (.max-val this) (.get field-vector idx)))))
+          (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
+                                                                      (.getOffset arrow-buf-pointer)
+                                                                      (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
+                                                                      max-val
+                                                                      0
+                                                                      (alength max-val))))
+            (set! (.max-val this) (.get field-vector idx)))))))
 
   (writeMetadata [_ metadata-vector idx]
     (.setSafe ^VarCharVector (.getChild metadata-vector "min" VarCharVector) idx (Text. min-val))
@@ -197,7 +202,6 @@
                (t/->field "count" (.getType Types$MinorType/BIGINT) false))))
 
 ;; TODO: flat metadata schema based on sparse unions.
-
 (def ^:private metadata-union-fields
   (vec (for [^Types$MinorType minor-type [Types$MinorType/NULL
                                           Types$MinorType/BIGINT
