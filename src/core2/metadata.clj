@@ -206,7 +206,7 @@
                                           Types$MinorType/VARCHAR
                                           Types$MinorType/BIT
                                           Types$MinorType/DATEMILLI]]
-         (t/->field (.toLowerCase (.name minor-type)) (.getType minor-type) false))))
+         (t/->field (.toLowerCase (.name minor-type)) (.getType minor-type) true))))
 
 (def ^org.apache.arrow.flatbuf.Schema metadata-schema
   (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) false)
