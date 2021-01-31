@@ -4,6 +4,7 @@
            [java.nio.channels Channels FileChannel]
            [java.nio.file OpenOption StandardOpenOption]
            org.apache.arrow.memory.RootAllocator
+           org.apache.arrow.vector.VectorSchemaRoot
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamReader JsonFileWriter]))
 
 (defn- file->json-file ^java.io.File [^File file]
@@ -36,6 +37,16 @@
           (.start file-writer (.getSchema root) nil)
           (while (.loadNextBatch file-reader)
             (.write file-writer root))))
+      (slurp json-file)
+      (finally
+        (.delete json-file)))))
+
+(defn vector-schema-root->json ^String [^VectorSchemaRoot root]
+  (let [json-file (File/createTempFile "arrow" "json")]
+    (try
+      (with-open [file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]
+        (.start file-writer (.getSchema root) nil)
+        (.write file-writer root))
       (slurp json-file)
       (finally
         (.delete json-file)))))
