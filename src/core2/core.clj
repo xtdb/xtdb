@@ -8,11 +8,12 @@
            [java.util Date HashMap List Map]
            java.util.function.Function
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BigIntVector FieldVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader ArrowStreamWriter]
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
+           org.apache.arrow.vector.util.Text
            core2.metadata.IColumnMetadata))
 
 (defprotocol TransactionIngester
@@ -228,29 +229,30 @@
   (close [this]
     (close-writers! this chunk-idx)))
 
-;; TODO: flat metadata schema based on sparse unions.
 (defn- write-metadata! [^Ingester ingester, ^long chunk-idx]
-  (let [^Map field->live-column (.field->live-column ingester)
-        field->live-column-sorted (sort-by (comp str key) field->live-column)
-
-        schema (Schema. (for [[^Field field, ^LiveColumn live-column] field->live-column-sorted]
-                          (apply t/->field (.getName ^File (.file live-column))
-                                 (.getType Types$MinorType/STRUCT)
-                                 false
-                                 (map meta/->metadata-field (.getFields (->column-schema field))))))]
-
+  (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema (.allocator ingester))]
+    (reduce
+     (fn [^long idx [^Field field, ^LiveColumn live-column]]
+       (let [content-root ^VectorSchemaRoot (.content-root live-column)
+             field-metadata (.field-metadata live-column)
+             file-name (Text. (.getName ^File (.file live-column)))
+             column-name (Text. (.getName field))]
+         (dotimes [n (count (.getFieldVectors content-root))]
+           (let [field-vector (.getVector content-root n)
+                 idx (+ idx n)]
+             (.setSafe ^VarCharVector (.getVector metadata-root "file") idx file-name)
+             (.setSafe ^VarCharVector (.getVector metadata-root "column") idx column-name)
+             (.setSafe ^VarCharVector (.getVector metadata-root "field") idx (Text. (.getName (.getField field-vector))))
+             (.writeMetadata ^IColumnMetadata (get field-metadata n) metadata-root idx)))
+         (let [idx (+ idx (count (.getFieldVectors content-root)))]
+           (.setRowCount metadata-root idx)
+           idx)))
+     0
+     (sort-by (comp str key) (.field->live-column ingester)))
+    (.syncSchema metadata-root)
     (with-open [metadata-file-ch (open-write-file-ch (io/file (.arrow-dir ingester) (format "metadata-%08x.arrow" chunk-idx)))
-                metadata-root (VectorSchemaRoot/create schema (.allocator ingester))
-                metadata-fw (doto (ArrowFileWriter. metadata-root nil metadata-file-ch)
-                              (.start))]
-
-      (doseq [[^Field field, ^LiveColumn live-column] field->live-column-sorted]
-        (let [^StructVector file-vec (.getVector metadata-root (.getName ^File (.file live-column)))]
-          (dotimes [n (.size file-vec)]
-            (.writeMetadata ^IColumnMetadata (get (.field-metadata live-column) n)
-                            (.getChildByOrdinal file-vec n)
-                            0))))
-      (.setRowCount metadata-root 1)
+                metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
+      (.start metadata-fw)
       (.writeBatch metadata-fw))))
 
 (defn- close-writers! [^Ingester ingester, ^long chunk-idx]
