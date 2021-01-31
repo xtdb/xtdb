@@ -4,10 +4,10 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.util.ByteFunctionHelpers
            [org.apache.arrow.vector BigIntVector BitVector DateMilliVector FieldVector Float8Vector VarBinaryVector VarCharVector]
-           org.apache.arrow.vector.complex.StructVector
+           [org.apache.arrow.vector.complex StructVector UnionVector]
            [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableDateMilliHolder NullableFloat8Holder]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType Field]
+           [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.apache.arrow.vector.util.Text))
 
 (definterface IColumnMetadata
@@ -195,3 +195,29 @@
                (t/->field "min" field-type false)
                (t/->field "max" field-type false)
                (t/->field "count" (.getType Types$MinorType/BIGINT) false))))
+
+;; TODO: flat metadata schema based on sparse unions.
+
+(def ^:private metadata-union-fields
+  (vec (for [^Types$MinorType minor-type [Types$MinorType/NULL
+                                          Types$MinorType/BIGINT
+                                          Types$MinorType/FLOAT8
+                                          Types$MinorType/VARBINARY
+                                          Types$MinorType/VARCHAR
+                                          Types$MinorType/BIT
+                                          Types$MinorType/DATEMILLI]]
+         (t/->field (.toLowerCase (.name minor-type)) (.getType minor-type) false))))
+
+(def ^org.apache.arrow.flatbuf.Schema metadata-schema
+  (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) false)
+            (t/->field "column" (.getType Types$MinorType/VARCHAR) false)
+            (t/->field "field" (.getType Types$MinorType/VARCHAR) false)
+            (apply t/->field "min"
+                   (.getType Types$MinorType/UNION)
+                   false
+                   metadata-union-fields)
+            (apply t/->field "max"
+                   (.getType Types$MinorType/UNION)
+                   false
+                   metadata-union-fields)
+            (t/->field "count" (.getType Types$MinorType/BIGINT) false)]))

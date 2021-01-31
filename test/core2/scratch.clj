@@ -4,12 +4,17 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [core2.core :as c2]
-            [core2.json :as c2-json])
+            [core2.json :as c2-json]
+            [core2.metadata :as c2-md])
   (:import java.io.File
            [java.nio.channels FileChannel]
            [java.nio.file Files OpenOption StandardOpenOption]
            java.util.Date
-           org.apache.arrow.memory.RootAllocator))
+           [org.apache.arrow.vector BigIntVector VarCharVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.UnionVector
+           org.apache.arrow.vector.types.Types$MinorType
+           org.apache.arrow.memory.RootAllocator
+           org.apache.arrow.vector.util.Text))
 
 (def device-info-csv-resource
   (io/resource "devices_small_device_info.csv"))
@@ -147,3 +152,57 @@
                      (Files/readAllBytes (.toPath file)))))
 
     (c2-json/write-arrow-json-files arrow-dir)))
+
+
+(comment
+  (with-open [a (RootAllocator. Long/MAX_VALUE)
+              r (VectorSchemaRoot/create c2-md/metadata-schema a)]
+    (.setSafe ^VarCharVector (.getVector r "file") 0 (Text. "00000"))
+    (.setSafe ^VarCharVector (.getVector r "column") 0 (Text. "name"))
+    (.setSafe ^VarCharVector (.getVector r "field") 0 (Text. "name"))
+    (let [min-vec ^UnionVector (.getVector r "min")]
+      (.setType  min-vec 0 Types$MinorType/VARCHAR)
+      (.setSafe (.getVarCharVector min-vec) 0 (Text. "Aaron")))
+    (let [max-vec ^UnionVector (.getVector r "max")]
+      (.setType max-vec 0 Types$MinorType/VARCHAR)
+      (.setSafe (.getVarCharVector max-vec) 0 (Text. "Zach")))
+    (.setSafe ^BigIntVector (.getVector r "count") 0 2)
+    (.setRowCount r 1)
+
+    (.setSafe ^VarCharVector (.getVector r "file") 1 (Text. "00000"))
+    (.setSafe ^VarCharVector (.getVector r "column") 1 (Text. "name"))
+    (.setSafe ^VarCharVector (.getVector r "field") 1 (Text. "_row-id"))
+    (let [min-vec ^UnionVector (.getVector r "min")]
+      (.setType  min-vec 1 Types$MinorType/BIGINT)
+      (.setSafe (.getBigIntVector min-vec) 1 1))
+    (let [max-vec ^UnionVector (.getVector r "max")]
+      (.setType max-vec 1 Types$MinorType/BIGINT)
+      (.setSafe (.getBigIntVector max-vec) 1 2))
+    (.setSafe ^BigIntVector (.getVector r "count") 1 2)
+    (.setRowCount r 2)
+
+    (.setSafe ^VarCharVector (.getVector r "file") 2 (Text. "00000"))
+    (.setSafe ^VarCharVector (.getVector r "column") 2 (Text. "age"))
+    (.setSafe ^VarCharVector (.getVector r "field") 2 (Text. "age"))
+    (let [min-vec ^UnionVector (.getVector r "min")]
+      (.setType min-vec 2 Types$MinorType/BIGINT)
+      (.setSafe (.getBigIntVector min-vec) 2 10))
+    (let [max-vec ^UnionVector (.getVector r "max")]
+      (.setType max-vec 2 Types$MinorType/BIGINT)
+      (.setSafe (.getBigIntVector max-vec) 2 20))
+    (.setSafe ^BigIntVector (.getVector r "count") 2 2)
+    (.setRowCount r 3)
+
+    (.setSafe ^VarCharVector (.getVector r "file") 3 (Text. "00000"))
+    (.setSafe ^VarCharVector (.getVector r "column") 3 (Text. "age"))
+    (.setSafe ^VarCharVector (.getVector r "field") 3 (Text. "_row-id"))
+    (let [min-vec ^UnionVector (.getVector r "min")]
+      (.setType  min-vec 3 Types$MinorType/BIGINT)
+      (.setSafe (.getBigIntVector min-vec) 3 1))
+    (let [max-vec ^UnionVector (.getVector r "max")]
+      (.setType max-vec 3 Types$MinorType/BIGINT)
+      (.setSafe (.getBigIntVector max-vec) 3 2))
+    (.setSafe ^BigIntVector (.getVector r "count") 3 2)
+    (.setRowCount r 4)
+
+    (.contentToTSVString r)))
