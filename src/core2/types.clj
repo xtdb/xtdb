@@ -62,7 +62,7 @@
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
   (set-null! [this idx] (.setNull this ^int idx)))
 
-(def default-primitive-dense-union-fields
+(def dense-union-fields-in-flatbuf-id-order
   (vec (for [^ArrowType arrow-type [(.getType Types$MinorType/NULL)
                                     (.getType Types$MinorType/BIGINT)
                                     (.getType Types$MinorType/FLOAT8)

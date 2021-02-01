@@ -262,6 +262,6 @@
   (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "column" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "field" (.getType Types$MinorType/VARCHAR) true)
-            (t/->dense-union-field "min" t/default-primitive-dense-union-fields)
-            (t/->dense-union-field "max" t/default-primitive-dense-union-fields)
+            (t/->dense-union-field "min" t/dense-union-fields-in-flatbuf-id-order)
+            (t/->dense-union-field "max" t/dense-union-fields-in-flatbuf-id-order)
             (t/->field "count" (.getType Types$MinorType/BIGINT) true)]))
