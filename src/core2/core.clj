@@ -16,6 +16,8 @@
            org.apache.arrow.vector.util.Text
            core2.metadata.IColumnMetadata))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defprotocol TransactionIngester
   (index-tx [ingester tx docs]))
 
@@ -27,7 +29,7 @@
                                   (t/->field "document" (.getType Types$MinorType/DENSEUNION) false))
                        (t/->field "delete" (.getType Types$MinorType/STRUCT) true))]))
 
-(defn- add-element-to-union! [^DenseUnionVector duv type-id parent-offset child-offset]
+(defn- add-element-to-union! [^DenseUnionVector duv type-id ^long parent-offset child-offset]
   (while (< (.getValueCapacity duv) (inc parent-offset))
     (.reAlloc duv))
 
@@ -73,7 +75,7 @@
                                                                        idx))))
                                                         (.registerNewTypeId put-doc-vec doc-field))
                                       struct-vec (.getStruct put-doc-vec field-type-id)
-                                      per-struct-offset (get-in acc [:put :per-struct-offsets doc-field] 0)]
+                                      per-struct-offset (long (get-in acc [:put :per-struct-offsets doc-field] 0))]
 
                                   (.setIndexDefined struct-vec per-struct-offset)
 
@@ -219,7 +221,8 @@
     (when (>= (->> (vals field->live-column)
                    (map (fn [^LiveColumn live-column]
                           (count (.getRecordBlocks ^ArrowFileWriter (.file-writer live-column)))))
-                   (apply max))
+                   (apply max)
+                   (long))
               max-blocks-per-chunk)
       (close-writers! this chunk-idx)
 

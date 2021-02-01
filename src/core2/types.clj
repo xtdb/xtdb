@@ -5,6 +5,8 @@
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal Field FieldType]
            org.apache.arrow.vector.util.Text))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (def ->arrow-type
   {Boolean (.getType Types$MinorType/BIT)
    (Class/forName "[B") (.getType Types$MinorType/VARBINARY)

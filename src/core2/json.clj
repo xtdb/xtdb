@@ -7,6 +7,8 @@
            org.apache.arrow.vector.VectorSchemaRoot
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamReader JsonFileWriter]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn- file->json-file ^java.io.File [^File file]
   (io/file (.getParentFile file) (format "%s.json" (.getName file))))
 
@@ -24,7 +26,6 @@
           (.start file-writer (.getSchema root) nil)
           (while (.loadNextBatch file-reader)
             (.write file-writer root)))))))
-
 
 (defn arrow-streaming->json ^String [^bytes bs]
   (let [json-file (File/createTempFile "arrow" "json")]

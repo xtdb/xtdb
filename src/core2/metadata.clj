@@ -10,6 +10,8 @@
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$ArrowTypeID Field Schema]
            org.apache.arrow.vector.util.Text))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (definterface IColumnMetadata
   (^void updateMetadata [^org.apache.arrow.vector.FieldVector field-vector])
   (^void writeMetadata [^org.apache.arrow.vector.VectorSchemaRoot metadata-root ^int idx]))
