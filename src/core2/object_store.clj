@@ -11,7 +11,7 @@
   (^java.util.concurrent.Future listObjects [])
   (^java.util.concurrent.Future deleteObject [^String k]))
 
-(defrecord LocalDirectoryObjectStore [^File dir]
+(deftype LocalDirectoryObjectStore [^File dir]
   ObjectStore
   (getObject [this k]
     (future
