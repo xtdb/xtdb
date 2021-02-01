@@ -62,7 +62,7 @@
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
   (set-null! [this idx] (.setNull this ^int idx)))
 
-(def default-union-fields
+(def default-primitive-dense-union-fields
   (vec (for [^ArrowType arrow-type [(.getType Types$MinorType/NULL)
                                     (.getType Types$MinorType/BIGINT)
                                     (.getType Types$MinorType/FLOAT8)
@@ -74,7 +74,7 @@
          (->field (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type))) arrow-type true))))
 
 
-(defn ->dense-union-field [^String field-name union-fields]
+(defn ->dense-union-field ^org.apache.arrow.vector.types.pojo.Field [^String field-name union-fields]
   (apply ->field field-name
          (.getType Types$MinorType/DENSEUNION)
          false
