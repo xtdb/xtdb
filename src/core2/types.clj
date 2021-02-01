@@ -62,7 +62,7 @@
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
   (set-null! [this idx] (.setNull this ^int idx)))
 
-(def ^:private default-union-fields
+(def default-union-fields
   (vec (for [^ArrowType arrow-type [(.getType Types$MinorType/NULL)
                                     (.getType Types$MinorType/BIGINT)
                                     (.getType Types$MinorType/FLOAT8)
@@ -74,11 +74,8 @@
          (->field (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type))) arrow-type true))))
 
 
-(defn ->dense-union-field
-  ([^String field-name]
-   (apply ->dense-union-field field-name default-union-fields))
-  ([^String field-name & union-fields]
-   (apply ->field field-name
-          (.getType Types$MinorType/DENSEUNION)
-          false
-          union-fields)))
+(defn ->dense-union-field [^String field-name union-fields]
+  (apply ->field field-name
+         (.getType Types$MinorType/DENSEUNION)
+         false
+         union-fields))

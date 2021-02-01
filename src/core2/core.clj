@@ -22,7 +22,7 @@
 (declare close-writers!)
 
 (def ^:private tx-arrow-schema
-  (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) true
+  (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
                        (t/->field "put" (.getType Types$MinorType/STRUCT) false
                                   (t/->field "document" (.getType Types$MinorType/DENSEUNION) false))
                        (t/->field "delete" (.getType Types$MinorType/STRUCT) true))]))

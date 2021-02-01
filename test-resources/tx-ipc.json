@@ -2,7 +2,7 @@
   "schema" : {
     "fields" : [{
       "name" : "tx-ops",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "union",
         "mode" : "Dense",
