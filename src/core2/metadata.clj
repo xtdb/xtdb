@@ -14,6 +14,17 @@
   (^void updateMetadata [^org.apache.arrow.vector.FieldVector field-vector])
   (^void writeMetadata [^org.apache.arrow.vector.VectorSchemaRoot metadata-root ^int idx]))
 
+(deftype NullMetadata [^:unsynchronized-mutable ^long cnt]
+  IColumnMetadata
+  (updateMetadata [this field-vector]
+    (set! (.cnt this) (+ cnt (.getValueCount field-vector))))
+
+  (writeMetadata [_ metadata-root idx]
+    (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))
+
+  Closeable
+  (close [_]))
+
 (deftype BitMetadata [^NullableBitHolder min-val
                       ^NullableBitHolder max-val
                       ^:unsynchronized-mutable ^long cnt]
@@ -211,12 +222,13 @@
 
 (defn ->metadata ^core2.metadata.IColumnMetadata [^ArrowType arrow-type]
   (condp = (Types/getMinorTypeForArrowType arrow-type)
-    Types$MinorType/BIT (->BitMetadata (NullableBitHolder.) (NullableBitHolder.) 0)
+    Types$MinorType/NULL (->NullMetadata 0)
     Types$MinorType/BIGINT (->BigIntMetadata (NullableBigIntHolder.) (NullableBigIntHolder.) 0)
-    Types$MinorType/DATEMILLI (->DateMilliMetadata (NullableDateMilliHolder.) (NullableDateMilliHolder.) 0)
     Types$MinorType/FLOAT8 (->Float8Metadata (NullableFloat8Holder.) (NullableFloat8Holder.) 0)
     Types$MinorType/VARBINARY (->VarBinaryMetadata nil nil 0 (ArrowBufPointer.))
     Types$MinorType/VARCHAR (->VarCharMetadata nil nil 0 (ArrowBufPointer.))
+    Types$MinorType/BIT (->BitMetadata (NullableBitHolder.) (NullableBitHolder.) 0)
+    Types$MinorType/DATEMILLI (->DateMilliMetadata (NullableDateMilliHolder.) (NullableDateMilliHolder.) 0)
     (throw (UnsupportedOperationException.))))
 
 (def ^:private metadata-union-fields
