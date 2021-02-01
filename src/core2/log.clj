@@ -9,3 +9,15 @@
 
 (defprotocol LogReader
   (^java.util.List readRecords [^long from-offset ^int limit]))
+
+#_(deftype LocalDirectoryLog [^File dir]
+    LogWriter
+    (appendRecord [this record]
+      (future))
+
+    LogReader
+    (readRecords [this from-offset limit]
+      ))
+
+#_(defn ->local-directory-log ^core2.object_store.LocalDirectoryLog [dir]
+    (->LocalDirectoryLog (io/file dir)))

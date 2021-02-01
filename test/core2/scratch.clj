@@ -60,12 +60,12 @@
             :ssid ssid})))))
 
 ;;; ingest
-;; TODO 4. writing metadata - minmax, bloom at chunk/file and block/record-batch
-;; TODO 4b. columnar metadata?
-;; TODO 4c. batched metadata?
-;; TODO 11. (solo) figure out last tx-id/row-id from latest chunk and resume ingest on start.
-;; TODO 13. (solo) log protocol. File implementation.
-;; TODO 12. object store protocol, store chunks and metadata. File implementation.
+;; TODO object store protocol, store chunks and metadata. Local directory implementation.
+;; TODO log protocol. Local directory implementation.
+;; TODO figure out last tx-id/row-id from latest chunk and resume ingest on start.
+;; TODO (bonus) refactor ingest to use holders / simplify union code.
+;; TODO (bonus) unnest ops similar to metadata.
+;; TODO (bonus) blocks vs chunks in object store?
 
 ;;; query
 ;; TODO 7. reading any blocks - select battery_level from db (simple code-level query)
@@ -79,6 +79,7 @@
 ;;; future
 ;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions, including nulls)
 ;; TODO 4d. block-level metadata - where do we store it?
+;; TODO 4e. bloom filters in metadata.
 ;; TODO 5. dictionaries
 ;; TODO 6. consider eviction
 ;; TODO 1b. writer?
