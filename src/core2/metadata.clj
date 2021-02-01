@@ -5,7 +5,7 @@
            org.apache.arrow.memory.util.ByteFunctionHelpers
            [org.apache.arrow.vector BigIntVector BitVector DateMilliVector FieldVector Float8Vector VarBinaryVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.UnionVector
-           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableDateMilliHolder NullableFloat8Holder]
+           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableDateMilliHolder NullableFloat8Holder NullableVarBinaryHolder NullableVarCharHolder]
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.apache.arrow.vector.util.Text))
@@ -137,13 +137,24 @@
                                                                       (alength max-val))))
             (set! (.max-val this) (.get field-vector idx)))))))
 
+
   (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^UnionVector (.getVector metadata-root "min")]
-      (.setType min-vec idx Types$MinorType/VARBINARY)
-      (.setSafe (.getVarBinaryVector min-vec) idx min-val))
-    (let [max-vec ^UnionVector (.getVector metadata-root "max")]
-      (.setType max-vec idx Types$MinorType/VARBINARY)
-      (.setSafe (.getVarBinaryVector max-vec) idx max-val))
+    (let [min-vec ^UnionVector (.getVector metadata-root "min")
+          max-vec ^UnionVector (.getVector metadata-root "max")
+          allocator (.getAllocator min-vec)
+          holder (NullableVarBinaryHolder.)]
+      (set! (.isSet holder) 1)
+      (set! (.start holder) 0)
+      (with-open [b (.buffer allocator (max (alength min-val) (alength max-val)))]
+        (set! (.buffer holder) b)
+
+        (set! (.end holder) (alength min-val))
+        (.setBytes b 0 min-val)
+        (.setSafe min-vec idx holder)
+
+        (set! (.end holder) (alength max-val))
+        (.setBytes b 0 max-val)
+        (.setSafe max-vec idx holder)))
     (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))
 
   Closeable
@@ -177,12 +188,22 @@
             (set! (.max-val this) (.get field-vector idx)))))))
 
   (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^UnionVector (.getVector metadata-root "min")]
-      (.setType min-vec idx Types$MinorType/VARCHAR)
-      (.setSafe (.getVarCharVector min-vec) idx (Text. min-val)))
-    (let [max-vec ^UnionVector (.getVector metadata-root "max")]
-      (.setType max-vec idx Types$MinorType/VARCHAR)
-      (.setSafe (.getVarCharVector max-vec) idx (Text. max-val)))
+    (let [min-vec ^UnionVector (.getVector metadata-root "min")
+          max-vec ^UnionVector (.getVector metadata-root "max")
+          allocator (.getAllocator min-vec)
+          holder (NullableVarCharHolder.)]
+      (set! (.isSet holder) 1)
+      (set! (.start holder) 0)
+      (with-open [b (.buffer allocator (max (alength min-val) (alength max-val)))]
+        (set! (.buffer holder) b)
+
+        (set! (.end holder) (alength min-val))
+        (.setBytes b 0 min-val)
+        (.setSafe min-vec idx holder)
+
+        (set! (.end holder) (alength max-val))
+        (.setBytes b 0 max-val)
+        (.setSafe max-vec idx holder)))
     (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))
 
   Closeable
