@@ -47,11 +47,15 @@ public class TestUtils {
         }
     }
 
+    public static void sync(ICruxAPI node) {
+        node.sync(duration);
+    }
+
     static List<Object> listOf(Object... objects) {
         return Arrays.asList(objects);
     }
 
-    static Date date(long diff) {
+    public static Date date(long diff) {
         return Date.from(now.toInstant().plusMillis(diff));
     }
 
@@ -100,7 +104,7 @@ public class TestUtils {
         return tx(node, txOp);
     }
 
-    static void close(Closeable closeable) {
+    public static void close(Closeable closeable) {
         try {
             closeable.close();
         }
@@ -127,7 +131,7 @@ public class TestUtils {
         return list.get(list.size() - 1);
     }
 
-    static void awaitTx(ICruxAPI node, TransactionInstant tx) {
+    public static void awaitTx(ICruxAPI node, TransactionInstant tx) {
         node.awaitTx(tx, duration);
     }
 
