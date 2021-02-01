@@ -481,9 +481,9 @@ You submit these transactions to a database value using `with-tx`:
 [source,clojure]
 ----
 include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-0,indent=0]
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-1,indent=5]
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-2,indent=5]
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-3,indent=5]
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-1,indent=2]
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-2,indent=2]
+include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-3,indent=2]
 ----
 --
 ====
