@@ -1,8 +1,8 @@
 (ns core2.types
   (:import java.util.Date
            [org.apache.arrow.vector BigIntVector BitVector DateMilliVector Float8Vector NullVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType]
+           [org.apache.arrow.vector.types Types Types$MinorType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (def ->arrow-type
@@ -61,3 +61,24 @@
   VarCharVector
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
   (set-null! [this idx] (.setNull this ^int idx)))
+
+(def ^:private default-union-fields
+  (vec (for [^ArrowType arrow-type [(.getType Types$MinorType/NULL)
+                                    (.getType Types$MinorType/BIGINT)
+                                    (.getType Types$MinorType/FLOAT8)
+                                    (.getType Types$MinorType/VARBINARY)
+                                    (.getType Types$MinorType/VARCHAR)
+                                    (.getType Types$MinorType/BIT)
+                                    (ArrowType$Decimal/createDecimal 16 16 (Integer/valueOf 128))
+                                    (.getType Types$MinorType/DATEMILLI)]]
+         (->field (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type))) arrow-type true))))
+
+
+(defn ->dense-union-field
+  ([^String field-name]
+   (apply ->dense-union-field field-name default-union-fields))
+  ([^String field-name & union-fields]
+   (apply ->field field-name
+          (.getType Types$MinorType/DENSEUNION)
+          false
+          union-fields)))
