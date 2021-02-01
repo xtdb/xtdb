@@ -260,7 +260,7 @@
     Types$MinorType/DATEMILLI (->DateMilliMetadata (NullableDateMilliHolder.) (NullableDateMilliHolder.) 0)
     (throw (UnsupportedOperationException.))))
 
-(def ^org.apache.arrow.flatbuf.Schema metadata-schema
+(def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "column" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "field" (.getType Types$MinorType/VARCHAR) true)
