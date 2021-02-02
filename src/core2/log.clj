@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io])
   (:import [java.io Closeable EOFException File RandomAccessFile]
            java.nio.ByteBuffer
-           [java.util ArrayList Date List]
+           [java.time Clock]
+           [java.util ArrayList Date]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService TimeUnit]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -61,7 +62,7 @@
       (finally
         (.close log-file)))))
 
-(defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue]
+(defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue ^Clock clock]
   (let [log-channel (.getChannel log-file)]
     (while true
       (when-let [element (.take queue)]
@@ -72,7 +73,7 @@
             (let [jobs (reduce
                         (fn [acc [f ^ByteBuffer record]]
                           (let [offset (.getFilePointer log-file)
-                                time (Date.)
+                                time (Date. (.millis clock))
                                 written-record (.duplicate record)
                                 size (.remaining written-record)
                                 check (bit-xor (unchecked-int offset) size)]
@@ -96,12 +97,13 @@
   (let [log-file (RandomAccessFile. (io/file dir "LOG") "r")]
     (->LocalDirectoryLogReader dir log-file)))
 
-(defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter [^File dir {:keys [buffer-size]
-                                                                                  :or {buffer-size 1024}}]
+(defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter
+  [^File dir {:keys [buffer-size clock]
+              :or {buffer-size 1024, clock (Clock/systemUTC)}}]
   (.mkdirs dir)
   (let [pool (Executors/newSingleThreadExecutor)
         queue (ArrayBlockingQueue. buffer-size)
         log-file (RandomAccessFile. (io/file dir "LOG") "rw")]
     (.seek log-file (.length log-file))
-    (.submit pool ^Runnable #(writer-append-loop log-file queue))
+    (.submit pool ^Runnable #(writer-append-loop log-file queue clock))
     (->LocalDirectoryLogWriter dir log-file pool queue)))
