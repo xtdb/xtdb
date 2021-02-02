@@ -1,5 +1,6 @@
 (ns core2.object-store
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [core2.util :as util])
   (:import java.io.Closeable
            [java.nio.file CopyOption StandardCopyOption Files LinkOption Path]
            java.nio.file.attribute.FileAttribute
@@ -14,41 +15,28 @@
   (^java.util.concurrent.CompletableFuture listObjects [])
   (^java.util.concurrent.CompletableFuture deleteObject [^String k]))
 
-(defn- ->supplier ^java.util.function.Supplier [f]
-  (reify Supplier
-    (get [_]
-      (f))))
-
-(defmacro completable-future {:style/indent 1} [pool & body]
-  `(CompletableFuture/supplyAsync
-    (->supplier (fn [] ~@body))
-    ~pool))
-
-(defn- mkdirs [^Path path]
-  (Files/createDirectories path (make-array FileAttribute 0)))
-
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore
   (getObject [_this k to-path]
-    (completable-future pool
+    (util/completable-future pool
       (let [from-path (.resolve root-path k)]
         (when (Files/exists from-path (make-array LinkOption 0))
           (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
           to-path))))
 
   (putObject [_this k from-path]
-    (completable-future pool
+    (util/completable-future pool
       (let [to-path (.resolve root-path k)]
-        (mkdirs (.getParent to-path))
+        (util/mkdirs (.getParent to-path))
         (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0)))))
 
   (listObjects [_this]
-    (completable-future pool
+    (util/completable-future pool
       (vec (sort (for [^Path path (iterator-seq (.iterator (Files/list root-path)))]
                    (str (.relativize root-path path)))))))
 
   (deleteObject [_this k]
-    (completable-future pool
+    (util/completable-future pool
       (Files/deleteIfExists (.resolve root-path k))))
 
   Closeable
@@ -63,7 +51,7 @@
    (->local-directory-object-store root-path {}))
   (^core2.object_store.FileSystemObjectStore
    [^Path root-path {:keys [pool-size], :or {pool-size 4}}]
-   (mkdirs root-path)
+   (util/mkdirs root-path)
    (->FileSystemObjectStore root-path (Executors/newFixedThreadPool pool-size))))
 
 ;; ok, so where we at?

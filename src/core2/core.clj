@@ -10,7 +10,6 @@
            [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
-           java.util.function.Function
            [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
@@ -112,41 +111,43 @@
   (ingest/->TransactionInstant (.offset record) (.time record)))
 
 (defn submit-tx ^java.util.concurrent.CompletableFuture [^LogWriter log-writer tx-ops ^BufferAllocator allocator]
-  (.thenApply (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
-              (reify Function
-                (apply [_ result]
-                  (log-record->tx-instant result)))))
+  (-> (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
+      (util/then-apply
+        (fn [result]
+          (log-record->tx-instant result)))))
 
 (defn latest-completed-tx [^ObjectStore os, ^BufferAllocator allocator]
   (-> (.listObjects os)
-      (.thenCompose (reify Function
-                      (apply [_ ks]
-                        (if-let [metadata-path (last (sort (filter #(str/starts-with? % "metadata-") ks)))]
-                          (let [tmp-file (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
-                                           (-> .toFile .deleteOnExit))]
-                            (.getObject os metadata-path tmp-file))
-                          (CompletableFuture/completedFuture nil)))))
-      (.thenApply (reify Function
-                    (apply [_ tmp-path]
-                      (when tmp-path
-                        (with-open [file-ch (Files/newByteChannel tmp-path (into-array OpenOption #{StandardOpenOption/READ}))
-                                    file-reader (ArrowFileReader. file-ch allocator)]
-                          (let [root (.getVectorSchemaRoot file-reader)]
-                            (.loadNextBatch file-reader)
-                            (let [field-vec (.getVector root "field")
-                                  ->field-idx (fn [col-name]
-                                                (reduce (fn [_ ^long idx]
-                                                          (when (= (str (.getObject field-vec idx))
-                                                                   col-name)
-                                                            (reduced idx)))
-                                                        nil
-                                                        (range (.getValueCount field-vec))))
-                                  tx-id-idx (->field-idx "_tx-id")
-                                  tx-time-idx (->field-idx "_tx-time")
 
-                                  max-vec (.getVector root "max")]
-                              (ingest/->TransactionInstant (.getObject max-vec tx-id-idx)
-                                                           (util/local-date-time->date (.getObject max-vec tx-time-idx))))))))))))
+      (util/then-compose
+        (fn [ks]
+          (if-let [metadata-path (last (sort (filter #(str/starts-with? % "metadata-") ks)))]
+            (let [tmp-file (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
+                             (-> .toFile .deleteOnExit))]
+              (.getObject os metadata-path tmp-file))
+            (CompletableFuture/completedFuture nil))))
+
+      (util/then-apply
+        (fn [tmp-path]
+          (when tmp-path
+            (with-open [file-ch (Files/newByteChannel tmp-path (into-array OpenOption #{StandardOpenOption/READ}))
+                        file-reader (ArrowFileReader. file-ch allocator)]
+              (.loadNextBatch file-reader)
+              (let [root (.getVectorSchemaRoot file-reader)
+                    field-vec (.getVector root "field")
+                    ->field-idx (fn [col-name]
+                                  (reduce (fn [_ ^long idx]
+                                            (when (= (str (.getObject field-vec idx))
+                                                     col-name)
+                                              (reduced idx)))
+                                          nil
+                                          (range (.getValueCount field-vec))))
+                    tx-id-idx (->field-idx "_tx-id")
+                    tx-time-idx (->field-idx "_tx-time")
+
+                    max-vec (.getVector root "max")]
+                (ingest/->TransactionInstant (.getObject max-vec tx-id-idx)
+                                             (util/local-date-time->date (.getObject max-vec tx-time-idx))))))))))
 
 (defn index-all-available-transactions
   ([^LogReader log-reader
