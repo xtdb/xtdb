@@ -5,15 +5,14 @@
             [core2.core :as c2]
             [core2.ingest :as ingest]
             [core2.json :as c2-json]
-            [core2.object-store :as os])
+            [core2.object-store :as os]
+            [core2.util :as util])
   (:import java.io.File
            org.apache.arrow.memory.RootAllocator))
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [object-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/object-store")]
-    (doseq [^File f (reverse (file-seq object-dir))]
-      (.delete f))
-
+    (util/delete-dir object-dir)
     (t/is (not (.exists object-dir)))
 
     (with-open [a (RootAllocator. Long/MAX_VALUE)

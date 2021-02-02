@@ -1,6 +1,8 @@
 (ns core2.util
+  (:require [clojure.java.io :as io])
   (:import java.nio.ByteBuffer
-           java.nio.channels.SeekableByteChannel))
+           java.nio.channels.SeekableByteChannel
+           [java.nio.file Files FileVisitResult SimpleFileVisitor]))
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
   (let [buffer (.duplicate buffer)]
@@ -32,3 +34,18 @@
 
       (truncate [size]
         (throw (UnsupportedOperationException.))))))
+
+(def ^:private file-deletion-visitor
+  (proxy [SimpleFileVisitor] []
+    (visitFile [file _]
+      (Files/delete file)
+      FileVisitResult/CONTINUE)
+
+    (postVisitDirectory [dir _]
+      (Files/delete dir)
+      FileVisitResult/CONTINUE)))
+
+(defn delete-dir [dir]
+  (let [dir (io/file dir)]
+    (when (.exists dir)
+      (Files/walkFileTree (.toPath dir) file-deletion-visitor))))

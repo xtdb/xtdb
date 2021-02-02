@@ -189,8 +189,7 @@
   Closeable
   (close [this]
     (close-writers! this)
-    (doseq [^File file (reverse (file-seq arrow-dir))]
-      (.delete file))))
+    (util/delete-dir arrow-dir)))
 
 (defn- close-writers! [^Ingester ingester]
   (let [^Map field->live-column (.field->live-column ingester)]
