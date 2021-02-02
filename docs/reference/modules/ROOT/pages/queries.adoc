@@ -187,6 +187,16 @@ include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6-r,inden
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
 
+[#return-maps]
+== Returning maps
+To return maps rather than tuples, supply the map keys under `:keys` for keywords, `:syms` for symbols, or `:strs` for strings:
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=return-maps,indent=0]
+include::example$test/crux/docs/examples/query_test.clj[tags=return-maps-r,indent=0]
+----
+
 [#where]
 == Where
 
@@ -198,7 +208,7 @@ The `:where` section of a query limits the combinations of possible results by s
 |Name|Description
 |<<#clause-triple, triple clause>>| Restrict using EAV indexes
 |<<#clause-pred, predicate>>| Restrict with any predicate
-|<<#clause-range, range predicate>>| Restrict with any of `< <= >= > =` 
+|<<#clause-range, range predicate>>| Restrict with any of `< <= >= > =`
 |<<#clause-unification, unification predicate>>| Unify two distinct logic variables with `!=` or `==`
 |<<#clause-not, not rule>>| Negate a list of clauses
 |<<#clause-not-join, not-join rule>>| Not rule with its own scope

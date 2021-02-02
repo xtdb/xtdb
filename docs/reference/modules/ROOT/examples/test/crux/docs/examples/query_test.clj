@@ -1,7 +1,8 @@
 (ns crux.docs.examples.query-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
-            [crux.fixtures :as fix :refer [*api*]]))
+            [crux.fixtures :as fix :refer [*api*]]
+            [user :as user]))
 
 (def ^:dynamic *storage-dir*)
 
@@ -437,6 +438,33 @@
             '{:find [(eql/project ?user [*])]
               :where [[?user :user/id 1]]})
            ;; end::eql-query-6[]
+           ))))
+
+(t/deftest test-return-maps
+  (fix/submit+await-tx
+   (fix/maps->tx-ops
+    [{:crux.db/id :ivan :user/name "Ivan" :user/id 1 :user/profession :doctor}
+     {:crux.db/id :sergei :user/name "Sergei" :user/id 2 :user/profession :lawyer}
+     {:crux.db/id :petr :user/name "Petr" :user/id 3 :user/profession :doctor}
+     {:crux.db/id :doctor :profession/name "Doctor"}
+     {:crux.db/id :lawyer :profession/name "Lawyer"}]))
+
+  (let [node *api*]
+    (t/is (=
+           ;; tag::return-maps-r[]
+           #{{:name "Ivan", :profession "Doctor"}}
+           ;; end::return-maps-r[]
+
+           ;; tag::return-maps[]
+           (crux/q
+            (crux/db node)
+            '{:find [?name ?profession-name]
+              :keys [name profession]
+              :where [[?user :user/id 1]
+                      [?user :user/name ?name]
+                      [?user :user/profession ?profession]
+                      [?profession :profession/name ?profession-name]]})
+           ;; end::return-maps[]
            ))))
 
 (t/deftest test-order-and-pagination

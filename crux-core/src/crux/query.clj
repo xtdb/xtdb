@@ -124,6 +124,10 @@
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
 
+(s/def ::keys (s/coll-of symbol? :kind vector?))
+(s/def ::syms (s/coll-of symbol? :kind vector?))
+(s/def ::strs (s/coll-of symbol? :kind vector?))
+
 (s/def ::where (s/coll-of ::term :kind vector? :min-count 1))
 
 (s/def ::arg-tuple (s/map-of (some-fn logic-var? keyword?) any?))
@@ -214,8 +218,17 @@
     :else q))
 
 (s/def ::query (s/and (s/conformer #'normalize-query)
+
                       (s/keys :req-un [::find]
-                              :opt-un [::where ::in ::args ::rules ::offset ::limit ::order-by ::timeout ::full-results? ::batch-size])))
+                              :opt-un [::keys ::syms ::strs
+                                       ::in ::where ::args ::rules
+                                       ::offset ::limit ::order-by
+                                       ::timeout ::full-results? ::batch-size])
+
+                      (fn [{:keys [find] :as q}]
+                        (->> (keep q [:keys :syms :strs])
+                             (every? (fn [ks]
+                                       (= (count ks) (count find))))))))
 
 (defrecord ConformedQuery [q-normalized q-conformed])
 
@@ -1662,6 +1675,13 @@
         [in in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn nil where in (rule-name->rules rules) stats)))
 
+(defn- ->return-maps [{:keys [keys syms strs]}]
+  (let [ks (or (some->> keys (mapv keyword))
+               (some->> syms (mapv symbol))
+               (some->> strs (mapv str)))]
+    (fn [row]
+      (zipmap ks row))))
+
 (defn query [{:keys [index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
@@ -1682,6 +1702,7 @@
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
           project? (or (contains? var-types :project) full-results?)
+          return-maps? (some q [:keys :syms :strs])
           var-bindings (mapv :var-binding compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
               :when (nil? var-binding)]
@@ -1702,7 +1723,8 @@
          order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         project? (project/->project-result db compiled-find q-conformed))))))
+         project? (project/->project-result db compiled-find q-conformed)
+         return-maps? (map (->return-maps q)))))))
 
 (defn entity-tx [{:keys [valid-time tx-id] :as db} index-snapshot eid]
   (when tx-id

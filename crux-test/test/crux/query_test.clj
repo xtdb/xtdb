@@ -65,6 +65,45 @@
                                                         [p1 :last-name name]
                                                         [p1 :name "Smith"]]})))))
 
+(t/deftest test-returning-maps
+  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov"}]))
+
+  (let [db (api/db *api*)]
+    (t/is (= #{{:user/name "Ivan", :user/last-name "Ivanov"}
+               {:user/name "Petr", :user/last-name "Petrov"}}
+             (api/q (api/db *api*)
+                    '{:find [?name ?last-name]
+                      :keys [user/name user/last-name]
+                      :where [[e :name ?name]
+                              [e :last-name ?last-name]]})))
+
+    (t/is (= #{{'user/name "Ivan", 'user/last-name "Ivanov"}
+               {'user/name "Petr", 'user/last-name "Petrov"}}
+             (api/q (api/db *api*)
+                    '{:find [?name ?last-name]
+                      :syms [user/name user/last-name]
+                      :where [[e :name ?name]
+                              [e :last-name ?last-name]]})))
+
+    (t/is (= #{{"name" "Ivan", "last-name" "Ivanov"}
+               {"name" "Petr", "last-name" "Petrov"}}
+             (api/q (api/db *api*)
+                    '{:find [?name ?last-name]
+                      :strs [name last-name]
+                      :where [[e :name ?name]
+                              [e :last-name ?last-name]]})))
+
+    (t/is (thrown? IllegalArgumentException
+                   (api/q db
+                          '{:find [name last-name]
+                            :keys [name]
+                            :where [[e :name name]
+                                    [e :last-name last-name]
+                                    [e :name "Ivan"]
+                                    [e :last-name "Ivanov"]]}))
+          "throws on arity mismatch")))
+
 (t/deftest test-basic-query-returning-full-results
   (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
 
