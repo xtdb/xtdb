@@ -45,10 +45,10 @@
       (.shutdownNow)
       (.awaitTermination 5 TimeUnit/SECONDS))))
 
-(defn ->local-directory-object-store
+(defn ->file-system-object-store
   (^core2.object_store.FileSystemObjectStore
    [^Path root-path]
-   (->local-directory-object-store root-path {}))
+   (->file-system-object-store root-path {}))
   (^core2.object_store.FileSystemObjectStore
    [^Path root-path {:keys [pool-size], :or {pool-size 4}}]
    (util/mkdirs root-path)

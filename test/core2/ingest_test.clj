@@ -79,7 +79,7 @@
     (with-open [a (RootAllocator. Long/MAX_VALUE)
                 log-reader (log/->local-directory-log-reader log-dir)
                 log-writer (log/->local-directory-log-writer log-dir {:clock mock-clock})
-                os (os/->local-directory-object-store (.toPath object-dir))
+                os (os/->file-system-object-store (.toPath object-dir))
                 i (ingest/->ingester a os)
                 il (c2/->ingest-loop log-reader i @(c2/latest-completed-tx os a))]
 
