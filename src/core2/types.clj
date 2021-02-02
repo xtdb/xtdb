@@ -1,8 +1,8 @@
 (ns core2.types
   (:import java.util.Date
            [org.apache.arrow.vector BigIntVector BitVector DateMilliVector Float8Vector NullVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal Field FieldType]
+           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -76,8 +76,10 @@
          (->field (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type))) arrow-type true))))
 
 
-(defn ->dense-union-field ^org.apache.arrow.vector.types.pojo.Field [^String field-name union-fields]
-  (apply ->field field-name
-         (.getType Types$MinorType/DENSEUNION)
-         false
-         union-fields))
+(defn ->dense-union-field-with-flatbuf-ids ^org.apache.arrow.vector.types.pojo.Field [^String field-name union-fields]
+  (let [type-ids (int-array (for [^Field field union-fields]
+                              (.getFlatbufID (.getTypeID (.getType field)))))]
+    (apply ->field field-name
+           (ArrowType$Union. UnionMode/Dense type-ids)
+           false
+           union-fields)))

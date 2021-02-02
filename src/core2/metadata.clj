@@ -46,7 +46,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (dec (.getFlatbufID ArrowType$ArrowTypeID/Int))]
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/Int)]
       (.setTypeId min-vec idx type-id)
       (.setSafe min-vec idx min-val)
       (.setTypeId max-vec idx type-id)
@@ -75,7 +75,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (dec (.getFlatbufID ArrowType$ArrowTypeID/FloatingPoint))]
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/FloatingPoint)]
       (.setTypeId min-vec idx type-id)
       (.setSafe min-vec idx min-val)
       (.setTypeId max-vec idx type-id)
@@ -116,7 +116,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (dec (.getFlatbufID ArrowType$ArrowTypeID/Binary))
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/Binary)
           allocator (.getAllocator min-vec)
           holder (NullableVarBinaryHolder.)]
       (set! (.isSet holder) 1)
@@ -168,7 +168,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (dec (.getFlatbufID ArrowType$ArrowTypeID/Utf8))
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/Utf8)
           allocator (.getAllocator min-vec)
           holder (NullableVarCharHolder.)]
       (set! (.isSet holder) 1)
@@ -209,7 +209,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (dec (.getFlatbufID ArrowType$ArrowTypeID/Bool))]
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/Bool)]
       (.setTypeId min-vec idx type-id)
       (.setSafe min-vec idx min-val)
       (.setTypeId max-vec idx type-id)
@@ -238,7 +238,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (dec (.getFlatbufID ArrowType$ArrowTypeID/Date))]
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/Date)]
       (.setTypeId min-vec idx type-id)
       (.setSafe min-vec idx min-val)
       (.setTypeId max-vec idx type-id)
@@ -264,6 +264,6 @@
   (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "column" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "field" (.getType Types$MinorType/VARCHAR) true)
-            (t/->dense-union-field "min" t/dense-union-fields-in-flatbuf-id-order)
-            (t/->dense-union-field "max" t/dense-union-fields-in-flatbuf-id-order)
+            (t/->dense-union-field-with-flatbuf-ids "min" t/dense-union-fields-in-flatbuf-id-order)
+            (t/->dense-union-field-with-flatbuf-ids "max" t/dense-union-fields-in-flatbuf-id-order)
             (t/->field "count" (.getType Types$MinorType/BIGINT) true)]))
