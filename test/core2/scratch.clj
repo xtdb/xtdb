@@ -60,7 +60,7 @@
             :ssid ssid})))))
 
 ;;; ingest
-;; TODO object store protocol, store chunks and metadata. Local directory implementation.
+;; DONE object store protocol, store chunks and metadata. Local directory implementation.
 ;; TODO log protocol. Local directory implementation.
 ;; TODO figure out last tx-id/row-id from latest chunk and resume ingest on start.
 ;; TODO (bonus) refactor ingest to use holders / simplify union code.
@@ -77,15 +77,17 @@
 ;; TODO 8d. VSR committed read slice
 
 ;;; future
-;; TODO 3d. dealing with schema that changes throughout an ingest (promotable unions, including nulls)
-;; TODO 4d. block-level metadata - where do we store it?
-;; TODO 4e. bloom filters in metadata.
-;; TODO 5. dictionaries
-;; TODO 6. consider eviction
-;; TODO 1b. writer?
-;; TODO 15. handle deletes
-;; TODO 16. JMH + JSON tests
-;; TODO 17. vectorised operations in the ingester
+;; TODO dealing with schema that changes throughout an ingest (promotable unions, including nulls)
+;; TODO metadata
+;; TODO   block-level metadata - where do we store it?
+;; TODO   bloom filters in metadata.
+;; TODO dictionaries
+;; TODO consider eviction
+;; TODO writer?
+;; TODO handle deletes
+;; TODO JMH + JSON tests
+;; TODO vectorised operations in the ingester
+;; TODO tx-ids?
 
 ;; directions?
 ;; 1. e2e? submit-tx + some code-level queries

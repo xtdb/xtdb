@@ -3,7 +3,7 @@
   (:import [java.io Closeable EOFException File RandomAccessFile]
            java.nio.ByteBuffer
            [java.util ArrayList Date List]
-           [java.util.concurrent ArrayBlockingQueue BlockingQueue Executors ExecutorService CompletableFuture TimeUnit]))
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService TimeUnit]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
