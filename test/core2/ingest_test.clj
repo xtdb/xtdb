@@ -84,10 +84,12 @@
       (doseq [^LogRecord record (.readRecords log-reader nil Integer/MAX_VALUE)]
         (.indexTx i (ingest/->TransactionInstant (.offset record) (.time record)) (.record record)))
 
-      (t/is (empty? (.listFiles object-dir)))
-      (.finishChunk i))
+      (t/is (empty? @(.listObjects os)))
+      (.finishChunk i)
+      (let [objects-list @(.listObjects os)]
+        (t/is (= 21 (count objects-list)))
+        (t/is (= "metadata-00000000.arrow" (last objects-list)))))
 
-    (t/is (= 21 (alength (.listFiles object-dir))))
     (c2-json/write-arrow-json-files object-dir)
     (t/is (= 42 (alength (.listFiles object-dir))))
 

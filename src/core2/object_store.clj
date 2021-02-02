@@ -40,9 +40,9 @@
   (listObjects [_this]
     (completable-future pool
       (let [dir-path (.toPath dir)]
-        (vec (for [^File f (file-seq dir)
-                   :when (.isFile f)]
-               (str (.relativize dir-path (.toPath f))))))))
+        (vec (sort (for [^File f (file-seq dir)
+                         :when (.isFile f)]
+                     (str (.relativize dir-path (.toPath f)))))))))
 
   (deleteObject [_this k]
     (completable-future pool
