@@ -1,9 +1,10 @@
 (ns core2.log
   (:require [clojure.java.io :as io])
-  (:import [java.io Closeable EOFException File RandomAccessFile]
+  (:import clojure.lang.MapEntry
+           [java.io Closeable EOFException File RandomAccessFile]
            java.nio.ByteBuffer
            [java.time Clock]
-           [java.util ArrayList Date]
+           [java.util ArrayList Date List]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService TimeUnit]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -55,7 +56,7 @@
   LogWriter
   (appendRecord [this record]
     (let [f (CompletableFuture.)]
-      (.put queue [f record])
+      (.put queue (MapEntry/create f record))
       f))
 
   Closeable
@@ -83,7 +84,7 @@
             (let [previous-offset (.getFilePointer log-file)
                   jobs (try
                          (reduce
-                          (fn [acc [f ^ByteBuffer record]]
+                          (fn [^List acc [f ^ByteBuffer record]]
                             (let [offset (.getFilePointer log-file)
                                   time (Date. (.millis clock))
                                   written-record (.duplicate record)
@@ -93,8 +94,9 @@
                               (.writeInt log-file size)
                               (.writeLong log-file (.getTime time))
                               (while (pos? (.write log-channel written-record)))
-                              (conj acc [f (->LogRecord offset time record)])))
-                          []
+                              (doto acc
+                                (.add (MapEntry/create f (->LogRecord offset time record))))))
+                          (ArrayList.)
                           elements)
                          (catch Throwable t
                            (.setLength log-file previous-offset)
