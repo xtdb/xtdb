@@ -71,7 +71,8 @@
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [object-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/object-store")
         log-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/log")
-        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])]
+        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
+        last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")]
     (util/delete-dir object-dir)
     (util/delete-dir log-dir)
 
@@ -84,12 +85,10 @@
       (doseq [tx-ops txs]
         @(c2/submit-tx log-writer tx-ops a))
 
-      (c2/index-all-available-transactions log-reader i @(c2/latest-completed-tx os a))
+      (t/is (= last-tx-instant (c2/index-all-available-transactions log-reader i @(c2/latest-completed-tx os a))))
 
       (.finishChunk i)
-
-      (t/is (= (ingest/->TransactionInstant 3496 #inst "2020-01-02")
-               @(c2/latest-completed-tx os a)))
+      (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
 
       (let [objects-list @(.listObjects os)]
         (t/is (= 21 (count objects-list)))
