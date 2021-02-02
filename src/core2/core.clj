@@ -5,16 +5,19 @@
   (:import java.io.ByteArrayOutputStream
            java.nio.ByteBuffer
            java.nio.channels.Channels
-           java.util.function.BiFunction
-           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           java.util.function.Function
+           [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamWriter
-           [org.apache.arrow.vector.types Types Types$MinorType]
+           [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
            [core2.log LogRecord LogWriter]))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(definterface SubmitTx
+  (^java.util.concurrent.CompletableFuture submitTx [_ ]))
 
 (def ^:private tx-arrow-schema
   (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
@@ -101,9 +104,7 @@
   (ingest/->TransactionInstant (.offset record) (.time record)))
 
 (defn submit-tx ^java.util.concurrent.CompletableFuture [^LogWriter log-writer tx-ops ^BufferAllocator allocator]
-  (.handle (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
-           (reify BiFunction
-             (apply [_ result exception]
-               (if exception
-                 (throw exception)
-                 (log-record->tx-instant result))))))
+  (.thenApply (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
+              (reify Function
+                (apply [_ result]
+                  (log-record->tx-instant result)))))
