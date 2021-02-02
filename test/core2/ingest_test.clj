@@ -79,10 +79,10 @@
                               :cpu-avg-1min 4.93,
                               :mem-free 7.20742332E8,
                               :mem-used 2.79257668E8}}]]]
-        @(.appendRecord log-writer (c2/serialize-tx-ops tx-ops a)))
+        @(c2/submit-tx log-writer tx-ops a))
 
       (doseq [^LogRecord record (.readRecords log-reader nil Integer/MAX_VALUE)]
-        (.indexTx i (ingest/->TransactionInstant (.offset record) (.time record)) (.record record)))
+        (.indexTx i (c2/log-record->tx-instant record) (.record record)))
 
       (t/is (empty? @(.listObjects os)))
       (.finishChunk i)

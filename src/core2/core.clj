@@ -1,14 +1,18 @@
 (ns core2.core
-  (:require [core2.types :as t])
+  (:require [core2.types :as t]
+            [core2.ingest :as ingest]
+            [core2.log :as log])
   (:import java.io.ByteArrayOutputStream
            java.nio.ByteBuffer
            java.nio.channels.Channels
-           org.apache.arrow.memory.RootAllocator
+           java.util.function.BiFunction
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamWriter
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo Field Schema]))
+           [org.apache.arrow.vector.types.pojo Field Schema]
+           [core2.log LogRecord LogWriter]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -27,7 +31,7 @@
            (* DenseUnionVector/OFFSET_WIDTH parent-offset)
            child-offset))
 
-(defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^RootAllocator allocator]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
     (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
 
@@ -92,3 +96,14 @@
           (.writeBatch)
           (.end))
         (ByteBuffer/wrap (.toByteArray baos))))))
+
+(defn log-record->tx-instant ^core2.ingest.TransactionInstant [^LogRecord record]
+  (ingest/->TransactionInstant (.offset record) (.time record)))
+
+(defn submit-tx ^java.util.concurrent.CompletableFuture [^LogWriter log-writer tx-ops ^BufferAllocator allocator]
+  (.handle (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
+           (reify BiFunction
+             (apply [_ result exception]
+               (if exception
+                 (throw exception)
+                 (log-record->tx-instant result))))))
