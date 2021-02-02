@@ -1,38 +1,56 @@
 (ns core2.log
   (:require [clojure.java.io :as io])
-  (:import [java.io Closeable File RandomAccessFile]
+  (:import [java.io Closeable EOFException File RandomAccessFile]
+           java.nio.ByteBuffer
            [java.util ArrayList Date List]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue Executors ExecutorService CompletableFuture TimeUnit]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (definterface LogWriter
-  (^java.util.concurrent.CompletableFuture appendRecord [^bytes record]))
+  (^java.util.concurrent.CompletableFuture appendRecord [^java.nio.ByteBuffer record]))
 
 (definterface LogReader
-  (^java.util.List readRecords [^long from-offset ^int limit]))
+  (^java.util.List readRecords [^Long after-offset ^int limit]))
 
-(defrecord LogRecord [^long offset ^Date time ^bytes record])
+(defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
 
-(deftype LocalDirectoryLog [^File dir ^RandomAccessFile read-raf ^ExecutorService pool ^BlockingQueue queue]
+(deftype LocalDirectoryLogReader [^File dir ^RandomAccessFile log-file]
+  LogReader
+  (readRecords [this after-offset limit]
+    (.seek log-file (or after-offset 0))
+    (loop [limit (inc limit)
+           acc []]
+      (let [offset (.getFilePointer log-file)]
+        (if (or (zero? limit) (= offset (.length log-file)))
+          (if after-offset
+            (subvec acc 1)
+            acc)
+          (if-let [record (try
+                            (let [check (.readInt log-file)
+                                  size (.readInt log-file)
+                                  _ (when-not (= check (bit-xor (unchecked-int offset) size))
+                                      (throw (IllegalStateException. "invalid record")))
+                                  time (Date. (.readLong log-file))
+                                  record (doto (byte-array size)
+                                           (->> (.readFully log-file)))]
+                              (->LogRecord offset time (ByteBuffer/wrap record)))
+                            (catch EOFException _))]
+            (recur (dec limit) (conj acc record))
+            (if after-offset
+              (subvec acc 1)
+              acc))))))
+
+  Closeable
+  (close [_]
+    (.close log-file)))
+
+(deftype LocalDirectoryLogWriter [^File dir ^RandomAccessFile log-file ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
   (appendRecord [this record]
     (let [f (CompletableFuture.)]
       (.put queue [f record])
       f))
-
-  LogReader
-  (readRecords [this from-offset limit]
-    (.seek read-raf from-offset)
-    (loop [limit limit
-           acc []]
-      (let [offset (.getFilePointer read-raf)]
-        (if (or (zero? limit) (= offset (.length read-raf)))
-          acc
-          (recur (dec limit)
-                 (conj acc (let [size (.readInt read-raf)
-                                 time (Date. (.readLong read-raf))
-                                 record (doto (byte-array size)
-                                          (->> (.readFully read-raf)))]
-                             (->LogRecord offset time record))))))))
 
   Closeable
   (close [_]
@@ -41,39 +59,49 @@
         (.shutdownNow)
         (.awaitTermination 5 TimeUnit/SECONDS))
       (finally
-        (.close read-raf)))))
+        (.close log-file)))))
 
-(defn- append-loop [^RandomAccessFile log-file ^BlockingQueue queue]
-  (while true
-    (when-let [element (.take queue)]
-      (let [elements (doto (ArrayList.)
-                       (.add element))]
-        (try
-          (.drainTo queue elements)
-          (let [jobs (reduce
-                      (fn [acc [f ^bytes record]]
-                        (let [offset (.getFilePointer log-file)
-                              time (Date.)]
-                          (.writeInt log-file (alength record))
-                          (.writeLong log-file (.getTime time))
-                          (.write log-file record)
-                          (conj acc [f (->LogRecord offset time record)])))
-                      []
-                      elements)]
-            (.sync (.getFD log-file))
-            (doseq [[^CompletableFuture f log-record] jobs]
-              (.complete f log-record)))
-          (catch Throwable t
-            (doseq [[^CompletableFuture f] elements]
-              (when-not (.isDone f)
-                (.completeExceptionally f t)))))))))
+(defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue]
+  (let [log-channel (.getChannel log-file)]
+    (while true
+      (when-let [element (.take queue)]
+        (let [elements (doto (ArrayList.)
+                         (.add element))]
+          (try
+            (.drainTo queue elements)
+            (let [jobs (reduce
+                        (fn [acc [f ^ByteBuffer record]]
+                          (let [offset (.getFilePointer log-file)
+                                time (Date.)
+                                written-record (.duplicate record)
+                                size (.remaining written-record)
+                                check (bit-xor (unchecked-int offset) size)]
+                            (.writeInt log-file check)
+                            (.writeInt log-file size)
+                            (.writeLong log-file (.getTime time))
+                            (while (pos? (.write log-channel written-record)))
+                            (conj acc [f (->LogRecord offset time record)])))
+                        []
+                        elements)]
+              (.force log-channel true)
+              (doseq [[^CompletableFuture f log-record] jobs]
+                (.complete f log-record)))
+            (catch Throwable t
+              (doseq [[^CompletableFuture f] elements]
+                (when-not (.isDone f)
+                  (.completeExceptionally f t))))))))))
 
-(defn ->local-directory-log ^core2.log.LocalDirectoryLog [dir]
+(defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^File dir]
+  (.mkdirs dir)
+  (let [log-file (RandomAccessFile. (io/file dir "LOG") "r")]
+    (->LocalDirectoryLogReader dir log-file)))
+
+(defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter [^File dir {:keys [buffer-size]
+                                                                                  :or {buffer-size 1024}}]
+  (.mkdirs dir)
   (let [pool (Executors/newSingleThreadExecutor)
-        queue (ArrayBlockingQueue. 1024)
-        log-file (doto (io/file dir "LOG")
-                   (io/make-parents))
-        log-raf (RandomAccessFile. log-file "rw")]
-    (.seek log-raf (.length log-file))
-    (.submit pool ^Runnable #(append-loop log-raf queue))
-    (->LocalDirectoryLog (io/file dir) (RandomAccessFile. log-file "r") pool queue)))
+        queue (ArrayBlockingQueue. buffer-size)
+        log-file (RandomAccessFile. (io/file dir "LOG") "rw")]
+    (.seek log-file (.length log-file))
+    (.submit pool ^Runnable #(writer-append-loop log-file queue))
+    (->LocalDirectoryLogWriter dir log-file pool queue)))
