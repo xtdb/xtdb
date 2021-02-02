@@ -104,20 +104,20 @@
 ;; live chunk, reading sealed block (maybe) written to disk
 ;; live chunk, reading unsealed block in memory
 
-(defn write-tx-bytes [^File dir]
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
-    (with-readings-docs
-      (fn [readings]
-        (let [info-docs @!info-docs]
-          (doseq [[idx tx-batch] (->> (concat (interleave info-docs
-                                                          (take (count info-docs) readings))
-                                              (drop (count info-docs) readings))
-                                      (partition-all 1000)
-                                      (map-indexed vector))]
-            (io/copy (c2/submit-tx (for [doc tx-batch]
-                                     {:op :put, :doc doc})
-                                   allocator)
-                     (io/file (doto dir .mkdirs) (format "%08x.stream.arrow" idx)))))))))
+#_(defn write-tx-bytes [^File dir]
+    (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+      (with-readings-docs
+        (fn [readings]
+          (let [info-docs @!info-docs]
+            (doseq [[idx tx-batch] (->> (concat (interleave info-docs
+                                                            (take (count info-docs) readings))
+                                                (drop (count info-docs) readings))
+                                        (partition-all 1000)
+                                        (map-indexed vector))]
+              (io/copy (c2/submit-tx (for [doc tx-batch]
+                                       {:op :put, :doc doc})
+                                     allocator)
+                       (io/file (doto dir .mkdirs) (format "%08x.stream.arrow" idx)))))))))
 
 #_
 (write-tx-bytes (io/file "data/tx-log"))

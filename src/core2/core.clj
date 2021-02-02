@@ -27,7 +27,7 @@
            (* DenseUnionVector/OFFSET_WIDTH parent-offset)
            child-offset))
 
-(defn submit-tx ^java.nio.ByteBuffer [tx-ops ^RootAllocator allocator]
+(defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^RootAllocator allocator]
   (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
     (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
 

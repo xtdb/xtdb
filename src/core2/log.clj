@@ -16,11 +16,15 @@
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
 
-(deftype LocalDirectoryLogReader [^File dir ^RandomAccessFile log-file]
+(deftype LocalDirectoryLogReader [^File dir ^:volatile-mutable ^RandomAccessFile log-file]
   LogReader
   (readRecords [this after-offset limit]
+    (when (nil? log-file)
+      (set! log-file (RandomAccessFile. (io/file dir "LOG") "r")))
     (.seek log-file (or after-offset 0))
-    (loop [limit (inc limit)
+    (loop [limit (int (if after-offset
+                        (inc limit)
+                        limit))
            acc []]
       (let [offset (.getFilePointer log-file)]
         (if (or (zero? limit) (= offset (.length log-file)))
@@ -44,7 +48,8 @@
 
   Closeable
   (close [_]
-    (.close log-file)))
+    (when log-file
+      (.close log-file))))
 
 (deftype LocalDirectoryLogWriter [^File dir ^RandomAccessFile log-file ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
@@ -93,9 +98,7 @@
                   (.completeExceptionally f t))))))))))
 
 (defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^File dir]
-  (.mkdirs dir)
-  (let [log-file (RandomAccessFile. (io/file dir "LOG") "r")]
-    (->LocalDirectoryLogReader dir log-file)))
+  (->LocalDirectoryLogReader dir nil))
 
 (defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter
   [^File dir {:keys [buffer-size clock]
