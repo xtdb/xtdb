@@ -221,7 +221,8 @@
                :index-store :crux/index-store
                :query-engine :crux/query-engine
                :indexer `->indexer
-               :analyzer `->analyzer}}
+               :analyzer `->analyzer}
+   ::sys/before #{[:crux/tx-ingester]}}
   [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         lucene-store (LuceneNode. directory analyzer indexer)]
