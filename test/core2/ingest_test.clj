@@ -10,7 +10,7 @@
             [core2.util :as util])
   (:import core2.log.LogRecord
            java.io.File
-           [java.time Clock ZoneId]
+           [java.time Clock Duration ZoneId]
            java.util.Date
            org.apache.arrow.memory.RootAllocator))
 
@@ -80,12 +80,15 @@
                 log-reader (log/->local-directory-log-reader log-dir)
                 log-writer (log/->local-directory-log-writer log-dir {:clock mock-clock})
                 os (os/->local-directory-object-store (.toPath object-dir))
-                i (ingest/->ingester a os)]
+                i (ingest/->ingester a os)
+                il (c2/->ingest-loop log-reader i @(c2/latest-completed-tx os a))]
 
-      (doseq [tx-ops txs]
-        @(c2/submit-tx log-writer tx-ops a))
+      (t/is (= last-tx-instant
+               (last (for [tx-ops txs]
+                       @(c2/submit-tx log-writer tx-ops a)))))
 
-      (t/is (= last-tx-instant (c2/index-all-available-transactions log-reader i @(c2/latest-completed-tx os a))))
+      (t/is (= last-tx-instant
+               (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
 
       (.finishChunk i)
       (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))

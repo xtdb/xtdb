@@ -4,13 +4,14 @@
             [core2.log :as log]
             [clojure.string :as str]
             [core2.util :as util])
-  (:import java.io.ByteArrayOutputStream
+  (:import [java.io ByteArrayOutputStream Closeable]
            java.nio.ByteBuffer
            java.nio.channels.Channels
            [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
+           [java.time Duration Instant]
            java.util.function.Function
-           java.util.concurrent.CompletableFuture
+           [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
@@ -157,12 +158,92 @@
     ^TransactionIngester ingester
     ^TransactionInstant latest-completed-tx
     {:keys [batch-size], :or {batch-size 100}}]
+
    (loop [latest-completed-tx latest-completed-tx]
      (if-let [log-records (seq (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
-       (recur (reduce (fn [_ ^LogRecord record]
-                        (let [tx-instant (log-record->tx-instant record)]
-                          (.indexTx ingester tx-instant (.record record))
-                          tx-instant))
-                      nil
-                      log-records))
+       (let [latest-completed-tx (reduce (fn [_ ^LogRecord record]
+                                           (let [tx-instant (log-record->tx-instant record)]
+                                             (.indexTx ingester tx-instant (.record record))
+
+                                             (when (Thread/interrupted)
+                                               (throw (InterruptedException.)))
+
+                                             tx-instant))
+                                         nil
+                                         log-records)]
+
+         (when (Thread/interrupted)
+           (throw (InterruptedException.)))
+
+         (recur latest-completed-tx))
+
        latest-completed-tx))))
+
+(definterface IIngestLoop
+  (^void ingestLoop [])
+  (^core2.ingest.TransactionInstant latestCompletedTx [])
+  (^core2.ingest.TransactionInstant awaitTx [^core2.ingest.TransactionInstant tx])
+  (^core2.ingest.TransactionInstant awaitTx [^core2.ingest.TransactionInstant tx, ^java.time.Duration timeout]))
+
+(deftype IngestLoop [^LogReader log-reader
+                     ^TransactionIngester ingester
+                     ^:unsynchronized-mutable ^TransactionInstant latest-completed-tx
+                     ^ExecutorService pool
+                     ingest-opts]
+  IIngestLoop
+  (ingestLoop [this]
+    (let [{:keys [^Duration poll-sleep-duration],
+           :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts]
+      (try
+        (while true
+          (let [next-completed-tx (index-all-available-transactions log-reader ingester latest-completed-tx ingest-opts)]
+            (if (= latest-completed-tx next-completed-tx)
+              (Thread/sleep (.toMillis poll-sleep-duration))
+              (set! (.latest-completed-tx this) next-completed-tx))))
+        (catch InterruptedException _))))
+
+  (latestCompletedTx [_this] latest-completed-tx)
+
+  (awaitTx [this tx] (.awaitTx this tx nil))
+
+  (awaitTx [_this tx timeout]
+    (if tx
+      (let [{:keys [^Duration poll-sleep-duration],
+             :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
+            start (Instant/now)
+            tx-id (.tx-id tx)]
+        (loop []
+          (let [latest-completed-tx latest-completed-tx]
+            (if (and (or (nil? latest-completed-tx)
+                         (< (.tx-id latest-completed-tx) tx-id))
+                     (or (nil? timeout)
+                         (.isBefore (Instant/now) (.plus start timeout))))
+              (do
+                (Thread/sleep (.toMillis poll-sleep-duration))
+                (recur))
+              latest-completed-tx))))
+      latest-completed-tx))
+
+  Closeable
+  (close [_]
+    (doto pool
+      (.shutdownNow)
+      (.awaitTermination 5 TimeUnit/SECONDS))))
+
+(defn ->ingest-loop
+  (^core2.core.IngestLoop
+   [^LogReader log-reader
+    ^TransactionIngester ingester
+    ^TransactionInstant latest-completed-tx]
+   (->ingest-loop log-reader ingester latest-completed-tx {}))
+
+  (^core2.core.IngestLoop
+   [^LogReader log-reader
+    ^TransactionIngester ingester
+    ^TransactionInstant latest-completed-tx
+    ingest-opts]
+
+   (let [pool (Executors/newSingleThreadExecutor)
+         ingest-loop (IngestLoop. log-reader ingester latest-completed-tx pool ingest-opts)]
+     (.submit pool ^Runnable #(.ingestLoop ingest-loop))
+     ingest-loop)))
