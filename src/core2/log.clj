@@ -55,9 +55,11 @@
 (deftype LocalDirectoryLogWriter [^File dir ^RandomAccessFile log-file ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
   (appendRecord [this record]
-    (let [f (CompletableFuture.)]
-      (.put queue (MapEntry/create f record))
-      f))
+    (if (.isShutdown pool)
+      (throw (IllegalStateException. "writer is closed"))
+      (let [f (CompletableFuture.)]
+        (.put queue (MapEntry/create f record))
+        f)))
 
   Closeable
   (close [_]
@@ -67,11 +69,11 @@
         (.awaitTermination 5 TimeUnit/SECONDS))
       (finally
         (.close log-file)
-        (let [elements (ArrayList.)]
-          (.drainTo queue elements)
-          (doseq [[^CompletableFuture f] elements]
+        (loop []
+          (when-let [[^CompletableFuture f] (.poll queue)]
             (when-not (.isDone f)
-              (.cancel f true))))))))
+              (.cancel f true))
+            (recur)))))))
 
 (defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue ^Clock clock]
   (with-open [log-channel (.getChannel log-file)]
