@@ -1,7 +1,7 @@
 (ns core2.object-store
   (:require [clojure.java.io :as io])
   (:import java.io.Closeable
-           [java.nio.file CopyOption Files LinkOption Path]
+           [java.nio.file CopyOption StandardCopyOption Files LinkOption Path]
            java.nio.file.attribute.FileAttribute
            [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
            java.util.function.Supplier))
@@ -33,7 +33,7 @@
     (completable-future pool
       (let [from-path (.resolve root-path k)]
         (when (Files/exists from-path (make-array LinkOption 0))
-          (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
+          (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
           to-path))))
 
   (putObject [_this k from-path]

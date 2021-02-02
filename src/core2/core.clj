@@ -1,17 +1,22 @@
 (ns core2.core
   (:require [core2.types :as t]
             [core2.ingest :as ingest]
-            [core2.log :as log])
+            [core2.log :as log]
+            [clojure.string :as str])
   (:import java.io.ByteArrayOutputStream
            java.nio.ByteBuffer
            java.nio.channels.Channels
+           [java.nio.file Files OpenOption StandardOpenOption]
+           java.nio.file.attribute.FileAttribute
            java.util.function.Function
+           java.util.concurrent.CompletableFuture
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           org.apache.arrow.vector.ipc.ArrowStreamWriter
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
+           [core2.object_store ObjectStore]
            [core2.log LogRecord LogWriter]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -108,3 +113,30 @@
               (reify Function
                 (apply [_ result]
                   (log-record->tx-instant result)))))
+
+(defn latest-completed-tx [^ObjectStore os, ^BufferAllocator allocator]
+  (-> (.listObjects os)
+      (.thenCompose (reify Function
+                      (apply [_ ks]
+                        (if-let [metadata-path (last (sort (filter #(str/starts-with? % "metadata-") ks)))]
+                          (let [tmp-file (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
+                                           (-> .toFile .deleteOnExit))]
+                            (.getObject os metadata-path tmp-file))
+                          (CompletableFuture/completedFuture nil)))))
+      (.thenApply (reify Function
+                    (apply [_ tmp-path]
+                      (when tmp-path
+                        (with-open [file-ch (Files/newByteChannel tmp-path (into-array OpenOption #{StandardOpenOption/READ}))
+                                    file-reader (ArrowFileReader. file-ch allocator)]
+                          (let [root (.getVectorSchemaRoot file-reader)]
+                            (.loadNextBatch file-reader)
+                            (let [field-vec (.getVector root "field")
+                                  tx-id-idx (reduce (fn [_ ^long idx]
+                                                      (when (= (str (.getObject field-vec idx))
+                                                               "_tx-id")
+                                                        (reduced idx)))
+                                                    nil
+                                                    (range (.getValueCount field-vec)))
+
+                                  max-vec (.getVector root "max")]
+                              (.getObject max-vec tx-id-idx))))))))))
