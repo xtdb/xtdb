@@ -74,7 +74,7 @@
               (.cancel f true))))))))
 
 (defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue ^Clock clock]
-  (let [log-channel (.getChannel log-file)]
+  (with-open [log-channel (.getChannel log-file)]
     (while (not (Thread/interrupted))
       (when-let [element (.take queue)]
         (let [elements (doto (ArrayList.)
