@@ -34,7 +34,7 @@
     (with-open [a (RootAllocator. Long/MAX_VALUE)
                 log-reader (log/->local-directory-log-reader log-dir)
                 log-writer (log/->local-directory-log-writer log-dir {:clock mock-clock})
-                os (os/->local-directory-object-store object-dir)
+                os (os/->local-directory-object-store (.toPath object-dir))
                 i (ingest/->ingester a os)]
 
       (doseq [tx-ops [[{:op :put

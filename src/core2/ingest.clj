@@ -175,12 +175,12 @@
       (.join (CompletableFuture/allOf
               (into-array CompletableFuture
                           (for [^File file files]
-                            (.putObject object-store (.getName file) file)))))
+                            (.putObject object-store (.getName file) (.toPath file))))))
 
       (doseq [^File file files]
         (.delete file))
 
-      (.join (.putObject object-store (.getName metadata-file) metadata-file))
+      (.join (.putObject object-store (.getName metadata-file) (.toPath metadata-file)))
 
       (.delete metadata-file))
 
