@@ -264,6 +264,21 @@
 (defmacro with-lucene-rocks-node [dir-keys & body]
   `(with-lucene-rocks-node* ~dir-keys (fn [] ~@body)))
 
+(t/deftest test-lucene-cluster-node
+  (t/testing "test restart with nil indexes"
+    (fix/with-tmp-dirs #{node-dir}
+      (fix/with-tmp-dirs #{lucene-dir}
+        (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+          (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])))
+
+      (let [old-fn crux.lucene/validate-lucene-store-up-to-date]
+        (with-redefs [crux.lucene/validate-lucene-store-up-to-date (fn [& args]
+                                                                     (Thread/sleep 1000)
+                                                                     (apply old-fn args))]
+          (fix/with-tmp-dirs #{lucene-dir}
+            (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+              (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))))
+
 (t/deftest test-lucene-node-restart
   (t/testing "test restart with nil indexes"
     (fix/with-tmp-dirs #{node-dir lucene-dir}
