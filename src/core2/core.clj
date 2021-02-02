@@ -1,6 +1,7 @@
 (ns core2.core
   (:require [core2.types :as t])
   (:import java.io.ByteArrayOutputStream
+           java.nio.ByteBuffer
            java.nio.channels.Channels
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
@@ -26,7 +27,7 @@
            (* DenseUnionVector/OFFSET_WIDTH parent-offset)
            child-offset))
 
-(defn submit-tx ^bytes [tx-ops ^RootAllocator allocator]
+(defn submit-tx ^java.nio.ByteBuffer [tx-ops ^RootAllocator allocator]
   (with-open [root (VectorSchemaRoot/create tx-arrow-schema allocator)]
     (let [^DenseUnionVector tx-op-vec (.getVector root "tx-ops")
 
@@ -90,4 +91,4 @@
           (.start)
           (.writeBatch)
           (.end))
-        (.toByteArray baos)))))
+        (ByteBuffer/wrap (.toByteArray baos))))))

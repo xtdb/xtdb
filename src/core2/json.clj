@@ -1,11 +1,13 @@
 (ns core2.json
-  (:require [clojure.java.io :as io])
-  (:import [java.io ByteArrayInputStream File]
-           [java.nio.channels Channels FileChannel]
+  (:require [clojure.java.io :as io]
+            [core2.util :as util])
+  (:import java.io.File
+           java.nio.ByteBuffer
+           java.nio.channels.FileChannel
            [java.nio.file OpenOption StandardOpenOption]
            org.apache.arrow.memory.RootAllocator
-           org.apache.arrow.vector.VectorSchemaRoot
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamReader JsonFileWriter]))
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamReader JsonFileWriter]
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -27,11 +29,11 @@
           (while (.loadNextBatch file-reader)
             (.write file-writer root)))))))
 
-(defn arrow-streaming->json ^String [^bytes bs]
+(defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]
     (try
       (with-open [allocator (RootAllocator. Long/MAX_VALUE)
-                  in-ch (Channels/newChannel (ByteArrayInputStream. bs))
+                  in-ch (util/->seekable-byte-channel buf)
                   file-reader (ArrowStreamReader. in-ch allocator)
                   file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]
         (let [root (.getVectorSchemaRoot file-reader)]

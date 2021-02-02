@@ -20,8 +20,7 @@
                 os (os/->local-directory-object-store object-dir)
                 i (ingest/->ingester a os)]
 
-      (doseq [[tx ops] [[{:tx-time #inst "2020-01-01"
-                          :tx-id 1}
+      (doseq [[tx ops] [[(ingest/map->TransactionInstant {:tx-id 1, :tx-time #inst "2020-01-01"})
                          [{:op :put
                            :doc {:_id "device-info-demo000000",
                                  :api-version "23",
@@ -43,8 +42,7 @@
                                  :cpu-avg-1min 24.81,
                                  :mem-free 4.10011078E8,
                                  :mem-used 5.89988922E8}}]]
-                        [{:tx-time #inst "2020-01-02"
-                          :tx-id 2}
+                        [(ingest/map->TransactionInstant {:tx-time #inst "2020-01-02", :tx-id 2})
                          [{:op :put
                            :doc {:_id "device-info-demo000001",
                                  :api-version "23",
@@ -66,11 +64,11 @@
                                  :cpu-avg-1min 4.93,
                                  :mem-free 7.20742332E8,
                                  :mem-used 2.79257668E8}}]]]]
-        (ingest/index-tx i tx (c2/submit-tx ops a)))
+        (.indexTx i tx (c2/submit-tx ops a)))
 
       (t/is (empty? (.listFiles object-dir)))
 
-      (ingest/finish-chunk! i))
+      (.finishChunk i))
 
     (c2-json/write-arrow-json-files object-dir)
     (t/is (= 42 (alength (.listFiles object-dir))))

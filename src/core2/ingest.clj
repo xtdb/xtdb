@@ -2,14 +2,16 @@
   (:require [clojure.java.io :as io]
             [core2.metadata :as meta]
             core2.object-store
-            [core2.types :as t])
+            [core2.types :as t]
+            [core2.util :as util])
   (:import core2.metadata.IColumnMetadata
            core2.object_store.ObjectStore
            [java.io ByteArrayInputStream Closeable File]
+           java.nio.ByteBuffer
            java.nio.channels.FileChannel
            [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.util HashMap List Map]
+           [java.util Date HashMap List Map]
            java.util.concurrent.CompletableFuture
            java.util.function.Function
            org.apache.arrow.memory.BufferAllocator
@@ -22,9 +24,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defprotocol TransactionIngester
-  (index-tx [ingester tx docs])
-  (finish-chunk! [ingester]))
+(defrecord TransactionInstant [^long tx-id, ^Date tx-time])
+
+(definterface TransactionIngester
+  (^void indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps])
+  (^void finishChunk []))
 
 (declare close-writers! write-metadata!)
 
@@ -72,8 +76,10 @@
                    ^:unsynchronized-mutable ^long next-row-id]
 
   TransactionIngester
-  (index-tx [this {:keys [tx-time tx-id]} tx-bytes]
-    (let [->column (reify Function
+  (indexTx [this tx-instant tx-ops]
+    (let [tx-time (.tx-time tx-instant)
+          tx-id (.tx-id tx-instant)
+          ->column (reify Function
                      (apply [_ field]
                        (let [^Field field field
                              schema (->column-schema field)
@@ -87,8 +93,8 @@
                                       (doto (ArrowFileWriter. content-root nil file-ch)
                                         (.start))
                                       field-metadata))))]
-      (with-open [bais (ByteArrayInputStream. tx-bytes)
-                  sr (doto (ArrowStreamReader. bais allocator)
+      (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
+                  sr (doto (ArrowStreamReader. tx-ops-ch allocator)
                        (.loadNextBatch))
                   tx-root (.getVectorSchemaRoot sr)]
 
@@ -149,9 +155,9 @@
                    (apply max)
                    (long))
               max-blocks-per-chunk)
-      (finish-chunk! this)))
+      (.finishChunk this)))
 
-  (finish-chunk! [this]
+  (finishChunk [this]
     (doseq [^LiveColumn live-column (vals field->live-column)
             :let [^VectorSchemaRoot content-root (.content-root live-column)]]
       (when (pos? (.getRowCount content-root))
