@@ -4,7 +4,8 @@
             [core2.types :as t])
   (:import [java.io ByteArrayInputStream ByteArrayOutputStream Closeable File]
            [java.nio.channels Channels FileChannel]
-           [java.nio.file OpenOption StandardOpenOption]
+           [java.nio.file Files OpenOption StandardOpenOption]
+           [java.nio.file.attribute FileAttribute]
            [java.util Date HashMap List Map]
            java.util.function.Function
            java.util.concurrent.CompletableFuture
@@ -250,13 +251,20 @@
                           (for [^File file files]
                             (.putObject object-store (.getName file) file)))))
 
-      (.join (.putObject object-store (.getName metadata-file) metadata-file)))
+      (doseq [^File file files]
+        (.delete file))
+
+      (.join (.putObject object-store (.getName metadata-file) metadata-file))
+
+      (.delete metadata-file))
 
     (set! (.chunk-idx this) next-row-id))
 
   Closeable
   (close [this]
-    (close-writers! this)))
+    (close-writers! this)
+    (doseq [^File file (reverse (file-seq arrow-dir))]
+      (.delete file))))
 
 (defn- close-writers! [^Ingester ingester]
   (let [^Map field->live-column (.field->live-column ingester)]
@@ -295,18 +303,16 @@
 
 (defn ->ingester
   (^core2.core.Ingester [^BufferAllocator allocator
-                         ^File arrow-dir
                          ^ObjectStore object-store]
-   (->ingester allocator arrow-dir object-store {}))
+   (->ingester allocator object-store {}))
 
   (^core2.core.Ingester [^BufferAllocator allocator
-                         ^File arrow-dir
                          ^ObjectStore object-store
                          {:keys [max-block-size max-blocks-per-chunk]
                           :or {max-block-size 10000
                                max-blocks-per-chunk 10}}]
    (Ingester. allocator
-              arrow-dir
+              (.toFile (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0)))
               object-store
               (HashMap.)
               max-block-size

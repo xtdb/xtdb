@@ -36,20 +36,15 @@
                  (json/parse-string))))))
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
-  (let [ingest-dir (doto (io/file "target/test-ingest")
-                     (.mkdir))
-        object-dir (doto (io/file "target/object-store")
-                     (.mkdir))]
-    (doseq [^File f (concat (.listFiles ingest-dir)
-                            (.listFiles object-dir))]
+  (let [object-dir (io/file "target/object-store")]
+    (doseq [^File f (reverse (file-seq object-dir))]
       (.delete f))
 
-    (t/is (empty? (concat (.listFiles ingest-dir)
-                          (.listFiles object-dir))))
+    (t/is (not (.exists object-dir)))
 
     (with-open [a (RootAllocator. Long/MAX_VALUE)
                 os (os/->local-directory-object-store object-dir)
-                i (c2/->ingester a ingest-dir os)]
+                i (c2/->ingester a os)]
 
       (doseq [[tx ops] [[{:tx-time #inst "2020-01-01"
                           :tx-id 1}
@@ -98,6 +93,8 @@
                                  :mem-free 7.20742332E8,
                                  :mem-used 2.79257668E8}}]]]]
         (c2/index-tx i tx (c2/submit-tx ops a)))
+
+      (t/is (empty? (.listFiles object-dir)))
 
       (c2/finish-chunk! i))
 
