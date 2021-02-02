@@ -84,13 +84,12 @@
       (doseq [tx-ops txs]
         @(c2/submit-tx log-writer tx-ops a))
 
-      (doseq [^LogRecord record (.readRecords log-reader @(c2/latest-completed-tx os a) Integer/MAX_VALUE)]
-        (.indexTx i (c2/log-record->tx-instant record) (.record record)))
+      (c2/index-all-available-transactions log-reader i @(c2/latest-completed-tx os a))
 
-      (t/is (empty? @(.listObjects os)))
       (.finishChunk i)
 
-      (t/is (= 3496 @(c2/latest-completed-tx os a)))
+      (t/is (= (ingest/->TransactionInstant 3496 #inst "2020-01-02")
+               @(c2/latest-completed-tx os a)))
 
       (let [objects-list @(.listObjects os)]
         (t/is (= 21 (count objects-list)))

@@ -2,7 +2,8 @@
   (:require [core2.types :as t]
             [core2.ingest :as ingest]
             [core2.log :as log]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [core2.util :as util])
   (:import java.io.ByteArrayOutputStream
            java.nio.ByteBuffer
            java.nio.channels.Channels
@@ -16,8 +17,9 @@
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
+           [core2.ingest TransactionIngester TransactionInstant]
            [core2.object_store ObjectStore]
-           [core2.log LogRecord LogWriter]))
+           [core2.log LogRecord LogReader LogWriter]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -131,12 +133,36 @@
                           (let [root (.getVectorSchemaRoot file-reader)]
                             (.loadNextBatch file-reader)
                             (let [field-vec (.getVector root "field")
-                                  tx-id-idx (reduce (fn [_ ^long idx]
-                                                      (when (= (str (.getObject field-vec idx))
-                                                               "_tx-id")
-                                                        (reduced idx)))
-                                                    nil
-                                                    (range (.getValueCount field-vec)))
+                                  ->field-idx (fn [col-name]
+                                                (reduce (fn [_ ^long idx]
+                                                          (when (= (str (.getObject field-vec idx))
+                                                                   col-name)
+                                                            (reduced idx)))
+                                                        nil
+                                                        (range (.getValueCount field-vec))))
+                                  tx-id-idx (->field-idx "_tx-id")
+                                  tx-time-idx (->field-idx "_tx-time")
 
                                   max-vec (.getVector root "max")]
-                              (.getObject max-vec tx-id-idx))))))))))
+                              (ingest/->TransactionInstant (.getObject max-vec tx-id-idx)
+                                                           (util/local-date-time->date (.getObject max-vec tx-time-idx))))))))))))
+
+(defn index-all-available-transactions
+  ([^LogReader log-reader
+    ^TransactionIngester ingester
+    ^TransactionInstant latest-completed-tx]
+   (index-all-available-transactions log-reader ingester latest-completed-tx {}))
+
+  ([^LogReader log-reader
+    ^TransactionIngester ingester
+    ^TransactionInstant latest-completed-tx
+    {:keys [batch-size], :or {batch-size 100}}]
+   (loop [latest-completed-tx latest-completed-tx]
+     (if-let [log-records (seq (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
+       (recur (reduce (fn [_ ^LogRecord record]
+                        (let [tx-instant (log-record->tx-instant record)]
+                          (.indexTx ingester tx-instant (.record record))
+                          tx-instant))
+                      nil
+                      log-records))
+       latest-completed-tx))))

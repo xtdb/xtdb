@@ -27,7 +27,7 @@
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
 (definterface TransactionIngester
-  (^void indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps])
+  (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps])
   (^void finishChunk []))
 
 (declare close-writers! write-metadata!)
@@ -146,6 +146,8 @@
                 :let [^VectorSchemaRoot content-root (.content-root live-column)]]
           (when (>= (.getRowCount content-root) max-block-size)
             (write-live-column live-column)))))
+
+    tx-instant
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?

@@ -2,7 +2,9 @@
   (:require [clojure.java.io :as io])
   (:import java.nio.ByteBuffer
            java.nio.channels.SeekableByteChannel
-           [java.nio.file Files FileVisitResult SimpleFileVisitor]))
+           [java.nio.file Files FileVisitResult SimpleFileVisitor]
+           java.util.Date
+           [java.time LocalDateTime ZoneId]))
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
   (let [buffer (.duplicate buffer)]
@@ -49,3 +51,6 @@
   (let [dir (io/file dir)]
     (when (.exists dir)
       (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
+
+(defn local-date-time->date ^java.util.Date [^LocalDateTime ldt]
+  (Date/from (.toInstant (.atZone ldt (ZoneId/of "UTC")))))
