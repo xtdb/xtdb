@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.core :as c2]
+            [core2.object-store :as os]
             [core2.json :as c2-json]
             [cheshire.core :as json])
   (:import java.io.File
@@ -36,12 +37,19 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [ingest-dir (doto (io/file "target/test-ingest")
+                     (.mkdir))
+        object-dir (doto (io/file "target/object-store")
                      (.mkdir))]
-    (doseq [^File f (.listFiles ingest-dir)]
+    (doseq [^File f (concat (.listFiles ingest-dir)
+                            (.listFiles object-dir))]
       (.delete f))
-    (t/is (zero? (alength (.listFiles ingest-dir))))
+
+    (t/is (empty? (concat (.listFiles ingest-dir)
+                          (.listFiles object-dir))))
+
     (with-open [a (RootAllocator. Long/MAX_VALUE)
-                i (c2/->ingester a ingest-dir)]
+                os (os/->local-directory-object-store object-dir)
+                i (c2/->ingester a ingest-dir os)]
 
       (doseq [[tx ops] [[{:tx-time #inst "2020-01-01"
                           :tx-id 1}
@@ -89,12 +97,14 @@
                                  :cpu-avg-1min 4.93,
                                  :mem-free 7.20742332E8,
                                  :mem-used 2.79257668E8}}]]]]
-        (c2/index-tx i tx (c2/submit-tx ops a))))
+        (c2/index-tx i tx (c2/submit-tx ops a)))
 
-    (c2-json/write-arrow-json-files ingest-dir)
-    (t/is (= 42 (alength (.listFiles ingest-dir))))
+      (c2/finish-chunk! i))
 
-    (doseq [^File f (.listFiles ingest-dir)
+    (c2-json/write-arrow-json-files object-dir)
+    (t/is (= 42 (alength (.listFiles object-dir))))
+
+    (doseq [^File f (.listFiles object-dir)
             :when (.endsWith (.getName f) ".json")]
       (t/is (= (json/parse-string (slurp (io/resource (str "ingest/" (.getName f)))))
                (json/parse-string (slurp f)))

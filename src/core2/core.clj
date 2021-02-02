@@ -7,6 +7,7 @@
            [java.nio.file OpenOption StandardOpenOption]
            [java.util Date HashMap List Map]
            java.util.function.Function
+           java.util.concurrent.CompletableFuture
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
@@ -14,14 +15,16 @@
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.Text
+           core2.object_store.ObjectStore
            core2.metadata.IColumnMetadata))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol TransactionIngester
-  (index-tx [ingester tx docs]))
+  (index-tx [ingester tx docs])
+  (finish-chunk! [ingester]))
 
-(declare close-writers!)
+(declare close-writers! write-metadata!)
 
 (def ^:private tx-arrow-schema
   (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
@@ -140,6 +143,7 @@
 
 (deftype Ingester [^BufferAllocator allocator
                    ^File arrow-dir
+                   ^ObjectStore object-store
                    ^Map field->live-column
                    ^long max-block-size
                    ^long max-blocks-per-chunk
@@ -224,15 +228,44 @@
                    (apply max)
                    (long))
               max-blocks-per-chunk)
-      (close-writers! this chunk-idx)
+      (finish-chunk! this)))
 
-      (set! (.chunk-idx this) next-row-id)))
+  (finish-chunk! [this]
+    (doseq [^LiveColumn live-column (vals field->live-column)
+            :let [^VectorSchemaRoot content-root (.content-root live-column)]]
+      (when (pos? (.getRowCount content-root))
+        (write-live-column live-column)))
+
+    (let [files (vec (for [^LiveColumn live-column (vals field->live-column)
+                           :let [^File file (.file live-column)]
+                           :when (.exists file)]
+                       file))
+          metadata-file (io/file (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
+
+      (write-metadata! this metadata-file)
+      (close-writers! this)
+
+      (.join (CompletableFuture/allOf
+              (into-array CompletableFuture
+                          (for [^File file files]
+                            (.putObject object-store (.getName file) file)))))
+
+      (.join (.putObject object-store (.getName metadata-file) metadata-file)))
+
+    (set! (.chunk-idx this) next-row-id))
 
   Closeable
   (close [this]
-    (close-writers! this chunk-idx)))
+    (close-writers! this)))
 
-(defn- write-metadata! [^Ingester ingester, ^long chunk-idx]
+(defn- close-writers! [^Ingester ingester]
+  (let [^Map field->live-column (.field->live-column ingester)]
+    (doseq [^LiveColumn live-column (vals field->live-column)]
+      (.close live-column))
+
+    (.clear field->live-column)))
+
+(defn- write-metadata! [^Ingester ingester, ^File metadata-file]
   (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema (.allocator ingester))]
     (reduce
      (fn [^long idx [^Field field, ^LiveColumn live-column]]
@@ -252,36 +285,29 @@
            idx)))
      0
      (sort-by (comp str key) (.field->live-column ingester)))
+
     (.syncSchema metadata-root)
-    (with-open [metadata-file-ch (open-write-file-ch (io/file (.arrow-dir ingester) (format "metadata-%08x.arrow" chunk-idx)))
+
+    (with-open [metadata-file-ch (open-write-file-ch metadata-file)
                 metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
       (.start metadata-fw)
       (.writeBatch metadata-fw))))
 
-(defn- close-writers! [^Ingester ingester, ^long chunk-idx]
-  (let [^Map field->live-column (.field->live-column ingester)]
-    (try
-      (doseq [^LiveColumn live-column (vals field->live-column)
-              :let [^VectorSchemaRoot content-root (.content-root live-column)]]
-        (when (pos? (.getRowCount content-root))
-          (write-live-column live-column)))
-
-      (write-metadata! ingester chunk-idx)
-
-      (finally
-        (doseq [^LiveColumn live-column (vals field->live-column)]
-          (.close live-column))
-
-        (.clear field->live-column)))))
-
 (defn ->ingester
-  (^core2.core.Ingester [^BufferAllocator allocator ^File arrow-dir]
-   (->ingester allocator arrow-dir {}))
-  (^core2.core.Ingester [^BufferAllocator allocator ^File arrow-dir {:keys [max-block-size max-blocks-per-chunk]
-                                                                     :or {max-block-size 10000
-                                                                          max-blocks-per-chunk 10}}]
+  (^core2.core.Ingester [^BufferAllocator allocator
+                         ^File arrow-dir
+                         ^ObjectStore object-store]
+   (->ingester allocator arrow-dir object-store {}))
+
+  (^core2.core.Ingester [^BufferAllocator allocator
+                         ^File arrow-dir
+                         ^ObjectStore object-store
+                         {:keys [max-block-size max-blocks-per-chunk]
+                          :or {max-block-size 10000
+                               max-blocks-per-chunk 10}}]
    (Ingester. allocator
               arrow-dir
+              object-store
               (HashMap.)
               max-block-size
               max-blocks-per-chunk
