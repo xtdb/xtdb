@@ -65,33 +65,48 @@
         (.shutdownNow)
         (.awaitTermination 5 TimeUnit/SECONDS))
       (finally
-        (.close log-file)))))
+        (.close log-file)
+        (let [elements (ArrayList.)]
+          (.drainTo queue elements)
+          (doseq [[^CompletableFuture f] elements]
+            (when-not (.isDone f)
+              (.cancel f true))))))))
 
 (defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue ^Clock clock]
   (let [log-channel (.getChannel log-file)]
-    (while true
+    (while (not (Thread/interrupted))
       (when-let [element (.take queue)]
         (let [elements (doto (ArrayList.)
                          (.add element))]
           (try
             (.drainTo queue elements)
-            (let [jobs (reduce
-                        (fn [acc [f ^ByteBuffer record]]
-                          (let [offset (.getFilePointer log-file)
-                                time (Date. (.millis clock))
-                                written-record (.duplicate record)
-                                size (.remaining written-record)
-                                check (bit-xor (unchecked-int offset) size)]
-                            (.writeInt log-file check)
-                            (.writeInt log-file size)
-                            (.writeLong log-file (.getTime time))
-                            (while (pos? (.write log-channel written-record)))
-                            (conj acc [f (->LogRecord offset time record)])))
-                        []
-                        elements)]
+            (let [previous-offset (.getFilePointer log-file)
+                  jobs (try
+                         (reduce
+                          (fn [acc [f ^ByteBuffer record]]
+                            (let [offset (.getFilePointer log-file)
+                                  time (Date. (.millis clock))
+                                  written-record (.duplicate record)
+                                  size (.remaining written-record)
+                                  check (bit-xor (unchecked-int offset) size)]
+                              (.writeInt log-file check)
+                              (.writeInt log-file size)
+                              (.writeLong log-file (.getTime time))
+                              (while (pos? (.write log-channel written-record)))
+                              (conj acc [f (->LogRecord offset time record)])))
+                          []
+                          elements)
+                         (catch Throwable t
+                           (.setLength log-file previous-offset)
+                           (throw t)))]
               (.force log-channel true)
               (doseq [[^CompletableFuture f log-record] jobs]
                 (.complete f log-record)))
+            (catch InterruptedException e
+              (doseq [[^CompletableFuture f] elements]
+                (when-not (.isDone f)
+                  (.cancel f true)))
+              (.interrupt (Thread/currentThread)))
             (catch Throwable t
               (doseq [[^CompletableFuture f] elements]
                 (when-not (.isDone f)
