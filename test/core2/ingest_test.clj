@@ -10,7 +10,7 @@
            org.apache.arrow.memory.RootAllocator))
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
-  (let [object-dir (io/file "target/object-store")]
+  (let [object-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/object-store")]
     (doseq [^File f (reverse (file-seq object-dir))]
       (.delete f))
 
@@ -75,6 +75,6 @@
 
     (doseq [^File f (.listFiles object-dir)
             :when (.endsWith (.getName f) ".json")]
-      (t/is (= (json/parse-string (slurp (io/resource (str "ingest/" (.getName f)))))
+      (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (.getName f)))))
                (json/parse-string (slurp f)))
             (.getName f)))))

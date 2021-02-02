@@ -8,7 +8,7 @@
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (with-open [a (RootAllocator. Long/MAX_VALUE)]
-    (t/is (= (json/parse-string (slurp (io/resource "tx-ipc.json")))
+    (t/is (= (json/parse-string (slurp (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
              (-> (c2/submit-tx [{:op :put
                                  :doc {:_id "device-info-demo000000",
                                        :api-version "23",
