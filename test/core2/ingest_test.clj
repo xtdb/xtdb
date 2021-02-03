@@ -11,7 +11,7 @@
             [core2.log :as log]
             [core2.util :as util]
             [core2.metadata :as meta])
-  (:import core2.core.IngestLoop
+  (:import [core2.core IngestLoop Node]
            core2.ingest.Ingester
            core2.object_store.ObjectStore
            clojure.lang.MapEntry
@@ -191,6 +191,42 @@
 
             (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
             (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a)))
+
+            (t/is (= 11 (count @(.listObjects os "metadata-*"))))
+            (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
+            (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
+
+(t/deftest can-ingest-ts-devices-mini-into-two-nodes
+  (let [node-dir (io/file "target/can-ingest-ts-devices-mini-into-two-nodes")
+        opts {:max-block-size 100}]
+    (util/delete-dir node-dir)
+
+    (with-open [node-1 (c2/->local-node node-dir opts)
+                node-2 (c2/->local-node node-dir opts)
+                node-3 (c2/->local-node node-dir opts)
+                tx-producer (c2/->local-tx-producer node-dir {})
+                info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
+                readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
+      (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
+            readings (map readings-csv->doc (csv/read-csv readings-reader))
+            [initial-readings rest-readings] (split-at (count device-infos) readings)
+            tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                     {:op :put
+                      :doc doc})]
+
+        (t/is (= 11000 (count tx-ops)))
+
+        (let [last-tx-instant @(reduce
+                                (fn [acc tx-ops]
+                                  (.submitTx tx-producer tx-ops))
+                                nil
+                                (partition-all 100 tx-ops))]
+
+          (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
+                  :let [il ^IngestLoop (.ingest-loop node)
+                        os ^ObjectStore (.object-store node)]]
+            (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
+            (t/is (= last-tx-instant (.latestCompletedTx il)))
 
             (t/is (= 11 (count @(.listObjects os "metadata-*"))))
             (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
