@@ -13,6 +13,8 @@
   (^java.util.concurrent.CompletableFuture getObject [^String k, ^java.nio.file.Path to-file])
   (^java.util.concurrent.CompletableFuture putObject [^String k, ^java.nio.file.Path from-path])
   (^java.util.concurrent.CompletableFuture listObjects [])
+  (^java.util.concurrent.CompletableFuture listObjects [^String glob]
+   "glob as defined by https://docs.oracle.com/javase/8/docs/api/java/nio/file/FileSystem.html#getPathMatcher-java.lang.String-")
   (^java.util.concurrent.CompletableFuture deleteObject [^String k]))
 
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
@@ -34,6 +36,12 @@
     (util/completable-future pool
       (vec (sort (for [^Path path (iterator-seq (.iterator (Files/list root-path)))]
                    (str (.relativize root-path path)))))))
+
+  (listObjects [_this glob]
+    (util/completable-future pool
+      (with-open [dir-stream (Files/newDirectoryStream root-path glob)]
+        (vec (sort (for [^Path path dir-stream]
+                     (str (.relativize root-path path))))))))
 
   (deleteObject [_this k]
     (util/completable-future pool

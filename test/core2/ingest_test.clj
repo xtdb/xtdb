@@ -102,8 +102,11 @@
         (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os a)))
 
         (let [objects-list @(.listObjects os)]
-          (t/is (= 21 (count objects-list)))
-          (t/is (= "metadata-00000000.arrow" (last objects-list))))
+          (t/is (= 21 (count objects-list))))
+
+        (let [objects-list @(.listObjects os "metadata-*")]
+          (t/is (= 1 (count objects-list)))
+          (t/is (= "metadata-00000000.arrow" (first objects-list))))
 
         (c2-json/write-arrow-json-files object-dir)
         (t/is (= 42 (alength (.listFiles object-dir))))

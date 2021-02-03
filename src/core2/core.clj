@@ -128,11 +128,11 @@
       (f (.getVectorSchemaRoot file-reader)))))
 
 (defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os]
-  (-> (.listObjects os)
+  (-> (.listObjects os "metadata-*")
 
       (util/then-compose
         (fn [ks]
-          (if-let [metadata-path (last (sort (filter #(str/starts-with? % "metadata-") ks)))]
+          (if-let [metadata-path (last (sort ks))]
             (let [tmp-path (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
                              (-> .toFile .deleteOnExit))]
               (.getObject os metadata-path tmp-path))
