@@ -83,28 +83,25 @@
                          (.add element))]
           (try
             (.drainTo queue elements)
-            (let [previous-offset (.getFilePointer log-file)
-                  jobs (try
-                         (reduce
-                          (fn [^List acc [f ^ByteBuffer record]]
-                            (let [offset (.getFilePointer log-file)
-                                  time (Date. (.millis clock))
-                                  written-record (.duplicate record)
-                                  size (.remaining written-record)
-                                  check (bit-xor (unchecked-int offset) size)]
-                              (.writeInt log-file check)
-                              (.writeInt log-file size)
-                              (.writeLong log-file (.getTime time))
-                              (while (pos? (.write log-channel written-record)))
-                              (doto acc
-                                (.add (MapEntry/create f (->LogRecord offset time record))))))
-                          (ArrayList.)
-                          elements)
-                         (catch Throwable t
-                           (.setLength log-file previous-offset)
-                           (throw t)))]
+            (let [previous-offset (.getFilePointer log-file)]
+              (try
+                (dotimes [n (.size elements)]
+                  (let [[f ^ByteBuffer record] (.get elements n)
+                        offset (.getFilePointer log-file)
+                        time (Date. (.millis clock))
+                        written-record (.duplicate record)
+                        size (.remaining written-record)
+                        check (bit-xor (unchecked-int offset) size)]
+                    (.writeInt log-file check)
+                    (.writeInt log-file size)
+                    (.writeLong log-file (.getTime time))
+                    (while (pos? (.write log-channel written-record)))
+                    (.set elements n (MapEntry/create f (->LogRecord offset time record)))))
+                (catch Throwable t
+                  (.setLength log-file previous-offset)
+                  (throw t)))
               (.force log-channel true)
-              (doseq [[^CompletableFuture f log-record] jobs]
+              (doseq [[^CompletableFuture f log-record] elements]
                 (.complete f log-record)))
             (catch InterruptedException e
               (doseq [[^CompletableFuture f] elements]
