@@ -32,9 +32,11 @@
       (let [to-path (.resolve root-path k)]
         (util/mkdirs (.getParent to-path))
         (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
-          (let [to-path-temp (.resolveSibling to-path (str (UUID/randomUUID)))]
-            (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
-            (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE])))
+          (if (Files/exists to-path (make-array LinkOption 0))
+            to-path
+            (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
+              (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
+              (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))))
           (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))))))
 
   (listObjects [_this]
