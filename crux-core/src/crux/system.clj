@@ -13,6 +13,7 @@
            java.net.URL
            [java.nio.file Path Paths]
            java.time.Duration
+           java.net.URI
            java.util.concurrent.TimeUnit
            java.util.Map))
 
@@ -89,7 +90,8 @@
                              (parse-opts opts args)
                              (catch IllegalArgumentException e
                                (throw (err/illegal-arg :error-parsing-opts
-                                                       {::err/message (format "Error parsing opts for %s" (pr-str k-path))})))))}
+                                                       {::err/message (format "Error parsing opts for %s" (pr-str k-path))}
+                                                       e)))))}
      :deps (->> (keys deps)
                 (into {} (map (fn [k]
                                 [(conj k-path k)
@@ -243,7 +245,11 @@
                         (cond
                           (instance? Path fp) fp
                           (instance? File fp) (.toPath ^File fp)
-                          (string? fp) (Paths/get fp (make-array String 0)))))
+                          (uri? fp) (Paths/get ^URI fp)
+                          (string? fp) (let [uri (URI. fp)]
+                                         (if (.getScheme uri)
+                                           (Paths/get uri)
+                                           (Paths/get fp (make-array String 0)))))))
          #(instance? Path %)))
 
 (s/def ::int
