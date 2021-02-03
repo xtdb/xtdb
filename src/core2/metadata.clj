@@ -267,3 +267,24 @@
             (t/->dense-union-field-with-flatbuf-ids "min" t/dense-union-fields-in-flatbuf-id-order)
             (t/->dense-union-field-with-flatbuf-ids "max" t/dense-union-fields-in-flatbuf-id-order)
             (t/->field "count" (.getType Types$MinorType/BIGINT) true)]))
+
+(defn- field-idx [^VectorSchemaRoot metadata, ^String column-name, ^String field-name]
+  (let [column-vec (.getVector metadata "column")
+        field-vec (.getVector metadata "field")]
+    (reduce (fn [_ ^long idx]
+              (when (and (= (str (.getObject column-vec idx))
+                            column-name)
+                         (= (str (.getObject field-vec idx))
+                            field-name))
+                (reduced idx)))
+            nil
+            (range (.getRowCount metadata)))))
+
+(defn max-value
+  ([^VectorSchemaRoot metadata, ^String field-name]
+   (max-value metadata field-name field-name))
+
+  ([^VectorSchemaRoot metadata, ^String column-name, ^String field-name]
+   (when-let [field-idx (field-idx metadata column-name field-name)]
+     ;; TODO boxing
+     (.getObject (.getVector metadata "max") field-idx))))

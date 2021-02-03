@@ -5,7 +5,8 @@
             [core2.log :as log]
             [clojure.string :as str]
             [core2.util :as util]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [core2.metadata :as meta])
   (:import [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels Channels SeekableByteChannel]
@@ -144,23 +145,8 @@
       (util/then-apply
         (fn [path]
           (with-metadata path allocator
-            (fn [^VectorSchemaRoot root]
-              (let [column-vec (.getVector root "column")
-                    field-vec (.getVector root "field")
-                    ->field-idx (fn [column-name field-name]
-                                  (reduce (fn [_ ^long idx]
-                                            (when (and (= (str (.getObject column-vec idx))
-                                                          column-name)
-                                                       (= (str (.getObject field-vec idx))
-                                                          field-name))
-                                              (reduced idx)))
-                                          nil
-                                          (range (.getRowCount root))))
-                    tx-id-row-id-idx (->field-idx "_tx-id" "_row-id")
-
-                    max-vec (.getVector root "max")]
-                (when (some? tx-id-row-id-idx)
-                  (.getObject max-vec tx-id-row-id-idx)))))))))
+            (fn [^VectorSchemaRoot metadata-root]
+              (meta/max-value metadata-root "_tx-id" "_row-id")))))))
 
 (defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (latest-metadata-object os)
@@ -168,22 +154,11 @@
       (util/then-apply
         (fn [path]
           (with-metadata path allocator
-            (fn [^VectorSchemaRoot root]
-              (let [field-vec (.getVector root "field")
-                    ->field-idx (fn [field-name]
-                                  (reduce (fn [_ ^long idx]
-                                            (when (= (str (.getObject field-vec idx))
-                                                     field-name)
-                                              (reduced idx)))
-                                          nil
-                                          (range (.getRowCount root))))
-                    tx-id-idx (->field-idx "_tx-id")
-                    tx-time-idx (->field-idx "_tx-time")
-
-                    max-vec (.getVector root "max")]
-                (when (and (some? tx-id-idx) (some? tx-time-idx))
-                  (ingest/->TransactionInstant (.getObject max-vec tx-id-idx)
-                                               (util/local-date-time->date (.getObject max-vec tx-time-idx)))))))))))
+            (fn [^VectorSchemaRoot metadata-root]
+              (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
+                (ingest/->TransactionInstant max-tx-id
+                                             (-> (meta/max-value metadata-root "_tx-time")
+                                                 util/local-date-time->date)))))))))
 
 (defn index-all-available-transactions
   ([^LogReader log-reader
