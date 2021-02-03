@@ -1,0 +1,94 @@
+= Crux Google Cloud Storage
+
+You can use Google's Cloud Storage (GCS) as Crux's 'document store' or 'checkpoint store'.
+
+Documents are serialized via https://github.com/ptaoussanis/nippy[Nippy].
+
+== Project Dependency
+
+In order to use GCS within Crux, you must first add this module as a project dependency:
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure, subs=attributes+]
+----
+juxt/crux-google-cloud-storage {:mvn/version "{crux_version}-alpha"}
+----
+
+pom.xml::
++
+[source,xml, subs=attributes+]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-google-cloud-storage</artifactId>
+    <version>{crux_version}-alpha</version>
+</dependency>
+----
+====
+
+== Using GCS
+
+Replace the implementation of the document store with `+crux.google.cloud-storage/->document-store+`
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "crux/document-store": {
+    "crux/module": "crux.google.cloud-storage/->document-store",
+    "root-path": "gs://bucket/prefix"
+  },
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:crux/document-store {:crux/module 'crux.google.cloud-storage/->document-store
+                       :root-path "gs://bucket/prefix"}}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux/document-store {:crux/module crux.google.cloud-storage/->document-store
+                       :root-path "gs://bucket/prefix"}}
+----
+====
+
+Follow the GCS https://github.com/googleapis/google-cloud-java#authentication[Authentication Guide] to get set up.
+
+== Parameters
+
+* `root-path` (string/`Path`, required): path where documents will be stored, `gs://bucket/prefix`
+* `doc-cache-size` (int): size of in-memory document cache
+* `pool-size` (int, default 4): size of thread-pool for GCS operations
+
+
+[#checkpoint-store]
+== Checkpoint store
+
+GCS can be used as a query index xref:checkpointing.adoc[checkpoint store].
+
+Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on GCS to remove older checkpoints.
+
+[source,clojure]
+----
+;; under :crux/index-store -> :kv-store -> :checkpointer
+;; see the Checkpointing guide for other parameters
+{:checkpointer {...
+                :store {:crux/module 'crux.google.cloud-storage/->checkpoint-store
+                        :path "gs://bucket/prefix"}}
+----
+
+=== Parameters
+
+* `path` (string/`URI`, required): URI of the form `"gs://bucket/prefix"`

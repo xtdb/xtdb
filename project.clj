@@ -11,6 +11,7 @@
    "crux-test"
    "crux-s3"
    "crux-azure-blobs"
+   "crux-google-cloud-storage"
    "crux-bench"])
 
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
@@ -37,6 +38,7 @@
    [juxt/crux-rdf "crux-git-version-alpha"]
    [juxt/crux-sql "crux-git-version-alpha"]
    [juxt/crux-azure-blobs "crux-git-version-alpha"]
+   [juxt/crux-google-cloud-storage "crux-git-version-alpha"]
    [juxt/crux-lucene "crux-git-version-alpha"]
    [juxt/crux-test "crux-git-version"]
    [juxt/crux-bench "crux-git-version"]
@@ -105,6 +107,7 @@
                "crux-metrics/test"
                "crux-s3/test"
                "crux-azure-blobs/test"
+               "crux-google-cloud-storage/test"
                "crux-sql/test"
                "crux-lucene/test"
                "crux-bench/test"
@@ -123,6 +126,7 @@
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
              :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}
              :with-azure-blobs-tests {:jvm-opts ["-Dcrux.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
-                                                 "-Dcrux.azure.blobs.test-container=crux-azure-blobs-test-container"]}}
+                                                 "-Dcrux.azure.blobs.test-container=crux-azure-blobs-test-container"]}
+             :with-google-cloud-storage-test {:jvm-opts ["-Dcrux.google.cloud-storage-test.bucket=crux-gcs-test"]}}
 
   :pedantic? :warn)
