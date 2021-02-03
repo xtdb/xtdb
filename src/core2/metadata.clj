@@ -288,3 +288,7 @@
    (when-let [field-idx (field-idx metadata column-name field-name)]
      ;; TODO boxing
      (.getObject (.getVector metadata "max") field-idx))))
+
+(defn chunk-file [^VectorSchemaRoot metadata, ^String field-name]
+  (when-let [field-idx (field-idx metadata field-name field-name)]
+    (str (.getObject (.getVector metadata "file") field-idx))))

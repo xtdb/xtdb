@@ -9,14 +9,20 @@
             [core2.ingest :as ingest]
             [core2.json :as c2-json]
             [core2.log :as log]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.metadata :as meta])
   (:import core2.core.IngestLoop
            core2.ingest.Ingester
            core2.object_store.ObjectStore
-           java.io.File
+           clojure.lang.MapEntry
+           [java.io Closeable File]
+           java.nio.file.Files
+           java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
            java.util.Date
-           org.apache.arrow.memory.BufferAllocator))
+           java.util.concurrent.CompletableFuture
+           org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -189,3 +195,60 @@
             (t/is (= 11 (count @(.listObjects os "metadata-*"))))
             (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
             (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
+
+(t/deftest scans-rowid-for-value
+  (let [node-dir (io/file "target/scans-rowid-for-value")]
+    (util/delete-dir node-dir)
+
+    (with-open [node (c2/->local-node node-dir)
+                tx-producer (c2/->local-tx-producer node-dir)]
+      (let [^BufferAllocator allocator (.allocator node)
+            ^Ingester i (.ingester node)
+            ^IngestLoop il (.ingest-loop node)
+            ^ObjectStore object-store (.object-store node)]
+
+        (let [tx @(.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 1}}])]
+
+          (.awaitTx il tx (Duration/ofSeconds 2))
+
+          (.finishChunk i))
+
+        (let [last-tx @(.submitTx tx-producer [{:op :put, :doc {:name "James", :id 2}}
+                                               {:op :put, :doc {:name "Jon", :id 3}}
+                                               {:op :put, :doc {:name "Dan", :id 4}}])]
+          (.awaitTx il last-tx (Duration/ofSeconds 2))
+
+          (.finishChunk i))
+
+        (t/is (= {1 "James", 2 "Jon"}
+                 @(-> (.listObjects object-store "metadata-*")
+                      (util/then-compose
+                        (fn [ks]
+                          (let [futs (for [k ks]
+                                       (let [to-path (Files/createTempFile "core2" "" (make-array FileAttribute 0))]
+                                         (-> (.getObject object-store k to-path)
+                                             (util/then-compose
+                                               (fn [to-path]
+                                                 (if-let [chunk-file (->> (c2/block-stream to-path allocator)
+                                                                          (reduce (completing
+                                                                                   (fn [_ ^VectorSchemaRoot metadata-root]
+                                                                                     (when (pos? (compare (str (meta/max-value metadata-root "name"))
+                                                                                                          "Ivan"))
+                                                                                       (meta/chunk-file metadata-root "name"))))
+                                                                                  nil))]
+                                                   (.getObject object-store chunk-file to-path)
+                                                   (CompletableFuture/completedFuture nil))))
+                                             (util/then-apply
+                                               (fn [to-path]
+                                                 (when to-path
+                                                   (->> (c2/block-stream to-path allocator)
+                                                        (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
+                                                                           (let [name-vec (.getVector chunk-root "name")
+                                                                                 ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]
+                                                                             (vec (for [idx (range (.getRowCount chunk-root))
+                                                                                        :let [name (str (.getObject name-vec idx))]
+                                                                                        :when (pos? (compare name "Ivan"))]
+                                                                                    (MapEntry/create (.get row-id-vec idx) name))))))))))))))]
+                            (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+                                (util/then-apply (fn [_]
+                                                   (into {} (mapcat deref) futs))))))))))))))
