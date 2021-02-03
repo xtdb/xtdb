@@ -171,6 +171,8 @@
 
           (t/is (= 11000 (count tx-ops)))
 
+          (t/is (nil? (.latestCompletedTx il)))
+
           (let [last-tx-instant (reduce
                                  (fn [acc tx-ops]
                                    @(.submitTx tx-producer tx-ops))
@@ -178,6 +180,7 @@
                                  (partition-all 100 tx-ops))]
 
             (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
+            (t/is (= last-tx-instant (.latestCompletedTx il)))
             (.finishChunk i)
 
             (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
