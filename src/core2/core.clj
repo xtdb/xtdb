@@ -116,32 +116,62 @@
         (fn [result]
           (log-record->tx-instant result)))))
 
-(defn latest-completed-tx [^ObjectStore os, ^BufferAllocator allocator]
+(defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (.listObjects os)
 
       (util/then-compose
         (fn [ks]
           (if-let [metadata-path (last (sort (filter #(str/starts-with? % "metadata-") ks)))]
-            (let [tmp-file (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
+            (let [tmp-path (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
                              (-> .toFile .deleteOnExit))]
-              (.getObject os metadata-path tmp-file))
-            (CompletableFuture/completedFuture nil))))
+              (.getObject os metadata-path tmp-path))
+            (CompletableFuture/completedFuture nil))))))
+
+(defn latest-row-id ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
+  (-> (latest-metadata-object os allocator)
 
       (util/then-apply
-        (fn [tmp-path]
-          (when tmp-path
-            (with-open [file-ch (Files/newByteChannel tmp-path (into-array OpenOption #{StandardOpenOption/READ}))
+        (fn [path]
+          (if path
+            (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
+                        file-reader (ArrowFileReader. file-ch allocator)]
+              (.loadNextBatch file-reader)
+              (let [root (.getVectorSchemaRoot file-reader)
+                    column-vec (.getVector root "column")
+                    field-vec (.getVector root "field")
+                    ->field-idx (fn [column-name field-name]
+                                  (reduce (fn [_ ^long idx]
+                                            (when (and (= (str (.getObject column-vec idx))
+                                                          column-name)
+                                                       (= (str (.getObject field-vec idx))
+                                                          field-name))
+                                              (reduced idx)))
+                                          nil
+                                          (range (.getRowCount root))))
+                    tx-id-row-id-idx (->field-idx "_tx-id" "_row-id")
+
+                    max-vec (.getVector root "max")]
+                (.getObject max-vec tx-id-row-id-idx)))
+            0)))))
+
+(defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
+  (-> (latest-metadata-object os allocator)
+
+      (util/then-apply
+        (fn [path]
+          (when path
+            (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
                         file-reader (ArrowFileReader. file-ch allocator)]
               (.loadNextBatch file-reader)
               (let [root (.getVectorSchemaRoot file-reader)
                     field-vec (.getVector root "field")
-                    ->field-idx (fn [col-name]
+                    ->field-idx (fn [field-name]
                                   (reduce (fn [_ ^long idx]
                                             (when (= (str (.getObject field-vec idx))
-                                                     col-name)
+                                                     field-name)
                                               (reduced idx)))
                                           nil
-                                          (range (.getValueCount field-vec))))
+                                          (range (.getRowCount root))))
                     tx-id-idx (->field-idx "_tx-id")
                     tx-time-idx (->field-idx "_tx-time")
 

@@ -72,7 +72,10 @@
   (let [object-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/object-store")
         log-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/log")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")]
+        last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")
+        total-number-of-ops (count (for [tx-ops txs
+                                         op tx-ops]
+                                     op))]
     (util/delete-dir object-dir)
     (util/delete-dir log-dir)
 
@@ -83,6 +86,9 @@
                 i (ingest/->ingester a os)
                 il (c2/->ingest-loop log-reader i @(c2/latest-completed-tx os a))]
 
+      (t/is (nil? @(c2/latest-completed-tx os a)))
+      (t/is (zero? @(c2/latest-row-id os a)))
+
       (t/is (= last-tx-instant
                (last (for [tx-ops txs]
                        @(c2/submit-tx log-writer tx-ops a)))))
@@ -91,7 +97,9 @@
                (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
 
       (.finishChunk i)
+
       (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
+      (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os a)))
 
       (let [objects-list @(.listObjects os)]
         (t/is (= 21 (count objects-list)))
