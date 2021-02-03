@@ -22,6 +22,8 @@
            [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.Text))
 
+;; TODO rename to indexer
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
@@ -230,19 +232,24 @@
 
 (defn ->ingester
   (^core2.ingest.Ingester [^BufferAllocator allocator
-                           ^ObjectStore object-store]
-   (->ingester allocator object-store {}))
+                           ^ObjectStore object-store
+                           ^Long latest-row-id]
+   (->ingester allocator object-store latest-row-id {}))
 
   (^core2.ingest.Ingester [^BufferAllocator allocator
                            ^ObjectStore object-store
+                           ^Long latest-row-id
                            {:keys [max-block-size max-blocks-per-chunk]
                             :or {max-block-size 10000
                                  max-blocks-per-chunk 10}}]
-   (Ingester. allocator
-              (.toFile (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0)))
-              object-store
-              (HashMap.)
-              max-block-size
-              max-blocks-per-chunk
-              0
-              0)))
+   (let [next-row-id (if latest-row-id
+                       (inc (long latest-row-id))
+                       0)]
+     (Ingester. allocator
+                (.toFile (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0)))
+                object-store
+                (HashMap.)
+                max-block-size
+                max-blocks-per-chunk
+                next-row-id
+                next-row-id))))

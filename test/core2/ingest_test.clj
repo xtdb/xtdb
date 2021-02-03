@@ -83,11 +83,11 @@
                 log-reader (log/->local-directory-log-reader log-dir)
                 log-writer (log/->local-directory-log-writer log-dir {:clock mock-clock})
                 os (os/->file-system-object-store (.toPath object-dir))
-                i (ingest/->ingester a os)
+                i (ingest/->ingester a os @(c2/latest-row-id os a))
                 il (c2/->ingest-loop log-reader i @(c2/latest-completed-tx os a))]
 
       (t/is (nil? @(c2/latest-completed-tx os a)))
-      (t/is (zero? @(c2/latest-row-id os a)))
+      (t/is (nil? @(c2/latest-row-id os a)))
 
       (t/is (= last-tx-instant
                (last (for [tx-ops txs]
