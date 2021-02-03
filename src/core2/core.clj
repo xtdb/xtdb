@@ -149,6 +149,13 @@
                 (recur (f v root))
                 (f v)))))))))
 
+(defn with-metadata [path ^BufferAllocator allocator f]
+  (->> (block-stream path allocator)
+       (reduce (completing
+                (fn [_ metadata-root]
+                  (f metadata-root)))
+               nil)))
+
 (defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os]
   (-> (.listObjects os "metadata-*")
 
@@ -165,23 +172,21 @@
 
       (util/then-apply
         (fn [path]
-          (->> (block-stream path allocator)
-               (reduce (completing (fn [_ ^VectorSchemaRoot metadata-root]
-                                     (meta/max-value metadata-root "_tx-id" "_row-id")))
-                       nil))))))
+          (with-metadata path allocator
+            (fn [^VectorSchemaRoot metadata-root]
+              (meta/max-value metadata-root "_tx-id" "_row-id")))))))
 
 (defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (latest-metadata-object os)
 
       (util/then-apply
         (fn [path]
-          (->> (block-stream path allocator)
-               (reduce (completing (fn [_ ^VectorSchemaRoot metadata-root]
-                                     (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
-                                       (ingest/->TransactionInstant max-tx-id
-                                                                    (-> (meta/max-value metadata-root "_tx-time")
-                                                                        util/local-date-time->date)))))
-                       nil))))))
+          (with-metadata path allocator
+            (fn [^VectorSchemaRoot metadata-root]
+              (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
+                (ingest/->TransactionInstant max-tx-id
+                                             (-> (meta/max-value metadata-root "_tx-time")
+                                                 util/local-date-time->date)))))))))
 
 (defn index-all-available-transactions
   ([^LogReader log-reader
