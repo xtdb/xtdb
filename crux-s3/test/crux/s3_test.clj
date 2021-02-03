@@ -1,6 +1,6 @@
 (ns crux.s3-test
   (:require [clojure.test :as t]
-            [crux.doc-store-test :as dst]
+            [crux.fixtures.document-store :as fix.ds]
             [crux.s3 :as s3]
             [crux.system :as sys])
   (:import crux.s3.S3Configurator
@@ -32,20 +32,11 @@
   (reify S3Configurator
     (makeClient [_] *client*)))
 
-(t/use-fixtures :each
-  (fn [f]
-    (with-open [sys (-> (sys/prep-system {::s3/document-store
-                                          {:bucket test-s3-bucket
-                                           :prefix (str "crux-s3-test-" (UUID/randomUUID))
-                                           :configurator `->configurator}})
-                        (sys/start-system))]
+(t/deftest test-s3-doc-store
+  (with-open [sys (-> (sys/prep-system {::s3/document-store
+                                        {:bucket test-s3-bucket
+                                         :prefix (str "crux-s3-test-" (UUID/randomUUID))
+                                         :configurator `->configurator}})
+                      (sys/start-system))]
 
-      (binding [dst/*doc-store* (::s3/document-store sys)]
-        (f)))))
-
-;; required for CIDER to run the tests in this namespace
-;; see https://github.com/clojure-emacs/cider-nrepl/issues/680
-(t/deftest _)
-
-(defn test-ns-hook []
-  (dst/test-doc-store (find-ns 'crux.s3-test)))
+    (fix.ds/test-doc-store (::s3/document-store sys))))
