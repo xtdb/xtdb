@@ -79,7 +79,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
-                log-writer (log/->local-directory-log-writer (io/file node-dir "log") {:clock mock-clock})]
+                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
       (let [^BufferAllocator a (.allocator node)
             ^ObjectStore os (.object-store node)
             ^Ingester i (.ingester node)
@@ -91,7 +91,7 @@
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
-                         @(c2/submit-tx log-writer tx-ops a)))))
+                         @(.submitTx tx-producer tx-ops)))))
 
         (t/is (= last-tx-instant
                  (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))

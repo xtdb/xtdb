@@ -28,7 +28,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(definterface SubmitTx
+(definterface TxProducer
   (^java.util.concurrent.CompletableFuture submitTx [_ ]))
 
 (def ^:private tx-arrow-schema
@@ -115,11 +115,25 @@
 (defn log-record->tx-instant ^core2.ingest.TransactionInstant [^LogRecord record]
   (ingest/->TransactionInstant (.offset record) (.time record)))
 
-(defn submit-tx ^java.util.concurrent.CompletableFuture [^LogWriter log-writer tx-ops ^BufferAllocator allocator]
-  (-> (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
-      (util/then-apply
-        (fn [result]
-          (log-record->tx-instant result)))))
+(deftype LogTxProducer [^LogWriter log-writer, ^BufferAllocator allocator]
+  TxProducer
+  (submitTx [_this tx-ops]
+    (-> (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
+        (util/then-apply
+          (fn [result]
+            (log-record->tx-instant result)))))
+
+  Closeable
+  (close [_]
+    (.close ^Closeable log-writer)
+    (.close allocator)))
+
+(defn ->local-tx-producer
+  (^core2.core.LogTxProducer [node-dir]
+   (->local-tx-producer node-dir {}))
+  (^core2.core.LogTxProducer [node-dir log-writer-opts]
+   (LogTxProducer. (log/->local-directory-log-writer (io/file node-dir "log") log-writer-opts)
+                   (RootAllocator.))))
 
 (defn with-metadata [path ^BufferAllocator allocator f]
   (when path
