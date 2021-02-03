@@ -159,7 +159,8 @@
                     tx-id-row-id-idx (->field-idx "_tx-id" "_row-id")
 
                     max-vec (.getVector root "max")]
-                (.getObject max-vec tx-id-row-id-idx))))))))
+                (when (some? tx-id-row-id-idx)
+                  (.getObject max-vec tx-id-row-id-idx)))))))))
 
 (defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (latest-metadata-object os)
@@ -180,8 +181,9 @@
                     tx-time-idx (->field-idx "_tx-time")
 
                     max-vec (.getVector root "max")]
-                (ingest/->TransactionInstant (.getObject max-vec tx-id-idx)
-                                             (util/local-date-time->date (.getObject max-vec tx-time-idx))))))))))
+                (when (and (some? tx-id-idx) (some? tx-time-idx))
+                  (ingest/->TransactionInstant (.getObject max-vec tx-id-idx)
+                                               (util/local-date-time->date (.getObject max-vec tx-time-idx)))))))))))
 
 (defn index-all-available-transactions
   ([^LogReader log-reader
