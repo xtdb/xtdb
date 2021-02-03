@@ -135,12 +135,19 @@
    (LogTxProducer. (log/->local-directory-log-writer (io/file node-dir "log") log-writer-opts)
                    (RootAllocator.))))
 
-(defn with-metadata [path ^BufferAllocator allocator f]
+(defn block-stream [path ^BufferAllocator allocator]
   (when path
-    (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
-                file-reader (ArrowFileReader. file-ch allocator)]
-      (.loadNextBatch file-reader)
-      (f (.getVectorSchemaRoot file-reader)))))
+    ;; `Stream`, when we go to Java
+    (reify
+      clojure.lang.IReduceInit
+      (reduce [_ f init]
+        (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
+                    file-reader (ArrowFileReader. file-ch allocator)]
+          (let [root (.getVectorSchemaRoot file-reader)]
+            (loop [v init]
+              (if (.loadNextBatch file-reader)
+                (recur (f v root))
+                (f v)))))))))
 
 (defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os]
   (-> (.listObjects os "metadata-*")
@@ -158,21 +165,23 @@
 
       (util/then-apply
         (fn [path]
-          (with-metadata path allocator
-            (fn [^VectorSchemaRoot metadata-root]
-              (meta/max-value metadata-root "_tx-id" "_row-id")))))))
+          (->> (block-stream path allocator)
+               (reduce (completing (fn [_ ^VectorSchemaRoot metadata-root]
+                                     (meta/max-value metadata-root "_tx-id" "_row-id")))
+                       nil))))))
 
 (defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (latest-metadata-object os)
 
       (util/then-apply
         (fn [path]
-          (with-metadata path allocator
-            (fn [^VectorSchemaRoot metadata-root]
-              (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
-                (ingest/->TransactionInstant max-tx-id
-                                             (-> (meta/max-value metadata-root "_tx-time")
-                                                 util/local-date-time->date)))))))))
+          (->> (block-stream path allocator)
+               (reduce (completing (fn [_ ^VectorSchemaRoot metadata-root]
+                                     (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
+                                       (ingest/->TransactionInstant max-tx-id
+                                                                    (-> (meta/max-value metadata-root "_tx-time")
+                                                                        util/local-date-time->date)))))
+                       nil))))))
 
 (defn index-all-available-transactions
   ([^LogReader log-reader
