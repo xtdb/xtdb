@@ -118,6 +118,13 @@
         (fn [result]
           (log-record->tx-instant result)))))
 
+(defn with-metadata [path ^BufferAllocator allocator f]
+  (when path
+    (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
+                file-reader (ArrowFileReader. file-ch allocator)]
+      (.loadNextBatch file-reader)
+      (f (.getVectorSchemaRoot file-reader)))))
+
 (defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (.listObjects os)
 
@@ -134,12 +141,9 @@
 
       (util/then-apply
         (fn [path]
-          (if path
-            (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
-                        file-reader (ArrowFileReader. file-ch allocator)]
-              (.loadNextBatch file-reader)
-              (let [root (.getVectorSchemaRoot file-reader)
-                    column-vec (.getVector root "column")
+          (with-metadata path allocator
+            (fn [^VectorSchemaRoot root]
+              (let [column-vec (.getVector root "column")
                     field-vec (.getVector root "field")
                     ->field-idx (fn [column-name field-name]
                                   (reduce (fn [_ ^long idx]
@@ -153,20 +157,16 @@
                     tx-id-row-id-idx (->field-idx "_tx-id" "_row-id")
 
                     max-vec (.getVector root "max")]
-                (.getObject max-vec tx-id-row-id-idx)))
-            0)))))
+                (.getObject max-vec tx-id-row-id-idx))))))))
 
 (defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
   (-> (latest-metadata-object os allocator)
 
       (util/then-apply
         (fn [path]
-          (when path
-            (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
-                        file-reader (ArrowFileReader. file-ch allocator)]
-              (.loadNextBatch file-reader)
-              (let [root (.getVectorSchemaRoot file-reader)
-                    field-vec (.getVector root "field")
+          (with-metadata path allocator
+            (fn [^VectorSchemaRoot root]
+              (let [field-vec (.getVector root "field")
                     ->field-idx (fn [field-name]
                                   (reduce (fn [_ ^long idx]
                                             (when (= (str (.getObject field-vec idx))
