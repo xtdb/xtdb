@@ -6,13 +6,14 @@
             [core2.ingest :as ingest]
             [core2.json :as c2-json]
             [core2.log :as log]
-            [core2.object-store :as os]
             [core2.util :as util])
-  (:import core2.log.LogRecord
+  (:import core2.core.IngestLoop
+           core2.ingest.Ingester
+           core2.object_store.ObjectStore
            java.io.File
            [java.time Clock Duration ZoneId]
            java.util.Date
-           org.apache.arrow.memory.RootAllocator))
+           org.apache.arrow.memory.BufferAllocator))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -69,47 +70,46 @@
            :mem-used 2.79257668E8}}]])
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
-  (let [object-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/object-store")
-        log-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format/log")
+  (let [node-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
         last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
-    (util/delete-dir object-dir)
-    (util/delete-dir log-dir)
+    (util/delete-dir node-dir)
 
-    (with-open [a (RootAllocator. Long/MAX_VALUE)
-                log-reader (log/->local-directory-log-reader log-dir)
-                log-writer (log/->local-directory-log-writer log-dir {:clock mock-clock})
-                os (os/->file-system-object-store (.toPath object-dir))
-                i (ingest/->ingester a os @(c2/latest-row-id os a))
-                il (c2/->ingest-loop log-reader i @(c2/latest-completed-tx os a))]
+    (with-open [node (c2/->local-node node-dir)
+                log-writer (log/->local-directory-log-writer (io/file node-dir "log") {:clock mock-clock})]
+      (let [^BufferAllocator a (.allocator node)
+            ^ObjectStore os (.object-store node)
+            ^Ingester i (.ingester node)
+            ^IngestLoop il (.ingest-loop node)
+            object-dir (io/file node-dir "objects")]
 
-      (t/is (nil? @(c2/latest-completed-tx os a)))
-      (t/is (nil? @(c2/latest-row-id os a)))
+        (t/is (nil? @(c2/latest-completed-tx os a)))
+        (t/is (nil? @(c2/latest-row-id os a)))
 
-      (t/is (= last-tx-instant
-               (last (for [tx-ops txs]
-                       @(c2/submit-tx log-writer tx-ops a)))))
+        (t/is (= last-tx-instant
+                 (last (for [tx-ops txs]
+                         @(c2/submit-tx log-writer tx-ops a)))))
 
-      (t/is (= last-tx-instant
-               (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
+        (t/is (= last-tx-instant
+                 (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
 
-      (.finishChunk i)
+        (.finishChunk i)
 
-      (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
-      (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os a)))
+        (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
+        (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os a)))
 
-      (let [objects-list @(.listObjects os)]
-        (t/is (= 21 (count objects-list)))
-        (t/is (= "metadata-00000000.arrow" (last objects-list)))))
+        (let [objects-list @(.listObjects os)]
+          (t/is (= 21 (count objects-list)))
+          (t/is (= "metadata-00000000.arrow" (last objects-list))))
 
-    (c2-json/write-arrow-json-files object-dir)
-    (t/is (= 42 (alength (.listFiles object-dir))))
+        (c2-json/write-arrow-json-files object-dir)
+        (t/is (= 42 (alength (.listFiles object-dir))))
 
-    (doseq [^File f (.listFiles object-dir)
-            :when (.endsWith (.getName f) ".json")]
-      (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (.getName f)))))
-               (json/parse-string (slurp f)))
-            (.getName f)))))
+        (doseq [^File f (.listFiles object-dir)
+                :when (.endsWith (.getName f) ".json")]
+          (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (.getName f)))))
+                   (json/parse-string (slurp f)))
+                (.getName f)))))))

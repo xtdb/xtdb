@@ -1,9 +1,11 @@
 (ns core2.core
   (:require [core2.types :as t]
             [core2.ingest :as ingest]
+            [core2.object-store :as os]
             [core2.log :as log]
             [clojure.string :as str]
-            [core2.util :as util])
+            [core2.util :as util]
+            [clojure.java.io :as io])
   (:import [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels Channels SeekableByteChannel]
@@ -12,14 +14,14 @@
            [java.time Duration Instant]
            [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
            [org.apache.arrow.flatbuf Footer]
-           [org.apache.arrow.memory BufferAllocator]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
            [org.apache.arrow.vector.ipc.message ArrowFooter]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
-           [core2.ingest TransactionIngester TransactionInstant]
+           [core2.ingest TransactionIngester TransactionInstant Ingester]
            [core2.object_store ObjectStore]
            [core2.log LogRecord LogReader LogWriter]))
 
@@ -125,7 +127,7 @@
       (.loadNextBatch file-reader)
       (f (.getVectorSchemaRoot file-reader)))))
 
-(defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
+(defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os]
   (-> (.listObjects os)
 
       (util/then-compose
@@ -137,7 +139,7 @@
             (CompletableFuture/completedFuture nil))))))
 
 (defn latest-row-id ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
-  (-> (latest-metadata-object os allocator)
+  (-> (latest-metadata-object os)
 
       (util/then-apply
         (fn [path]
@@ -160,7 +162,7 @@
                 (.getObject max-vec tx-id-row-id-idx))))))))
 
 (defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
-  (-> (latest-metadata-object os allocator)
+  (-> (latest-metadata-object os)
 
       (util/then-apply
         (fn [path]
@@ -298,3 +300,26 @@
     (while (pos? (.read in bb)))
     (.flip bb)
     (ArrowFooter. (Footer/getRootAsFooter bb))))
+
+(deftype Node [^BufferAllocator allocator
+               ^LogReader log-reader
+               ^ObjectStore object-store
+               ^Ingester ingester
+               ^IngestLoop ingest-loop]
+  Closeable
+  (close [_]
+    (.close ingest-loop)
+    (.close ingester)
+    (.close ^Closeable object-store)
+    (.close ^Closeable log-reader)
+    (.close allocator)))
+
+(defn ->local-node ^core2.core.Node [node-dir]
+  (let [object-dir (io/file node-dir "objects")
+        log-dir (io/file node-dir "log")
+        allocator (RootAllocator.)
+        log-reader (log/->local-directory-log-reader log-dir)
+        object-store (os/->file-system-object-store (.toPath object-dir))
+        ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator))
+        ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator))]
+    (Node. allocator log-reader object-store ingester ingest-loop)))
