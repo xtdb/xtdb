@@ -305,12 +305,15 @@
     (.close ^Closeable log-reader)
     (.close allocator)))
 
-(defn ->local-node ^core2.core.Node [node-dir]
-  (let [object-dir (io/file node-dir "objects")
-        log-dir (io/file node-dir "log")
-        allocator (RootAllocator.)
-        log-reader (log/->local-directory-log-reader log-dir)
-        object-store (os/->file-system-object-store (.toPath object-dir))
-        ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator))
-        ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator))]
-    (Node. allocator log-reader object-store ingester ingest-loop)))
+(defn ->local-node
+  (^core2.core.Node [node-dir]
+   (->local-node node-dir {}))
+  (^core2.core.Node [node-dir opts]
+   (let [object-dir (io/file node-dir "objects")
+         log-dir (io/file node-dir "log")
+         allocator (RootAllocator.)
+         log-reader (log/->local-directory-log-reader log-dir)
+         object-store (os/->file-system-object-store (.toPath object-dir) opts)
+         ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator) opts)
+         ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator) opts)]
+     (Node. allocator log-reader object-store ingester ingest-loop))))

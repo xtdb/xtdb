@@ -1,6 +1,9 @@
 (ns core2.ingest-test
   (:require [cheshire.core :as json]
+            [clojure.data.csv :as csv]
             [clojure.java.io :as io]
+            [clojure.instant :as inst]
+            [clojure.string :as str]
             [clojure.test :as t]
             [core2.core :as c2]
             [core2.ingest :as ingest]
@@ -116,3 +119,70 @@
           (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (.getName f)))))
                    (json/parse-string (slurp f)))
                 (.getName f)))))))
+
+(defn- device-info-csv->doc [[device-id api-version manufacturer model os-name]]
+  {:_id (str "device-info-" device-id)
+   :api-version api-version
+   :manufacturer manufacturer
+   :model model
+   :os-name os-name})
+
+(defn- readings-csv->doc [[time device-id battery-level battery-status
+                           battery-temperature bssid
+                           cpu-avg-1min cpu-avg-5min cpu-avg-15min
+                           mem-free mem-used rssi ssid]]
+  {:_id (str "reading-" device-id)
+   :time (inst/read-instant-date
+          (-> time
+              (str/replace " " "T")
+              (str/replace #"-(\d\d)$" ".000-$1:00")))
+   :device-id (str "device-info-" device-id)
+   :battery-level (Double/parseDouble battery-level)
+   :battery-status battery-status
+   :battery-temperature (Double/parseDouble battery-temperature)
+   :bssid bssid
+   :cpu-avg-1min (Double/parseDouble cpu-avg-1min)
+   :cpu-avg-5min (Double/parseDouble cpu-avg-5min)
+   :cpu-avg-15min (Double/parseDouble cpu-avg-15min)
+   :mem-free (Double/parseDouble mem-free)
+   :mem-used (Double/parseDouble mem-used)
+   :rssi (Double/parseDouble rssi)
+   :ssid ssid})
+
+(t/deftest can-ingest-ts-devices-mini
+  (let [node-dir (io/file "target/can-ingest-ts-devices-mini")]
+    (util/delete-dir node-dir)
+
+    (with-open [node (c2/->local-node node-dir {:max-block-size 100})
+                tx-producer (c2/->local-tx-producer node-dir {})
+                info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
+                readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
+      (let [^BufferAllocator a (.allocator node)
+            ^ObjectStore os (.object-store node)
+            ^Ingester i (.ingester node)
+            ^IngestLoop il (.ingest-loop node)
+            object-dir (io/file node-dir "objects")]
+        (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
+              readings (map readings-csv->doc (csv/read-csv readings-reader))
+              [initial-readings rest-readings] (split-at (count device-infos) readings)
+              tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                       {:op :put
+                        :doc doc})]
+
+          (t/is (= 11000 (count tx-ops)))
+
+          (let [last-tx-instant (reduce
+                                 (fn [acc tx-ops]
+                                   @(.submitTx tx-producer tx-ops))
+                                 nil
+                                 (partition-all 100 tx-ops))]
+
+            (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
+            (.finishChunk i)
+
+            (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
+            (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a)))
+
+            (t/is (= 11 (count @(.listObjects os "metadata-*"))))
+            (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
+            (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))

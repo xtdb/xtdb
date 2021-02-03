@@ -74,8 +74,8 @@
                    ^Map field->live-column
                    ^long max-block-size
                    ^long max-blocks-per-chunk
-                   ^:unsynchronized-mutable ^long chunk-idx
-                   ^:unsynchronized-mutable ^long next-row-id]
+                   ^:volatile-mutable ^long chunk-idx
+                   ^:volatile-mutable ^long next-row-id]
 
   TransactionIngester
   (indexTx [this tx-instant tx-ops]
@@ -162,33 +162,34 @@
       (.finishChunk this)))
 
   (finishChunk [this]
-    (doseq [^LiveColumn live-column (vals field->live-column)
-            :let [^VectorSchemaRoot content-root (.content-root live-column)]]
-      (when (pos? (.getRowCount content-root))
-        (write-live-column live-column)))
+    (when-not (empty? field->live-column)
+      (doseq [^LiveColumn live-column (vals field->live-column)
+              :let [^VectorSchemaRoot content-root (.content-root live-column)]]
+        (when (pos? (.getRowCount content-root))
+          (write-live-column live-column)))
 
-    (let [files (vec (for [^LiveColumn live-column (vals field->live-column)
-                           :let [^File file (.file live-column)]
-                           :when (.exists file)]
-                       file))
-          metadata-file (io/file (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
+      (let [files (vec (for [^LiveColumn live-column (vals field->live-column)
+                             :let [^File file (.file live-column)]
+                             :when (.exists file)]
+                         file))
+            metadata-file (io/file (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
 
-      (write-metadata! this metadata-file)
-      (close-writers! this)
+        (write-metadata! this metadata-file)
+        (close-writers! this)
 
-      (.join (CompletableFuture/allOf
-              (into-array CompletableFuture
-                          (for [^File file files]
-                            (.putObject object-store (.getName file) (.toPath file))))))
+        (.join (CompletableFuture/allOf
+                (into-array CompletableFuture
+                            (for [^File file files]
+                              (.putObject object-store (.getName file) (.toPath file))))))
 
-      (doseq [^File file files]
-        (.delete file))
+        (doseq [^File file files]
+          (.delete file))
 
-      (.join (.putObject object-store (.getName metadata-file) (.toPath metadata-file)))
+        (.join (.putObject object-store (.getName metadata-file) (.toPath metadata-file)))
 
-      (.delete metadata-file))
+        (.delete metadata-file))
 
-    (set! (.chunk-idx this) next-row-id))
+      (set! (.chunk-idx this) next-row-id)))
 
   Closeable
   (close [this]
