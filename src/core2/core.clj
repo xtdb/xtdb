@@ -228,12 +228,13 @@
   IIngestLoop
   (ingestLoop [this]
     (let [{:keys [^Duration poll-sleep-duration],
-           :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts]
+           :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
+          poll-sleep-ms (.toMillis poll-sleep-duration)]
       (try
         (while true
           (let [next-completed-tx (index-all-available-transactions log-reader ingester latest-completed-tx ingest-opts)]
             (if (= latest-completed-tx next-completed-tx)
-              (Thread/sleep (.toMillis poll-sleep-duration))
+              (Thread/sleep poll-sleep-ms)
               (set! (.latest-completed-tx this) next-completed-tx))))
         (catch InterruptedException _))))
 
@@ -245,14 +246,15 @@
     (if tx
       (let [{:keys [^Duration poll-sleep-duration],
              :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
-            start (Instant/now)
+            poll-sleep-ms (.toMillis poll-sleep-duration)
+            end (.plus (Instant/now) timeout)
             tx-id (.tx-id tx)]
         (loop []
           (let [latest-completed-tx latest-completed-tx]
             (if (and (or (nil? latest-completed-tx)
                          (< (.tx-id latest-completed-tx) tx-id))
                      (or (nil? timeout)
-                         (.isBefore (Instant/now) (.plus start timeout))))
+                         (.isBefore (Instant/now) end)))
               (do
                 (Thread/sleep (.toMillis poll-sleep-duration))
                 (recur))
