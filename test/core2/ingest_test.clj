@@ -173,11 +173,11 @@
 
           (t/is (nil? (.latestCompletedTx il)))
 
-          (let [last-tx-instant (reduce
-                                 (fn [acc tx-ops]
-                                   @(.submitTx tx-producer tx-ops))
-                                 nil
-                                 (partition-all 100 tx-ops))]
+          (let [last-tx-instant @(reduce
+                                  (fn [acc tx-ops]
+                                    (.submitTx tx-producer tx-ops))
+                                  nil
+                                  (partition-all 100 tx-ops))]
 
             (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
             (t/is (= last-tx-instant (.latestCompletedTx il)))
