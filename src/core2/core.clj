@@ -213,7 +213,7 @@
 
 (deftype IngestLoop [^LogReader log-reader
                      ^TransactionIngester ingester
-                     ^:unsynchronized-mutable ^TransactionInstant latest-completed-tx
+                     ^:volatile-mutable ^TransactionInstant latest-completed-tx
                      ^ExecutorService pool
                      ingest-opts]
   IIngestLoop
