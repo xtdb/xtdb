@@ -5,16 +5,18 @@
             [clojure.string :as str]
             [core2.util :as util])
   (:import [java.io ByteArrayOutputStream Closeable]
-           java.nio.ByteBuffer
-           java.nio.channels.Channels
+           [java.nio ByteBuffer ByteOrder]
+           [java.nio.channels Channels SeekableByteChannel]
            [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
            [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
+           [org.apache.arrow.flatbuf Footer]
            [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.vector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
+           [org.apache.arrow.vector.ipc.message ArrowFooter]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
            [core2.ingest TransactionIngester TransactionInstant]
@@ -278,3 +280,21 @@
          ingest-loop (IngestLoop. log-reader ingester latest-completed-tx pool ingest-opts)]
      (.submit pool ^Runnable #(.ingestLoop ingest-loop))
      ingest-loop)))
+
+(def ^:private ^{:tag 'long} arrow-magic-size (alength (.getBytes "ARROW1" "UTF-8")))
+
+(defn read-footer-position ^long [^SeekableByteChannel in]
+  (let [footer-size-bb (.order (ByteBuffer/allocate Integer/BYTES) ByteOrder/LITTLE_ENDIAN)
+        footer-size-offset (- (.size in) (+ (.capacity footer-size-bb) arrow-magic-size))]
+    (.position in footer-size-offset)
+    (while (pos? (.read in footer-size-bb)))
+    (- footer-size-offset (.getInt footer-size-bb 0))))
+
+(defn read-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^SeekableByteChannel in]
+  (let [footer-position (read-footer-position in)
+        footer-size (- (.size in) footer-position)
+        bb (ByteBuffer/allocate footer-size)]
+    (.position in footer-position)
+    (while (pos? (.read in bb)))
+    (.flip bb)
+    (ArrowFooter. (Footer/getRootAsFooter bb))))
