@@ -104,9 +104,14 @@ public class ConfigurationTest {
 
     @Test
     public void consumerAndExplicitBuildersAreEquivalent() {
+        ModuleConfiguration internalExplicitModule = ModuleConfiguration.builder()
+                .set("foo", "bar")
+                .build();
+
         ModuleConfiguration explicitModule = ModuleConfiguration.builder()
                 .set("foo", "bar")
                 .with("baz")
+                .with("waka", internalExplicitModule)
                 .set(Collections.singletonMap("foo2", 3))
                 .build();
 
@@ -119,6 +124,7 @@ public class ConfigurationTest {
             n.with("nodeFoo", buildModule(m -> {
                 m.set("foo", "bar");
                 m.with("baz");
+                m.with("waka", m2 -> m2.set("foo", "bar"));
                 m.set(Collections.singletonMap("foo2", 3));
             }));
             n.with("nodeBar");

@@ -85,9 +85,9 @@ public class Crux {
      * Starts a Crux node using the provided configuration.
      * <p>
      * <pre>
-     * ICruxAPI cruxNode = Crux.startNode(buildNode(n -> {
+     * ICruxAPI cruxNode = Crux.startNode(n -> {
      *   // ...
-     * }));
+     * });
      * </pre>
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
@@ -157,9 +157,9 @@ public class Crux {
      * running a full local node with index.
      * <p>
      * <pre>
-     * ICruxAPI ingestClient = Crux.newIngestClient(buildNode(n -> {
+     * ICruxAPI ingestClient = Crux.newIngestClient(n -> {
      *   // ...
-     * }));
+     * });
      * </pre>
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}

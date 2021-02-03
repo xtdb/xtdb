@@ -52,6 +52,10 @@ public final class ModuleConfiguration {
             return set(module, configuration);
         }
 
+        public Builder with(String name, Consumer<ModuleConfiguration.Builder> f) {
+            return with(name, ModuleConfiguration.buildModule(f));
+        }
+
         public Builder with(String module, String reference) {
             return set(module, reference);
         }
