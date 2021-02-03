@@ -20,32 +20,36 @@
 (deftype LocalDirectoryLogReader [^File dir ^:volatile-mutable ^RandomAccessFile log-file]
   LogReader
   (readRecords [this after-offset limit]
-    (when (nil? log-file)
-      (set! log-file (RandomAccessFile. (io/file dir "LOG") "r")))
-    (.seek log-file (or after-offset 0))
-    (loop [limit (int (if after-offset
-                        (inc limit)
-                        limit))
-           acc []]
-      (let [offset (.getFilePointer log-file)]
-        (if (or (zero? limit) (= offset (.length log-file)))
-          (if after-offset
-            (subvec acc 1)
-            acc)
-          (if-let [record (try
-                            (let [check (.readInt log-file)
-                                  size (.readInt log-file)
-                                  _ (when-not (= check (bit-xor (unchecked-int offset) size))
-                                      (throw (IllegalStateException. "invalid record")))
-                                  time (Date. (.readLong log-file))
-                                  record (doto (byte-array size)
-                                           (->> (.readFully log-file)))]
-                              (->LogRecord offset time (ByteBuffer/wrap record)))
-                            (catch EOFException _))]
-            (recur (dec limit) (conj acc record))
-            (if after-offset
-              (subvec acc 1)
-              acc))))))
+    (if (nil? log-file)
+      (let [f (io/file dir "LOG")]
+        (if (.exists f)
+          (do (set! log-file (RandomAccessFile. f "r"))
+              (recur after-offset limit))
+          []))
+      (do (.seek log-file (or after-offset 0))
+          (loop [limit (int (if after-offset
+                              (inc limit)
+                              limit))
+                 acc []]
+            (let [offset (.getFilePointer log-file)]
+              (if (or (zero? limit) (= offset (.length log-file)))
+                (if after-offset
+                  (subvec acc 1)
+                  acc)
+                (if-let [record (try
+                                  (let [check (.readInt log-file)
+                                        size (.readInt log-file)
+                                        _ (when-not (= check (bit-xor (unchecked-int offset) size))
+                                            (throw (IllegalStateException. "invalid record")))
+                                        time (Date. (.readLong log-file))
+                                        record (doto (byte-array size)
+                                                 (->> (.readFully log-file)))]
+                                    (->LogRecord offset time (ByteBuffer/wrap record)))
+                                  (catch EOFException _))]
+                  (recur (dec limit) (conj acc record))
+                  (if after-offset
+                    (subvec acc 1)
+                    acc))))))))
 
   Closeable
   (close [_]
