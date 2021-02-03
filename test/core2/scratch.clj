@@ -61,8 +61,9 @@
 
 ;;; ingest
 ;; DONE object store protocol, store chunks and metadata. Local directory implementation.
-;; TODO log protocol. Local directory implementation.
-;; TODO figure out last tx-id/row-id from latest chunk and resume ingest on start.
+;; DONE log protocol. Local directory implementation.
+;; DONE figure out last tx-id/row-id from latest chunk and resume ingest on start.
+;; TODO sanity checking of multiple nodes sharing a log/object-store
 ;; TODO (bonus) refactor ingest to use holders / simplify union code.
 ;; TODO (bonus) unnest ops similar to metadata.
 ;; TODO (bonus) blocks vs chunks in object store?
@@ -87,7 +88,7 @@
 ;; TODO handle deletes
 ;; TODO JMH + JSON tests
 ;; TODO vectorised operations in the ingester
-;; TODO tx-ids?
+;; TODO tx-ids? storing as binary in the columns?
 
 ;; directions?
 ;; 1. e2e? submit-tx + some code-level queries
