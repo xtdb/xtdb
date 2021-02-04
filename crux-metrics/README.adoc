@@ -5,7 +5,7 @@ This module provides components that expose metrics about a node via https://met
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-metrics {:mvn/version "20.12-1.13.0-beta"}
+juxt/crux-metrics {:mvn/version "21.01-1.14.0-beta"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ juxt/crux-metrics {:mvn/version "20.12-1.13.0-beta"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-metrics</artifactId>
-    <version>20.12-1.13.0-beta</version>
+    <version>21.01-1.14.0-beta</version>
 </dependency>
 ----
 

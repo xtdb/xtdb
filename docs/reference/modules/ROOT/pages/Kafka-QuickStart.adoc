@@ -4,7 +4,7 @@
 
 Download the connector from Confluent hub, then unzip the downloaded folder:
 ----
-unzip juxt-kafka-connect-crux-20.12-1.13.0-beta.zip
+unzip juxt-kafka-connect-crux-21.01-1.14.0-beta.zip
 ----
 
 Navigate into the base of the Kafka folder, then run the following commands:
