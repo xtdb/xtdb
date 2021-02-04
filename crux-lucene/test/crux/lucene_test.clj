@@ -18,6 +18,10 @@
 
 (t/use-fixtures :each lf/with-lucene-module fix/with-node)
 
+(t/deftest test-empty-database-returns-empty
+  (t/is (= 0 (count (c/q (c/db *api*) {:find '[?e]
+                                       :where '[[(text-search :name "Ivan") [[?e]]]]})))))
+
 (t/deftest test-can-search-string
   (let [doc {:crux.db/id :ivan :name "Ivan"}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
