@@ -13,7 +13,6 @@
            java.nio.file.attribute.FileAttribute
            [java.util Date List Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
-           java.util.concurrent.atomic.AtomicBoolean
            java.util.function.Function
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot]
@@ -35,11 +34,10 @@
 
 (declare close-writers! write-metadata!)
 
-(deftype LiveColumn [^VectorSchemaRoot content-root, ^File file, ^ArrowFileWriter file-writer, ^List field-metadata ^AtomicBoolean closed?]
+(deftype LiveColumn [^VectorSchemaRoot content-root, ^File file, ^ArrowFileWriter file-writer, ^List field-metadata]
   Closeable
   (close [_]
-    (when (.compareAndSet closed? false true)
-      (.close file-writer))
+    (.close file-writer)
     (doseq [^Closeable metadata field-metadata]
       (.close metadata))
     (.close content-root)))
@@ -96,8 +94,7 @@
                                       file
                                       (doto (ArrowFileWriter. content-root nil file-ch)
                                         (.start))
-                                      field-metadata
-                                      (AtomicBoolean.)))))]
+                                      field-metadata))))]
       (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                   sr (doto (ArrowStreamReader. tx-ops-ch allocator)
                        (.loadNextBatch))
