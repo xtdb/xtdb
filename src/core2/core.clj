@@ -189,37 +189,6 @@
                                              (-> (meta/max-value metadata-root "_tx-time")
                                                  util/local-date-time->date)))))))))
 
-(defn index-all-available-transactions
-  ([^LogReader log-reader
-    ^TransactionIngester ingester
-    ^TransactionInstant latest-completed-tx]
-   (index-all-available-transactions log-reader ingester latest-completed-tx {}))
-
-  ([^LogReader log-reader
-    ^TransactionIngester ingester
-    ^TransactionInstant latest-completed-tx
-    {:keys [batch-size], :or {batch-size 100}}]
-
-   (loop [latest-completed-tx latest-completed-tx]
-     (if-let [log-records (seq (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
-       (let [latest-completed-tx (reduce (fn [_ ^LogRecord record]
-                                           (let [tx-instant (log-record->tx-instant record)]
-                                             (.indexTx ingester tx-instant (.record record))
-
-                                             (when (Thread/interrupted)
-                                               (throw (InterruptedException.)))
-
-                                             tx-instant))
-                                         nil
-                                         log-records)]
-
-         (when (Thread/interrupted)
-           (throw (InterruptedException.)))
-
-         (recur latest-completed-tx))
-
-       latest-completed-tx))))
-
 (definterface IIngestLoop
   (^void ingestLoop [])
   (^core2.ingest.TransactionInstant latestCompletedTx [])
@@ -233,15 +202,21 @@
                      ingest-opts]
   IIngestLoop
   (ingestLoop [this]
-    (let [{:keys [^Duration poll-sleep-duration],
-           :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
+    (let [{:keys [^Duration poll-sleep-duration ^long batch-size],
+           :or {poll-sleep-duration (Duration/ofMillis 100)
+                batch-size 100}} ingest-opts
           poll-sleep-ms (.toMillis poll-sleep-duration)]
       (try
         (while true
-          (let [next-completed-tx (index-all-available-transactions log-reader ingester latest-completed-tx ingest-opts)]
-            (if (= latest-completed-tx next-completed-tx)
-              (Thread/sleep poll-sleep-ms)
-              (set! (.latest-completed-tx this) next-completed-tx))))
+          (if-let [next-completed-tx (reduce
+                                      (fn [_ ^LogRecord record]
+                                        (when (Thread/interrupted)
+                                          (throw (InterruptedException.)))
+                                        (.indexTx ingester (log-record->tx-instant record) (.record record)))
+                                      nil
+                                      (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
+            (set! (.latest-completed-tx this) next-completed-tx)
+            (Thread/sleep poll-sleep-ms)))
         (catch InterruptedException _))))
 
   (latestCompletedTx [_this] latest-completed-tx)
