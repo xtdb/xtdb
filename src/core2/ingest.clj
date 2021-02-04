@@ -11,8 +11,8 @@
            java.nio.channels.FileChannel
            [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.util Date HashMap List Map]
-           java.util.concurrent.CompletableFuture
+           [java.util Date List Map]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.atomic.AtomicBoolean
            java.util.function.Function
            org.apache.arrow.memory.BufferAllocator
@@ -165,7 +165,7 @@
     tx-instant)
 
   (finishChunk [this]
-    (when-not (empty? field->live-column)
+    (when-not (.isEmpty field->live-column)
       (doseq [^LiveColumn live-column (vals field->live-column)
               :let [^VectorSchemaRoot content-root (.content-root live-column)]]
         (when (pos? (.getRowCount content-root))
@@ -252,7 +252,7 @@
      (Ingester. allocator
                 (.toFile (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0)))
                 object-store
-                (HashMap.)
+                (ConcurrentHashMap.)
                 max-block-size
                 max-blocks-per-chunk
                 next-row-id
