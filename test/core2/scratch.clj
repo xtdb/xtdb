@@ -89,6 +89,7 @@
 ;; TODO JMH + JSON tests
 ;; TODO vectorised operations in the ingester
 ;; TODO tx-ids? storing as binary in the columns?
+;; TODO in-memory object-store/log?
 
 ;; directions?
 ;; 1. e2e? submit-tx + some code-level queries
