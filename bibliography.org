@@ -3,11 +3,14 @@
 - [[https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf][(Abadi) The Design and Implementation of Modern Columnar Store Systems]]
 - [[https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf][C-Store: A Column-oriented DBMS]]
 - [[https://arxiv.org/pdf/2004.14471.pdf][Mainlining Databases: Supporting Fast Transactional Workloads on Universal Columnar Data File Formats]]
+  - [[https://db.in.tum.de/~muehlbau/papers/mvcc.pdf][Fast Serializable Multi-Version Concurrency Controlfor Main-Memory Database Systems]]
+  - [[https://www.cs.cmu.edu/~pavlo/courses/fall2013/static/papers/p731-sikka.pdf][Efficient Transaction Processing in SAP HANA Database –The End of a Column Store Myth]]
 
 MonetDB:
 - [[http://www.cs.cmu.edu/~natassa/courses/15-823/syllabus/papers/boncz99database.pdf][Database Architecture Optimized for the new Bottleneck: Memory Access]]
 - [[https://strum355.netsoc.co/books/PDF/MonetDB-X100%20-%20Hyper-Pipelining%20Query%20Execution%20(CIDR%202005%20P19).pdf][MonetDB/X100: Hyper-Pipelining Query Execution]]
 - [[https://pdfs.semanticscholar.org/3854/4aae01b27a3a429c2e3accd70cc932531136.pdf][Database Architecture Evolution: Mammals Flourished long before Dinosaurs became Extinct]]
+- [[https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.8552&rep=rep1&type=pdf][MIL Primitives for Querying a Fragmented World]]
 
 ** Separating Storage from Compute
 blog posts:
@@ -23,3 +26,7 @@ papers:
 - [[https://www.vertica.com/wp-content/uploads/2018/05/Vertica_EON_SIGMOD_Paper.pdf][Eon Mode: Bringing the Vertica Columnar Database to the Cloud]] - explains their journey from the old enterprise model to the cloud EON-mode.
 - [[https://media.amazonwebservices.com/blog/2017/aurora-design-considerations-paper.pdf][Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases]] - stores the logs in S3, and all other data is derived from it.
 - [[https://www.eecg.utoronto.ca/~ashvin/publications/hailstorm.pdf][Hailstorm: Disaggregated Compute and Storage for Distributed LSM-based Databases]] - more of a cloud LSM implementation paper.
+
+** CMU Courses
+- [[https://15445.courses.cs.cmu.edu/fall2019/schedule.html][Intro to Database Systems (Fall 2019)]]
+- [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html][Advanced Database Systems (Spring 2020)]]
