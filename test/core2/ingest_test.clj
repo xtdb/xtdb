@@ -12,7 +12,7 @@
             [core2.util :as util]
             [core2.metadata :as meta])
   (:import [core2.core IngestLoop Node]
-           core2.ingest.Ingester
+           [core2.ingest Ingester TransactionInstant]
            core2.object_store.ObjectStore
            clojure.lang.MapEntry
            [java.io Closeable File]
@@ -231,6 +231,76 @@
             (t/is (= 11 (count @(.listObjects os "metadata-*"))))
             (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
             (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
+
+(t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
+  (let [node-dir (io/file "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
+        opts {:max-block-size 100}]
+    (util/delete-dir node-dir)
+
+    (with-open [tx-producer (c2/->local-tx-producer node-dir {})
+                info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
+                readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
+      (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
+            readings (map readings-csv->doc (csv/read-csv readings-reader))
+            [initial-readings rest-readings] (split-at (count device-infos) readings)
+            tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                     {:op :put
+                      :doc doc})
+            [first-half-tx-ops second-half-tx-ops] (split-at (/ (count tx-ops) 2) tx-ops)]
+
+        (t/is (= 5500 (count first-half-tx-ops)))
+        (t/is (= 5500 (count second-half-tx-ops)))
+
+        (let [^TransactionInstant
+              first-half-tx-instant @(reduce
+                                      (fn [acc tx-ops]
+                                        (.submitTx tx-producer tx-ops))
+                                      nil
+                                      (partition-all 100 first-half-tx-ops))]
+
+          (with-open [node (c2/->local-node node-dir opts)]
+            (let [^BufferAllocator a (.allocator node)
+                  ^IngestLoop il (.ingest-loop node)
+                  ^ObjectStore os (.object-store node)]
+              (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
+              (t/is (= first-half-tx-instant (.latestCompletedTx il)))
+
+              (let [^TransactionInstant os-tx-instant @(c2/latest-completed-tx os a)
+                    os-latest-row-id @(c2/latest-row-id os a)]
+                (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
+                (t/is (< os-latest-row-id (count first-half-tx-ops)))
+
+                (t/is (= 5 (count @(.listObjects os "metadata-*"))))
+                (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
+                (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*")))))
+
+              (let [^TransactionInstant
+                    second-half-tx-instant @(reduce
+                                             (fn [acc tx-ops]
+                                               (.submitTx tx-producer tx-ops))
+                                             nil
+                                             (partition-all 100 second-half-tx-ops))]
+
+                (t/is (<= (.tx-id first-half-tx-instant)
+                          (.tx-id (.latestCompletedTx il))
+                          (.tx-id second-half-tx-instant)))
+
+                (with-open [new-node (c2/->local-node node-dir opts)]
+                  (doseq [^Node node [new-node node]]
+                    :let [^IngestLoop il (.ingest-loop node)]
+                    (t/is (<= (.tx-id first-half-tx-instant)
+                              (.tx-id (.latestCompletedTx il))
+                              (.tx-id second-half-tx-instant))))
+
+                  (doseq [^Node node [new-node node]]
+                    :let [^IngestLoop il (.ingest-loop node)
+                          ^ObjectStore os (.object-store node)]
+                    (t/is (= second-half-tx-instant (.awaitTx il second-half-tx-instant (Duration/ofSeconds 5))))
+                    (t/is (= second-half-tx-instant (.latestCompletedTx il)))
+
+                    (t/is (= 11 (count @(.listObjects os "metadata-*"))))
+                    (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
+                    (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))))))
 
 (t/deftest scans-rowid-for-value
   (let [node-dir (io/file "target/scans-rowid-for-value")]
