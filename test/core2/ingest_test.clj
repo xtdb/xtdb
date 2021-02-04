@@ -126,6 +126,37 @@
                    (json/parse-string (slurp f)))
                 (.getName f)))))))
 
+(t/deftest can-stop-node-without-writing-chunks
+  (let [node-dir (io/file "target/can-stop-node-without-writing-chunks")
+        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
+        last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")
+        total-number-of-ops (count (for [tx-ops txs
+                                         op tx-ops]
+                                     op))]
+    (util/delete-dir node-dir)
+
+    (with-open [node (c2/->local-node node-dir)
+                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
+      (let [^ObjectStore os (.object-store node)
+            ^IngestLoop il (.ingest-loop node)
+            object-dir (io/file node-dir "objects")]
+
+        (t/is (= last-tx-instant
+                 (last (for [tx-ops txs]
+                         @(.submitTx tx-producer tx-ops)))))
+
+        (t/is (= last-tx-instant
+                 (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
+        (t/is (= last-tx-instant (.latestCompletedTx il)))
+
+        (with-open [node (c2/->local-node node-dir)]
+          (let [^IngestLoop il (.ingest-loop node)]
+            (t/is (= last-tx-instant
+                     (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
+            (t/is (= last-tx-instant (.latestCompletedTx il)))))
+
+        (t/is (zero? (alength (.listFiles object-dir))))))))
+
 (defn- device-info-csv->doc [[device-id api-version manufacturer model os-name]]
   {:_id (str "device-info-" device-id)
    :api-version api-version
