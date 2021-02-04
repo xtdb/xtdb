@@ -196,8 +196,8 @@
             (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
             (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
 
-(t/deftest can-ingest-ts-devices-mini-into-two-nodes
-  (let [node-dir (io/file "target/can-ingest-ts-devices-mini-into-two-nodes")
+(t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
+  (let [node-dir (io/file "target/can-ingest-ts-devices-mini-into-multiple-nodes")
         opts {:max-block-size 100}]
     (util/delete-dir node-dir)
 
