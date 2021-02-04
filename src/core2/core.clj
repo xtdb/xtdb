@@ -10,6 +10,7 @@
   (:import [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels Channels SeekableByteChannel]
+           [java.nio.charset StandardCharsets]
            [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
@@ -290,7 +291,7 @@
      (.submit pool ^Runnable #(.ingestLoop ingest-loop))
      ingest-loop)))
 
-(def ^:private ^{:tag 'long} arrow-magic-size (alength (.getBytes "ARROW1" "UTF-8")))
+(def ^:private ^{:tag 'long} arrow-magic-size (alength (.getBytes "ARROW1" StandardCharsets/UTF_8)))
 
 (defn read-footer-position ^long [^SeekableByteChannel in]
   (let [footer-size-bb (.order (ByteBuffer/allocate Integer/BYTES) ByteOrder/LITTLE_ENDIAN)

@@ -58,8 +58,10 @@
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
 
+(def ^:private ^ZoneId utc (ZoneId/of "UTC"))
+
 (defn local-date-time->date ^java.util.Date [^LocalDateTime ldt]
-  (Date/from (.toInstant (.atZone ldt (ZoneId/of "UTC")))))
+  (Date/from (.toInstant (.atZone ldt utc))))
 
 (defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
   (reify Supplier
