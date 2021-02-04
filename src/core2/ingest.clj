@@ -149,8 +149,6 @@
           (when (>= (.getRowCount content-root) max-block-size)
             (write-live-column live-column)))))
 
-    tx-instant
-
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
     (when (>= (->> (vals field->live-column)
@@ -159,7 +157,9 @@
                    (apply max)
                    (long))
               max-blocks-per-chunk)
-      (.finishChunk this)))
+      (.finishChunk this))
+
+    tx-instant)
 
   (finishChunk [this]
     (when-not (empty? field->live-column)
