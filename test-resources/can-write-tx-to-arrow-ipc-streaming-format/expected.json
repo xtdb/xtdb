@@ -119,8 +119,9 @@
               "name" : "time",
               "nullable" : true,
               "type" : {
-                "name" : "date",
-                "unit" : "MILLISECOND"
+                "name" : "timestamp",
+                "unit" : "MILLISECOND",
+                "timezone" : null
               },
               "children" : [ ]
             },{

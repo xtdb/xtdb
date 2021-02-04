@@ -185,9 +185,8 @@
           (with-metadata path allocator
             (fn [^VectorSchemaRoot metadata-root]
               (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
-                (ingest/->TransactionInstant max-tx-id
-                                             (-> (meta/max-value metadata-root "_tx-time")
-                                                 util/local-date-time->date)))))))))
+                (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
+                     (ingest/->TransactionInstant max-tx-id)))))))))
 
 (definterface IIngestLoop
   (^void ingestLoop [])

@@ -1,20 +1,20 @@
 (ns core2.types
   (:import java.util.Date
-           [org.apache.arrow.vector BigIntVector BitVector DateMilliVector Float8Vector NullVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector VarBinaryVector VarCharVector TimeStampMilliVector]
            [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Decimal ArrowType$Union Field FieldType]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Timestamp ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ->arrow-type
-  {Boolean (.getType Types$MinorType/BIT)
-   (Class/forName "[B") (.getType Types$MinorType/VARBINARY)
-   Double (.getType Types$MinorType/FLOAT8)
+  {nil (.getType Types$MinorType/NULL)
    Long (.getType Types$MinorType/BIGINT)
+   Double (.getType Types$MinorType/FLOAT8)
+   (Class/forName "[B") (.getType Types$MinorType/VARBINARY)
    String (.getType Types$MinorType/VARCHAR)
-   Date (.getType Types$MinorType/DATEMILLI)
-   nil (.getType Types$MinorType/NULL)})
+   Boolean (.getType Types$MinorType/BIT)
+   Date (.getType Types$MinorType/TIMESTAMPMILLI)})
 
 (defn ->field-type ^org.apache.arrow.vector.types.pojo.FieldType [^ArrowType arrow-type nullable]
   (FieldType. nullable arrow-type nil nil))
@@ -23,13 +23,13 @@
   (Field. field-name (->field-type arrow-type nullable) children))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (->field "_row-id" (.getType Types$MinorType/BIGINT) false))
+  (->field "_row-id" (->arrow-type Long) false))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-time-field
-  (->field "_tx-time" (.getType Types$MinorType/DATEMILLI) false))
+  (->field "_tx-time" (->arrow-type Date) false))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-id-field
-  (->field "_tx-id" (.getType Types$MinorType/BIGINT) false))
+  (->field "_tx-id" (->arrow-type Long) false))
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])
@@ -44,7 +44,7 @@
   (set-safe! [this idx v] (.setSafe this ^int idx ^int (if v 1 0)))
   (set-null! [this idx] (.setNull this ^int idx))
 
-  DateMilliVector
+  TimeStampMilliVector
   (set-safe! [this idx v] (.setSafe this ^int idx (.getTime ^Date v)))
   (set-null! [this idx] (.setNull this ^int idx))
 
@@ -71,8 +71,7 @@
                                     (.getType Types$MinorType/VARBINARY)
                                     (.getType Types$MinorType/VARCHAR)
                                     (.getType Types$MinorType/BIT)
-                                    (ArrowType$Decimal/createDecimal 16 16 (Integer/valueOf 128))
-                                    (.getType Types$MinorType/DATEMILLI)]]
+                                    (.getType Types$MinorType/TIMESTAMPMILLI)]]
          (->field (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type))) arrow-type true))))
 
 

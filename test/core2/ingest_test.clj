@@ -81,7 +81,7 @@
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")
+        last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -129,7 +129,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (io/file "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 3496 #inst "2020-01-02")
+        last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]

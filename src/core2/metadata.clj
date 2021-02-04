@@ -3,9 +3,9 @@
   (:import java.io.Closeable
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.util.ByteFunctionHelpers
-           [org.apache.arrow.vector BigIntVector BitVector DateMilliVector FieldVector Float8Vector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector VarBinaryVector VarCharVector VectorSchemaRoot TimeStampMilliVector]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableDateMilliHolder NullableFloat8Holder NullableVarBinaryHolder NullableVarCharHolder]
+           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableVarBinaryHolder NullableVarCharHolder NullableTimeStampMilliHolder]
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$ArrowTypeID Field Schema]
            org.apache.arrow.vector.util.Text))
@@ -219,12 +219,12 @@
   Closeable
   (close [_]))
 
-(deftype DateMilliMetadata [^NullableDateMilliHolder min-val
-                            ^NullableDateMilliHolder max-val
-                            ^:unsynchronized-mutable ^long cnt]
+(deftype TimeStampMilliMetadata [^NullableTimeStampMilliHolder min-val
+                                 ^NullableTimeStampMilliHolder max-val
+                                 ^:unsynchronized-mutable ^long cnt]
   IColumnMetadata
   (updateMetadata [this field-vector]
-    (let [^DateMilliVector field-vector field-vector]
+    (let [^TimeStampMilliVector field-vector field-vector]
       (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
 
       (dotimes [idx (.getValueCount field-vector)]
@@ -238,7 +238,7 @@
   (writeMetadata [_ metadata-root idx]
     (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
           max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/Date)]
+          type-id (.getFlatbufID ArrowType$ArrowTypeID/Timestamp)]
       (.setTypeId min-vec idx type-id)
       (.setSafe min-vec idx min-val)
       (.setTypeId max-vec idx type-id)
@@ -256,8 +256,7 @@
     Types$MinorType/VARBINARY (->VarBinaryMetadata nil nil 0 (ArrowBufPointer.))
     Types$MinorType/VARCHAR (->VarCharMetadata nil nil 0 (ArrowBufPointer.))
     Types$MinorType/BIT (->BitMetadata (NullableBitHolder.) (NullableBitHolder.) 0)
-    Types$MinorType/DECIMAL (throw (UnsupportedOperationException.))
-    Types$MinorType/DATEMILLI (->DateMilliMetadata (NullableDateMilliHolder.) (NullableDateMilliHolder.) 0)
+    Types$MinorType/TIMESTAMPMILLI (->TimeStampMilliMetadata (NullableTimeStampMilliHolder.) (NullableTimeStampMilliHolder.) 0)
     (throw (UnsupportedOperationException.))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema

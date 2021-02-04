@@ -27,7 +27,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [1,2,3,4,5,6,7,8]
+        "typeIds" : [1,2,3,4,5,6,10]
       },
       "children" : [{
         "name" : "$data$",
@@ -75,21 +75,12 @@
         },
         "children" : [ ]
       },{
-        "name" : "decimal",
+        "name" : "timestampmilli",
         "nullable" : true,
         "type" : {
-          "name" : "decimal",
-          "precision" : 16,
-          "scale" : 16,
-          "bitWidth" : 128
-        },
-        "children" : [ ]
-      },{
-        "name" : "datemilli",
-        "nullable" : true,
-        "type" : {
-          "name" : "date",
-          "unit" : "MILLISECOND"
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
         },
         "children" : [ ]
       }]
@@ -99,7 +90,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [1,2,3,4,5,6,7,8]
+        "typeIds" : [1,2,3,4,5,6,10]
       },
       "children" : [{
         "name" : "$data$",
@@ -147,21 +138,12 @@
         },
         "children" : [ ]
       },{
-        "name" : "decimal",
+        "name" : "timestampmilli",
         "nullable" : true,
         "type" : {
-          "name" : "decimal",
-          "precision" : 16,
-          "scale" : 16,
-          "bitWidth" : 128
-        },
-        "children" : [ ]
-      },{
-        "name" : "datemilli",
-        "nullable" : true,
-        "type" : {
-          "name" : "date",
-          "unit" : "MILLISECOND"
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
         },
         "children" : [ ]
       }]
@@ -182,8 +164,8 @@
       "name" : "file",
       "count" : 40,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,41,82,125,168,216,264,313,362,412,462,514,566,622,678,721,764,814,864,913,962,1011,1060,1107,1154,1204,1254,1299,1344,1389,1434,1477,1520,1565,1610,1651,1692,1734,1776,1820,1864],
-      "DATA" : ["chunk-00000000-_id-VARCHAR-01217599.arrow","chunk-00000000-_id-VARCHAR-01217599.arrow","chunk-00000000-_tx-id-BIGINT-8621105f.arrow","chunk-00000000-_tx-id-BIGINT-8621105f.arrow","chunk-00000000-_tx-time-DATEMILLI-e979ae8f.arrow","chunk-00000000-_tx-time-DATEMILLI-e979ae8f.arrow","chunk-00000000-api-version-VARCHAR-ae538d2d.arrow","chunk-00000000-api-version-VARCHAR-ae538d2d.arrow","chunk-00000000-battery-level-FLOAT8-e8fcb016.arrow","chunk-00000000-battery-level-FLOAT8-e8fcb016.arrow","chunk-00000000-battery-status-VARCHAR-c5497c7b.arrow","chunk-00000000-battery-status-VARCHAR-c5497c7b.arrow","chunk-00000000-battery-temperature-FLOAT8-49d42f1d.arrow","chunk-00000000-battery-temperature-FLOAT8-49d42f1d.arrow","chunk-00000000-bssid-VARCHAR-63f8a6c1.arrow","chunk-00000000-bssid-VARCHAR-63f8a6c1.arrow","chunk-00000000-cpu-avg-15min-FLOAT8-28c3e032.arrow","chunk-00000000-cpu-avg-15min-FLOAT8-28c3e032.arrow","chunk-00000000-cpu-avg-1min-FLOAT8-5d468bad.arrow","chunk-00000000-cpu-avg-1min-FLOAT8-5d468bad.arrow","chunk-00000000-cpu-avg-5min-FLOAT8-cc682bd4.arrow","chunk-00000000-cpu-avg-5min-FLOAT8-cc682bd4.arrow","chunk-00000000-device-id-VARCHAR-7ea3cc93.arrow","chunk-00000000-device-id-VARCHAR-7ea3cc93.arrow","chunk-00000000-manufacturer-VARCHAR-a5c8825f.arrow","chunk-00000000-manufacturer-VARCHAR-a5c8825f.arrow","chunk-00000000-mem-free-FLOAT8-24e6f0aa.arrow","chunk-00000000-mem-free-FLOAT8-24e6f0aa.arrow","chunk-00000000-mem-used-FLOAT8-f827ba43.arrow","chunk-00000000-mem-used-FLOAT8-f827ba43.arrow","chunk-00000000-model-VARCHAR-3cc79fee.arrow","chunk-00000000-model-VARCHAR-3cc79fee.arrow","chunk-00000000-os-name-VARCHAR-c2acf3db.arrow","chunk-00000000-os-name-VARCHAR-c2acf3db.arrow","chunk-00000000-rssi-FLOAT8-08f16daf.arrow","chunk-00000000-rssi-FLOAT8-08f16daf.arrow","chunk-00000000-ssid-VARCHAR-d41f5e15.arrow","chunk-00000000-ssid-VARCHAR-d41f5e15.arrow","chunk-00000000-time-DATEMILLI-974933d1.arrow","chunk-00000000-time-DATEMILLI-974933d1.arrow"]
+      "OFFSET" : [0,41,82,125,168,221,274,323,372,422,472,524,576,632,688,731,774,824,874,923,972,1021,1070,1117,1164,1214,1264,1309,1354,1399,1444,1487,1530,1575,1620,1661,1702,1744,1786,1835,1884],
+      "DATA" : ["chunk-00000000-_id-VARCHAR-01217599.arrow","chunk-00000000-_id-VARCHAR-01217599.arrow","chunk-00000000-_tx-id-BIGINT-8621105f.arrow","chunk-00000000-_tx-id-BIGINT-8621105f.arrow","chunk-00000000-_tx-time-TIMESTAMPMILLI-5758e2b4.arrow","chunk-00000000-_tx-time-TIMESTAMPMILLI-5758e2b4.arrow","chunk-00000000-api-version-VARCHAR-ae538d2d.arrow","chunk-00000000-api-version-VARCHAR-ae538d2d.arrow","chunk-00000000-battery-level-FLOAT8-e8fcb016.arrow","chunk-00000000-battery-level-FLOAT8-e8fcb016.arrow","chunk-00000000-battery-status-VARCHAR-c5497c7b.arrow","chunk-00000000-battery-status-VARCHAR-c5497c7b.arrow","chunk-00000000-battery-temperature-FLOAT8-49d42f1d.arrow","chunk-00000000-battery-temperature-FLOAT8-49d42f1d.arrow","chunk-00000000-bssid-VARCHAR-63f8a6c1.arrow","chunk-00000000-bssid-VARCHAR-63f8a6c1.arrow","chunk-00000000-cpu-avg-15min-FLOAT8-28c3e032.arrow","chunk-00000000-cpu-avg-15min-FLOAT8-28c3e032.arrow","chunk-00000000-cpu-avg-1min-FLOAT8-5d468bad.arrow","chunk-00000000-cpu-avg-1min-FLOAT8-5d468bad.arrow","chunk-00000000-cpu-avg-5min-FLOAT8-cc682bd4.arrow","chunk-00000000-cpu-avg-5min-FLOAT8-cc682bd4.arrow","chunk-00000000-device-id-VARCHAR-7ea3cc93.arrow","chunk-00000000-device-id-VARCHAR-7ea3cc93.arrow","chunk-00000000-manufacturer-VARCHAR-a5c8825f.arrow","chunk-00000000-manufacturer-VARCHAR-a5c8825f.arrow","chunk-00000000-mem-free-FLOAT8-24e6f0aa.arrow","chunk-00000000-mem-free-FLOAT8-24e6f0aa.arrow","chunk-00000000-mem-used-FLOAT8-f827ba43.arrow","chunk-00000000-mem-used-FLOAT8-f827ba43.arrow","chunk-00000000-model-VARCHAR-3cc79fee.arrow","chunk-00000000-model-VARCHAR-3cc79fee.arrow","chunk-00000000-os-name-VARCHAR-c2acf3db.arrow","chunk-00000000-os-name-VARCHAR-c2acf3db.arrow","chunk-00000000-rssi-FLOAT8-08f16daf.arrow","chunk-00000000-rssi-FLOAT8-08f16daf.arrow","chunk-00000000-ssid-VARCHAR-d41f5e15.arrow","chunk-00000000-ssid-VARCHAR-d41f5e15.arrow","chunk-00000000-time-TIMESTAMPMILLI-92aa813a.arrow","chunk-00000000-time-TIMESTAMPMILLI-92aa813a.arrow"]
     },{
       "name" : "column",
       "count" : 40,
@@ -199,7 +181,7 @@
     },{
       "name" : "min",
       "count" : 40,
-      "TYPE_ID" : [2,5,2,2,2,8,2,5,2,3,2,5,2,3,2,5,2,3,2,3,2,3,2,5,2,5,2,3,2,3,2,5,2,5,2,3,2,5,2,8],
+      "TYPE_ID" : [2,5,2,2,2,10,2,5,2,3,2,5,2,3,2,5,2,3,2,3,2,3,2,5,2,5,2,3,2,3,2,5,2,5,2,3,2,5,2,10],
       "OFFSET" : [0,0,1,2,3,0,4,1,5,0,6,2,7,1,8,3,9,2,10,3,11,4,12,4,13,5,14,5,15,6,16,6,17,7,18,7,19,8,20,1],
       "children" : [{
         "name" : "$data$",
@@ -232,12 +214,7 @@
         "VALIDITY" : [ ],
         "DATA" : [ ]
       },{
-        "name" : "decimal",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "datemilli",
+        "name" : "timestampmilli",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1577836800000,1479211200000]
@@ -245,7 +222,7 @@
     },{
       "name" : "max",
       "count" : 40,
-      "TYPE_ID" : [2,5,2,2,2,8,2,5,2,3,2,5,2,3,2,5,2,3,2,3,2,3,2,5,2,5,2,3,2,3,2,5,2,5,2,3,2,5,2,8],
+      "TYPE_ID" : [2,5,2,2,2,10,2,5,2,3,2,5,2,3,2,5,2,3,2,3,2,3,2,5,2,5,2,3,2,3,2,5,2,5,2,3,2,5,2,10],
       "OFFSET" : [0,0,1,2,3,0,4,1,5,0,6,2,7,1,8,3,9,2,10,3,11,4,12,4,13,5,14,5,15,6,16,6,17,7,18,7,19,8,20,1],
       "children" : [{
         "name" : "$data$",
@@ -254,7 +231,7 @@
         "name" : "bigint",
         "count" : 21,
         "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-        "DATA" : ["3","3","3496","3","2","3","3","3","3","3","3","3","3","2","3","3","2","2","3","3","3"]
+        "DATA" : ["3","3","3504","3","2","3","3","3","3","3","3","3","3","2","3","3","2","2","3","3","3"]
       },{
         "name" : "float8",
         "count" : 8,
@@ -278,12 +255,7 @@
         "VALIDITY" : [ ],
         "DATA" : [ ]
       },{
-        "name" : "decimal",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "DATA" : [ ]
-      },{
-        "name" : "datemilli",
+        "name" : "timestampmilli",
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1577923200000,1479211200000]
