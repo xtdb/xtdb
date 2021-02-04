@@ -208,14 +208,12 @@
           poll-sleep-ms (.toMillis poll-sleep-duration)]
       (try
         (while true
-          (if-let [next-completed-tx (reduce
-                                      (fn [_ ^LogRecord record]
-                                        (when (Thread/interrupted)
-                                          (throw (InterruptedException.)))
-                                        (.indexTx ingester (log-record->tx-instant record) (.record record)))
-                                      nil
-                                      (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
-            (set! (.latest-completed-tx this) next-completed-tx)
+          (if-let [log-records (not-empty (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
+            (doseq [^LogRecord record log-records]
+              (if (Thread/interrupted)
+                (throw (InterruptedException.))
+                (set! (.latest-completed-tx this)
+                      (.indexTx ingester (log-record->tx-instant record) (.record record)))))
             (Thread/sleep poll-sleep-ms)))
         (catch InterruptedException _))))
 
