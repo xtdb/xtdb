@@ -29,7 +29,9 @@
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
 (definterface TransactionIngester
-  (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps])
+  (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
+
+(definterface FinishChunk
   (^void finishChunk []))
 
 (declare close-writers! write-metadata!)
@@ -161,6 +163,7 @@
 
     tx-instant)
 
+  FinishChunk
   (finishChunk [this]
     (when-not (.isEmpty field->live-column)
       (doseq [^LiveColumn live-column (vals field->live-column)
