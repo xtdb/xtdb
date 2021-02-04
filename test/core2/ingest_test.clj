@@ -286,15 +286,15 @@
                           (.tx-id second-half-tx-instant)))
 
                 (with-open [new-node (c2/->local-node node-dir opts)]
-                  (doseq [^Node node [new-node node]]
-                    :let [^IngestLoop il (.ingest-loop node)]
+                  (doseq [^Node node [new-node node]
+                          :let [^IngestLoop il (.ingest-loop node)]]
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (.latestCompletedTx il))
                               (.tx-id second-half-tx-instant))))
 
-                  (doseq [^Node node [new-node node]]
-                    :let [^IngestLoop il (.ingest-loop node)
-                          ^ObjectStore os (.object-store node)]
+                  (doseq [^Node node [new-node node]
+                          :let [^IngestLoop il (.ingest-loop node)
+                                ^ObjectStore os (.object-store node)]]
                     (t/is (= second-half-tx-instant (.awaitTx il second-half-tx-instant (Duration/ofSeconds 5))))
                     (t/is (= second-half-tx-instant (.latestCompletedTx il)))
 
