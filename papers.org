@@ -1,5 +1,0 @@
-* Papers to read:
-** Columnar:
-- [[https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf][Abadi: The Design and Implementation of Modern Columnar Store Systems]]
-- [[https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf][C-Store: A Column-oriented DBMS]]
-- [[https://arxiv.org/pdf/2004.14471.pdf][Mainlining Databases: Supporting Fast Transactional Workloads on Universal Columnar Data File Formats]]

@@ -1,0 +1,25 @@
+* Bibliography
+** Columnar:
+- [[https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf][(Abadi) The Design and Implementation of Modern Columnar Store Systems]]
+- [[https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf][C-Store: A Column-oriented DBMS]]
+- [[https://arxiv.org/pdf/2004.14471.pdf][Mainlining Databases: Supporting Fast Transactional Workloads on Universal Columnar Data File Formats]]
+
+MonetDB:
+- [[http://www.cs.cmu.edu/~natassa/courses/15-823/syllabus/papers/boncz99database.pdf][Database Architecture Optimized for the new Bottleneck: Memory Access]]
+- [[https://strum355.netsoc.co/books/PDF/MonetDB-X100%20-%20Hyper-Pipelining%20Query%20Execution%20(CIDR%202005%20P19).pdf][MonetDB/X100: Hyper-Pipelining Query Execution]]
+- [[https://pdfs.semanticscholar.org/3854/4aae01b27a3a429c2e3accd70cc932531136.pdf][Database Architecture Evolution: Mammals Flourished long before Dinosaurs became Extinct]]
+
+** Separating Storage from Compute
+blog posts:
+- https://ajstorm.medium.com/separating-compute-and-storage-59def4f27d64
+- https://www.teradata.co.uk/Trends/Cloud/The-Power-of-Separating-Cloud-Compute-and-Cloud-Storage
+- https://www.vertica.com/blog/verticas-architectural-direction-separation-of-compute-and-storage/
+
+papers:
+- [[http://pages.cs.wisc.edu/~yxy/cs839-s20/papers/p2170-tan.pdf][Choosing A Cloud DBMS: Architectures and Tradeoffs]] - good intro, focuses on OLAP.
+- [[https://people.csail.mit.edu/kraska/pub/sigmod08-s3.pdf][Building a Database on S3]] - accessible paper from 2008 that tries to directly map the buffer manager of old architectures to S3, uses SQS for logging and synchornisation between nodes.
+- [[https://www.usenix.org/system/files/nsdi20-paper-vuppalapati.pdf][Building An Elastic Query Engine on Disaggregated Storage]] - describes Snowflake, which was directly built in this way, also summarised [[https://blog.acolyer.org/2020/03/09/snowflake/][here]].
+- [[https://www.microsoft.com/en-us/research/uploads/prod/2019/05/socrates.pdf][Socrates: The New SQL Server in the Cloud]] - the Azure paper I posted yesterday.
+- [[https://www.vertica.com/wp-content/uploads/2018/05/Vertica_EON_SIGMOD_Paper.pdf][Eon Mode: Bringing the Vertica Columnar Database to the Cloud]] - explains their journey from the old enterprise model to the cloud EON-mode.
+- [[https://media.amazonwebservices.com/blog/2017/aurora-design-considerations-paper.pdf][Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases]] - stores the logs in S3, and all other data is derived from it.
+- [[https://www.eecg.utoronto.ca/~ashvin/publications/hailstorm.pdf][Hailstorm: Disaggregated Compute and Storage for Distributed LSM-based Databases]] - more of a cloud LSM implementation paper.
