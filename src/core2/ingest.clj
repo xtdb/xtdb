@@ -1,12 +1,11 @@
 (ns core2.ingest
   (:require [clojure.java.io :as io]
             [core2.metadata :as meta]
-            core2.object-store
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.metadata.IColumnMetadata
            core2.object_store.ObjectStore
-           [java.io ByteArrayInputStream Closeable File]
+           [java.io Closeable File]
            java.nio.ByteBuffer
            java.nio.channels.FileChannel
            [java.nio.file Files OpenOption StandardOpenOption]
@@ -50,12 +49,6 @@
           (str (Types/getMinorTypeForArrowType (.getType field)))
           (hash (str field))))
 
-(defn- open-write-file-ch ^java.nio.channels.FileChannel [^File file]
-  (FileChannel/open (.toPath file)
-                    (into-array OpenOption #{StandardOpenOption/CREATE
-                                             StandardOpenOption/WRITE
-                                             StandardOpenOption/TRUNCATE_EXISTING})))
-
 (defn- write-live-column [^LiveColumn live-column]
   (let [^VectorSchemaRoot content-root (.content-root live-column)]
     (.writeBatch ^ArrowFileWriter (.file-writer live-column))
@@ -91,7 +84,7 @@
                                                    (meta/->metadata (.getType field))))
                              content-root (VectorSchemaRoot/create schema allocator)
                              file (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))
-                             file-ch (open-write-file-ch file)]
+                             file-ch (util/open-write-file-ch file)]
                          (LiveColumn. content-root
                                       file
                                       (doto (ArrowFileWriter. content-root nil file-ch)

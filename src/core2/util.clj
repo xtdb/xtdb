@@ -1,8 +1,9 @@
 (ns core2.util
   (:require [clojure.java.io :as io])
-  (:import java.nio.ByteBuffer
-           java.nio.channels.SeekableByteChannel
-           [java.nio.file Files FileVisitResult SimpleFileVisitor Path]
+  (:import java.io.File
+           java.nio.ByteBuffer
+           [java.nio.channels FileChannel SeekableByteChannel]
+           [java.nio.file Files FileVisitResult OpenOption StandardOpenOption SimpleFileVisitor Path]
            java.nio.file.attribute.FileAttribute
            java.util.Date
            [java.util.function Supplier Function]
@@ -39,6 +40,12 @@
 
       (truncate [size]
         (throw (UnsupportedOperationException.))))))
+
+(defn open-write-file-ch ^java.nio.channels.FileChannel [^File file]
+  (FileChannel/open (.toPath file)
+                    (into-array OpenOption #{StandardOpenOption/CREATE
+                                             StandardOpenOption/WRITE
+                                             StandardOpenOption/TRUNCATE_EXISTING})))
 
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []
