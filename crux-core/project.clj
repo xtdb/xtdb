@@ -24,6 +24,7 @@
                                    [org.tukaani/xz "1.8"]
                                    [org.ow2.asm/asm "5.0.4"]]}}
   :middleware [leiningen.project-version/middleware]
+  :aot [crux.main]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
