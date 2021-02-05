@@ -4,7 +4,9 @@
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            [java.io Closeable EOFException File RandomAccessFile]
+           java.nio.channels.FileChannel
            java.nio.ByteBuffer
+           [java.nio.file OpenOption StandardOpenOption]
            [java.time Clock]
            [java.util ArrayList Date List]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService TimeUnit]))
@@ -19,44 +21,53 @@
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
 
-(deftype LocalDirectoryLogReader [^File dir ^:volatile-mutable ^RandomAccessFile log-file]
+(deftype LocalDirectoryLogReader [^File dir ^:volatile-mutable ^FileChannel log-channel]
   LogReader
   (readRecords [this after-offset limit]
-    (if (nil? log-file)
-      (let [f (io/file dir "LOG")]
-        (if (.exists f)
-          (do (set! log-file (RandomAccessFile. f "r"))
+    (if (nil? log-channel)
+      (let [log-file (io/file dir "LOG")]
+        (if (.exists log-file)
+          (do (set! log-channel (FileChannel/open (.toPath log-file)
+                                                  (into-array OpenOption #{StandardOpenOption/READ})))
               (recur after-offset limit))
           []))
-      (do (.seek log-file (or after-offset 0))
-          (loop [limit (int (if after-offset
-                              (inc limit)
-                              limit))
-                 acc []]
-            (let [offset (.getFilePointer log-file)]
-              (if (or (zero? limit) (= offset (.length log-file)))
-                (if after-offset
-                  (subvec acc 1)
-                  acc)
-                (if-let [record (try
-                                  (let [check (.readInt log-file)
-                                        size (.readInt log-file)
+      (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))]
+        (.position log-channel (long (or after-offset 0)))
+        (loop [limit (int (if after-offset
+                            (inc limit)
+                            limit))
+               acc []]
+          (let [offset (.position log-channel)]
+            (if (or (zero? limit) (= offset (.size log-channel)))
+              (if after-offset
+                (subvec acc 1)
+                acc)
+              (if-let [record (try
+                                (.clear header)
+                                (while (and (.hasRemaining header)
+                                            (not (neg? (.read log-channel header)))))
+                                (when-not (.hasRemaining header)
+                                  (.flip header)
+                                  (let [check (.getInt header)
+                                        size (.getInt header)
                                         _ (when-not (= check (bit-xor (unchecked-int offset) size))
                                             (throw (IllegalStateException. "invalid record")))
-                                        time (Date. (.readLong log-file))
-                                        record (doto (byte-array size)
-                                                 (->> (.readFully log-file)))]
-                                    (->LogRecord offset time (ByteBuffer/wrap record)))
-                                  (catch EOFException _))]
-                  (recur (dec limit) (conj acc record))
-                  (if after-offset
-                    (subvec acc 1)
-                    acc))))))))
+                                        time-ms (.getLong header)
+                                        record (ByteBuffer/allocate size)]
+                                    (while (and (.hasRemaining record)
+                                                (not (neg? (.read log-channel record)))))
+                                    (when-not (.hasRemaining record)
+                                      (->LogRecord offset (Date. time-ms) (.flip record)))))
+                                (catch EOFException _))]
+                (recur (dec limit) (conj acc record))
+                (if after-offset
+                  (subvec acc 1)
+                  acc))))))))
 
   Closeable
   (close [_]
-    (when log-file
-      (.close log-file))))
+    (when log-channel
+      (.close log-channel))))
 
 (deftype LocalDirectoryLogWriter [^File dir ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
@@ -81,52 +92,59 @@
             (recur)))))))
 
 (defn- writer-append-loop [^File dir ^BlockingQueue queue ^Clock clock]
-  (with-open [log-file (RandomAccessFile. (io/file dir "LOG") "rw")
-              log-channel (.getChannel log-file)]
-    (.seek log-file (.length log-file))
-    (while (not (Thread/interrupted))
-      (when-let [element (.take queue)]
-        (let [elements (doto (ArrayList.)
-                         (.add element))]
-          (try
-            (.drainTo queue elements)
-            (let [previous-offset (.getFilePointer log-file)]
-              (try
-                (dotimes [n (.size elements)]
-                  (let [[f ^ByteBuffer record] (.get elements n)
-                        offset (.getFilePointer log-file)
-                        time (Date. (.millis clock))
-                        written-record (.duplicate record)
-                        size (.remaining written-record)
-                        check (bit-xor (unchecked-int offset) size)]
-                    (.writeInt log-file check)
-                    (.writeInt log-file size)
-                    (.writeLong log-file (.getTime time))
-                    (while (pos? (.write log-channel written-record)))
-                    (.set elements n (MapEntry/create f (->LogRecord offset time record)))))
-                (catch Throwable t
-                  (log/error t "failed appending record to log")
-                  (.setLength log-file previous-offset)
-                  (throw t)))
-              (.force log-channel true)
-              (doseq [[^CompletableFuture f log-record] elements]
-                (.complete f log-record)))
-            (catch InterruptedException e
-              (doseq [[^CompletableFuture f] elements]
-                (when-not (.isDone f)
-                  (.cancel f true)))
-              (.interrupt (Thread/currentThread)))
-            (catch Throwable t
-              (doseq [[^CompletableFuture f] elements]
-                (when-not (.isDone f)
-                  (.completeExceptionally f t))))))))))
+  (with-open [log-channel (FileChannel/open (.toPath (io/file dir "LOG"))
+                                            (into-array OpenOption #{StandardOpenOption/CREATE
+                                                                     StandardOpenOption/WRITE}))]
+    (.position log-channel (.size log-channel))
+    (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))]
+      (while (not (Thread/interrupted))
+        (when-let [element (.take queue)]
+          (let [elements (doto (ArrayList.)
+                           (.add element))]
+            (try
+              (.drainTo queue elements)
+              (let [previous-offset (.position log-channel)]
+                (try
+                  (dotimes [n (.size elements)]
+                    (let [[f ^ByteBuffer record] (.get elements n)
+                          offset (.position log-channel)
+                          time-ms (.millis clock)
+                          written-record (.duplicate record)
+                          size (.remaining written-record)
+                          check (bit-xor (unchecked-int offset) size)]
+                      (-> (.clear header)
+                          (.putInt check)
+                          (.putInt size)
+                          (.putLong time-ms)
+                          (.flip))
+                      (while (.hasRemaining header)
+                        (.write log-channel header))
+                      (while (.hasRemaining written-record)
+                        (.write log-channel written-record))
+                      (.set elements n (MapEntry/create f (->LogRecord offset (Date. time-ms) record)))))
+                  (catch Throwable t
+                    (log/error t "failed appending record to log")
+                    (.truncate log-channel previous-offset)
+                    (throw t)))
+                (.force log-channel true)
+                (doseq [[^CompletableFuture f log-record] elements]
+                  (.complete f log-record)))
+              (catch InterruptedException e
+                (doseq [[^CompletableFuture f] elements]
+                  (when-not (.isDone f)
+                    (.cancel f true)))
+                (.interrupt (Thread/currentThread)))
+              (catch Throwable t
+                (doseq [[^CompletableFuture f] elements]
+                  (when-not (.isDone f)
+                    (.completeExceptionally f t)))))))))))
 
 (defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^File dir]
   (->LocalDirectoryLogReader dir nil))
 
 (defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter
   [^File dir {:keys [buffer-size clock]
-              :or {buffer-size 1024, clock (Clock/systemUTC)}}]
+              :or {buffer-size 4096, clock (Clock/systemUTC)}}]
   (.mkdirs dir)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)]
