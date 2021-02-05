@@ -40,8 +40,6 @@
   Closeable
   (close [_]
     (.close file-writer)
-    (doseq [^Closeable metadata field-metadata]
-      (.close metadata))
     (.close content-root)))
 
 (defn- field->file-name [^Field field]
