@@ -222,7 +222,7 @@
 
     (.syncSchema metadata-root)
 
-    (with-open [metadata-file-ch (open-write-file-ch metadata-file)
+    (with-open [metadata-file-ch (util/open-write-file-ch metadata-file)
                 metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
       (.start metadata-fw)
       (.writeBatch metadata-fw))))
