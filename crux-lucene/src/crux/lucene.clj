@@ -226,6 +226,9 @@
   [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine] :as opts}]
   (let [directory (FSDirectory/open db-dir)
         lucene-store (LuceneNode. directory analyzer indexer)]
+    ;; Ensure lucene index exists for immediate queries:
+    (with-open [index-writer (index-writer lucene-store)]
+      (.commit index-writer))
     (validate-lucene-store-up-to-date index-store lucene-store)
     (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
     (bus/listen bus {:crux/event-types #{:crux.tx/committing-tx}
