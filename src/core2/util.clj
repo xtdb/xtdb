@@ -1,6 +1,8 @@
 (ns core2.util
   (:require [clojure.java.io :as io])
-  (:import java.io.File
+  (:import [org.apache.arrow.vector ValueVector]
+           [org.apache.arrow.vector.complex DenseUnionVector]
+           java.io.File
            java.nio.ByteBuffer
            [java.nio.channels FileChannel SeekableByteChannel]
            [java.nio.file Files FileVisitResult OpenOption StandardOpenOption SimpleFileVisitor Path]
@@ -88,3 +90,34 @@
 
 (defmacro completable-future {:style/indent 1} [pool & body]
   `(CompletableFuture/supplyAsync (->supplier (fn [] ~@body)) ~pool))
+
+(definterface DenseUnionWriter
+  (^int writeTypeId [^byte type-id])
+  (^void end []))
+
+(deftype DenseUnionWriterImpl [^DenseUnionVector duv
+                               ^:unsynchronized-mutable ^int value-count
+                               ^ints offsets]
+  DenseUnionWriter
+  (writeTypeId [this type-id]
+    (while (< (.getValueCapacity duv) (inc value-count))
+      (.reAlloc duv))
+
+    (let [offset (aget offsets type-id)
+          offset-buffer (.getOffsetBuffer duv)]
+      (.setTypeId duv value-count type-id)
+      (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH value-count) offset)
+
+      (set! (.value-count this) (inc value-count))
+      (aset offsets type-id (inc offset))
+
+      offset))
+
+  (end [_]
+    (.setValueCount duv value-count)))
+
+(defn ->dense-union-writer ^core2.util.DenseUnionWriter [^DenseUnionVector duv]
+  (->DenseUnionWriterImpl duv
+                          (.getValueCount duv)
+                          (int-array (for [^ValueVector child-vec (.getChildrenFromFields duv)]
+                                       (.getValueCount child-vec)))))

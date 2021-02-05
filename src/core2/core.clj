@@ -9,6 +9,7 @@
   (:import clojure.lang.MapEntry
            [core2.ingest Ingester TransactionIngester TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
+           [core2.util DenseUnionWriter]
            core2.object_store.ObjectStore
            [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer ByteOrder]
@@ -41,34 +42,6 @@
       (.end))
     (ByteBuffer/wrap (.toByteArray baos))))
 
-(definterface DenseUnionWriter
-  (^int writeTypeId [^byte type-id])
-  (^void end []))
-
-(deftype DenseUnionWriterImpl [^DenseUnionVector duv
-                               ^:unsynchronized-mutable ^int value-count
-                               ^ints offsets]
-  DenseUnionWriter
-  (writeTypeId [this type-id]
-    (while (< (.getValueCapacity duv) (inc value-count))
-      (.reAlloc duv))
-
-    (let [offset (aget offsets type-id)
-          offset-buffer (.getOffsetBuffer duv)]
-      (.setTypeId duv value-count type-id)
-      (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH value-count) offset)
-
-      (set! (.value-count this) (inc value-count))
-      (aset offsets type-id (inc offset))
-
-      offset))
-
-  (end [_]
-    (.setValueCount duv value-count)))
-
-(defn ->dense-union-writer ^core2.core.DenseUnionWriter [^DenseUnionVector duv]
-  (->DenseUnionWriterImpl duv (.getValueCount duv) (int-array (count (.getChildren (.getField duv))))))
-
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (let [put-op-fields (->> tx-ops
                            (into {} (keep (fn [{:keys [op] :as tx-op}]
@@ -92,11 +65,11 @@
 
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")
-            tx-ops-duw (->dense-union-writer tx-ops-duv)
+            tx-ops-duw (util/->dense-union-writer tx-ops-duv)
 
             ^StructVector put-vec (.getStruct tx-ops-duv 0)
             ^DenseUnionVector document-vec (.getChild put-vec "document" DenseUnionVector)
-            document-duw (->dense-union-writer document-vec)]
+            document-duw (util/->dense-union-writer document-vec)]
 
         (doseq [{:keys [op] :as tx-op} tx-ops]
           (let [tx-op-offset (.writeTypeId tx-ops-duw (case op :put 0, :delete 1))]
