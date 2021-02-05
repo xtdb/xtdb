@@ -1,6 +1,5 @@
 (ns core2.core
   (:require [clojure.java.io :as io]
-            [core2.core :as c2]
             [core2.ingest :as ingest]
             [core2.log :as log]
             [core2.metadata :as meta]
@@ -42,67 +41,92 @@
       (.end))
     (ByteBuffer/wrap (.toByteArray baos))))
 
-(defn write-dense-union-offsets [^DenseUnionVector duv type-ids]
-  (let [value-count (count type-ids)]
-    (.setValueCount duv value-count)
+(definterface DenseUnionWriter
+  (^int writeTypeId [^byte type-id])
+  (^void end []))
 
-    (let [offsets (int-array (count (.getChildren (.getField duv))))
+(deftype DenseUnionWriterImpl [^DenseUnionVector duv
+                               ^:unsynchronized-mutable ^int value-count
+                               ^ints offsets]
+  DenseUnionWriter
+  (writeTypeId [this type-id]
+    (while (< (.getValueCapacity duv) (inc value-count))
+      (.reAlloc duv))
+
+    (let [offset (aget offsets type-id)
           offset-buffer (.getOffsetBuffer duv)]
-      (dotimes [idx value-count]
-        (let [type-id (nth type-ids idx)
-              offset (aget offsets type-id)]
-          (.setTypeId duv idx type-id)
-          (.setInt offset-buffer
-                   (* DenseUnionVector/OFFSET_WIDTH idx)
-                   offset)
-          (aset offsets type-id (inc offset)))))
+      (.setTypeId duv value-count type-id)
+      (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH value-count) offset)
 
-    ;; re-run to set child value counts
+      (set! (.value-count this) (inc value-count))
+      (aset offsets type-id (inc offset))
+
+      offset))
+
+  (end [_]
     (.setValueCount duv value-count)))
 
+(defn ->dense-union-writer ^core2.core.DenseUnionWriter [^DenseUnionVector duv]
+  (->DenseUnionWriterImpl duv (.getValueCount duv) (int-array (count (.getChildren (.getField duv))))))
+
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (let [put-ops (vec (for [{:keys [op] :as tx-op} tx-ops
-                           :when (= op :put)]
-                       (with-meta tx-op
-                         {::fields (for [[k v] (sort-by key (:doc tx-op))]
-                                     (t/->field (subs (str k) 1) (t/->arrow-type (type v)) true))})))
+  (let [put-op-fields (->> tx-ops
+                           (into {} (keep (fn [{:keys [op] :as tx-op}]
+                                            (when (= :put op)
+                                              (MapEntry/create tx-op
+                                                               (for [[k v] (sort-by key (:doc tx-op))]
+                                                                 (t/->field (subs (str k) 1) (t/->arrow-type (type v)) true))))))))
 
-        put-op-fields (->> put-ops
-                           (into {} (comp (map (comp ::fields meta))
-                                          (distinct)
-                                          (map-indexed (fn [idx key-fields]
-                                                         ;; boxing idx
-                                                         (MapEntry/create key-fields idx))))))
-
-        op-type-ids {:put 0, :delete 1}
+        put-op-struct-idxs (->> (vals put-op-fields)
+                                (into {} (comp (distinct)
+                                               (map-indexed (fn [idx key-fields]
+                                                              ;; boxing idx
+                                                              (MapEntry/create key-fields idx))))))
 
         tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
                                        (t/->field "put" (.getType Types$MinorType/STRUCT) false
                                                   (apply t/->field "document" (.getType Types$MinorType/DENSEUNION) false
-                                                         (for [[key-fields idx] (sort-by val put-op-fields)]
+                                                         (for [[key-fields idx] (sort-by val put-op-struct-idxs)]
                                                            (apply t/->field (str "struct" idx) (.getType Types$MinorType/STRUCT) true key-fields))))
                                        (t/->field "delete" (.getType Types$MinorType/STRUCT) true))])]
 
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
-        (write-dense-union-offsets tx-ops-duv (mapv (comp op-type-ids :op) tx-ops))
+      (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")
+            tx-ops-duw (->dense-union-writer tx-ops-duv)
 
-        (let [^StructVector put-vec (.getStruct tx-ops-duv 0)
-              ^DenseUnionVector document-vec (.getChild put-vec "document" DenseUnionVector)]
-          (dotimes [n (count put-ops)]
-            (.setIndexDefined put-vec n))
+            ^StructVector put-vec (.getStruct tx-ops-duv 0)
+            ^DenseUnionVector document-vec (.getChild put-vec "document" DenseUnionVector)
+            document-duw (->dense-union-writer document-vec)]
 
-          (write-dense-union-offsets document-vec (mapv (comp put-op-fields ::fields meta) put-ops))
-          (doseq [[type-id put-ops] (group-by (comp put-op-fields ::fields meta) put-ops)]
-            (let [^StructVector struct-vec (.getStruct document-vec type-id)]
-              (dotimes [n (count put-ops)]
-                (.setIndexDefined struct-vec n)
-                (doseq [[k v] (:doc (nth put-ops n))]
-                  (t/set-safe! (.getChild struct-vec (subs (str k) 1) ValueVector) n v)))))))
+        (doseq [{:keys [op] :as tx-op} tx-ops]
+          (let [tx-op-offset (.writeTypeId tx-ops-duw (case op :put 0, :delete 1))]
+            (case op
+              :put (do
+                     (.setIndexDefined put-vec tx-op-offset)
 
-      (.setRowCount root (count tx-ops))
+                     (let [{:keys [doc]} tx-op
+                           doc-duv-type-id (put-op-struct-idxs (put-op-fields tx-op))
+                           doc-duv-offset (.writeTypeId document-duw doc-duv-type-id)
+                           ^StructVector struct-vec (.getStruct document-vec doc-duv-type-id)]
 
-      (root->byte-buffer root))))
+                       (.setIndexDefined struct-vec doc-duv-offset)
+
+                       (doseq [[k v] doc
+                               :let [value-vec (.getChild struct-vec (subs (str k) 1) ValueVector)]]
+                         (if (some? v)
+                           (t/set-safe! value-vec doc-duv-offset v)
+                           (t/set-null! value-vec doc-duv-offset)))))
+
+              :delete nil)))
+
+        (.end document-duw)
+        (.end tx-ops-duw)
+
+        (.setRowCount root (count tx-ops))
+
+        (.syncSchema root)
+
+        (root->byte-buffer root)))))
 
 (defn log-record->tx-instant ^core2.ingest.TransactionInstant [^LogRecord record]
   (ingest/->TransactionInstant (.offset record) (.time record)))

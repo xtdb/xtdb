@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [core2.metadata :as meta]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.object-store :as os])
   (:import core2.metadata.IColumnMetadata
            core2.object_store.ObjectStore
            [java.io Closeable File]
@@ -91,9 +92,10 @@
                                         (.start))
                                       field-metadata))))]
       (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
-                  sr (doto (ArrowStreamReader. tx-ops-ch allocator)
-                       (.loadNextBatch))
+                  sr (ArrowStreamReader. tx-ops-ch allocator)
                   tx-root (.getVectorSchemaRoot sr)]
+
+        (.loadNextBatch sr)
 
         (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
               op-type-ids (object-array (mapv (fn [^Field field]
