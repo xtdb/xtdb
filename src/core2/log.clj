@@ -1,5 +1,6 @@
 (ns core2.log
   (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            [java.io Closeable EOFException File RandomAccessFile]
@@ -104,6 +105,7 @@
                     (while (pos? (.write log-channel written-record)))
                     (.set elements n (MapEntry/create f (->LogRecord offset time record)))))
                 (catch Throwable t
+                  (log/error t "failed appending record to log")
                   (.setLength log-file previous-offset)
                   (throw t)))
               (.force log-channel true)
