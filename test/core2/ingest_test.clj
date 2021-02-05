@@ -1,26 +1,25 @@
 (ns core2.ingest-test
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
-            [clojure.java.io :as io]
             [clojure.instant :as inst]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t]
             [core2.core :as c2]
             [core2.ingest :as ingest]
             [core2.json :as c2-json]
-            [core2.log :as log]
-            [core2.util :as util]
-            [core2.metadata :as meta])
-  (:import [core2.core IngestLoop Node]
+            [core2.metadata :as meta]
+            [core2.util :as util])
+  (:import clojure.lang.MapEntry
+           [core2.core IngestLoop Node]
            [core2.ingest Ingester TransactionInstant]
            core2.object_store.ObjectStore
-           clojure.lang.MapEntry
-           [java.io Closeable File]
-           java.nio.file.Files
+           java.io.File
            java.nio.file.attribute.FileAttribute
+           java.nio.file.Files
            [java.time Clock Duration ZoneId]
-           java.util.Date
            java.util.concurrent.CompletableFuture
+           java.util.Date
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
 
