@@ -44,8 +44,7 @@
                 acc)
               (if-let [record (try
                                 (.clear header)
-                                (while (and (.hasRemaining header)
-                                            (not (neg? (.read log-channel header)))))
+                                (while (pos? (.read log-channel header)))
                                 (when-not (.hasRemaining header)
                                   (.flip header)
                                   (let [check (.getInt header)
@@ -54,8 +53,7 @@
                                             (throw (IllegalStateException. "invalid record")))
                                         time-ms (.getLong header)
                                         record (ByteBuffer/allocate size)]
-                                    (while (and (.hasRemaining record)
-                                                (not (neg? (.read log-channel record)))))
+                                    (while (pos? (.read log-channel record)))
                                     (when-not (.hasRemaining record)
                                       (->LogRecord offset (Date. time-ms) (.flip record)))))
                                 (catch EOFException _))]
