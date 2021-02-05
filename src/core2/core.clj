@@ -10,7 +10,6 @@
   (:import clojure.lang.MapEntry
            [core2.ingest Ingester TransactionIngester TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
-           [core2.util DenseUnionWriter]
            core2.object_store.ObjectStore
            [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer]

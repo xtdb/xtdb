@@ -7,17 +7,16 @@
   (:import core2.metadata.IColumnMetadata
            core2.object_store.ObjectStore
            [java.io Closeable File]
-           java.nio.ByteBuffer
-           java.nio.channels.FileChannel
-           [java.nio.file Files OpenOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.util Date List Map]
+           java.nio.file.Files
+           [java.util Date LinkedList List Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.function.Function
-           org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
+           [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot VectorLoader VectorUnloader]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
+           [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.Text))
@@ -34,12 +33,41 @@
 (definterface FinishChunk
   (^void finishChunk []))
 
-(declare close-writers! write-metadata!)
+(declare close-cols! write-metadata!)
 
-(deftype LiveColumn [^VectorSchemaRoot content-root, ^File file, ^ArrowFileWriter file-writer, ^List field-metadata]
+(definterface ILiveColumn
+  (^void writeBlock [])
+  (^void writeColumn []))
+
+(deftype LiveColumn [^VectorSchemaRoot content-root, ^List record-batches, ^List field-metadata, ^File file]
+  ILiveColumn
+  (writeBlock [_this]
+    (.add record-batches (.getRecordBatch (VectorUnloader. content-root)))
+
+    (dotimes [n (count (.getFieldVectors content-root))]
+      (let [field-vector (.getVector content-root n)]
+        (.updateMetadata ^IColumnMetadata (get field-metadata n) field-vector)
+        (.clear field-vector)))
+
+    (.setRowCount content-root 0))
+
+  (writeColumn [_this]
+    (with-open [file-ch (util/open-write-file-ch file)
+                fw (ArrowFileWriter. content-root nil file-ch)]
+      (.start fw)
+      (let [loader (VectorLoader. content-root)]
+
+        (doseq [^ArrowRecordBatch batch record-batches]
+          (.load loader batch)
+          (.writeBatch fw)
+          (.close batch)))
+      (.end fw)))
+
   Closeable
   (close [_]
-    (.close file-writer)
+    (doseq [^ArrowRecordBatch record-batch record-batches]
+      (.close record-batch))
+
     (.close content-root)))
 
 (defn- field->file-name [^Field field]
@@ -47,17 +75,6 @@
           (.getName field)
           (str (Types/getMinorTypeForArrowType (.getType field)))
           (hash (str field))))
-
-(defn- write-live-column [^LiveColumn live-column]
-  (let [^VectorSchemaRoot content-root (.content-root live-column)]
-    (.writeBatch ^ArrowFileWriter (.file-writer live-column))
-
-    (dotimes [n (count (.getFieldVectors content-root))]
-      (let [field-vector (.getVector content-root n)]
-        (.updateMetadata ^IColumnMetadata (get (.field-metadata live-column) n) field-vector)
-        (.reset field-vector)))
-
-    (.setRowCount content-root 0)))
 
 (defn- ->column-schema ^org.apache.arrow.vector.types.pojo.Schema [^Field field]
   (Schema. [t/row-id-field field]))
@@ -81,14 +98,11 @@
                              schema (->column-schema field)
                              field-metadata (vec (for [^Field field (.getFields schema)]
                                                    (meta/->metadata (.getType field))))
-                             content-root (VectorSchemaRoot/create schema allocator)
-                             file (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))
-                             file-ch (util/open-write-file-ch file)]
+                             content-root (VectorSchemaRoot/create schema allocator)]
                          (LiveColumn. content-root
-                                      file
-                                      (doto (ArrowFileWriter. content-root nil file-ch)
-                                        (.start))
-                                      field-metadata))))]
+                                      (LinkedList.)
+                                      field-metadata
+                                      (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))))))]
       (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                   sr (ArrowStreamReader. tx-ops-ch allocator)
                   tx-root (.getVectorSchemaRoot sr)]
@@ -142,13 +156,13 @@
         (doseq [^LiveColumn live-column (vals field->live-column)
                 :let [^VectorSchemaRoot content-root (.content-root live-column)]]
           (when (>= (.getRowCount content-root) max-block-size)
-            (write-live-column live-column)))))
+            (.writeBlock live-column)))))
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
     (when (>= (->> (vals field->live-column)
                    (map (fn [^LiveColumn live-column]
-                          (count (.getRecordBlocks ^ArrowFileWriter (.file-writer live-column)))))
+                          (count (.record-batches live-column))))
                    (apply max)
                    (long))
               max-blocks-per-chunk)
@@ -162,16 +176,17 @@
       (doseq [^LiveColumn live-column (vals field->live-column)
               :let [^VectorSchemaRoot content-root (.content-root live-column)]]
         (when (pos? (.getRowCount content-root))
-          (write-live-column live-column)))
+          (.writeBlock live-column)))
 
       (let [files (vec (for [^LiveColumn live-column (vals field->live-column)
-                             :let [^File file (.file live-column)]
-                             :when (.exists file)]
-                         file))
+                             :when (not-empty (.record-batches live-column))]
+                         (do
+                           (.writeColumn live-column)
+                           (.file live-column))))
             metadata-file (io/file (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
 
         (write-metadata! this metadata-file)
-        (close-writers! this)
+        (close-cols! this)
 
         (.join (CompletableFuture/allOf
                 (into-array CompletableFuture
@@ -189,10 +204,10 @@
 
   Closeable
   (close [this]
-    (close-writers! this)
+    (close-cols! this)
     (util/delete-dir arrow-dir)))
 
-(defn- close-writers! [^Ingester ingester]
+(defn- close-cols! [^Ingester ingester]
   (let [^Map field->live-column (.field->live-column ingester)]
     (doseq [^LiveColumn live-column (vals field->live-column)]
       (.close live-column))
