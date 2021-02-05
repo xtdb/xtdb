@@ -1,5 +1,6 @@
 (ns core2.log
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            [java.io Closeable EOFException File RandomAccessFile]
            java.nio.ByteBuffer
@@ -124,7 +125,7 @@
   [^File dir {:keys [buffer-size clock]
               :or {buffer-size 1024, clock (Clock/systemUTC)}}]
   (.mkdirs dir)
-  (let [pool (Executors/newSingleThreadExecutor)
+  (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)
         log-file (RandomAccessFile. (io/file dir "LOG") "rw")]
     (.seek log-file (.length log-file))

@@ -260,7 +260,7 @@
     ^TransactionInstant latest-completed-tx
     ingest-opts]
 
-   (let [pool (Executors/newSingleThreadExecutor)]
+   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "ingest-loop-"))]
      (doto (IngestLoop. log-reader ingester latest-completed-tx pool nil ingest-opts)
        (.start)))))
 

@@ -67,7 +67,7 @@
   (^core2.object_store.FileSystemObjectStore
    [^Path root-path {:keys [pool-size], :or {pool-size 4}}]
    (util/mkdirs root-path)
-   (->FileSystemObjectStore root-path (Executors/newFixedThreadPool pool-size))))
+   (->FileSystemObjectStore root-path (Executors/newFixedThreadPool pool-size (util/->prefix-thread-factory "file-system-object-store-")))))
 
 ;; ok, so where we at?
 

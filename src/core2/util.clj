@@ -12,7 +12,7 @@
            java.nio.file.attribute.FileAttribute
            java.util.Date
            [java.util.function Supplier Function]
-           java.util.concurrent.CompletableFuture
+           [java.util.concurrent CompletableFuture Executors ThreadFactory]
            [java.time LocalDateTime ZoneId]))
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
@@ -93,6 +93,14 @@
 
 (defmacro completable-future {:style/indent 1} [pool & body]
   `(CompletableFuture/supplyAsync (->supplier (fn [] ~@body)) ~pool))
+
+(defn ->prefix-thread-factory ^java.util.concurrent.ThreadFactory [^String prefix]
+  (let [default-thread-factory (Executors/defaultThreadFactory)]
+    (reify ThreadFactory
+      (newThread [_ r]
+        (let [t (.newThread default-thread-factory r)]
+          (.setName t (str prefix (.getName t)))
+          t)))))
 
 (definterface DenseUnionWriter
   (^int writeTypeId [^byte type-id])
