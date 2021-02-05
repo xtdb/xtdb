@@ -198,6 +198,7 @@
                      ^TransactionIngester ingester
                      ^:volatile-mutable ^TransactionInstant latest-completed-tx
                      ^ExecutorService pool
+                     ^:unsynchronized-mutable ^Throwable ingest-error
                      ingest-opts]
   IIngestLoop
   (ingestLoop [this]
@@ -211,8 +212,12 @@
             (doseq [^LogRecord record log-records]
               (if (Thread/interrupted)
                 (throw (InterruptedException.))
-                (set! (.latest-completed-tx this)
-                      (.indexTx ingester (log-record->tx-instant record) (.record record)))))
+                (try
+                  (set! (.latest-completed-tx this)
+                        (.indexTx ingester (log-record->tx-instant record) (.record record)))
+                  (catch Throwable t
+                    (set! (.ingest-error this) t)
+                    (throw t)))))
             (Thread/sleep poll-sleep-ms)))
         (catch InterruptedException _))))
 
@@ -224,19 +229,24 @@
     (if tx
       (let [{:keys [^Duration poll-sleep-duration],
              :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
-            poll-sleep-ms (.toMillis poll-sleep-duration)
             end (.plus (Instant/now) timeout)
             tx-id (.tx-id tx)]
         (loop []
           (let [latest-completed-tx latest-completed-tx]
-            (if (and (or (nil? latest-completed-tx)
-                         (< (.tx-id latest-completed-tx) tx-id))
-                     (or (nil? timeout)
-                         (.isBefore (Instant/now) end)))
+            (cond
+              ingest-error (throw (ex-info "Error during ingestion" {} ingest-error))
+
+              (and latest-completed-tx
+                   (>= (.tx-id latest-completed-tx) tx-id))
+              latest-completed-tx
+
+              (or (nil? timeout)
+                  (.isBefore (Instant/now) end))
               (do
                 (Thread/sleep (.toMillis poll-sleep-duration))
                 (recur))
-              latest-completed-tx))))
+
+              :else (throw (ex-info "await-tx timed out" {:requested tx, :available latest-completed-tx}))))))
       latest-completed-tx))
 
   Closeable
@@ -259,7 +269,7 @@
     ingest-opts]
 
    (let [pool (Executors/newSingleThreadExecutor)
-         ingest-loop (IngestLoop. log-reader ingester latest-completed-tx pool ingest-opts)]
+         ingest-loop (IngestLoop. log-reader ingester latest-completed-tx pool nil ingest-opts)]
      (.submit pool ^Runnable #(.ingestLoop ingest-loop))
      ingest-loop)))
 
