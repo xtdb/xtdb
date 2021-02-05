@@ -226,6 +226,45 @@
             (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
             (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
 
+#_(t/deftest can-ingest-ts-devices-small
+    (if-not (io/resource "devices_small_device_info.csv")
+      (t/is true)
+      (let [node-dir (io/file "target/can-ingest-ts-devices-small")]
+        (util/delete-dir node-dir)
+
+        (with-open [node (c2/->local-node node-dir)
+                    tx-producer (c2/->local-tx-producer node-dir {})
+                    info-reader (io/reader (io/resource "devices_small_device_info.csv"))
+                    readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
+          (let [^BufferAllocator a (.allocator node)
+                ^ObjectStore os (.object-store node)
+                ^Ingester i (.ingester node)
+                ^IngestLoop il (.ingest-loop node)
+                object-dir (io/file node-dir "objects")]
+            (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
+                  readings (map readings-csv->doc (csv/read-csv readings-reader))
+                  [initial-readings rest-readings] (split-at (count device-infos) readings)
+                  tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                           {:op :put
+                            :doc doc})]
+
+              (t/is (= 1001000 (count tx-ops)))
+
+              (t/is (nil? (.latestCompletedTx il)))
+
+              (let [last-tx-instant @(reduce
+                                      (fn [acc tx-ops]
+                                        (.submitTx tx-producer tx-ops))
+                                      nil
+                                      (partition-all 100 tx-ops))]
+
+                (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
+                (t/is (= last-tx-instant (.latestCompletedTx il)))
+                (.finishChunk i)
+
+                (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
+                (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a))))))))))
+
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (io/file "target/can-ingest-ts-devices-mini-into-multiple-nodes")
         opts {:max-block-size 100}]
