@@ -15,7 +15,7 @@
   (io/file (.getParentFile file) (format "%s.json" (.getName file))))
 
 (defn write-arrow-json-files [^File arrow-dir]
-  (with-open [allocator (RootAllocator. Long/MAX_VALUE)]
+  (with-open [allocator (RootAllocator.)]
     (doseq [^File
             file (->> (.listFiles arrow-dir)
                       (filter #(.endsWith (.getName ^File %) ".arrow")))]
@@ -32,7 +32,7 @@
 (defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]
     (try
-      (with-open [allocator (RootAllocator. Long/MAX_VALUE)
+      (with-open [allocator (RootAllocator.)
                   in-ch (util/->seekable-byte-channel buf)
                   file-reader (ArrowStreamReader. in-ch allocator)
                   file-writer (JsonFileWriter. json-file (.. (JsonFileWriter/config) (pretty true)))]

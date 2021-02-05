@@ -7,7 +7,7 @@
   (:import org.apache.arrow.memory.RootAllocator))
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
-  (with-open [a (RootAllocator. Long/MAX_VALUE)]
+  (with-open [a (RootAllocator.)]
     (t/is (= (json/parse-string (slurp (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
              (-> (c2/serialize-tx-ops
                   [{:op :put
