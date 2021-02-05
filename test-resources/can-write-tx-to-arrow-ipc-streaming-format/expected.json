@@ -78,23 +78,7 @@
               },
               "children" : [ ]
             },{
-              "name" : "cpu-avg-15min",
-              "nullable" : true,
-              "type" : {
-                "name" : "floatingpoint",
-                "precision" : "DOUBLE"
-              },
-              "children" : [ ]
-            },{
-              "name" : "rssi",
-              "nullable" : true,
-              "type" : {
-                "name" : "floatingpoint",
-                "precision" : "DOUBLE"
-              },
-              "children" : [ ]
-            },{
-              "name" : "cpu-avg-5min",
+              "name" : "battery-level",
               "nullable" : true,
               "type" : {
                 "name" : "floatingpoint",
@@ -109,23 +93,7 @@
               },
               "children" : [ ]
             },{
-              "name" : "ssid",
-              "nullable" : true,
-              "type" : {
-                "name" : "utf8"
-              },
-              "children" : [ ]
-            },{
-              "name" : "time",
-              "nullable" : true,
-              "type" : {
-                "name" : "timestamp",
-                "unit" : "MILLISECOND",
-                "timezone" : null
-              },
-              "children" : [ ]
-            },{
-              "name" : "battery-level",
+              "name" : "battery-temperature",
               "nullable" : true,
               "type" : {
                 "name" : "floatingpoint",
@@ -140,7 +108,7 @@
               },
               "children" : [ ]
             },{
-              "name" : "battery-temperature",
+              "name" : "cpu-avg-15min",
               "nullable" : true,
               "type" : {
                 "name" : "floatingpoint",
@@ -149,6 +117,14 @@
               "children" : [ ]
             },{
               "name" : "cpu-avg-1min",
+              "nullable" : true,
+              "type" : {
+                "name" : "floatingpoint",
+                "precision" : "DOUBLE"
+              },
+              "children" : [ ]
+            },{
+              "name" : "cpu-avg-5min",
               "nullable" : true,
               "type" : {
                 "name" : "floatingpoint",
@@ -169,6 +145,30 @@
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
+              },
+              "children" : [ ]
+            },{
+              "name" : "rssi",
+              "nullable" : true,
+              "type" : {
+                "name" : "floatingpoint",
+                "precision" : "DOUBLE"
+              },
+              "children" : [ ]
+            },{
+              "name" : "ssid",
+              "nullable" : true,
+              "type" : {
+                "name" : "utf8"
+              },
+              "children" : [ ]
+            },{
+              "name" : "time",
+              "nullable" : true,
+              "type" : {
+                "name" : "timestamp",
+                "unit" : "MILLISECOND",
+                "timezone" : null
               },
               "children" : [ ]
             }]
@@ -246,26 +246,57 @@
               "OFFSET" : [0,18],
               "DATA" : ["reading-demo000000"]
             },{
-              "name" : "cpu-avg-15min",
+              "name" : "battery-level",
               "count" : 1,
               "VALIDITY" : [1],
-              "DATA" : [8.654]
-            },{
-              "name" : "rssi",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [-50.0]
-            },{
-              "name" : "cpu-avg-5min",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [10.802]
+              "DATA" : [59.0]
             },{
               "name" : "battery-status",
               "count" : 1,
               "VALIDITY" : [1],
               "OFFSET" : [0,11],
               "DATA" : ["discharging"]
+            },{
+              "name" : "battery-temperature",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [89.5]
+            },{
+              "name" : "bssid",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "OFFSET" : [0,17],
+              "DATA" : ["01:02:03:04:05:06"]
+            },{
+              "name" : "cpu-avg-15min",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [8.654]
+            },{
+              "name" : "cpu-avg-1min",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [24.81]
+            },{
+              "name" : "cpu-avg-5min",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [10.802]
+            },{
+              "name" : "mem-free",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [4.10011078E8]
+            },{
+              "name" : "mem-used",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [5.89988922E8]
+            },{
+              "name" : "rssi",
+              "count" : 1,
+              "VALIDITY" : [1],
+              "DATA" : [-50.0]
             },{
               "name" : "ssid",
               "count" : 1,
@@ -277,37 +308,6 @@
               "count" : 1,
               "VALIDITY" : [1],
               "DATA" : [1479211200000]
-            },{
-              "name" : "battery-level",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [59.0]
-            },{
-              "name" : "bssid",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "OFFSET" : [0,17],
-              "DATA" : ["01:02:03:04:05:06"]
-            },{
-              "name" : "battery-temperature",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [89.5]
-            },{
-              "name" : "cpu-avg-1min",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [24.81]
-            },{
-              "name" : "mem-free",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [4.10011078E8]
-            },{
-              "name" : "mem-used",
-              "count" : 1,
-              "VALIDITY" : [1],
-              "DATA" : [5.89988922E8]
             }]
           }]
         }]
