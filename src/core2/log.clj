@@ -57,7 +57,7 @@
     (when log-file
       (.close log-file))))
 
-(deftype LocalDirectoryLogWriter [^File dir ^RandomAccessFile log-file ^ExecutorService pool ^BlockingQueue queue]
+(deftype LocalDirectoryLogWriter [^File dir ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
   (appendRecord [this record]
     (if (.isShutdown pool)
@@ -73,15 +73,16 @@
         (.shutdownNow)
         (.awaitTermination 5 TimeUnit/SECONDS))
       (finally
-        (.close log-file)
         (loop []
           (when-let [[^CompletableFuture f] (.poll queue)]
             (when-not (.isDone f)
               (.cancel f true))
             (recur)))))))
 
-(defn- writer-append-loop [^RandomAccessFile log-file ^BlockingQueue queue ^Clock clock]
-  (with-open [log-channel (.getChannel log-file)]
+(defn- writer-append-loop [^File dir ^BlockingQueue queue ^Clock clock]
+  (with-open [log-file (RandomAccessFile. (io/file dir "LOG") "rw")
+              log-channel (.getChannel log-file)]
+    (.seek log-file (.length log-file))
     (while (not (Thread/interrupted))
       (when-let [element (.take queue)]
         (let [elements (doto (ArrayList.)
@@ -126,8 +127,6 @@
               :or {buffer-size 1024, clock (Clock/systemUTC)}}]
   (.mkdirs dir)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
-        queue (ArrayBlockingQueue. buffer-size)
-        log-file (RandomAccessFile. (io/file dir "LOG") "rw")]
-    (.seek log-file (.length log-file))
-    (.submit pool ^Runnable #(writer-append-loop log-file queue clock))
-    (->LocalDirectoryLogWriter dir log-file pool queue)))
+        queue (ArrayBlockingQueue. buffer-size)]
+    (.submit pool ^Runnable #(writer-append-loop dir queue clock))
+    (->LocalDirectoryLogWriter dir pool queue)))
