@@ -94,7 +94,8 @@
                                             (into-array OpenOption #{StandardOpenOption/CREATE
                                                                      StandardOpenOption/WRITE}))]
     (.position log-channel (.size log-channel))
-    (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))]
+    (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))
+          ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])]
       (while (not (Thread/interrupted))
         (when-let [element (.take queue)]
           (let [elements (doto (ArrayList.)
@@ -115,10 +116,8 @@
                           (.putInt size)
                           (.putLong time-ms)
                           (.flip))
-                      (while (.hasRemaining header)
-                        (.write log-channel header))
-                      (while (.hasRemaining written-record)
-                        (.write log-channel written-record))
+                      (aset buffers 1 written-record)
+                      (while (pos? (.write log-channel buffers)))
                       (.set elements n (MapEntry/create f (->LogRecord offset (Date. time-ms) record)))))
                   (catch Throwable t
                     (log/error t "failed appending record to log")
