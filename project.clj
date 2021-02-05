@@ -20,6 +20,7 @@
                    :java-source-paths ["src" "jmh"]
                    :resource-paths ["test-resources" "data"]}}
   :aliases {"jmh" ["trampoline" "run" "-m" "org.openjdk.jmh.Main" "-f" "1" "-rf" "json" "-rff" "target/jmh-result.json"]}
+  :main core2.core
   :java-source-paths ["src"]
   :jvm-opts ["-Xmx2G"
              "-XX:MaxDirectMemorySize=2G"

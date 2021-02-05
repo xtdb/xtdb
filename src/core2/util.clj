@@ -2,9 +2,12 @@
   (:require [clojure.java.io :as io])
   (:import [org.apache.arrow.vector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector]
+           org.apache.arrow.flatbuf.Footer
+           org.apache.arrow.vector.ipc.message.ArrowFooter
            java.io.File
-           java.nio.ByteBuffer
+           [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel SeekableByteChannel]
+           java.nio.charset.StandardCharsets
            [java.nio.file Files FileVisitResult OpenOption StandardOpenOption SimpleFileVisitor Path]
            java.nio.file.attribute.FileAttribute
            java.util.Date
@@ -121,3 +124,21 @@
                           (.getValueCount duv)
                           (int-array (for [^ValueVector child-vec (.getChildrenFromFields duv)]
                                        (.getValueCount child-vec)))))
+
+(def ^:private ^{:tag 'long} arrow-magic-size (alength (.getBytes "ARROW1" StandardCharsets/UTF_8)))
+
+(defn read-footer-position ^long [^SeekableByteChannel in]
+  (let [footer-size-bb (.order (ByteBuffer/allocate Integer/BYTES) ByteOrder/LITTLE_ENDIAN)
+        footer-size-offset (- (.size in) (+ (.capacity footer-size-bb) arrow-magic-size))]
+    (.position in footer-size-offset)
+    (while (pos? (.read in footer-size-bb)))
+    (- footer-size-offset (.getInt footer-size-bb 0))))
+
+(defn read-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^SeekableByteChannel in]
+  (let [footer-position (read-footer-position in)
+        footer-size (- (.size in) footer-position)
+        bb (ByteBuffer/allocate footer-size)]
+    (.position in footer-position)
+    (while (pos? (.read in bb)))
+    (.flip bb)
+    (ArrowFooter. (Footer/getRootAsFooter bb))))
