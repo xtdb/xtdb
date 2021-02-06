@@ -1,14 +1,16 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import [org.apache.arrow.vector ValueVector]
+  (:import [org.apache.arrow.vector ValueVector VectorSchemaRoot VectorLoader]
            [org.apache.arrow.vector.complex DenseUnionVector]
-           org.apache.arrow.flatbuf.Footer
-           org.apache.arrow.vector.ipc.message.ArrowFooter
+           [org.apache.arrow.flatbuf Footer Message RecordBatch]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager OwnershipTransferResult]
+           org.apache.arrow.memory.util.MemoryUtil
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
            java.io.File
            java.lang.AutoCloseable
            [java.nio ByteBuffer ByteOrder]
-           [java.nio.channels FileChannel SeekableByteChannel]
+           [java.nio.channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
            [java.nio.file Files FileVisitResult LinkOption OpenOption Path StandardOpenOption SimpleFileVisitor]
            java.nio.file.attribute.FileAttribute
@@ -50,6 +52,10 @@
 
 (defn ->file-channel ^java.nio.channels.FileChannel [^Path path options]
   (FileChannel/open path (into-array OpenOption options)))
+
+(defn ->mmap-path ^java.nio.MappedByteBuffer [^Path path]
+  (with-open [in (->file-channel path #{StandardOpenOption/READ})]
+    (.map in FileChannel$MapMode/READ_ONLY 0 (.size in))))
 
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []
@@ -139,21 +145,81 @@
 
 (def ^:private ^{:tag 'long} arrow-magic-size (alength (.getBytes "ARROW1" StandardCharsets/UTF_8)))
 
-(defn read-footer-position ^long [^SeekableByteChannel in]
+(defn- read-arrow-footer-position ^long [^SeekableByteChannel in]
   (let [footer-size-bb (.order (ByteBuffer/allocate Integer/BYTES) ByteOrder/LITTLE_ENDIAN)
         footer-size-offset (- (.size in) (+ (.capacity footer-size-bb) arrow-magic-size))]
     (.position in footer-size-offset)
     (while (pos? (.read in footer-size-bb)))
     (- footer-size-offset (.getInt footer-size-bb 0))))
 
-(defn read-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^SeekableByteChannel in]
-  (let [footer-position (read-footer-position in)
+(defn read-arrow-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^SeekableByteChannel in]
+  (let [footer-position (read-arrow-footer-position in)
         footer-size (- (.size in) footer-position)
         bb (ByteBuffer/allocate footer-size)]
     (.position in footer-position)
     (while (pos? (.read in bb)))
     (.flip bb)
     (ArrowFooter. (Footer/getRootAsFooter bb))))
+
+(def ^:private nio-view-reference-manager
+  (reify ReferenceManager
+    (deriveBuffer [this source-buffer index length]
+      (ArrowBuf. this
+                 nil
+                 length
+                 (+ (.memoryAddress source-buffer) index)))
+
+    (retain [this])
+
+    (retain [this src-buffer allocator]
+      src-buffer)
+
+    (release [this]
+      false)
+
+    (getRefCount [this]
+      1)
+
+    (transferOwnership [this source-buffer target-allocator]
+      (reify OwnershipTransferResult
+        (getAllocationFit [this]
+          true)
+
+        (getTransferredBuffer [this]
+          source-buffer)))))
+
+(defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^ByteBuffer nio-buffer]
+  (when-not (.isDirect nio-buffer)
+    (throw (IllegalArgumentException. (str "not a direct buffer: " nio-buffer))))
+  (ArrowBuf. nio-view-reference-manager
+             nil
+             (.capacity nio-buffer)
+             (MemoryUtil/getByteBufferAddress nio-buffer)))
+
+(defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ByteBuffer nio-buffer]
+  (let [prefix-size (if (= (.getInt nio-buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
+                      8
+                      4)
+        ^RecordBatch batch (.header (Message/getRootAsMessage
+                                     (.slice nio-buffer
+                                             (+ (.getOffset block) prefix-size)
+                                             (- (.getMetadataLength block) prefix-size)))
+                                    (RecordBatch.))
+        body-buffer (->arrow-buf-view (.slice nio-buffer
+                                              (+ (.getOffset block)
+                                                 (.getMetadataLength block))
+                                              (.getBodyLength block)))]
+    (MessageSerializer/deserializeRecordBatch batch body-buffer)))
+
+(defn read-arrow-record-batches [^BufferAllocator allocator ^ByteBuffer buffer]
+  (let [^ArrowFooter footer (with-open [in (->seekable-byte-channel buffer)]
+                              (read-arrow-footer in))
+        schema (.getSchema footer)]
+    (vec (for [block (.getRecordBatches footer)
+               :let [record-batch (VectorSchemaRoot/create schema allocator)
+                     loader (VectorLoader. record-batch)]]
+           (do (.load loader (->arrow-record-batch-view block buffer))
+               record-batch)))))
 
 (defn try-close [c]
   (try
