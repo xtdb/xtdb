@@ -88,19 +88,19 @@
               (.cancel f true))
             (recur)))))))
 
-(defn- writer-append-loop [^Path root-path ^BlockingQueue queue ^Clock clock]
+(defn- writer-append-loop [^Path root-path ^BlockingQueue queue ^Clock clock ^long buffer-size]
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
                                                #{StandardOpenOption/CREATE
                                                  StandardOpenOption/WRITE})]
     (let [header (ByteBuffer/allocate header-size)
           ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])
-          elements (ArrayList.)]
+          elements (ArrayList. buffer-size)]
       (.position log-channel (.size log-channel))
       (while (not (Thread/interrupted))
         (try
           (when-let [element (.take queue)]
             (.add elements element)
-            (.drainTo queue elements)
+            (.drainTo queue elements (.size queue))
             (let [previous-offset (.position log-channel)]
               (try
                 (loop [n (int 0)
@@ -153,5 +153,5 @@
   (util/mkdirs root-path)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)
-        append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue clock))]
+        append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue clock buffer-size))]
     (->LocalDirectoryLogWriter root-path pool queue append-loop-future)))
