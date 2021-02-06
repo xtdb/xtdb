@@ -14,9 +14,8 @@
            [core2.core IngestLoop Node]
            [core2.ingest Ingester TransactionInstant]
            core2.object_store.ObjectStore
-           java.io.File
-           java.nio.file.attribute.FileAttribute
            [java.nio.file Files Path]
+           java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
            java.util.concurrent.CompletableFuture
            java.util.Date
@@ -128,16 +127,12 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")
-        total-number-of-ops (count (for [tx-ops txs
-                                         op tx-ops]
-                                     op))]
+        last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-      (let [^ObjectStore os (.object-store node)
-            ^IngestLoop il (.ingest-loop node)
+      (let [^IngestLoop il (.ingest-loop node)
             object-dir (.resolve node-dir "objects")]
 
         (t/is (= last-tx-instant
@@ -197,34 +192,33 @@
             ^ObjectStore os (.object-store node)
             ^Ingester i (.ingester node)
             ^IngestLoop il (.ingest-loop node)
-            object-dir (.resolve node-dir "objects")]
-        (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
-              readings (map readings-csv->doc (csv/read-csv readings-reader))
-              [initial-readings rest-readings] (split-at (count device-infos) readings)
-              tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                       {:op :put
-                        :doc doc})]
+            device-infos (map device-info-csv->doc (csv/read-csv info-reader))
+            readings (map readings-csv->doc (csv/read-csv readings-reader))
+            [initial-readings rest-readings] (split-at (count device-infos) readings)
+            tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                     {:op :put
+                      :doc doc})]
 
-          (t/is (= 11000 (count tx-ops)))
+        (t/is (= 11000 (count tx-ops)))
 
-          (t/is (nil? (.latestCompletedTx il)))
+        (t/is (nil? (.latestCompletedTx il)))
 
-          (let [last-tx-instant @(reduce
-                                  (fn [acc tx-ops]
-                                    (.submitTx tx-producer tx-ops))
-                                  nil
-                                  (partition-all 100 tx-ops))]
+        (let [last-tx-instant @(reduce
+                                (fn [_acc tx-ops]
+                                  (.submitTx tx-producer tx-ops))
+                                nil
+                                (partition-all 100 tx-ops))]
 
-            (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
-            (t/is (= last-tx-instant (.latestCompletedTx il)))
-            (.finishChunk i)
+          (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
+          (t/is (= last-tx-instant (.latestCompletedTx il)))
+          (.finishChunk i)
 
-            (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
-            (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a)))
+          (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
+          (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a)))
 
-            (t/is (= 11 (count @(.listObjects os "metadata-*"))))
-            (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
-            (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
+          (t/is (= 11 (count @(.listObjects os "metadata-*"))))
+          (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
+          (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*")))))))))
 
 #_(t/deftest can-ingest-ts-devices-small
     (if-not (io/resource "devices_small_device_info.csv")
@@ -286,7 +280,7 @@
         (t/is (= 11000 (count tx-ops)))
 
         (let [last-tx-instant @(reduce
-                                (fn [acc tx-ops]
+                                (fn [_ tx-ops]
                                   (.submitTx tx-producer tx-ops))
                                 nil
                                 (partition-all 100 tx-ops))]
@@ -322,7 +316,7 @@
 
         (let [^TransactionInstant
               first-half-tx-instant @(reduce
-                                      (fn [acc tx-ops]
+                                      (fn [_ tx-ops]
                                         (.submitTx tx-producer tx-ops))
                                       nil
                                       (partition-all 100 first-half-tx-ops))]
@@ -345,7 +339,7 @@
 
               (let [^TransactionInstant
                     second-half-tx-instant @(reduce
-                                             (fn [acc tx-ops]
+                                             (fn [_ tx-ops]
                                                (.submitTx tx-producer tx-ops))
                                              nil
                                              (partition-all 100 second-half-tx-ops))]
