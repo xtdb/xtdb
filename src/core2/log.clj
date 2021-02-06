@@ -93,20 +93,21 @@
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
                                                #{StandardOpenOption/CREATE
                                                  StandardOpenOption/WRITE})]
-    (.position log-channel (.size log-channel))
     (let [header (ByteBuffer/allocate header-size)
-          ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])]
+          ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])
+          elements (ArrayList.)]
+      (.position log-channel (.size log-channel))
       (while (not (Thread/interrupted))
-        (when-let [element (.take queue)]
-          (let [elements (doto (ArrayList.)
-                           (.add element))]
-            (try
-              (.drainTo queue elements)
-              (let [previous-offset (.position log-channel)]
-                (try
-                  (dotimes [n (.size elements)]
+        (try
+          (when-let [element (.take queue)]
+            (.add elements element)
+            (.drainTo queue elements)
+            (let [previous-offset (.position log-channel)]
+              (try
+                (loop [n (int 0)
+                       offset previous-offset]
+                  (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
-                          offset (.position log-channel)
                           time-ms (.millis clock)
                           written-record (.duplicate record)
                           size (.remaining written-record)
@@ -118,23 +119,26 @@
                           (.flip))
                       (aset buffers 1 written-record)
                       (while (pos? (.write log-channel buffers)))
-                      (.set elements n (MapEntry/create f (->LogRecord offset (Date. time-ms) record)))))
-                  (catch Throwable t
-                    (log/error t "failed appending record to log")
-                    (.truncate log-channel previous-offset)
-                    (throw t)))
-                (.force log-channel true)
-                (doseq [[^CompletableFuture f log-record] elements]
-                  (.complete f log-record)))
-              (catch InterruptedException e
-                (doseq [[^CompletableFuture f] elements]
-                  (when-not (.isDone f)
-                    (.cancel f true)))
-                (.interrupt (Thread/currentThread)))
-              (catch Throwable t
-                (doseq [[^CompletableFuture f] elements]
-                  (when-not (.isDone f)
-                    (.completeExceptionally f t)))))))))))
+                      (.set elements n (MapEntry/create f (->LogRecord offset (Date. time-ms) record)))
+                      (recur (inc n) (+ offset header-size size)))))
+                (catch Throwable t
+                  (.truncate log-channel previous-offset)
+                  (throw t)))
+              (.force log-channel true)
+              (doseq [[^CompletableFuture f log-record] elements]
+                (.complete f log-record))))
+          (catch InterruptedException e
+            (doseq [[^CompletableFuture f] elements]
+              (when-not (.isDone f)
+                (.cancel f true)))
+            (.interrupt (Thread/currentThread)))
+          (catch Throwable t
+            (log/error t "failed appending to log")
+            (doseq [[^CompletableFuture f] elements]
+              (when-not (.isDone f)
+                (.completeExceptionally f t))))
+          (finally
+            (.clear elements)))))))
 
 (defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^Path root-path]
   (->LocalDirectoryLogReader root-path nil))
