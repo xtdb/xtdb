@@ -1,14 +1,13 @@
 (ns core2.ingest
-  (:require [clojure.java.io :as io]
-            [core2.metadata :as meta]
+  (:require [core2.metadata :as meta]
             [core2.types :as t]
             [core2.util :as util]
             [core2.object-store :as os])
   (:import core2.metadata.IColumnMetadata
            core2.object_store.ObjectStore
-           [java.io Closeable File]
+           [java.io Closeable]
            java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
+           [java.nio.file Files Path StandardOpenOption]
            [java.util Date LinkedList List Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.function.Function
@@ -39,7 +38,7 @@
   (^void writeBlock [])
   (^void writeColumn []))
 
-(deftype LiveColumn [^VectorSchemaRoot content-root, ^List record-batches, ^List field-metadata, ^File file]
+(deftype LiveColumn [^VectorSchemaRoot content-root, ^List record-batches, ^List field-metadata, ^Path file]
   ILiveColumn
   (writeBlock [_this]
     (.add record-batches (.getRecordBatch (VectorUnloader. content-root)))
@@ -52,7 +51,9 @@
     (.setRowCount content-root 0))
 
   (writeColumn [_this]
-    (with-open [file-ch (util/open-write-file-ch file)
+    (with-open [file-ch (util/->file-channel file #{StandardOpenOption/CREATE
+                                                    StandardOpenOption/WRITE
+                                                    StandardOpenOption/TRUNCATE_EXISTING})
                 fw (ArrowFileWriter. content-root nil file-ch)]
       (.start fw)
       (let [loader (VectorLoader. content-root)]
@@ -80,7 +81,7 @@
   (Schema. [t/row-id-field field]))
 
 (deftype Ingester [^BufferAllocator allocator
-                   ^File arrow-dir
+                   ^Path arrow-dir
                    ^ObjectStore object-store
                    ^Map field->live-column
                    ^long max-block-size
@@ -102,7 +103,7 @@
                          (LiveColumn. content-root
                                       (LinkedList.)
                                       field-metadata
-                                      (io/file arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))))))]
+                                      (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx (field->file-name field)))))))]
       (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                   sr (ArrowStreamReader. tx-ops-ch allocator)
                   tx-root (.getVectorSchemaRoot sr)]
@@ -183,22 +184,22 @@
                          (do
                            (.writeColumn live-column)
                            (.file live-column))))
-            metadata-file (io/file (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
+            metadata-file (.resolve ^Path (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
 
         (write-metadata! this metadata-file)
         (close-cols! this)
 
         (.join (CompletableFuture/allOf
                 (into-array CompletableFuture
-                            (for [^File file files]
-                              (.putObject object-store (.getName file) (.toPath file))))))
+                            (for [^Path file files]
+                              (.putObject object-store (str (.getFileName file)) file)))))
 
-        (doseq [^File file files]
-          (.delete file))
+        (doseq [^Path file files]
+          (Files/delete file))
 
-        (.join (.putObject object-store (.getName metadata-file) (.toPath metadata-file)))
+        (.join (.putObject object-store (str (.getFileName metadata-file)) metadata-file))
 
-        (.delete metadata-file))
+        (Files/delete metadata-file))
 
       (set! (.chunk-idx this) next-row-id)))
 
@@ -214,13 +215,13 @@
 
     (.clear field->live-column)))
 
-(defn- write-metadata! [^Ingester ingester, ^File metadata-file]
+(defn- write-metadata! [^Ingester ingester, ^Path metadata-file]
   (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema (.allocator ingester))]
     (reduce
      (fn [^long idx [^Field field, ^LiveColumn live-column]]
        (let [content-root ^VectorSchemaRoot (.content-root live-column)
              field-metadata (.field-metadata live-column)
-             file-name (Text. (.getName ^File (.file live-column)))
+             file-name (Text. (str (.getFileName ^Path (.file live-column))))
              column-name (Text. (.getName field))]
          (dotimes [n (count (.getFieldVectors content-root))]
            (let [field-vector (.getVector content-root n)
@@ -237,7 +238,9 @@
 
     (.syncSchema metadata-root)
 
-    (with-open [metadata-file-ch (util/open-write-file-ch metadata-file)
+    (with-open [metadata-file-ch (util/->file-channel metadata-file #{StandardOpenOption/CREATE
+                                                                      StandardOpenOption/WRITE
+                                                                      StandardOpenOption/TRUNCATE_EXISTING})
                 metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
       (.start metadata-fw)
       (.writeBatch metadata-fw))))
@@ -258,7 +261,7 @@
                        (inc (long latest-row-id))
                        0)]
      (Ingester. allocator
-                (.toFile (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0)))
+                (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0))
                 object-store
                 (ConcurrentHashMap.)
                 max-block-size

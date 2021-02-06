@@ -1,6 +1,5 @@
 (ns core2.core
-  (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [core2.ingest :as ingest]
             [core2.log :as l]
             [core2.metadata :as meta]
@@ -14,7 +13,7 @@
            [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer]
            [java.nio.channels Channels SeekableByteChannel]
-           [java.nio.file Files OpenOption StandardOpenOption]
+           [java.nio.file Files Path StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
            [java.util.concurrent CompletableFuture Future Executors ExecutorService TimeUnit TimeoutException]
@@ -115,10 +114,10 @@
     (.close allocator)))
 
 (defn ->local-tx-producer
-  (^core2.core.LogTxProducer [node-dir]
+  (^core2.core.LogTxProducer [^Path node-dir]
    (->local-tx-producer node-dir {}))
-  (^core2.core.LogTxProducer [node-dir log-writer-opts]
-   (LogTxProducer. (l/->local-directory-log-writer (io/file node-dir "log") log-writer-opts)
+  (^core2.core.LogTxProducer [^Path node-dir log-writer-opts]
+   (LogTxProducer. (l/->local-directory-log-writer (.resolve node-dir "log") log-writer-opts)
                    (RootAllocator.))))
 
 (defn block-stream [path ^BufferAllocator allocator]
@@ -127,7 +126,7 @@
     (reify
       clojure.lang.IReduceInit
       (reduce [_ f init]
-        (with-open [file-ch (Files/newByteChannel path (into-array OpenOption #{StandardOpenOption/READ}))
+        (with-open [file-ch (util/->file-channel path #{StandardOpenOption/READ})
                     file-reader (ArrowFileReader. file-ch allocator)]
           (let [root (.getVectorSchemaRoot file-reader)]
             (loop [v init]
@@ -277,21 +276,21 @@
     (.close allocator)))
 
 (defn ->local-node
-  (^core2.core.Node [node-dir]
+  (^core2.core.Node [^Path node-dir]
    (->local-node node-dir {}))
-  (^core2.core.Node [node-dir opts]
-   (let [object-dir (io/file node-dir "objects")
-         log-dir (io/file node-dir "log")
+  (^core2.core.Node [^Path node-dir opts]
+   (let [object-dir (.resolve node-dir "objects")
+         log-dir (.resolve node-dir "log")
          allocator (RootAllocator.)
          log-reader (l/->local-directory-log-reader log-dir)
-         object-store (os/->file-system-object-store (.toPath object-dir) opts)
+         object-store (os/->file-system-object-store object-dir opts)
          ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator) opts)
          ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator) opts)]
      (Node. allocator log-reader object-store ingester ingest-loop))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
-    (let [node-dir (io/file node-dir)]
+    (let [node-dir (util/->path node-dir)]
       (->local-node node-dir)
       (println "core2 started in" (str node-dir)))
     (binding [*out* *err*]

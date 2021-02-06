@@ -1,12 +1,11 @@
 (ns core2.log
-  (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           [java.io Closeable EOFException File RandomAccessFile]
+           [java.io Closeable]
            java.nio.channels.FileChannel
            java.nio.ByteBuffer
-           [java.nio.file OpenOption StandardOpenOption]
+           [java.nio.file Files Path StandardOpenOption]
            [java.time Clock]
            [java.util ArrayList Date List]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService TimeUnit]))
@@ -21,14 +20,13 @@
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
 
-(deftype LocalDirectoryLogReader [^File dir ^:volatile-mutable ^FileChannel log-channel]
+(deftype LocalDirectoryLogReader [^Path root-path ^:volatile-mutable ^FileChannel log-channel]
   LogReader
   (readRecords [this after-offset limit]
     (if (nil? log-channel)
-      (let [log-file (io/file dir "LOG")]
-        (if (.exists log-file)
-          (do (set! log-channel (FileChannel/open (.toPath log-file)
-                                                  (into-array OpenOption #{StandardOpenOption/READ})))
+      (let [log-path (.resolve root-path "LOG")]
+        (if (util/path-exists log-path)
+          (do (set! log-channel (util/->file-channel log-path #{StandardOpenOption/READ}))
               (recur after-offset limit))
           []))
       (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))]
@@ -42,21 +40,19 @@
               (if after-offset
                 (subvec acc 1)
                 acc)
-              (if-let [record (try
-                                (.clear header)
-                                (while (pos? (.read log-channel header)))
-                                (when-not (.hasRemaining header)
-                                  (.flip header)
-                                  (let [check (.getInt header)
-                                        size (.getInt header)
-                                        _ (when-not (= check (bit-xor (unchecked-int offset) size))
-                                            (throw (IllegalStateException. "invalid record")))
-                                        time-ms (.getLong header)
-                                        record (ByteBuffer/allocate size)]
-                                    (while (pos? (.read log-channel record)))
-                                    (when-not (.hasRemaining record)
-                                      (->LogRecord offset (Date. time-ms) (.flip record)))))
-                                (catch EOFException _))]
+              (if-let [record (do (.clear header)
+                                  (while (pos? (.read log-channel header)))
+                                  (when-not (.hasRemaining header)
+                                    (.flip header)
+                                    (let [check (.getInt header)
+                                          size (.getInt header)
+                                          _ (when-not (= check (bit-xor (unchecked-int offset) size))
+                                              (throw (IllegalStateException. "invalid record")))
+                                          time-ms (.getLong header)
+                                          record (ByteBuffer/allocate size)]
+                                      (while (pos? (.read log-channel record)))
+                                      (when-not (.hasRemaining record)
+                                        (->LogRecord offset (Date. time-ms) (.flip record))))))]
                 (recur (dec limit) (conj acc record))
                 (if after-offset
                   (subvec acc 1)
@@ -67,7 +63,7 @@
     (when log-channel
       (.close log-channel))))
 
-(deftype LocalDirectoryLogWriter [^File dir ^ExecutorService pool ^BlockingQueue queue]
+(deftype LocalDirectoryLogWriter [^Path dir ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
   (appendRecord [this record]
     (if (.isShutdown pool)
@@ -89,10 +85,10 @@
               (.cancel f true))
             (recur)))))))
 
-(defn- writer-append-loop [^File dir ^BlockingQueue queue ^Clock clock]
-  (with-open [log-channel (FileChannel/open (.toPath (io/file dir "LOG"))
-                                            (into-array OpenOption #{StandardOpenOption/CREATE
-                                                                     StandardOpenOption/WRITE}))]
+(defn- writer-append-loop [^Path root-path ^BlockingQueue queue ^Clock clock]
+  (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
+                                               #{StandardOpenOption/CREATE
+                                                 StandardOpenOption/WRITE})]
     (.position log-channel (.size log-channel))
     (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))
           ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])]
@@ -136,14 +132,14 @@
                   (when-not (.isDone f)
                     (.completeExceptionally f t)))))))))))
 
-(defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^File dir]
-  (->LocalDirectoryLogReader dir nil))
+(defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^Path root-path]
+  (->LocalDirectoryLogReader root-path nil))
 
 (defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter
-  [^File dir {:keys [buffer-size clock]
-              :or {buffer-size 4096, clock (Clock/systemUTC)}}]
-  (.mkdirs dir)
+  [^Path root-path {:keys [buffer-size clock]
+                    :or {buffer-size 4096, clock (Clock/systemUTC)}}]
+  (util/mkdirs root-path)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)]
-    (.submit pool ^Runnable #(writer-append-loop dir queue clock))
-    (->LocalDirectoryLogWriter dir pool queue)))
+    (.submit pool ^Runnable #(writer-append-loop root-path queue clock))
+    (->LocalDirectoryLogWriter root-path pool queue)))

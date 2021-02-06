@@ -8,7 +8,7 @@
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel SeekableByteChannel]
            java.nio.charset.StandardCharsets
-           [java.nio.file Files FileVisitResult OpenOption StandardOpenOption SimpleFileVisitor Path]
+           [java.nio.file Files FileVisitResult LinkOption OpenOption Path StandardOpenOption SimpleFileVisitor]
            java.nio.file.attribute.FileAttribute
            java.util.Date
            [java.util.function Supplier Function]
@@ -46,11 +46,8 @@
       (truncate [size]
         (throw (UnsupportedOperationException.))))))
 
-(defn open-write-file-ch ^java.nio.channels.FileChannel [^File file]
-  (FileChannel/open (.toPath file)
-                    (into-array OpenOption #{StandardOpenOption/CREATE
-                                             StandardOpenOption/WRITE
-                                             StandardOpenOption/TRUNCATE_EXISTING})))
+(defn ->file-channel ^java.nio.channels.FileChannel [^Path path options]
+  (FileChannel/open path (into-array OpenOption options)))
 
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []
@@ -62,13 +59,18 @@
       (Files/delete dir)
       FileVisitResult/CONTINUE)))
 
-(defn delete-dir [dir]
-  (let [dir (io/file dir)]
-    (when (.exists dir)
-      (Files/walkFileTree (.toPath dir) file-deletion-visitor))))
+(defn path-exists [^Path path]
+  (Files/exists path (make-array LinkOption 0)))
+
+(defn delete-dir [^Path dir]
+  (when (path-exists dir)
+    (Files/walkFileTree dir file-deletion-visitor)))
 
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
+
+(defn ->path ^Path [^String path]
+  (.toPath (io/file path)))
 
 (def ^:private ^ZoneId utc (ZoneId/of "UTC"))
 

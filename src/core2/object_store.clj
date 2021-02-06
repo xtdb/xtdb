@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [core2.util :as util])
   (:import java.io.Closeable
-           [java.nio.file CopyOption StandardCopyOption Files FileSystems LinkOption Path]
+           [java.nio.file CopyOption StandardCopyOption Files FileSystems Path]
            java.nio.file.attribute.FileAttribute
            java.util.UUID
            [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
@@ -23,7 +23,7 @@
   (getObject [_this k to-path]
     (util/completable-future pool
       (let [from-path (.resolve root-path k)]
-        (when (Files/exists from-path (make-array LinkOption 0))
+        (when (util/path-exists from-path)
           (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
           to-path))))
 
@@ -32,7 +32,7 @@
       (let [to-path (.resolve root-path k)]
         (util/mkdirs (.getParent to-path))
         (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
-          (if (Files/exists to-path (make-array LinkOption 0))
+          (if (util/path-exists to-path)
             to-path
             (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
               (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))

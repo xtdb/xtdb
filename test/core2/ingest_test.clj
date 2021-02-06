@@ -16,7 +16,7 @@
            core2.object_store.ObjectStore
            java.io.File
            java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
+           [java.nio.file Files Path]
            [java.time Clock Duration ZoneId]
            java.util.concurrent.CompletableFuture
            java.util.Date
@@ -78,7 +78,7 @@
            :mem-used 2.79257668E8}}]])
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
-  (let [node-dir (io/file "target/can-build-chunk-as-arrow-ipc-file-format")
+  (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
         last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
@@ -92,7 +92,7 @@
             ^ObjectStore os (.object-store node)
             ^Ingester i (.ingester node)
             ^IngestLoop il (.ingest-loop node)
-            object-dir (io/file node-dir "objects")]
+            object-dir (.resolve node-dir "objects")]
 
         (t/is (nil? @(c2/latest-completed-tx os a)))
         (t/is (nil? @(c2/latest-row-id os a)))
@@ -116,17 +116,17 @@
           (t/is (= 1 (count objects-list)))
           (t/is (= "metadata-00000000.arrow" (first objects-list))))
 
-        (c2-json/write-arrow-json-files object-dir)
-        (t/is (= 42 (alength (.listFiles object-dir))))
+        (c2-json/write-arrow-json-files (.toFile object-dir))
+        (t/is (= 42 (.count (Files/list object-dir))))
 
-        (doseq [^File f (.listFiles object-dir)
-                :when (.endsWith (.getName f) ".json")]
-          (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (.getName f)))))
-                   (json/parse-string (slurp f)))
-                (.getName f)))))))
+        (doseq [^Path f (iterator-seq (.iterator (Files/list object-dir)))
+                :when (.endsWith (str f) ".json")]
+          (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (str (.getFileName f))))))
+                   (json/parse-string (slurp (.toFile f))))
+                (str f)))))))
 
 (t/deftest can-stop-node-without-writing-chunks
-  (let [node-dir (io/file "target/can-stop-node-without-writing-chunks")
+  (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
         last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
@@ -138,7 +138,7 @@
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
       (let [^ObjectStore os (.object-store node)
             ^IngestLoop il (.ingest-loop node)
-            object-dir (io/file node-dir "objects")]
+            object-dir (.resolve node-dir "objects")]
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
@@ -154,7 +154,7 @@
                      (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
             (t/is (= last-tx-instant (.latestCompletedTx il)))))
 
-        (t/is (zero? (alength (.listFiles object-dir))))))))
+        (t/is (zero? (.count (Files/list object-dir))))))))
 
 (defn- device-info-csv->doc [[device-id api-version manufacturer model os-name]]
   {:_id (str "device-info-" device-id)
@@ -186,7 +186,7 @@
    :ssid ssid})
 
 (t/deftest can-ingest-ts-devices-mini
-  (let [node-dir (io/file "target/can-ingest-ts-devices-mini")]
+  (let [node-dir (util/->path "target/can-ingest-ts-devices-mini")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir {:max-block-size 100})
@@ -197,7 +197,7 @@
             ^ObjectStore os (.object-store node)
             ^Ingester i (.ingester node)
             ^IngestLoop il (.ingest-loop node)
-            object-dir (io/file node-dir "objects")]
+            object-dir (.resolve node-dir "objects")]
         (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
               readings (map readings-csv->doc (csv/read-csv readings-reader))
               [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -229,7 +229,7 @@
 #_(t/deftest can-ingest-ts-devices-small
     (if-not (io/resource "devices_small_device_info.csv")
       (t/is true)
-      (let [node-dir (io/file "target/can-ingest-ts-devices-small")]
+      (let [node-dir (util/->path "target/can-ingest-ts-devices-small")]
         (util/delete-dir node-dir)
 
         (with-open [node (c2/->local-node node-dir)
@@ -240,7 +240,7 @@
                 ^ObjectStore os (.object-store node)
                 ^Ingester i (.ingester node)
                 ^IngestLoop il (.ingest-loop node)
-                object-dir (io/file node-dir "objects")]
+                object-dir (.resolve node-dir "objects")]
             (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
                   readings (map readings-csv->doc (csv/read-csv readings-reader))
                   [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -266,7 +266,7 @@
                 (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
-  (let [node-dir (io/file "target/can-ingest-ts-devices-mini-into-multiple-nodes")
+  (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
         opts {:max-block-size 100}]
     (util/delete-dir node-dir)
 
@@ -302,7 +302,7 @@
             (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
-  (let [node-dir (io/file "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
+  (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
         opts {:max-block-size 100}]
     (util/delete-dir node-dir)
 
@@ -372,7 +372,7 @@
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))))))
 
 (t/deftest scans-rowid-for-value
-  (let [node-dir (io/file "target/scans-rowid-for-value")]
+  (let [node-dir (util/->path "target/scans-rowid-for-value")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
