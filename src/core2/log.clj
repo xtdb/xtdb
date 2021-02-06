@@ -2,8 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           [java.io Closeable]
-           [java.nio.channels ClosedByInterruptException FileChannel]
+           [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
+           [java.nio.channels Channels ClosedByInterruptException FileChannel]
            java.nio.ByteBuffer
            [java.nio.file Files Path StandardOpenOption]
            [java.time Clock]
@@ -31,7 +31,7 @@
           (do (set! log-channel (util/->file-channel log-path #{StandardOpenOption/READ}))
               (recur after-offset limit))
           []))
-      (let [header (ByteBuffer/allocate header-size)]
+      (let [log-in (DataInputStream. (BufferedInputStream. (Channels/newInputStream log-channel)))]
         (.position log-channel (long (or after-offset 0)))
         (loop [limit (int (if after-offset
                             (inc limit)
@@ -42,19 +42,16 @@
             (if after-offset
               (subvec acc 1)
               acc)
-            (if-let [record (do (.clear header)
-                                (while (pos? (.read log-channel header)))
-                                (when-not (.hasRemaining header)
-                                  (.flip header)
-                                  (let [check (.getInt header)
-                                        size (.getInt header)
-                                        _ (when-not (= check (bit-xor (unchecked-int offset) size))
-                                            (throw (IllegalStateException. "invalid record")))
-                                        time-ms (.getLong header)
-                                        record (ByteBuffer/allocate size)]
-                                    (while (pos? (.read log-channel record)))
-                                    (when-not (.hasRemaining record)
-                                      (->LogRecord offset (Date. time-ms) (.flip record))))))]
+            (if-let [record (try
+                              (let [check (.readInt log-in)
+                                    size (.readInt log-in)
+                                    _ (when-not (= check (bit-xor (unchecked-int offset) size))
+                                        (throw (IllegalStateException. "invalid record")))
+                                    time-ms (.readLong log-in)
+                                    record (byte-array size)]
+                                (when (= size (.read log-in record))
+                                  (->LogRecord offset (Date. time-ms) (ByteBuffer/wrap record))))
+                              (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
                      (+ offset header-size (.capacity ^ByteBuffer (.record ^LogRecord record))))
@@ -92,37 +89,37 @@
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
                                                #{StandardOpenOption/CREATE
                                                  StandardOpenOption/WRITE})]
-    (let [header (ByteBuffer/allocate header-size)
-          ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])
-          elements (ArrayList. buffer-size)]
+    (let [elements (ArrayList. buffer-size)]
       (.position log-channel (.size log-channel))
       (while (not (Thread/interrupted))
         (try
           (when-let [element (.take queue)]
             (.add elements element)
             (.drainTo queue elements (.size queue))
-            (let [previous-offset (.position log-channel)]
+            (let [previous-offset (.position log-channel)
+                  log-out (DataOutputStream. (BufferedOutputStream. (Channels/newOutputStream log-channel)))]
               (try
                 (loop [n (int 0)
                        offset previous-offset]
                   (when-not (= n (.size elements))
                     (let [[f ^ByteBuffer record] (.get elements n)
                           time-ms (.millis clock)
-                          written-record (.duplicate record)
-                          size (.remaining written-record)
-                          check (bit-xor (unchecked-int offset) size)]
-                      (-> (.clear header)
-                          (.putInt check)
-                          (.putInt size)
-                          (.putLong time-ms)
-                          (.flip))
-                      (aset buffers 1 written-record)
-                      (while (pos? (.write log-channel buffers)))
+                          size (.remaining record)
+                          check (bit-xor (unchecked-int offset) size)
+                          written-record (.duplicate record)]
+                      (.writeInt log-out check)
+                      (.writeInt log-out size)
+                      (.writeLong log-out time-ms)
+                      (while (>= (.remaining written-record) Long/BYTES)
+                        (.writeLong log-out (.getLong written-record)))
+                      (while (.hasRemaining written-record)
+                        (.write log-out (.get written-record)))
                       (.set elements n (MapEntry/create f (->LogRecord offset (Date. time-ms) record)))
                       (recur (inc n) (+ offset header-size size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
                   (throw t)))
+              (.flush log-out)
               (.force log-channel true)
               (doseq [[^CompletableFuture f log-record] elements]
                 (.complete f log-record))))

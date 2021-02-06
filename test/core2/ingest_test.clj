@@ -241,8 +241,8 @@
                 ^Ingester i (.ingester node)
                 ^IngestLoop il (.ingest-loop node)
                 object-dir (.resolve node-dir "objects")]
-            (let [device-infos (map device-info-csv->doc (csv/read-csv info-reader))
-                  readings (map readings-csv->doc (csv/read-csv readings-reader))
+            (let [device-infos (mapv device-info-csv->doc (csv/read-csv info-reader))
+                  readings (mapv readings-csv->doc (csv/read-csv readings-reader))
                   [initial-readings rest-readings] (split-at (count device-infos) readings)
                   tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
                            {:op :put
