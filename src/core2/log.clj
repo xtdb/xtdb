@@ -63,7 +63,7 @@
     (when log-channel
       (.close log-channel))))
 
-(deftype LocalDirectoryLogWriter [^Path dir ^ExecutorService pool ^BlockingQueue queue]
+(deftype LocalDirectoryLogWriter [^Path root-path ^ExecutorService pool ^BlockingQueue queue]
   LogWriter
   (appendRecord [this record]
     (if (.isShutdown pool)
