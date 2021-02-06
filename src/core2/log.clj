@@ -3,7 +3,7 @@
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            [java.io Closeable]
-           java.nio.channels.FileChannel
+           [java.nio.channels ClosedByInterruptException FileChannel]
            java.nio.ByteBuffer
            [java.nio.file Files Path StandardOpenOption]
            [java.time Clock]
@@ -127,16 +127,21 @@
               (.force log-channel true)
               (doseq [[^CompletableFuture f log-record] elements]
                 (.complete f log-record))))
+          (catch ClosedByInterruptException e
+            (log/warn e "channel interrupted while closing")
+            (doseq [[^CompletableFuture f] elements
+                    :when (not (.isDone f))]
+              (.cancel f true)))
           (catch InterruptedException e
-            (doseq [[^CompletableFuture f] elements]
-              (when-not (.isDone f)
-                (.cancel f true)))
+            (doseq [[^CompletableFuture f] elements
+                    :when (not (.isDone f))]
+              (.cancel f true))
             (.interrupt (Thread/currentThread)))
           (catch Throwable t
             (log/error t "failed appending to log")
-            (doseq [[^CompletableFuture f] elements]
-              (when-not (.isDone f)
-                (.completeExceptionally f t))))
+            (doseq [[^CompletableFuture f] elements
+                    :when (not (.isDone f))]
+              (.completeExceptionally f t)))
           (finally
             (.clear elements)))))))
 

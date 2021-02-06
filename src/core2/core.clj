@@ -12,7 +12,7 @@
            core2.object_store.ObjectStore
            [java.io ByteArrayOutputStream Closeable]
            [java.nio ByteBuffer]
-           [java.nio.channels Channels SeekableByteChannel]
+           [java.nio.channels Channels ClosedByInterruptException SeekableByteChannel]
            [java.nio.file Files Path StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
@@ -200,6 +200,8 @@
                 (set! (.latest-completed-tx this)
                       (.indexTx ingester (log-record->tx-instant record) (.record record)))))
             (Thread/sleep poll-sleep-ms)))
+        (catch ClosedByInterruptException e
+          (log/warn e "channel interrupted while closing"))
         (catch InterruptedException _)
         (catch Throwable t
           (log/fatal t "ingest loop stopped")
