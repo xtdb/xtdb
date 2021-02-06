@@ -220,7 +220,7 @@
       (let [{:keys [^Duration poll-sleep-duration],
              :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
             poll-sleep-ms (.toMillis poll-sleep-duration)
-            end (.plus (Instant/now) timeout)
+            end-ns (+ (System/nanoTime) (.toNanos timeout))
             tx-id (.tx-id tx)]
         (loop []
           (let [latest-completed-tx latest-completed-tx]
@@ -233,7 +233,7 @@
               (do @ingest-future (throw (IllegalStateException. "node closed")))
 
               (or (nil? timeout)
-                  (.isBefore (Instant/now) end))
+                  (neg? (- (System/nanoTime) end-ns)))
               (do
                 (Thread/sleep poll-sleep-ms)
                 (recur))
