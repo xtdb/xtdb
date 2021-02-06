@@ -20,6 +20,8 @@
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
 
+(def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
+
 (deftype LocalDirectoryLogReader [^Path root-path ^:volatile-mutable ^FileChannel log-channel]
   LogReader
   (readRecords [this after-offset limit]
@@ -29,34 +31,36 @@
           (do (set! log-channel (util/->file-channel log-path #{StandardOpenOption/READ}))
               (recur after-offset limit))
           []))
-      (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))]
+      (let [header (ByteBuffer/allocate header-size)]
         (.position log-channel (long (or after-offset 0)))
         (loop [limit (int (if after-offset
                             (inc limit)
                             limit))
-               acc []]
-          (let [offset (.position log-channel)]
-            (if (or (zero? limit) (= offset (.size log-channel)))
+               acc []
+               offset (.position log-channel)]
+          (if (or (zero? limit) (= offset (.size log-channel)))
+            (if after-offset
+              (subvec acc 1)
+              acc)
+            (if-let [record (do (.clear header)
+                                (while (pos? (.read log-channel header)))
+                                (when-not (.hasRemaining header)
+                                  (.flip header)
+                                  (let [check (.getInt header)
+                                        size (.getInt header)
+                                        _ (when-not (= check (bit-xor (unchecked-int offset) size))
+                                            (throw (IllegalStateException. "invalid record")))
+                                        time-ms (.getLong header)
+                                        record (ByteBuffer/allocate size)]
+                                    (while (pos? (.read log-channel record)))
+                                    (when-not (.hasRemaining record)
+                                      (->LogRecord offset (Date. time-ms) (.flip record))))))]
+              (recur (dec limit)
+                     (conj acc record)
+                     (+ offset header-size (.capacity ^ByteBuffer (.record ^LogRecord record))))
               (if after-offset
                 (subvec acc 1)
-                acc)
-              (if-let [record (do (.clear header)
-                                  (while (pos? (.read log-channel header)))
-                                  (when-not (.hasRemaining header)
-                                    (.flip header)
-                                    (let [check (.getInt header)
-                                          size (.getInt header)
-                                          _ (when-not (= check (bit-xor (unchecked-int offset) size))
-                                              (throw (IllegalStateException. "invalid record")))
-                                          time-ms (.getLong header)
-                                          record (ByteBuffer/allocate size)]
-                                      (while (pos? (.read log-channel record)))
-                                      (when-not (.hasRemaining record)
-                                        (->LogRecord offset (Date. time-ms) (.flip record))))))]
-                (recur (dec limit) (conj acc record))
-                (if after-offset
-                  (subvec acc 1)
-                  acc))))))))
+                acc)))))))
 
   Closeable
   (close [_]
@@ -90,7 +94,7 @@
                                                #{StandardOpenOption/CREATE
                                                  StandardOpenOption/WRITE})]
     (.position log-channel (.size log-channel))
-    (let [header (ByteBuffer/allocate (+ Integer/BYTES Integer/BYTES Long/BYTES))
+    (let [header (ByteBuffer/allocate header-size)
           ^"[Ljava.nio.ByteBuffer;" buffers (into-array ByteBuffer [header nil])]
       (while (not (Thread/interrupted))
         (when-let [element (.take queue)]
