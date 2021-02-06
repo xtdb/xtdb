@@ -14,7 +14,7 @@
            java.nio.file.attribute.FileAttribute
            java.util.Date
            [java.util.function Supplier Function]
-           [java.util.concurrent CompletableFuture Executors ThreadFactory]
+           [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            [java.time LocalDateTime ZoneId]))
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
@@ -161,3 +161,17 @@
       (.close ^AutoCloseable c))
     (catch Exception e
       (log/warn e "could not close"))))
+
+(defn shutdown-pool
+  ([^ExecutorService pool]
+   (shutdown-pool pool 60))
+  ([^ExecutorService pool ^long timeout-seconds]
+   (try
+     (.shutdown pool)
+     (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
+       (.shutdownNow pool)
+       (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
+         (log/warn "pool did not terminate" pool)))
+     (catch InterruptedException _
+       (.shutdownNow pool)
+       (.interrupt (Thread/currentThread))))))

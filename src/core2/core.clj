@@ -243,9 +243,8 @@
 
   Closeable
   (close [_]
-    (doto pool
-      (.shutdownNow)
-      (.awaitTermination 5 TimeUnit/SECONDS))))
+    (future-cancel ingest-future)
+    (util/shutdown-pool pool)))
 
 (defn ->ingest-loop
   (^core2.core.IngestLoop

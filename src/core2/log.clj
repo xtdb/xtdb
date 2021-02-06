@@ -8,7 +8,7 @@
            [java.nio.file Files Path StandardOpenOption]
            [java.time Clock]
            [java.util ArrayList Date List]
-           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService TimeUnit]))
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future TimeUnit]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -67,7 +67,7 @@
     (when log-channel
       (.close log-channel))))
 
-(deftype LocalDirectoryLogWriter [^Path root-path ^ExecutorService pool ^BlockingQueue queue]
+(deftype LocalDirectoryLogWriter [^Path root-path ^ExecutorService pool ^BlockingQueue queue ^Future append-loop-future]
   LogWriter
   (appendRecord [this record]
     (if (.isShutdown pool)
@@ -79,9 +79,8 @@
   Closeable
   (close [_]
     (try
-      (doto pool
-        (.shutdownNow)
-        (.awaitTermination 5 TimeUnit/SECONDS))
+      (future-cancel append-loop-future)
+      (util/shutdown-pool pool)
       (finally
         (loop []
           (when-let [[^CompletableFuture f] (.poll queue)]
@@ -153,6 +152,6 @@
                     :or {buffer-size 4096, clock (Clock/systemUTC)}}]
   (util/mkdirs root-path)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
-        queue (ArrayBlockingQueue. buffer-size)]
-    (.submit pool ^Runnable #(writer-append-loop root-path queue clock))
-    (->LocalDirectoryLogWriter root-path pool queue)))
+        queue (ArrayBlockingQueue. buffer-size)
+        append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue clock))]
+    (->LocalDirectoryLogWriter root-path pool queue append-loop-future)))

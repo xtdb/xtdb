@@ -56,9 +56,7 @@
 
   Closeable
   (close [_this]
-    (doto pool
-      (.shutdownNow)
-      (.awaitTermination 5 TimeUnit/SECONDS))))
+    (util/shutdown-pool pool)))
 
 (defn ->file-system-object-store
   (^core2.object_store.FileSystemObjectStore
