@@ -1,10 +1,12 @@
 (ns core2.util
-  (:require [clojure.java.io :as io])
+  (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as log])
   (:import [org.apache.arrow.vector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector]
            org.apache.arrow.flatbuf.Footer
            org.apache.arrow.vector.ipc.message.ArrowFooter
            java.io.File
+           java.lang.AutoCloseable
            [java.nio ByteBuffer ByteOrder]
            [java.nio.channels FileChannel SeekableByteChannel]
            java.nio.charset.StandardCharsets
@@ -152,3 +154,10 @@
     (while (pos? (.read in bb)))
     (.flip bb)
     (ArrowFooter. (Footer/getRootAsFooter bb))))
+
+(defn try-close [c]
+  (try
+    (when (instance? AutoCloseable c)
+      (.close ^AutoCloseable c))
+    (catch Exception e
+      (log/warn e "could not close"))))

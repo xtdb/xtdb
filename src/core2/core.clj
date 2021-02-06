@@ -110,8 +110,8 @@
 
   Closeable
   (close [_]
-    (.close ^Closeable log-writer)
-    (.close allocator)))
+    (util/try-close log-writer)
+    (util/try-close allocator)))
 
 (defn ->local-tx-producer
   (^core2.core.LogTxProducer [^Path node-dir]
@@ -271,11 +271,11 @@
                ^IngestLoop ingest-loop]
   Closeable
   (close [_]
-    (.close ingest-loop)
-    (.close ingester)
-    (.close ^Closeable object-store)
-    (.close ^Closeable log-reader)
-    (.close allocator)))
+    (util/try-close ingest-loop)
+    (util/try-close ingester)
+    (util/try-close object-store)
+    (util/try-close log-reader)
+    (util/try-close allocator)))
 
 (defn ->local-node
   (^core2.core.Node [^Path node-dir]

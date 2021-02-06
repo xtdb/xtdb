@@ -61,15 +61,15 @@
         (doseq [^ArrowRecordBatch batch record-batches]
           (.load loader batch)
           (.writeBatch fw)
-          (.close batch)))
+          (util/try-close batch)))
       (.end fw)))
 
   Closeable
   (close [_]
     (doseq [^ArrowRecordBatch record-batch record-batches]
-      (.close record-batch))
+      (util/try-close record-batch))
 
-    (.close content-root)))
+    (util/try-close content-root)))
 
 (defn- field->file-name [^Field field]
   (format "%s-%s-%08x"
@@ -211,7 +211,7 @@
 (defn- close-cols! [^Ingester ingester]
   (let [^Map field->live-column (.field->live-column ingester)]
     (doseq [^LiveColumn live-column (vals field->live-column)]
-      (.close live-column))
+      (util/try-close live-column))
 
     (.clear field->live-column)))
 
