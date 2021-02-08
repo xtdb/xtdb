@@ -37,7 +37,9 @@
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
 
 (defn ^Query build-lucene-text-query
-  [^Analyzer analyzer, [^String q & args]]
+  [^Analyzer analyzer, [q & args]]
+  (when-not (string? q)
+    (throw (IllegalArgumentException. "lucene-text-search query must be String")))
   (.parse (QueryParser. nil analyzer) (format q args)))
 
 (defn- resolve-search-results-content-hash
@@ -52,7 +54,7 @@
         search-results))
 
 (defmethod q/pred-args-spec 'lucene-text-search [_]
-  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query string? :bindings (s/* :crux.query/binding))) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query (some-fn string? symbol?) :bindings (s/* :crux.query/binding))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'lucene-text-search [_ {::l/keys [lucene-store] :as pred-ctx}]
   (when-not (instance? LuceneMultiFieldIndexer (:indexer lucene-store))

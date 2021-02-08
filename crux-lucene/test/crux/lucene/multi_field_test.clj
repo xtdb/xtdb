@@ -69,3 +69,23 @@
                           (c/q (c/db *api*) {:find '[?e]
                                              :where '[[(lucene-text-search "+12!") [[?e]]]
                                                       [?e :crux.db/id]]}))))
+
+(t/deftest test-use-in-argument
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+                                   :firstname "Fred"
+                                   :surname "Smith"}]])
+
+  (with-open [db (c/open-db *api*)]
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?s]
+                         :where [[(lucene-text-search ?s) [[?e]]]]}
+                    "firstname: Fred")))
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?s]
+                         :where [[(lucene-text-search ?s) [[?e]]]]}
+                    "firstname:James OR surname:smith")))
+    (t/is (thrown-with-msg? IllegalArgumentException #"lucene-text-search query must be String"
+                            (c/q db '{:find  [?v]
+                                      :in    [input]
+                                      :where [[(lucene-text-search input) [[?e ?v]]]]}
+                                 1)))))
