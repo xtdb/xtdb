@@ -7,81 +7,81 @@
             [core2.object-store :as os]
             [core2.types :as t]
             [core2.util :as util])
-  (:import clojure.lang.MapEntry
-           core2.buffer_pool.BufferPool
+  (:import core2.buffer_pool.BufferPool
            [core2.ingest Ingester TransactionIngester TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
            core2.object_store.ObjectStore
-           [java.io Closeable]
-           [java.nio ByteBuffer]
-           [java.nio.channels ClosedByInterruptException]
-           [java.nio.file Path]
-           java.nio.file.attribute.FileAttribute
-           [java.time Duration Instant]
-           [java.util.concurrent CompletableFuture Future Executors ExecutorService TimeUnit TimeoutException]
+           java.io.Closeable
+           java.nio.ByteBuffer
+           java.nio.channels.ClosedByInterruptException
+           java.nio.file.Path
+           java.time.Duration
+           [java.util LinkedHashMap LinkedHashSet Set]
+           [java.util.concurrent CompletableFuture Executors ExecutorService Future TimeoutException]
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector ValueVector VectorSchemaRoot VectorLoader]
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType))
+           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface TxProducer
   (^java.util.concurrent.CompletableFuture submitTx [_]))
 
+(defn- ->put-k-types [tx-ops]
+  (let [put-k-types (LinkedHashMap.)]
+    (doseq [{:keys [op] :as tx-op} tx-ops
+            :when [(= :put op)]
+            :let [doc (:doc tx-op)]
+            [k v] doc]
+      (let [^Set field-types (.computeIfAbsent put-k-types k (util/->jfn (fn [_] (LinkedHashSet.))))]
+        (when (some? v)
+          (.add field-types (t/->arrow-type (type v))))))
+
+    put-k-types))
+
+(defn- ->put-fields [put-k-types]
+  (apply t/->field "document" (.getType Types$MinorType/STRUCT) false
+         (for [[k v-types] put-k-types]
+           (apply t/->field
+                  (name k)
+                  (ArrowType$Union. UnionMode/Dense
+                                    (int-array (for [^ArrowType v-type v-types]
+                                                 (.getFlatbufID (.getTypeID v-type)))))
+                  true
+                  (for [^ArrowType v-type v-types]
+                    (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type true))))))
+
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (let [put-op-fields (->> tx-ops
-                           (into {} (keep (fn [{:keys [op] :as tx-op}]
-                                            (when (= :put op)
-                                              (MapEntry/create tx-op
-                                                               (for [[k v] (sort-by key (:doc tx-op))]
-                                                                 (t/->field (subs (str k) 1) (t/->arrow-type (type v)) true))))))))
-
-        put-op-struct-idxs (->> (vals put-op-fields)
-                                (into {} (comp (distinct)
-                                               (map-indexed (fn [idx key-fields]
-                                                              ;; boxing idx
-                                                              (MapEntry/create key-fields idx))))))
-
+  (let [put-k-types (->put-k-types tx-ops)
         tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
-                                       (t/->field "put" (.getType Types$MinorType/STRUCT) false
-                                                  (apply t/->field "document" (.getType Types$MinorType/DENSEUNION) false
-                                                         (for [[key-fields idx] (sort-by val put-op-struct-idxs)]
-                                                           (apply t/->field (str "struct" idx) (.getType Types$MinorType/STRUCT) true key-fields))))
+                                       (t/->field "put" (.getType Types$MinorType/STRUCT) false (->put-fields put-k-types))
                                        (t/->field "delete" (.getType Types$MinorType/STRUCT) true))])]
-
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")
-            tx-ops-duw (util/->dense-union-writer tx-ops-duv)
-
             ^StructVector put-vec (.getStruct tx-ops-duv 0)
-            ^DenseUnionVector document-vec (.getChild put-vec "document" DenseUnionVector)
-            document-duw (util/->dense-union-writer document-vec)]
+            ^StructVector document-vec (.getChild put-vec "document" StructVector)]
 
-        (doseq [{:keys [op] :as tx-op} tx-ops]
-          (let [tx-op-offset (.writeTypeId tx-ops-duw (case op :put 0, :delete 1))]
+        (dotimes [tx-op-n (count tx-ops)]
+          (let [{:keys [op] :as tx-op} (nth tx-ops tx-op-n)
+                tx-op-offset (util/write-type-id tx-ops-duv tx-op-n (case op :put 0, :delete 1))]
             (case op
               :put (do
                      (.setIndexDefined put-vec tx-op-offset)
+                     (.setIndexDefined document-vec tx-op-offset)
 
-                     (let [{:keys [doc]} tx-op
-                           doc-duv-type-id (put-op-struct-idxs (put-op-fields tx-op))
-                           doc-duv-offset (.writeTypeId document-duw doc-duv-type-id)
-                           ^StructVector struct-vec (.getStruct document-vec doc-duv-type-id)]
-
-                       (.setIndexDefined struct-vec doc-duv-offset)
-
+                     (let [{:keys [doc]} tx-op]
                        (doseq [[k v] doc
-                               :let [value-vec (.getChild struct-vec (subs (str k) 1) ValueVector)]]
+                               :let [^DenseUnionVector value-duv (.getChild document-vec (name k) DenseUnionVector)]]
                          (if (some? v)
-                           (t/set-safe! value-vec doc-duv-offset v)
-                           (t/set-null! value-vec doc-duv-offset)))))
+                           (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                                 value-offset (util/write-type-id value-duv tx-op-offset type-id)]
+                             (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
+
+                           (.setValueCount value-duv (inc (.getValueCount value-duv)))))))
 
               :delete nil)))
-
-        (.end document-duw)
-        (.end tx-ops-duw)
 
         (.setRowCount root (count tx-ops))
 
