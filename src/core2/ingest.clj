@@ -13,7 +13,7 @@
            java.util.function.Function
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot VectorLoader VectorUnloader]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
            [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
            [org.apache.arrow.vector.types Types Types$MinorType]
@@ -36,7 +36,8 @@
 (declare close-cols! write-metadata!)
 
 (definterface ILiveColumn
-  (^void copySafe [^org.apache.arrow.vector.FieldVector src-vec ^int src-idx ^int row-id])
+  (^void promoteField [^org.apache.arrow.vector.types.pojo.Field field])
+  (^void copySafe [^org.apache.arrow.vector.complex.DenseUnionVector src-vec ^int src-idx ^int row-id])
   (^void setSafe [v ^int row-id]) ; TODO boxing v. holder?
   (^void writeBlock [])
   (^void writeColumn []))
@@ -46,15 +47,25 @@
                      ^List field-metadata,
                      ^Path file]
   ILiveColumn
+  (promoteField [_this field]
+    ;; TODO: check, and promote
+    )
+
   (copySafe [_this src-vec src-idx row-id]
-    (let [[^BigIntVector row-id-vec, ^FieldVector field-vec] (.getFieldVectors content-root)
-          value-count (.getRowCount content-root)]
+    (let [[^BigIntVector row-id-vec, ^DenseUnionVector field-vec] (.getFieldVectors content-root)
+          value-count (.getRowCount content-root)
+          type-id (.getTypeId src-vec src-idx)
+          offset (util/write-type-id field-vec (.getValueCount field-vec) type-id)]
       (.setSafe row-id-vec value-count row-id)
-      (.copyFromSafe field-vec src-idx value-count src-vec)
+      (.copyFromSafe (.getVectorByType field-vec type-id)
+                     (.getOffset src-vec src-idx)
+                     offset
+                     (.getVectorByType src-vec type-id))
       (.setRowCount content-root (inc value-count))))
 
+  ;; atm this is just used for tx-time/tx-id
   (setSafe [_this v row-id]
-    (let [[^BigIntVector row-id-vec, ^FieldVector field-vec] (.getFieldVectors content-root)
+    (let [[^BigIntVector row-id-vec, ^DenseUnionVector field-vec] (.getFieldVectors content-root)
           value-count (.getRowCount content-root)]
       (.setSafe row-id-vec value-count row-id)
       (t/set-safe! field-vec value-count v)
@@ -111,47 +122,51 @@
   (indexTx [this tx-instant tx-ops]
     (let [tx-time (.tx-time tx-instant)
           tx-id (.tx-id tx-instant)]
-      (letfn [(add-or-get-live-column [^Field field]
-                (.computeIfAbsent field-name->live-column
-                                  (.getName field)
-                                  (reify Function
-                                    (apply [_ field-name]
-                                      (->live-column field (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx field-name)) allocator)))))]
-        (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
-                    sr (ArrowStreamReader. tx-ops-ch allocator)
-                    tx-root (.getVectorSchemaRoot sr)]
+      (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
+                  sr (ArrowStreamReader. tx-ops-ch allocator)
+                  tx-root (.getVectorSchemaRoot sr)]
 
-          (.loadNextBatch sr)
+        (.loadNextBatch sr)
 
-          (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
-                op-type-ids (object-array (mapv (fn [^Field field]
-                                                  (keyword (.getName field)))
-                                                (.getChildren (.getField tx-ops-vec))))]
-            (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-              (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
-                    op-vec (.getStruct tx-ops-vec op-type-id)
-                    per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
-                (case (aget op-type-ids op-type-id)
-                  :put (let [^DenseUnionVector document-vec (.addOrGet op-vec "document" (t/->field-type (.getType Types$MinorType/DENSEUNION) false) DenseUnionVector)
-                             struct-type-id (.getTypeId document-vec per-op-offset)
-                             per-struct-offset (.getOffset document-vec per-op-offset)
-                             row-id (+ next-row-id tx-op-idx)]
-                         (doseq [^ValueVector kv-vec (.getChildrenFromFields (.getStruct document-vec struct-type-id))]
-                           (doto ^LiveColumn (add-or-get-live-column (.getField kv-vec))
-                             (.copySafe kv-vec per-struct-offset row-id)))
+        (doseq [^Field field (concat [t/tx-time-field t/tx-id-field]
+                                     (-> (.getSchema tx-root)
+                                         (.findField "tx-ops") .getChildren
+                                         (Schema/findField "put") .getChildren
+                                         (Schema/findField "document") .getChildren))]
+          (.compute field-name->live-column (.getName field)
+                    (util/->jbifn
+                      (fn [field-name live-col]
+                        (if-let [^LiveColumn live-col live-col]
+                          (.promoteField live-col field)
+                          (->live-column field
+                                         (.resolve arrow-dir
+                                                   (format "chunk-%08x-%s.arrow" chunk-idx field-name))
+                                         allocator))))))
 
-                         (doto ^LiveColumn (add-or-get-live-column t/tx-time-field)
-                           (.setSafe tx-time row-id))
+        (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
+              op-type-ids (object-array (mapv (fn [^Field field]
+                                                (keyword (.getName field)))
+                                              (.getChildren (.getField tx-ops-vec))))]
+          (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+            (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
+                  op-vec (.getStruct tx-ops-vec op-type-id)
+                  per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
+              (case (aget op-type-ids op-type-id)
+                :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
+                           row-id (+ next-row-id per-op-offset)]
+                       (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
+                               :when (pos? (.getTypeId value-vec per-op-offset))]
 
-                         (doto ^LiveColumn (add-or-get-live-column t/tx-id-field)
-                           (.setSafe tx-id row-id))))))
+                         (doto ^LiveColumn (get field-name->live-column (.getName (.getField value-vec)))
+                           (.copySafe value-vec per-op-offset row-id)))
 
-            (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec))))
+                       (doto ^LiveColumn (get field-name->live-column (.getName t/tx-time-field))
+                         (.setSafe tx-time row-id))
 
-          (doseq [^LiveColumn live-column (vals field-name->live-column)
-                  :let [^VectorSchemaRoot content-root (.content-root live-column)]]
-            (when (>= (.getRowCount content-root) max-block-size)
-              (.writeBlock live-column))))))
+                       (doto ^LiveColumn (get field-name->live-column (.getName t/tx-id-field))
+                         (.setSafe tx-id row-id))))))
+
+          (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec))))))
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?

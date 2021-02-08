@@ -12,7 +12,7 @@
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            java.util.Date
-           [java.util.function Function Supplier]
+           [java.util.function BiFunction Function Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            org.apache.arrow.memory.util.MemoryUtil
@@ -101,6 +101,11 @@
   (reify Function
     (apply [_ v]
       (f v))))
+
+(defn ->jbifn {:style/indent :defn} ^java.util.function.BiFunction [f]
+  (reify BiFunction
+    (apply [_ a b]
+      (f a b))))
 
 (defn then-apply {:style/indent :defn} [^CompletableFuture fut f]
   (.thenApply fut (->jfn f)))
