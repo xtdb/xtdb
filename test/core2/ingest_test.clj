@@ -13,7 +13,7 @@
   (:import clojure.lang.MapEntry
            [core2.core IngestLoop Node]
            [core2.ingest Ingester TransactionInstant]
-           core2.object_store.ObjectStore
+           [core2.object_store ObjectStore FileSystemObjectStore]
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
@@ -31,6 +31,21 @@
         (if (.hasNext times-iterator)
           (.toInstant ^Date (.next times-iterator))
           (throw (IllegalStateException. "out of time")))))))
+
+(defn check-json [^Path expected-path, ^FileSystemObjectStore os]
+  (let [^Path os-path (.root-path os)]
+
+    (let [expected-file-count (.count (Files/list expected-path))]
+      (t/is (= expected-file-count (.count (Files/list os-path))))
+      (t/is (= expected-file-count (count @(.listObjects os)))))
+
+    (c2-json/write-arrow-json-files (.toFile os-path))
+
+    (doseq [^Path path (iterator-seq (.iterator (Files/list os-path)))
+            :when (.endsWith (str path) ".json")]
+      (t/is (= (json/parse-string (Files/readString (.resolve expected-path (.getFileName path))))
+               (json/parse-string (Files/readString path)))
+            (str path)))))
 
 (def txs
   [[{:op :put
@@ -90,8 +105,7 @@
       (let [^BufferAllocator a (.allocator node)
             ^ObjectStore os (.object-store node)
             ^Ingester i (.ingester node)
-            ^IngestLoop il (.ingest-loop node)
-            object-dir (.resolve node-dir "objects")]
+            ^IngestLoop il (.ingest-loop node)]
 
         (t/is (nil? @(c2/latest-completed-tx os a)))
         (t/is (nil? @(c2/latest-row-id os a)))
@@ -108,21 +122,35 @@
         (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
         (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os a)))
 
-        (let [objects-list @(.listObjects os)]
-          (t/is (= 21 (count objects-list))))
+        (let [objects-list @(.listObjects os "metadata-*")]
+          (t/is (= 1 (count objects-list)))
+          (t/is (= "metadata-00000000.arrow" (first objects-list))))
+
+        (check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)))))
+
+(t/deftest can-handle-dynamic-cols-in-same-block
+  (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
+        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
+        tx-ops [{:op :put, :doc {:_id "foo"}}
+                {:op :put, :doc {:_id 24.0}}
+                #_{:op :put, :doc {:_id #inst "2020-01-01"}}]]
+    (util/delete-dir node-dir)
+
+    (with-open [node (c2/->local-node node-dir)
+                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
+      (let [^ObjectStore os (.object-store node)
+            ^Ingester i (.ingester node)
+            ^IngestLoop il (.ingest-loop node)]
+
+        (.awaitTx il @(.submitTx tx-producer tx-ops) (Duration/ofSeconds 2))
+
+        (.finishChunk i)
 
         (let [objects-list @(.listObjects os "metadata-*")]
           (t/is (= 1 (count objects-list)))
           (t/is (= "metadata-00000000.arrow" (first objects-list))))
 
-        (c2-json/write-arrow-json-files (.toFile object-dir))
-        (t/is (= 42 (.count (Files/list object-dir))))
-
-        (doseq [^Path f (iterator-seq (.iterator (Files/list object-dir)))
-                :when (.endsWith (str f) ".json")]
-          (t/is (= (json/parse-string (slurp (io/resource (str "can-build-chunk-as-arrow-ipc-file-format/" (str (.getFileName f))))))
-                   (json/parse-string (slurp (.toFile f))))
-                (str f)))))))
+        (check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
