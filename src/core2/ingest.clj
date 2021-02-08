@@ -29,7 +29,8 @@
 (definterface TransactionIngester
   (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
-(definterface FinishChunk
+(definterface Finish
+  (^void finishBlock [])
   (^void finishChunk []))
 
 (declare close-cols! write-metadata!)
@@ -171,13 +172,16 @@
 
     tx-instant)
 
-  FinishChunk
+  Finish
+  (finishBlock [_this]
+    (doseq [^LiveColumn live-column (vals field->live-column)
+            :let [^VectorSchemaRoot content-root (.content-root live-column)]]
+      (when (pos? (.getRowCount content-root))
+        (.writeBlock live-column))))
+
   (finishChunk [this]
     (when-not (.isEmpty field->live-column)
-      (doseq [^LiveColumn live-column (vals field->live-column)
-              :let [^VectorSchemaRoot content-root (.content-root live-column)]]
-        (when (pos? (.getRowCount content-root))
-          (.writeBlock live-column)))
+      (.finishBlock this)
 
       (let [files (vec (for [^LiveColumn live-column (vals field->live-column)
                              :when (not-empty (.record-batches live-column))]
