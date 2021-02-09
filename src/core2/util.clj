@@ -210,7 +210,9 @@
       (-> (.getReferenceManager) (.retain))))
 
   (retain [this increment]
-    (.addAndGet ref-count increment))
+    (let [ref-count (.addAndGet ref-count increment)]
+      (when-not (pos? (- ref-count increment))
+        (throw (IllegalStateException. "ref count was at zero")))))
 
   (transferOwnership [this source-buffer target-allocator]
     (reify OwnershipTransferResult
