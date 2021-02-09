@@ -1,24 +1,17 @@
 (ns core2.ingest
-  (:require [core2.metadata :as meta]
-            [core2.types :as t]
-            [core2.util :as util]
-            [core2.object-store :as os])
-  (:import core2.metadata.IColumnMetadata
-           core2.object_store.ObjectStore
-           [java.io Closeable]
-           java.nio.file.attribute.FileAttribute
+  (:require [core2.types :as t]
+            [core2.util :as util])
+  (:import core2.object_store.ObjectStore
+           java.io.Closeable
            [java.nio.file Files Path StandardOpenOption]
-           [java.util Date LinkedList List Map]
+           java.nio.file.attribute.FileAttribute
+           [java.util Date Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
-           java.util.function.Function
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector FieldVector ValueVector VarCharVector VectorSchemaRoot VectorLoader VectorUnloader]
+           org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
-           [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
-           [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo Field Schema]
-           org.apache.arrow.vector.util.Text))
+           [org.apache.arrow.vector.types.pojo Field Schema]))
 
 ;; TODO rename to indexer
 
@@ -29,177 +22,182 @@
 (definterface TransactionIngester
   (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
-(definterface Finish
-  (^void finishBlock [])
+(definterface IngesterPrivate
+  (^void writeMetadata [])
+  (^void closeCols [])
   (^void finishChunk []))
 
-(declare close-cols! write-metadata!)
+(defn- copy-safe! [^VectorSchemaRoot content-root ^DenseUnionVector src-vec src-idx row-id]
+  (let [[^BigIntVector row-id-vec, ^DenseUnionVector field-vec] (.getFieldVectors content-root)
+        value-count (.getRowCount content-root)
+        type-id (.getTypeId src-vec src-idx)
+        offset (util/write-type-id field-vec (.getValueCount field-vec) type-id)]
 
-(definterface ILiveColumn
-  (^void promoteField [^org.apache.arrow.vector.types.pojo.Field field])
-  (^void copySafe [^org.apache.arrow.vector.complex.DenseUnionVector src-vec ^int src-idx ^int row-id])
-  (^void setSafe [v ^int row-id]) ; TODO boxing v. holder?
-  (^void writeBlock [])
-  (^void writeColumn []))
+    (.setSafe row-id-vec value-count ^int row-id)
 
-(deftype LiveColumn [^VectorSchemaRoot content-root,
-                     ^List record-batches,
-                     ^List field-metadata,
-                     ^Path file]
-  ILiveColumn
-  (promoteField [_this field]
-    ;; TODO: check, and promote
-    )
+    (.copyFromSafe (.getVectorByType field-vec type-id)
+                   (.getOffset src-vec src-idx)
+                   offset
+                   (.getVectorByType src-vec type-id))
 
-  (copySafe [_this src-vec src-idx row-id]
-    (let [[^BigIntVector row-id-vec, ^DenseUnionVector field-vec] (.getFieldVectors content-root)
-          value-count (.getRowCount content-root)
-          type-id (.getTypeId src-vec src-idx)
-          offset (util/write-type-id field-vec (.getValueCount field-vec) type-id)]
-      (.setSafe row-id-vec value-count row-id)
-      (.copyFromSafe (.getVectorByType field-vec type-id)
-                     (.getOffset src-vec src-idx)
-                     offset
-                     (.getVectorByType src-vec type-id))
-      (.setRowCount content-root (inc value-count))))
+    (.setRowCount content-root (inc value-count))))
 
-  ;; atm this is just used for tx-time/tx-id
-  (setSafe [_this v row-id]
-    (let [[^BigIntVector row-id-vec, ^DenseUnionVector field-vec] (.getFieldVectors content-root)
-          value-count (.getRowCount content-root)]
-      (.setSafe row-id-vec value-count row-id)
-      (t/set-safe! field-vec value-count v)
-      (.setRowCount content-root (inc value-count))))
+(defn- write-column! [^VectorSchemaRoot root, ^Path tmp-file]
+  (with-open [file-ch (util/->file-channel tmp-file #{StandardOpenOption/CREATE
+                                                      StandardOpenOption/WRITE
+                                                      StandardOpenOption/TRUNCATE_EXISTING})
+              fw (ArrowFileWriter. root nil file-ch)]
+    (.start fw)
+    (.writeBatch fw)
+    (.end fw)))
 
-  (writeBlock [_this]
-    (.add record-batches (.getRecordBatch (VectorUnloader. content-root)))
+(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-time-field
+  (t/->primitive-dense-union-field "_tx-time" #{:timestampmilli}))
 
-    (dotimes [n (count (.getFieldVectors content-root))]
-      (let [field-vector (.getVector content-root n)]
-        (.updateMetadata ^IColumnMetadata (get field-metadata n) field-vector)
-        (.clear field-vector)))
+(def ^:private timestampmilli-type-id
+  (-> (t/primitive-type->arrow-type :timestampmilli)
+      (t/arrow-type->type-id)))
 
-    (.setRowCount content-root 0))
+(defn ->tx-time-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Date tx-time]
+  (doto ^DenseUnionVector (.createVector tx-time-field allocator)
+    (.setValueCount 1)
+    (util/write-type-id 0 timestampmilli-type-id)
+    (-> (.getTimeStampMilliVector timestampmilli-type-id)
+        (.setSafe 0 (.getTime tx-time)))))
 
-  (writeColumn [_this]
-    (with-open [file-ch (util/->file-channel file #{StandardOpenOption/CREATE
-                                                    StandardOpenOption/WRITE
-                                                    StandardOpenOption/TRUNCATE_EXISTING})
-                fw (ArrowFileWriter. content-root nil file-ch)]
-      (.start fw)
-      (let [loader (VectorLoader. content-root)]
+(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-id-field
+  (t/->primitive-dense-union-field "_tx-id" #{:bigint}))
 
-        (doseq [^ArrowRecordBatch batch record-batches]
-          (.load loader batch)
-          (.writeBatch fw)
-          (util/try-close batch)))
-      (.end fw)))
+(def ^:private bigint-type-id
+  (-> (t/primitive-type->arrow-type :bigint)
+      (t/arrow-type->type-id)))
 
-  Closeable
-  (close [_]
-    (doseq [^ArrowRecordBatch record-batch record-batches]
-      (util/try-close record-batch))
+(defn ->tx-id-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^long tx-id]
+  (doto ^DenseUnionVector (.createVector tx-id-field allocator)
+    (.setValueCount 1)
+    (util/write-type-id 0 bigint-type-id)
+    (-> (.getBigIntVector bigint-type-id)
+        (.setSafe 0 tx-id))))
 
-    (util/try-close content-root)))
-
-(defn- ->live-column [^Field field out-path allocator]
-  (let [fields [t/row-id-field field]
-        field-metadata (vec (for [^Field field fields]
-                              (meta/->metadata (.getType field))))
-        content-root (VectorSchemaRoot/create (Schema. fields) allocator)]
-    (LiveColumn. content-root (LinkedList.) field-metadata out-path)))
+(defn- ->live-root [field-name allocator]
+  (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
 (deftype Ingester [^BufferAllocator allocator
                    ^Path arrow-dir
                    ^ObjectStore object-store
-                   ^Map field-name->live-column
-                   ^long max-block-size
-                   ^long max-blocks-per-chunk
+                   ^Map live-roots
+                   ^long max-rows-per-chunk
+                   ^long max-rows-per-block
                    ^:volatile-mutable ^long chunk-idx
                    ^:volatile-mutable ^long next-row-id]
 
   TransactionIngester
   (indexTx [this tx-instant tx-ops]
-    (let [tx-time (.tx-time tx-instant)
-          tx-id (.tx-id tx-instant)]
-      (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
-                  sr (ArrowStreamReader. tx-ops-ch allocator)
-                  tx-root (.getVectorSchemaRoot sr)]
+    (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
+                sr (ArrowStreamReader. tx-ops-ch allocator)
+                tx-root (.getVectorSchemaRoot sr)
+                ^DenseUnionVector tx-id-vec (->tx-id-vec allocator (.tx-id tx-instant))
+                ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))]
 
-        (.loadNextBatch sr)
+      (.loadNextBatch sr)
 
-        (doseq [^Field field (concat [t/tx-time-field t/tx-id-field]
-                                     (-> (.getSchema tx-root)
-                                         (.findField "tx-ops") .getChildren
-                                         (Schema/findField "put") .getChildren
-                                         (Schema/findField "document") .getChildren))]
-          (.compute field-name->live-column (.getName field)
-                    (util/->jbifn
-                      (fn [field-name live-col]
-                        (if-let [^LiveColumn live-col live-col]
-                          (.promoteField live-col field)
-                          (->live-column field
-                                         (.resolve arrow-dir
-                                                   (format "chunk-%08x-%s.arrow" chunk-idx field-name))
-                                         allocator))))))
+      (doseq [^Field field (concat [tx-time-field tx-id-field]
+                                   (-> (.getSchema tx-root)
+                                       (.findField "tx-ops") .getChildren
+                                       (Schema/findField "put") .getChildren
+                                       (Schema/findField "document") .getChildren))]
+        (.computeIfAbsent live-roots (.getName field)
+                          (util/->jfn
+                            (fn [field-name]
+                              (->live-root field-name allocator)))))
 
-        (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
-              op-type-ids (object-array (mapv (fn [^Field field]
-                                                (keyword (.getName field)))
-                                              (.getChildren (.getField tx-ops-vec))))]
-          (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-            (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
-                  op-vec (.getStruct tx-ops-vec op-type-id)
-                  per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
-              (case (aget op-type-ids op-type-id)
-                :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
-                           row-id (+ next-row-id per-op-offset)]
-                       (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
-                               :when (pos? (.getTypeId value-vec per-op-offset))]
+      (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
+            op-type-ids (object-array (mapv (fn [^Field field]
+                                              (keyword (.getName field)))
+                                            (.getChildren (.getField tx-ops-vec))))]
+        (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+          (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
+                op-vec (.getStruct tx-ops-vec op-type-id)
+                per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
+            (case (aget op-type-ids op-type-id)
+              :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
+                         row-id (+ next-row-id per-op-offset)]
+                     (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
+                             :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
-                         (doto ^LiveColumn (get field-name->live-column (.getName (.getField value-vec)))
-                           (.copySafe value-vec per-op-offset row-id)))
+                       (copy-safe! (get live-roots (.getName (.getField value-vec)))
+                                   value-vec per-op-offset row-id))
 
-                       (doto ^LiveColumn (get field-name->live-column (.getName t/tx-time-field))
-                         (.setSafe tx-time row-id))
+                     (copy-safe! (get live-roots (.getName (.getField tx-time-vec)))
+                                 tx-time-vec 0 row-id)
 
-                       (doto ^LiveColumn (get field-name->live-column (.getName t/tx-id-field))
-                         (.setSafe tx-id row-id))))))
+                     (copy-safe! (get live-roots (.getName (.getField tx-id-vec)))
+                                 tx-id-vec 0 row-id)))))
 
-          (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec))))))
+        (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec)))))
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
-    (when (>= (->> (vals field-name->live-column)
-                   (map (fn [^LiveColumn live-column]
-                          (count (.record-batches live-column))))
+    (when (>= (->> (vals live-roots)
+                   (map (fn [^VectorSchemaRoot root]
+                          (.getRowCount root)))
                    (apply max)
                    (long))
-              max-blocks-per-chunk)
+              max-rows-per-chunk)
       (.finishChunk this))
 
     tx-instant)
 
-  Finish
-  (finishBlock [_this]
-    (doseq [^LiveColumn live-column (vals field-name->live-column)
-            :let [^VectorSchemaRoot content-root (.content-root live-column)]]
-      (when (pos? (.getRowCount content-root))
-        (.writeBlock live-column))))
+  IngesterPrivate
+  (writeMetadata [_this]
+    #_
+    (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema allocator)]
+      (reduce
+       (fn [^long idx [^String field-name, ^LiveColumn live-column]]
+         (let [content-root ^VectorSchemaRoot (.content-root live-column)
+               field-metadata (.field-metadata live-column)
+               file-name (Text. (str (.getFileName ^Path (.file live-column))))
+               column-name (Text. field-name)]
+           (dotimes [n (count (.getFieldVectors content-root))]
+             (let [field-vector (.getVector content-root n)
+                   idx (+ idx n)]
+               (.setSafe ^VarCharVector (.getVector metadata-root "file") idx file-name)
+               (.setSafe ^VarCharVector (.getVector metadata-root "column") idx column-name)
+               (.setSafe ^VarCharVector (.getVector metadata-root "field") idx (Text. (.getName (.getField field-vector))))
+               (.writeMetadata ^IColumnMetadata (get field-metadata n) metadata-root idx)))
+           (let [idx (+ idx (count (.getFieldVectors content-root)))]
+             (.setRowCount metadata-root idx)
+             idx)))
+       0
+       (sort-by (comp str key) (.field-name->live-column ingester)))
+
+      (.syncSchema metadata-root)
+
+      (with-open [metadata-file-ch (util/->file-channel metadata-file #{StandardOpenOption/CREATE
+                                                                        StandardOpenOption/WRITE
+                                                                        StandardOpenOption/TRUNCATE_EXISTING})
+                  metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
+        (.start metadata-fw)
+        (.writeBatch metadata-fw))))
+
+  (closeCols [_this]
+    (doseq [^VectorSchemaRoot live-root (vals live-roots)]
+      (util/try-close live-root))
+
+    (.clear live-roots))
 
   (finishChunk [this]
-    (when-not (.isEmpty field-name->live-column)
-      (.finishBlock this)
+    (when-not (.isEmpty live-roots)
+      (let [files (vec (for [[field-name ^VectorSchemaRoot live-root] live-roots]
+                         (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx field-name))]
+                           (write-column! live-root tmp-file)
+                           tmp-file)))
+            #_#_
+            metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
 
-      (let [files (vec (for [^LiveColumn live-column (vals field-name->live-column)
-                             :when (not-empty (.record-batches live-column))]
-                         (do
-                           (.writeColumn live-column)
-                           (.file live-column))))
-            metadata-file (.resolve ^Path (.arrow-dir this) (format "metadata-%08x.arrow" chunk-idx))]
-
-        (write-metadata! this metadata-file)
-        (close-cols! this)
+        #_
+        (.writeMetadata this metadata-file)
+        (.closeCols this)
 
         (.join (CompletableFuture/allOf
                 (into-array CompletableFuture
@@ -209,53 +207,18 @@
         (doseq [^Path file files]
           (Files/delete file))
 
+        #_
         (.join (.putObject object-store (str (.getFileName metadata-file)) metadata-file))
 
+        #_
         (Files/delete metadata-file))
 
       (set! (.chunk-idx this) next-row-id)))
 
   Closeable
   (close [this]
-    (close-cols! this)
+    (.closeCols this)
     (util/delete-dir arrow-dir)))
-
-(defn- close-cols! [^Ingester ingester]
-  (let [^Map field->live-column (.field-name->live-column ingester)]
-    (doseq [^LiveColumn live-column (vals field->live-column)]
-      (util/try-close live-column))
-
-    (.clear field->live-column)))
-
-(defn- write-metadata! [^Ingester ingester, ^Path metadata-file]
-  (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema (.allocator ingester))]
-    (reduce
-     (fn [^long idx [^String field-name, ^LiveColumn live-column]]
-       (let [content-root ^VectorSchemaRoot (.content-root live-column)
-             field-metadata (.field-metadata live-column)
-             file-name (Text. (str (.getFileName ^Path (.file live-column))))
-             column-name (Text. field-name)]
-         (dotimes [n (count (.getFieldVectors content-root))]
-           (let [field-vector (.getVector content-root n)
-                 idx (+ idx n)]
-             (.setSafe ^VarCharVector (.getVector metadata-root "file") idx file-name)
-             (.setSafe ^VarCharVector (.getVector metadata-root "column") idx column-name)
-             (.setSafe ^VarCharVector (.getVector metadata-root "field") idx (Text. (.getName (.getField field-vector))))
-             (.writeMetadata ^IColumnMetadata (get field-metadata n) metadata-root idx)))
-         (let [idx (+ idx (count (.getFieldVectors content-root)))]
-           (.setRowCount metadata-root idx)
-           idx)))
-     0
-     (sort-by (comp str key) (.field-name->live-column ingester)))
-
-    (.syncSchema metadata-root)
-
-    (with-open [metadata-file-ch (util/->file-channel metadata-file #{StandardOpenOption/CREATE
-                                                                      StandardOpenOption/WRITE
-                                                                      StandardOpenOption/TRUNCATE_EXISTING})
-                metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
-      (.start metadata-fw)
-      (.writeBatch metadata-fw))))
 
 (defn ->ingester
   (^core2.ingest.Ingester [^BufferAllocator allocator
@@ -266,9 +229,9 @@
   (^core2.ingest.Ingester [^BufferAllocator allocator
                            ^ObjectStore object-store
                            ^Long latest-row-id
-                           {:keys [max-block-size max-blocks-per-chunk]
-                            :or {max-block-size 10000
-                                 max-blocks-per-chunk 10}}]
+                           {:keys [max-rows-per-chunk max-rows-per-block]
+                            :or {max-rows-per-chunk 10000
+                                 max-rows-per-block 1000}}]
    (let [next-row-id (if latest-row-id
                        (inc (long latest-row-id))
                        0)]
@@ -276,7 +239,7 @@
                 (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0))
                 object-store
                 (ConcurrentHashMap.)
-                max-block-size
-                max-blocks-per-chunk
+                max-rows-per-chunk
+                max-rows-per-block
                 next-row-id
                 next-row-id))))

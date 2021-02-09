@@ -241,8 +241,8 @@
   (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "column" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "field" (.getType Types$MinorType/VARCHAR) true)
-            (t/->dense-union-field-with-flatbuf-ids "min" t/dense-union-fields-in-flatbuf-id-order)
-            (t/->dense-union-field-with-flatbuf-ids "max" t/dense-union-fields-in-flatbuf-id-order)
+            (t/->primitive-dense-union-field "min")
+            (t/->primitive-dense-union-field "max")
             (t/->field "count" (.getType Types$MinorType/BIGINT) true)]))
 
 (defn- field-idx [^VectorSchemaRoot metadata, ^String column-name, ^String field-name]
