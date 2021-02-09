@@ -161,6 +161,14 @@
         footer-bb (.nioBuffer (.slice ipc-file-format-buffer footer-position footer-size))]
     (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
+(def ^:private try-free-direct-buffer
+  (try
+    (eval
+     '(fn free-direct-buffer [nio-buffer]
+        (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)))
+    (catch Exception e
+      (fn free-dircect-buffer-nop [_]))))
+
 (deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
   ReferenceManager
   (deriveBuffer [this source-buffer index length]
@@ -190,8 +198,10 @@
     (let [ref-count (.addAndGet ref-count (- decrement))])
     (cond
       (zero? ref-count)
-      (do (set! (.nio-buffer this) nil)
-          true)
+      (let [nio-buffer nio-buffer]
+        (set! (.nio-buffer this) nil)
+        (try-free-direct-buffer nio-buffer)
+        true)
 
       (neg? ref-count)
       (throw (IllegalStateException. "Ref count below zero."))
