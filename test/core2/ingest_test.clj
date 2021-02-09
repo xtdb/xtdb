@@ -140,6 +140,7 @@
         (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
 
         (with-open [^VectorSchemaRoot metadata-batch (first (util/read-arrow-record-batches a @(.getBuffer bp "metadata-00000000.arrow")))]
+          (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
           (t/is (= 40 (.getRowCount metadata-batch))))
 
         (t/is (.evictBuffer bp "metadata-00000000.arrow"))

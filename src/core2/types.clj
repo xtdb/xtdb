@@ -72,7 +72,11 @@
                                     (.getType Types$MinorType/VARCHAR)
                                     (.getType Types$MinorType/BIT)
                                     (.getType Types$MinorType/TIMESTAMPMILLI)]]
-         (->field (.toLowerCase (.name (Types/getMinorTypeForArrowType arrow-type))) arrow-type true))))
+         (->field (.toLowerCase (if (= arrow-type (.getType Types$MinorType/NULL))
+                                  "$data$"
+                                  (.name (Types/getMinorTypeForArrowType arrow-type))))
+                  arrow-type
+                  true))))
 
 
 (defn ->dense-union-field-with-flatbuf-ids ^org.apache.arrow.vector.types.pojo.Field [^String field-name union-fields]
