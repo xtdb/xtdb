@@ -43,7 +43,8 @@
 
 (defn- ->put-fields [put-k-types]
   (apply t/->field "document" (.getType Types$MinorType/STRUCT) false
-         (for [[k v-types] put-k-types]
+         (for [[k v-types] put-k-types
+               :let [v-types (sort-by #(.getFlatbufID (.getTypeID ^ArrowType %)) v-types)]]
            (apply t/->field
                   (name k)
                   (ArrowType$Union. UnionMode/Dense

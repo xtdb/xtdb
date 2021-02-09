@@ -75,17 +75,17 @@
     }]
   },
   "batches" : [{
-    "count" : 2,
+    "count" : 6,
     "columns" : [{
       "name" : "_row-id",
-      "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : ["0","1"]
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["0","1","2","3","4","5"]
     },{
       "name" : "_id",
-      "count" : 2,
-      "TYPE_ID" : [3,10],
-      "OFFSET" : [0,0],
+      "count" : 6,
+      "TYPE_ID" : [5,3,5,10,3,10],
+      "OFFSET" : [0,0,1,0,1,1],
       "children" : [{
         "name" : "null",
         "count" : 0
@@ -96,9 +96,9 @@
         "DATA" : [ ]
       },{
         "name" : "float8",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "DATA" : [24.0]
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [24.0,52.0]
       },{
         "name" : "varbinary",
         "count" : 0,
@@ -107,10 +107,10 @@
         "DATA" : [ ]
       },{
         "name" : "varchar",
-        "count" : 0,
-        "VALIDITY" : [ ],
-        "OFFSET" : [0],
-        "DATA" : [ ]
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "OFFSET" : [0,3,6],
+        "DATA" : ["foo","bar"]
       },{
         "name" : "bit",
         "count" : 0,
@@ -118,9 +118,9 @@
         "DATA" : [ ]
       },{
         "name" : "timestampmilli",
-        "count" : 1,
-        "VALIDITY" : [1],
-        "DATA" : [1577836800000]
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [1609459200000,1577836800000]
       }]
     }]
   }]
