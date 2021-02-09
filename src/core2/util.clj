@@ -228,14 +228,13 @@
         (throw (IllegalStateException. "ref count was at zero")))))
 
   (transferOwnership [this source-buffer target-allocator]
-    (when-not (identical? target-allocator (.getAllocator this))
-      (throw (IllegalStateException. "cannot transfer nio buffer in other allocator")))
-    (reify OwnershipTransferResult
-      (getAllocationFit [this]
-        true)
+    (let [source-buffer (.retain this source-buffer target-allocator)]
+      (reify OwnershipTransferResult
+        (getAllocationFit [this]
+          true)
 
-      (getTransferredBuffer [this]
-        source-buffer))))
+        (getTransferredBuffer [this]
+          source-buffer)))))
 
 (defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
   (when-not (.isDirect nio-buffer)

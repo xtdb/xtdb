@@ -155,7 +155,17 @@
             (t/is (= "_row-id" (str (.getObject (.getVector metadata-batch "field") 0))))
             (t/is (= 0 (.getObject (.getVector metadata-batch "min") 0)))
             (t/is (= 3 (.getObject (.getVector metadata-batch "max") 0)))
-            (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0))))
+            (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0)))
+
+            (let [from (.getVector metadata-batch "count")
+                  tp (.getTransferPair from a)]
+              (with-open [to (.getTo tp)]
+                (t/is (zero? (.getValueCount to)))
+                (.splitAndTransfer tp 0 20)
+                (t/is  (= (.memoryAddress (.getDataBuffer from))
+                          (.memoryAddress (.getDataBuffer to))))
+                (t/is (= 20 (.getValueCount to))))))
+
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
           (.close buffer)
