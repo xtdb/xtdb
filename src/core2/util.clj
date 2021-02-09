@@ -195,6 +195,8 @@
     (.release this 1))
 
   (release [this decrement]
+    (when-not (pos? decrement)
+      (throw (IllegalArgumentException. "decrement must be positive")))
     (let [ref-count (.addAndGet ref-count (- decrement))])
     (cond
       (zero? ref-count)
@@ -204,7 +206,7 @@
         true)
 
       (neg? ref-count)
-      (throw (IllegalStateException. "Ref count below zero."))
+      (throw (IllegalStateException. "ref count has gone negative"))
 
       :else
       false))
@@ -219,8 +221,10 @@
       (-> (.getReferenceManager) (.retain))))
 
   (retain [this increment]
-    (let [ref-count (.addAndGet ref-count increment)]
-      (when-not (pos? (- ref-count increment))
+    (when-not (pos? increment)
+      (throw (IllegalArgumentException. "increment must be positive")))
+    (let [ref-count (.getAndAdd ref-count increment)]
+      (when-not (pos? ref-count)
         (throw (IllegalStateException. "ref count was at zero")))))
 
   (transferOwnership [this source-buffer target-allocator]
