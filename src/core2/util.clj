@@ -144,27 +144,14 @@
                           (int-array (for [^ValueVector child-vec (.getChildrenFromFields duv)]
                                        (.getValueCount child-vec)))))
 
-(def ^:private ^{:tag 'long} arrow-magic-size (alength (.getBytes "ARROW1" StandardCharsets/UTF_8)))
+(def ^:private ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
 
-(defn- read-arrow-footer-position ^long [^SeekableByteChannel in]
-  (let [footer-size-bb (.order (ByteBuffer/allocate Integer/BYTES) ByteOrder/LITTLE_ENDIAN)
-        footer-size-offset (- (.size in) (+ (.capacity footer-size-bb) arrow-magic-size))]
-    (.position in footer-size-offset)
-    (while (pos? (.read in footer-size-bb)))
-    (- footer-size-offset (.getInt footer-size-bb 0))))
-
-(defn read-arrow-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^SeekableByteChannel in]
-  (let [footer-position (read-arrow-footer-position in)
-        footer-size (- (.size in) footer-position)
-        bb (ByteBuffer/allocate footer-size)]
-    (.position in footer-position)
-    (while (pos? (.read in bb)))
-    (.flip bb)
-    (ArrowFooter. (Footer/getRootAsFooter bb))))
-
-(defn read-arrow-footer-from-buffer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^ArrowBuf buffer]
-  (with-open [in (->seekable-byte-channel (.nioBuffer buffer 0 (.capacity buffer)))]
-    (read-arrow-footer in)))
+(defn read-arrow-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^ArrowBuf ipc-file-format-buffer]
+  (let [footer-size-offset (- (.capacity ipc-file-format-buffer) (+ Integer/BYTES (alength arrow-magic)))
+        footer-size (.getInt ipc-file-format-buffer footer-size-offset)
+        footer-position (- footer-size-offset footer-size)
+        footer-bb (.nioBuffer (.slice ipc-file-format-buffer footer-position footer-size))]
+    (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
 (deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
   ReferenceManager

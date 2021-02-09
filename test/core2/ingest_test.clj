@@ -134,22 +134,24 @@
         (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))
 
         (let [buffer-name "metadata-00000000.arrow"
-              ^ArrowBuf buffer @(.getBuffer bp buffer-name)]
-          (t/is (instance? ArrowBuf buffer))
+              ^ArrowBuf buffer @(.getBuffer bp buffer-name)
+              footer (util/read-arrow-footer buffer)]
           (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
+          (t/is (instance? ArrowBuf buffer))
+          (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+
           (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
             (t/is (identical? buffer same-buffer))
             (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
 
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-          (let [footer (util/read-arrow-footer-from-buffer buffer)]
-            (t/is (= meta/metadata-schema (.getSchema footer)))
-            (t/is (= 1 (count (.getRecordBatches footer))))
-            (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
-                        record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
-              (let [loader (VectorLoader. metadata-batch)]
-                (.load loader record-batch)
-                (t/is (= 40 (.getRowCount metadata-batch))))))
+
+          (t/is (= meta/metadata-schema (.getSchema footer)))
+          (t/is (= 1 (count (.getRecordBatches footer))))
+          (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
+                      record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
+            (.load (VectorLoader. metadata-batch) record-batch)
+            (t/is (= 40 (.getRowCount metadata-batch))))
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
           (.close buffer)
