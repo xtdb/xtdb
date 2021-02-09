@@ -17,6 +17,7 @@
            java.util.Date
            [java.util.function Supplier Function]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
+           java.util.concurrent.atomic.AtomicInteger
            [java.time LocalDateTime ZoneId]))
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
@@ -161,37 +162,56 @@
     (.flip bb)
     (ArrowFooter. (Footer/getRootAsFooter bb))))
 
-(def ^:private nio-view-reference-manager
-  (reify ReferenceManager
-    (deriveBuffer [this source-buffer index length]
-      (ArrowBuf. this
-                 nil
-                 length
-                 (+ (.memoryAddress source-buffer) index)))
+(deftype NioViewReferenceManager [^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
+  ReferenceManager
+  (deriveBuffer [this source-buffer index length]
+    (ArrowBuf. this
+               nil
+               length
+               (+ (.memoryAddress source-buffer) index)))
 
-    (retain [this])
+  (getAccountedSize [this]
+    (.capacity nio-buffer))
 
-    (retain [this src-buffer allocator]
-      src-buffer)
+  (getAllocator [this]
+    (.getAllocator ReferenceManager/NO_OP))
 
-    (release [this]
-      false)
+  (getRefCount [this]
+    (.get ref-count))
 
-    (getRefCount [this]
-      1)
+  (getSize [this]
+    (.capacity nio-buffer))
 
-    (transferOwnership [this source-buffer target-allocator]
-      (reify OwnershipTransferResult
-        (getAllocationFit [this]
+  (release [this]
+    (.release this 1))
+
+  (release [this decrement]
+    (if (zero? (.addAndGet ref-count (- decrement)))
+      (do (set! (.nio-buffer this) nil)
           true)
+      false))
 
-        (getTransferredBuffer [this]
-          source-buffer)))))
+  (retain [this]
+    (.retain this 1))
+
+  (retain [this src-buffer allocator]
+    src-buffer)
+
+  (retain [this increment]
+    (.addAndGet ref-count increment))
+
+  (transferOwnership [this source-buffer target-allocator]
+    (reify OwnershipTransferResult
+      (getAllocationFit [this]
+        true)
+
+      (getTransferredBuffer [this]
+        source-buffer))))
 
 (defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^ByteBuffer nio-buffer]
   (when-not (.isDirect nio-buffer)
     (throw (IllegalArgumentException. (str "not a direct buffer: " nio-buffer))))
-  (ArrowBuf. nio-view-reference-manager
+  (ArrowBuf. (->NioViewReferenceManager nio-buffer (AtomicInteger. 1))
              nil
              (.capacity nio-buffer)
              (MemoryUtil/getByteBufferAddress nio-buffer)))
