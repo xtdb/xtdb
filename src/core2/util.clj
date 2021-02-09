@@ -228,6 +228,8 @@
         (throw (IllegalStateException. "ref count was at zero")))))
 
   (transferOwnership [this source-buffer target-allocator]
+    (when-not (identical? target-allocator (.getAllocator this))
+      (throw (IllegalStateException. "cannot transfer nio buffer in other allocator")))
     (reify OwnershipTransferResult
       (getAllocationFit [this]
         true)
