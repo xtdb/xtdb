@@ -5,32 +5,39 @@
            [java.io Closeable]
            [java.nio.file Files Path]
            [java.util Map]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap]))
+           [java.util.concurrent CompletableFuture ConcurrentHashMap]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]))
 
 (definterface BufferPool
   (^java.util.concurrent.CompletableFuture getBuffer [^String k])
   (^boolean evictBuffer [^String k]))
 
-(deftype MemoryMappedBufferPool [^Path root-path ^Map buffers ^ObjectStore object-store]
+(deftype MemoryMappedBufferPool [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store ^Map buffers]
   BufferPool
   (getBuffer [_ k]
     (let [v (.getOrDefault buffers k ::not-found)]
       (if-not (= ::not-found v)
-        (CompletableFuture/completedFuture v)
+        (CompletableFuture/completedFuture (doto ^ArrowBuf v
+                                             (.retain)))
         (util/then-apply
           (.getObject object-store k (.resolve root-path k))
           (fn [^Path path]
-            (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                      (util/->mmap-path path)))))))))
+            (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                      (util/->arrow-buf-view allocator (util/->mmap-path path)))))
+              (.retain)))))))
 
   (evictBuffer [_ k]
-    (when (.remove buffers k)
+    (when-let [^ArrowBuf buffer (.remove buffers k)]
+      (.release buffer)
       (Files/deleteIfExists (.resolve root-path k))))
 
   Closeable
   (close [_]
-    (.clear buffers)))
+    (let [i (.iterator (.values buffers))]
+      (while (.hasNext i)
+        (.release ^ArrowBuf (.next i))
+        (.remove i)))))
 
-(defn ->memory-mapped-buffer-pool [^Path root-path ^ObjectStore object-store]
+(defn ->memory-mapped-buffer-pool [^Path root-path ^BufferAllocator allocator^ObjectStore object-store]
   (util/mkdirs root-path)
-  (->MemoryMappedBufferPool root-path (ConcurrentHashMap.) object-store))
+  (->MemoryMappedBufferPool root-path allocator object-store (ConcurrentHashMap.)))

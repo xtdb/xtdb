@@ -291,7 +291,7 @@
          object-store (os/->file-system-object-store object-dir opts)
          ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator) opts)
          ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator) opts)
-         buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") object-store)]
+         buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)]
      (Node. allocator log-reader object-store ingester ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]

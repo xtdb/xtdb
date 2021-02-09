@@ -21,7 +21,7 @@
            [java.time Clock Duration ZoneId]
            java.util.concurrent.CompletableFuture
            java.util.Date
-           org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
@@ -134,16 +134,25 @@
         (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))
 
         (let [buffer-name "metadata-00000000.arrow"
-              buffer @(.getBuffer bp buffer-name)]
-          (t/is (instance? java.nio.ByteBuffer buffer))
+              ^ArrowBuf buffer @(.getBuffer bp buffer-name)]
+          (t/is (instance? ArrowBuf buffer))
           (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
-          (t/is (identical? buffer @(.getBuffer bp buffer-name)))
+          (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
+            (t/is (identical? buffer same-buffer))
+            (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
 
+          (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
           (with-open [^VectorSchemaRoot metadata-batch (first (util/read-arrow-record-batches a buffer))]
             (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
             (t/is (= 40 (.getRowCount metadata-batch))))
+          (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+
+          (.close buffer)
+          (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
           (t/is (.evictBuffer bp buffer-name))
+          (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+          (t/is (zero? (.getSize (.getReferenceManager ^ArrowBuf buffer))))
           (t/is (empty? (.buffers ^MemoryMappedBufferPool bp))))))))
 
 (t/deftest can-stop-node-without-writing-chunks

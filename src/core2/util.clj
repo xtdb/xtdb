@@ -162,7 +162,7 @@
     (.flip bb)
     (ArrowFooter. (Footer/getRootAsFooter bb))))
 
-(deftype NioViewReferenceManager [^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
+(deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
   ReferenceManager
   (deriveBuffer [this source-buffer index length]
     (ArrowBuf. this
@@ -171,31 +171,43 @@
                (+ (.memoryAddress source-buffer) index)))
 
   (getAccountedSize [this]
-    (.capacity nio-buffer))
+    (.getSize this))
 
   (getAllocator [this]
-    (.getAllocator ReferenceManager/NO_OP))
+    allocator)
 
   (getRefCount [this]
     (.get ref-count))
 
   (getSize [this]
-    (.capacity nio-buffer))
+    (if nio-buffer
+      (.capacity nio-buffer)
+      0))
 
   (release [this]
     (.release this 1))
 
   (release [this decrement]
-    (if (zero? (.addAndGet ref-count (- decrement)))
+    (let [ref-count (.addAndGet ref-count (- decrement))])
+    (cond
+      (zero? ref-count)
       (do (set! (.nio-buffer this) nil)
           true)
+
+      (neg? ref-count)
+      (throw (IllegalStateException. "Ref count below zero."))
+
+      :else
       false))
 
   (retain [this]
     (.retain this 1))
 
   (retain [this src-buffer allocator]
-    src-buffer)
+    (when-not (identical? allocator (.getAllocator this))
+      (throw (IllegalStateException. "cannot retain nio buffer in other allocator")))
+    (doto (.slice src-buffer)
+      (-> (.getReferenceManager) (.retain))))
 
   (retain [this increment]
     (.addAndGet ref-count increment))
@@ -208,38 +220,40 @@
       (getTransferredBuffer [this]
         source-buffer))))
 
-(defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^ByteBuffer nio-buffer]
+(defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
   (when-not (.isDirect nio-buffer)
     (throw (IllegalArgumentException. (str "not a direct buffer: " nio-buffer))))
-  (ArrowBuf. (->NioViewReferenceManager nio-buffer (AtomicInteger. 1))
+  (ArrowBuf. (->NioViewReferenceManager allocator nio-buffer (AtomicInteger. 1))
              nil
              (.capacity nio-buffer)
              (MemoryUtil/getByteBufferAddress nio-buffer)))
 
-(defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ByteBuffer nio-buffer]
-  (let [prefix-size (if (= (.getInt nio-buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
+(defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ArrowBuf buffer]
+  (let [prefix-size (if (= (.getInt buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
                       8
                       4)
         ^RecordBatch batch (.header (Message/getRootAsMessage
-                                     (.slice nio-buffer
-                                             (+ (.getOffset block) prefix-size)
-                                             (- (.getMetadataLength block) prefix-size)))
+                                     (.nioBuffer buffer
+                                                 (+ (.getOffset block) prefix-size)
+                                                 (- (.getMetadataLength block) prefix-size)))
                                     (RecordBatch.))
-        body-buffer (->arrow-buf-view (.slice nio-buffer
-                                              (+ (.getOffset block)
-                                                 (.getMetadataLength block))
-                                              (.getBodyLength block)))]
+        body-buffer (doto (.slice buffer
+                                  (+ (.getOffset block)
+                                     (.getMetadataLength block))
+                                  (.getBodyLength block))
+                      (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
-(defn read-arrow-record-batches [^BufferAllocator allocator ^ByteBuffer buffer]
-  (let [^ArrowFooter footer (with-open [in (->seekable-byte-channel buffer)]
+(defn read-arrow-record-batches [^BufferAllocator allocator ^ArrowBuf buffer]
+  (let [^ArrowFooter footer (with-open [in (->seekable-byte-channel (.nioBuffer buffer 0 (.capacity buffer)))]
                               (read-arrow-footer in))
         schema (.getSchema footer)]
     (vec (for [block (.getRecordBatches footer)
-               :let [record-batch (VectorSchemaRoot/create schema allocator)
-                     loader (VectorLoader. record-batch)]]
-           (do (.load loader (->arrow-record-batch-view block buffer))
-               record-batch)))))
+               :let [root (VectorSchemaRoot/create schema allocator)
+                     loader (VectorLoader. root)]]
+           (with-open [record-batch (->arrow-record-batch-view block buffer)]
+             (.load loader record-batch)
+             root)))))
 
 (defn try-close [c]
   (try
