@@ -146,31 +146,6 @@
           (t/is (.evictBuffer bp buffer-name))
           (t/is (empty? (.buffers ^MemoryMappedBufferPool bp))))))))
 
-(t/deftest can-handle-dynamic-cols-in-same-block
-  (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
-        tx-ops [{:op :put, :doc {:_id "foo"}}
-                {:op :put, :doc {:_id 24.0}}
-                #_{:op :put, :doc {:_id #inst "2020-01-01"}}]]
-    (util/delete-dir node-dir)
-
-    (with-open [node (c2/->local-node node-dir)
-                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-      (let [^ObjectStore os (.object-store node)
-            ^Ingester i (.ingester node)
-            ^IngestLoop il (.ingest-loop node)]
-
-        (.awaitTx il @(.submitTx tx-producer tx-ops) (Duration/ofSeconds 2))
-
-        (.finishChunk i)
-
-        (let [objects-list @(.listObjects os "metadata-*")]
-          (t/is (= 1 (count objects-list)))
-          (t/is (= "metadata-00000000.arrow" (first objects-list))))
-
-        ;; TODO: expected files not in repo
-        #_(check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
-
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
