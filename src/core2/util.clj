@@ -146,7 +146,15 @@
 
 (def ^:private ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
 
+(defn- validate-arrow-magic [^ArrowBuf ipc-file-format-buffer]
+  (dotimes [n (alength arrow-magic)]
+    (when-not (= (.getByte ipc-file-format-buffer
+                           (dec (- (.capacity ipc-file-format-buffer) n)))
+                 (aget arrow-magic (dec (- (alength arrow-magic) n))))
+      (throw (IllegalArgumentException. "invalid Arrow IPC file format")))))
+
 (defn read-arrow-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^ArrowBuf ipc-file-format-buffer]
+  (validate-arrow-magic ipc-file-format-buffer)
   (let [footer-size-offset (- (.capacity ipc-file-format-buffer) (+ Integer/BYTES (alength arrow-magic)))
         footer-size (.getInt ipc-file-format-buffer footer-size-offset)
         footer-position (- footer-size-offset footer-size)
