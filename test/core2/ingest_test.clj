@@ -133,18 +133,18 @@
 
         (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))
 
-        (t/is (instance? java.nio.ByteBuffer @(.getBuffer bp "metadata-00000000.arrow")))
-        (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
+        (let [buffer-name "metadata-00000000.arrow"
+              buffer @(.getBuffer bp buffer-name)]
+          (t/is (instance? java.nio.ByteBuffer buffer))
+          (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
+          (t/is (identical? buffer @(.getBuffer bp buffer-name)))
 
-        (t/is (instance? java.nio.ByteBuffer @(.getBuffer bp "metadata-00000000.arrow")))
-        (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
+          (with-open [^VectorSchemaRoot metadata-batch (first (util/read-arrow-record-batches a buffer))]
+            (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
+            (t/is (= 40 (.getRowCount metadata-batch))))
 
-        (with-open [^VectorSchemaRoot metadata-batch (first (util/read-arrow-record-batches a @(.getBuffer bp "metadata-00000000.arrow")))]
-          (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
-          (t/is (= 40 (.getRowCount metadata-batch))))
-
-        (t/is (.evictBuffer bp "metadata-00000000.arrow"))
-        (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))))))
+          (t/is (.evictBuffer bp buffer-name))
+          (t/is (empty? (.buffers ^MemoryMappedBufferPool bp))))))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
