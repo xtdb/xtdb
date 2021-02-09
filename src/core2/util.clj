@@ -250,11 +250,6 @@
                       (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
-(defn load-block-from-buffer [^VectorSchemaRoot root ^ArrowBlock block ^ArrowBuf buffer]
-  (with-open [record-batch (->arrow-record-batch-view block buffer)]
-    (.load (VectorLoader. root) record-batch)
-    root))
-
 (defn try-close [c]
   (try
     (when (instance? AutoCloseable c)

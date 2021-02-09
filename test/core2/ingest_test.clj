@@ -22,7 +22,7 @@
            java.util.concurrent.CompletableFuture
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -143,11 +143,13 @@
 
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
           (let [footer (util/read-arrow-footer-from-buffer buffer)]
-            (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)]
-              (t/is (= 1 (count (.getRecordBatches footer))))
-              (util/load-block-from-buffer metadata-batch (first (.getRecordBatches footer)) buffer)
-              (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
-              (t/is (= 40 (.getRowCount metadata-batch)))))
+            (t/is (= meta/metadata-schema (.getSchema footer)))
+            (t/is (= 1 (count (.getRecordBatches footer))))
+            (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
+                        record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
+              (let [loader (VectorLoader. metadata-batch)]
+                (.load loader record-batch)
+                (t/is (= 40 (.getRowCount metadata-batch))))))
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
           (.close buffer)
