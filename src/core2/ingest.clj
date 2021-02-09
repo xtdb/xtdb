@@ -1,5 +1,6 @@
 (ns core2.ingest
-  (:require [core2.types :as t]
+  (:require [core2.metadata :as meta]
+            [core2.types :as t]
             [core2.util :as util])
   (:import core2.object_store.ObjectStore
            java.io.Closeable
@@ -23,7 +24,6 @@
   (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
 (definterface IngesterPrivate
-  (^void writeMetadata [])
   (^void closeCols [])
   (^void finishChunk []))
 
@@ -149,37 +149,6 @@
     tx-instant)
 
   IngesterPrivate
-  (writeMetadata [_this]
-    #_
-    (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema allocator)]
-      (reduce
-       (fn [^long idx [^String field-name, ^LiveColumn live-column]]
-         (let [content-root ^VectorSchemaRoot (.content-root live-column)
-               field-metadata (.field-metadata live-column)
-               file-name (Text. (str (.getFileName ^Path (.file live-column))))
-               column-name (Text. field-name)]
-           (dotimes [n (count (.getFieldVectors content-root))]
-             (let [field-vector (.getVector content-root n)
-                   idx (+ idx n)]
-               (.setSafe ^VarCharVector (.getVector metadata-root "file") idx file-name)
-               (.setSafe ^VarCharVector (.getVector metadata-root "column") idx column-name)
-               (.setSafe ^VarCharVector (.getVector metadata-root "field") idx (Text. (.getName (.getField field-vector))))
-               (.writeMetadata ^IColumnMetadata (get field-metadata n) metadata-root idx)))
-           (let [idx (+ idx (count (.getFieldVectors content-root)))]
-             (.setRowCount metadata-root idx)
-             idx)))
-       0
-       (sort-by (comp str key) (.field-name->live-column ingester)))
-
-      (.syncSchema metadata-root)
-
-      (with-open [metadata-file-ch (util/->file-channel metadata-file #{StandardOpenOption/CREATE
-                                                                        StandardOpenOption/WRITE
-                                                                        StandardOpenOption/TRUNCATE_EXISTING})
-                  metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
-        (.start metadata-fw)
-        (.writeBatch metadata-fw))))
-
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
       (util/try-close live-root))
@@ -188,32 +157,39 @@
 
   (finishChunk [this]
     (when-not (.isEmpty live-roots)
-      (let [files (vec (for [[field-name ^VectorSchemaRoot live-root] live-roots]
-                         (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx field-name))]
-                           (write-column! live-root tmp-file)
-                           tmp-file)))
-            #_#_
-            metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
+      (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema allocator)]
+        (let [futs (vec
+                    (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                      (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx col-name))
+                            file-name (str (.getFileName tmp-file))]
+                        (write-column! live-root tmp-file)
 
-        #_
-        (.writeMetadata this metadata-file)
-        (.closeCols this)
+                        (let [fut (.putObject object-store file-name tmp-file)]
+                          (meta/write-col-meta metadata-root live-root col-name file-name)
 
-        (.join (CompletableFuture/allOf
-                (into-array CompletableFuture
-                            (for [^Path file files]
-                              (.putObject object-store (str (.getFileName file)) file)))))
+                          (-> fut
+                              (util/then-apply
+                                (fn [_]
+                                  (Files/delete tmp-file))))))))
 
-        (doseq [^Path file files]
-          (Files/delete file))
+              metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
 
-        #_
-        (.join (.putObject object-store (str (.getFileName metadata-file)) metadata-file))
+          (with-open [metadata-file-ch (util/->file-channel metadata-file #{StandardOpenOption/CREATE
+                                                                            StandardOpenOption/WRITE
+                                                                            StandardOpenOption/TRUNCATE_EXISTING})
+                      metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
+            (.start metadata-fw)
+            (.writeBatch metadata-fw)
+            (.end metadata-fw))
 
-        #_
-        (Files/delete metadata-file))
+          @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+               (util/then-compose
+                 (fn [_]
+                   (.putObject object-store (str (.getFileName metadata-file)) metadata-file))))
 
-      (set! (.chunk-idx this) next-row-id)))
+          (.closeCols this)
+          (Files/delete metadata-file)
+          (set! (.chunk-idx this) next-row-id)))))
 
   Closeable
   (close [this]

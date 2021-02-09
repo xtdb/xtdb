@@ -1,3 +1,284 @@
 {
-  "TODO": true
+  "schema" : {
+    "fields" : [{
+      "name" : "file",
+      "nullable" : true,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "column",
+      "nullable" : true,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "field",
+      "nullable" : true,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "type-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 8,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "min",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
+      },
+      "children" : [{
+        "name" : "null",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : true,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : true,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : true,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : true,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "max",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
+      },
+      "children" : [{
+        "name" : "null",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : true,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : true,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : true,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : true,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "count",
+      "nullable" : true,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 8,
+    "columns" : [{
+      "name" : "file",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,27,54,78,102,126,150,179,208],
+      "DATA" : ["chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_tx-time.arrow","chunk-00000000-_tx-time.arrow"]
+    },{
+      "name" : "column",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,6,12,15,18,21,24,32,40],
+      "DATA" : ["_tx-id","_tx-id","_id","_id","_id","_id","_tx-time","_tx-time"]
+    },{
+      "name" : "field",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,7,13,20,23,26,29,36,44],
+      "DATA" : ["_row-id","_tx-id","_row-id","_id","_id","_id","_row-id","_tx-time"]
+    },{
+      "name" : "type-id",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "DATA" : [2,2,2,3,5,10,2,10]
+    },{
+      "name" : "min",
+      "count" : 8,
+      "TYPE_ID" : [2,2,2,3,5,10,2,10],
+      "OFFSET" : [0,1,2,0,0,0,3,1],
+      "children" : [{
+        "name" : "null",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : ["0","0","0","0"]
+      },{
+        "name" : "float8",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [24.0]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "OFFSET" : [0,3],
+        "DATA" : ["bar"]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [1577836800000,1577836800000]
+      }]
+    },{
+      "name" : "max",
+      "count" : 8,
+      "TYPE_ID" : [2,2,2,3,5,10,2,10],
+      "OFFSET" : [0,1,2,0,0,0,3,1],
+      "children" : [{
+        "name" : "null",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : ["5","0","5","5"]
+      },{
+        "name" : "float8",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "DATA" : [52.0]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 1,
+        "VALIDITY" : [1],
+        "OFFSET" : [0,3],
+        "DATA" : ["foo"]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [1609459200000,1577836800000]
+      }]
+    },{
+      "name" : "count",
+      "count" : 8,
+      "VALIDITY" : [1,1,1,1,1,1,1,1],
+      "DATA" : ["6","6","6","2","2","2","6","6"]
+    }]
+  }]
 }

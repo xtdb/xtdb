@@ -11,14 +11,30 @@
       "children" : [ ]
     },{
       "name" : "_id",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [3,10]
+        "typeIds" : [1,2,3,4,5,6,10]
       },
       "children" : [{
-        "name" : "type-3",
+        "name" : "null",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
         "nullable" : true,
         "type" : {
           "name" : "floatingpoint",
@@ -26,7 +42,28 @@
         },
         "children" : [ ]
       },{
-        "name" : "type-10",
+        "name" : "varbinary",
+        "nullable" : true,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : true,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
         "nullable" : true,
         "type" : {
           "name" : "timestamp",
@@ -50,12 +87,37 @@
       "TYPE_ID" : [3,10],
       "OFFSET" : [0,0],
       "children" : [{
-        "name" : "type-3",
+        "name" : "null",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "float8",
         "count" : 1,
         "VALIDITY" : [1],
         "DATA" : [24.0]
       },{
-        "name" : "type-10",
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
         "count" : 1,
         "VALIDITY" : [1],
         "DATA" : [1577836800000]
