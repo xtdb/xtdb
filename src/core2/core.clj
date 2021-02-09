@@ -1,5 +1,6 @@
 (ns core2.core
   (:require [clojure.tools.logging :as log]
+            [core2.buffer-pool :as bp]
             [core2.ingest :as ingest]
             [core2.log :as l]
             [core2.metadata :as meta]
@@ -7,6 +8,7 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
+           core2.buffer_pool.BufferPool
            [core2.ingest Ingester TransactionIngester TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
            core2.object_store.ObjectStore
@@ -267,11 +269,13 @@
                ^LogReader log-reader
                ^ObjectStore object-store
                ^Ingester ingester
-               ^IngestLoop ingest-loop]
+               ^IngestLoop ingest-loop
+               ^BufferPool buffer-pool]
   Closeable
   (close [_]
     (util/try-close ingest-loop)
     (util/try-close ingester)
+    (util/try-close buffer-pool)
     (util/try-close object-store)
     (util/try-close log-reader)
     (util/try-close allocator)))
@@ -286,8 +290,9 @@
          log-reader (l/->local-directory-log-reader log-dir)
          object-store (os/->file-system-object-store object-dir opts)
          ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator) opts)
-         ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator) opts)]
-     (Node. allocator log-reader object-store ingester ingest-loop))))
+         ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator) opts)
+         buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") object-store)]
+     (Node. allocator log-reader object-store ingester ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
