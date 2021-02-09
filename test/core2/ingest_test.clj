@@ -142,9 +142,12 @@
             (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
 
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-          (with-open [^VectorSchemaRoot metadata-batch (first (util/read-arrow-record-batches a buffer))]
-            (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
-            (t/is (= 40 (.getRowCount metadata-batch))))
+          (let [footer (util/read-arrow-footer-from-buffer buffer)]
+            (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)]
+              (t/is (= 1 (count (.getRecordBatches footer))))
+              (util/load-block-from-buffer metadata-batch (first (.getRecordBatches footer)) buffer)
+              (t/is (= meta/metadata-schema (.getSchema metadata-batch)))
+              (t/is (= 40 (.getRowCount metadata-batch)))))
           (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
           (.close buffer)

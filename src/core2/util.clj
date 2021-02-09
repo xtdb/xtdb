@@ -162,6 +162,10 @@
     (.flip bb)
     (ArrowFooter. (Footer/getRootAsFooter bb))))
 
+(defn read-arrow-footer-from-buffer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^ArrowBuf buffer]
+  (with-open [in (->seekable-byte-channel (.nioBuffer buffer 0 (.capacity buffer)))]
+    (read-arrow-footer in)))
+
 (deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
   ReferenceManager
   (deriveBuffer [this source-buffer index length]
@@ -246,16 +250,10 @@
                       (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
-(defn read-arrow-record-batches [^BufferAllocator allocator ^ArrowBuf buffer]
-  (let [^ArrowFooter footer (with-open [in (->seekable-byte-channel (.nioBuffer buffer 0 (.capacity buffer)))]
-                              (read-arrow-footer in))
-        schema (.getSchema footer)]
-    (vec (for [block (.getRecordBatches footer)
-               :let [root (VectorSchemaRoot/create schema allocator)
-                     loader (VectorLoader. root)]]
-           (with-open [record-batch (->arrow-record-batch-view block buffer)]
-             (.load loader record-batch)
-             root)))))
+(defn load-block-from-buffer [^VectorSchemaRoot root ^ArrowBlock block ^ArrowBuf buffer]
+  (with-open [record-batch (->arrow-record-batch-view block buffer)]
+    (.load (VectorLoader. root) record-batch)
+    root))
 
 (defn try-close [c]
   (try
