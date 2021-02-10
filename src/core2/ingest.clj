@@ -59,13 +59,18 @@
                                        (pos? ^long (mod row-count max-rows-per-block)) inc))
               :let [start-idx (* max-rows-per-block block-idx)
                     end-idx (min (+ start-idx max-rows-per-block) row-count)
-                    len (- end-idx start-idx)]]
+                    len (- end-idx start-idx)
+                    sliced-root (.slice root start-idx len)]]
+        (try
+          (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+            (.load loader arb)
+            (.writeBatch fw))
 
-        ;; TODO closing the slice clears the original root - Arrow bug?
-        (with-open [sliced-root (.slice root start-idx len)
-                    arb (.getRecordBatch (VectorUnloader. sliced-root))]
-          (.load loader arb)
-          (.writeBatch fw))))
+          (finally
+            ;; slice returns the same VSR object if it's asked to slice the whole thing
+            ;; we don't want to close it in that case, because that will mutate the live-root.
+            (when-not (identical? sliced-root root)
+              (.close sliced-root))))))
     (.end fw)))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-time-field
@@ -179,13 +184,15 @@
                     (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
                       (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx col-name))
                             file-name (str (.getFileName tmp-file))]
-                        (meta/write-col-meta metadata-root live-root col-name file-name)
                         (write-column! live-root allocator tmp-file max-rows-per-block)
 
-                        (-> (.putObject object-store file-name tmp-file)
-                            (util/then-apply
-                             (fn [_]
-                               (Files/delete tmp-file)))))))
+                        (let [fut (.putObject object-store file-name tmp-file)]
+                          (meta/write-col-meta metadata-root live-root col-name file-name)
+
+                          (-> fut
+                              (util/then-apply
+                                (fn [_]
+                                  (Files/delete tmp-file))))))))
 
               metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
 
