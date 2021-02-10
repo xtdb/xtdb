@@ -187,7 +187,7 @@
     (.get ref-count))
 
   (getSize [this]
-    (if nio-buffer
+    (if-let [nio-buffer nio-buffer]
       (.capacity nio-buffer)
       0))
 
