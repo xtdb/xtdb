@@ -9,7 +9,7 @@
            [java.util Date Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector VectorSchemaRoot VectorLoader VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
            [org.apache.arrow.vector.types.pojo Field Schema]))
@@ -42,13 +42,30 @@
 
     (.setRowCount content-root (inc value-count))))
 
-(defn- write-column! [^VectorSchemaRoot root, ^Path tmp-file]
-  (with-open [file-ch (util/->file-channel tmp-file #{StandardOpenOption/CREATE
+(defn- write-column! [^VectorSchemaRoot root, ^BufferAllocator allocator, ^Path tmp-file ^long max-rows-per-block]
+  (with-open [write-root (VectorSchemaRoot/create (.getSchema root) allocator)
+              file-ch (util/->file-channel tmp-file #{StandardOpenOption/CREATE
                                                       StandardOpenOption/WRITE
                                                       StandardOpenOption/TRUNCATE_EXISTING})
-              fw (ArrowFileWriter. root nil file-ch)]
+              fw (ArrowFileWriter. write-root nil file-ch)]
     (.start fw)
-    (.writeBatch fw)
+
+    (let [row-count (.getRowCount root)
+          loader (VectorLoader. write-root)]
+
+      ;; TODO: between-col block alignment? at the moment, each block will have `max-rows-per-block` rows,
+      ;; but values for the same row-id may not be in the same block for different cols.
+      (doseq [^long block-idx (range (cond-> (quot row-count max-rows-per-block)
+                                       (pos? ^long (mod row-count max-rows-per-block)) inc))
+              :let [start-idx (* max-rows-per-block block-idx)
+                    end-idx (min (+ start-idx max-rows-per-block) row-count)
+                    len (- end-idx start-idx)]]
+
+        ;; TODO closing the slice clears the original root - Arrow bug?
+        (with-open [sliced-root (.slice root start-idx len)
+                    arb (.getRecordBatch (VectorUnloader. sliced-root))]
+          (.load loader arb)
+          (.writeBatch fw))))
     (.end fw)))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-time-field
@@ -162,15 +179,13 @@
                     (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
                       (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx col-name))
                             file-name (str (.getFileName tmp-file))]
-                        (write-column! live-root tmp-file)
+                        (meta/write-col-meta metadata-root live-root col-name file-name)
+                        (write-column! live-root allocator tmp-file max-rows-per-block)
 
-                        (let [fut (.putObject object-store file-name tmp-file)]
-                          (meta/write-col-meta metadata-root live-root col-name file-name)
-
-                          (-> fut
-                              (util/then-apply
-                                (fn [_]
-                                  (Files/delete tmp-file))))))))
+                        (-> (.putObject object-store file-name tmp-file)
+                            (util/then-apply
+                             (fn [_]
+                               (Files/delete tmp-file)))))))
 
               metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
 
