@@ -22,6 +22,7 @@
   (^core2.indexer.TransactionInstant indexTx [^core2.indexer.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
 (definterface IndexerPrivate
+  (^void writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root, ^java.nio.file.Path tmp-file])
   (^void closeCols [])
   (^void finishChunk []))
 
@@ -39,37 +40,6 @@
                    (.getVectorByType src-vec type-id))
 
     (.setRowCount content-root (inc value-count))))
-
-(defn- write-column! [^VectorSchemaRoot root, ^BufferAllocator allocator, ^Path tmp-file ^long max-rows-per-block]
-  (with-open [write-root (VectorSchemaRoot/create (.getSchema root) allocator)
-              file-ch (util/->file-channel tmp-file #{StandardOpenOption/CREATE
-                                                      StandardOpenOption/WRITE
-                                                      StandardOpenOption/TRUNCATE_EXISTING})
-              fw (ArrowFileWriter. write-root nil file-ch)]
-    (.start fw)
-
-    (let [row-count (.getRowCount root)
-          loader (VectorLoader. write-root)]
-
-      ;; TODO: between-col block alignment? at the moment, each block will have `max-rows-per-block` rows,
-      ;; but values for the same row-id may not be in the same block for different cols.
-      (doseq [^long block-idx (range (cond-> (quot row-count max-rows-per-block)
-                                       (pos? ^long (mod row-count max-rows-per-block)) inc))
-              :let [start-idx (* max-rows-per-block block-idx)
-                    end-idx (min (+ start-idx max-rows-per-block) row-count)
-                    len (- end-idx start-idx)
-                    sliced-root (.slice root start-idx len)]]
-        (try
-          (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-            (.load loader arb)
-            (.writeBatch fw))
-
-          (finally
-            ;; slice returns the same VSR object if it's asked to slice the whole thing
-            ;; we don't want to close it in that case, because that will mutate the live-root.
-            (when-not (identical? sliced-root root)
-              (.close sliced-root))))))
-    (.end fw)))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-time-field
   (t/->primitive-dense-union-field "_tx-time" #{:timestampmilli}))
@@ -101,6 +71,34 @@
 
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
+
+(defn- with-slices [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block, f]
+  (let [^BigIntVector row-id-vec (.getVector root (.getName t/row-id-field))
+        row-count (.getRowCount root)]
+
+    (loop [start-idx 0
+           target-row-id (+ start-row-id max-rows-per-block)]
+      (let [len (loop [len 0]
+                  (let [idx (+ start-idx len)]
+                    (if (or (>= idx row-count)
+                            (>= (.get row-id-vec idx) target-row-id))
+                      len
+                      (recur (inc len)))))
+            end-idx (+ start-idx ^long len)
+
+            sliced-root (.slice root start-idx len)]
+
+        (try
+          (f sliced-root)
+
+          (finally
+            ;; slice returns the same VSR object if it's asked to slice the whole thing
+            ;; we don't want to close it in that case, because that will mutate the live-root.
+            (when-not (identical? sliced-root root)
+              (.close sliced-root))))
+
+        (when (< end-idx row-count)
+          (recur end-idx (+ target-row-id max-rows-per-block)))))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^Path arrow-dir
@@ -169,6 +167,23 @@
     tx-instant)
 
   IndexerPrivate
+  (writeColumn [_this live-root tmp-file]
+    (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)
+                file-ch (util/->file-channel tmp-file #{StandardOpenOption/CREATE
+                                                        StandardOpenOption/WRITE
+                                                        StandardOpenOption/TRUNCATE_EXISTING})
+                fw (ArrowFileWriter. write-root nil file-ch)]
+      (.start fw)
+
+      (let [loader (VectorLoader. write-root)]
+        (with-slices live-root chunk-idx max-rows-per-block
+          (fn [sliced-root]
+            (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+              (.load loader arb)
+              (.writeBatch fw)))))
+
+      (.end fw)))
+
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
       (util/try-close live-root))
@@ -182,7 +197,7 @@
                     (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
                       (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx col-name))
                             file-name (str (.getFileName tmp-file))]
-                        (write-column! live-root allocator tmp-file max-rows-per-block)
+                        (.writeColumn this live-root tmp-file)
 
                         (let [fut (.putObject object-store file-name tmp-file)]
                           (meta/write-col-meta metadata-root live-root col-name file-name)
