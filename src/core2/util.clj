@@ -21,6 +21,8 @@
            java.util.concurrent.atomic.AtomicInteger
            [java.time LocalDateTime ZoneId]))
 
+;;; IO
+
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
   (let [buffer (.duplicate buffer)]
     (proxy [SeekableByteChannel] []
@@ -116,6 +118,29 @@
         (let [t (.newThread default-thread-factory r)]
           (.setName t (str prefix (.getName t)))
           t)))))
+
+(defn try-close [c]
+  (try
+    (when (instance? AutoCloseable c)
+      (.close ^AutoCloseable c))
+    (catch Exception e
+      (log/warn e "could not close"))))
+
+(defn shutdown-pool
+  ([^ExecutorService pool]
+   (shutdown-pool pool 60))
+  ([^ExecutorService pool ^long timeout-seconds]
+   (try
+     (.shutdown pool)
+     (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
+       (.shutdownNow pool)
+       (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
+         (log/warn "pool did not terminate" pool)))
+     (catch InterruptedException _
+       (.shutdownNow pool)
+       (.interrupt (Thread/currentThread))))))
+
+;;; Arrow
 
 (definterface DenseUnionWriter
   (^int writeTypeId [^byte type-id])
@@ -288,24 +313,3 @@
                                   (.getBodyLength block))
                       (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
-
-(defn try-close [c]
-  (try
-    (when (instance? AutoCloseable c)
-      (.close ^AutoCloseable c))
-    (catch Exception e
-      (log/warn e "could not close"))))
-
-(defn shutdown-pool
-  ([^ExecutorService pool]
-   (shutdown-pool pool 60))
-  ([^ExecutorService pool ^long timeout-seconds]
-   (try
-     (.shutdown pool)
-     (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
-       (.shutdownNow pool)
-       (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
-         (log/warn "pool did not terminate" pool)))
-     (catch InterruptedException _
-       (.shutdownNow pool)
-       (.interrupt (Thread/currentThread))))))
