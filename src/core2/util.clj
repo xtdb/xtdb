@@ -218,6 +218,8 @@
     (when-not (identical? allocator (.getAllocator this))
       (throw (IllegalStateException. "cannot retain nio buffer in other allocator")))
     (doto (.slice src-buffer)
+      (.readerIndex (.readerIndex src-buffer))
+      (.writerIndex (.writerIndex src-buffer))
       (-> (.getReferenceManager) (.retain))))
 
   (retain [this increment]
