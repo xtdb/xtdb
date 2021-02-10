@@ -1,10 +1,10 @@
 (ns core2.types
   (:require [clojure.string :as str])
-  (:import java.util.Date
-           [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder ValueHolder]
-           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
+  (:import [java.util Comparator Date]
+           org.apache.arrow.memory.util.ByteFunctionHelpers
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableVarBinaryHolder NullableVarCharHolder]
+           [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
 
@@ -88,51 +88,17 @@
                        true))))))
 
 ;; generics ftw
-(definterface PrimitiveComparator
-  (^int compare [^org.apache.arrow.vector.holders.ValueHolder left
-                 ^org.apache.arrow.vector.holders.ValueHolder right]))
+(definterface ReadWrite
+  (^Object newHolder [])
+  (^boolean isSet [holder])
+  (^void read [^org.apache.arrow.vector.FieldVector in-vec, ^int idx, holder])
+  (^void write [^org.apache.arrow.vector.FieldVector out-vec, ^int idx, holder]))
 
-(defmacro def-prim-comp {:style/indent [2 :form :form [1]]} [sym holder-class & specs]
-  `(def ~sym
-     (reify PrimitiveComparator
-       ~(let [[_compare [left right] & body] (->> specs
-                                                  (filter (comp #{'compare} first))
-                                                  first)]
-          `(~'compare [this# ~left ~right]
-            (let [~(with-meta left {:tag holder-class}) ~left
-                  ~(with-meta right {:tag holder-class}) ~right]
-              ~@body))))))
-
-(def-prim-comp bigint-comp NullableBigIntHolder
-  (compare [left right] (Long/compare (.value left) (.value right))))
-
-(def-prim-comp bit-comp NullableBitHolder
-  (compare [left right] (Integer/compare (.value left) (.value right))))
-
-(def-prim-comp timestamp-milli-comp NullableTimeStampMilliHolder
-  (compare [left right] (Long/compare (.value left) (.value right))))
-
-(def-prim-comp float8-comp NullableFloat8Holder
-  (compare [left right] (Double/compare (.value left) (.value right))))
-
-(definterface PrimitiveReadWrite
-  (^org.apache.arrow.vector.holders.ValueHolder newHolder [])
-
-  (^boolean isSet [^org.apache.arrow.vector.holders.ValueHolder holder])
-
-  (^void read [^org.apache.arrow.vector.FieldVector field-vec
-               ^int idx
-               ^org.apache.arrow.vector.holders.ValueHolder holder])
-
-  (^void write [^org.apache.arrow.vector.holders.ValueHolder holder
-                ^org.apache.arrow.vector.FieldVector out-vec
-                ^int idx]))
-
-(defmacro def-prim-rw [sym vec-class holder-class]
+(defmacro def-rw [sym vec-class holder-class]
   (let [vec-sym (gensym 'vec)
         holder-sym (gensym 'holder)]
     `(def ~sym
-       (reify PrimitiveReadWrite
+       (reify ReadWrite
          (~'newHolder [this#] (new ~holder-class))
 
          (~'isSet [this# ~holder-sym]
@@ -144,80 +110,50 @@
                 ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
             (.get ~vec-sym idx# ~holder-sym)))
 
-         (~'write [this# ~holder-sym ~vec-sym idx#]
+         (~'write [this# ~vec-sym idx# ~holder-sym]
           (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
                 ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
             (.setSafe ~vec-sym idx# ~holder-sym)))))))
 
-(def-prim-rw bigint-rw BigIntVector NullableBigIntHolder)
-(def-prim-rw bit-rw BitVector NullableBitHolder)
-(def-prim-rw timestamp-milli-rw TimeStampMilliVector NullableTimeStampMilliHolder)
-(def-prim-rw float8-rw Float8Vector NullableFloat8Holder)
+(def-rw bigint-rw BigIntVector NullableBigIntHolder)
+(def-rw bit-rw BitVector NullableBitHolder)
+(def-rw timestamp-milli-rw TimeStampMilliVector NullableTimeStampMilliHolder)
+(def-rw float8-rw Float8Vector NullableFloat8Holder)
 
-(definterface ObjectComparator
-  (^int compare [left right]))
+(def null-rw
+  (reify ReadWrite
+    (newHolder [_] nil)
+    (isSet [_ _holder] false)
+    (read [_ _fv _idx _holder])
+    (write [_ _holder _fv _idx])))
 
-(defmacro def-obj-comp {:style/indent [2 :form :form [1]]} [sym val-tag & specs]
+(def-rw varbinary-rw VarBinaryVector NullableVarBinaryHolder)
+(def-rw varchar-rw VarCharVector NullableVarCharHolder)
+
+(defmacro def-comp {:style/indent [3 :form :form :form]} [sym holder-class [left right] & body]
   `(def ~sym
-     (reify ObjectComparator
-       ~(let [[_compare [left right] & body] (->> specs
-                                                  (filter (comp #{'compare} first))
-                                                  first)]
-          `(~'compare [this# ~left ~right]
-            (let [~(with-meta left {:tag val-tag}) ~left
-                  ~(with-meta right {:tag val-tag}) ~right]
-              ~@body))))))
+     (reify Comparator
+       (~'compare [this# ~left ~right]
+        (let [~(with-meta left {:tag holder-class}) ~left
+              ~(with-meta right {:tag holder-class}) ~right]
+          ~@body)))))
 
-(def-obj-comp null-comp Object
-  (compare [left right] 0))
+(def-comp bigint-comp NullableBigIntHolder [left right]
+  (Long/compare (.value left) (.value right)))
 
-(def-obj-comp varbinary-comp ArrowBufPointer
-  (compare [left right]
-    (ByteFunctionHelpers/compare (.getBuf left)
-                                 (.getOffset left)
-                                 (+ (.getOffset left) (.getLength left))
-                                 (.getBuf right)
-                                 (.getOffset right)
-                                 (+ (.getOffset right) (.getLength right)))))
+(def-comp bit-comp NullableBitHolder [left right]
+  (Integer/compare (.value left) (.value right)))
 
-(def-obj-comp varchar-comp String
-  (compare [left right] (.compareTo left right)))
+(def-comp timestamp-milli-comp NullableTimeStampMilliHolder [left right]
+  (Long/compare (.value left) (.value right)))
 
-(definterface ObjectReadWrite
-  (read [^org.apache.arrow.vector.FieldVector field-vec, ^int idx])
-  (^void write [value ^org.apache.arrow.vector.FieldVector out-vec ^int idx]))
+(def-comp float8-comp NullableFloat8Holder [left right]
+  (Double/compare (.value left) (.value right)))
 
-(defmacro def-obj-rw {:style/indent [3 :form :form :form [1]]} [sym vec-class val-tag & specs]
-  `(def ~sym
-     (reify ObjectReadWrite
-       ~(let [[_read [vec-sym idx-sym] & body] (->> specs
-                                                    (filter (comp #{'read} first))
-                                                    first)]
-          `(~'read [this# ~vec-sym ~idx-sym]
-            (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym]
-              ~@body)))
+(def-comp varbinary-comp NullableVarBinaryHolder [left right]
+  (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
+                               (.buffer right) (.start right) (.end right)))
 
-       ~(let [[_write [value-sym vec-sym idx-sym] & body] (->> specs
-                                                               (filter (comp #{'write} first))
-                                                               first)]
-          `(~'write [this# ~value-sym ~vec-sym ~idx-sym]
-            (let [~(with-meta value-sym {:tag val-tag}) ~value-sym
-                  ~(with-meta vec-sym {:tag vec-class}) ~vec-sym]
-              ~@body))))))
-
-(def-obj-rw null-rw NullVector Object
-  (read [_fv _idx])
-  (write [_value fv idx]))
-
-(def-obj-rw varbinary-rw VarBinaryVector ArrowBufPointer
-  (read [fv idx]
-    (.getDataPointer fv idx))
-
-  (write [v fv idx]
-    (.setSafe fv idx (.getOffset v) (.getLength v) (.getBuf v))))
-
-(def-obj-rw varchar-rw VarCharVector String
-  (read [fv idx]
-    (str (.getObject fv idx)))
-  (write [v fv idx]
-    (.setSafe fv idx (Text. v))))
+(def-comp varchar-comp NullableVarCharHolder [left right]
+  (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
+                               (.buffer right) (.start right) (.end right)))

@@ -1,10 +1,10 @@
 (ns core2.metadata
   (:require [core2.types :as t]
             [core2.util :as util])
-  (:import [core2.types ObjectComparator ObjectReadWrite PrimitiveComparator PrimitiveReadWrite]
+  (:import core2.types.ReadWrite
+           java.util.Comparator
            [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.holders.ValueHolder
            [org.apache.arrow.vector.types Types Types$MinorType]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.Text))
@@ -25,58 +25,33 @@
                       ^org.apache.arrow.vector.FieldVector min-vec, ^int min-vec-idx
                       ^org.apache.arrow.vector.FieldVector max-vec, ^int max-vec-idx]))
 
-(deftype PrimitiveMinMax [^PrimitiveReadWrite prim-rw
-                          ^PrimitiveComparator prim-comp
-                          ^ValueHolder curr-val
-                          ^ValueHolder min-val
-                          ^ValueHolder max-val]
+(deftype MinMaxImpl [^ReadWrite rw, ^Comparator comparator
+                     curr-val min-val max-val]
   MinMax
   (writeMinMax [_this src-vec min-vec min-vec-idx max-vec max-vec-idx]
     (dotimes [src-idx (.getValueCount src-vec)]
-      (.read prim-rw src-vec src-idx curr-val)
-      (when (or (not (.isSet prim-rw min-val)) (neg? (.compare prim-comp curr-val min-val)))
-        (.read prim-rw src-vec src-idx min-val))
+      (.read rw src-vec src-idx curr-val)
+      (when (or (not (.isSet rw min-val)) (neg? (.compare comparator curr-val min-val)))
+        (.read rw src-vec src-idx min-val))
 
-      (when (or (not (.isSet prim-rw min-val)) (pos? (.compare prim-comp curr-val max-val)))
-        (.read prim-rw src-vec src-idx max-val)))
+      (when (or (not (.isSet rw max-val)) (pos? (.compare comparator curr-val max-val)))
+        (.read rw src-vec src-idx max-val)))
 
-    (.write prim-rw min-val min-vec min-vec-idx)
-    (.write prim-rw max-val max-vec max-vec-idx)))
+    (.write rw min-vec min-vec-idx min-val)
+    (.write rw max-vec max-vec-idx max-val)))
 
-(defn- ->prim-min-max [^PrimitiveReadWrite prim-rw, ^PrimitiveComparator prim-comparator]
-  (PrimitiveMinMax. prim-rw prim-comparator (.newHolder prim-rw) (.newHolder prim-rw) (.newHolder prim-rw)))
-
-(deftype ObjectMinMax [^ObjectReadWrite obj-rw, ^ObjectComparator obj-comp]
-  MinMax
-  (writeMinMax [_this src-vec min-vec min-vec-idx max-vec max-vec-idx]
-    (let [first-val (.read obj-rw src-vec 0)
-          value-count (.getValueCount src-vec)]
-      (loop [min-val first-val
-             max-val first-val
-             src-idx 1]
-        (if (< src-idx value-count)
-          (let [curr-val (.read obj-rw src-vec src-idx)]
-            (recur (if (neg? (.compare obj-comp curr-val min-val))
-                     curr-val
-                     min-val)
-                   (if (pos? (.compare obj-comp curr-val max-val))
-                     curr-val
-                     max-val)
-                   (inc src-idx)))
-
-          (do
-            (.write obj-rw min-val min-vec min-vec-idx)
-            (.write obj-rw max-val max-vec max-vec-idx)))))))
+(defn- ->min-max-impl [^ReadWrite rw, ^Comparator comparator]
+  (MinMaxImpl. rw comparator (.newHolder rw) (.newHolder rw) (.newHolder rw)))
 
 (defn- ->min-max [^FieldVector field-vec]
   (condp = (Types/getMinorTypeForArrowType (.getType (.getField field-vec)))
-    Types$MinorType/BIGINT (->prim-min-max t/bigint-rw t/bigint-comp)
-    Types$MinorType/FLOAT8 (->prim-min-max t/float8-rw t/float8-comp)
-    Types$MinorType/BIT (->prim-min-max t/bit-rw t/bit-comp)
-    Types$MinorType/TIMESTAMPMILLI (->prim-min-max t/timestamp-milli-rw t/timestamp-milli-comp)
-    Types$MinorType/NULL (->ObjectMinMax t/null-rw t/null-comp)
-    Types$MinorType/VARBINARY (->ObjectMinMax t/varbinary-rw t/varbinary-comp)
-    Types$MinorType/VARCHAR (->ObjectMinMax t/varchar-rw t/varchar-comp)))
+    Types$MinorType/BIGINT (->min-max-impl t/bigint-rw t/bigint-comp)
+    Types$MinorType/FLOAT8 (->min-max-impl t/float8-rw t/float8-comp)
+    Types$MinorType/BIT (->min-max-impl t/bit-rw t/bit-comp)
+    Types$MinorType/TIMESTAMPMILLI (->min-max-impl t/timestamp-milli-rw t/timestamp-milli-comp)
+    Types$MinorType/NULL (->min-max-impl t/null-rw (Comparator/nullsFirst (Comparator/naturalOrder)))
+    Types$MinorType/VARBINARY (->min-max-impl t/varbinary-rw t/varbinary-comp)
+    Types$MinorType/VARCHAR (->min-max-impl t/varchar-rw t/varchar-comp)))
 
 (defn- write-min-max [^FieldVector field-vec, ^VectorSchemaRoot metadata-root, idx]
   (let [^byte type-id (t/arrow-type->type-id (.getType (.getField field-vec)))
