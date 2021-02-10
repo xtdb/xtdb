@@ -427,7 +427,8 @@
       (let [^BufferAllocator allocator (.allocator node)
             ^Ingester i (.ingester node)
             ^IngestLoop il (.ingest-loop node)
-            ^ObjectStore object-store (.object-store node)]
+            ^ObjectStore object-store (.object-store node)
+            ^BufferPool bp (.buffer-pool node)]
 
         (let [tx @(.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 1}}])]
 
@@ -447,30 +448,29 @@
                       (util/then-compose
                         (fn [ks]
                           (let [futs (for [k ks]
-                                       (let [to-path (Files/createTempFile "core2" "" (make-array FileAttribute 0))]
-                                         (-> (.getObject object-store k to-path)
-                                             (util/then-compose
-                                               (fn [to-path]
-                                                 (if-let [chunk-file (->> (util/block-stream to-path allocator)
-                                                                          (reduce (completing
-                                                                                   (fn [_ ^VectorSchemaRoot metadata-root]
-                                                                                     (when (pos? (compare (str (meta/max-value metadata-root "name"))
-                                                                                                          "Ivan"))
-                                                                                       (meta/chunk-file metadata-root "name"))))
-                                                                                  nil))]
-                                                   (.getObject object-store chunk-file to-path)
-                                                   (CompletableFuture/completedFuture nil))))
-                                             (util/then-apply
-                                               (fn [to-path]
-                                                 (when to-path
-                                                   (->> (util/block-stream to-path allocator)
-                                                        (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
-                                                                           (let [name-vec (.getVector chunk-root "name")
-                                                                                 ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]
-                                                                             (vec (for [idx (range (.getRowCount chunk-root))
-                                                                                        :let [name (str (.getObject name-vec idx))]
-                                                                                        :when (pos? (compare name "Ivan"))]
-                                                                                    (MapEntry/create (.get row-id-vec idx) name))))))))))))))]
+                                       (-> (.getBuffer bp k)
+                                           (util/then-compose
+                                             (fn [buffer]
+                                               (if-let [chunk-file (->> (util/block-stream buffer allocator)
+                                                                        (reduce (completing
+                                                                                 (fn [_ ^VectorSchemaRoot metadata-root]
+                                                                                   (when (pos? (compare (str (meta/max-value metadata-root "name"))
+                                                                                                        "Ivan"))
+                                                                                     (meta/chunk-file metadata-root "name"))))
+                                                                                nil))]
+                                                 (.getBuffer bp chunk-file)
+                                                 (CompletableFuture/completedFuture nil))))
+                                           (util/then-apply
+                                             (fn [buffer]
+                                               (when buffer
+                                                 (->> (util/block-stream buffer allocator)
+                                                      (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
+                                                                         (let [name-vec (.getVector chunk-root "name")
+                                                                               ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]
+                                                                           (vec (for [idx (range (.getRowCount chunk-root))
+                                                                                      :let [name (str (.getObject name-vec idx))]
+                                                                                      :when (pos? (compare name "Ivan"))]
+                                                                                  (MapEntry/create (.get row-id-vec idx) name)))))))))))))]
                             (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                                 (util/then-apply (fn [_]
                                                    (into {} (mapcat deref) futs))))))))))))))

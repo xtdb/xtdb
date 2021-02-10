@@ -7,7 +7,7 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager OwnershipTransferResult]
            org.apache.arrow.memory.util.MemoryUtil
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
+           [org.apache.arrow.vector.ipc ArrowStreamWriter]
            [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            [java.nio ByteBuffer ByteOrder]
@@ -173,21 +173,7 @@
                           (int-array (for [^ValueVector child-vec (.getChildrenFromFields duv)]
                                        (.getValueCount child-vec)))))
 
-(defn block-stream [path ^BufferAllocator allocator]
-  (when path
-    ;; `Stream`, when we go to Java
-    (reify
-      clojure.lang.IReduceInit
-      (reduce [_ f init]
-        (with-open [file-ch (->file-channel path)
-                    file-reader (ArrowFileReader. file-ch allocator)]
-          (let [root (.getVectorSchemaRoot file-reader)]
-            (loop [v init]
-              (if (.loadNextBatch file-reader)
-                (recur (f v root))
-                (f v)))))))))
-
-(defn root->byte-buffer [^VectorSchemaRoot root]
+(defn root->arrow-ipc-byte-buffer ^java.nio.ByteBuffer [^VectorSchemaRoot root]
   (with-open [baos (ByteArrayOutputStream.)
               sw (ArrowStreamWriter. root nil (Channels/newChannel baos))]
     (doto sw
@@ -313,3 +299,20 @@
                                   (.getBodyLength block))
                       (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
+
+(defn block-stream [^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
+  (when ipc-file-format-buffer
+    ;; `Stream`, when we go to Java
+    (reify
+      clojure.lang.IReduceInit
+      (reduce [_ f init]
+        (let [footer (read-arrow-footer ipc-file-format-buffer)]
+          (with-open [root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+            (let [loader (VectorLoader. root)]
+              (f (reduce
+                  (fn [acc record-batch]
+                    (with-open [batch (->arrow-record-batch-view record-batch ipc-file-format-buffer)]
+                      (.load loader batch)
+                      (f acc root)))
+                  init
+                  (.getRecordBatches footer))))))))))
