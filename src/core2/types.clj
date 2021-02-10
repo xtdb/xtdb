@@ -83,7 +83,9 @@
             (ArrowType$Union. UnionMode/Dense type-ids)
             false
             (for [type-k type-ks]
-              (->field (name type-k)
+              (->field (if (= type-k :null)
+                         "$data$"
+                         (name type-k))
                        (primitive-type->arrow-type type-k)
                        true))))))
 
