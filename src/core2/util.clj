@@ -196,7 +196,7 @@
   (let [footer-size-offset (- (.capacity ipc-file-format-buffer) (+ Integer/BYTES (alength arrow-magic)))
         footer-size (.getInt ipc-file-format-buffer footer-size-offset)
         footer-position (- footer-size-offset footer-size)
-        footer-bb (.nioBuffer (.slice ipc-file-format-buffer footer-position footer-size))]
+        footer-bb (.nioBuffer ipc-file-format-buffer footer-position footer-size)]
     (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
 (def ^:private try-free-direct-buffer
