@@ -12,17 +12,16 @@
            [core2.ingest Ingester TransactionIngester TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
            core2.object_store.ObjectStore
-           [java.io ByteArrayOutputStream Closeable]
+           [java.io Closeable]
            [java.nio ByteBuffer]
-           [java.nio.channels Channels ClosedByInterruptException SeekableByteChannel]
-           [java.nio.file Files Path StandardOpenOption]
+           [java.nio.channels ClosedByInterruptException]
+           [java.nio.file Path]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
            [java.util.concurrent CompletableFuture Future Executors ExecutorService TimeUnit TimeoutException]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
+           [org.apache.arrow.vector ValueVector VectorSchemaRoot VectorLoader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType))
 
@@ -30,15 +29,6 @@
 
 (definterface TxProducer
   (^java.util.concurrent.CompletableFuture submitTx [_]))
-
-(defn- root->byte-buffer [^VectorSchemaRoot root]
-  (with-open [baos (ByteArrayOutputStream.)
-              sw (ArrowStreamWriter. root nil (Channels/newChannel baos))]
-    (doto sw
-      (.start)
-      (.writeBatch)
-      (.end))
-    (ByteBuffer/wrap (.toByteArray baos))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (let [put-op-fields (->> tx-ops
@@ -97,7 +87,7 @@
 
         (.syncSchema root)
 
-        (root->byte-buffer root)))))
+        (util/root->byte-buffer root)))))
 
 (defn log-record->tx-instant ^core2.ingest.TransactionInstant [^LogRecord record]
   (ingest/->TransactionInstant (.offset record) (.time record)))
@@ -122,54 +112,41 @@
    (LogTxProducer. (l/->local-directory-log-writer (.resolve node-dir "log") log-writer-opts)
                    (RootAllocator.))))
 
-(defn block-stream [path ^BufferAllocator allocator]
-  (when path
-    ;; `Stream`, when we go to Java
-    (reify
-      clojure.lang.IReduceInit
-      (reduce [_ f init]
-        (with-open [file-ch (util/->file-channel path #{StandardOpenOption/READ})
-                    file-reader (ArrowFileReader. file-ch allocator)]
-          (let [root (.getVectorSchemaRoot file-reader)]
-            (loop [v init]
-              (if (.loadNextBatch file-reader)
-                (recur (f v root))
-                (f v)))))))))
-
-(defn with-metadata [path ^BufferAllocator allocator f]
-  (->> (block-stream path allocator)
-       (reduce (completing
-                (fn [_ metadata-root]
-                  (f metadata-root)))
-               nil)))
-
-(defn latest-metadata-object ^java.util.concurrent.CompletableFuture [^ObjectStore os]
+(defn latest-metadata-buffer ^java.util.concurrent.CompletableFuture [^ObjectStore os ^BufferPool bp]
   (-> (.listObjects os "metadata-*")
 
       (util/then-compose
         (fn [ks]
           (if-let [metadata-path (last (sort ks))]
-            (let [tmp-path (doto (Files/createTempFile metadata-path "" (make-array FileAttribute 0))
-                             (-> .toFile .deleteOnExit))]
-              (.getObject os metadata-path tmp-path))
+            (.getBuffer bp metadata-path)
             (CompletableFuture/completedFuture nil))))))
 
-(defn latest-row-id ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
-  (-> (latest-metadata-object os)
+(defn with-metadata [^ArrowBuf metadata-buffer, ^BufferAllocator allocator, f]
+  (when metadata-buffer
+    (with-open [metadata-buffer metadata-buffer]
+      (let [footer (util/read-arrow-footer metadata-buffer)
+            metadata-batch (first (.getRecordBatches footer))]
+        (with-open [metadata-root (VectorSchemaRoot/create (.getSchema footer) allocator)
+                    record-batch (util/->arrow-record-batch-view metadata-batch metadata-buffer)]
+          (.load (VectorLoader. metadata-root) record-batch)
+          (f metadata-root))))))
+
+(defn latest-row-id ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferPool bp, ^BufferAllocator allocator]
+  (-> (latest-metadata-buffer os bp)
 
       (util/then-apply
-        (fn [path]
-          (with-metadata path allocator
-            (fn [^VectorSchemaRoot metadata-root]
+        (fn [metadata-buffer]
+          (with-metadata metadata-buffer allocator
+            (fn [metadata-root]
               (meta/max-value metadata-root "_tx-id" "_row-id")))))))
 
-(defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferAllocator allocator]
-  (-> (latest-metadata-object os)
+(defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferPool bp, ^BufferAllocator allocator]
+  (-> (latest-metadata-buffer os bp)
 
       (util/then-apply
-        (fn [path]
-          (with-metadata path allocator
-            (fn [^VectorSchemaRoot metadata-root]
+        (fn [metadata-buffer]
+          (with-metadata metadata-buffer allocator
+            (fn [metadata-root]
               (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
                 (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
                      (ingest/->TransactionInstant max-tx-id)))))))))
@@ -289,9 +266,11 @@
          allocator (RootAllocator.)
          log-reader (l/->local-directory-log-reader log-dir)
          object-store (os/->file-system-object-store object-dir opts)
-         ingester (ingest/->ingester allocator object-store @(latest-row-id object-store allocator) opts)
-         ingest-loop (->ingest-loop log-reader ingester @(latest-completed-tx object-store allocator) opts)
-         buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)]
+         buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
+         latest-row-id @(latest-row-id object-store buffer-pool allocator)
+         latest-completed-tx @(latest-completed-tx object-store buffer-pool allocator)
+         ingester (ingest/->ingester allocator object-store latest-row-id opts)
+         ingest-loop (->ingest-loop log-reader ingester latest-completed-tx opts)]
      (Node. allocator log-reader object-store ingester ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]

@@ -19,12 +19,15 @@
       (if-not (= ::not-found v)
         (CompletableFuture/completedFuture (doto ^ArrowBuf v
                                              (.retain)))
-        (util/then-apply
-          (.getObject object-store k (.resolve root-path k))
-          (fn [^Path path]
-            (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                      (util/->arrow-buf-view allocator (util/->mmap-path path)))))
-              (.retain)))))))
+        (let [buffer-path (.resolve root-path k)]
+          (util/then-apply
+            (if (util/path-exists buffer-path)
+              (CompletableFuture/completedFuture buffer-path)
+              (.getObject object-store k buffer-path))
+            (fn [^Path path]
+              (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                        (util/->arrow-buf-view allocator (util/->mmap-path path)))))
+                (.retain))))))))
 
   (evictBuffer [_ k]
     (when-let [^ArrowBuf buffer (.remove buffers k)]

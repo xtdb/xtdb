@@ -28,7 +28,7 @@
     (if (nil? log-channel)
       (let [log-path (.resolve root-path "LOG")]
         (if (util/path-exists log-path)
-          (do (set! log-channel (util/->file-channel log-path #{StandardOpenOption/READ}))
+          (do (set! log-channel (util/->file-channel log-path))
               (recur after-offset limit))
           []))
       (let [log-in (DataInputStream. (BufferedInputStream. (Channels/newInputStream log-channel)))]

@@ -22,7 +22,8 @@
            java.util.concurrent.CompletableFuture
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]))
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.ipc ArrowFileReader]))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -110,8 +111,8 @@
             ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)]
 
-        (t/is (nil? @(c2/latest-completed-tx os a)))
-        (t/is (nil? @(c2/latest-row-id os a)))
+        (t/is (nil? @(c2/latest-completed-tx os bp a)))
+        (t/is (nil? @(c2/latest-row-id os bp a)))
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
@@ -122,16 +123,14 @@
 
         (.finishChunk i)
 
-        (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
-        (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os a)))
+        (t/is (= last-tx-instant @(c2/latest-completed-tx os bp a)))
+        (t/is (= (dec total-number-of-ops) @(c2/latest-row-id os bp a)))
 
         (let [objects-list @(.listObjects os "metadata-*")]
           (t/is (= 1 (count objects-list)))
           (t/is (= "metadata-00000000.arrow" (first objects-list))))
 
         (check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)
-
-        (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))
 
         (let [buffer-name "metadata-00000000.arrow"
               ^ArrowBuf buffer @(.getBuffer bp buffer-name)
@@ -244,6 +243,7 @@
             ^ObjectStore os (.object-store node)
             ^Ingester i (.ingester node)
             ^IngestLoop il (.ingest-loop node)
+            ^BufferPool bp (.buffer-pool node)
             device-infos (map device-info-csv->doc (csv/read-csv info-reader))
             readings (map readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -265,8 +265,8 @@
           (t/is (= last-tx-instant (.latestCompletedTx il)))
           (.finishChunk i)
 
-          (t/is (= last-tx-instant @(c2/latest-completed-tx os a)))
-          (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os a)))
+          (t/is (= last-tx-instant @(c2/latest-completed-tx os bp a)))
+          (t/is (= (dec (count tx-ops)) @(c2/latest-row-id os bp a)))
 
           (t/is (= 11 (count @(.listObjects os "metadata-*"))))
           (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
@@ -376,12 +376,13 @@
           (with-open [node (c2/->local-node node-dir opts)]
             (let [^BufferAllocator a (.allocator node)
                   ^IngestLoop il (.ingest-loop node)
-                  ^ObjectStore os (.object-store node)]
+                  ^ObjectStore os (.object-store node)
+                  ^BufferPool bp (.buffer-pool node)]
               (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
               (t/is (= first-half-tx-instant (.latestCompletedTx il)))
 
-              (let [^TransactionInstant os-tx-instant @(c2/latest-completed-tx os a)
-                    os-latest-row-id @(c2/latest-row-id os a)]
+              (let [^TransactionInstant os-tx-instant @(c2/latest-completed-tx os bp a)
+                    os-latest-row-id @(c2/latest-row-id os bp a)]
                 (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
                 (t/is (< os-latest-row-id (count first-half-tx-ops)))
 
@@ -450,7 +451,7 @@
                                          (-> (.getObject object-store k to-path)
                                              (util/then-compose
                                                (fn [to-path]
-                                                 (if-let [chunk-file (->> (c2/block-stream to-path allocator)
+                                                 (if-let [chunk-file (->> (util/block-stream to-path allocator)
                                                                           (reduce (completing
                                                                                    (fn [_ ^VectorSchemaRoot metadata-root]
                                                                                      (when (pos? (compare (str (meta/max-value metadata-root "name"))
@@ -462,7 +463,7 @@
                                              (util/then-apply
                                                (fn [to-path]
                                                  (when to-path
-                                                   (->> (c2/block-stream to-path allocator)
+                                                   (->> (util/block-stream to-path allocator)
                                                         (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
                                                                            (let [name-vec (.getVector chunk-root "name")
                                                                                  ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]

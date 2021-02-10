@@ -7,10 +7,11 @@
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager OwnershipTransferResult]
            org.apache.arrow.memory.util.MemoryUtil
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           java.io.File
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowStreamWriter]
+           [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            [java.nio ByteBuffer ByteOrder]
-           [java.nio.channels FileChannel FileChannel$MapMode SeekableByteChannel]
+           [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
            [java.nio.file Files FileVisitResult LinkOption OpenOption Path StandardOpenOption SimpleFileVisitor]
            java.nio.file.attribute.FileAttribute
@@ -51,11 +52,14 @@
       (truncate [size]
         (throw (UnsupportedOperationException.))))))
 
-(defn ->file-channel ^java.nio.channels.FileChannel [^Path path options]
-  (FileChannel/open path (into-array OpenOption options)))
+(defn ->file-channel
+  (^java.nio.channels.FileChannel [^Path path]
+   (->file-channel path #{StandardOpenOption/READ}))
+  (^java.nio.channels.FileChannel [^Path path options]
+   (FileChannel/open path (into-array OpenOption options))))
 
 (defn ->mmap-path ^java.nio.MappedByteBuffer [^Path path]
-  (with-open [in (->file-channel path #{StandardOpenOption/READ})]
+  (with-open [in (->file-channel path)]
     (.map in FileChannel$MapMode/READ_ONLY 0 (.size in))))
 
 (def ^:private file-deletion-visitor
@@ -143,6 +147,29 @@
                           (.getValueCount duv)
                           (int-array (for [^ValueVector child-vec (.getChildrenFromFields duv)]
                                        (.getValueCount child-vec)))))
+
+(defn block-stream [path ^BufferAllocator allocator]
+  (when path
+    ;; `Stream`, when we go to Java
+    (reify
+      clojure.lang.IReduceInit
+      (reduce [_ f init]
+        (with-open [file-ch (->file-channel path)
+                    file-reader (ArrowFileReader. file-ch allocator)]
+          (let [root (.getVectorSchemaRoot file-reader)]
+            (loop [v init]
+              (if (.loadNextBatch file-reader)
+                (recur (f v root))
+                (f v)))))))))
+
+(defn root->byte-buffer [^VectorSchemaRoot root]
+  (with-open [baos (ByteArrayOutputStream.)
+              sw (ArrowStreamWriter. root nil (Channels/newChannel baos))]
+    (doto sw
+      (.start)
+      (.writeBatch)
+      (.end))
+    (ByteBuffer/wrap (.toByteArray baos))))
 
 (def ^:private ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
 
