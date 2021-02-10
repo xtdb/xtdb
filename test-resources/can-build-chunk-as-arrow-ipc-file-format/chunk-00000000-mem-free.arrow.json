@@ -11,12 +11,67 @@
       "children" : [ ]
     },{
       "name" : "mem-free",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
-        "name" : "floatingpoint",
-        "precision" : "DOUBLE"
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
       },
-      "children" : [ ]
+      "children" : [{
+        "name" : "null",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : true,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : true,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : true,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : true,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
     }]
   },
   "batches" : [{
@@ -29,8 +84,44 @@
     },{
       "name" : "mem-free",
       "count" : 2,
-      "VALIDITY" : [1,1],
-      "DATA" : [4.10011078E8,7.20742332E8]
+      "TYPE_ID" : [3,3],
+      "OFFSET" : [0,1],
+      "children" : [{
+        "name" : "null",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "float8",
+        "count" : 2,
+        "VALIDITY" : [1,1],
+        "DATA" : [4.10011078E8,7.20742332E8]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      }]
     }]
   }]
 }

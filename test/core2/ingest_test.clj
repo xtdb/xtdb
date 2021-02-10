@@ -97,7 +97,7 @@
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")
+        last-tx-instant (ingest/->TransactionInstant 5520 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -151,10 +151,11 @@
                       record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
             (.load (VectorLoader. metadata-batch) record-batch)
             (t/is (= 40 (.getRowCount metadata-batch)))
+            (t/is (= "api-version" (str (.getObject (.getVector metadata-batch "column") 0))))
             (t/is (= "_row-id" (str (.getObject (.getVector metadata-batch "field") 0))))
             (t/is (= 0 (.getObject (.getVector metadata-batch "min") 0)))
-            (t/is (= 3 (.getObject (.getVector metadata-batch "max") 0)))
-            (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0)))
+            (t/is (= 2 (.getObject (.getVector metadata-batch "max") 0)))
+            (t/is (= 2 (.getObject (.getVector metadata-batch "count") 0)))
 
             (let [from (.getVector metadata-batch "count")
                   tp (.getTransferPair from a)]
@@ -201,7 +202,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 3504 #inst "2020-01-02")]
+        last-tx-instant (ingest/->TransactionInstant 5520 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
@@ -258,7 +259,7 @@
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini")]
     (util/delete-dir node-dir)
 
-    (with-open [node (c2/->local-node node-dir {:max-block-size 100})
+    (with-open [node (c2/->local-node node-dir {:max-rows-per-chunk 1000, :max-rows-per-block 100})
                 tx-producer (c2/->local-tx-producer node-dir {})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
@@ -336,7 +337,7 @@
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
-        opts {:max-block-size 100}]
+        opts {:max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
 
     (with-open [node-1 (c2/->local-node node-dir opts)
@@ -372,7 +373,7 @@
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
-        opts {:max-block-size 100}]
+        opts {:max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
 
     (with-open [tx-producer (c2/->local-tx-producer node-dir {})
