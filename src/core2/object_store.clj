@@ -1,12 +1,9 @@
 (ns core2.object-store
-  (:require [clojure.java.io :as io]
-            [core2.util :as util])
+  (:require [core2.util :as util])
   (:import java.io.Closeable
-           [java.nio.file CopyOption StandardCopyOption Files FileSystems Path]
-           java.nio.file.attribute.FileAttribute
-           java.util.UUID
-           [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
-           java.util.function.Supplier))
+           [java.nio.file CopyOption Files FileSystems Path StandardCopyOption]
+           [java.util.concurrent CompletableFuture Executors ExecutorService]
+           java.util.UUID))
 
 (set! *unchecked-math* :warn-on-boxed)
 

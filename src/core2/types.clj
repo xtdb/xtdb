@@ -1,8 +1,11 @@
 (ns core2.types
-  (:import java.util.Date
-           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector VarBinaryVector VarCharVector TimeStampMilliVector]
-           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Timestamp ArrowType$Union Field FieldType]
+  (:require [clojure.string :as str])
+  (:import [java.util Comparator Date]
+           org.apache.arrow.memory.util.ByteFunctionHelpers
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableVarBinaryHolder NullableVarCharHolder]
+           [org.apache.arrow.vector.types Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -16,20 +19,11 @@
    Boolean (.getType Types$MinorType/BIT)
    Date (.getType Types$MinorType/TIMESTAMPMILLI)})
 
-(defn ->field-type ^org.apache.arrow.vector.types.pojo.FieldType [^ArrowType arrow-type nullable]
-  (FieldType. nullable arrow-type nil nil))
-
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
-  (Field. field-name (->field-type arrow-type nullable) children))
+  (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
   (->field "_row-id" (->arrow-type Long) false))
-
-(def ^org.apache.arrow.vector.types.pojo.Field tx-time-field
-  (->field "_tx-time" (->arrow-type Date) false))
-
-(def ^org.apache.arrow.vector.types.pojo.Field tx-id-field
-  (->field "_tx-id" (->arrow-type Long) false))
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])
@@ -64,25 +58,104 @@
   (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
   (set-null! [this idx] (.setNull this ^int idx)))
 
-(def dense-union-fields-in-flatbuf-id-order
-  (vec (for [^ArrowType arrow-type [(.getType Types$MinorType/NULL)
-                                    (.getType Types$MinorType/BIGINT)
-                                    (.getType Types$MinorType/FLOAT8)
-                                    (.getType Types$MinorType/VARBINARY)
-                                    (.getType Types$MinorType/VARCHAR)
-                                    (.getType Types$MinorType/BIT)
-                                    (.getType Types$MinorType/TIMESTAMPMILLI)]]
-         (->field (.toLowerCase (if (= arrow-type (.getType Types$MinorType/NULL))
-                                  "$data$"
-                                  (.name (Types/getMinorTypeForArrowType arrow-type))))
-                  arrow-type
-                  true))))
+(def ->minor-type
+  (->> (for [^Types$MinorType t (Types$MinorType/values)]
+         [(keyword (str/lower-case (.name t))) t])
+       (into {})))
 
+(def primitive-types
+  #{:null :bigint :float8 :varbinary :varchar :bit :timestampmilli})
 
-(defn ->dense-union-field-with-flatbuf-ids ^org.apache.arrow.vector.types.pojo.Field [^String field-name union-fields]
-  (let [type-ids (int-array (for [^Field field union-fields]
-                              (.getFlatbufID (.getTypeID (.getType field)))))]
-    (apply ->field field-name
-           (ArrowType$Union. UnionMode/Dense type-ids)
-           false
-           union-fields)))
+(defn arrow-type->type-id [^ArrowType arrow-type]
+  (.getFlatbufID (.getTypeID arrow-type)))
+
+(defn primitive-type->arrow-type [type-k]
+  (.getType ^Types$MinorType (->minor-type type-k)))
+
+(defn ->primitive-dense-union-field ^org.apache.arrow.vector.types.pojo.Field
+  ([field-name]
+   (->primitive-dense-union-field field-name primitive-types))
+  ([^String field-name type-ks]
+   (let [type-ks (sort-by (comp arrow-type->type-id primitive-type->arrow-type) type-ks)
+         type-ids (int-array (for [type-k type-ks]
+                               (-> type-k primitive-type->arrow-type arrow-type->type-id)))]
+     (apply ->field field-name
+            (ArrowType$Union. UnionMode/Dense type-ids)
+            false
+            (for [type-k type-ks]
+              (->field (if (= type-k :null)
+                         "$data$"
+                         (name type-k))
+                       (primitive-type->arrow-type type-k)
+                       true))))))
+
+;; generics ftw
+(definterface ReadWrite
+  (^Object newHolder [])
+  (^boolean isSet [holder])
+  (^void read [^org.apache.arrow.vector.FieldVector in-vec, ^int idx, holder])
+  (^void write [^org.apache.arrow.vector.FieldVector out-vec, ^int idx, holder]))
+
+(defmacro def-rw [sym vec-class holder-class]
+  (let [vec-sym (gensym 'vec)
+        holder-sym (gensym 'holder)]
+    `(def ~sym
+       (reify ReadWrite
+         (~'newHolder [this#] (new ~holder-class))
+
+         (~'isSet [this# ~holder-sym]
+          (let [~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
+            (pos? (.isSet ~holder-sym))))
+
+         (~'read [this# ~vec-sym idx# ~holder-sym]
+          (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
+                ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
+            (.get ~vec-sym idx# ~holder-sym)))
+
+         (~'write [this# ~vec-sym idx# ~holder-sym]
+          (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
+                ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
+            (.setSafe ~vec-sym idx# ~holder-sym)))))))
+
+(def-rw bigint-rw BigIntVector NullableBigIntHolder)
+(def-rw bit-rw BitVector NullableBitHolder)
+(def-rw timestamp-milli-rw TimeStampMilliVector NullableTimeStampMilliHolder)
+(def-rw float8-rw Float8Vector NullableFloat8Holder)
+
+(def null-rw
+  (reify ReadWrite
+    (newHolder [_] nil)
+    (isSet [_ _holder] false)
+    (read [_ _fv _idx _holder])
+    (write [_ _holder _fv _idx])))
+
+(def-rw varbinary-rw VarBinaryVector NullableVarBinaryHolder)
+(def-rw varchar-rw VarCharVector NullableVarCharHolder)
+
+(defmacro def-comp {:style/indent [3 :form :form :form]} [sym holder-class [left right] & body]
+  `(def ~sym
+     (reify Comparator
+       (~'compare [this# ~left ~right]
+        (let [~(with-meta left {:tag holder-class}) ~left
+              ~(with-meta right {:tag holder-class}) ~right]
+          ~@body)))))
+
+(def-comp bigint-comp NullableBigIntHolder [left right]
+  (Long/compare (.value left) (.value right)))
+
+(def-comp bit-comp NullableBitHolder [left right]
+  (Integer/compare (.value left) (.value right)))
+
+(def-comp timestamp-milli-comp NullableTimeStampMilliHolder [left right]
+  (Long/compare (.value left) (.value right)))
+
+(def-comp float8-comp NullableFloat8Holder [left right]
+  (Double/compare (.value left) (.value right)))
+
+(def-comp varbinary-comp NullableVarBinaryHolder [left right]
+  (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
+                               (.buffer right) (.start right) (.end right)))
+
+(def-comp varchar-comp NullableVarCharHolder [left right]
+  (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
+                               (.buffer right) (.start right) (.end right)))

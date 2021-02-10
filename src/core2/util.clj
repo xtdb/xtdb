@@ -1,25 +1,25 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import [org.apache.arrow.vector ValueVector VectorSchemaRoot VectorLoader]
-           [org.apache.arrow.vector.complex DenseUnionVector]
-           [org.apache.arrow.flatbuf Footer Message RecordBatch]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager OwnershipTransferResult]
-           org.apache.arrow.memory.util.MemoryUtil
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           [org.apache.arrow.vector.ipc ArrowStreamWriter]
-           [java.io ByteArrayOutputStream File]
+  (:import java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
-           [java.nio ByteBuffer ByteOrder]
+           java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
-           [java.nio.file Files FileVisitResult LinkOption OpenOption Path StandardOpenOption SimpleFileVisitor]
+           [java.nio.file Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           java.util.Date
-           [java.util.function Supplier Function]
+           [java.time LocalDateTime ZoneId]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.time LocalDateTime ZoneId]))
+           java.util.Date
+           [java.util.function BiFunction Function Supplier]
+           [org.apache.arrow.flatbuf Footer Message RecordBatch]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
+           org.apache.arrow.memory.util.MemoryUtil
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           org.apache.arrow.vector.complex.DenseUnionVector
+           org.apache.arrow.vector.ipc.ArrowStreamWriter
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]))
 
 ;;; IO
 
@@ -102,6 +102,11 @@
     (apply [_ v]
       (f v))))
 
+(defn ->jbifn {:style/indent :defn} ^java.util.function.BiFunction [f]
+  (reify BiFunction
+    (apply [_ a b]
+      (f a b))))
+
 (defn then-apply {:style/indent :defn} [^CompletableFuture fut f]
   (.thenApply fut (->jfn f)))
 
@@ -142,36 +147,22 @@
 
 ;;; Arrow
 
-(definterface DenseUnionWriter
-  (^int writeTypeId [^byte type-id])
-  (^void end []))
+(defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
+  ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
+  (while (< (.getValueCapacity duv) (inc idx))
+    (.reAlloc duv))
 
-(deftype DenseUnionWriterImpl [^DenseUnionVector duv
-                               ^:unsynchronized-mutable ^int value-count
-                               ^ints offsets]
-  DenseUnionWriter
-  (writeTypeId [this type-id]
-    (while (< (.getValueCapacity duv) (inc value-count))
-      (.reAlloc duv))
+  (let [sub-vec (.getVectorByType duv type-id)
+        offset (.getValueCount sub-vec)
+        offset-buffer (.getOffsetBuffer duv)]
+    (.setTypeId duv idx type-id)
+    (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH idx) offset)
+    (.setValueCount sub-vec (inc offset))
 
-    (let [offset (aget offsets type-id)
-          offset-buffer (.getOffsetBuffer duv)]
-      (.setTypeId duv value-count type-id)
-      (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH value-count) offset)
+    ;; this updates all the counts of all the sub-vecs, which might not be performant if the DUV is large
+    (.setValueCount duv (inc idx))
 
-      (set! (.value-count this) (inc value-count))
-      (aset offsets type-id (inc offset))
-
-      offset))
-
-  (end [_]
-    (.setValueCount duv value-count)))
-
-(defn ->dense-union-writer ^core2.util.DenseUnionWriter [^DenseUnionVector duv]
-  (->DenseUnionWriterImpl duv
-                          (.getValueCount duv)
-                          (int-array (for [^ValueVector child-vec (.getChildrenFromFields duv)]
-                                       (.getValueCount child-vec)))))
+    offset))
 
 (defn root->arrow-ipc-byte-buffer ^java.nio.ByteBuffer [^VectorSchemaRoot root]
   (with-open [baos (ByteArrayOutputStream.)

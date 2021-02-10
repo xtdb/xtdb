@@ -1,249 +1,100 @@
 (ns core2.metadata
-  (:require [core2.types :as t])
-  (:import org.apache.arrow.memory.util.ArrowBufPointer
-           org.apache.arrow.memory.util.ByteFunctionHelpers
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector VarBinaryVector VarCharVector VectorSchemaRoot TimeStampMilliVector]
+  (:require [core2.types :as t]
+            [core2.util :as util])
+  (:import core2.types.ReadWrite
+           java.util.Comparator
+           [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableVarBinaryHolder NullableVarCharHolder NullableTimeStampMilliHolder]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$ArrowTypeID Field Schema]
+           org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(definterface IColumnMetadata
-  (^void updateMetadata [^org.apache.arrow.vector.FieldVector field-vector])
-  (^void writeMetadata [^org.apache.arrow.vector.VectorSchemaRoot metadata-root ^int idx]))
-
-(deftype NullMetadata [^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (set! (.cnt this) (+ cnt (.getValueCount field-vector))))
-
-  (writeMetadata [_ metadata-root idx]
-    (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt)))
-
-(deftype BigIntMetadata [^NullableBigIntHolder min-val
-                         ^NullableBigIntHolder max-val
-                         ^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (let [^BigIntVector field-vector field-vector]
-      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
-
-      (dotimes [idx (.getValueCount field-vector)]
-        (let [value (.get field-vector idx)]
-          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-            (.get field-vector idx min-val))
-
-          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-            (.get field-vector idx max-val))))))
-
-  (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
-          max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/Int)]
-      (.setTypeId min-vec idx type-id)
-      (.setSafe min-vec idx min-val)
-      (.setTypeId max-vec idx type-id)
-      (.setSafe max-vec idx max-val)
-      (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))))
-
-(deftype Float8Metadata [^NullableFloat8Holder min-val
-                         ^NullableFloat8Holder max-val
-                         ^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (let [^Float8Vector field-vector field-vector]
-      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
-
-      (dotimes [idx (.getValueCount field-vector)]
-        (let [value (.get field-vector idx)]
-          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-            (.get field-vector idx min-val))
-
-          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-            (.get field-vector idx max-val))))))
-
-  (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
-          max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/FloatingPoint)]
-      (.setTypeId min-vec idx type-id)
-      (.setSafe min-vec idx min-val)
-      (.setTypeId max-vec idx type-id)
-      (.setSafe max-vec idx max-val)
-      (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))))
-
-(deftype VarBinaryMetadata [^:unsynchronized-mutable ^bytes min-val
-                            ^:unsynchronized-mutable ^bytes max-val
-                            ^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (let [^VarBinaryVector field-vector field-vector]
-      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
-
-      (let [arrow-buf-pointer (ArrowBufPointer.)]
-        (dotimes [idx (.getValueCount field-vector)]
-          (let [arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)]
-            (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                        (.getOffset arrow-buf-pointer)
-                                                                        (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
-                                                                        min-val
-                                                                        0
-                                                                        (alength min-val))))
-              (set! (.min-val this) (.get field-vector idx)))
-
-            (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                        (.getOffset arrow-buf-pointer)
-                                                                        (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
-                                                                        max-val
-                                                                        0
-                                                                        (alength max-val))))
-              (set! (.max-val this) (.get field-vector idx))))))))
-
-
-  (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
-          max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/Binary)
-          allocator (.getAllocator min-vec)
-          holder (NullableVarBinaryHolder.)]
-      (set! (.isSet holder) 1)
-      (set! (.start holder) 0)
-      (with-open [b (.buffer allocator (max (alength min-val) (alength max-val)))]
-        (set! (.buffer holder) b)
-
-        (set! (.end holder) (alength min-val))
-        (.setBytes b 0 min-val)
-        (.setTypeId min-vec idx type-id)
-        (.setSafe min-vec idx holder)
-
-        (set! (.end holder) (alength max-val))
-        (.setBytes b 0 max-val)
-        (.setTypeId max-vec idx type-id)
-        (.setSafe max-vec idx holder))
-      (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))))
-
-(deftype VarCharMetadata [^:unsynchronized-mutable ^bytes min-val
-                          ^:unsynchronized-mutable ^bytes max-val
-                          ^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (let [^VarCharVector field-vector field-vector]
-      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
-
-      (let [arrow-buf-pointer (ArrowBufPointer.)]
-        (dotimes [idx (.getValueCount field-vector)]
-          (let [arrow-buf-pointer (.getDataPointer field-vector idx arrow-buf-pointer)]
-            (when (or (nil? min-val) (neg? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                        (.getOffset arrow-buf-pointer)
-                                                                        (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
-                                                                        min-val
-                                                                        0
-                                                                        (alength min-val))))
-              (set! (.min-val this) (.get field-vector idx)))
-
-            (when (or (nil? max-val) (pos? (ByteFunctionHelpers/compare (.getBuf arrow-buf-pointer)
-                                                                        (.getOffset arrow-buf-pointer)
-                                                                        (+ (.getOffset arrow-buf-pointer) (.getLength arrow-buf-pointer))
-                                                                        max-val
-                                                                        0
-                                                                        (alength max-val))))
-              (set! (.max-val this) (.get field-vector idx))))))))
-
-  (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
-          max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/Utf8)
-          allocator (.getAllocator min-vec)
-          holder (NullableVarCharHolder.)]
-      (set! (.isSet holder) 1)
-      (set! (.start holder) 0)
-      (with-open [b (.buffer allocator (max (alength min-val) (alength max-val)))]
-        (set! (.buffer holder) b)
-
-        (set! (.end holder) (alength min-val))
-        (.setBytes b 0 min-val)
-        (.setTypeId min-vec idx type-id)
-        (.setSafe min-vec idx holder)
-
-        (set! (.end holder) (alength max-val))
-        (.setBytes b 0 max-val)
-        (.setTypeId max-vec idx type-id)
-        (.setSafe max-vec idx holder))
-      (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))))
-
-(deftype BitMetadata [^NullableBitHolder min-val
-                      ^NullableBitHolder max-val
-                      ^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (let [^BitVector field-vector field-vector]
-      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
-
-      (dotimes [idx (.getValueCount field-vector)]
-        (let [value (.get field-vector idx)]
-          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-            (.get field-vector idx min-val))
-
-          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-            (.get field-vector idx max-val))))))
-
-  (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
-          max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/Bool)]
-      (.setTypeId min-vec idx type-id)
-      (.setSafe min-vec idx min-val)
-      (.setTypeId max-vec idx type-id)
-      (.setSafe max-vec idx max-val)
-      (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))))
-
-(deftype TimeStampMilliMetadata [^NullableTimeStampMilliHolder min-val
-                                 ^NullableTimeStampMilliHolder max-val
-                                 ^:unsynchronized-mutable ^long cnt]
-  IColumnMetadata
-  (updateMetadata [this field-vector]
-    (let [^TimeStampMilliVector field-vector field-vector]
-      (set! (.cnt this) (+ cnt (.getValueCount field-vector)))
-
-      (dotimes [idx (.getValueCount field-vector)]
-        (let [value (.get field-vector idx)]
-          (when (or (zero? (.isSet min-val)) (< value (.value min-val)))
-            (.get field-vector idx min-val))
-
-          (when (or (zero? (.isSet max-val)) (> value (.value max-val)))
-            (.get field-vector idx max-val))))))
-
-  (writeMetadata [_ metadata-root idx]
-    (let [min-vec ^DenseUnionVector (.getVector metadata-root "min")
-          max-vec ^DenseUnionVector (.getVector metadata-root "max")
-          type-id (.getFlatbufID ArrowType$ArrowTypeID/Timestamp)]
-      (.setTypeId min-vec idx type-id)
-      (.setSafe min-vec idx min-val)
-      (.setTypeId max-vec idx type-id)
-      (.setSafe max-vec idx max-val)
-      (.setSafe ^BigIntVector (.getVector metadata-root "count") idx cnt))))
-
-(defn ->metadata ^core2.metadata.IColumnMetadata [^ArrowType arrow-type]
-  (condp = (Types/getMinorTypeForArrowType arrow-type)
-    Types$MinorType/NULL (->NullMetadata 0)
-    Types$MinorType/BIGINT (->BigIntMetadata (NullableBigIntHolder.) (NullableBigIntHolder.) 0)
-    Types$MinorType/FLOAT8 (->Float8Metadata (NullableFloat8Holder.) (NullableFloat8Holder.) 0)
-    Types$MinorType/VARBINARY (->VarBinaryMetadata nil nil 0)
-    Types$MinorType/VARCHAR (->VarCharMetadata nil nil 0)
-    Types$MinorType/BIT (->BitMetadata (NullableBitHolder.) (NullableBitHolder.) 0)
-    Types$MinorType/TIMESTAMPMILLI (->TimeStampMilliMetadata (NullableTimeStampMilliHolder.) (NullableTimeStampMilliHolder.) 0)
-    (throw (UnsupportedOperationException.))))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "column" (.getType Types$MinorType/VARCHAR) true)
             (t/->field "field" (.getType Types$MinorType/VARCHAR) true)
-            (t/->dense-union-field-with-flatbuf-ids "min" t/dense-union-fields-in-flatbuf-id-order)
-            (t/->dense-union-field-with-flatbuf-ids "max" t/dense-union-fields-in-flatbuf-id-order)
+            (t/->field "type-id" (.getType Types$MinorType/TINYINT) false)
+            (t/->primitive-dense-union-field "min")
+            (t/->primitive-dense-union-field "max")
             (t/->field "count" (.getType Types$MinorType/BIGINT) true)]))
+
+(definterface MinMax
+  (^void writeMinMax [^org.apache.arrow.vector.FieldVector src-vec
+                      ^org.apache.arrow.vector.FieldVector min-vec, ^int min-vec-idx
+                      ^org.apache.arrow.vector.FieldVector max-vec, ^int max-vec-idx]))
+
+(deftype MinMaxImpl [^ReadWrite rw, ^Comparator comparator
+                     curr-val min-val max-val]
+  MinMax
+  (writeMinMax [_this src-vec min-vec min-vec-idx max-vec max-vec-idx]
+    (dotimes [src-idx (.getValueCount src-vec)]
+      (.read rw src-vec src-idx curr-val)
+      (when (or (not (.isSet rw min-val)) (neg? (.compare comparator curr-val min-val)))
+        (.read rw src-vec src-idx min-val))
+
+      (when (or (not (.isSet rw max-val)) (pos? (.compare comparator curr-val max-val)))
+        (.read rw src-vec src-idx max-val)))
+
+    (.write rw min-vec min-vec-idx min-val)
+    (.write rw max-vec max-vec-idx max-val)))
+
+(defn- ->min-max-impl [^ReadWrite rw, ^Comparator comparator]
+  (MinMaxImpl. rw comparator (.newHolder rw) (.newHolder rw) (.newHolder rw)))
+
+(defn- ->min-max [^FieldVector field-vec]
+  (condp = (Types/getMinorTypeForArrowType (.getType (.getField field-vec)))
+    Types$MinorType/BIGINT (->min-max-impl t/bigint-rw t/bigint-comp)
+    Types$MinorType/FLOAT8 (->min-max-impl t/float8-rw t/float8-comp)
+    Types$MinorType/BIT (->min-max-impl t/bit-rw t/bit-comp)
+    Types$MinorType/TIMESTAMPMILLI (->min-max-impl t/timestamp-milli-rw t/timestamp-milli-comp)
+    Types$MinorType/NULL (->min-max-impl t/null-rw (Comparator/nullsFirst (Comparator/naturalOrder)))
+    Types$MinorType/VARBINARY (->min-max-impl t/varbinary-rw t/varbinary-comp)
+    Types$MinorType/VARCHAR (->min-max-impl t/varchar-rw t/varchar-comp)))
+
+(defn- write-min-max [^FieldVector field-vec, ^VectorSchemaRoot metadata-root, idx]
+  (let [^byte type-id (t/arrow-type->type-id (.getType (.getField field-vec)))
+
+        ^DenseUnionVector min-vec (.getVector metadata-root "min")
+        min-offset (util/write-type-id min-vec idx type-id)
+
+        ^DenseUnionVector max-vec (.getVector metadata-root "max")
+        max-offset (util/write-type-id max-vec idx type-id)]
+    (when (pos? (.getValueCount field-vec))
+      (.writeMinMax ^MinMax (->min-max field-vec)
+                    field-vec
+                    (.getVectorByType min-vec type-id) min-offset
+                    (.getVectorByType max-vec type-id) max-offset))))
+
+(defn write-col-meta [^VectorSchemaRoot metadata-root, ^VectorSchemaRoot live-root
+                      ^String col-name ^String file-name]
+  (letfn [(write-vec-meta [^FieldVector field-vec ^String field-name]
+            (when (pos? (.getValueCount field-vec))
+              (let [idx (.getRowCount metadata-root)
+                    ^byte type-id (t/arrow-type->type-id (.getType (.getField field-vec)))]
+
+                (doto ^VarCharVector (.getVector metadata-root "column")
+                  (.setSafe idx (Text. col-name)))
+                (doto ^VarCharVector (.getVector metadata-root "field")
+                  (.setSafe idx (Text. field-name)))
+                (doto ^VarCharVector (.getVector metadata-root "file")
+                  (.setSafe idx (Text. file-name)))
+                (doto ^TinyIntVector (.getVector metadata-root "type-id")
+                  (.setSafe idx type-id))
+                (doto ^BigIntVector (.getVector metadata-root "count")
+                  (.setSafe idx (.getValueCount field-vec)))
+
+                (write-min-max field-vec metadata-root idx)
+
+                (.setRowCount metadata-root (inc idx)))))]
+
+    (doseq [^FieldVector field-vec (.getFieldVectors live-root)
+            :let [field-name (.getName (.getField field-vec))]]
+      (if (instance? DenseUnionVector field-vec)
+        (doseq [child-vec (.getChildrenFromFields ^DenseUnionVector field-vec)]
+          (write-vec-meta child-vec field-name))
+        (write-vec-meta field-vec field-name)))))
 
 (defn- field-idx [^VectorSchemaRoot metadata, ^String column-name, ^String field-name]
   (let [column-vec (.getVector metadata "column")
