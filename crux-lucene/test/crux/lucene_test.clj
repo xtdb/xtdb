@@ -129,6 +129,16 @@
                         :where '[[(wildcard-text-search "Ivan") [[?e ?v ?a _]]]
                                  [?e :crux.db/id]]}))))))
 
+(t/deftest test-can-search-multiple-entities-with-same-av-pair
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
+                    [:crux.tx/put {:crux.db/id :ivan2 :name "Ivan"}]])
+
+  (with-open [db (c/open-db *api*)]
+    (t/is (= #{[:ivan "Ivan"] [:ivan2 "Ivan"]}
+             (c/q db {:find '[?e ?v]
+                        :where '[[(text-search :name "Ivan") [[?e ?v]]]
+                                 [?e :crux.db/id]]})))))
+
 ;; Leaving to document when score is impacted by accumulated temporal data
 #_(t/deftest test-scoring-shouldnt-be-impacted-by-non-matched-past-docs
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan :name "Ivan Bob"}]])
