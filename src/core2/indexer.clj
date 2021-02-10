@@ -1,4 +1,4 @@
-(ns core2.ingest
+(ns core2.indexer
   (:require [core2.metadata :as meta]
             [core2.types :as t]
             [core2.util :as util])
@@ -14,16 +14,14 @@
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
            [org.apache.arrow.vector.types.pojo Field Schema]))
 
-;; TODO rename to indexer
-
 (set! *unchecked-math* :warn-on-boxed)
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
-(definterface TransactionIngester
-  (^core2.ingest.TransactionInstant indexTx [^core2.ingest.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
+(definterface TransactionIndexer
+  (^core2.indexer.TransactionInstant indexTx [^core2.indexer.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
-(definterface IngesterPrivate
+(definterface IndexerPrivate
   (^void closeCols [])
   (^void finishChunk []))
 
@@ -104,16 +102,16 @@
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
-(deftype Ingester [^BufferAllocator allocator
-                   ^Path arrow-dir
-                   ^ObjectStore object-store
-                   ^Map live-roots
-                   ^long max-rows-per-chunk
-                   ^long max-rows-per-block
-                   ^:volatile-mutable ^long chunk-idx
-                   ^:volatile-mutable ^long next-row-id]
+(deftype Indexer [^BufferAllocator allocator
+                  ^Path arrow-dir
+                  ^ObjectStore object-store
+                  ^Map live-roots
+                  ^long max-rows-per-chunk
+                  ^long max-rows-per-block
+                  ^:volatile-mutable ^long chunk-idx
+                  ^:volatile-mutable ^long next-row-id]
 
-  TransactionIngester
+  TransactionIndexer
   (indexTx [this tx-instant tx-ops]
     (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                 sr (ArrowStreamReader. tx-ops-ch allocator)
@@ -130,8 +128,8 @@
                                        (Schema/findField "document") .getChildren))]
         (.computeIfAbsent live-roots (.getName field)
                           (util/->jfn
-                            (fn [field-name]
-                              (->live-root field-name allocator)))))
+                           (fn [field-name]
+                             (->live-root field-name allocator)))))
 
       (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
             op-type-ids (object-array (mapv (fn [^Field field]
@@ -170,7 +168,7 @@
 
     tx-instant)
 
-  IngesterPrivate
+  IndexerPrivate
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
       (util/try-close live-root))
@@ -191,8 +189,8 @@
 
                           (-> fut
                               (util/then-apply
-                                (fn [_]
-                                  (Files/delete tmp-file))))))))
+                               (fn [_]
+                                 (Files/delete tmp-file))))))))
 
               metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
 
@@ -206,8 +204,8 @@
 
           @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                (util/then-compose
-                 (fn [_]
-                   (.putObject object-store (str (.getFileName metadata-file)) metadata-file))))
+                (fn [_]
+                  (.putObject object-store (str (.getFileName metadata-file)) metadata-file))))
 
           (.closeCols this)
           (Files/delete metadata-file)
@@ -218,26 +216,26 @@
     (.closeCols this)
     (util/delete-dir arrow-dir)))
 
-(defn ->ingester
-  (^core2.ingest.Ingester [^BufferAllocator allocator
-                           ^ObjectStore object-store
-                           ^Long latest-row-id]
-   (->ingester allocator object-store latest-row-id {}))
+(defn ->indexer
+  (^core2.indexer.Indexer [^BufferAllocator allocator
+                         ^ObjectStore object-store
+                         ^Long latest-row-id]
+   (->indexer allocator object-store latest-row-id {}))
 
-  (^core2.ingest.Ingester [^BufferAllocator allocator
-                           ^ObjectStore object-store
-                           ^Long latest-row-id
-                           {:keys [max-rows-per-chunk max-rows-per-block]
-                            :or {max-rows-per-chunk 10000
-                                 max-rows-per-block 1000}}]
+  (^core2.indexer.Indexer [^BufferAllocator allocator
+                         ^ObjectStore object-store
+                         ^Long latest-row-id
+                         {:keys [max-rows-per-chunk max-rows-per-block]
+                          :or {max-rows-per-chunk 10000
+                               max-rows-per-block 1000}}]
    (let [next-row-id (if latest-row-id
                        (inc (long latest-row-id))
                        0)]
-     (Ingester. allocator
-                (Files/createTempDirectory "core2-ingester" (make-array FileAttribute 0))
-                object-store
-                (ConcurrentHashMap.)
-                max-rows-per-chunk
-                max-rows-per-block
-                next-row-id
-                next-row-id))))
+     (Indexer. allocator
+               (Files/createTempDirectory "core2-indexer" (make-array FileAttribute 0))
+               object-store
+               (ConcurrentHashMap.)
+               max-rows-per-chunk
+               max-rows-per-block
+               next-row-id
+               next-row-id))))

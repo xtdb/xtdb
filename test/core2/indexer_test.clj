@@ -1,29 +1,26 @@
-(ns core2.ingest-test
+(ns core2.indexer-test
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t]
-            [core2.buffer-pool :as bp]
             [core2.core :as c2]
-            [core2.ingest :as ingest]
+            [core2.indexer :as indexer]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            [core2.buffer_pool BufferPool MemoryMappedBufferPool]
            [core2.core IngestLoop Node]
-           [core2.ingest Ingester TransactionInstant]
-           [core2.object_store ObjectStore FileSystemObjectStore]
+           [core2.indexer Indexer TransactionInstant]
+           [core2.object_store FileSystemObjectStore ObjectStore]
            [java.nio.file Files Path]
-           java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
            java.util.concurrent.CompletableFuture
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.ipc ArrowFileReader]))
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -97,7 +94,7 @@
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 5520 #inst "2020-01-02")
+        last-tx-instant (indexer/->TransactionInstant 5520 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -107,7 +104,7 @@
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
       (let [^BufferAllocator a (.allocator node)
             ^ObjectStore os (.object-store node)
-            ^Ingester i (.ingester node)
+            ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)]
 
@@ -190,7 +187,7 @@
     (with-open [node (c2/->local-node node-dir)
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
       (let [^ObjectStore os (.object-store node)
-            ^Ingester i (.ingester node)
+            ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)]
 
         (.awaitTx il @(.submitTx tx-producer tx-ops) (Duration/ofSeconds 2))
@@ -202,7 +199,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (ingest/->TransactionInstant 5520 #inst "2020-01-02")]
+        last-tx-instant (indexer/->TransactionInstant 5520 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
@@ -265,7 +262,7 @@
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [^BufferAllocator a (.allocator node)
             ^ObjectStore os (.object-store node)
-            ^Ingester i (.ingester node)
+            ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)
             device-infos (map device-info-csv->doc (csv/read-csv info-reader))
@@ -308,7 +305,7 @@
                     readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
           (let [^BufferAllocator a (.allocator node)
                 ^ObjectStore os (.object-store node)
-                ^Ingester i (.ingester node)
+                ^Indexer i (.indexer node)
                 ^IngestLoop il (.ingest-loop node)
                 object-dir (.resolve node-dir "objects")]
             (let [device-infos (mapv device-info-csv->doc (csv/read-csv info-reader))
@@ -449,7 +446,7 @@
     (with-open [node (c2/->local-node node-dir)
                 tx-producer (c2/->local-tx-producer node-dir)]
       (let [^BufferAllocator allocator (.allocator node)
-            ^Ingester i (.ingester node)
+            ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
             ^ObjectStore object-store (.object-store node)
             ^BufferPool bp (.buffer-pool node)]

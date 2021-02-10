@@ -101,7 +101,7 @@ Migration.
 ;; TODO writer?
 ;; TODO handle deletes
 ;; TODO JMH + JSON tests
-;; TODO vectorised operations in the ingester
+;; TODO vectorised operations in the indexer
 ;; TODO tx-ids? storing as binary in the columns?
 ;; TODO in-memory object-store/log?
 

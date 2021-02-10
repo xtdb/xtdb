@@ -1,14 +1,14 @@
 (ns core2.core
   (:require [clojure.tools.logging :as log]
             [core2.buffer-pool :as bp]
-            [core2.ingest :as ingest]
+            [core2.indexer :as indexer]
             [core2.log :as l]
             [core2.metadata :as meta]
             [core2.object-store :as os]
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
-           [core2.ingest Ingester TransactionIngester TransactionInstant]
+           [core2.indexer Indexer TransactionIndexer TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
            core2.object_store.ObjectStore
            java.io.Closeable
@@ -90,8 +90,8 @@
 
         (util/root->arrow-ipc-byte-buffer root)))))
 
-(defn log-record->tx-instant ^core2.ingest.TransactionInstant [^LogRecord record]
-  (ingest/->TransactionInstant (.offset record) (.time record)))
+(defn log-record->tx-instant ^core2.indexer.TransactionInstant [^LogRecord record]
+  (indexer/->TransactionInstant (.offset record) (.time record)))
 
 (deftype LogTxProducer [^LogWriter log-writer, ^BufferAllocator allocator]
   TxProducer
@@ -150,17 +150,17 @@
             (fn [metadata-root]
               (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
                 (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
-                     (ingest/->TransactionInstant max-tx-id)))))))))
+                     (indexer/->TransactionInstant max-tx-id)))))))))
 
 (definterface IIngestLoop
   (^void ingestLoop [])
   (^void start [])
-  (^core2.ingest.TransactionInstant latestCompletedTx [])
-  (^core2.ingest.TransactionInstant awaitTx [^core2.ingest.TransactionInstant tx])
-  (^core2.ingest.TransactionInstant awaitTx [^core2.ingest.TransactionInstant tx, ^java.time.Duration timeout]))
+  (^core2.indexer.TransactionInstant latestCompletedTx [])
+  (^core2.indexer.TransactionInstant awaitTx [^core2.indexer.TransactionInstant tx])
+  (^core2.indexer.TransactionInstant awaitTx [^core2.indexer.TransactionInstant tx, ^java.time.Duration timeout]))
 
 (deftype IngestLoop [^LogReader log-reader
-                     ^TransactionIngester ingester
+                     ^TransactionIndexer indexer
                      ^:volatile-mutable ^TransactionInstant latest-completed-tx
                      ^ExecutorService pool
                      ^:volatile-mutable ^Future ingest-future
@@ -178,7 +178,7 @@
               (if (Thread/interrupted)
                 (throw (InterruptedException.))
                 (set! (.latest-completed-tx this)
-                      (.indexTx ingester (log-record->tx-instant record) (.record record)))))
+                      (.indexTx indexer (log-record->tx-instant record) (.record record)))))
             (Thread/sleep poll-sleep-ms)))
         (catch ClosedByInterruptException e
           (log/warn e "channel interrupted while closing"))
@@ -229,30 +229,30 @@
 (defn ->ingest-loop
   (^core2.core.IngestLoop
    [^LogReader log-reader
-    ^TransactionIngester ingester
+    ^TransactionIndexer indexer
     ^TransactionInstant latest-completed-tx]
-   (->ingest-loop log-reader ingester latest-completed-tx {}))
+   (->ingest-loop log-reader indexer latest-completed-tx {}))
 
   (^core2.core.IngestLoop
    [^LogReader log-reader
-    ^TransactionIngester ingester
+    ^TransactionIndexer indexer
     ^TransactionInstant latest-completed-tx
     ingest-opts]
 
    (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "ingest-loop-"))]
-     (doto (IngestLoop. log-reader ingester latest-completed-tx pool nil ingest-opts)
+     (doto (IngestLoop. log-reader indexer latest-completed-tx pool nil ingest-opts)
        (.start)))))
 
 (deftype Node [^BufferAllocator allocator
                ^LogReader log-reader
                ^ObjectStore object-store
-               ^Ingester ingester
+               ^Indexer indexer
                ^IngestLoop ingest-loop
                ^BufferPool buffer-pool]
   Closeable
   (close [_]
     (util/try-close ingest-loop)
-    (util/try-close ingester)
+    (util/try-close indexer)
     (util/try-close buffer-pool)
     (util/try-close object-store)
     (util/try-close log-reader)
@@ -270,9 +270,9 @@
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
          latest-row-id @(latest-row-id object-store buffer-pool allocator)
          latest-completed-tx @(latest-completed-tx object-store buffer-pool allocator)
-         ingester (ingest/->ingester allocator object-store latest-row-id opts)
-         ingest-loop (->ingest-loop log-reader ingester latest-completed-tx opts)]
-     (Node. allocator log-reader object-store ingester ingest-loop buffer-pool))))
+         indexer (indexer/->indexer allocator object-store latest-row-id opts)
+         ingest-loop (->ingest-loop log-reader indexer latest-completed-tx opts)]
+     (Node. allocator log-reader object-store indexer ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
