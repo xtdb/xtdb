@@ -273,19 +273,19 @@
   (release [this decrement]
     (when-not (pos? decrement)
       (throw (IllegalArgumentException. "decrement must be positive")))
-    (let [ref-count (.addAndGet ref-count (- decrement))])
-    (cond
-      (zero? ref-count)
-      (let [nio-buffer nio-buffer]
-        (set! (.nio-buffer this) nil)
-        (try-free-direct-buffer nio-buffer)
-        true)
+    (let [new-ref-count (.addAndGet ref-count (- decrement))]
+      (cond
+        (zero? new-ref-count)
+        (let [nio-buffer nio-buffer]
+          (set! (.nio-buffer this) nil)
+          (try-free-direct-buffer nio-buffer)
+          true)
 
-      (neg? ref-count)
-      (throw (IllegalStateException. "ref count has gone negative"))
+        (neg? new-ref-count)
+        (throw (IllegalStateException. "ref count has gone negative"))
 
-      :else
-      false))
+        :else
+        false)))
 
   (retain [this]
     (.retain this 1))
