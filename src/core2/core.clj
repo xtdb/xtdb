@@ -187,40 +187,6 @@
     (future-cancel ingest-future)
     (util/shutdown-pool pool)))
 
-(deftype ChunkManager [^BufferAllocator allocator ^ObjectStore object-store ^BufferPool buffer-pool ^SortedSet known-metadata]
-  IChunkManager
-  (registerNewMetadata [_ metadata]
-    (.add known-metadata metadata))
-
-  (latestStoredTx [_]
-    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
-      (with-open [latest-metadata-buffer latest-metadata-buffer]
-        (reduce (completing
-                 (fn [_ metadata-root]
-                   (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
-                     (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
-                          (indexer/->TransactionInstant max-tx-id)
-                          (reduced)))))
-                nil
-                (util/block-stream latest-metadata-buffer allocator)))))
-
-  (latestStoredRowId [_]
-    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
-      (with-open [latest-metadata-buffer latest-metadata-buffer]
-        (reduce (completing
-                 (fn [_ metadata-root]
-                   (reduced (meta/max-value metadata-root "_tx-id" "_row-id"))))
-                nil
-                (util/block-stream latest-metadata-buffer allocator)))))
-
-  Closeable
-  (close [_]
-    (.clear known-metadata)))
-
-(defn ->chunk-mananger ^core2.indexer.IChunkManager [^BufferAllocator allocator ^ObjectStore object-store ^BufferPool buffer-pool]
-  (let [known-metadata @(.listObjects object-store "metadata-*")]
-    (->ChunkManager allocator object-store buffer-pool (ConcurrentSkipListSet. ^List known-metadata))))
-
 (defn ->ingest-loop
   (^core2.core.IngestLoop
    [^LogReader log-reader
@@ -243,13 +209,11 @@
                ^ObjectStore object-store
                ^Indexer indexer
                ^IngestLoop ingest-loop
-               ^BufferPool buffer-pool
-               ^ChunkManager chunk-manager]
+               ^BufferPool buffer-pool]
   Closeable
   (close [_]
     (util/try-close ingest-loop)
     (util/try-close indexer)
-    (util/try-close chunk-manager)
     (util/try-close buffer-pool)
     (util/try-close object-store)
     (util/try-close log-reader)
@@ -265,10 +229,9 @@
          log-reader (l/->local-directory-log-reader log-dir)
          object-store (os/->file-system-object-store object-dir opts)
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
-         chunk-manager (->chunk-mananger allocator object-store buffer-pool)
-         indexer (indexer/->indexer allocator object-store chunk-manager opts)
-         ingest-loop (->ingest-loop log-reader indexer (.latestStoredTx chunk-manager) opts)]
-     (Node. allocator log-reader object-store indexer ingest-loop buffer-pool chunk-manager))))
+         indexer (indexer/->indexer allocator object-store buffer-pool opts)
+         ingest-loop (->ingest-loop log-reader indexer (.latestStoredTx indexer) opts)]
+     (Node. allocator log-reader object-store indexer ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir

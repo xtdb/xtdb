@@ -173,30 +173,30 @@
       "name" : "file",
       "count" : 8,
       "VALIDITY" : [1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,27,54,78,102,126,150,179,208],
-      "DATA" : ["chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_tx-time.arrow","chunk-00000000-_tx-time.arrow"]
+      "OFFSET" : [0,24,48,72,96,123,150,179,208],
+      "DATA" : ["chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-time.arrow","chunk-00000000-_tx-time.arrow"]
     },{
       "name" : "column",
       "count" : 8,
       "VALIDITY" : [1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,6,12,15,18,21,24,32,40],
-      "DATA" : ["_tx-id","_tx-id","_id","_id","_id","_id","_tx-time","_tx-time"]
+      "OFFSET" : [0,3,6,9,12,18,24,32,40],
+      "DATA" : ["_id","_id","_id","_id","_tx-id","_tx-id","_tx-time","_tx-time"]
     },{
       "name" : "field",
       "count" : 8,
       "VALIDITY" : [1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,7,13,20,23,26,29,36,44],
-      "DATA" : ["_row-id","_tx-id","_row-id","_id","_id","_id","_row-id","_tx-time"]
+      "OFFSET" : [0,7,10,13,16,23,29,36,44],
+      "DATA" : ["_row-id","_id","_id","_id","_row-id","_tx-id","_row-id","_tx-time"]
     },{
       "name" : "type-id",
       "count" : 8,
       "VALIDITY" : [1,1,1,1,1,1,1,1],
-      "DATA" : [2,2,2,3,5,10,2,10]
+      "DATA" : [2,3,5,10,2,2,2,10]
     },{
       "name" : "min",
       "count" : 8,
-      "TYPE_ID" : [2,2,2,3,5,10,2,10],
-      "OFFSET" : [0,1,2,0,0,0,3,1],
+      "TYPE_ID" : [2,3,5,10,2,2,2,10],
+      "OFFSET" : [0,0,0,0,1,2,3,1],
       "children" : [{
         "name" : "$data$",
         "count" : 0
@@ -236,8 +236,8 @@
     },{
       "name" : "max",
       "count" : 8,
-      "TYPE_ID" : [2,2,2,3,5,10,2,10],
-      "OFFSET" : [0,1,2,0,0,0,3,1],
+      "TYPE_ID" : [2,3,5,10,2,2,2,10],
+      "OFFSET" : [0,0,0,0,1,2,3,1],
       "children" : [{
         "name" : "$data$",
         "count" : 0
@@ -245,7 +245,7 @@
         "name" : "bigint",
         "count" : 4,
         "VALIDITY" : [1,1,1,1],
-        "DATA" : ["5","0","5","5"]
+        "DATA" : ["5","5","0","5"]
       },{
         "name" : "float8",
         "count" : 1,
@@ -278,7 +278,7 @@
       "name" : "count",
       "count" : 8,
       "VALIDITY" : [1,1,1,1,1,1,1,1],
-      "DATA" : ["6","6","6","2","2","2","6","6"]
+      "DATA" : ["6","2","2","2","6","6","6","6"]
     }]
   }]
 }

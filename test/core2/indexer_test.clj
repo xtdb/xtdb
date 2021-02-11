@@ -12,7 +12,7 @@
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            [core2.buffer_pool BufferPool MemoryMappedBufferPool]
-           [core2.core ChunkManager IngestLoop Node]
+           [core2.core IngestLoop Node]
            [core2.indexer Indexer TransactionInstant]
            [core2.object_store FileSystemObjectStore ObjectStore]
            [java.nio.file Files Path]
@@ -106,11 +106,10 @@
             ^ObjectStore os (.object-store node)
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
-            ^BufferPool bp (.buffer-pool node)
-            ^ChunkManager cm (.chunk-manager node)]
+            ^BufferPool bp (.buffer-pool node)]
 
-        (t/is (nil? (.latestStoredTx cm)))
-        (t/is (nil? (.latestStoredRowId cm)))
+        (t/is (nil? (.latestStoredTx i)))
+        (t/is (nil? (.latestStoredRowId i)))
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
@@ -121,8 +120,8 @@
 
         (.finishChunk i)
 
-        (t/is (= last-tx-instant (.latestStoredTx cm)))
-        (t/is (= (dec total-number-of-ops) (.latestStoredRowId cm)))
+        (t/is (= last-tx-instant (.latestStoredTx i)))
+        (t/is (= (dec total-number-of-ops) (.latestStoredRowId i)))
 
         (let [objects-list @(.listObjects os "metadata-*")]
           (t/is (= 1 (count objects-list)))
@@ -149,11 +148,11 @@
                       record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
             (.load (VectorLoader. metadata-batch) record-batch)
             (t/is (= 40 (.getRowCount metadata-batch)))
-            (t/is (= "api-version" (str (.getObject (.getVector metadata-batch "column") 0))))
+            (t/is (= "_id" (str (.getObject (.getVector metadata-batch "column") 0))))
             (t/is (= "_row-id" (str (.getObject (.getVector metadata-batch "field") 0))))
             (t/is (= 0 (.getObject (.getVector metadata-batch "min") 0)))
-            (t/is (= 2 (.getObject (.getVector metadata-batch "max") 0)))
-            (t/is (= 2 (.getObject (.getVector metadata-batch "count") 0)))
+            (t/is (= 3 (.getObject (.getVector metadata-batch "max") 0)))
+            (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0)))
 
             (let [from (.getVector metadata-batch "count")
                   tp (.getTransferPair from a)]
@@ -266,7 +265,6 @@
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)
-            ^ChunkManager cm (.chunk-manager node)
             device-infos (map device-info-csv->doc (csv/read-csv info-reader))
             readings (map readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -288,8 +286,8 @@
           (t/is (= last-tx-instant (.latestCompletedTx il)))
           (.finishChunk i)
 
-          (t/is (= last-tx-instant (.latestStoredTx cm)))
-          (t/is (= (dec (count tx-ops)) (.latestStoredRowId cm)))
+          (t/is (= last-tx-instant (.latestStoredTx i)))
+          (t/is (= (dec (count tx-ops)) (.latestStoredRowId i)))
 
           (t/is (= 4 (count @(.listObjects os "metadata-*"))))
           (t/is (= 1 (count @(.listObjects os "chunk-*-api-version*"))))
@@ -334,45 +332,42 @@
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
                  (row-id-ranges "chunk-00000bb8-battery-level.arrow.json")))))))
 
-#_(t/deftest can-ingest-ts-devices-small
-    (if-not (io/resource "devices_small_device_info.csv")
-      (t/is true)
-      (let [node-dir (util/->path "target/can-ingest-ts-devices-small")]
-        (util/delete-dir node-dir)
+#_
+(t/deftest can-ingest-ts-devices-small
+  (if-not (io/resource "devices_small_device_info.csv")
+    (t/is true)
+    (let [node-dir (util/->path "target/can-ingest-ts-devices-small")]
+      (util/delete-dir node-dir)
 
-        (with-open [node (c2/->local-node node-dir)
-                    tx-producer (c2/->local-tx-producer node-dir {})
-                    info-reader (io/reader (io/resource "devices_small_device_info.csv"))
-                    readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
-          (let [^BufferAllocator a (.allocator node)
-                ^ObjectStore os (.object-store node)
-                ^Indexer i (.indexer node)
-                ^IngestLoop il (.ingest-loop node)
-                ^ChunkManager cm (.chunk-manager node)
-                object-dir (.resolve node-dir "objects")]
-            (let [device-infos (mapv device-info-csv->doc (csv/read-csv info-reader))
-                  readings (mapv readings-csv->doc (csv/read-csv readings-reader))
-                  [initial-readings rest-readings] (split-at (count device-infos) readings)
-                  tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                           {:op :put
-                            :doc doc})]
+      (with-open [node (c2/->local-node node-dir)
+                  tx-producer (c2/->local-tx-producer node-dir {})
+                  info-reader (io/reader (io/resource "devices_small_device_info.csv"))
+                  readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
+        (let [^Indexer i (.indexer node)
+              ^IngestLoop il (.ingest-loop node)
+              device-infos (mapv device-info-csv->doc (csv/read-csv info-reader))
+              readings (mapv readings-csv->doc (csv/read-csv readings-reader))
+              [initial-readings rest-readings] (split-at (count device-infos) readings)
+              tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
+                       {:op :put
+                        :doc doc})]
 
-              (t/is (= 1001000 (count tx-ops)))
+          (t/is (= 1001000 (count tx-ops)))
 
-              (t/is (nil? (.latestCompletedTx il)))
+          (t/is (nil? (.latestCompletedTx il)))
 
-              (let [last-tx-instant @(reduce
-                                      (fn [acc tx-ops]
-                                        (.submitTx tx-producer tx-ops))
-                                      nil
-                                      (partition-all 100 tx-ops))]
+          (let [last-tx-instant @(reduce
+                                  (fn [acc tx-ops]
+                                    (.submitTx tx-producer tx-ops))
+                                  nil
+                                  (partition-all 100 tx-ops))]
 
-                (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
-                (t/is (= last-tx-instant (.latestCompletedTx il)))
-                (.finishChunk i)
+            (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
+            (t/is (= last-tx-instant (.latestCompletedTx il)))
+            (.finishChunk i)
 
-                (t/is (= last-tx-instant (.latestStoredTx cm)))
-                (t/is (= (dec total-number-of-ops) (.latestStoredRowId cm))))))))))
+            (t/is (= last-tx-instant (.latestStoredTx i)))
+            (t/is (= (dec (count tx-ops)) (.latestStoredRowId i)))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -437,16 +432,14 @@
                                       (partition-all 100 first-half-tx-ops))]
 
           (with-open [node (c2/->local-node node-dir opts)]
-            (let [^BufferAllocator a (.allocator node)
+            (let [^Indexer i (.indexer node)
                   ^IngestLoop il (.ingest-loop node)
-                  ^ObjectStore os (.object-store node)
-                  ^BufferPool bp (.buffer-pool node)
-                  ^ChunkManager cm (.chunk-manager node)]
+                  ^ObjectStore os (.object-store node)]
               (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
               (t/is (= first-half-tx-instant (.latestCompletedTx il)))
 
-              (let [^TransactionInstant os-tx-instant (.latestStoredTx cm)
-                    os-latest-row-id (.latestStoredRowId cm)]
+              (let [^TransactionInstant os-tx-instant (.latestStoredTx i)
+                    os-latest-row-id (.latestStoredRowId i)]
                 (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
                 (t/is (< os-latest-row-id (count first-half-tx-ops)))
 

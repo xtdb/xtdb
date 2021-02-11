@@ -1,14 +1,16 @@
 (ns core2.indexer
-  (:require [core2.metadata :as meta]
+  (:require core2.buffer-pool
+            [core2.metadata :as meta]
             [core2.types :as t]
             [core2.util :as util])
-  (:import core2.object_store.ObjectStore
+  (:import core2.buffer_pool.BufferPool
+           core2.object_store.ObjectStore
            java.io.Closeable
            [java.nio.file Files Path StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.util Date Map]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap]
-           org.apache.arrow.memory.BufferAllocator
+           [java.util Date List Map SortedSet]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap ConcurrentSkipListSet]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot VectorLoader VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
@@ -19,6 +21,7 @@
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
 (definterface IChunkManager
+  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
   (^void registerNewMetadata [^String metadata])
   (^core2.indexer.TransactionInstant latestStoredTx [])
   (^Long latestStoredRowId []))
@@ -105,18 +108,14 @@
         (when (< end-idx row-count)
           (recur end-idx (+ target-row-id max-rows-per-block)))))))
 
-(deftype Indexer [^BufferAllocator allocator
-                  ^Path arrow-dir
-                  ^ObjectStore object-store
-                  ^IChunkManager chunk-manager
-                  ^Map live-roots
-                  ^long max-rows-per-chunk
-                  ^long max-rows-per-block
-                  ^:volatile-mutable ^long chunk-idx
-                  ^:volatile-mutable ^long next-row-id]
+(definterface IJustIndex
+  (^int indexTx [^core2.indexer.IChunkManager chunkMgr, ^org.apache.arrow.memory.BufferAllocator allocator,
+                 ^core2.indexer.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops,
+                 ^long nextRowId]))
 
-  TransactionIndexer
-  (indexTx [this tx-instant tx-ops]
+(deftype JustIndexer []
+  IJustIndex
+  (indexTx [_ chunk-mgr allocator tx-instant tx-ops next-row-id]
     (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
                 sr (ArrowStreamReader. tx-ops-ch allocator)
                 tx-root (.getVectorSchemaRoot sr)
@@ -124,16 +123,6 @@
                 ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))]
 
       (.loadNextBatch sr)
-
-      (doseq [^Field field (concat [tx-time-field tx-id-field]
-                                   (-> (.getSchema tx-root)
-                                       (.findField "tx-ops") .getChildren
-                                       (Schema/findField "put") .getChildren
-                                       (Schema/findField "document") .getChildren))]
-        (.computeIfAbsent live-roots (.getName field)
-                          (util/->jfn
-                           (fn [field-name]
-                             (->live-root field-name allocator)))))
 
       (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
             op-type-ids (object-array (mapv (fn [^Field field]
@@ -149,25 +138,70 @@
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
-                       (copy-safe! (get live-roots (.getName (.getField value-vec)))
+                       (copy-safe! (.getLiveRoot chunk-mgr (.getName (.getField value-vec)))
                                    value-vec per-op-offset row-id))
 
-                     (copy-safe! (get live-roots (.getName (.getField tx-time-vec)))
+                     (copy-safe! (.getLiveRoot chunk-mgr (.getName (.getField tx-time-vec)))
                                  tx-time-vec 0 row-id)
 
-                     (copy-safe! (get live-roots (.getName (.getField tx-id-vec)))
+                     (copy-safe! (.getLiveRoot chunk-mgr (.getName (.getField tx-id-vec)))
                                  tx-id-vec 0 row-id)))))
 
-        (set! (.next-row-id this) (+ next-row-id (.getValueCount tx-ops-vec)))))
+        (.getValueCount tx-ops-vec)))))
+
+(defn- latest-stored-row-id [^BufferAllocator allocator ^BufferPool buffer-pool ^SortedSet known-metadata]
+  (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
+    (with-open [latest-metadata-buffer latest-metadata-buffer]
+      (reduce (completing
+               (fn [_ metadata-root]
+                 (reduced (meta/max-value metadata-root "_tx-id" "_row-id"))))
+              nil
+              (util/block-stream latest-metadata-buffer allocator)))))
+
+(deftype Indexer [^BufferAllocator allocator
+                  ^Path arrow-dir
+                  ^ObjectStore object-store
+                  ^long max-rows-per-chunk
+                  ^long max-rows-per-block
+                  ^:volatile-mutable ^long chunk-idx
+                  ^:volatile-mutable ^long row-count
+                  ^Map live-roots
+                  ^BufferPool buffer-pool
+                  ^SortedSet known-metadata]
+
+  IChunkManager
+  (getLiveRoot [_ field-name]
+    (.computeIfAbsent live-roots field-name
+                      (util/->jfn
+                        (fn [field-name]
+                          (->live-root field-name allocator)))))
+
+  (registerNewMetadata [_ metadata]
+    (.add known-metadata metadata))
+
+  (latestStoredTx [_]
+    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
+      (with-open [latest-metadata-buffer latest-metadata-buffer]
+        (reduce (completing
+                 (fn [_ metadata-root]
+                   (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
+                     (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
+                          (->TransactionInstant max-tx-id)
+                          (reduced)))))
+                nil
+                (util/block-stream latest-metadata-buffer allocator)))))
+
+  (latestStoredRowId [_]
+    (latest-stored-row-id allocator buffer-pool known-metadata))
+
+  TransactionIndexer
+  (indexTx [this tx-instant tx-ops]
+    (let [new-row-count (.indexTx (JustIndexer.) this allocator tx-instant tx-ops (+ chunk-idx row-count))]
+      (set! (.row-count this) (+ row-count new-row-count)))
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
-    (when (>= (->> (vals live-roots)
-                   (map (fn [^VectorSchemaRoot root]
-                          (.getRowCount root)))
-                   (apply max)
-                   (long))
-              max-rows-per-chunk)
+    (when (>= row-count max-rows-per-chunk)
       (.finishChunk this))
 
     tx-instant)
@@ -190,7 +224,7 @@
 
       (.end fw)))
 
-  (closeCols [_this]
+  (closeCols [this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
       (util/try-close live-root))
 
@@ -210,8 +244,8 @@
 
                           (-> fut
                               (util/then-apply
-                               (fn [_]
-                                 (Files/delete tmp-file))))))))
+                                (fn [_]
+                                  (Files/delete tmp-file))))))))
 
               metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
 
@@ -225,43 +259,47 @@
 
           @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                (util/then-compose
-                (fn [_]
-                  (.putObject object-store (str (.getFileName metadata-file)) metadata-file)))
+                 (fn [_]
+                   (.putObject object-store (str (.getFileName metadata-file)) metadata-file)))
                (util/then-apply
                  (fn [_]
-                   (.registerNewMetadata chunk-manager (str (.getFileName metadata-file))))))
+                   (.registerNewMetadata this (str (.getFileName metadata-file))))))
 
           (.closeCols this)
           (Files/delete metadata-file)
-          (set! (.chunk-idx this) next-row-id)))))
+          (set! (.chunk-idx this) (+ chunk-idx row-count))
+          (set! (.row-count this) 0)))))
 
   Closeable
   (close [this]
     (.closeCols this)
-    (util/delete-dir arrow-dir)))
+    (util/delete-dir arrow-dir)
+    (.clear known-metadata)))
 
 (defn ->indexer
   (^core2.indexer.Indexer [^BufferAllocator allocator
                            ^ObjectStore object-store
-                           ^IChunkManager chunk-manager]
-   (->indexer allocator object-store chunk-manager {}))
+                           ^BufferPool buffer-pool]
+   (->indexer allocator object-store buffer-pool {}))
 
   (^core2.indexer.Indexer [^BufferAllocator allocator
                            ^ObjectStore object-store
-                           ^IChunkManager chunk-manager
+                           ^BufferPool buffer-pool
                            {:keys [max-rows-per-chunk max-rows-per-block]
                             :or {max-rows-per-chunk 10000
                                  max-rows-per-block 1000}}]
-   (let [latest-row-id (.latestStoredRowId chunk-manager)
+   (let [known-metadata (ConcurrentSkipListSet. ^List @(.listObjects object-store "metadata-*"))
+         latest-row-id (latest-stored-row-id allocator buffer-pool known-metadata)
          next-row-id (if latest-row-id
                        (inc (long latest-row-id))
                        0)]
      (Indexer. allocator
                (Files/createTempDirectory "core2-indexer" (make-array FileAttribute 0))
                object-store
-               chunk-manager
-               (ConcurrentHashMap.)
                max-rows-per-chunk
                max-rows-per-block
                next-row-id
-               next-row-id))))
+               0
+               (ConcurrentSkipListMap.)
+               buffer-pool
+               known-metadata))))
