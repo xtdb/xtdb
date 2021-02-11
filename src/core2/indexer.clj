@@ -2,7 +2,8 @@
   (:require core2.buffer-pool
             [core2.metadata :as meta]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.tx :as tx])
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
@@ -21,7 +22,7 @@
 
 (definterface IChunkManager
   (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
-  (^java.util.SortedMap getWatermark []))
+  (^core2.tx.Watermark getWatermark []))
 
 (definterface TransactionIndexer
   (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
@@ -141,16 +142,17 @@
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
-(defn- ->watermark ^java.util.SortedMap [^long chunk-idx ^Map live-roots]
-  (Collections/unmodifiableSortedMap
-   (reduce
-    (fn [^Map acc ^Map$Entry kv]
-      (let [k (chunk-object-key chunk-idx (.getKey kv))
-            v (.getRowCount ^VectorSchemaRoot (.getValue kv))]
-        (doto acc
-          (.put k v))))
-    (TreeMap.)
-    live-roots)))
+(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^Map live-roots]
+  (tx/->Watermark chunk-idx
+                  (Collections/unmodifiableSortedMap
+                   (reduce
+                    (fn [^Map acc ^Map$Entry kv]
+                      (let [k (chunk-object-key chunk-idx (.getKey kv))
+                            v (.getRowCount ^VectorSchemaRoot (.getValue kv))]
+                        (doto acc
+                          (.put k v))))
+                    (TreeMap.)
+                    live-roots))))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -215,10 +217,11 @@
                (fn [_]
                  (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
-        (set! (.watermark this) (TreeMap.))
-        (.closeCols this)
-        (set! (.chunk-idx this) (+ chunk-idx row-count))
-        (set! (.row-count this) 0))))
+        (let [next-chunk-idx (+ chunk-idx row-count)]
+          (set! (.watermark this) (tx/->Watermark next-chunk-idx (TreeMap.)))
+          (.closeCols this)
+          (set! (.chunk-idx this) next-chunk-idx)
+          (set! (.row-count this) 0)))))
 
   Closeable
   (close [this]
@@ -237,7 +240,7 @@
                             :or {max-rows-per-chunk 10000
                                  max-rows-per-block 1000}}]
    (let [latest-row-id (.latestStoredRowId metadata-mgr)
-         next-row-id (if latest-row-id
+         chunk-idx (if latest-row-id
                        (inc (long latest-row-id))
                        0)]
      (Indexer. allocator
@@ -245,7 +248,7 @@
                metadata-mgr
                max-rows-per-chunk
                max-rows-per-block
-               next-row-id
+               chunk-idx
                0
                (ConcurrentSkipListMap.)
-               (Collections/unmodifiableSortedMap (TreeMap.))))))
+               (tx/->Watermark chunk-idx (Collections/unmodifiableSortedMap (TreeMap.)))))))
