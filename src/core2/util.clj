@@ -15,6 +15,7 @@
            [java.util.function BiFunction Function Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
+           org.apache.arrow.memory.util.ByteFunctionHelpers
            org.apache.arrow.memory.util.MemoryUtil
            [org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -207,11 +208,13 @@
 (def ^:private ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
 
 (defn- validate-arrow-magic [^ArrowBuf ipc-file-format-buffer]
-  (dotimes [n (alength arrow-magic)]
-    (when-not (= (.getByte ipc-file-format-buffer
-                           (dec (- (.capacity ipc-file-format-buffer) n)))
-                 (aget arrow-magic (dec (- (alength arrow-magic) n))))
-      (throw (IllegalArgumentException. "invalid Arrow IPC file format")))))
+  (when-not (zero? (ByteFunctionHelpers/compare ipc-file-format-buffer
+                                                (- (.capacity ipc-file-format-buffer) (alength arrow-magic))
+                                                (.capacity ipc-file-format-buffer)
+                                                arrow-magic
+                                                0
+                                                (alength arrow-magic)))
+    (throw (IllegalArgumentException. "invalid Arrow IPC file format"))))
 
 (defn read-arrow-footer ^org.apache.arrow.vector.ipc.message.ArrowFooter [^ArrowBuf ipc-file-format-buffer]
   (validate-arrow-magic ipc-file-format-buffer)
