@@ -154,6 +154,9 @@
                     (TreeMap.)
                     live-roots))))
 
+(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx]
+  (tx/->Watermark chunk-idx (Collections/emptySortedMap)))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -218,7 +221,7 @@
                  (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
         (let [next-chunk-idx (+ chunk-idx row-count)]
-          (set! (.watermark this) (tx/->Watermark next-chunk-idx (TreeMap.)))
+          (set! (.watermark this) (->empty-watermark next-chunk-idx))
           (.closeCols this)
           (set! (.chunk-idx this) next-chunk-idx)
           (set! (.row-count this) 0)))))
@@ -251,4 +254,4 @@
                chunk-idx
                0
                (ConcurrentSkipListMap.)
-               (tx/->Watermark chunk-idx (Collections/unmodifiableSortedMap (TreeMap.)))))))
+               (->empty-watermark chunk-idx)))))
