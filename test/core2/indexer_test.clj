@@ -120,9 +120,17 @@
                          @(.submitTx tx-producer tx-ops)))))
 
         (t/is (= last-tx-instant
+
                  (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
 
+        (let [watermark (.getWatermark i)]
+          (t/is (t/is 20 (count watermark)))
+          (t/is (= ["chunk-00000000-_id.arrow" 4] (first watermark)))
+          (t/is (= ["chunk-00000000-time.arrow" 2] (last watermark))))
+
         (.finishChunk i)
+
+        (t/is (empty? (.getWatermark i)))
 
         (t/is (= last-tx-instant (.latestStoredTx mm)))
         (t/is (= (dec total-number-of-ops) (.latestStoredRowId mm)))
@@ -133,49 +141,50 @@
 
         (check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)
 
-        (let [buffer-name "metadata-00000000.arrow"
-              ^ArrowBuf buffer @(.getBuffer bp buffer-name)
-              footer (util/read-arrow-footer buffer)]
-          (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
-          (t/is (instance? ArrowBuf buffer))
-          (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+        (t/testing "buffer pool"
+          (let [buffer-name "metadata-00000000.arrow"
+                ^ArrowBuf buffer @(.getBuffer bp buffer-name)
+                footer (util/read-arrow-footer buffer)]
+            (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
+            (t/is (instance? ArrowBuf buffer))
+            (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-          (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
-            (t/is (identical? buffer same-buffer))
-            (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
+            (with-open [^ArrowBuf same-buffer @(.getBuffer bp buffer-name)]
+              (t/is (identical? buffer same-buffer))
+              (t/is (= 3 (.getRefCount (.getReferenceManager ^ArrowBuf buffer)))))
 
-          (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+            (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-          (t/is (= meta/metadata-schema (.getSchema footer)))
-          (t/is (= 1 (count (.getRecordBatches footer))))
-          (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
-                      record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
-            (.load (VectorLoader. metadata-batch) record-batch)
-            (t/is (= 40 (.getRowCount metadata-batch)))
-            (t/is (= "_id" (str (.getObject (.getVector metadata-batch "column") 0))))
-            (t/is (= "_row-id" (str (.getObject (.getVector metadata-batch "field") 0))))
-            (t/is (= 0 (.getObject (.getVector metadata-batch "min") 0)))
-            (t/is (= 3 (.getObject (.getVector metadata-batch "max") 0)))
-            (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0)))
+            (t/is (= meta/metadata-schema (.getSchema footer)))
+            (t/is (= 1 (count (.getRecordBatches footer))))
+            (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
+                        record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
+              (.load (VectorLoader. metadata-batch) record-batch)
+              (t/is (= 40 (.getRowCount metadata-batch)))
+              (t/is (= "_id" (str (.getObject (.getVector metadata-batch "column") 0))))
+              (t/is (= "_row-id" (str (.getObject (.getVector metadata-batch "field") 0))))
+              (t/is (= 0 (.getObject (.getVector metadata-batch "min") 0)))
+              (t/is (= 3 (.getObject (.getVector metadata-batch "max") 0)))
+              (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0)))
 
-            (let [from (.getVector metadata-batch "count")
-                  tp (.getTransferPair from a)]
-              (with-open [to (.getTo tp)]
-                (t/is (zero? (.getValueCount to)))
-                (.splitAndTransfer tp 0 20)
-                (t/is  (= (.memoryAddress (.getDataBuffer from))
-                          (.memoryAddress (.getDataBuffer to))))
-                (t/is (= 20 (.getValueCount to))))))
+              (let [from (.getVector metadata-batch "count")
+                    tp (.getTransferPair from a)]
+                (with-open [to (.getTo tp)]
+                  (t/is (zero? (.getValueCount to)))
+                  (.splitAndTransfer tp 0 20)
+                  (t/is  (= (.memoryAddress (.getDataBuffer from))
+                            (.memoryAddress (.getDataBuffer to))))
+                  (t/is (= 20 (.getValueCount to))))))
 
-          (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+            (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-          (.close buffer)
-          (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+            (.close buffer)
+            (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-          (t/is (.evictBuffer bp buffer-name))
-          (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-          (t/is (zero? (.getSize (.getReferenceManager ^ArrowBuf buffer))))
-          (t/is (empty? (.buffers ^MemoryMappedBufferPool bp))))))))
+            (t/is (.evictBuffer bp buffer-name))
+            (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+            (t/is (zero? (.getSize (.getReferenceManager ^ArrowBuf buffer))))
+            (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))))))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")

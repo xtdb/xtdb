@@ -9,7 +9,7 @@
            java.io.Closeable
            [java.nio.file Files Path StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.util Date List Map SortedSet]
+           [java.util Date List Map Map$Entry SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap ConcurrentSkipListSet]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot VectorLoader VectorUnloader]
@@ -20,7 +20,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IChunkManager
-  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName]))
+  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
+  (^java.util.Map getWatermark []))
 
 (definterface TransactionIndexer
   (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
@@ -137,6 +138,18 @@
 
         (.getValueCount tx-ops-vec)))))
 
+(defn- chunk-object-key [^long chunk-idx col-name]
+  (format "chunk-%08x-%s.arrow" chunk-idx col-name))
+
+(defn- update-watermark [current-watermark ^long chunk-idx ^Map live-roots]
+  (reduce
+   (fn [acc ^Map$Entry kv]
+     (assoc acc
+            (chunk-object-key chunk-idx (.getKey kv))
+            (.getRowCount ^VectorSchemaRoot (.getValue kv))))
+   (empty current-watermark)
+   live-roots))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -144,7 +157,8 @@
                   ^long max-rows-per-block
                   ^:volatile-mutable ^long chunk-idx
                   ^:volatile-mutable ^long row-count
-                  ^Map live-roots]
+                  ^Map live-roots
+                  !watermark]
 
   IChunkManager
   (getLiveRoot [_ field-name]
@@ -153,10 +167,15 @@
                         (fn [field-name]
                           (->live-root field-name allocator)))))
 
+  (getWatermark [_]
+    @!watermark)
+
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
     (let [new-row-count (.indexTx (JustIndexer.) this allocator tx-instant tx-ops (+ chunk-idx row-count))]
       (set! (.row-count this) (+ row-count new-row-count)))
+
+    (swap! !watermark update-watermark chunk-idx live-roots)
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
@@ -187,8 +206,7 @@
     (when-not (.isEmpty live-roots)
       (let [futs (vec
                   (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                    (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
-                      (.putObject object-store obj-key (.writeColumn this live-root)))))]
+                    (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root))))]
 
         @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
              (util/then-apply
@@ -196,6 +214,7 @@
                  (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
         (.closeCols this)
+        (swap! !watermark empty)
         (set! (.chunk-idx this) (+ chunk-idx row-count))
         (set! (.row-count this) 0))))
 
@@ -226,4 +245,5 @@
                max-rows-per-block
                next-row-id
                0
-               (ConcurrentSkipListMap.)))))
+               (ConcurrentSkipListMap.)
+               (atom (sorted-map))))))
