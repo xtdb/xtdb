@@ -125,8 +125,10 @@
 
         (let [watermark (.getWatermark i)]
           (t/is (t/is 20 (count watermark)))
-          (t/is (= ["chunk-00000000-_id.arrow" 4] (first watermark)))
-          (t/is (= ["chunk-00000000-time.arrow" 2] (last watermark))))
+          (t/is (= ["chunk-00000000-_id.arrow" 4]
+                   [(key (first watermark)) (val (first watermark))]))
+          (t/is (= ["chunk-00000000-time.arrow" 2]
+                   [(key (last watermark)) (val (last watermark))])))
 
         (.finishChunk i)
 
