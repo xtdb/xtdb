@@ -30,7 +30,7 @@
   (^core2.indexer.TransactionInstant indexTx [^core2.indexer.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
 (definterface IndexerPrivate
-  (^void writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root, ^java.nio.file.Path tmp-file])
+  (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
   (^void closeCols [])
   (^void finishChunk []))
 
@@ -159,7 +159,6 @@
               (util/block-stream latest-metadata-buffer allocator)))))
 
 (deftype Indexer [^BufferAllocator allocator
-                  ^Path arrow-dir
                   ^ObjectStore object-store
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
@@ -207,24 +206,18 @@
     tx-instant)
 
   IndexerPrivate
-  (writeColumn [_this live-root tmp-file]
-    (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)
-                file-ch (util/->file-channel tmp-file #{StandardOpenOption/CREATE
-                                                        StandardOpenOption/WRITE
-                                                        StandardOpenOption/TRUNCATE_EXISTING})
-                fw (ArrowFileWriter. write-root nil file-ch)]
-      (.start fw)
-
+  (writeColumn [_this live-root]
+    (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
       (let [loader (VectorLoader. write-root)]
-        (with-slices live-root chunk-idx max-rows-per-block
-          (fn [sliced-root]
-            (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-              (.load loader arb)
-              (.writeBatch fw)))))
+        (util/build-arrow-ipc-byte-buffer write-root :file
+          (fn [write-batch!]
+            (with-slices live-root chunk-idx max-rows-per-block
+              (fn [sliced-root]
+                (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                  (.load loader arb)
+                  (write-batch!)))))))))
 
-      (.end fw)))
-
-  (closeCols [this]
+  (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
       (util/try-close live-root))
 
@@ -235,45 +228,30 @@
       (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema allocator)]
         (let [futs (vec
                     (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                      (let [tmp-file (.resolve arrow-dir (format "chunk-%08x-%s.arrow" chunk-idx col-name))
-                            file-name (str (.getFileName tmp-file))]
-                        (.writeColumn this live-root tmp-file)
+                      (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)
+                            fut (.putObject object-store obj-key (.writeColumn this live-root))]
+                        (meta/write-col-meta metadata-root live-root col-name obj-key)
+                        fut)))
 
-                        (let [fut (.putObject object-store file-name tmp-file)]
-                          (meta/write-col-meta metadata-root live-root col-name file-name)
+              metadata-obj-key (format "metadata-%08x.arrow" chunk-idx)]
 
-                          (-> fut
-                              (util/then-apply
-                                (fn [_]
-                                  (Files/delete tmp-file))))))))
+          (let [metadata-buf (util/root->arrow-ipc-byte-buffer metadata-root :file)]
 
-              metadata-file (.resolve arrow-dir (format "metadata-%08x.arrow" chunk-idx))]
-
-          (with-open [metadata-file-ch (util/->file-channel metadata-file #{StandardOpenOption/CREATE
-                                                                            StandardOpenOption/WRITE
-                                                                            StandardOpenOption/TRUNCATE_EXISTING})
-                      metadata-fw (ArrowFileWriter. metadata-root nil metadata-file-ch)]
-            (.start metadata-fw)
-            (.writeBatch metadata-fw)
-            (.end metadata-fw))
-
-          @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-               (util/then-compose
-                 (fn [_]
-                   (.putObject object-store (str (.getFileName metadata-file)) metadata-file)))
-               (util/then-apply
-                 (fn [_]
-                   (.registerNewMetadata this (str (.getFileName metadata-file))))))
+            @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+                 (util/then-compose
+                   (fn [_]
+                     (.putObject object-store metadata-obj-key metadata-buf)))
+                 (util/then-apply
+                   (fn [_]
+                     (.registerNewMetadata this metadata-obj-key)))))
 
           (.closeCols this)
-          (Files/delete metadata-file)
           (set! (.chunk-idx this) (+ chunk-idx row-count))
           (set! (.row-count this) 0)))))
 
   Closeable
   (close [this]
     (.closeCols this)
-    (util/delete-dir arrow-dir)
     (.clear known-metadata)))
 
 (defn ->indexer
@@ -294,7 +272,6 @@
                        (inc (long latest-row-id))
                        0)]
      (Indexer. allocator
-               (Files/createTempDirectory "core2-indexer" (make-array FileAttribute 0))
                object-store
                max-rows-per-chunk
                max-rows-per-block

@@ -88,7 +88,7 @@
 
         (.syncSchema root)
 
-        (util/root->arrow-ipc-byte-buffer root)))))
+        (util/root->arrow-ipc-byte-buffer root :stream)))))
 
 (defn log-record->tx-instant ^core2.indexer.TransactionInstant [^LogRecord record]
   (indexer/->TransactionInstant (.offset record) (.time record)))

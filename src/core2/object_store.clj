@@ -9,7 +9,7 @@
 
 (definterface ObjectStore
   (^java.util.concurrent.CompletableFuture getObject [^String k, ^java.nio.file.Path to-file])
-  (^java.util.concurrent.CompletableFuture putObject [^String k, ^java.nio.file.Path from-path])
+  (^java.util.concurrent.CompletableFuture putObject [^String k, ^java.nio.ByteBuffer buf])
   (^java.util.concurrent.CompletableFuture listObjects [])
   (^java.util.concurrent.CompletableFuture listObjects [^String glob]
    "glob as defined by https://docs.oracle.com/javase/8/docs/api/java/nio/file/FileSystem.html#getPathMatcher-java.lang.String-")
@@ -24,17 +24,25 @@
           (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
           to-path))))
 
-  (putObject [_this k from-path]
-    (util/completable-future pool
-      (let [to-path (.resolve root-path k)]
-        (util/mkdirs (.getParent to-path))
-        (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
-          (if (util/path-exists to-path)
-            to-path
-            (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
-              (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
-              (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))))
-          (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))))))
+  (putObject [_this k buf]
+    (letfn [(write-buf [^Path path]
+              (with-open [file-ch (util/->file-channel path util/write-new-file-opts)]
+                (.write file-ch buf)))]
+      (util/completable-future pool
+        (let [to-path (.resolve root-path k)]
+          (util/mkdirs (.getParent to-path))
+          (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
+            (if (util/path-exists to-path)
+              to-path
+
+              (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
+                (try
+                  (write-buf to-path-temp)
+                  (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
+                  (finally
+                    (Files/deleteIfExists to-path-temp)))))
+
+            (write-buf to-path))))))
 
   (listObjects [_this]
     (util/completable-future pool

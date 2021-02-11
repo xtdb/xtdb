@@ -18,8 +18,8 @@
            org.apache.arrow.memory.util.MemoryUtil
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.ipc.ArrowStreamWriter
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]))
+           [org.apache.arrow.vector.ipc ArrowWriter ArrowFileWriter ArrowStreamWriter]
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer]))
 
 ;;; IO
 
@@ -53,6 +53,9 @@
 
       (truncate [size]
         (throw (UnsupportedOperationException.))))))
+
+(def write-new-file-opts ^"[Ljava.nio.file.OpenOption;"
+  (into-array OpenOption #{StandardOpenOption/CREATE StandardOpenOption/WRITE StandardOpenOption/TRUNCATE_EXISTING}))
 
 (defn ->file-channel
   (^java.nio.channels.FileChannel [^Path path]
@@ -164,14 +167,28 @@
 
     offset))
 
-(defn root->arrow-ipc-byte-buffer ^java.nio.ByteBuffer [^VectorSchemaRoot root]
+(defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
+  [^VectorSchemaRoot root ipc-type f]
+
   (with-open [baos (ByteArrayOutputStream.)
-              sw (ArrowStreamWriter. root nil (Channels/newChannel baos))]
-    (doto sw
-      (.start)
-      (.writeBatch)
-      (.end))
+
+              ^ArrowWriter sw (case ipc-type
+                                :file (ArrowFileWriter. root nil (Channels/newChannel baos))
+                                :stream (ArrowStreamWriter. root nil (Channels/newChannel baos)))]
+
+    (.start sw)
+
+    (f (fn write-batch! []
+         (.writeBatch sw)))
+
+    (.end sw)
+
     (ByteBuffer/wrap (.toByteArray baos))))
+
+(defn root->arrow-ipc-byte-buffer ^java.nio.ByteBuffer [^VectorSchemaRoot root ipc-type]
+  (build-arrow-ipc-byte-buffer root ipc-type
+    (fn [write-batch!]
+      (write-batch!))))
 
 (def ^:private ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
 
