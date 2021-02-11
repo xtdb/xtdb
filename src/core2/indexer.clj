@@ -142,8 +142,8 @@
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
-(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^Map live-roots]
-  (tx/->Watermark chunk-idx
+(defn- ->watermark ^core2.tx.Watermark [^long next-row-id ^long chunk-idx ^Map live-roots]
+  (tx/->Watermark next-row-id
                   (Collections/unmodifiableSortedMap
                    (reduce
                     (fn [^Map acc ^Map$Entry kv]
@@ -182,7 +182,7 @@
     (let [new-row-count (.indexTx (JustIndexer.) this allocator tx-instant tx-ops (+ chunk-idx row-count))]
       (set! (.row-count this) (+ row-count new-row-count)))
 
-    (set! (.watermark this) (->watermark chunk-idx live-roots))
+    (set! (.watermark this) (->watermark (+ chunk-idx row-count) chunk-idx live-roots))
 
     ;; TODO better metric here?
     ;; row-id? bytes? tx-id?
