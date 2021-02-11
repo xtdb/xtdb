@@ -5,23 +5,25 @@
             [core2.log :as l]
             [core2.metadata :as meta]
             [core2.object-store :as os]
+            [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
-           [core2.indexer IChunkManager Indexer TransactionIndexer TransactionInstant]
+           [core2.indexer Indexer TransactionIndexer]
            [core2.log LogReader LogRecord LogWriter]
+           core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
+           core2.tx.TransactionInstant
            java.io.Closeable
-           java.nio.ByteBuffer
            java.nio.channels.ClosedByInterruptException
            java.nio.file.Path
            java.time.Duration
-           [java.util List LinkedHashMap LinkedHashSet Set SortedSet]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListSet Executors ExecutorService Future TimeoutException]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           [java.util LinkedHashMap LinkedHashSet Set]
+           [java.util.concurrent Executors ExecutorService Future TimeoutException]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.types Types Types$MinorType UnionMode]
+           [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -90,8 +92,8 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(defn log-record->tx-instant ^core2.indexer.TransactionInstant [^LogRecord record]
-  (indexer/->TransactionInstant (.offset record) (.time record)))
+(defn log-record->tx-instant ^core2.tx.TransactionInstant [^LogRecord record]
+  (tx/->TransactionInstant (.offset record) (.time record)))
 
 (deftype LogTxProducer [^LogWriter log-writer, ^BufferAllocator allocator]
   TxProducer
@@ -116,9 +118,9 @@
 (definterface IIngestLoop
   (^void ingestLoop [])
   (^void start [])
-  (^core2.indexer.TransactionInstant latestCompletedTx [])
-  (^core2.indexer.TransactionInstant awaitTx [^core2.indexer.TransactionInstant tx])
-  (^core2.indexer.TransactionInstant awaitTx [^core2.indexer.TransactionInstant tx, ^java.time.Duration timeout]))
+  (^core2.tx.TransactionInstant latestCompletedTx [])
+  (^core2.tx.TransactionInstant awaitTx [^core2.tx.TransactionInstant tx])
+  (^core2.tx.TransactionInstant awaitTx [^core2.tx.TransactionInstant tx, ^java.time.Duration timeout]))
 
 (deftype IngestLoop [^LogReader log-reader
                      ^TransactionIndexer indexer
@@ -207,6 +209,7 @@
 (deftype Node [^BufferAllocator allocator
                ^LogReader log-reader
                ^ObjectStore object-store
+               ^IMetadataManager metadata-manager
                ^Indexer indexer
                ^IngestLoop ingest-loop
                ^BufferPool buffer-pool]
@@ -214,6 +217,7 @@
   (close [_]
     (util/try-close ingest-loop)
     (util/try-close indexer)
+    (util/try-close metadata-manager)
     (util/try-close buffer-pool)
     (util/try-close object-store)
     (util/try-close log-reader)
@@ -229,9 +233,10 @@
          log-reader (l/->local-directory-log-reader log-dir)
          object-store (os/->file-system-object-store object-dir opts)
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
-         indexer (indexer/->indexer allocator object-store buffer-pool opts)
-         ingest-loop (->ingest-loop log-reader indexer (.latestStoredTx indexer) opts)]
-     (Node. allocator log-reader object-store indexer ingest-loop buffer-pool))))
+         metadata-manager (meta/->metadata-manager allocator object-store buffer-pool)
+         indexer (indexer/->indexer allocator object-store metadata-manager opts)
+         ingest-loop (->ingest-loop log-reader indexer (.latestStoredTx metadata-manager) opts)]
+     (Node. allocator log-reader object-store metadata-manager indexer ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir

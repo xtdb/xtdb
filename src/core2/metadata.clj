@@ -1,8 +1,16 @@
 (ns core2.metadata
-  (:require [core2.types :as t]
+  (:require core2.buffer-pool
+            core2.object-store
+            [core2.tx :as tx]
+            [core2.types :as t]
             [core2.util :as util])
   (:import core2.types.ReadWrite
-           java.util.Comparator
+           core2.buffer_pool.BufferPool
+           core2.object_store.ObjectStore
+           java.io.Closeable
+           [java.util Comparator List SortedSet]
+           java.util.concurrent.ConcurrentSkipListSet
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types Types Types$MinorType]
@@ -96,14 +104,6 @@
           (write-vec-meta child-vec field-name))
         (write-vec-meta field-vec field-name)))))
 
-(defn chunk->metadata ^java.nio.ByteBuffer [live-roots allocator ^long chunk-idx]
-  (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
-    (doseq [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-      (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
-        (write-col-meta metadata-root live-root col-name obj-key)))
-
-    (util/root->arrow-ipc-byte-buffer metadata-root :file)))
-
 (defn- field-idx [^VectorSchemaRoot metadata, ^String column-name, ^String field-name]
   (let [column-vec (.getVector metadata "column")
         field-vec (.getVector metadata "field")]
@@ -128,3 +128,60 @@
 (defn chunk-file [^VectorSchemaRoot metadata, ^String field-name]
   (when-let [field-idx (field-idx metadata field-name field-name)]
     (str (.getObject (.getVector metadata "file") field-idx))))
+
+(defn- latest-stored-row-id [^BufferAllocator allocator ^BufferPool buffer-pool ^SortedSet known-metadata]
+  (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
+    (with-open [latest-metadata-buffer latest-metadata-buffer]
+      (reduce (completing
+               (fn [_ metadata-root]
+                 (reduced (max-value metadata-root "_tx-id" "_row-id"))))
+              nil
+              (util/block-stream latest-metadata-buffer allocator)))))
+
+(definterface IMetadataManager
+  (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx])
+  (^core2.tx.TransactionInstant latestStoredTx [])
+  (^Long latestStoredRowId []))
+
+(deftype MetadataManager [^BufferAllocator allocator
+                          ^ObjectStore object-store
+                          ^BufferPool buffer-pool
+                          ^SortedSet known-metadata]
+  IMetadataManager
+  (registerNewChunk [_ live-roots chunk-idx]
+    (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
+                         (doseq [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                           (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
+                             (write-col-meta metadata-root live-root col-name obj-key)))
+
+                         (util/root->arrow-ipc-byte-buffer metadata-root :file))
+          metadata-obj-key (format "metadata-%08x.arrow" chunk-idx)]
+
+      @(.putObject object-store metadata-obj-key metadata-buf)
+
+      (.add known-metadata metadata-obj-key)))
+
+  (latestStoredTx [_]
+    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
+      (with-open [latest-metadata-buffer latest-metadata-buffer]
+        (reduce (completing
+                 (fn [_ metadata-root]
+                   (when-let [max-tx-id (max-value metadata-root "_tx-id")]
+                     (->> (util/local-date-time->date (max-value metadata-root "_tx-time"))
+                          (tx/->TransactionInstant max-tx-id)
+                          (reduced)))))
+                nil
+                (util/block-stream latest-metadata-buffer allocator)))))
+
+  (latestStoredRowId [_]
+    (latest-stored-row-id allocator buffer-pool known-metadata))
+
+  Closeable
+  (close [_]
+    (.clear known-metadata)))
+
+(defn ->metadata-manager ^core2.metadata.IMetadataManager [^BufferAllocator allocator
+                                                           ^ObjectStore object-store
+                                                           ^BufferPool buffer-pool]
+  (MetadataManager. allocator object-store buffer-pool
+                    (ConcurrentSkipListSet. ^List @(.listObjects object-store "metadata-*"))))

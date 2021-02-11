@@ -4,6 +4,7 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
+           core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            java.io.Closeable
            [java.nio.file Files Path StandardOpenOption]
@@ -18,16 +19,11 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord TransactionInstant [^long tx-id, ^Date tx-time])
-
 (definterface IChunkManager
-  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName])
-  (^void registerNewMetadata [^String metadata])
-  (^core2.indexer.TransactionInstant latestStoredTx [])
-  (^Long latestStoredRowId []))
+  (^org.apache.arrow.vector.VectorSchemaRoot getLiveRoot [^String fieldName]))
 
 (definterface TransactionIndexer
-  (^core2.indexer.TransactionInstant indexTx [^core2.indexer.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
+  (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
 (definterface IndexerPrivate
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
@@ -102,7 +98,7 @@
 
 (definterface IJustIndex
   (^int indexTx [^core2.indexer.IChunkManager chunkMgr, ^org.apache.arrow.memory.BufferAllocator allocator,
-                 ^core2.indexer.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops,
+                 ^core2.tx.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops,
                  ^long nextRowId]))
 
 (deftype JustIndexer []
@@ -141,24 +137,14 @@
 
         (.getValueCount tx-ops-vec)))))
 
-(defn- latest-stored-row-id [^BufferAllocator allocator ^BufferPool buffer-pool ^SortedSet known-metadata]
-  (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
-    (with-open [latest-metadata-buffer latest-metadata-buffer]
-      (reduce (completing
-               (fn [_ metadata-root]
-                 (reduced (meta/max-value metadata-root "_tx-id" "_row-id"))))
-              nil
-              (util/block-stream latest-metadata-buffer allocator)))))
-
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
+                  ^IMetadataManager metadata-mgr
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
                   ^:volatile-mutable ^long chunk-idx
                   ^:volatile-mutable ^long row-count
-                  ^Map live-roots
-                  ^BufferPool buffer-pool
-                  ^SortedSet known-metadata]
+                  ^Map live-roots]
 
   IChunkManager
   (getLiveRoot [_ field-name]
@@ -166,24 +152,6 @@
                       (util/->jfn
                         (fn [field-name]
                           (->live-root field-name allocator)))))
-
-  (registerNewMetadata [_ metadata]
-    (.add known-metadata metadata))
-
-  (latestStoredTx [_]
-    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
-      (with-open [latest-metadata-buffer latest-metadata-buffer]
-        (reduce (completing
-                 (fn [_ metadata-root]
-                   (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
-                     (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
-                          (->TransactionInstant max-tx-id)
-                          (reduced)))))
-                nil
-                (util/block-stream latest-metadata-buffer allocator)))))
-
-  (latestStoredRowId [_]
-    (latest-stored-row-id allocator buffer-pool known-metadata))
 
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
@@ -220,18 +188,12 @@
       (let [futs (vec
                   (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
                     (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
-                      (.putObject object-store obj-key (.writeColumn this live-root)))))
+                      (.putObject object-store obj-key (.writeColumn this live-root)))))]
 
-            metadata-obj-key (format "metadata-%08x.arrow" chunk-idx)]
-
-        (let [metadata-buf (meta/chunk->metadata live-roots allocator chunk-idx)]
-          @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-               (util/then-compose
-                 (fn [_]
-                   (.putObject object-store metadata-obj-key metadata-buf)))
-               (util/then-apply
-                 (fn [_]
-                   (.registerNewMetadata this metadata-obj-key)))))
+        @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+             (util/then-apply
+               (fn [_]
+                 (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
         (.closeCols this)
         (set! (.chunk-idx this) (+ chunk-idx row-count))
@@ -239,32 +201,29 @@
 
   Closeable
   (close [this]
-    (.closeCols this)
-    (.clear known-metadata)))
+    (.closeCols this)))
 
 (defn ->indexer
   (^core2.indexer.Indexer [^BufferAllocator allocator
                            ^ObjectStore object-store
-                           ^BufferPool buffer-pool]
-   (->indexer allocator object-store buffer-pool {}))
+                           ^IMetadataManager metadata-mgr]
+   (->indexer allocator object-store metadata-mgr {}))
 
   (^core2.indexer.Indexer [^BufferAllocator allocator
                            ^ObjectStore object-store
-                           ^BufferPool buffer-pool
+                           ^IMetadataManager metadata-mgr
                            {:keys [max-rows-per-chunk max-rows-per-block]
                             :or {max-rows-per-chunk 10000
                                  max-rows-per-block 1000}}]
-   (let [known-metadata (ConcurrentSkipListSet. ^List @(.listObjects object-store "metadata-*"))
-         latest-row-id (latest-stored-row-id allocator buffer-pool known-metadata)
+   (let [latest-row-id (.latestStoredRowId metadata-mgr)
          next-row-id (if latest-row-id
                        (inc (long latest-row-id))
                        0)]
      (Indexer. allocator
                object-store
+               metadata-mgr
                max-rows-per-chunk
                max-rows-per-block
                next-row-id
                0
-               (ConcurrentSkipListMap.)
-               buffer-pool
-               known-metadata))))
+               (ConcurrentSkipListMap.)))))

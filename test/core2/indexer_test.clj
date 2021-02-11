@@ -9,11 +9,14 @@
             [core2.indexer :as indexer]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.tx :as tx])
   (:import clojure.lang.MapEntry
            [core2.buffer_pool BufferPool MemoryMappedBufferPool]
            [core2.core IngestLoop Node]
-           [core2.indexer Indexer TransactionInstant]
+           [core2.indexer Indexer]
+           core2.metadata.IMetadataManager
+           core2.tx.TransactionInstant
            [core2.object_store FileSystemObjectStore ObjectStore]
            [java.nio.file Files Path]
            [java.time Clock Duration ZoneId]
@@ -94,7 +97,7 @@
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (indexer/->TransactionInstant 5520 #inst "2020-01-02")
+        last-tx-instant (tx/->TransactionInstant 5520 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -106,10 +109,11 @@
             ^ObjectStore os (.object-store node)
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
-            ^BufferPool bp (.buffer-pool node)]
+            ^BufferPool bp (.buffer-pool node)
+            ^IMetadataManager mm (.metadata-manager node)]
 
-        (t/is (nil? (.latestStoredTx i)))
-        (t/is (nil? (.latestStoredRowId i)))
+        (t/is (nil? (.latestStoredTx mm)))
+        (t/is (nil? (.latestStoredRowId mm)))
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
@@ -120,8 +124,8 @@
 
         (.finishChunk i)
 
-        (t/is (= last-tx-instant (.latestStoredTx i)))
-        (t/is (= (dec total-number-of-ops) (.latestStoredRowId i)))
+        (t/is (= last-tx-instant (.latestStoredTx mm)))
+        (t/is (= (dec total-number-of-ops) (.latestStoredRowId mm)))
 
         (let [objects-list @(.listObjects os "metadata-*")]
           (t/is (= 1 (count objects-list)))
@@ -199,7 +203,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (indexer/->TransactionInstant 5520 #inst "2020-01-02")]
+        last-tx-instant (tx/->TransactionInstant 5520 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
@@ -265,6 +269,7 @@
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)
+            ^IMetadataManager mm (.metadata-manager node)
             device-infos (map device-info-csv->doc (csv/read-csv info-reader))
             readings (map readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -286,8 +291,8 @@
           (t/is (= last-tx-instant (.latestCompletedTx il)))
           (.finishChunk i)
 
-          (t/is (= last-tx-instant (.latestStoredTx i)))
-          (t/is (= (dec (count tx-ops)) (.latestStoredRowId i)))
+          (t/is (= last-tx-instant (.latestStoredTx mm)))
+          (t/is (= (dec (count tx-ops)) (.latestStoredRowId mm)))
 
           (t/is (= 4 (count @(.listObjects os "metadata-*"))))
           (t/is (= 1 (count @(.listObjects os "chunk-*-api-version*"))))
@@ -345,6 +350,7 @@
                   readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
         (let [^Indexer i (.indexer node)
               ^IngestLoop il (.ingest-loop node)
+              ^IMetadataManager mm (.metadata-manager node)
               device-infos (mapv device-info-csv->doc (csv/read-csv info-reader))
               readings (mapv readings-csv->doc (csv/read-csv readings-reader))
               [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -366,8 +372,8 @@
             (t/is (= last-tx-instant (.latestCompletedTx il)))
             (.finishChunk i)
 
-            (t/is (= last-tx-instant (.latestStoredTx i)))
-            (t/is (= (dec (count tx-ops)) (.latestStoredRowId i)))))))))
+            (t/is (= last-tx-instant (.latestStoredTx mm)))
+            (t/is (= (dec (count tx-ops)) (.latestStoredRowId mm)))))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -434,12 +440,13 @@
           (with-open [node (c2/->local-node node-dir opts)]
             (let [^Indexer i (.indexer node)
                   ^IngestLoop il (.ingest-loop node)
-                  ^ObjectStore os (.object-store node)]
+                  ^ObjectStore os (.object-store node)
+                  ^IMetadataManager mm (.metadata-manager node)]
               (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
               (t/is (= first-half-tx-instant (.latestCompletedTx il)))
 
-              (let [^TransactionInstant os-tx-instant (.latestStoredTx i)
-                    os-latest-row-id (.latestStoredRowId i)]
+              (let [^TransactionInstant os-tx-instant (.latestStoredTx mm)
+                    os-latest-row-id (.latestStoredRowId mm)]
                 (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
                 (t/is (< os-latest-row-id (count first-half-tx-ops)))
 
