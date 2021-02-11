@@ -96,6 +96,14 @@
           (write-vec-meta child-vec field-name))
         (write-vec-meta field-vec field-name)))))
 
+(defn chunk->metadata ^java.nio.ByteBuffer [live-roots allocator ^long chunk-idx]
+  (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
+    (doseq [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+      (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
+        (write-col-meta metadata-root live-root col-name obj-key)))
+
+    (util/root->arrow-ipc-byte-buffer metadata-root :file)))
+
 (defn- field-idx [^VectorSchemaRoot metadata, ^String column-name, ^String field-name]
   (let [column-vec (.getVector metadata "column")
         field-vec (.getVector metadata "field")]

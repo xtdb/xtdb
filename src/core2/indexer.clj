@@ -217,29 +217,25 @@
 
   (finishChunk [this]
     (when-not (.isEmpty live-roots)
-      (with-open [metadata-root (VectorSchemaRoot/create meta/metadata-schema allocator)]
-        (let [futs (vec
-                    (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                      (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)
-                            fut (.putObject object-store obj-key (.writeColumn this live-root))]
-                        (meta/write-col-meta metadata-root live-root col-name obj-key)
-                        fut)))
+      (let [futs (vec
+                  (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                    (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
+                      (.putObject object-store obj-key (.writeColumn this live-root)))))
 
-              metadata-obj-key (format "metadata-%08x.arrow" chunk-idx)]
+            metadata-obj-key (format "metadata-%08x.arrow" chunk-idx)]
 
-          (let [metadata-buf (util/root->arrow-ipc-byte-buffer metadata-root :file)]
+        (let [metadata-buf (meta/chunk->metadata live-roots allocator chunk-idx)]
+          @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+               (util/then-compose
+                 (fn [_]
+                   (.putObject object-store metadata-obj-key metadata-buf)))
+               (util/then-apply
+                 (fn [_]
+                   (.registerNewMetadata this metadata-obj-key)))))
 
-            @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-                 (util/then-compose
-                   (fn [_]
-                     (.putObject object-store metadata-obj-key metadata-buf)))
-                 (util/then-apply
-                   (fn [_]
-                     (.registerNewMetadata this metadata-obj-key)))))
-
-          (.closeCols this)
-          (set! (.chunk-idx this) (+ chunk-idx row-count))
-          (set! (.row-count this) 0)))))
+        (.closeCols this)
+        (set! (.chunk-idx this) (+ chunk-idx row-count))
+        (set! (.row-count this) 0))))
 
   Closeable
   (close [this]
