@@ -67,6 +67,11 @@
   (with-open [in (->file-channel path)]
     (.map in FileChannel$MapMode/READ_ONLY 0 (.size in))))
 
+(defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
+  (with-open [file-ch (->file-channel to-path write-new-file-opts)
+              buf-ch (->seekable-byte-channel from-buffer)]
+    (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
+
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []
     (visitFile [file _]

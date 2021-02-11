@@ -25,24 +25,21 @@
           to-path))))
 
   (putObject [_this k buf]
-    (letfn [(write-buf [^Path path]
-              (with-open [file-ch (util/->file-channel path util/write-new-file-opts)]
-                (.write file-ch buf)))]
-      (util/completable-future pool
-        (let [to-path (.resolve root-path k)]
-          (util/mkdirs (.getParent to-path))
-          (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
-            (if (util/path-exists to-path)
-              to-path
+    (util/completable-future pool
+      (let [to-path (.resolve root-path k)]
+        (util/mkdirs (.getParent to-path))
+        (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
+          (if (util/path-exists to-path)
+            to-path
 
-              (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
-                (try
-                  (write-buf to-path-temp)
-                  (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
-                  (finally
-                    (Files/deleteIfExists to-path-temp)))))
+            (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
+              (try
+                (util/write-buffer-to-path buf to-path-temp)
+                (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
+                (finally
+                  (Files/deleteIfExists to-path-temp)))))
 
-            (write-buf to-path))))))
+          (util/write-buffer-to-path buf to-path)))))
 
   (listObjects [_this]
     (util/completable-future pool
