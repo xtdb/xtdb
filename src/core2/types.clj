@@ -96,66 +96,65 @@
   (^void read [^org.apache.arrow.vector.FieldVector in-vec, ^int idx, holder])
   (^void write [^org.apache.arrow.vector.FieldVector out-vec, ^int idx, holder]))
 
-(defmacro def-rw [sym vec-class holder-class]
+(defmacro ->rw [vec-class holder-class]
   (let [vec-sym (gensym 'vec)
         holder-sym (gensym 'holder)]
-    `(def ~sym
-       (reify ReadWrite
-         (~'newHolder [this#] (new ~holder-class))
+    `(reify ReadWrite
+       (~'newHolder [this#] (new ~holder-class))
 
-         (~'isSet [this# ~holder-sym]
-          (let [~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
-            (pos? (.isSet ~holder-sym))))
+       (~'isSet [this# ~holder-sym]
+        (let [~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
+          (pos? (.isSet ~holder-sym))))
 
-         (~'read [this# ~vec-sym idx# ~holder-sym]
-          (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
-                ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
-            (.get ~vec-sym idx# ~holder-sym)))
+       (~'read [this# ~vec-sym idx# ~holder-sym]
+        (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
+              ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
+          (.get ~vec-sym idx# ~holder-sym)))
 
-         (~'write [this# ~vec-sym idx# ~holder-sym]
-          (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
-                ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
-            (.setSafe ~vec-sym idx# ~holder-sym)))))))
+       (~'write [this# ~vec-sym idx# ~holder-sym]
+        (let [~(with-meta vec-sym {:tag vec-class}) ~vec-sym
+              ~(with-meta holder-sym {:tag holder-class}) ~holder-sym]
+          (.setSafe ~vec-sym idx# ~holder-sym))))))
 
-(def-rw bigint-rw BigIntVector NullableBigIntHolder)
-(def-rw bit-rw BitVector NullableBitHolder)
-(def-rw timestamp-milli-rw TimeStampMilliVector NullableTimeStampMilliHolder)
-(def-rw float8-rw Float8Vector NullableFloat8Holder)
+(def type->rw
+  {Types$MinorType/NULL (reify ReadWrite
+                          (newHolder [_] nil)
+                          (isSet [_ _holder] false)
+                          (read [_ _fv _idx _holder])
+                          (write [_ _holder _fv _idx]))
+   Types$MinorType/BIGINT (->rw BigIntVector NullableBigIntHolder)
+   Types$MinorType/BIT (->rw BitVector NullableBitHolder)
+   Types$MinorType/TIMESTAMPMILLI (->rw TimeStampMilliVector NullableTimeStampMilliHolder)
+   Types$MinorType/FLOAT8 (->rw Float8Vector NullableFloat8Holder)
+   Types$MinorType/VARBINARY (->rw VarBinaryVector NullableVarBinaryHolder)
+   Types$MinorType/VARCHAR (->rw VarCharVector NullableVarCharHolder)})
 
-(def null-rw
-  (reify ReadWrite
-    (newHolder [_] nil)
-    (isSet [_ _holder] false)
-    (read [_ _fv _idx _holder])
-    (write [_ _holder _fv _idx])))
+(defmacro ->comp {:style/indent [2 :form :form]} [holder-class [left right] & body]
+  `(reify Comparator
+     (~'compare [this# ~left ~right]
+      (let [~(with-meta left {:tag holder-class}) ~left
+            ~(with-meta right {:tag holder-class}) ~right]
+        ~@body))))
 
-(def-rw varbinary-rw VarBinaryVector NullableVarBinaryHolder)
-(def-rw varchar-rw VarCharVector NullableVarCharHolder)
+(def type->comp
+  {Types$MinorType/NULL (Comparator/nullsFirst (Comparator/naturalOrder))
 
-(defmacro def-comp {:style/indent [3 :form :form :form]} [sym holder-class [left right] & body]
-  `(def ~sym
-     (reify Comparator
-       (~'compare [this# ~left ~right]
-        (let [~(with-meta left {:tag holder-class}) ~left
-              ~(with-meta right {:tag holder-class}) ~right]
-          ~@body)))))
+   Types$MinorType/BIGINT (->comp NullableBigIntHolder [left right]
+                            (Long/compare (.value left) (.value right)))
 
-(def-comp bigint-comp NullableBigIntHolder [left right]
-  (Long/compare (.value left) (.value right)))
+   Types$MinorType/BIT (->comp NullableBitHolder [left right]
+                         (Integer/compare (.value left) (.value right)))
 
-(def-comp bit-comp NullableBitHolder [left right]
-  (Integer/compare (.value left) (.value right)))
+   Types$MinorType/TIMESTAMPMILLI (->comp NullableTimeStampMilliHolder [left right]
+                                    (Long/compare (.value left) (.value right)))
 
-(def-comp timestamp-milli-comp NullableTimeStampMilliHolder [left right]
-  (Long/compare (.value left) (.value right)))
+   Types$MinorType/FLOAT8 (->comp NullableFloat8Holder [left right]
+                            (Double/compare (.value left) (.value right)))
 
-(def-comp float8-comp NullableFloat8Holder [left right]
-  (Double/compare (.value left) (.value right)))
+   Types$MinorType/VARBINARY (->comp NullableVarBinaryHolder [left right]
+                               (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
+                                                            (.buffer right) (.start right) (.end right)))
 
-(def-comp varbinary-comp NullableVarBinaryHolder [left right]
-  (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
-                               (.buffer right) (.start right) (.end right)))
-
-(def-comp varchar-comp NullableVarCharHolder [left right]
-  (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
-                               (.buffer right) (.start right) (.end right)))
+   Types$MinorType/VARCHAR (->comp NullableVarCharHolder [left right]
+                             (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
+                                                          (.buffer right) (.start right) (.end right)))})

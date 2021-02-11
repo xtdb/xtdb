@@ -48,18 +48,10 @@
     (.write rw min-vec min-vec-idx min-val)
     (.write rw max-vec max-vec-idx max-val)))
 
-(defn- ->min-max-impl [^ReadWrite rw, ^Comparator comparator]
-  (MinMaxImpl. rw comparator (.newHolder rw) (.newHolder rw) (.newHolder rw)))
-
 (defn- ->min-max [^FieldVector field-vec]
-  (condp = (Types/getMinorTypeForArrowType (.getType (.getField field-vec)))
-    Types$MinorType/BIGINT (->min-max-impl t/bigint-rw t/bigint-comp)
-    Types$MinorType/FLOAT8 (->min-max-impl t/float8-rw t/float8-comp)
-    Types$MinorType/BIT (->min-max-impl t/bit-rw t/bit-comp)
-    Types$MinorType/TIMESTAMPMILLI (->min-max-impl t/timestamp-milli-rw t/timestamp-milli-comp)
-    Types$MinorType/NULL (->min-max-impl t/null-rw (Comparator/nullsFirst (Comparator/naturalOrder)))
-    Types$MinorType/VARBINARY (->min-max-impl t/varbinary-rw t/varbinary-comp)
-    Types$MinorType/VARCHAR (->min-max-impl t/varchar-rw t/varchar-comp)))
+  (let [minor-type (Types/getMinorTypeForArrowType (.getType (.getField field-vec)))
+        ^ReadWrite rw (t/type->rw minor-type)]
+    (MinMaxImpl. rw (t/type->comp minor-type) (.newHolder rw) (.newHolder rw) (.newHolder rw))))
 
 (defn- write-min-max [^FieldVector field-vec, ^VectorSchemaRoot metadata-root, idx]
   (let [^byte type-id (t/arrow-type->type-id (.getType (.getField field-vec)))
