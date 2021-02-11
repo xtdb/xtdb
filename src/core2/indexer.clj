@@ -18,6 +18,11 @@
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
+(definterface IChunkManager
+  (^void registerNewMetadata [^String metadata])
+  (^core2.indexer.TransactionInstant latestStoredTx [])
+  (^Long latestStoredRowId []))
+
 (definterface TransactionIndexer
   (^core2.indexer.TransactionInstant indexTx [^core2.indexer.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
 
@@ -103,6 +108,7 @@
 (deftype Indexer [^BufferAllocator allocator
                   ^Path arrow-dir
                   ^ObjectStore object-store
+                  ^IChunkManager chunk-manager
                   ^Map live-roots
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
@@ -220,7 +226,10 @@
           @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                (util/then-compose
                 (fn [_]
-                  (.putObject object-store (str (.getFileName metadata-file)) metadata-file))))
+                  (.putObject object-store (str (.getFileName metadata-file)) metadata-file)))
+               (util/then-apply
+                 (fn [_]
+                   (.registerNewMetadata chunk-manager (str (.getFileName metadata-file))))))
 
           (.closeCols this)
           (Files/delete metadata-file)
@@ -233,22 +242,24 @@
 
 (defn ->indexer
   (^core2.indexer.Indexer [^BufferAllocator allocator
-                         ^ObjectStore object-store
-                         ^Long latest-row-id]
-   (->indexer allocator object-store latest-row-id {}))
+                           ^ObjectStore object-store
+                           ^IChunkManager chunk-manager]
+   (->indexer allocator object-store chunk-manager {}))
 
   (^core2.indexer.Indexer [^BufferAllocator allocator
-                         ^ObjectStore object-store
-                         ^Long latest-row-id
-                         {:keys [max-rows-per-chunk max-rows-per-block]
-                          :or {max-rows-per-chunk 10000
-                               max-rows-per-block 1000}}]
-   (let [next-row-id (if latest-row-id
+                           ^ObjectStore object-store
+                           ^IChunkManager chunk-manager
+                           {:keys [max-rows-per-chunk max-rows-per-block]
+                            :or {max-rows-per-chunk 10000
+                                 max-rows-per-block 1000}}]
+   (let [latest-row-id (.latestStoredRowId chunk-manager)
+         next-row-id (if latest-row-id
                        (inc (long latest-row-id))
                        0)]
      (Indexer. allocator
                (Files/createTempDirectory "core2-indexer" (make-array FileAttribute 0))
                object-store
+               chunk-manager
                (ConcurrentHashMap.)
                max-rows-per-chunk
                max-rows-per-block

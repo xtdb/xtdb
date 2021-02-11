@@ -15,19 +15,21 @@
 (deftype MemoryMappedBufferPool [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store ^Map buffers]
   BufferPool
   (getBuffer [_ k]
-    (let [v (.getOrDefault buffers k ::not-found)]
-      (if-not (= ::not-found v)
-        (CompletableFuture/completedFuture (doto ^ArrowBuf v
-                                             (.retain)))
-        (let [buffer-path (.resolve root-path k)]
-          (util/then-apply
-            (if (util/path-exists buffer-path)
-              (CompletableFuture/completedFuture buffer-path)
-              (.getObject object-store k buffer-path))
-            (fn [^Path path]
-              (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                        (util/->arrow-buf-view allocator (util/->mmap-path path)))))
-                (.retain))))))))
+    (if (nil? k)
+      (CompletableFuture/completedFuture nil)
+      (let [v (.getOrDefault buffers k ::not-found)]
+        (if-not (= ::not-found v)
+          (CompletableFuture/completedFuture (doto ^ArrowBuf v
+                                               (.retain)))
+          (let [buffer-path (.resolve root-path k)]
+            (util/then-apply
+              (if (util/path-exists buffer-path)
+                (CompletableFuture/completedFuture buffer-path)
+                (.getObject object-store k buffer-path))
+              (fn [^Path path]
+                (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                          (util/->arrow-buf-view allocator (util/->mmap-path path)))))
+                  (.retain)))))))))
 
   (evictBuffer [_ k]
     (when-let [^ArrowBuf buffer (.remove buffers k)]
@@ -41,6 +43,6 @@
         (.release ^ArrowBuf (.next i))
         (.remove i)))))
 
-(defn ->memory-mapped-buffer-pool [^Path root-path ^BufferAllocator allocator^ObjectStore object-store]
+(defn ->memory-mapped-buffer-pool [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store]
   (util/mkdirs root-path)
   (->MemoryMappedBufferPool root-path allocator object-store (ConcurrentHashMap.)))

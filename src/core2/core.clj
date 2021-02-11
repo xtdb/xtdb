@@ -8,7 +8,7 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
-           [core2.indexer Indexer TransactionIndexer TransactionInstant]
+           [core2.indexer IChunkManager Indexer TransactionIndexer TransactionInstant]
            [core2.log LogReader LogRecord LogWriter]
            core2.object_store.ObjectStore
            java.io.Closeable
@@ -16,8 +16,8 @@
            java.nio.channels.ClosedByInterruptException
            java.nio.file.Path
            java.time.Duration
-           [java.util LinkedHashMap LinkedHashSet Set]
-           [java.util.concurrent CompletableFuture Executors ExecutorService Future TimeoutException]
+           [java.util List LinkedHashMap LinkedHashSet Set SortedSet]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListSet Executors ExecutorService Future TimeoutException]
            [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
@@ -113,45 +113,6 @@
    (LogTxProducer. (l/->local-directory-log-writer (.resolve node-dir "log") log-writer-opts)
                    (RootAllocator.))))
 
-(defn latest-metadata-buffer ^java.util.concurrent.CompletableFuture [^ObjectStore os ^BufferPool bp]
-  (-> (.listObjects os "metadata-*")
-
-      (util/then-compose
-        (fn [ks]
-          (if-let [metadata-path (last (sort ks))]
-            (.getBuffer bp metadata-path)
-            (CompletableFuture/completedFuture nil))))))
-
-(defn with-metadata [^ArrowBuf metadata-buffer, ^BufferAllocator allocator, f]
-  (when metadata-buffer
-    (with-open [metadata-buffer metadata-buffer]
-      (let [footer (util/read-arrow-footer metadata-buffer)
-            metadata-batch (first (.getRecordBatches footer))]
-        (with-open [metadata-root (VectorSchemaRoot/create (.getSchema footer) allocator)
-                    record-batch (util/->arrow-record-batch-view metadata-batch metadata-buffer)]
-          (.load (VectorLoader. metadata-root) record-batch)
-          (f metadata-root))))))
-
-(defn latest-row-id ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferPool bp, ^BufferAllocator allocator]
-  (-> (latest-metadata-buffer os bp)
-
-      (util/then-apply
-        (fn [metadata-buffer]
-          (with-metadata metadata-buffer allocator
-            (fn [metadata-root]
-              (meta/max-value metadata-root "_tx-id" "_row-id")))))))
-
-(defn latest-completed-tx ^java.util.concurrent.CompletableFuture [^ObjectStore os, ^BufferPool bp, ^BufferAllocator allocator]
-  (-> (latest-metadata-buffer os bp)
-
-      (util/then-apply
-        (fn [metadata-buffer]
-          (with-metadata metadata-buffer allocator
-            (fn [metadata-root]
-              (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
-                (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
-                     (indexer/->TransactionInstant max-tx-id)))))))))
-
 (definterface IIngestLoop
   (^void ingestLoop [])
   (^void start [])
@@ -226,6 +187,40 @@
     (future-cancel ingest-future)
     (util/shutdown-pool pool)))
 
+(deftype ChunkManager [^BufferAllocator allocator ^ObjectStore object-store ^BufferPool buffer-pool ^SortedSet known-metadata]
+  IChunkManager
+  (registerNewMetadata [_ metadata]
+    (.add known-metadata metadata))
+
+  (latestStoredTx [_]
+    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
+      (with-open [latest-metadata-buffer latest-metadata-buffer]
+        (reduce (completing
+                 (fn [_ metadata-root]
+                   (when-let [max-tx-id (meta/max-value metadata-root "_tx-id")]
+                     (->> (util/local-date-time->date (meta/max-value metadata-root "_tx-time"))
+                          (indexer/->TransactionInstant max-tx-id)
+                          (reduced)))))
+                nil
+                (util/block-stream latest-metadata-buffer allocator)))))
+
+  (latestStoredRowId [_]
+    (when-let [^ArrowBuf latest-metadata-buffer @(.getBuffer buffer-pool (last known-metadata))]
+      (with-open [latest-metadata-buffer latest-metadata-buffer]
+        (reduce (completing
+                 (fn [_ metadata-root]
+                   (reduced (meta/max-value metadata-root "_tx-id" "_row-id"))))
+                nil
+                (util/block-stream latest-metadata-buffer allocator)))))
+
+  Closeable
+  (close [_]
+    (.clear known-metadata)))
+
+(defn ->chunk-mananger ^core2.indexer.IChunkManager [^BufferAllocator allocator ^ObjectStore object-store ^BufferPool buffer-pool]
+  (let [known-metadata @(.listObjects object-store "metadata-*")]
+    (->ChunkManager allocator object-store buffer-pool (ConcurrentSkipListSet. ^List known-metadata))))
+
 (defn ->ingest-loop
   (^core2.core.IngestLoop
    [^LogReader log-reader
@@ -248,11 +243,13 @@
                ^ObjectStore object-store
                ^Indexer indexer
                ^IngestLoop ingest-loop
-               ^BufferPool buffer-pool]
+               ^BufferPool buffer-pool
+               ^ChunkManager chunk-manager]
   Closeable
   (close [_]
     (util/try-close ingest-loop)
     (util/try-close indexer)
+    (util/try-close chunk-manager)
     (util/try-close buffer-pool)
     (util/try-close object-store)
     (util/try-close log-reader)
@@ -268,11 +265,10 @@
          log-reader (l/->local-directory-log-reader log-dir)
          object-store (os/->file-system-object-store object-dir opts)
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
-         latest-row-id @(latest-row-id object-store buffer-pool allocator)
-         latest-completed-tx @(latest-completed-tx object-store buffer-pool allocator)
-         indexer (indexer/->indexer allocator object-store latest-row-id opts)
-         ingest-loop (->ingest-loop log-reader indexer latest-completed-tx opts)]
-     (Node. allocator log-reader object-store indexer ingest-loop buffer-pool))))
+         chunk-manager (->chunk-mananger allocator object-store buffer-pool)
+         indexer (indexer/->indexer allocator object-store chunk-manager opts)
+         ingest-loop (->ingest-loop log-reader indexer (.latestStoredTx chunk-manager) opts)]
+     (Node. allocator log-reader object-store indexer ingest-loop buffer-pool chunk-manager))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
