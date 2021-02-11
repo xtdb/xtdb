@@ -92,18 +92,10 @@
                             (>= (.get row-id-vec idx) target-row-id))
                       len
                       (recur (inc len)))))
-            end-idx (+ start-idx ^long len)
+            end-idx (+ start-idx ^long len)]
 
-            sliced-root (.slice root start-idx len)]
-
-        (try
-          (f sliced-root)
-
-          (finally
-            ;; slice returns the same VSR object if it's asked to slice the whole thing
-            ;; we don't want to close it in that case, because that will mutate the live-root.
-            (when-not (identical? sliced-root root)
-              (.close sliced-root))))
+        (with-open [sliced-root (util/slice-root root start-idx len)]
+          (f sliced-root))
 
         (when (< end-idx row-count)
           (recur end-idx (+ target-row-id max-rows-per-block)))))))

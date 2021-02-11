@@ -16,7 +16,7 @@
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            org.apache.arrow.memory.util.MemoryUtil
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.ipc ArrowWriter ArrowFileWriter ArrowStreamWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer]))
@@ -149,6 +149,15 @@
        (.interrupt (Thread/currentThread))))))
 
 ;;; Arrow
+
+(defn slice-root
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root start-idx]
+   (slice-root root start-idx (- (.getRowCount root) start-idx)))
+
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root start-idx len]
+   (VectorSchemaRoot. ^Iterable (vec (for [^FieldVector field-vec (.getFieldVectors root)]
+                                       (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
+                                                 (.splitAndTransfer start-idx len))))))))
 
 (defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
   ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
