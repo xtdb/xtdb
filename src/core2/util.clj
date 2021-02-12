@@ -12,14 +12,14 @@
            [java.time LocalDateTime ZoneId]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           java.util.Date
+           [java.util ArrayList Date]
            [java.util.function BiFunction Function Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            org.apache.arrow.memory.util.ByteFunctionHelpers
            org.apache.arrow.memory.util.MemoryUtil
-           [org.apache.arrow.vector FieldVector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector FieldVector ValueVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowWriter ArrowFileWriter ArrowStreamWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer]))
 
@@ -158,17 +158,40 @@
 ;;; Arrow
 
 (defn slice-root
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root start-idx]
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx]
    (slice-root root start-idx (- (.getRowCount root) start-idx)))
 
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root start-idx len]
-   (VectorSchemaRoot. ^Iterable (vec (for [^FieldVector field-vec (.getFieldVectors root)]
-                                       (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
-                                                 (.splitAndTransfer start-idx len))))))))
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx ^long len]
+   (let [num-fields (.size (.getFields (.getSchema root)))
+         acc (ArrayList. num-fields)]
+     (dotimes [n num-fields]
+       (let [field-vec (.getVector root n)]
+         (.add acc (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
+                             (.splitAndTransfer start-idx len))))))
+
+     (VectorSchemaRoot. acc))))
 
 (def ^:private ^Field dense-union-value-count-field
   (doto (.getDeclaredField DenseUnionVector "valueCount")
     (.setAccessible true)))
+
+;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
+;; solve the VSR calling this.
+(defn set-value-count [^ValueVector v ^long value-count]
+  (let [value-count (int value-count)]
+    (cond
+      (instance? DenseUnionVector v)
+      (.set dense-union-value-count-field v value-count)
+
+      (and (instance? NonNullableStructVector v)
+           (zero? (.getNullCount v)))
+      (let [^NonNullableStructVector v v]
+        (doseq [v (.getChildrenFromFields v)]
+          (set-value-count v value-count))
+        (set! (.valueCount v) value-count))
+
+      :else
+      (.setValueCount v value-count))))
 
 (defn- write-type-id-no-realloc ^long [^DenseUnionVector duv, ^long idx ^long type-id]
   ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
@@ -177,11 +200,9 @@
         offset-buffer (.getOffsetBuffer duv)]
     (.setTypeId duv idx type-id)
     (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH idx) offset)
-    (.setValueCount sub-vec (inc offset))
+    (set-value-count sub-vec (inc offset))
 
-    ;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
-    ;; solve the VSR calling this.
-    (.set dense-union-value-count-field duv (int (inc idx)))
+    (set-value-count duv (inc idx))
 
     offset))
 
@@ -200,10 +221,8 @@
 (defn set-vector-schema-root-row-count [^VectorSchemaRoot root ^long row-count]
   (let [row-count (int row-count)]
     (.set vector-schema-root-row-count-field root row-count)
-    (doseq [^FieldVector v (.getFieldVectors root)]
-      (if (instance? DenseUnionVector v)
-        (.set dense-union-value-count-field v row-count)
-        (.setValueCount v row-count)))))
+    (dotimes [n (.size (.getFields (.getSchema root)))]
+      (set-value-count (.getVector root n) row-count))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]

@@ -92,7 +92,7 @@
                       (recur (inc len)))))
             end-idx (+ start-idx ^long len)]
 
-        (with-open [sliced-root (util/slice-root root start-idx len)]
+        (with-open [^VectorSchemaRoot sliced-root (util/slice-root root start-idx len)]
           (f sliced-root))
 
         (when (< end-idx row-count)
