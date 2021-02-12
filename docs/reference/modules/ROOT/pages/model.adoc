@@ -1,0 +1,62 @@
+= Model
+
+== Introduction
+Crux is a document database that provides you with a comprehensive means of traversing and querying across all of your documents and data without any need to define a schema ahead of time. This is possible because Crux is "schemaless" and automatically indexes the top-level fields in all of your documents to support efficient ad-hoc joins and retrievals. With these capabilities you can quickly build queries that match directly against the relations in your data without worrying too much about the shape of your documents or how that shape might change in future.
+
+Crux is also a graph database.
+The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations.
+Crux gives you the ability to construct graph queries via a Datalog query language and uses graph-friendly indexes to provide a powerful set of querying capabilities.
+Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
+
+== Indexes
+
+=== EAV Indexes
+
+Crux documents are primarily are broken down into Entity-Attribute-Value (EAV) facts/triples.
+
+The following illustrates how the document for `:person/ivan` will be split into EAV triples:
+[source, clojure]
+----
+{:crux.db/id :person/ivan
+ :full-name "Ivan Ivanov"
+ :age 21}
+
+;; Will be split and stored as the following:
+[:person/ivan :crux.db/id :person/ivan]
+[:person/ivan :full-name "Ivan Ivanov"]
+[:person/ivan :age 21]
+----
+
+Within Crux, documents can easily refer to other documents simply by referring to them within a value. In this case, there are no specific ID keys necessary, they are joined based on their indexes.
+[source, clojure]
+----
+{:crux.db/id :person/john
+ :full-name "John Johnson"
+ :age 22
+ :friends-with :person/ivan}
+
+;; Will be split and stored as the following:
+[:person/john :crux.db/id :person/john]
+[:person/john :full-name "John Johnson"]
+[:person/john :age 22]
+[:person/john :friends-with :person/ivan]
+----
+
+==== Set/Vector Behavior
+
+Rather than treating set/vectors as a single value, they are broken up into individual EAV facts:
+[source, clojure]
+----
+{:crux.db/id :company/c1
+ :company-name "BusinessCo"
+ :employees #{:person/ivan :person/john}}
+
+;; Will be split and stored as the following:
+[:company/c1 :crux.db/id :company/c1]
+[:company/c1 :company-name "BusinessCo"]
+[:company/c1 :employees :person/ivan]
+[:company/c1 :employees :person/john]
+----
+
+.TODO:
+- Examples of various other indexes?

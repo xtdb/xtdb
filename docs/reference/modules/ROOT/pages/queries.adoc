@@ -3,14 +3,7 @@
 [#intro]
 == Introduction
 
-Crux is a document database that provides you with a comprehensive means of traversing and querying across all of your documents and data without any need to define a schema ahead of time.
-This is possible because Crux is "schemaless" and automatically indexes the top-level fields in all of your documents to support efficient ad-hoc joins and retrievals.
-With these capabilities you can quickly build queries that match directly against the relations in your data without worrying too much about the shape of your documents or how that shape might change in future.
-
-Crux is also a graph database.
-The central characteristic of a graph database is that it can support arbitrary-depth graph queries (recursive traversals) very efficiently by default, without any need for schema-level optimisations.
-Crux gives you the ability to construct graph queries via a Datalog query language and uses graph-friendly indexes to provide a powerful set of querying capabilities.
-Additionally, when Crux's indexes are deployed directly alongside your application you are able to easily blend Datalog and code together to construct highly complex graph algorithms.
+To gain a familiarity of Crux's underlying data model, see the xref:model.adoc[model] section.
 
 //This page walks through many of the more interesting queries that run as part of Crux's default test suite.
 //See the https://github.com/juxt/crux/blob/master/crux-test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
@@ -23,13 +16,8 @@ Note that all Crux Datalog queries run using a point-in-time view of the databas
 A Datalog query consists of a set of variables and a set of clauses. The result
 of running a query is a result set of the possible combinations of values that
 satisfy all of the clauses at the same time. These combinations of values are
-referred to as "tuples".
-
-The possible values within the result tuples are derived from your database of
-documents. The documents themselves are represented in the database indexes as
-"entity–attribute–value" (EAV) facts. For example, a single document
-`{:crux.db/id :myid :color "blue" :age 12}` is transformed into two facts
-`[[:myid :color "blue"][:myid :age 12]]`.
+referred to as "tuples". The possible values within the result tuples are derived from your database of
+documents.
 
 In the most basic case, a Datalog query works by searching for "subgraphs" in
 the database that match the pattern defined by the clauses. The values within
