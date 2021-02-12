@@ -1,4 +1,4 @@
-{:crux.version/version "20.09-1.11.1-beta-SNAPSHOT",
+{:crux.version/version "21.01-1.14.0-beta",
  :crux.version/revision nil, :crux.index/index-version 13,
  :crux.doc-log/consumer-state nil,
  :crux.tx-log/consumer-state nil,

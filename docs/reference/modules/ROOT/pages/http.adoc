@@ -139,10 +139,10 @@ curl -X GET \
 ====
 JSON::
 +
-[source,json]
+[source,json,subs=attributes+]
 ----
 {
-    "version": "20.09-1.11.1-beta-SNAPSHOT",
+    "version": "{crux_version}-beta",
     "revision": null,
     "indexVersion": 13,
     "consumerState": null,
@@ -154,9 +154,9 @@ JSON::
 
 EDN::
 +
-[source,clojure]
+[source,clojure,subs=attributes+]
 ----
-{:crux.version/version "20.09-1.11.1-beta-SNAPSHOT",
+{:crux.version/version "{crux_version}-beta",
  :crux.version/revision nil, :crux.index/index-version 13,
  :crux.doc-log/consumer-state nil,
  :crux.tx-log/consumer-state nil,
