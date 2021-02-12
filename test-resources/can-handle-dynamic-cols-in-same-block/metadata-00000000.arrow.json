@@ -2,21 +2,21 @@
   "schema" : {
     "fields" : [{
       "name" : "file",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "utf8"
       },
       "children" : [ ]
     },{
       "name" : "column",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "utf8"
       },
       "children" : [ ]
     },{
       "name" : "field",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "utf8"
       },
@@ -40,14 +40,14 @@
       },
       "children" : [{
         "name" : "$data$",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "null"
         },
         "children" : [ ]
       },{
         "name" : "bigint",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "int",
           "bitWidth" : 64,
@@ -56,7 +56,7 @@
         "children" : [ ]
       },{
         "name" : "float8",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
@@ -64,28 +64,28 @@
         "children" : [ ]
       },{
         "name" : "varbinary",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "binary"
         },
         "children" : [ ]
       },{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
         "name" : "bit",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "bool"
         },
         "children" : [ ]
       },{
         "name" : "timestampmilli",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "timestamp",
           "unit" : "MILLISECOND",
@@ -103,14 +103,14 @@
       },
       "children" : [{
         "name" : "$data$",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "null"
         },
         "children" : [ ]
       },{
         "name" : "bigint",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "int",
           "bitWidth" : 64,
@@ -119,7 +119,7 @@
         "children" : [ ]
       },{
         "name" : "float8",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "floatingpoint",
           "precision" : "DOUBLE"
@@ -127,28 +127,28 @@
         "children" : [ ]
       },{
         "name" : "varbinary",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "binary"
         },
         "children" : [ ]
       },{
         "name" : "varchar",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "utf8"
         },
         "children" : [ ]
       },{
         "name" : "bit",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "bool"
         },
         "children" : [ ]
       },{
         "name" : "timestampmilli",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "timestamp",
           "unit" : "MILLISECOND",
@@ -158,7 +158,7 @@
       }]
     },{
       "name" : "count",
-      "nullable" : true,
+      "nullable" : false,
       "type" : {
         "name" : "int",
         "bitWidth" : 64,

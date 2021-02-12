@@ -87,7 +87,7 @@
                          "$data$"
                          (name type-k))
                        (primitive-type->arrow-type type-k)
-                       true))))))
+                       false))))))
 
 ;; generics ftw
 (definterface ReadWrite

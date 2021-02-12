@@ -20,13 +20,13 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
-  (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) true)
-            (t/->field "column" (.getType Types$MinorType/VARCHAR) true)
-            (t/->field "field" (.getType Types$MinorType/VARCHAR) true)
+  (Schema. [(t/->field "file" (.getType Types$MinorType/VARCHAR) false)
+            (t/->field "column" (.getType Types$MinorType/VARCHAR) false)
+            (t/->field "field" (.getType Types$MinorType/VARCHAR) false)
             (t/->field "type-id" (.getType Types$MinorType/TINYINT) false)
             (t/->primitive-dense-union-field "min")
             (t/->primitive-dense-union-field "max")
-            (t/->field "count" (.getType Types$MinorType/BIGINT) true)]))
+            (t/->field "count" (.getType Types$MinorType/BIGINT) false)]))
 
 (definterface MinMax
   (^void writeMinMax [^org.apache.arrow.vector.FieldVector src-vec
