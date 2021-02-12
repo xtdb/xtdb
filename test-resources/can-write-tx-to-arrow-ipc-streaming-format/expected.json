@@ -22,7 +22,7 @@
           },
           "children" : [{
             "name" : "_id",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -30,7 +30,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -38,7 +38,7 @@
             }]
           },{
             "name" : "api-version",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -46,7 +46,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -54,7 +54,7 @@
             }]
           },{
             "name" : "manufacturer",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -62,7 +62,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -70,7 +70,7 @@
             }]
           },{
             "name" : "model",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -78,7 +78,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -86,7 +86,7 @@
             }]
           },{
             "name" : "os-name",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -94,7 +94,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -102,7 +102,7 @@
             }]
           },{
             "name" : "cpu-avg-15min",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -110,7 +110,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -119,7 +119,7 @@
             }]
           },{
             "name" : "rssi",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -127,7 +127,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -136,7 +136,7 @@
             }]
           },{
             "name" : "cpu-avg-5min",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -144,7 +144,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -153,7 +153,7 @@
             }]
           },{
             "name" : "battery-status",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -161,7 +161,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -169,7 +169,7 @@
             }]
           },{
             "name" : "ssid",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -177,7 +177,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -185,7 +185,7 @@
             }]
           },{
             "name" : "time",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -193,7 +193,7 @@
             },
             "children" : [{
               "name" : "type-10",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "timestamp",
                 "unit" : "MILLISECOND",
@@ -203,7 +203,7 @@
             }]
           },{
             "name" : "battery-level",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -211,7 +211,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -220,7 +220,7 @@
             }]
           },{
             "name" : "bssid",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -228,7 +228,7 @@
             },
             "children" : [{
               "name" : "type-5",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "utf8"
               },
@@ -236,7 +236,7 @@
             }]
           },{
             "name" : "battery-temperature",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -244,7 +244,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -253,7 +253,7 @@
             }]
           },{
             "name" : "cpu-avg-1min",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -261,7 +261,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -270,7 +270,7 @@
             }]
           },{
             "name" : "mem-free",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -278,7 +278,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"
@@ -287,7 +287,7 @@
             }]
           },{
             "name" : "mem-used",
-            "nullable" : true,
+            "nullable" : false,
             "type" : {
               "name" : "union",
               "mode" : "Dense",
@@ -295,7 +295,7 @@
             },
             "children" : [{
               "name" : "type-3",
-              "nullable" : true,
+              "nullable" : false,
               "type" : {
                 "name" : "floatingpoint",
                 "precision" : "DOUBLE"

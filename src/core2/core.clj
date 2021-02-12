@@ -38,8 +38,7 @@
             :let [doc (:doc tx-op)]
             [k v] doc]
       (let [^Set field-types (.computeIfAbsent put-k-types k (util/->jfn (fn [_] (LinkedHashSet.))))]
-        (when (some? v)
-          (.add field-types (t/->arrow-type (type v))))))
+        (.add field-types (t/->arrow-type (type v)))))
 
     put-k-types))
 
@@ -52,9 +51,9 @@
                   (ArrowType$Union. UnionMode/Dense
                                     (int-array (for [^ArrowType v-type v-types]
                                                  (.getFlatbufID (.getTypeID v-type)))))
-                  true
+                  false
                   (for [^ArrowType v-type v-types]
-                    (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type true))))))
+                    (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type false))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (let [put-k-types (->put-k-types tx-ops)
