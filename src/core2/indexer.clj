@@ -34,7 +34,8 @@
   (^void finishChunk []))
 
 (defn- copy-safe! [^VectorSchemaRoot content-root ^DenseUnionVector src-vec src-idx row-id]
-  (let [[^BigIntVector row-id-vec, ^DenseUnionVector field-vec] (.getFieldVectors content-root)
+  (let [^BigIntVector row-id-vec (.getVector content-root 0)
+        ^DenseUnionVector field-vec (.getVector content-root 1)
         value-count (.getRowCount content-root)
         type-id (.getTypeId src-vec src-idx)
         offset (util/write-type-id field-vec (.getValueCount field-vec) type-id)]
@@ -46,7 +47,7 @@
                    offset
                    (.getVectorByType src-vec type-id))
 
-    (.setRowCount content-root (inc value-count))))
+    (util/set-vector-schema-root-row-count content-root (inc value-count))))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-time-field
   (t/->primitive-dense-union-field "_tx-time" #{:timestampmilli}))
@@ -57,7 +58,6 @@
 
 (defn ->tx-time-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Date tx-time]
   (doto ^DenseUnionVector (.createVector tx-time-field allocator)
-    (.setValueCount 1)
     (util/write-type-id 0 timestampmilli-type-id)
     (-> (.getTimeStampMilliVector timestampmilli-type-id)
         (.setSafe 0 (.getTime tx-time)))))
@@ -71,7 +71,6 @@
 
 (defn ->tx-id-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^long tx-id]
   (doto ^DenseUnionVector (.createVector tx-id-field allocator)
-    (.setValueCount 1)
     (util/write-type-id 0 bigint-type-id)
     (-> (.getBigIntVector bigint-type-id)
         (.setSafe 0 tx-id))))
@@ -129,13 +128,13 @@
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
-                       (copy-safe! (.getLiveRoot chunk-mgr (.getName (.getField value-vec)))
+                       (copy-safe! (.getLiveRoot chunk-mgr (.getName value-vec))
                                    value-vec per-op-offset row-id))
 
-                     (copy-safe! (.getLiveRoot chunk-mgr (.getName (.getField tx-time-vec)))
+                     (copy-safe! (.getLiveRoot chunk-mgr (.getName tx-time-vec))
                                  tx-time-vec 0 row-id)
 
-                     (copy-safe! (.getLiveRoot chunk-mgr (.getName (.getField tx-id-vec)))
+                     (copy-safe! (.getLiveRoot chunk-mgr (.getName tx-id-vec))
                                  tx-id-vec 0 row-id)))))
 
         (.getValueCount tx-ops-vec)))))

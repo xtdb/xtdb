@@ -87,7 +87,7 @@
 
                 (write-min-max field-vec metadata-root idx)
 
-                (.setRowCount metadata-root (inc idx)))))]
+                (util/set-vector-schema-root-row-count metadata-root (inc idx)))))]
 
     (doseq [^FieldVector field-vec (.getFieldVectors live-root)
             :let [field-name (.getName (.getField field-vec))]]

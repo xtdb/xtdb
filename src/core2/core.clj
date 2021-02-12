@@ -80,13 +80,11 @@
                          (if (some? v)
                            (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
                                  value-offset (util/write-type-id value-duv tx-op-offset type-id)]
-                             (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
-
-                           (.setValueCount value-duv (inc (.getValueCount value-duv)))))))
+                             (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))))))
 
               :delete nil)))
 
-        (.setRowCount root (count tx-ops))
+        (util/set-vector-schema-root-row-count root (count tx-ops))
 
         (.syncSchema root)
 

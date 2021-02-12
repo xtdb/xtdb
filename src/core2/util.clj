@@ -3,6 +3,7 @@
             [clojure.tools.logging :as log])
   (:import java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
+           java.lang.reflect.Field
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
@@ -165,11 +166,12 @@
                                        (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
                                                  (.splitAndTransfer start-idx len))))))))
 
-(defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
-  ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
-  (while (< (.getValueCapacity duv) (inc idx))
-    (.reAlloc duv))
+(def ^:private ^Field dense-union-value-count-field
+  (doto (.getDeclaredField DenseUnionVector "valueCount")
+    (.setAccessible true)))
 
+(defn- write-type-id-no-realloc ^long [^DenseUnionVector duv, ^long idx ^long type-id]
+  ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
   (let [sub-vec (.getVectorByType duv type-id)
         offset (.getValueCount sub-vec)
         offset-buffer (.getOffsetBuffer duv)]
@@ -177,10 +179,31 @@
     (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH idx) offset)
     (.setValueCount sub-vec (inc offset))
 
-    ;; this updates all the counts of all the sub-vecs, which might not be performant if the DUV is large
-    (.setValueCount duv (inc idx))
+    ;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
+    ;; solve the VSR calling this.
+    (.set dense-union-value-count-field duv (int (inc idx)))
 
     offset))
+
+;; NOTE: also updates value count of the vector.
+(defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
+  (try
+    (write-type-id-no-realloc duv idx type-id)
+    (catch IndexOutOfBoundsException retry
+      (.reAlloc duv)
+      (write-type-id-no-realloc duv idx type-id))))
+
+(def ^:private ^Field vector-schema-root-row-count-field
+  (doto (.getDeclaredField VectorSchemaRoot "rowCount")
+    (.setAccessible true)))
+
+(defn set-vector-schema-root-row-count [^VectorSchemaRoot root ^long row-count]
+  (let [row-count (int row-count)]
+    (.set vector-schema-root-row-count-field root row-count)
+    (doseq [^FieldVector v (.getFieldVectors root)]
+      (if (instance? DenseUnionVector v)
+        (.set dense-union-value-count-field v row-count)
+        (.setValueCount v row-count)))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
