@@ -60,7 +60,7 @@
   (let [put-k-types (->put-k-types tx-ops)
         tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
                                        (t/->field "put" (.getType Types$MinorType/STRUCT) false (->put-fields put-k-types))
-                                       (t/->field "delete" (.getType Types$MinorType/STRUCT) true))])]
+                                       (t/->field "delete" (.getType Types$MinorType/STRUCT) false))])]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")
             ^StructVector put-vec (.getStruct tx-ops-duv 0)

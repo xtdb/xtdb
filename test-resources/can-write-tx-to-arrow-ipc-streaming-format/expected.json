@@ -306,7 +306,7 @@
         }]
       },{
         "name" : "delete",
-        "nullable" : true,
+        "nullable" : false,
         "type" : {
           "name" : "struct"
         },
