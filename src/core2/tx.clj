@@ -3,4 +3,4 @@
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
-(defrecord Watermark [^long next-row-id ^SortedMap chunk-object-key->idx])
+(defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap chunk-object-key->idx])

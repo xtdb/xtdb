@@ -128,7 +128,8 @@
                 column->idx (.chunk-object-key->idx watermark)
                 first-column (first column->idx)
                 last-column (last column->idx)]
-            (t/is (= 4 (.next-row-id watermark)))
+            (t/is (zero? (.chunk-idx watermark)))
+            (t/is (= 4 (.row-count watermark)))
             (t/is (t/is 20 (count column->idx)))
             (t/is (= ["chunk-00000000-_id.arrow" 4]
                      [(key first-column) (val first-column)]))
@@ -138,7 +139,8 @@
         (.finishChunk i)
 
         (let [watermark (.getWatermark i)]
-          (t/is (= 4 (.next-row-id watermark)))
+          (t/is (= 4 (.chunk-idx watermark)))
+          (t/is (zero? (.row-count watermark)))
           (t/is (empty? (.chunk-object-key->idx watermark))))
 
         (t/is (= last-tx-instant (.latestStoredTx mm)))
