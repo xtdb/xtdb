@@ -18,7 +18,9 @@
                                   [org.clojure/data.csv "1.0.0"]
                                   [cheshire "5.10.0"]]
                    :java-source-paths ["src" "jmh"]
-                   :resource-paths ["test-resources" "data"]}}
+                   :resource-paths ["test-resources" "data"]
+                   :test-selectors {:default (complement :integration)
+                                    :integration :integration}}}
   :aliases {"jmh" ["trampoline" "run" "-m" "org.openjdk.jmh.Main" "-f" "1" "-rf" "json" "-rff" "target/jmh-result.json"]}
   :main core2.core
   :java-source-paths ["src"]

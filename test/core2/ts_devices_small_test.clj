@@ -10,7 +10,7 @@
            core2.metadata.IMetadataManager
            [java.time Duration]))
 
-(t/deftest can-ingest-ts-devices-small
+(t/deftest ^:integration can-ingest-ts-devices-small
   (if-not (io/resource "devices_small_device_info.csv")
     (t/is true)
     (let [node-dir (util/->path "target/can-ingest-ts-devices-small")]
