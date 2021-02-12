@@ -7,6 +7,7 @@
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
+           core2.tx.Watermark
            java.io.Closeable
            [java.nio.file Files Path StandardOpenOption]
            java.nio.file.attribute.FileAttribute
@@ -163,10 +164,8 @@
                   ^IMetadataManager metadata-mgr
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
-                  ^:volatile-mutable ^long chunk-idx
-                  ^:volatile-mutable ^long row-count
                   ^Map live-roots
-                  ^:volatile-mutable watermark]
+                  ^:volatile-mutable ^Watermark watermark]
 
   IChunkManager
   (getLiveRoot [_ field-name]
@@ -180,22 +179,22 @@
 
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
-    (let [new-row-count (.indexTx (JustIndexer.) this allocator tx-instant tx-ops (+ chunk-idx row-count))]
-      (set! (.row-count this) (+ row-count new-row-count)))
-
-    (set! (.watermark this) (->watermark chunk-idx row-count live-roots))
-
-    ;; TODO better metric here?
-    ;; row-id? bytes? tx-id?
-    (when (>= row-count max-rows-per-chunk)
-      (.finishChunk this))
+    (let [chunk-idx (.chunk-idx watermark)
+          row-count (.row-count watermark)
+          next-row-id (+ chunk-idx row-count)
+          number-of-new-rows (.indexTx (JustIndexer.) this allocator tx-instant tx-ops next-row-id)
+          new-chunk-row-count (+ row-count number-of-new-rows)]
+      (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots))
+      (when (>= new-chunk-row-count max-rows-per-chunk)
+        (.finishChunk this)))
 
     tx-instant)
 
   IndexerPrivate
   (writeColumn [_this live-root]
     (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
-      (let [loader (VectorLoader. write-root)]
+      (let [loader (VectorLoader. write-root)
+            chunk-idx (.chunk-idx watermark)]
         (util/build-arrow-ipc-byte-buffer write-root :file
           (fn [write-batch!]
             (with-slices live-root chunk-idx max-rows-per-block
@@ -212,20 +211,20 @@
 
   (finishChunk [this]
     (when-not (.isEmpty live-roots)
-      (let [futs (vec
-                  (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                    (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root))))]
+      (try
+        (let [chunk-idx (.chunk-idx watermark)
+              futs (vec
+                    (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                      (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root))))]
 
-        @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-             (util/then-apply
-               (fn [_]
-                 (.registerNewChunk metadata-mgr live-roots chunk-idx))))
+          @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+               (util/then-apply
+                 (fn [_]
+                   (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
-        (let [next-chunk-idx (+ chunk-idx row-count)]
-          (set! (.watermark this) (->empty-watermark next-chunk-idx))
-          (.closeCols this)
-          (set! (.chunk-idx this) next-chunk-idx)
-          (set! (.row-count this) 0)))))
+          (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count watermark)))))
+        (finally
+          (.closeCols this)))))
 
   Closeable
   (close [this]
@@ -252,7 +251,5 @@
                metadata-mgr
                max-rows-per-chunk
                max-rows-per-block
-               chunk-idx
-               0
                (ConcurrentSkipListMap.)
                (->empty-watermark chunk-idx)))))
