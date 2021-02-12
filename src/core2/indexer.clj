@@ -58,6 +58,7 @@
 
 (defn ->tx-time-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Date tx-time]
   (doto ^DenseUnionVector (.createVector tx-time-field allocator)
+    (util/set-value-count 1)
     (util/write-type-id 0 timestampmilli-type-id)
     (-> (.getTimeStampMilliVector timestampmilli-type-id)
         (.setSafe 0 (.getTime tx-time)))))
@@ -71,6 +72,7 @@
 
 (defn ->tx-id-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^long tx-id]
   (doto ^DenseUnionVector (.createVector tx-id-field allocator)
+    (util/set-value-count 1)
     (util/write-type-id 0 bigint-type-id)
     (-> (.getBigIntVector bigint-type-id)
         (.setSafe 0 tx-id))))
