@@ -54,9 +54,8 @@ juxt/crux-rocksdb {:mvn/version "{crux_version}-beta"}
 ----
 
 To build the JAR, run the `build-uberjar.sh` script.
-You can optionally pass the environment variable `UBERJAR_NAME` (for example, `crux-rocks.jar`) to the script, otherwise the built uberjar will be called `crux.jar`.
-
-Running the JAR will now start up a similar node to `crux-standalone` above - with the addition of persistent storage.
+You can optionally pass the environment variable `UBERJAR_NAME` to the script (for example, `UBERJAR_NAME=crux-rocks.jar ./build-uberjar.sh`), otherwise the built uberjar will be called `crux.jar`.
+To run the clojure uberjar, use the following command `java -jar crux.jar`. This will now start up a similar node to `crux-standalone` above - with the addition of persistent storage.
 
 === Building a JAR (Maven tooling)
 
