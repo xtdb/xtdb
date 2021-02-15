@@ -11,6 +11,7 @@
             [core2.metadata :as meta]
             [core2.util :as util]
             [core2.tx :as tx]
+            [core2.types :as types]
             [core2.ts-devices :as ts])
   (:import clojure.lang.MapEntry
            [core2.buffer_pool BufferPool MemoryMappedBufferPool]
@@ -24,7 +25,8 @@
            java.util.concurrent.CompletableFuture
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]))
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.holders NullableVarCharHolder]))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -445,8 +447,8 @@
       (let [^BufferAllocator allocator (.allocator node)
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
-            ^ObjectStore object-store (.object-store node)
-            ^BufferPool bp (.buffer-pool node)]
+            ^BufferPool bp (.buffer-pool node)
+            ^IMetadataManager mm (.metadata-manager node)]
 
         (let [tx @(.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 1}}])]
 
@@ -461,37 +463,28 @@
 
           (.finishChunk i))
 
-        (t/is (= {1 "James", 2 "Jon"}
-                 @(-> (.listObjects object-store "metadata-*")
-                      (util/then-compose
-                        (fn [ks]
-                          (let [futs (for [k ks]
-                                       (-> (.getBuffer bp k)
-                                           (util/then-compose
-                                             (fn [buffer]
-                                               (if-let [chunk-file (when buffer
-                                                                     (with-open [^ArrowBuf buffer buffer]
-                                                                       (->> (util/block-stream buffer allocator)
-                                                                            (reduce (completing
-                                                                                     (fn [_ ^VectorSchemaRoot metadata-root]
-                                                                                       (when (pos? (compare (str (meta/max-value metadata-root "name"))
-                                                                                                            "Ivan"))
-                                                                                         (meta/chunk-file metadata-root "name"))))
-                                                                                    nil))))]
-                                                 (.getBuffer bp chunk-file)
-                                                 (CompletableFuture/completedFuture nil))))
-                                           (util/then-apply
-                                             (fn [buffer]
-                                               (when buffer
-                                                 (with-open [^ArrowBuf buffer buffer]
-                                                   (->> (util/block-stream buffer allocator)
-                                                        (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
-                                                                           (let [name-vec (.getVector chunk-root "name")
-                                                                                 ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]
-                                                                             (vec (for [idx (range (.getRowCount chunk-root))
-                                                                                        :let [name (str (.getObject name-vec idx))]
-                                                                                        :when (pos? (compare name "Ivan"))]
-                                                                                    (MapEntry/create (.get row-id-vec idx) name))))))))))))))]
-                            (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-                                (util/then-apply (fn [_]
-                                                   (into {} (mapcat deref) futs))))))))))))))
+        (t/testing "where name > 'Ivan'"
+          (let [matching-chunks (with-open [ivan-holder (types/open-literal-varchar-holder allocator "Ivan")]
+                                  (.matchingChunks mm "name"
+                                                   (.holder ivan-holder) false
+                                                   (NullableVarCharHolder.) false))]
+            (t/is (= ["metadata-00000001.arrow"] matching-chunks))
+
+            (t/is (= {1 "James", 2 "Jon"}
+                     @(let [futs (for [metadata-key matching-chunks]
+                                   (-> (.getBuffer bp (.chunkFileKey mm metadata-key "name"))
+                                       (util/then-apply
+                                         (fn [buffer]
+                                           (when buffer
+                                             (with-open [^ArrowBuf buffer buffer]
+                                               (->> (util/block-stream buffer allocator)
+                                                    (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
+                                                                       (let [name-vec (.getVector chunk-root "name")
+                                                                             ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]
+                                                                         (vec (for [idx (range (.getRowCount chunk-root))
+                                                                                    :let [name (str (.getObject name-vec idx))]
+                                                                                    :when (pos? (compare name "Ivan"))]
+                                                                                (MapEntry/create (.get row-id-vec idx) name))))))))))))))]
+                        (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+                            (util/then-apply (fn [_]
+                                               (into {} (mapcat deref) futs)))))))))))))

@@ -1,9 +1,12 @@
 (ns core2.types
   (:require [clojure.string :as str])
-  (:import [java.util Comparator Date]
+  (:import java.io.Closeable
+           java.nio.charset.StandardCharsets
+           [java.util Comparator Date]
+           org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ByteFunctionHelpers
-           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableVarBinaryHolder NullableVarCharHolder]
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableTinyIntHolder NullableVarBinaryHolder NullableVarCharHolder]
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
@@ -92,6 +95,7 @@
 (defn holder-minor-type ^org.apache.arrow.vector.types.Types$MinorType [holder]
   (condp = (type holder)
     nil Types$MinorType/NULL
+    NullableTinyIntHolder Types$MinorType/TINYINT
     NullableBigIntHolder Types$MinorType/BIGINT
     NullableBitHolder Types$MinorType/BIT
     NullableFloat8Holder Types$MinorType/FLOAT8
@@ -133,6 +137,7 @@
                           (isSet [_ _holder] false)
                           (read [_ _fv _idx _holder])
                           (write [_ _holder _fv _idx]))
+   Types$MinorType/TINYINT (->rw TinyIntVector NullableTinyIntHolder)
    Types$MinorType/BIGINT (->rw BigIntVector NullableBigIntHolder)
    Types$MinorType/BIT (->rw BitVector NullableBitHolder)
    Types$MinorType/TIMESTAMPMILLI (->rw TimeStampMilliVector NullableTimeStampMilliHolder)
@@ -149,6 +154,9 @@
 
 (def type->comp
   {Types$MinorType/NULL (Comparator/nullsFirst (Comparator/naturalOrder))
+
+   Types$MinorType/TINYINT (->comp NullableTinyIntHolder [left right]
+                             (Byte/compare (.value left) (.value right)))
 
    Types$MinorType/BIGINT (->comp NullableBigIntHolder [left right]
                             (Long/compare (.value left) (.value right)))
@@ -170,3 +178,17 @@
                              (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
                                                           (.buffer right) (.start right) (.end right)))})
 
+(deftype LiteralVarCharHolder [^NullableVarCharHolder holder]
+  Closeable
+  (close [_]
+    (.close (.buffer holder))))
+
+(defn open-literal-varchar-holder ^core2.types.LiteralVarCharHolder [^BufferAllocator allocator, ^String value]
+  (let [bs (.getBytes value StandardCharsets/UTF_8)
+        buf (doto (.buffer allocator (alength bs))
+              (.setBytes 0 bs 0 (alength bs)))]
+    (LiteralVarCharHolder. (doto (NullableVarCharHolder.)
+                             (-> .isSet (set! 1))
+                             (-> .start (set! 0))
+                             (-> .end (set! (alength bs)))
+                             (-> .buffer (set! buf))))))

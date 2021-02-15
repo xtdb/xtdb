@@ -72,6 +72,21 @@
 
             1 (recur low (dec mid))))))))
 
+(defn last-index-of ^long [^FieldVector field-vec, ^ValueHolder needle-holder, ^long start-idx]
+  (let [minor-type (.getMinorType field-vec)
+        ^ReadWrite rw (t/type->rw minor-type)
+        ^Comparator comparator (t/type->comp minor-type)
+        val-holder (.newHolder rw)
+        value-count (.getValueCount field-vec)]
+    (loop [idx start-idx]
+      (if (< idx value-count)
+        (do
+          (.read rw field-vec idx val-holder)
+          (if (zero? (.compare comparator val-holder needle-holder))
+            (recur (inc idx))
+            idx))
+        idx))))
+
 (definterface ISelect
   (^int select [^org.apache.arrow.vector.FieldVector fieldVector
                 ^org.apache.arrow.vector.BitVector indexesOut])
