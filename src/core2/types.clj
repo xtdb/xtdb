@@ -89,7 +89,18 @@
                        (primitive-type->arrow-type type-k)
                        false))))))
 
+(defn holder-minor-type ^org.apache.arrow.vector.types.Types$MinorType [holder]
+  (condp = (type holder)
+    nil Types$MinorType/NULL
+    NullableBigIntHolder Types$MinorType/BIGINT
+    NullableBitHolder Types$MinorType/BIT
+    NullableFloat8Holder Types$MinorType/FLOAT8
+    NullableVarBinaryHolder Types$MinorType/VARBINARY
+    NullableVarCharHolder Types$MinorType/VARCHAR
+    NullableTimeStampMilliHolder Types$MinorType/TIMESTAMPMILLI))
+
 ;; generics ftw
+
 (definterface ReadWrite
   (^Object newHolder [])
   (^boolean isSet [holder])
@@ -158,3 +169,4 @@
    Types$MinorType/VARCHAR (->comp NullableVarCharHolder [left right]
                              (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
                                                           (.buffer right) (.start right) (.end right)))})
+
