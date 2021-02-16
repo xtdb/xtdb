@@ -268,21 +268,23 @@
 
 (def ^:private try-free-direct-buffer
   (try
+    (Class/forName "io.netty.util.internal.PlatformDependent")
     (eval
      '(fn free-direct-buffer [nio-buffer]
         (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)))
-    (catch Exception e
+    (catch ClassNotFoundException e
       (fn free-direct-buffer-nop [_]))))
 
 (def ^:private try-open-reflective-access
   (try
+    (Class/forName "java.lang.Module")
     (eval
      '(fn open-reflective-access [^Class from ^Class to]
         (let [this-module (.getModule from)]
           (when-not (.isNamed this-module)
             (.addOpens (.getModule to) (.getName (.getPackage to)) this-module)))))
-    (catch Exception e
-      (fn open-reflective-access-nop [_]))))
+    (catch ClassNotFoundException e
+      (fn open-reflective-access-nop [_ _]))))
 
 (defonce ^:private direct-byte-buffer-access
   (try-open-reflective-access ArrowBuf (class (ByteBuffer/allocateDirect 0))))
