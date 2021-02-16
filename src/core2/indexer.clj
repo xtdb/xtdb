@@ -179,7 +179,7 @@
 
   (getWatermark [_]
     (let [current-watermark watermark]
-      (if (pos? (.getAndIncrement ^AtomicInteger (.ref-count current-watermark)))
+      (if (pos? (util/inc-ref-count (.ref-count current-watermark) 1))
         current-watermark
         (recur))))
 

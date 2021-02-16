@@ -9,6 +9,6 @@
 (defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^AtomicInteger ref-count]
   Closeable
   (close [_]
-    (when (zero? (.decrementAndGet ref-count))
+    (when (zero? (util/dec-ref-count ref-count))
       (doseq [root (vals column->root)]
         (util/try-close root)))))

@@ -13,7 +13,7 @@
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util ArrayList Date]
-           [java.util.function BiFunction Function Supplier]
+           [java.util.function BiFunction Function IntUnaryOperator Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            org.apache.arrow.memory.util.ByteFunctionHelpers
@@ -289,6 +289,25 @@
     (catch ClassNotFoundException e
       (fn free-direct-buffer-nop [_]))))
 
+(defn inc-ref-count ^long [^AtomicInteger ref-count ^long increment]
+  (.updateAndGet ^AtomicInteger ref-count
+                 (reify IntUnaryOperator
+                   (applyAsInt [_ x]
+                     (if (pos? x)
+                       (+ x increment)
+                       x)))))
+
+(defn dec-ref-count ^long [^AtomicInteger ref-count]
+  (let [new-ref-count (.updateAndGet ^AtomicInteger ref-count
+                                     (reify IntUnaryOperator
+                                       (applyAsInt [_ x]
+                                         (if (pos? x)
+                                           (dec x)
+                                           -1))))]
+    (when (neg? new-ref-count)
+      (.set ref-count 0))
+    new-ref-count))
+
 (deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
   ReferenceManager
   (deriveBuffer [this source-buffer index length]
@@ -317,19 +336,17 @@
   (release [this decrement]
     (when-not (pos? decrement)
       (throw (IllegalArgumentException. "decrement must be positive")))
-    (let [new-ref-count (.addAndGet ref-count (- decrement))]
-      (cond
-        (zero? new-ref-count)
-        (let [nio-buffer nio-buffer]
-          (set! (.nio-buffer this) nil)
-          (try-free-direct-buffer nio-buffer)
-          true)
-
-        (neg? new-ref-count)
-        (throw (IllegalStateException. "ref count has gone negative"))
-
-        :else
-        false)))
+    (loop [n (dec decrement)]
+      (let [new-ref-count (dec-ref-count ref-count)]
+        (when (neg? new-ref-count)
+          (throw (IllegalStateException. "ref count has gone negative")))
+        (when (zero? new-ref-count)
+          (let [nio-buffer nio-buffer]
+            (set! (.nio-buffer this) nil)
+            (try-free-direct-buffer nio-buffer)))
+        (if (zero? n)
+          (zero? new-ref-count)
+          (recur (dec n))))))
 
   (retain [this]
     (.retain this 1))
@@ -345,8 +362,8 @@
   (retain [this increment]
     (when-not (pos? increment)
       (throw (IllegalArgumentException. "increment must be positive")))
-    (let [ref-count (.getAndAdd ref-count increment)]
-      (when-not (pos? ref-count)
+    (let [new-ref-count (inc-ref-count ref-count increment)]
+      (when-not (pos? new-ref-count)
         (throw (IllegalStateException. "ref count was at zero")))))
 
   (transferOwnership [this source-buffer target-allocator]
