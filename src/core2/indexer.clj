@@ -13,6 +13,7 @@
            java.nio.file.attribute.FileAttribute
            [java.util Collections Date List Map Map$Entry SortedSet TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap ConcurrentSkipListSet]
+           java.util.concurrent.atomic.AtomicInteger
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot VectorLoader VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
@@ -144,21 +145,22 @@
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
-(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^long row-count ^Map live-roots]
+(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^long row-count ^Map column->root]
   (tx/->Watermark chunk-idx
                   row-count
                   (Collections/unmodifiableSortedMap
                    (reduce
                     (fn [^Map acc ^Map$Entry kv]
-                      (let [k (chunk-object-key chunk-idx (.getKey kv))
-                            v (.getRowCount ^VectorSchemaRoot (.getValue kv))]
+                      (let [k (.getKey kv)
+                            v (util/slice-root ^VectorSchemaRoot (.getValue kv) 0)]
                         (doto acc
                           (.put k v))))
                     (TreeMap.)
-                    live-roots))))
+                    column->root))
+                  (AtomicInteger. 1)))
 
 (defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap)))
+  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) (AtomicInteger. 1)))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -176,7 +178,10 @@
                           (->live-root field-name allocator)))))
 
   (getWatermark [_]
-    watermark)
+    (let [current-watermark watermark]
+      (if (pos? (.getAndIncrement ^AtomicInteger (.ref-count current-watermark)))
+        current-watermark
+        (recur))))
 
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
@@ -185,7 +190,8 @@
           next-row-id (+ chunk-idx row-count)
           number-of-new-rows (.indexTx (JustIndexer.) this allocator tx-instant tx-ops next-row-id)
           new-chunk-row-count (+ row-count number-of-new-rows)]
-      (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots))
+      (with-open [old-watermark watermark]
+        (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots)))
       (when (>= new-chunk-row-count max-rows-per-chunk)
         (.finishChunk this)))
 
@@ -223,13 +229,15 @@
                  (fn [_]
                    (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
-          (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count watermark)))))
+          (with-open [old-watermark watermark]
+            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count watermark))))))
         (finally
           (.closeCols this)))))
 
   Closeable
   (close [this]
-    (.closeCols this)))
+    (.closeCols this)
+    (.close watermark)))
 
 (defn ->indexer
   (^core2.indexer.Indexer [^BufferAllocator allocator

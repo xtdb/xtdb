@@ -125,24 +125,24 @@
                  (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (let [watermark (.getWatermark i)
-                column->idx (.chunk-object-key->idx watermark)
-                first-column (first column->idx)
-                last-column (last column->idx)]
-            (t/is (zero? (.chunk-idx watermark)))
-            (t/is (= 4 (.row-count watermark)))
-            (t/is (t/is 20 (count column->idx)))
-            (t/is (= ["chunk-00000000-_id.arrow" 4]
-                     [(key first-column) (val first-column)]))
-            (t/is (= ["chunk-00000000-time.arrow" 2]
-                     [(key last-column) (val last-column)]))))
+          (with-open [watermark (.getWatermark i)]
+            (let [column->root (.column->root watermark)
+                  first-column (first column->root)
+                  last-column (last column->root)]
+              (t/is (zero? (.chunk-idx watermark)))
+              (t/is (= 4 (.row-count watermark)))
+              (t/is (t/is 20 (count column->root)))
+              (t/is (= ["_id" 4]
+                       [(key first-column) (.getRowCount ^VectorSchemaRoot (val first-column))]))
+              (t/is (= ["time" 2]
+                       [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
 
         (.finishChunk i)
 
-        (let [watermark (.getWatermark i)]
+        (with-open [watermark (.getWatermark i)]
           (t/is (= 4 (.chunk-idx watermark)))
           (t/is (zero? (.row-count watermark)))
-          (t/is (empty? (.chunk-object-key->idx watermark))))
+          (t/is (empty? (.column->root watermark))))
 
         (t/is (= last-tx-instant (.latestStoredTx mm)))
         (t/is (= (dec total-number-of-ops) (.latestStoredRowId mm)))
