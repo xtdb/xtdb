@@ -266,15 +266,6 @@
         footer-bb (.nioBuffer ipc-file-format-buffer footer-position footer-size)]
     (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
-(def ^:private try-free-direct-buffer
-  (try
-    (Class/forName "io.netty.util.internal.PlatformDependent")
-    (eval
-     '(fn free-direct-buffer [nio-buffer]
-        (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)))
-    (catch ClassNotFoundException e
-      (fn free-direct-buffer-nop [_]))))
-
 (def ^:private try-open-reflective-access
   (try
     (Class/forName "java.lang.Module")
@@ -288,6 +279,15 @@
 
 (defonce ^:private direct-byte-buffer-access
   (try-open-reflective-access ArrowBuf (class (ByteBuffer/allocateDirect 0))))
+
+(def ^:private try-free-direct-buffer
+  (try
+    (Class/forName "io.netty.util.internal.PlatformDependent")
+    (eval
+     '(fn free-direct-buffer [nio-buffer]
+        (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)))
+    (catch ClassNotFoundException e
+      (fn free-direct-buffer-nop [_]))))
 
 (deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
   ReferenceManager
