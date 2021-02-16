@@ -178,8 +178,8 @@
                           (->live-root field-name allocator)))))
 
   (getWatermark [_]
-    (let [current-watermark watermark]
-      (if (pos? (util/inc-ref-count (.ref-count current-watermark) 1))
+    (when-let [current-watermark watermark]
+      (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
         current-watermark
         (recur))))
 
@@ -237,7 +237,8 @@
   Closeable
   (close [this]
     (.closeCols this)
-    (.close watermark)))
+    (.close watermark)
+    (set! (.watermark this) nil)))
 
 (defn ->indexer
   (^core2.indexer.Indexer [^BufferAllocator allocator

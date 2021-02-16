@@ -289,13 +289,16 @@
     (catch ClassNotFoundException e
       (fn free-direct-buffer-nop [_]))))
 
-(defn inc-ref-count ^long [^AtomicInteger ref-count ^long increment]
-  (.updateAndGet ^AtomicInteger ref-count
-                 (reify IntUnaryOperator
-                   (applyAsInt [_ x]
-                     (if (pos? x)
-                       (+ x increment)
-                       x)))))
+(defn inc-ref-count
+  (^long [^AtomicInteger ref-count]
+   (inc-ref-count ref-count 1))
+  (^long [^AtomicInteger ref-count ^long increment]
+   (.updateAndGet ^AtomicInteger ref-count
+                  (reify IntUnaryOperator
+                    (applyAsInt [_ x]
+                      (if (pos? x)
+                        (+ x increment)
+                        x))))))
 
 (defn dec-ref-count ^long [^AtomicInteger ref-count]
   (let [new-ref-count (.updateAndGet ^AtomicInteger ref-count
