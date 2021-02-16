@@ -305,7 +305,8 @@
                                            (dec x)
                                            -1))))]
     (when (neg? new-ref-count)
-      (.set ref-count 0))
+      (.set ref-count 0)
+      (throw (IllegalStateException. "ref count has gone negative")))
     new-ref-count))
 
 (deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
@@ -338,8 +339,6 @@
       (throw (IllegalArgumentException. "decrement must be positive")))
     (loop [n (dec decrement)]
       (let [new-ref-count (dec-ref-count ref-count)]
-        (when (neg? new-ref-count)
-          (throw (IllegalStateException. "ref count has gone negative")))
         (when (zero? new-ref-count)
           (let [nio-buffer nio-buffer]
             (set! (.nio-buffer this) nil)
