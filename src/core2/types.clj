@@ -1,11 +1,14 @@
 (ns core2.types
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [core2.util :as util])
   (:import java.io.Closeable
            java.nio.charset.StandardCharsets
-           [java.util Comparator Date]
+           [java.util Comparator Date Spliterator Spliterator$OfDouble Spliterator$OfInt Spliterator$OfLong]
+           java.util.stream.StreamSupport
+           [java.util.function Consumer DoubleConsumer IntConsumer LongConsumer]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ByteFunctionHelpers
-           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector IntVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
            [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableTinyIntHolder NullableVarBinaryHolder NullableVarCharHolder]
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]
@@ -192,3 +195,79 @@
                              (-> .start (set! 0))
                              (-> .end (set! (alength bs)))
                              (-> .buffer (set! buf))))))
+
+(def ^:private ^{:tag long} default-characteristics
+  (bit-or Spliterator/SIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
+
+(deftype ValueVectorSpliterator [v-fn ^ValueVector v ^:unsynchronized-mutable ^int idx]
+  Spliterator
+  (^boolean tryAdvance [this ^Consumer f]
+   (if (< idx (.getValueCount v))
+     (do (.accept f (v-fn (.getObject v idx)))
+         (set! (.idx this) (inc idx))
+         true)
+     false))
+
+  (trySplit [_])
+
+  (estimateSize [_]
+    (.getValueCount v))
+
+  (characteristics [_]
+    default-characteristics))
+
+(defmacro def-spliterator [t st ct]
+  (let [vec-sym (gensym 'vec)
+        idx-sym (gensym 'idx)
+        f-sym (gensym 'f)]
+    `(deftype ~(symbol (str t "Spliterator"))
+         [~(with-meta vec-sym {:tag t})
+          ~(with-meta idx-sym {:unsynchronized-mutable true :tag 'int})]
+       ~st
+       (^boolean tryAdvance [this# ~(with-meta f-sym {:tag ct})]
+        (if (< ~idx-sym (.getValueCount ~vec-sym))
+          (do (.accept ~f-sym (.get ~vec-sym ~idx-sym))
+              (set! (~(symbol (str "." idx-sym)) this#) (inc ~idx-sym))
+              true)
+          false))
+
+       (trySplit [_])
+
+       (estimateSize [_]
+         (.getValueCount ~vec-sym))
+
+       (characteristics [_]
+         ~default-characteristics))))
+
+(def-spliterator BigIntVector Spliterator$OfLong LongConsumer)
+(def-spliterator IntVector Spliterator$OfInt IntConsumer)
+(def-spliterator TinyIntVector Spliterator$OfInt IntConsumer)
+(def-spliterator Float8Vector Spliterator$OfDouble DoubleConsumer)
+
+(def type->spliterator-ctor
+  {Types$MinorType/TINYINT ->TinyIntVectorSpliterator
+   Types$MinorType/INT ->IntVectorSpliterator
+   Types$MinorType/FLOAT8 ->Float8VectorSpliterator
+   Types$MinorType/BIGINT ->BigIntVectorSpliterator
+   Types$MinorType/VARCHAR (partial ->ValueVectorSpliterator str)
+   Types$MinorType/TIMESTAMPMILLI (partial ->ValueVectorSpliterator util/local-date-time->date)})
+
+(defn ->spliterator ^java.util.Spliterator [^ValueVector v]
+  (let [minor-type (.getMinorType v)
+        ->ctor (or (get type->spliterator-ctor minor-type)
+                   (partial ->ValueVectorSpliterator identity))]
+    (->ctor v 0)))
+
+(defn ->stream ^java.util.stream.BaseStream [^Spliterator spliterator]
+  (cond
+    (instance? Spliterator$OfInt spliterator)
+    (StreamSupport/intStream spliterator false)
+
+    (instance? Spliterator$OfDouble spliterator)
+    (StreamSupport/doubleStream spliterator false)
+
+    (instance? Spliterator$OfLong spliterator)
+    (StreamSupport/longStream spliterator false)
+
+    :else
+    (StreamSupport/stream spliterator false)))
