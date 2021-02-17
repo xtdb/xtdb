@@ -5,12 +5,12 @@
            [java.util.function Consumer DoubleConsumer IntConsumer LongConsumer]
            java.time.LocalDateTime
            org.apache.arrow.vector.util.Text
-           [org.apache.arrow.vector BigIntVector Float8Vector IntVector TimeStampMilliVector TinyIntVector ValueVector]))
+           [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private ^{:tag long} default-characteristics
-  (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/SUBSIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
+(def ^:private ^{:tag 'long} default-characteristics
+  (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/SUBSIZED Spliterator/IMMUTABLE Spliterator/NONNULL))
 
 (defprotocol PArrowToClojure
   (arrow->clojure [this]))
@@ -31,7 +31,7 @@
   nil
   (arrow->clojure [this]))
 
-(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx ^int end-idx]
+(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx ^int end-idx ^int characteristics]
   Spliterator
   (^boolean tryAdvance [this ^Consumer f]
    (if (< idx end-idx)
@@ -53,13 +53,13 @@
           mid (quot (- end-idx idx) 2)]
       (when (< idx mid)
         (set! (.idx this) mid)
-        (ValueVectorSpliterator. v idx mid))))
+        (ValueVectorSpliterator. v idx mid characteristics))))
 
   (estimateSize [_]
     (- end-idx idx))
 
   (characteristics [_]
-    default-characteristics))
+    characteristics))
 
 (defmacro ^:private def-spliterator [t st ct]
   (let [vec-sym (gensym 'vec)
@@ -110,7 +110,11 @@
 (extend-protocol PSpliterator
   ValueVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0 (.getValueCount this)))
+    (->ValueVectorSpliterator this 0 (.getValueCount this) default-characteristics))
+
+  NullVector
+  (->spliterator [this]
+    (->ValueVectorSpliterator this 0 (.getValueCount this) (bit-and-not default-characteristics Spliterator/NONNULL)))
 
   TinyIntVector
   (->spliterator [this]
@@ -127,10 +131,6 @@
   Float8Vector
   (->spliterator [this]
     (->Float8VectorSpliterator this 0 (.getValueCount this)))
-
-  TimeStampMilliVector
-  (->spliterator [this]
-    (->ValueVectorSpliterator this 0 (.getValueCount this)))
 
   Spliterator
   (->spliterator [this] this))
