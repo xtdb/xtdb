@@ -6,6 +6,7 @@
            [java.util Comparator Date Spliterator Spliterator$OfDouble Spliterator$OfInt Spliterator$OfLong]
            java.util.stream.StreamSupport
            [java.util.function Consumer DoubleConsumer IntConsumer LongConsumer]
+           java.time.LocalDateTime
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ByteFunctionHelpers
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector IntVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
@@ -199,11 +200,30 @@
 (def ^:private ^{:tag long} default-characteristics
   (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
 
-(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx v-fn]
+(defprotocol PArrowToClojure
+  (arrow->clojure [this]))
+
+(extend-protocol PArrowToClojure
+  Text
+  (arrow->clojure [this]
+    (str this))
+
+  LocalDateTime
+  (arrow->clojure [this]
+    (util/local-date-time->date this))
+
+  Object
+  (arrow->clojure [this]
+    this)
+
+  nil
+  (arrow->clojure [this]))
+
+(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx]
   Spliterator
   (^boolean tryAdvance [this ^Consumer f]
    (if (< idx (.getValueCount v))
-     (do (.accept f (v-fn (.getObject v idx)))
+     (do (.accept f (arrow->clojure (.getObject v idx)))
          (set! (.idx this) (inc idx))
          true)
      false))
@@ -213,7 +233,7 @@
      (loop [idx idx]
        (if (< idx n)
          (do (try
-               (.accept f (v-fn (.getObject v idx)))
+               (.accept f (arrow->clojure (.getObject v idx)))
                (catch Throwable t
                  (set! (.idx this) idx)
                  (throw t)))
@@ -274,7 +294,7 @@
 (extend-protocol PSpliterator
   ValueVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0 identity))
+    (->ValueVectorSpliterator this 0))
 
   TinyIntVector
   (->spliterator [this]
@@ -290,11 +310,11 @@
 
   VarCharVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0 str))
+    (->ValueVectorSpliterator this 0))
 
   TimeStampMilliVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0 util/local-date-time->date))
+    (->ValueVectorSpliterator this 0))
 
   Spliterator
   (->spliterator [this] this))
