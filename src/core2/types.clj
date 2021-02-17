@@ -197,7 +197,7 @@
                              (-> .buffer (set! buf))))))
 
 (def ^:private ^{:tag long} default-characteristics
-  (bit-or Spliterator/SIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
+  (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
 
 (deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx v-fn]
   Spliterator
@@ -228,7 +228,7 @@
   (characteristics [_]
     default-characteristics))
 
-(defmacro def-spliterator [t st ct]
+(defmacro ^:private def-spliterator [t st ct]
   (let [vec-sym (gensym 'vec)
         idx-sym (gensym 'idx)
         f-sym (gensym 'f)]
