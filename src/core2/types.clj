@@ -232,11 +232,7 @@
    (let [n (.getValueCount v)]
      (loop [idx idx]
        (if (< idx n)
-         (do (try
-               (.accept f (arrow->clojure (.getObject v idx)))
-               (catch Throwable t
-                 (set! (.idx this) idx)
-                 (throw t)))
+         (do (.accept f (arrow->clojure (.getObject v idx)))
              (recur (inc idx)))
          (set! (.idx this) idx)))))
 
@@ -267,11 +263,7 @@
         (let [n# (.getValueCount ~vec-sym)]
           (loop [idx# ~idx-sym]
             (if (< idx# n#)
-              (do (try
-                    (.accept ~f-sym (.get ~vec-sym idx#))
-                    (catch Throwable t#
-                      (set! (~(symbol (str "." idx-sym)) this#) idx#)
-                      (throw t#)))
+              (do (.accept ~f-sym (.get ~vec-sym idx#))
                   (recur (inc idx#)))
               (set! (~(symbol (str "." idx-sym)) this#) idx#)))))
 
