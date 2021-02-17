@@ -199,7 +199,7 @@
 (def ^:private ^{:tag long} default-characteristics
   (bit-or Spliterator/SIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
 
-(deftype ValueVectorSpliterator [v-fn ^ValueVector v ^:unsynchronized-mutable ^int idx]
+(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx v-fn]
   Spliterator
   (^boolean tryAdvance [this ^Consumer f]
    (if (< idx (.getValueCount v))
@@ -268,30 +268,48 @@
 (def-spliterator TinyIntVector Spliterator$OfInt IntConsumer)
 (def-spliterator Float8Vector Spliterator$OfDouble DoubleConsumer)
 
-(def type->spliterator-ctor
-  {Types$MinorType/TINYINT ->TinyIntVectorSpliterator
-   Types$MinorType/INT ->IntVectorSpliterator
-   Types$MinorType/FLOAT8 ->Float8VectorSpliterator
-   Types$MinorType/BIGINT ->BigIntVectorSpliterator
-   Types$MinorType/VARCHAR (partial ->ValueVectorSpliterator str)
-   Types$MinorType/TIMESTAMPMILLI (partial ->ValueVectorSpliterator util/local-date-time->date)})
+(defprotocol PSpliterator
+  (->spliterator [this]))
 
-(defn ->spliterator ^java.util.Spliterator [^ValueVector v]
-  (let [minor-type (.getMinorType v)
-        ->ctor (or (get type->spliterator-ctor minor-type)
-                   (partial ->ValueVectorSpliterator identity))]
-    (->ctor v 0)))
+(extend-protocol PSpliterator
+  ValueVector
+  (->spliterator [this]
+    (->ValueVectorSpliterator this 0 identity))
 
-(defn ->stream ^java.util.stream.BaseStream [^Spliterator spliterator]
-  (cond
-    (instance? Spliterator$OfInt spliterator)
-    (StreamSupport/intStream spliterator false)
+  TinyIntVector
+  (->spliterator [this]
+    (->TinyIntVectorSpliterator this 0))
 
-    (instance? Spliterator$OfDouble spliterator)
-    (StreamSupport/doubleStream spliterator false)
+  IntVector
+  (->spliterator [this]
+    (->IntVectorSpliterator this 0))
 
-    (instance? Spliterator$OfLong spliterator)
-    (StreamSupport/longStream spliterator false)
+  BigIntVector
+  (->spliterator [this]
+    (->BigIntVectorSpliterator this 0))
 
-    :else
-    (StreamSupport/stream spliterator false)))
+  VarCharVector
+  (->spliterator [this]
+    (->ValueVectorSpliterator this 0 str))
+
+  TimeStampMilliVector
+  (->spliterator [this]
+    (->ValueVectorSpliterator this 0 util/local-date-time->date))
+
+  Spliterator
+  (->spliterator [this] this))
+
+(defn ->stream ^java.util.stream.BaseStream [pspliterator]
+  (let [spliterator (->spliterator pspliterator)]
+    (cond
+      (instance? Spliterator$OfInt spliterator)
+      (StreamSupport/intStream spliterator false)
+
+      (instance? Spliterator$OfDouble spliterator)
+      (StreamSupport/doubleStream spliterator false)
+
+      (instance? Spliterator$OfLong spliterator)
+      (StreamSupport/longStream spliterator false)
+
+      :else
+      (StreamSupport/stream spliterator false))))
