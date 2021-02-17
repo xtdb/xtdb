@@ -218,9 +218,11 @@
     (when-not (.isEmpty live-roots)
       (try
         (let [chunk-idx (.chunk-idx watermark)
-              futs (vec
-                    (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                      (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root))))]
+              futs (reduce
+                    (fn [acc [^String col-name, ^VectorSchemaRoot live-root]]
+                      (conj acc (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root))))
+                    []
+                    live-roots)]
 
           @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                (util/then-apply

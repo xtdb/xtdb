@@ -15,7 +15,6 @@
            core2.object_store.ObjectStore
            core2.tx.TransactionInstant
            java.io.Closeable
-           java.nio.channels.ClosedByInterruptException
            java.nio.file.Path
            java.time.Duration
            [java.util LinkedHashMap LinkedHashSet Set]
@@ -140,12 +139,12 @@
                 (throw (InterruptedException.))
                 (.indexTx indexer (log-record->tx-instant record) (.record record))))
             (Thread/sleep poll-sleep-ms)))
-        (catch ClosedByInterruptException e
-          (log/warn e "channel interrupted while closing"))
         (catch InterruptedException _)
         (catch Throwable t
-          (log/fatal t "ingest loop stopped")
-          (throw t)))))
+          (if (Thread/interrupted)
+            (log/warn t "exception while closing")
+            (do (log/fatal t "ingest loop stopped")
+                (throw t)))))))
 
   (start [this]
     (set! (.ingest-future this)

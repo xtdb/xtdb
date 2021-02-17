@@ -228,10 +228,10 @@
   [^VectorSchemaRoot root ipc-type f]
 
   (with-open [baos (ByteArrayOutputStream.)
-
+              ch (Channels/newChannel baos)
               ^ArrowWriter sw (case ipc-type
-                                :file (ArrowFileWriter. root nil (Channels/newChannel baos))
-                                :stream (ArrowStreamWriter. root nil (Channels/newChannel baos)))]
+                                :file (ArrowFileWriter. root nil ch)
+                                :stream (ArrowStreamWriter. root nil ch))]
 
     (.start sw)
 
