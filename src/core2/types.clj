@@ -219,27 +219,32 @@
   nil
   (arrow->clojure [this]))
 
-(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx]
+(deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx ^int end-idx]
   Spliterator
   (^boolean tryAdvance [this ^Consumer f]
-   (if (< idx (.getValueCount v))
+   (if (< idx end-idx)
      (do (.accept f (arrow->clojure (.getObject v idx)))
          (set! (.idx this) (inc idx))
          true)
      false))
 
   (^void forEachRemaining [this ^Consumer f]
-   (let [n (.getValueCount v)]
+   (let [n end-idx]
      (loop [idx idx]
        (if (< idx n)
          (do (.accept f (arrow->clojure (.getObject v idx)))
              (recur (inc idx)))
          (set! (.idx this) idx)))))
 
-  (trySplit [_])
+  (trySplit [this]
+    (let [idx idx
+          mid (quot (- end-idx idx) 2)]
+      (when (< idx mid)
+        (set! (.idx this) mid)
+        (ValueVectorSpliterator. v idx mid))))
 
   (estimateSize [_]
-    (.getValueCount v))
+    (- end-idx idx))
 
   (characteristics [_]
     default-characteristics))
@@ -247,30 +252,37 @@
 (defmacro ^:private def-spliterator [t st ct]
   (let [vec-sym (gensym 'vec)
         idx-sym (gensym 'idx)
+        end-idx-sym (gensym 'end-idx)
         f-sym (gensym 'f)]
     `(deftype ~(symbol (str t "Spliterator"))
          [~(with-meta vec-sym {:tag t})
-          ~(with-meta idx-sym {:unsynchronized-mutable true :tag 'int})]
+          ~(with-meta idx-sym {:unsynchronized-mutable true :tag 'int})
+          ~(with-meta end-idx-sym {:tag 'int})]
        ~st
        (^boolean tryAdvance [this# ~(with-meta f-sym {:tag ct})]
-        (if (< ~idx-sym (.getValueCount ~vec-sym))
+        (if (< ~idx-sym ~end-idx-sym)
           (do (.accept ~f-sym (.get ~vec-sym ~idx-sym))
               (set! (~(symbol (str "." idx-sym)) this#) (inc ~idx-sym))
               true)
           false))
 
        (^void forEachRemaining [this# ~(with-meta f-sym {:tag ct})]
-        (let [n# (.getValueCount ~vec-sym)]
+        (let [n# ~end-idx-sym]
           (loop [idx# ~idx-sym]
             (if (< idx# n#)
               (do (.accept ~f-sym (.get ~vec-sym idx#))
                   (recur (inc idx#)))
               (set! (~(symbol (str "." idx-sym)) this#) idx#)))))
 
-       (trySplit [_])
+       (trySplit [this#]
+         (let [idx# ~idx-sym
+               mid# (quot (- ~end-idx-sym idx#) 2)]
+           (when (< idx# mid#)
+             (set! (~(symbol (str "." idx-sym)) this#) mid#)
+             (~(symbol (str t "Spliterator.")) ~vec-sym idx# mid#))))
 
        (estimateSize [_]
-         (.getValueCount ~vec-sym))
+         (- ~end-idx-sym ~idx-sym))
 
        (characteristics [_]
          ~default-characteristics))))
@@ -286,27 +298,27 @@
 (extend-protocol PSpliterator
   ValueVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0))
+    (->ValueVectorSpliterator this 0 (.getValueCount this)))
 
   TinyIntVector
   (->spliterator [this]
-    (->TinyIntVectorSpliterator this 0))
+    (->TinyIntVectorSpliterator this 0 (.getValueCount this)))
 
   IntVector
   (->spliterator [this]
-    (->IntVectorSpliterator this 0))
+    (->IntVectorSpliterator this 0 (.getValueCount this)))
 
   BigIntVector
   (->spliterator [this]
-    (->BigIntVectorSpliterator this 0))
+    (->BigIntVectorSpliterator this 0 (.getValueCount this)))
 
   VarCharVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0))
+    (->ValueVectorSpliterator this 0 (.getValueCount this)))
 
   TimeStampMilliVector
   (->spliterator [this]
-    (->ValueVectorSpliterator this 0))
+    (->ValueVectorSpliterator this 0 (.getValueCount this)))
 
   Spliterator
   (->spliterator [this] this))
