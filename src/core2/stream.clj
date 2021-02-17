@@ -1,11 +1,15 @@
 (ns core2.stream
-  (:require [core2.util :as util])
+  (:require [core2.util :as util]
+            [core2.types :as t])
   (:import [java.util Spliterator Spliterator$OfDouble Spliterator$OfInt Spliterator$OfLong]
-           java.util.stream.StreamSupport
-           [java.util.function Consumer DoubleConsumer IntConsumer LongConsumer]
+           [java.util.stream StreamSupport Stream IntStream LongStream DoubleStream]
+           [java.util.function BiConsumer Consumer DoubleConsumer IntConsumer LongConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
            java.time.LocalDateTime
+           org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.util.Text
-           [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]))
+           org.apache.arrow.vector.types.pojo.Field
+           [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]
+           org.apache.arrow.vector.util.VectorBatchAppender))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -149,3 +153,64 @@
 
       :else
       (StreamSupport/stream spliterator false))))
+
+(defprotocol PStreamToVector
+  (stream->vector [this field allocator]))
+
+(def ^:private vector-combiner
+  (reify BiConsumer
+    (accept [_ x y]
+      (VectorBatchAppender/batchAppend x (make-array ValueVector [y])))))
+
+(extend-protocol PStreamToVector
+  Stream
+  (stream->vector [this field allocator]
+    (.collect this
+              (reify Supplier
+                (get [_]
+                  (.createVector ^Field field allocator)))
+              (reify BiConsumer
+                (accept [_ v x]
+                  (let [c (.getValueCount ^ValueVector v)]
+                    (t/set-safe! v c x)
+                    (.setValueCount ^ValueVector v (inc c)))))
+              vector-combiner))
+
+  IntStream
+  (stream->vector [this _ allocator]
+    (.collect this
+              (reify Supplier
+                (get [_]
+                  (IntVector. "" ^BufferAllocator allocator)))
+              (reify ObjIntConsumer
+                (accept [_ v x]
+                  (let [c (.getValueCount ^ValueVector v)]
+                    (.setSafe ^IntVector v c x)
+                    (.setValueCount ^ValueVector v (inc c)))))
+              vector-combiner))
+
+  LongStream
+  (stream->vector [this _ allocator]
+    (.collect this
+              (reify Supplier
+                (get [_]
+                  (BigIntVector. "" ^BufferAllocator allocator)))
+              (reify ObjLongConsumer
+                (accept [_ v x]
+                  (let [c (.getValueCount ^ValueVector v)]
+                    (.setSafe ^BigIntVector v c x)
+                    (.setValueCount ^ValueVector v (inc c)))))
+              vector-combiner))
+
+  DoubleStream
+  (stream->vector [this _ allocator]
+    (.collect this
+              (reify Supplier
+                (get [_]
+                  (Float8Vector. "" ^BufferAllocator allocator)))
+              (reify ObjDoubleConsumer
+                (accept [_ v x]
+                  (let [c (.getValueCount ^ValueVector v)]
+                    (.setSafe ^Float8Vector v c x)
+                    (.setValueCount ^ValueVector v (inc c)))))
+              vector-combiner)))
