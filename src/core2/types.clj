@@ -312,6 +312,10 @@
   (->spliterator [this]
     (->BigIntVectorSpliterator this 0 (.getValueCount this)))
 
+  Float8Vector
+  (->spliterator [this]
+    (->Float8VectorSpliterator this 0 (.getValueCount this)))
+
   VarCharVector
   (->spliterator [this]
     (->ValueVectorSpliterator this 0 (.getValueCount this)))
