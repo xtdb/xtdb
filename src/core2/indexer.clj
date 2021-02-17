@@ -28,6 +28,7 @@
   (^core2.tx.TransactionInstant latestCompletedTx []))
 
 (definterface IndexerPrivate
+  (^int indexTx [^core2.tx.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops, ^long nextRowId])
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
   (^void closeCols [])
   (^void finishChunk []))
@@ -99,47 +100,6 @@
         (when (< end-idx row-count)
           (recur end-idx (+ target-row-id max-rows-per-block)))))))
 
-(definterface IJustIndex
-  (^int indexTx [^core2.indexer.IChunkManager chunkMgr, ^org.apache.arrow.memory.BufferAllocator allocator,
-                 ^core2.tx.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops,
-                 ^long nextRowId]))
-
-(deftype JustIndexer []
-  IJustIndex
-  (indexTx [_ chunk-mgr allocator tx-instant tx-ops next-row-id]
-    (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
-                sr (ArrowStreamReader. tx-ops-ch allocator)
-                tx-root (.getVectorSchemaRoot sr)
-                ^DenseUnionVector tx-id-vec (->tx-id-vec allocator (.tx-id tx-instant))
-                ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))]
-
-      (.loadNextBatch sr)
-
-      (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
-            op-type-ids (object-array (mapv (fn [^Field field]
-                                              (keyword (.getName field)))
-                                            (.getChildren (.getField tx-ops-vec))))]
-        (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
-          (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
-                op-vec (.getStruct tx-ops-vec op-type-id)
-                per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
-            (case (aget op-type-ids op-type-id)
-              :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
-                         row-id (+ next-row-id per-op-offset)]
-                     (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
-                             :when (not (neg? (.getTypeId value-vec per-op-offset)))]
-
-                       (copy-safe! (.getLiveRoot chunk-mgr (.getName value-vec))
-                                   value-vec per-op-offset row-id))
-
-                     (copy-safe! (.getLiveRoot chunk-mgr (.getName tx-time-vec))
-                                 tx-time-vec 0 row-id)
-
-                     (copy-safe! (.getLiveRoot chunk-mgr (.getName tx-id-vec))
-                                 tx-id-vec 0 row-id)))))
-
-        (.getValueCount tx-ops-vec)))))
-
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
@@ -188,7 +148,7 @@
     (let [chunk-idx (.chunk-idx watermark)
           row-count (.row-count watermark)
           next-row-id (+ chunk-idx row-count)
-          number-of-new-rows (.indexTx (JustIndexer.) this allocator tx-instant tx-ops next-row-id)
+          number-of-new-rows (.indexTx this tx-instant tx-ops next-row-id)
           new-chunk-row-count (+ row-count number-of-new-rows)]
       (with-open [old-watermark watermark]
         (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots tx-instant)))
@@ -201,6 +161,41 @@
     (.tx-instant watermark))
 
   IndexerPrivate
+  (indexTx [this tx-instant tx-ops next-row-id]
+    (with-open [tx-ops-ch (util/->seekable-byte-channel tx-ops)
+                sr (ArrowStreamReader. tx-ops-ch allocator)
+                tx-root (.getVectorSchemaRoot sr)
+                ^DenseUnionVector tx-id-vec (->tx-id-vec allocator (.tx-id tx-instant))
+                ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))]
+
+      (.loadNextBatch sr)
+
+      (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
+            op-type-ids (object-array (mapv (fn [^Field field]
+                                              (keyword (.getName field)))
+                                            (.getChildren (.getField tx-ops-vec))))]
+        (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+          (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
+                op-vec (.getStruct tx-ops-vec op-type-id)
+                per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
+            (case (aget op-type-ids op-type-id)
+              :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
+                         row-id (+ next-row-id per-op-offset)]
+                     (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
+                             :when (not (neg? (.getTypeId value-vec per-op-offset)))]
+
+                       (copy-safe! (.getLiveRoot this (.getName value-vec))
+                                   value-vec per-op-offset row-id))
+
+                     (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
+                                 tx-time-vec 0 row-id)
+
+                     (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
+                                 tx-id-vec 0 row-id)))))
+
+        (.getValueCount tx-ops-vec))))
+
+
   (writeColumn [_this live-root]
     (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
       (let [loader (VectorLoader. write-root)
