@@ -6,7 +6,7 @@
             [core2.util :as util])
   (:import core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
-           core2.tx.Watermark
+           [core2.tx TransactionInstant Watermark]
            java.io.Closeable
            [java.util Collections Date Map Map$Entry TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
@@ -24,7 +24,8 @@
   (^core2.tx.Watermark getWatermark []))
 
 (definterface TransactionIndexer
-  (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps]))
+  (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps])
+  (^core2.tx.TransactionInstant latestCompletedTx []))
 
 (definterface IndexerPrivate
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
@@ -142,7 +143,7 @@
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
-(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^long row-count ^Map column->root]
+(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^long row-count ^Map column->root ^TransactionInstant tx-instant]
   (tx/->Watermark chunk-idx
                   row-count
                   (Collections/unmodifiableSortedMap
@@ -154,10 +155,11 @@
                           (.put k v))))
                     (TreeMap.)
                     column->root))
+                  tx-instant
                   (AtomicInteger. 1)))
 
-(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) (AtomicInteger. 1)))
+(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant]
+  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant (AtomicInteger. 1)))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -175,10 +177,11 @@
                           (->live-root field-name allocator)))))
 
   (getWatermark [_]
-    (when-let [current-watermark watermark]
-      (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
-        current-watermark
-        (recur))))
+    (loop []
+      (when-let [current-watermark watermark]
+        (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
+          current-watermark
+          (recur)))))
 
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
@@ -188,11 +191,14 @@
           number-of-new-rows (.indexTx (JustIndexer.) this allocator tx-instant tx-ops next-row-id)
           new-chunk-row-count (+ row-count number-of-new-rows)]
       (with-open [old-watermark watermark]
-        (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots)))
+        (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots tx-instant)))
       (when (>= new-chunk-row-count max-rows-per-chunk)
         (.finishChunk this)))
 
     tx-instant)
+
+  (latestCompletedTx [_]
+    (.tx-instant watermark))
 
   IndexerPrivate
   (writeColumn [_this live-root]
@@ -227,7 +233,7 @@
                    (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
           (with-open [old-watermark watermark]
-            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count watermark))))))
+            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)))))
         (finally
           (.closeCols this)))))
 
@@ -252,11 +258,12 @@
    (let [latest-row-id (.latestStoredRowId metadata-mgr)
          chunk-idx (if latest-row-id
                        (inc (long latest-row-id))
-                       0)]
+                       0)
+         latest-stored-tx (.latestStoredTx metadata-mgr)]
      (Indexer. allocator
                object-store
                metadata-mgr
                max-rows-per-chunk
                max-rows-per-block
                (ConcurrentSkipListMap.)
-               (->empty-watermark chunk-idx)))))
+               (->empty-watermark chunk-idx latest-stored-tx)))))

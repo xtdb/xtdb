@@ -6,7 +6,7 @@
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time])
 
-(defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^AtomicInteger ref-count]
+(defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^TransactionInstant tx-instant ^AtomicInteger ref-count]
   Closeable
   (close [_]
     (when (zero? (util/dec-ref-count ref-count))

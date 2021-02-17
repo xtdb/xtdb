@@ -123,7 +123,6 @@
 
 (deftype IngestLoop [^LogReader log-reader
                      ^TransactionIndexer indexer
-                     ^:volatile-mutable ^TransactionInstant latest-completed-tx
                      ^ExecutorService pool
                      ^:volatile-mutable ^Future ingest-future
                      ingest-opts]
@@ -135,12 +134,11 @@
           poll-sleep-ms (.toMillis poll-sleep-duration)]
       (try
         (while true
-          (if-let [log-records (not-empty (.readRecords log-reader (some-> latest-completed-tx .tx-id) batch-size))]
+          (if-let [log-records (not-empty (.readRecords log-reader (some-> (.latestCompletedTx indexer) .tx-id) batch-size))]
             (doseq [^LogRecord record log-records]
               (if (Thread/interrupted)
                 (throw (InterruptedException.))
-                (set! (.latest-completed-tx this)
-                      (.indexTx indexer (log-record->tx-instant record) (.record record)))))
+                (.indexTx indexer (log-record->tx-instant record) (.record record))))
             (Thread/sleep poll-sleep-ms)))
         (catch ClosedByInterruptException e
           (log/warn e "channel interrupted while closing"))
@@ -153,7 +151,7 @@
     (set! (.ingest-future this)
           (.submit pool ^Runnable #(.ingestLoop this))))
 
-  (latestCompletedTx [_this] latest-completed-tx)
+  (latestCompletedTx [_this] (.latestCompletedTx indexer))
 
   (awaitTx [this tx] (.awaitTx this tx nil))
 
@@ -165,7 +163,7 @@
             end-ns (+ (System/nanoTime) (.toNanos timeout))
             tx-id (.tx-id tx)]
         (loop []
-          (let [latest-completed-tx latest-completed-tx]
+          (let [latest-completed-tx (.latestCompletedTx indexer)]
             (cond
               (and latest-completed-tx
                    (>= (.tx-id latest-completed-tx) tx-id))
@@ -181,7 +179,7 @@
                 (recur))
 
               :else (throw (TimeoutException.))))))
-      latest-completed-tx))
+      (.latestCompletedTx indexer)))
 
   Closeable
   (close [_]
@@ -191,18 +189,16 @@
 (defn ->ingest-loop
   (^core2.core.IngestLoop
    [^LogReader log-reader
-    ^TransactionIndexer indexer
-    ^TransactionInstant latest-completed-tx]
-   (->ingest-loop log-reader indexer latest-completed-tx {}))
+    ^TransactionIndexer indexer]
+   (->ingest-loop log-reader indexer {}))
 
   (^core2.core.IngestLoop
    [^LogReader log-reader
     ^TransactionIndexer indexer
-    ^TransactionInstant latest-completed-tx
     ingest-opts]
 
    (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "ingest-loop-"))]
-     (doto (IngestLoop. log-reader indexer latest-completed-tx pool nil ingest-opts)
+     (doto (IngestLoop. log-reader indexer pool nil ingest-opts)
        (.start)))))
 
 (deftype Node [^BufferAllocator allocator
@@ -234,7 +230,7 @@
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
          metadata-manager (meta/->metadata-manager allocator object-store buffer-pool)
          indexer (indexer/->indexer allocator object-store metadata-manager opts)
-         ingest-loop (->ingest-loop log-reader indexer (.latestStoredTx metadata-manager) opts)]
+         ingest-loop (->ingest-loop log-reader indexer opts)]
      (Node. allocator log-reader object-store metadata-manager indexer ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]
