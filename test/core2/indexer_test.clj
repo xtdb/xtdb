@@ -429,11 +429,12 @@
                               (.tx-id second-half-tx-instant))))
 
                   (doseq [^Node node [new-node node]
-                          :let [^IngestLoop il (.ingest-loop node)
-                                ^ObjectStore os (.object-store node)]]
+                          :let [^IngestLoop il (.ingest-loop node)]]
                     (t/is (= second-half-tx-instant (.awaitTx il second-half-tx-instant (Duration/ofSeconds 5))))
-                    (t/is (= second-half-tx-instant (.latestCompletedTx il)))
+                    (t/is (= second-half-tx-instant (.latestCompletedTx il))))
 
+                  (doseq [^Node node [new-node node]
+                          :let [^ObjectStore os (.object-store node)]]
                     (t/is (= 11 (count @(.listObjects os "metadata-*"))))
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))))))
