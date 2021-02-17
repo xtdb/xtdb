@@ -3,7 +3,8 @@
             core2.object-store
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.metadata :as meta])
   (:import core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.tx TransactionInstant Watermark]
@@ -252,15 +253,15 @@
                            {:keys [max-rows-per-chunk max-rows-per-block]
                             :or {max-rows-per-chunk 10000
                                  max-rows-per-block 1000}}]
-   (let [latest-row-id (.latestStoredRowId metadata-mgr)
+   (let [[latest-row-id latest-tx] @(meta/with-latest-metadata metadata-mgr
+                                      (juxt meta/latest-row-id meta/latest-tx))
          chunk-idx (if latest-row-id
                        (inc (long latest-row-id))
-                       0)
-         latest-stored-tx (.latestStoredTx metadata-mgr)]
+                       0)]
      (Indexer. allocator
                object-store
                metadata-mgr
                max-rows-per-chunk
                max-rows-per-block
                (ConcurrentSkipListMap.)
-               (->empty-watermark chunk-idx latest-stored-tx)))))
+               (->empty-watermark chunk-idx latest-tx)))))

@@ -8,6 +8,7 @@
            java.util.stream.IntStream
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
            [org.apache.arrow.vector FieldVector VarCharVector]
+           org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.holders.ValueHolder
            org.roaringbitmap.RoaringBitmap))
 
@@ -50,6 +51,13 @@
 
 (defn ->str-pred [^IntPredicate compare-pred ^String comparison-value]
   (compare->pred compare-pred (->str-compare comparison-value)))
+
+(defn ->dense-union-pred [^IVectorPredicate vec-pred, ^long type-id]
+  (reify IVectorPredicate
+    (test [_ field-vec idx]
+      (let [^DenseUnionVector field-vec field-vec]
+        (and (= (.getTypeId field-vec idx) type-id)
+             (.test vec-pred (.getVectorByType field-vec type-id) (.getOffset field-vec idx)))))))
 
 (defn search ^org.roaringbitmap.RoaringBitmap [^FieldVector field-vec, ^IVectorCompare vec-compare]
   (let [value-count (.getValueCount field-vec)
