@@ -1,23 +1,20 @@
 (ns core2.indexer
-  (:require core2.buffer-pool
-            [core2.metadata :as meta]
+  (:require core2.metadata
+            core2.object-store
+            [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.tx :as tx])
-  (:import core2.buffer_pool.BufferPool
-           core2.metadata.IMetadataManager
+            [core2.util :as util])
+  (:import core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.tx.Watermark
            java.io.Closeable
-           [java.nio.file Files Path StandardOpenOption]
-           java.nio.file.attribute.FileAttribute
-           [java.util Collections Date List Map Map$Entry SortedSet TreeMap]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListMap ConcurrentSkipListSet]
+           [java.util Collections Date Map Map$Entry TreeMap]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot VectorLoader VectorUnloader]
+           org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamReader]
+           org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo Field Schema]))
 
 (set! *unchecked-math* :warn-on-boxed)
