@@ -155,7 +155,7 @@
       (StreamSupport/stream spliterator false))))
 
 (defprotocol PStreamToVector
-  (stream->vector [this field allocator]))
+  (stream->vector [this to-vector]))
 
 (def ^:private vector-combiner
   (reify BiConsumer
@@ -164,11 +164,9 @@
 
 (extend-protocol PStreamToVector
   Stream
-  (stream->vector [this field allocator]
+  (stream->vector [this to-vector]
     (.collect this
-              (reify Supplier
-                (get [_]
-                  (.createVector ^Field field allocator)))
+              (util/->supplier (constantly to-vector))
               (reify BiConsumer
                 (accept [_ v x]
                   (let [c (.getValueCount ^ValueVector v)]
@@ -177,11 +175,9 @@
               vector-combiner))
 
   IntStream
-  (stream->vector [this _ allocator]
+  (stream->vector [this to-vector]
     (.collect this
-              (reify Supplier
-                (get [_]
-                  (IntVector. "" ^BufferAllocator allocator)))
+              (util/->supplier (constantly to-vector))
               (reify ObjIntConsumer
                 (accept [_ v x]
                   (let [c (.getValueCount ^ValueVector v)]
@@ -190,11 +186,9 @@
               vector-combiner))
 
   LongStream
-  (stream->vector [this _ allocator]
+  (stream->vector [this to-vector]
     (.collect this
-              (reify Supplier
-                (get [_]
-                  (BigIntVector. "" ^BufferAllocator allocator)))
+              (util/->supplier (constantly to-vector))
               (reify ObjLongConsumer
                 (accept [_ v x]
                   (let [c (.getValueCount ^ValueVector v)]
@@ -203,11 +197,9 @@
               vector-combiner))
 
   DoubleStream
-  (stream->vector [this _ allocator]
+  (stream->vector [this to-vector]
     (.collect this
-              (reify Supplier
-                (get [_]
-                  (Float8Vector. "" ^BufferAllocator allocator)))
+              (util/->supplier (constantly to-vector))
               (reify ObjDoubleConsumer
                 (accept [_ v x]
                   (let [c (.getValueCount ^ValueVector v)]
