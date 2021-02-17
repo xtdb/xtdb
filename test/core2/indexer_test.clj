@@ -464,15 +464,15 @@
           (.finishChunk i))
 
         (t/testing "where name > 'Ivan'"
-          (let [matching-chunks (with-open [ivan-holder (types/open-literal-varchar-holder allocator "Ivan")]
-                                  (.matchingChunks mm "name"
-                                                   (.holder ivan-holder) false
-                                                   (NullableVarCharHolder.) false))]
-            (t/is (= ["metadata-00000001.arrow"] matching-chunks))
+          (let [chunk-idxs (with-open [ivan-holder (types/open-literal-varchar-holder allocator "Ivan")]
+                             (.matchingChunks mm "name"
+                                              (.holder ivan-holder) false
+                                              (NullableVarCharHolder.) false))]
+            (t/is (= [1] chunk-idxs))
 
             (t/is (= {1 "James", 2 "Jon"}
-                     @(let [futs (for [metadata-key matching-chunks]
-                                   (-> (.getBuffer bp (.chunkFileKey mm metadata-key "name"))
+                     @(let [futs (for [chunk-idx chunk-idxs]
+                                   (-> (.getBuffer bp (.chunkFileKey mm chunk-idx "name"))
                                        (util/then-apply
                                          (fn [buffer]
                                            (when buffer

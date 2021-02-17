@@ -30,6 +30,13 @@
             (t/->primitive-dense-union-field "max")
             (t/->field "count" (.getType Types$MinorType/BIGINT) false)]))
 
+(defn- ->metadata-obj-key [chunk-idx]
+  (format "metadata-%08x.arrow" chunk-idx))
+
+(defn- obj-key->chunk-idx [obj-key]
+  (some-> (second (re-matches #"metadata-(\p{XDigit}{8}).arrow" obj-key))
+          (Long/parseLong 16)))
+
 (definterface MinMax
   (^void writeMinMax [^org.apache.arrow.vector.FieldVector src-vec
                       ^org.apache.arrow.vector.FieldVector min-vec, ^int min-vec-idx
@@ -107,7 +114,7 @@
                                    ^org.apache.arrow.vector.holders.ValueHolder lowerBound ^boolean isLowerInclusive
                                    ^org.apache.arrow.vector.holders.ValueHolder upperBound ^boolean isUpperInclusive])
 
-  (^String chunkFileKey [^String chunkKey, ^String fieldName]))
+  (^String chunkFileKey [^long chunkIdx, ^String fieldName]))
 
 (definterface IMetadataPrivate
   (^int fieldIndex [^org.apache.arrow.vector.VectorSchemaRoot metadataRoot, ^String columnName, ^String fieldName])
@@ -124,8 +131,8 @@
         (pos? (.get bit-vec idx)) idx
         :else (recur (inc idx))))))
 
-(defn- with-metadata [^BufferAllocator allocator, ^BufferPool buffer-pool, metadata-key, f]
-  (-> (.getBuffer buffer-pool metadata-key)
+(defn- with-metadata [^BufferAllocator allocator, ^BufferPool buffer-pool, ^long chunk-idx, f]
+  (-> (.getBuffer buffer-pool (->metadata-obj-key chunk-idx))
       (util/then-apply
         (fn [^ArrowBuf metadata-buffer]
           (if metadata-buffer
@@ -143,7 +150,7 @@
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^BufferPool buffer-pool
-                          ^SortedSet known-metadata]
+                          ^SortedSet known-chunks]
   IMetadataPrivate
   (fieldIndex [this metadata column-name field-name]
     (.fieldIndex this metadata column-name field-name -1))
@@ -183,16 +190,15 @@
                            (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
                              (write-col-meta metadata-root live-root col-name obj-key)))
 
-                         (util/root->arrow-ipc-byte-buffer metadata-root :file))
-          metadata-obj-key (format "metadata-%08x.arrow" chunk-idx)]
+                         (util/root->arrow-ipc-byte-buffer metadata-root :file))]
 
-      @(.putObject object-store metadata-obj-key metadata-buf)
+      @(.putObject object-store (->metadata-obj-key chunk-idx) metadata-buf)
 
-      (.add known-metadata metadata-obj-key)))
+      (.add known-chunks chunk-idx)))
 
   (latestStoredTx [this]
-    (when-let [metadata-key (last known-metadata)]
-      @(with-metadata allocator buffer-pool metadata-key
+    (when-let [chunk-idx (last known-chunks)]
+      @(with-metadata allocator buffer-pool chunk-idx
          (fn [^VectorSchemaRoot metadata-root]
            (let [tx-id-holder (NullableBigIntHolder.)
                  tx-time-holder (NullableTimeStampMilliHolder.)]
@@ -202,8 +208,8 @@
                                       (Date. (.value tx-time-holder))))))))
 
   (latestStoredRowId [this]
-    (when-let [metadata-key (last known-metadata)]
-      @(with-metadata allocator buffer-pool metadata-key
+    (when-let [chunk-idx (last known-chunks)]
+      @(with-metadata allocator buffer-pool chunk-idx
          (fn [^VectorSchemaRoot metadata-root]
            (let [row-id-holder (NullableBigIntHolder.)]
              (.readMaxValue this metadata-root "_tx-id" "_row-id" row-id-holder)
@@ -219,9 +225,9 @@
           lower-pred (if lower-inclusive? sel/pred>= sel/pred>)
           upper-pred (if upper-inclusive? sel/pred<= sel/pred<)]
 
-      (->> (vec known-metadata)
-           (mapv (fn [metadata-key]
-                   (with-metadata allocator buffer-pool metadata-key
+      (->> (vec known-chunks)
+           (mapv (fn [chunk-idx]
+                   (with-metadata allocator buffer-pool chunk-idx
                      (fn [^VectorSchemaRoot metadata-root]
                        (let [val-holder (.newHolder rw)]
                          (when-let [field-idx (.fieldIndex this metadata-root col-name col-name type-id)]
@@ -237,21 +243,21 @@
                                         (or (not (.isSet rw upper-bound))
                                             (within-bound (.getVector metadata-root "min")
                                                           upper-pred upper-bound)))
-                               metadata-key))))))))
+                               chunk-idx))))))))
            (into [] (keep deref)))))
 
-  (chunkFileKey [this metadata-key field-name]
-    @(with-metadata allocator buffer-pool metadata-key
+  (chunkFileKey [this chunk-idx field-name]
+    @(with-metadata allocator buffer-pool chunk-idx
        (fn [^VectorSchemaRoot metadata-root]
          (when-let [field-idx (.fieldIndex this metadata-root field-name field-name)]
            (str (.getObject (.getVector metadata-root "file") field-idx))))))
 
   Closeable
   (close [_]
-    (.clear known-metadata)))
+    (.clear known-chunks)))
 
 (defn ->metadata-manager ^core2.metadata.IMetadataManager [^BufferAllocator allocator
                                                            ^ObjectStore object-store
                                                            ^BufferPool buffer-pool]
   (MetadataManager. allocator object-store buffer-pool
-                    (ConcurrentSkipListSet. ^List @(.listObjects object-store "metadata-*"))))
+                    (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx @(.listObjects object-store "metadata-*")))))
