@@ -10,7 +10,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:private ^{:tag long} default-characteristics
-  (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
+  (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/SUBSIZED Spliterator/NONNULL Spliterator/IMMUTABLE))
 
 (defprotocol PArrowToClojure
   (arrow->clojure [this]))
