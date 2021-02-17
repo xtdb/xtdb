@@ -208,6 +208,18 @@
          true)
      false))
 
+  (^void forEachRemaining [this ^Consumer f]
+   (let [n (.getValueCount v)]
+     (loop [idx idx]
+       (if (< idx n)
+         (do (try
+               (.accept f (v-fn (.getObject v idx)))
+               (catch Throwable t
+                 (set! (.idx this) idx)
+                 (throw t)))
+             (recur (inc idx)))
+         (set! (.idx this) idx)))))
+
   (trySplit [_])
 
   (estimateSize [_]
@@ -230,6 +242,18 @@
               (set! (~(symbol (str "." idx-sym)) this#) (inc ~idx-sym))
               true)
           false))
+
+       (^void forEachRemaining [this# ~(with-meta f-sym {:tag ct})]
+        (let [n# (.getValueCount ~vec-sym)]
+          (loop [idx# ~idx-sym]
+            (if (< idx# n#)
+              (do (try
+                    (.accept ~f-sym (.get ~vec-sym idx#))
+                    (catch Throwable t#
+                      (set! (~(symbol (str "." idx-sym)) this#) idx#)
+                      (throw t#)))
+                  (recur (inc idx#)))
+              (set! (~(symbol (str "." idx-sym)) this#) idx#)))))
 
        (trySplit [_])
 
