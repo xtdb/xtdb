@@ -10,6 +10,7 @@
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]
            org.apache.arrow.vector.complex.VectorWithOrdinal
+           org.apache.arrow.vector.complex.reader.FieldReader
            org.apache.arrow.vector.util.VectorBatchAppender))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -62,6 +63,42 @@
 
   (estimateSize [_]
     (- end-idx idx))
+
+  (characteristics [_]
+    characteristics))
+
+
+(deftype FieldReaderSpliterator [^ValueVector v ^FieldReader r ^int end-idx ^int characteristics]
+  Spliterator
+  (^boolean tryAdvance [this ^Consumer f]
+   (if (< (.getPosition r) end-idx)
+     (do (.accept f r)
+         (.setPosition r (inc (.getPosition r)))
+         true)
+     false))
+
+  (^void forEachRemaining [this ^Consumer f]
+   (let [n end-idx]
+     (loop [idx (.getPosition r)]
+       (doto r
+         (.setPosition idx))
+       (when (< idx n)
+         (do (.accept f r)
+             (recur (inc idx)))))))
+
+  (trySplit [this]
+    (let [idx (.getPosition r)
+          mid (quot (- end-idx idx) 2)]
+      (when (< idx mid)
+        (.setPosition r mid)
+        (FieldReaderSpliterator. v
+                                 (doto (.getReader v)
+                                   (.setPosition idx))
+                                 mid
+                                 characteristics))))
+
+  (estimateSize [_]
+    (- end-idx (.getPosition r)))
 
   (characteristics [_]
     characteristics))
@@ -172,6 +209,9 @@
 
 (defn ->spliterator-with-ordinal ^java.util.Spliterator [^ValueVector v]
   (->ValueVectorWithOrdinalSpliterator v 0 (.getValueCount v) default-characteristics))
+
+(defn ->spliterator-with-field-reader ^java.util.Spliterator [^ValueVector v]
+  (->FieldReaderSpliterator v (.getReader v) (.getValueCount v) default-characteristics))
 
 (defn ->stream ^java.util.stream.BaseStream [pspliterator]
   (let [spliterator (->spliterator pspliterator)]
