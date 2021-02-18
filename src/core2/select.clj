@@ -7,7 +7,7 @@
            [java.util.function IntConsumer IntPredicate]
            java.util.stream.IntStream
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
-           [org.apache.arrow.vector FieldVector VarCharVector]
+           [org.apache.arrow.vector ElementAddressableVector FieldVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.holders.ValueHolder
            org.roaringbitmap.RoaringBitmap))
@@ -40,14 +40,19 @@
 (defn ->vec-pred [^IntPredicate compare-pred ^ValueHolder comparison-value]
   (compare->pred compare-pred (->vec-compare comparison-value)))
 
-(defn ->str-compare ^core2.select.IVectorCompare [^String comparison-value]
-  (let [vc-bytes (.getBytes comparison-value StandardCharsets/UTF_8)
-        buf-pointer (ArrowBufPointer.)]
+(defn ->bytes-compare ^core2.select.IVectorCompare [^bytes comparison-value]
+  (let [buf-pointer (ArrowBufPointer.)]
     (reify IVectorCompare
       (compareIdx [_ field-vec idx]
-        (.getDataPointer ^VarCharVector field-vec idx buf-pointer)
+        (.getDataPointer ^ElementAddressableVector field-vec idx buf-pointer)
         (ByteFunctionHelpers/compare (.getBuf buf-pointer) (.getOffset buf-pointer) (+ (.getOffset buf-pointer) (.getLength buf-pointer))
-                                     vc-bytes 0 (alength vc-bytes))))))
+                                     comparison-value 0 (alength comparison-value))))))
+
+(defn ->bytes-pred [^IntPredicate compare-pred ^bytes comparison-value]
+  (compare->pred compare-pred (->bytes-compare comparison-value)))
+
+(defn ->str-compare ^core2.select.IVectorCompare [^String comparison-value]
+  (->bytes-compare (.getBytes comparison-value StandardCharsets/UTF_8)))
 
 (defn ->str-pred [^IntPredicate compare-pred ^String comparison-value]
   (compare->pred compare-pred (->str-compare comparison-value)))
