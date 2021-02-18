@@ -38,6 +38,8 @@
 
   :jvm-opts ["-Xmx2G"
              "-XX:MaxDirectMemorySize=2G"
-             "-Dio.netty.tryReflectionSetAccessible=true"]
+             "-Dio.netty.tryReflectionSetAccessible=true"
+             "-Darrow.enable_null_check_for_get=false"
+             #_"-Darrow.enable_unsafe_memory_access=true"]
 
   :global-vars {*warn-on-reflection* true})
