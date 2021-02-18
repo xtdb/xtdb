@@ -52,6 +52,17 @@
                (json/parse-string (Files/readString path)))
             (str path)))))
 
+(defn then-await-tx
+  ([^CompletableFuture submit-tx-fut, ^IngestLoop il]
+   (-> submit-tx-fut
+       (then-await-tx il (Duration/ofSeconds 2))))
+
+  ([^CompletableFuture submit-tx-fut, ^IngestLoop il, timeout]
+   (-> submit-tx-fut
+       (util/then-apply
+         (fn [tx]
+           (.awaitTx il tx timeout))))))
+
 (def txs
   [[{:op :put
      :doc {:_id "device-info-demo000000",
@@ -217,7 +228,8 @@
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)]
 
-        (.awaitTx il @(.submitTx tx-producer tx-ops) (Duration/ofSeconds 2))
+        @(-> (.submitTx tx-producer tx-ops)
+             (then-await-tx il))
 
         (.finishChunk i)
 
@@ -453,18 +465,17 @@
             ^BufferPool bp (.buffer-pool node)
             ^IMetadataManager mm (.metadata-manager node)]
 
-        (let [tx @(.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 1}}])]
+        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 1}}])
+             (then-await-tx il))
 
-          (.awaitTx il tx (Duration/ofSeconds 2))
+        (.finishChunk i)
 
-          (.finishChunk i))
+        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "James", :id 2}}
+                                     {:op :put, :doc {:name "Jon", :id 3}}
+                                     {:op :put, :doc {:name "Dan", :id 4}}])
+             (then-await-tx il))
 
-        (let [last-tx @(.submitTx tx-producer [{:op :put, :doc {:name "James", :id 2}}
-                                               {:op :put, :doc {:name "Jon", :id 3}}
-                                               {:op :put, :doc {:name "Dan", :id 4}}])]
-          (.awaitTx il last-tx (Duration/ofSeconds 2))
-
-          (.finishChunk i))
+        (.finishChunk i)
 
         (t/testing "where name > 'Ivan'"
           (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
