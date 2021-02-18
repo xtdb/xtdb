@@ -33,10 +33,17 @@
         (.read rw field-vec idx holder)
         (.compare comparator holder comparison-value)))))
 
-(defn- compare->pred [^IntPredicate compare-pred ^IVectorCompare cmp]
-  (reify IVectorPredicate
+(defn compare->pred [^IntPredicate compare-pred ^IVectorCompare cmp]
+  (reify
+    IVectorPredicate
     (test [_ field-vec idx]
-      (.test compare-pred (.compareIdx cmp field-vec idx)))))
+      (.test compare-pred (.compareIdx cmp field-vec idx)))
+
+    IVectorCompare
+    (compareIdx [_ field-vec idx] (.compareIdx cmp field-vec idx))
+
+    IntPredicate
+    (test [_ n] (.test compare-pred n))))
 
 (defn ->vec-pred [^IntPredicate compare-pred ^ValueHolder comparison-value]
   (compare->pred compare-pred (->vec-compare comparison-value)))

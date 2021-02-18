@@ -468,20 +468,16 @@
 
         (t/testing "where name > 'Ivan'"
           (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
+                matching-chunk? (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)
                 matching-chunks (->> (for [chunk-idx (.knownChunks mm)]
-                                       (meta/with-metadata mm chunk-idx
-                                         (fn [^VectorSchemaRoot metadata-root]
-                                           (let [name-idx (meta/field-idx metadata-root "name" "name" Types$MinorType/VARCHAR)]
-                                             (when (and (not (neg? name-idx))
-                                                        (meta/test-max-value metadata-root name-idx ivan-pred))
-                                               chunk-idx)))))
+                                       (MapEntry/create chunk-idx (meta/with-metadata mm chunk-idx matching-chunk?)))
                                      vec
-                                     (keep deref))]
+                                     (filter (comp deref val))
+                                     keys)]
 
             (t/is (= [1] matching-chunks))
 
             (t/is (= {1 "James", 2 "Jon"}
-
                      @(letfn [(select-gt-ivans [^VectorSchemaRoot chunk-root]
                                 (let [^DenseUnionVector name-vec (.getVector chunk-root "name")
                                       ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")
