@@ -22,6 +22,7 @@
 (def-pred pred>= [n] (not (neg? n)))
 (def-pred pred= [n] (zero? n))
 
+;; NOTE the IVectorCompare and IVectorPredicate instances here aren't thread-safe
 (defn ->vec-compare ^core2.select.IVectorCompare [^ValueHolder comparison-value]
   (let [minor-type (t/holder-minor-type comparison-value)
         ^ReadWrite rw (t/type->rw minor-type)
