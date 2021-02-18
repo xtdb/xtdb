@@ -4,6 +4,7 @@
             [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.core :as c2]
+            [core2.indexer :as c2i]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
             [core2.ts-devices :as ts]
@@ -17,6 +18,7 @@
            core2.indexer.Indexer
            core2.metadata.IMetadataManager
            [core2.object_store FileSystemObjectStore ObjectStore]
+           core2.select.IVectorPredicate
            core2.tx.TransactionInstant
            [java.nio.file Files Path]
            [java.time Clock Duration ZoneId]
@@ -454,59 +456,44 @@
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))))))
 
-(t/deftest scans-rowid-for-value
-  (let [node-dir (doto (util/->path "target/scans-rowid-for-value")
+(t/deftest test-find-gt-ivan
+  (let [node-dir (doto (util/->path "target/test-find-gt-ivan")
                    util/delete-dir)]
-    (with-open [node (c2/->local-node node-dir)
+    (with-open [node (c2/->local-node node-dir {:max-rows-per-chunk 10, :max-rows-per-block 2})
                 tx-producer (c2/->local-tx-producer node-dir)]
-      (let [^BufferAllocator allocator (.allocator node)
-            ^Indexer i (.indexer node)
-            ^IngestLoop il (.ingest-loop node)
-            ^BufferPool bp (.buffer-pool node)
-            ^IMetadataManager mm (.metadata-manager node)]
+      (let [^Indexer i (.indexer node)
+            ^IngestLoop il (.ingest-loop node)]
 
-        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 1}}])
+        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 0}}])
              (then-await-tx il))
 
         (.finishChunk i)
 
-        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "James", :id 2}}
-                                     {:op :put, :doc {:name "Jon", :id 3}}
-                                     {:op :put, :doc {:name "Dan", :id 4}}])
+        @(.submitTx tx-producer [{:op :put, :doc {:name "James", :id 1}}
+                                 {:op :put, :doc {:name "Dan", :id 2}}])
+
+        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jon", :id 3}}])
              (then-await-tx il))
 
         (.finishChunk i)
 
-        (t/testing "where name > 'Ivan'"
-          (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
-                matching-chunk? (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)
-                matching-chunks (->> (for [chunk-idx (.knownChunks mm)]
-                                       (MapEntry/create chunk-idx (meta/with-metadata mm chunk-idx matching-chunk?)))
-                                     vec
-                                     (filter (comp deref val))
-                                     keys)]
+        (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")]
+          (t/is (= [1] (c2/matching-chunks node "name" ivan-pred Types$MinorType/VARCHAR))
+                "only needs to scan chunk 1")
 
-            (t/is (= [1] matching-chunks))
+          (letfn [(query-ivan [watermark]
+                    (->> @(c2/scan node watermark "name" ivan-pred Types$MinorType/VARCHAR
+                                   (fn [row-id ^VarCharVector field-vec idx]
+                                     (MapEntry/create row-id (str (.getObject field-vec ^int idx)))))
+                         (into {} (mapcat seq))))]
 
-            (t/is (= {1 "James", 2 "Jon"}
-                     @(letfn [(select-gt-ivans [^VectorSchemaRoot chunk-root]
-                                (let [^DenseUnionVector name-vec (.getVector chunk-root "name")
-                                      ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")
-                                      varchar-type-id (types/arrow-type->type-id (.getType Types$MinorType/VARCHAR))]
-                                  (vec (for [idx (-> (sel/select nil name-vec (-> ivan-pred (sel/->dense-union-pred varchar-type-id)))
-                                                     .stream .iterator iterator-seq)]
-                                         (MapEntry/create (.get row-id-vec idx)
-                                                          (-> (.getVectorByType name-vec varchar-type-id)
-                                                              (.getObject (.getOffset name-vec idx))
-                                                              str))))))]
-                        (let [futs (for [chunk-idx matching-chunks]
-                                     (-> (.getBuffer bp (meta/->chunk-obj-key chunk-idx "name"))
-                                         (util/then-apply
-                                           (fn [buffer]
-                                             (when buffer
-                                               (with-open [^ArrowBuf buffer buffer]
-                                                 (->> (util/block-stream buffer allocator)
-                                                      (into [] (mapcat select-gt-ivans)))))))))]
-                          (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-                              (util/then-apply (fn [_]
-                                                 (into {} (mapcat deref) futs))))))))))))))
+            (with-open [watermark (.getWatermark i)]
+              @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
+                   (then-await-tx il))
+
+              (t/is (= {1 "James", 3 "Jon"}
+                       (query-ivan watermark))))
+
+            (with-open [watermark (.getWatermark i)]
+              (t/is (= {1 "James", 3 "Jon", 4 "Jeremy"}
+                       (query-ivan watermark))))))))))
