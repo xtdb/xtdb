@@ -58,7 +58,7 @@
           mid (quot (- end-idx idx) 2)]
       (when (< idx mid)
         (set! (.idx this) mid)
-        (ValueVectorSpliteratorWithIndex. v idx mid characteristics))))
+        (ValueVectorWithOrdinalSpliterator. v idx mid characteristics))))
 
   (estimateSize [_]
     (- end-idx idx))
@@ -196,7 +196,7 @@
     (accept [_ x y]
       (VectorBatchAppender/batchAppend x (make-array ValueVector [y])))))
 
-(extend-protocol PStreamToVector
+(extend-protocol PStreamToArrow
   Stream
   (stream->arrow [this to-vector]
     (.collect this
