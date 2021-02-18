@@ -9,6 +9,7 @@
            org.apache.arrow.vector.util.Text
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]
+           org.apache.arrow.vector.complex.VectorWithOrdinal
            org.apache.arrow.vector.util.VectorBatchAppender))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -34,6 +35,36 @@
 
   nil
   (arrow->clojure [this]))
+
+(deftype ValueVectorWithOrdinalSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx ^int end-idx ^int characteristics]
+  Spliterator
+  (^boolean tryAdvance [this ^Consumer f]
+   (if (< idx end-idx)
+     (do (.accept f (VectorWithOrdinal. v idx))
+         (set! (.idx this) (inc idx))
+         true)
+     false))
+
+  (^void forEachRemaining [this ^Consumer f]
+   (let [n end-idx]
+     (loop [idx idx]
+       (if (< idx n)
+         (do (.accept f (VectorWithOrdinal. v idx))
+             (recur (inc idx)))
+         (set! (.idx this) idx)))))
+
+  (trySplit [this]
+    (let [idx idx
+          mid (quot (- end-idx idx) 2)]
+      (when (< idx mid)
+        (set! (.idx this) mid)
+        (ValueVectorSpliteratorWithIndex. v idx mid characteristics))))
+
+  (estimateSize [_]
+    (- end-idx idx))
+
+  (characteristics [_]
+    characteristics))
 
 (deftype ValueVectorSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx ^int end-idx ^int characteristics]
   Spliterator
@@ -139,6 +170,9 @@
   Spliterator
   (->spliterator [this] this))
 
+(defn ->spliterator-with-ordinal ^java.util.Spliterator [^ValueVector v]
+  (->ValueVectorWithOrdinalSpliterator v 0 (.getValueCount v) default-characteristics))
+
 (defn ->stream ^java.util.stream.BaseStream [pspliterator]
   (let [spliterator (->spliterator pspliterator)]
     (cond
@@ -154,8 +188,8 @@
       :else
       (StreamSupport/stream spliterator false))))
 
-(defprotocol PStreamToVector
-  (stream->vector [this to-vector]))
+(defprotocol PStreamToArrow
+  (stream->arrow [this to-vector]))
 
 (def ^:private vector-combiner
   (reify BiConsumer
@@ -164,7 +198,7 @@
 
 (extend-protocol PStreamToVector
   Stream
-  (stream->vector [this to-vector]
+  (stream->arrow [this to-vector]
     (.collect this
               (util/->supplier (constantly to-vector))
               (reify BiConsumer
@@ -175,7 +209,7 @@
               vector-combiner))
 
   IntStream
-  (stream->vector [this to-vector]
+  (stream->arrow [this to-vector]
     (.collect this
               (util/->supplier (constantly to-vector))
               (reify ObjIntConsumer
@@ -186,7 +220,7 @@
               vector-combiner))
 
   LongStream
-  (stream->vector [this to-vector]
+  (stream->arrow [this to-vector]
     (.collect this
               (util/->supplier (constantly to-vector))
               (reify ObjLongConsumer
@@ -197,7 +231,7 @@
               vector-combiner))
 
   DoubleStream
-  (stream->vector [this to-vector]
+  (stream->arrow [this to-vector]
     (.collect this
               (util/->supplier (constantly to-vector))
               (reify ObjDoubleConsumer
