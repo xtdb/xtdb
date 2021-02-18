@@ -4,7 +4,8 @@
             [clojure.data.csv :as csv]
             [core2.ts-devices :as ts]
             [core2.core :as c2]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.metadata :as meta])
   (:import [core2.core IngestLoop Node]
            [core2.indexer Indexer]
            core2.metadata.IMetadataManager
@@ -44,5 +45,6 @@
             (t/is (= last-tx-instant (.latestCompletedTx il)))
             (.finishChunk i)
 
-            (t/is (= last-tx-instant (.latestStoredTx mm)))
-            (t/is (= (dec (count tx-ops)) (.latestStoredRowId mm)))))))))
+            (t/is (= [last-tx-instant (dec (count tx-ops))]
+                     (meta/with-latest-metadata mm
+                       (juxt meta/latest-tx meta/latest-row-id))))))))))

@@ -1,32 +1,31 @@
 (ns core2.indexer-test
   (:require [cheshire.core :as json]
             [clojure.data.csv :as csv]
-            [clojure.instant :as inst]
             [clojure.java.io :as io]
-            [clojure.string :as str]
             [clojure.test :as t]
             [core2.core :as c2]
-            [core2.indexer :as indexer]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
-            [core2.util :as util]
+            [core2.ts-devices :as ts]
             [core2.tx :as tx]
             [core2.types :as types]
-            [core2.ts-devices :as ts])
+            [core2.util :as util]
+            [core2.select :as sel])
   (:import clojure.lang.MapEntry
            [core2.buffer_pool BufferPool MemoryMappedBufferPool]
            [core2.core IngestLoop Node]
-           [core2.indexer Indexer]
+           core2.indexer.Indexer
            core2.metadata.IMetadataManager
-           core2.tx.TransactionInstant
            [core2.object_store FileSystemObjectStore ObjectStore]
+           core2.tx.TransactionInstant
            [java.nio.file Files Path]
            [java.time Clock Duration ZoneId]
            java.util.concurrent.CompletableFuture
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.holders NullableVarCharHolder]))
+           [org.apache.arrow.vector BigIntVector VarCharVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector.complex DenseUnionVector]
+           org.apache.arrow.vector.types.Types$MinorType))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -115,8 +114,8 @@
             ^BufferPool bp (.buffer-pool node)
             ^IMetadataManager mm (.metadata-manager node)]
 
-        (t/is (nil? (.latestStoredTx mm)))
-        (t/is (nil? (.latestStoredRowId mm)))
+        (t/is (every? nil? @(meta/with-latest-metadata mm
+                              (juxt meta/latest-tx meta/latest-row-id))))
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
@@ -146,8 +145,9 @@
           (t/is (zero? (.row-count watermark)))
           (t/is (empty? (.column->root watermark))))
 
-        (t/is (= last-tx-instant (.latestStoredTx mm)))
-        (t/is (= (dec total-number-of-ops) (.latestStoredRowId mm)))
+        (t/is (= [last-tx-instant (dec total-number-of-ops)]
+                 @(meta/with-latest-metadata mm
+                    (juxt meta/latest-tx meta/latest-row-id))))
 
         (let [objects-list @(.listObjects os "metadata-*")]
           (t/is (= 1 (count objects-list)))
@@ -285,8 +285,9 @@
           (t/is (= last-tx-instant (.latestCompletedTx il)))
           (.finishChunk i)
 
-          (t/is (= last-tx-instant (.latestStoredTx mm)))
-          (t/is (= (dec (count tx-ops)) (.latestStoredRowId mm)))
+          (t/is [last-tx-instant (dec (count tx-ops))]
+               @(meta/with-latest-metadata mm
+                  (juxt meta/latest-tx meta/latest-row-id)))
 
           (t/is (= 4 (count @(.listObjects os "metadata-*"))))
           (t/is (= 1 (count @(.listObjects os "chunk-*-api-version*"))))
@@ -401,8 +402,8 @@
               (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
               (t/is (= first-half-tx-instant (.latestCompletedTx il)))
 
-              (let [^TransactionInstant os-tx-instant (.latestStoredTx mm)
-                    os-latest-row-id (.latestStoredRowId mm)]
+              (let [[^TransactionInstant os-tx-instant os-latest-row-id] @(meta/with-latest-metadata mm
+                                                                            (juxt meta/latest-tx meta/latest-row-id))]
                 (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
                 (t/is (< os-latest-row-id (count first-half-tx-ops)))
 
@@ -440,9 +441,8 @@
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))))))
 
 (t/deftest scans-rowid-for-value
-  (let [node-dir (util/->path "target/scans-rowid-for-value")]
-    (util/delete-dir node-dir)
-
+  (let [node-dir (doto (util/->path "target/scans-rowid-for-value")
+                   util/delete-dir)]
     (with-open [node (c2/->local-node node-dir)
                 tx-producer (c2/->local-tx-producer node-dir)]
       (let [^BufferAllocator allocator (.allocator node)
@@ -465,27 +465,42 @@
           (.finishChunk i))
 
         (t/testing "where name > 'Ivan'"
-          (let [chunk-idxs (with-open [ivan-holder (types/open-literal-varchar-holder allocator "Ivan")]
-                             (.matchingChunks mm "name"
-                                              (.holder ivan-holder) false
-                                              (NullableVarCharHolder.) false))]
-            (t/is (= [1] chunk-idxs))
+          (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
+                matching-files (->> (for [chunk-idx (.knownChunks mm)]
+                                      (meta/with-metadata mm chunk-idx
+                                        (fn [^VectorSchemaRoot metadata-root]
+                                          (let [name-idx (meta/field-idx metadata-root "name" "name" Types$MinorType/VARCHAR)]
+                                            (when (and (not (neg? name-idx))
+                                                       (meta/test-max-value metadata-root name-idx ivan-pred))
+                                              (-> metadata-root
+                                                  ^VarCharVector (.getVector meta/file-name-field)
+                                                  (.getObject name-idx)
+                                                  str))))))
+                                    vec
+                                    (keep deref))]
+
+            (t/is (= ["chunk-00000001-name.arrow"] matching-files))
 
             (t/is (= {1 "James", 2 "Jon"}
-                     @(let [futs (for [chunk-idx chunk-idxs]
-                                   (-> (.getBuffer bp (.chunkFileKey mm chunk-idx "name"))
-                                       (util/then-apply
-                                         (fn [buffer]
-                                           (when buffer
-                                             (with-open [^ArrowBuf buffer buffer]
-                                               (->> (util/block-stream buffer allocator)
-                                                    (into [] (mapcat (fn [^VectorSchemaRoot chunk-root]
-                                                                       (let [name-vec (.getVector chunk-root "name")
-                                                                             ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")]
-                                                                         (vec (for [idx (range (.getRowCount chunk-root))
-                                                                                    :let [name (str (.getObject name-vec idx))]
-                                                                                    :when (pos? (compare name "Ivan"))]
-                                                                                (MapEntry/create (.get row-id-vec idx) name))))))))))))))]
-                        (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-                            (util/then-apply (fn [_]
-                                               (into {} (mapcat deref) futs)))))))))))))
+
+                     @(letfn [(select-gt-ivans [^VectorSchemaRoot chunk-root]
+                                (let [^DenseUnionVector name-vec (.getVector chunk-root "name")
+                                      ^BigIntVector row-id-vec (.getVector chunk-root "_row-id")
+                                      varchar-type-id (types/arrow-type->type-id (.getType Types$MinorType/VARCHAR))]
+                                  (vec (for [idx (-> (sel/select nil name-vec (-> ivan-pred (sel/->dense-union-pred varchar-type-id)))
+                                                     .stream .iterator iterator-seq)]
+                                         (MapEntry/create (.get row-id-vec idx)
+                                                          (-> (.getVectorByType name-vec varchar-type-id)
+                                                              (.getObject (.getOffset name-vec idx))
+                                                              str))))))]
+                        (let [futs (for [^String matching-file matching-files]
+                                     (-> (.getBuffer bp matching-file)
+                                         (util/then-apply
+                                           (fn [buffer]
+                                             (when buffer
+                                               (with-open [^ArrowBuf buffer buffer]
+                                                 (->> (util/block-stream buffer allocator)
+                                                      (into [] (mapcat select-gt-ivans)))))))))]
+                          (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+                              (util/then-apply (fn [_]
+                                                 (into {} (mapcat deref) futs))))))))))))))

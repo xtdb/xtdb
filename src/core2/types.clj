@@ -1,12 +1,10 @@
 (ns core2.types
   (:require [clojure.string :as str])
-  (:import java.io.Closeable
-           java.nio.charset.StandardCharsets
-           [java.util Comparator Date]
-           org.apache.arrow.memory.BufferAllocator
+  (:import [java.util Comparator Date]
            org.apache.arrow.memory.util.ByteFunctionHelpers
-           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector]
-           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableTinyIntHolder NullableVarBinaryHolder NullableVarCharHolder]
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
+           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector.holders NullableBigIntHolder NullableBitHolder NullableFloat8Holder NullableTimeStampMilliHolder NullableTinyIntHolder NullableVarBinaryHolder NullableVarCharHolder ValueHolder]
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
@@ -178,17 +176,8 @@
                              (ByteFunctionHelpers/compare (.buffer left) (.start left) (.end left)
                                                           (.buffer right) (.start right) (.end right)))})
 
-(deftype LiteralVarCharHolder [^NullableVarCharHolder holder]
-  Closeable
-  (close [_]
-    (.close (.buffer holder))))
-
-(defn open-literal-varchar-holder ^core2.types.LiteralVarCharHolder [^BufferAllocator allocator, ^String value]
-  (let [bs (.getBytes value StandardCharsets/UTF_8)
-        buf (doto (.buffer allocator (alength bs))
-              (.setBytes 0 bs 0 (alength bs)))]
-    (LiteralVarCharHolder. (doto (NullableVarCharHolder.)
-                             (-> .isSet (set! 1))
-                             (-> .start (set! 0))
-                             (-> .end (set! (alength bs)))
-                             (-> .buffer (set! buf))))))
+(defn read-duv-value [^DenseUnionVector duv, ^long idx, ^ValueHolder out-holder]
+  (let [minor-type (holder-minor-type out-holder)
+        type-id (arrow-type->type-id (.getType minor-type))
+        ^ReadWrite rw (type->rw minor-type)]
+    (.read rw (.getVectorByType duv type-id) (.getOffset duv idx) out-holder)))

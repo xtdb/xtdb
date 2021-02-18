@@ -1,12 +1,16 @@
 (ns core2.select
   (:require [core2.types :as t])
-  (:import core2.select.IVectorPredicate
+  (:import [core2.select IVectorCompare IVectorPredicate]
            core2.types.ReadWrite
+           java.nio.charset.StandardCharsets
            java.util.Comparator
-           java.util.function.IntPredicate
-           org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BitVector FieldVector]
-           org.apache.arrow.vector.holders.ValueHolder))
+           [java.util.function IntConsumer IntPredicate]
+           java.util.stream.IntStream
+           [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
+           [org.apache.arrow.vector FieldVector VarCharVector]
+           org.apache.arrow.vector.complex.DenseUnionVector
+           org.apache.arrow.vector.holders.ValueHolder
+           org.roaringbitmap.RoaringBitmap))
 
 (defmacro ^:private def-pred [sym [binding] & body]
   `(def ~(-> sym (with-meta {:tag IntPredicate}))
@@ -18,119 +22,83 @@
 (def-pred pred>= [n] (not (neg? n)))
 (def-pred pred= [n] (zero? n))
 
-(deftype VectorPredicate [^ReadWrite rw
-                          ^Comparator comparator
-                          ^IntPredicate compare-pred
-                          ^ValueHolder holder
-                          comparison-value]
-  IVectorPredicate
-  (test [_ field-vec idx]
-    (.read rw field-vec idx holder)
-    (.test compare-pred (.compare comparator holder comparison-value))))
-
-(defn ->vec-pred [compare-pred ^ValueHolder comparison-value]
+(defn ->vec-compare ^core2.select.IVectorCompare [^ValueHolder comparison-value]
   (let [minor-type (t/holder-minor-type comparison-value)
         ^ReadWrite rw (t/type->rw minor-type)
-        comparator (t/type->comp minor-type)]
-    (VectorPredicate. rw comparator compare-pred (.newHolder rw) comparison-value)))
-
-(defn first-index-of ^long [^FieldVector field-vec, ^IntPredicate predicate, ^ValueHolder needle-holder]
-  (let [minor-type (.getMinorType field-vec)
-        ^ReadWrite rw (t/type->rw minor-type)
         ^Comparator comparator (t/type->comp minor-type)
-        val-holder (.newHolder rw)
-        value-count (.getValueCount field-vec)]
+        holder (.newHolder rw)]
+    (reify IVectorCompare
+      (compareIdx [_ field-vec idx]
+        (.read rw field-vec idx holder)
+        (.compare comparator holder comparison-value)))))
+
+(defn- compare->pred [^IntPredicate compare-pred ^IVectorCompare cmp]
+  (reify IVectorPredicate
+    (test [_ field-vec idx]
+      (.test compare-pred (.compareIdx cmp field-vec idx)))))
+
+(defn ->vec-pred [^IntPredicate compare-pred ^ValueHolder comparison-value]
+  (compare->pred compare-pred (->vec-compare comparison-value)))
+
+(defn ->str-compare ^core2.select.IVectorCompare [^String comparison-value]
+  (let [vc-bytes (.getBytes comparison-value StandardCharsets/UTF_8)
+        buf-pointer (ArrowBufPointer.)]
+    (reify IVectorCompare
+      (compareIdx [_ field-vec idx]
+        (.getDataPointer ^VarCharVector field-vec idx buf-pointer)
+        (ByteFunctionHelpers/compare (.getBuf buf-pointer) (.getOffset buf-pointer) (+ (.getOffset buf-pointer) (.getLength buf-pointer))
+                                     vc-bytes 0 (alength vc-bytes))))))
+
+(defn ->str-pred [^IntPredicate compare-pred ^String comparison-value]
+  (compare->pred compare-pred (->str-compare comparison-value)))
+
+(defn ->dense-union-pred [^IVectorPredicate vec-pred, ^long type-id]
+  (reify IVectorPredicate
+    (test [_ field-vec idx]
+      (let [^DenseUnionVector field-vec field-vec]
+        (and (= (.getTypeId field-vec idx) type-id)
+             (.test vec-pred (.getVectorByType field-vec type-id) (.getOffset field-vec idx)))))))
+
+(defn search ^org.roaringbitmap.RoaringBitmap [^FieldVector field-vec, ^IVectorCompare vec-compare]
+  (let [value-count (.getValueCount field-vec)
+        idx-bitmap (RoaringBitmap.)]
     (loop [low 0
            high (dec value-count)]
       (if (< high low)
-        (if (.test predicate 1)
-          low
-          -1)
+        idx-bitmap
 
         (let [mid (+ low (quot (- high low) 2))]
-          (.read rw field-vec mid val-holder)
-          (case (Long/signum (.compare comparator val-holder needle-holder))
+          (case (Long/signum (.compareIdx vec-compare field-vec mid))
             -1 (recur (inc mid) high)
-            0 (if (.test predicate 0)
-                (loop [idx mid]
-                  (if (and (pos? idx)
-                           (do
-                             (.read rw field-vec (dec idx) val-holder)
-                             (zero? (.compare comparator val-holder needle-holder))))
-                    (recur (dec idx))
-                    idx))
-
-                ;; pred> case
-                (loop [idx mid]
-                  (if (< idx value-count)
-                    (do
-                      (.read rw field-vec idx val-holder)
-                      (if (.test predicate (.compare comparator val-holder needle-holder))
-                        idx
-                        (recur (inc idx))))
-                    idx)))
+            0 (let [first-idx (loop [idx mid]
+                                (if (and (pos? idx)
+                                         (zero? (.compareIdx vec-compare field-vec (dec idx))))
+                                  (recur (dec idx))
+                                  idx))
+                    last-idx (loop [idx mid]
+                               (if (< idx value-count)
+                                 (if (zero? (.compareIdx vec-compare field-vec idx))
+                                   (recur (inc idx))
+                                   idx)
+                                 idx))]
+                (doto idx-bitmap
+                  (.add ^int first-idx ^int last-idx)))
 
             1 (recur low (dec mid))))))))
 
-(defn last-index-of ^long [^FieldVector field-vec, ^ValueHolder needle-holder, ^long start-idx]
-  (let [minor-type (.getMinorType field-vec)
-        ^ReadWrite rw (t/type->rw minor-type)
-        ^Comparator comparator (t/type->comp minor-type)
-        val-holder (.newHolder rw)
-        value-count (.getValueCount field-vec)]
-    (loop [idx start-idx]
-      (if (< idx value-count)
-        (do
-          (.read rw field-vec idx val-holder)
-          (if (zero? (.compare comparator val-holder needle-holder))
-            (recur (inc idx))
-            idx))
-        idx))))
+(defn select
+  (^org.roaringbitmap.RoaringBitmap [^FieldVector field-vec, ^IVectorPredicate vec-predicate]
+   (select nil field-vec vec-predicate))
 
-(definterface ISelect
-  (^int select [^org.apache.arrow.vector.FieldVector fieldVector
-                ^org.apache.arrow.vector.BitVector indexesOut])
-  (^int select [^org.apache.arrow.vector.FieldVector fieldVector
-                ^int start
-                ^org.apache.arrow.vector.BitVector indexesOut])
-  (^int select [^org.apache.arrow.vector.FieldVector fieldVector
-                ^int start, ^int end
-                ^org.apache.arrow.vector.BitVector indexesOut]))
+  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap idx-bitmap, ^FieldVector field-vec, ^IVectorPredicate vec-predicate]
+   (assert (or (nil? idx-bitmap) (< (.last idx-bitmap) (.getValueCount field-vec))))
+   (let [res (RoaringBitmap.)]
+     (-> ^IntStream (if idx-bitmap
+                      (.stream idx-bitmap)
+                      (IntStream/range 0 (.getValueCount field-vec)))
+         (.forEach (reify IntConsumer
+                     (accept [_ idx]
+                       (when (.test vec-predicate field-vec idx)
+                         (.add res idx))))))
 
-(deftype Selector [^IVectorPredicate vec-predicate, ^boolean continue-on-mismatch?]
-  ISelect
-  (select [this field-vec idxs-out]
-    (.select this field-vec 0 idxs-out))
-
-  (select [this field-vec start idxs-out]
-    (.select this field-vec start (.getValueCount field-vec) idxs-out))
-
-  (select [_this field-vec start end idxs-out]
-    (assert (<= 0 start (.getValueCount field-vec)))
-    (assert (<= 0 end (.getValueCount field-vec)))
-    (assert (<= start end))
-
-    (loop [idx start
-           res-count 0]
-      (if-not (< idx end)
-        res-count
-
-        (let [res-idx (- idx start)]
-          (if (and (pos? (.get idxs-out res-idx))
-                   (.test vec-predicate field-vec idx))
-            (recur (inc idx) (inc res-count))
-            (do
-              (.set idxs-out res-idx 0)
-              (if continue-on-mismatch?
-                (recur (inc idx) res-count)
-                res-count))))))))
-
-(defn ^core2.select.ISelect ->selector
-  "on-mismatch :: #{:take-while :filter}"
-  ([^IVectorPredicate vec-pred] (->selector vec-pred :filter))
-  ([^IVectorPredicate vec-pred, mismatch-behaviour] (Selector. vec-pred (= mismatch-behaviour :filter))))
-
-(defn open-result-vec ^org.apache.arrow.vector.BitVector [^BufferAllocator allocator, len]
-  (doto (BitVector. "res" allocator)
-    (.setValueCount len)
-    (.setRangeToOne 0 len)))
+     res)))

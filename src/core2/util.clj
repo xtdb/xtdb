@@ -10,17 +10,16 @@
            [java.nio.file Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time LocalDateTime ZoneId]
+           [java.util ArrayList Date]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.util ArrayList Date]
            [java.util.function BiFunction Function IntUnaryOperator Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
-           org.apache.arrow.memory.util.ByteFunctionHelpers
-           org.apache.arrow.memory.util.MemoryUtil
-           [org.apache.arrow.vector FieldVector ValueVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
+           [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
-           [org.apache.arrow.vector.ipc ArrowWriter ArrowFileWriter ArrowStreamWriter]
+           [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer]))
 
 ;;; IO
