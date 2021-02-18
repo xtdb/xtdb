@@ -3,14 +3,15 @@
             [clojure.tools.logging :as log])
   (:import java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
-           java.lang.reflect.Field
+           [java.lang.reflect Field Method]
+           [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
            [java.nio.file Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time LocalDateTime ZoneId]
-           [java.util ArrayList Date]
+           [java.util ArrayList Date List]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Function IntUnaryOperator Supplier]
@@ -115,6 +116,29 @@
   (reify BiFunction
     (apply [_ a b]
       (f a b))))
+
+(defn ->sam [f ^Class target-interface]
+  (let [caller (MethodHandles/lookup)
+
+        implementing-class (class f)
+        [implementing-method] (.getDeclaredMethods implementing-class)
+        implementing-method-handle (.unreflect caller implementing-method)
+
+        [^Method sam-method] (for [^Method m (.getMethods target-interface)
+                                   :when (not (.isDefault m))]
+                               m)
+        sam-method-type (.type (.unreflect caller sam-method))
+        sam-method-type-without-this (.dropParameterTypes sam-method-type 0 1)
+
+        factory-method-type (MethodType/methodType target-interface implementing-class)
+        call-site (LambdaMetafactory/metafactory caller
+                                                 (.getName sam-method)
+                                                 factory-method-type
+                                                 sam-method-type-without-this
+                                                 implementing-method-handle
+                                                 sam-method-type-without-this)
+        ^List args [f]]
+    (.invokeWithArguments (.getTarget call-site) args)))
 
 (defn then-apply {:style/indent :defn} [^CompletableFuture fut f]
   (.thenApply fut (->jfn f)))
