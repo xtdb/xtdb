@@ -1,13 +1,6 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "file",
-      "nullable" : false,
-      "type" : {
-        "name" : "utf8"
-      },
-      "children" : [ ]
-    },{
       "name" : "column",
       "nullable" : false,
       "type" : {
@@ -170,12 +163,6 @@
   "batches" : [{
     "count" : 40,
     "columns" : [{
-      "name" : "file",
-      "count" : 40,
-      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,24,48,75,102,131,160,192,224,258,292,327,362,402,442,468,494,528,562,595,628,661,694,724,754,787,820,849,878,907,936,962,988,1016,1044,1069,1094,1119,1144,1169,1194],
-      "DATA" : ["chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-time.arrow","chunk-00000000-_tx-time.arrow","chunk-00000000-api-version.arrow","chunk-00000000-api-version.arrow","chunk-00000000-battery-level.arrow","chunk-00000000-battery-level.arrow","chunk-00000000-battery-status.arrow","chunk-00000000-battery-status.arrow","chunk-00000000-battery-temperature.arrow","chunk-00000000-battery-temperature.arrow","chunk-00000000-bssid.arrow","chunk-00000000-bssid.arrow","chunk-00000000-cpu-avg-15min.arrow","chunk-00000000-cpu-avg-15min.arrow","chunk-00000000-cpu-avg-1min.arrow","chunk-00000000-cpu-avg-1min.arrow","chunk-00000000-cpu-avg-5min.arrow","chunk-00000000-cpu-avg-5min.arrow","chunk-00000000-device-id.arrow","chunk-00000000-device-id.arrow","chunk-00000000-manufacturer.arrow","chunk-00000000-manufacturer.arrow","chunk-00000000-mem-free.arrow","chunk-00000000-mem-free.arrow","chunk-00000000-mem-used.arrow","chunk-00000000-mem-used.arrow","chunk-00000000-model.arrow","chunk-00000000-model.arrow","chunk-00000000-os-name.arrow","chunk-00000000-os-name.arrow","chunk-00000000-rssi.arrow","chunk-00000000-rssi.arrow","chunk-00000000-ssid.arrow","chunk-00000000-ssid.arrow","chunk-00000000-time.arrow","chunk-00000000-time.arrow"]
-    },{
       "name" : "column",
       "count" : 40,
       "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],

@@ -466,20 +466,17 @@
 
         (t/testing "where name > 'Ivan'"
           (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
-                matching-files (->> (for [chunk-idx (.knownChunks mm)]
-                                      (meta/with-metadata mm chunk-idx
-                                        (fn [^VectorSchemaRoot metadata-root]
-                                          (let [name-idx (meta/field-idx metadata-root "name" "name" Types$MinorType/VARCHAR)]
-                                            (when (and (not (neg? name-idx))
-                                                       (meta/test-max-value metadata-root name-idx ivan-pred))
-                                              (-> metadata-root
-                                                  ^VarCharVector (.getVector meta/file-name-field)
-                                                  (.getObject name-idx)
-                                                  str))))))
-                                    vec
-                                    (keep deref))]
+                matching-chunks (->> (for [chunk-idx (.knownChunks mm)]
+                                       (meta/with-metadata mm chunk-idx
+                                         (fn [^VectorSchemaRoot metadata-root]
+                                           (let [name-idx (meta/field-idx metadata-root "name" "name" Types$MinorType/VARCHAR)]
+                                             (when (and (not (neg? name-idx))
+                                                        (meta/test-max-value metadata-root name-idx ivan-pred))
+                                               chunk-idx)))))
+                                     vec
+                                     (keep deref))]
 
-            (t/is (= ["chunk-00000001-name.arrow"] matching-files))
+            (t/is (= [1] matching-chunks))
 
             (t/is (= {1 "James", 2 "Jon"}
 
@@ -493,8 +490,8 @@
                                                           (-> (.getVectorByType name-vec varchar-type-id)
                                                               (.getObject (.getOffset name-vec idx))
                                                               str))))))]
-                        (let [futs (for [^String matching-file matching-files]
-                                     (-> (.getBuffer bp matching-file)
+                        (let [futs (for [chunk-idx matching-chunks]
+                                     (-> (.getBuffer bp (meta/->chunk-obj-key chunk-idx "name"))
                                          (util/then-apply
                                            (fn [buffer]
                                              (when buffer

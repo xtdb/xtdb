@@ -1,13 +1,6 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "file",
-      "nullable" : false,
-      "type" : {
-        "name" : "utf8"
-      },
-      "children" : [ ]
-    },{
       "name" : "column",
       "nullable" : false,
       "type" : {
@@ -170,12 +163,6 @@
   "batches" : [{
     "count" : 8,
     "columns" : [{
-      "name" : "file",
-      "count" : 8,
-      "VALIDITY" : [1,1,1,1,1,1,1,1],
-      "OFFSET" : [0,24,48,72,96,123,150,179,208],
-      "DATA" : ["chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-id.arrow","chunk-00000000-_tx-time.arrow","chunk-00000000-_tx-time.arrow"]
-    },{
       "name" : "column",
       "count" : 8,
       "VALIDITY" : [1,1,1,1,1,1,1,1],

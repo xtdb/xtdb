@@ -27,12 +27,10 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Field column-name-field (t/->field "column" (.getType Types$MinorType/VARCHAR) false))
 (def ^org.apache.arrow.vector.types.pojo.Field field-name-field (t/->field "field" (.getType Types$MinorType/VARCHAR) false))
-(def ^org.apache.arrow.vector.types.pojo.Field file-name-field (t/->field "file" (.getType Types$MinorType/VARCHAR) false))
 (def ^org.apache.arrow.vector.types.pojo.Field type-id-field (t/->field "type-id" (.getType Types$MinorType/TINYINT) false))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
-  (Schema. [file-name-field
-            column-name-field
+  (Schema. [column-name-field
             field-name-field
             type-id-field
             (t/->primitive-dense-union-field "min")
@@ -41,6 +39,9 @@
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%08x.arrow" chunk-idx))
+
+(defn ->chunk-obj-key [chunk-idx column-name]
+  (format "chunk-%08x-%s.arrow" chunk-idx column-name))
 
 (defn- obj-key->chunk-idx [obj-key]
   (some-> (second (re-matches #"metadata-(\p{XDigit}{8}).arrow" obj-key))
@@ -85,8 +86,7 @@
                     (.getVectorByType min-vec type-id) min-offset
                     (.getVectorByType max-vec type-id) max-offset))))
 
-(defn write-col-meta [^VectorSchemaRoot metadata-root, ^VectorSchemaRoot live-root
-                      ^String col-name ^String file-name]
+(defn write-col-meta [^VectorSchemaRoot metadata-root, ^VectorSchemaRoot live-root, ^String col-name]
   (letfn [(write-vec-meta [^FieldVector field-vec ^String field-name]
             (when (pos? (.getValueCount field-vec))
               (let [idx (.getRowCount metadata-root)
@@ -96,8 +96,6 @@
                   (.setSafe idx (Text. col-name)))
                 (doto ^VarCharVector (.getVector metadata-root field-name-field)
                   (.setSafe idx (Text. field-name)))
-                (doto ^VarCharVector (.getVector metadata-root file-name-field)
-                  (.setSafe idx (Text. file-name)))
                 (doto ^TinyIntVector (.getVector metadata-root "type-id")
                   (.setSafe idx type-id))
                 (doto ^BigIntVector (.getVector metadata-root "count")
@@ -174,8 +172,7 @@
   (registerNewChunk [_ live-roots chunk-idx]
     (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
                          (doseq [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                           (let [obj-key (format "chunk-%08x-%s.arrow" chunk-idx col-name)]
-                             (write-col-meta metadata-root live-root col-name obj-key)))
+                           (write-col-meta metadata-root live-root col-name))
 
                          (util/root->arrow-ipc-byte-buffer metadata-root :file))]
 
