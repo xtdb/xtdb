@@ -18,11 +18,6 @@ public final class EvictOperation extends TransactionOperation {
     }
 
     @Override
-    public final Type getType() {
-        return Type.EVICT;
-    }
-
-    @Override
     public <E> E accept(Visitor<E> visitor) {
         return visitor.visit(this);
     }
@@ -37,6 +32,6 @@ public final class EvictOperation extends TransactionOperation {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.EVICT, id);
+        return Objects.hash("evict", id);
     }
 }

@@ -8,7 +8,10 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
 
-public class TransactionInstant {
+/**
+ * A POJO representing the identity of a transaction, comprised of a transaction ID and a transaction time.
+ */
+public final class TransactionInstant {
     private static final Keyword TX_ID = Keyword.intern("crux.tx/tx-id");
     private static final Keyword TX_TIME = Keyword.intern("crux.tx/tx-time");
 
@@ -55,6 +58,9 @@ public class TransactionInstant {
         return time;
     }
 
+    /**
+     * Not for public use, may be removed.
+     */
     public IPersistentMap toMap() {
         IPersistentMap map = PersistentArrayMap.EMPTY;
         if (id != null) {

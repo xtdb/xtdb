@@ -14,7 +14,7 @@ import org.junit.Test;
 import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
 
-import static crux.api.CruxDocument.buildDoc;
+import static crux.api.CruxDocument.build;
 
 public class DocumentTest {
     private static final Keyword foo = Keyword.intern("foo");
@@ -44,7 +44,7 @@ public class DocumentTest {
 
         compare.put(DB_ID, documentId);
         CruxDocument document = CruxDocument.create(documentId);
-        CruxDocument builtDocument = buildDoc(documentId, doc -> {});
+        CruxDocument builtDocument = build(documentId, doc -> {});
 
         assertEquals(compare, document.toMap());
         assertEquals(compare, builtDocument.toMap());
@@ -80,7 +80,7 @@ public class DocumentTest {
         compare.put(foo, "bar");
 
         CruxDocument document = CruxDocument.create(documentId).plus("foo", "bar");
-        CruxDocument builtDocument = buildDoc(documentId, doc -> {
+        CruxDocument builtDocument = build(documentId, doc -> {
             doc.put("foo", "bar");
         });
 
@@ -103,7 +103,7 @@ public class DocumentTest {
         data.put("bar", 0);
 
         CruxDocument document = CruxDocument.create(documentId).plusAll(data);
-        CruxDocument builtDocument = buildDoc(documentId, doc -> {
+        CruxDocument builtDocument = build(documentId, doc -> {
             doc.putAll(data);
         });
 
@@ -125,7 +125,7 @@ public class DocumentTest {
         data.put("bar", 0);
 
         CruxDocument document = CruxDocument.create(documentId, data).minus("bar");
-        CruxDocument builtDocument = buildDoc(documentId, doc -> {
+        CruxDocument builtDocument = build(documentId, doc -> {
             doc.putAll(data);
             doc.remove("bar");
         });
@@ -147,7 +147,7 @@ public class DocumentTest {
         data.put("bar", 0);
 
         CruxDocument document = CruxDocument.create(documentId, data).minusAll(data.keySet());
-        CruxDocument builtDocument = buildDoc(documentId, doc -> {
+        CruxDocument builtDocument = build(documentId, doc -> {
             doc.putAll(data);
             doc.removeAll(data.keySet());
         });

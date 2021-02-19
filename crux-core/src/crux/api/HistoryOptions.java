@@ -6,7 +6,7 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
 
 @SuppressWarnings("unused")
-public class HistoryOptions {
+public final class HistoryOptions {
     public enum SortOrder {
         ASC("asc"),
         DESC("desc");
@@ -165,6 +165,10 @@ public class HistoryOptions {
         return sortOrder.getKeyword();
     }
 
+    /**
+     * Not intended for public use, may be removed.
+     * @return
+     */
     public IPersistentMap toMap() {
         IPersistentMap ret = PersistentArrayMap.EMPTY
                 .assoc(SORT_ORDER, sortOrder.keyword)

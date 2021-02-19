@@ -4,6 +4,7 @@ import clojure.java.api.Clojure;
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
+import crux.api.tx.Transaction;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -22,8 +23,8 @@ public final class CruxDocument {
         this.data = data;
     }
 
-    public static CruxDocument buildDoc(Object id, Consumer<Builder> f) {
-        Builder builder = new CruxDocument.Builder(id);
+    public static CruxDocument build(Object id, Consumer<Builder> f) {
+        Builder builder = builder(id);
         f.accept(builder);
         return builder.build();
     }
@@ -32,6 +33,11 @@ public final class CruxDocument {
         return new Builder(id);
     }
 
+    /**
+     * Creates a CruxDocument from a Clojure map. Not intended for public use, may be removed.
+     * @param input
+     * @return
+     */
     public static CruxDocument factory(IPersistentMap input) {
         if (input == null) return null;
         Object id = input.valAt(DB_ID);
@@ -93,10 +99,22 @@ public final class CruxDocument {
         }
     }
 
+    /**
+     * Creates a new {@link CruxDocument} with just an ID key.
+     * See {@link CruxDocument} for valid ID types
+     * @param id
+     * @return a new {@link CruxDocument}
+     */
     public static CruxDocument create(Object id) {
         return new CruxDocument(id, PersistentArrayMap.EMPTY);
     }
 
+    /**
+     * Static factory to create a Crux transaction function document.
+     * @param id the id of the transaction function
+     * @param rawFunction the function body, as a Clojure-code string.
+     * @return the function document, suitable for use in {@link Transaction.Builder#put(CruxDocument)}
+     */
     public static CruxDocument createFunction(Object id, String rawFunction) {
         return new CruxDocument(id, PersistentArrayMap.EMPTY.assoc(FN_ID, Clojure.read(rawFunction)));
     }
@@ -105,18 +123,30 @@ public final class CruxDocument {
         return create(id).plusAll(data);
     }
 
+    /**
+     * @return a new CruxDocument with the key/value added
+     */
     public CruxDocument plus(String key, Object value) {
         return toBuilder().put(key, value).build();
     }
 
+    /**
+     * @return a new CruxDocument with the entries added
+     */
     public CruxDocument plusAll(Map<String, Object> entries) {
         return toBuilder().putAll(entries).build();
     }
 
+    /**
+     * @return a new CruxDocument with the key removed
+     */
     public CruxDocument minus(String key) {
         return toBuilder().remove(key).build();
     }
 
+    /**
+     * @return a new CruxDocument with the keys removed
+     */
     public CruxDocument minusAll(Iterable<String> keys) {
         return toBuilder().removeAll(keys).build();
     }
@@ -129,6 +159,11 @@ public final class CruxDocument {
         return id;
     }
 
+    /**
+     * Not intended for public use, may be removed.
+     *
+     * @return this document as a Clojure map.
+     */
     public IPersistentMap toMap() {
         return data.assoc(DB_ID, id);
     }

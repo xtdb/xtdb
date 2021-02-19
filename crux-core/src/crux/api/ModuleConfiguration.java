@@ -6,6 +6,12 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+
+/**
+ * Class to configure a Crux module.
+ *
+ * See https://opencrux.com/reference/configuration.html for examples.
+ */
 @SuppressWarnings("unused") // entry points
 public final class ModuleConfiguration {
     private static final String MODULE = "crux/module";
@@ -30,11 +36,25 @@ public final class ModuleConfiguration {
     public final static class Builder {
         private final Map<String, Object> opts = new HashMap<>();
 
+        /**
+         * Sets the configuration key to the given value
+         * @return this
+         */
         public Builder set(String key, Object value) {
             opts.put(key, value);
             return this;
         }
 
+        /**
+         * Specifies the constructor of this module.
+         *
+         * If it is not explicitly provided, Crux will use the key that this module is referenced by.
+         * e.g. if it is included under a `"crux.rocksdb/kv-store"` key,
+         * Crux will use the `"crux.rocksdb/->kv-store"` Clojure function to construct the module.
+         *
+         * @param module the module constructor, e.g. `"crux.rocksdb/->kv-store"`
+         * @return this
+         */
         public Builder module(String module) {
             return set(MODULE, module);
         }
@@ -44,20 +64,39 @@ public final class ModuleConfiguration {
             return this;
         }
 
+        /**
+         * Adds the submodule to this module with the default parameters
+         * @return this
+         */
         public Builder with(String module) {
             return set(module, ModuleConfiguration.EMPTY);
         }
 
+        /**
+         * Adds the submodule to this module with the given configuration
+         * @return this
+         */
         public Builder with(String module, ModuleConfiguration configuration) {
             return set(module, configuration);
         }
 
+        /**
+         * Adds the submodule to this module with the given configuration
+         * @return this
+         */
         public Builder with(String name, Consumer<ModuleConfiguration.Builder> f) {
             return with(name, ModuleConfiguration.buildModule(f));
         }
 
-        public Builder with(String module, String reference) {
-            return set(module, reference);
+        /**
+         * Adds an existing top-level module to this submodule as a dependency.
+         *
+         * @param key the key under which the dependency will appear to this module
+         * @param module the key of the module to refer to
+         * @return this
+         */
+        public Builder with(String key, String module) {
+            return set(key, module);
         }
 
         public ModuleConfiguration build() {
@@ -65,6 +104,9 @@ public final class ModuleConfiguration {
         }
     }
 
+    /**
+     * Not for public use, may be removed.
+    */
     public Map<String, ?> toMap() {
         return opts.entrySet()
                 .stream()

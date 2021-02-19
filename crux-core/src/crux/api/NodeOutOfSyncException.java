@@ -3,7 +3,7 @@ package crux.api;
 import clojure.lang.IExceptionInfo;
 import clojure.lang.IPersistentMap;
 
-public class NodeOutOfSyncException extends RuntimeException implements IExceptionInfo {
+public final class NodeOutOfSyncException extends RuntimeException implements IExceptionInfo {
     private static final long serialVersionUID = 2L;
 
     private final IPersistentMap data;

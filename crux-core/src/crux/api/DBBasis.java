@@ -8,6 +8,9 @@ import java.util.Date;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * A class representing the basis of a DB instance - a valid time and a transaction instant.
+ */
 public final class DBBasis {
     private static final Keyword VALID_TIME = Keyword.intern("crux.db/valid-time");
     private static final Keyword TX = Keyword.intern("crux.tx/tx");
@@ -28,6 +31,11 @@ public final class DBBasis {
         this.transactionInstant = transactionInstant;
     }
 
+    /**
+     * Not intended for public use, may be removed.
+     * @param map
+     * @return
+     */
     @SuppressWarnings("unchecked")
     public static DBBasis factory(IPersistentMap map) {
         Date validTime = (Date) map.valAt(VALID_TIME);
@@ -35,6 +43,11 @@ public final class DBBasis {
         return new DBBasis(validTime, transactionInstant);
     }
 
+    /**
+     * Not intended for public use, may be removed.
+     *
+     * @return
+     */
     public IPersistentMap toMap() {
         IPersistentMap ret = PersistentArrayMap.EMPTY;
         if (transactionInstant != null) {

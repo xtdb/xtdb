@@ -1,6 +1,7 @@
 package crux.api.tx;
 
 import clojure.lang.IPersistentVector;
+import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
 import crux.api.CruxDocument;
 
@@ -38,50 +39,116 @@ public final class Transaction {
             return this;
         }
 
+        /**
+         * Adds a put operation to the transaction, putting the given document at validTime = now.
+         * @return this
+         */
         public final Builder put(CruxDocument document) {
             return add(PutOperation.create(document));
         }
 
+        /**
+         * Adds a put operation to the transaction, putting the given document starting from the given valid time
+         * @return this
+         */
         public final Builder put(CruxDocument document, Date startValidTime) {
             return add(PutOperation.create(document, startValidTime));
         }
 
+        /**
+         * Adds a put operation to the transaction, putting the given document starting for the given validTime range
+         * @return this
+         */
         public final Builder put(CruxDocument document, Date startValidTime, Date endValidTime) {
             return add(PutOperation.create(document, startValidTime, endValidTime));
         }
 
+        /**
+         * Adds a delete operation to the transaction, deleting the given document from validTime = now.
+         * @return this
+         */
         public final Builder delete(Object id) {
             return add(DeleteOperation.create(id));
         }
 
+        /**
+         * Adds a delete operation to the transaction, deleting the given document starting from the given valid time
+         * @return this
+         */
         public final Builder delete(Object id, Date startValidTime) {
             return add(DeleteOperation.create(id, startValidTime));
         }
 
+        /**
+         * Adds a delete operation to the transaction, deleting the given document starting for the given validTime range
+         * @return this
+         */
         public final Builder delete(Object id, Date startValidTime, Date endValidTime) {
             return add(DeleteOperation.create(id, startValidTime, endValidTime));
         }
 
+        /**
+         * Adds an evict operation to the transaction, removing all trace of the entity with the given ID.
+         *
+         * Eviction also removes all history of the entity - unless you are required to do this,
+         * (for legal reasons, for example) we'd recommend using a {@link #delete(Object)} instead,
+         * to preserve the history of the entity.
+         *
+         * @return this
+         */
         public final Builder evict(Object id) {
             return add(EvictOperation.create(id));
         }
 
+        /**
+         * Adds a match operation to the transaction.
+         *
+         * Asserts that the given entity ID does not exist at validTime = now, otherwise the transaction will abort.
+         *
+         * @return this
+         */
         public final Builder matchNotExists(Object id) {
             return add(MatchOperation.create(id));
         }
 
+        /**
+         * Adds a match operation to the transaction.
+         *
+         * Asserts that the given document is present at validTime = now, otherwise the transaction will abort.
+         *
+         * @return this
+         */
         public final Builder match(CruxDocument document) {
             return add(MatchOperation.create(document));
         }
 
+        /**
+         * Adds a match operation to the transaction.
+         *
+         * Asserts that the given entity ID does not exist at the given validTime, otherwise the transaction will abort.
+         *
+         * @return this
+         */
         public final Builder matchNotExists(Object id, Date atValidTime) {
             return add(MatchOperation.create(id, atValidTime));
         }
 
+        /**
+         * Adds a match operation to the transaction.
+         *
+         * Asserts that the given document is present at the given valid time, otherwise the transaction will abort.
+         *
+         * @return this
+         */
         public final Builder match(CruxDocument document, Date atValidTime) {
             return add(MatchOperation.create(document, atValidTime));
         }
 
+        /**
+         * Adds a transaction function invocation operation to the transaction.
+         * Invokes the transaction function with the given id, passing it the given arguments.
+         * @return this
+         */
         public final Builder invokeFunction(Object id, Object... arguments) {
             return add(InvokeFunctionOperation.create(id, arguments));
         }
@@ -92,10 +159,16 @@ public final class Transaction {
     }
 
     private static class EdnVisitor implements TransactionOperation.Visitor<IPersistentVector> {
+        private static final Keyword PUT = Keyword.intern("crux.tx/put");
+        private static final Keyword DELETE = Keyword.intern("crux.tx/delete");
+        private static final Keyword EVICT = Keyword.intern("crux.tx/evict");
+        private static final Keyword MATCH = Keyword.intern("crux.tx/match");
+        private static final Keyword FN = Keyword.intern("crux.tx/fn");
+
         @Override
         public IPersistentVector visit(PutOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(TransactionOperation.Type.PUT.getKeyword())
+                    .cons(PUT)
                     .cons(operation.getDocument().toMap());
 
             Date startValidTime = operation.getStartValidTime();
@@ -116,7 +189,7 @@ public final class Transaction {
         @Override
         public IPersistentVector visit(DeleteOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(TransactionOperation.Type.DELETE.getKeyword())
+                    .cons(DELETE)
                     .cons(operation.getId());
 
             Date startValidTime = operation.getStartValidTime();
@@ -137,14 +210,14 @@ public final class Transaction {
         @Override
         public IPersistentVector visit(EvictOperation operation) {
             return PersistentVector.EMPTY
-                    .cons(TransactionOperation.Type.EVICT.getKeyword())
+                    .cons(EVICT)
                     .cons(operation.getId());
         }
 
         @Override
         public IPersistentVector visit(MatchOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(TransactionOperation.Type.MATCH.getKeyword())
+                    .cons(MATCH)
                     .cons(operation.getId());
 
             CruxDocument document = operation.getDocument();
@@ -166,7 +239,7 @@ public final class Transaction {
         @Override
         public IPersistentVector visit(InvokeFunctionOperation operation) {
             IPersistentVector toAdd = PersistentVector.EMPTY
-                    .cons(TransactionOperation.Type.FN.getKeyword())
+                    .cons(FN)
                     .cons(operation.getId());
 
             for (Object argument: operation.getArguments()) {

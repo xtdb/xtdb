@@ -41,11 +41,6 @@ public final class PutOperation extends TransactionOperation {
     }
 
     @Override
-    public final Type getType() {
-        return Type.PUT;
-    }
-
-    @Override
     public <E> E accept(Visitor<E> visitor) {
         return visitor.visit(this);
     }
@@ -62,6 +57,6 @@ public final class PutOperation extends TransactionOperation {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.PUT, document, startValidTime, endValidTime);
+        return Objects.hash("put", document, startValidTime, endValidTime);
     }
 }

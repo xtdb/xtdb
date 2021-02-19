@@ -12,7 +12,7 @@ import clojure.lang.IFn;
  * Public API entry point for starting an {@link ICruxAPI}.
  */
 @SuppressWarnings("unused")
-public class Crux {
+public final class Crux {
 
     private static final IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
 

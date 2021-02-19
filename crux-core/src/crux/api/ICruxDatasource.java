@@ -109,6 +109,12 @@ public interface ICruxDatasource extends Closeable {
      * @return an eagerly-evaluated sequence of changes to the given entity.
      */
     List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions options);
+
+    /**
+     * Eagerly retrieves entity history for the given entity.
+     * @see #entityHistory(Object, HistoryOptions)
+     * @return an eagerly-evaluated sequence of changes to the given entity.
+     */
     default List<Map<Keyword, ?>> entityHistory(Object eid, HistoryOptions.SortOrder sortOrder) {
         return entityHistory(eid, HistoryOptions.create(sortOrder));
     }
@@ -118,10 +124,17 @@ public interface ICruxDatasource extends Closeable {
      * Don't forget to close the cursor when you've consumed enough history!
      *
      * @see #entityHistory(Object, HistoryOptions)
-     * @param eid The entity id to return history for
      * @return a cursor of changes to the given entity.
      */
     ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions options);
+
+    /**
+     * Lazily retrieves entity history for the given entity.
+     * Don't forget to close the cursor when you've consumed enough history!
+     *
+     * @see #entityHistory(Object, HistoryOptions)
+     * @return a cursor of changes to the given entity.
+     */
     default ICursor<Map<Keyword, ?>> openEntityHistory(Object eid, HistoryOptions.SortOrder sortOrder) {
         return openEntityHistory(eid, HistoryOptions.create(sortOrder));
     }
@@ -143,9 +156,6 @@ public interface ICruxDatasource extends Closeable {
     Date transactionTime();
 
     /**
-     * Returns the basis of this database snapshot - a map containing
-     * `:crux.db/valid-time` and `:crux.tx/tx`
-     *
      * @return the basis of this database snapshot.
      */
     DBBasis dbBasis();
@@ -154,7 +164,7 @@ public interface ICruxDatasource extends Closeable {
      * Returns a new db value with the txOps speculatively applied.
      * The txOps will only be visible in the value returned from this method - they're not submitted to the cluster, nor are they visible to any other database value in your application.
      *
-     * If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil.
+     * If the transaction doesn't commit (eg because of a failed 'match'), this function returns null.
      *
      * @param transaction the transaction to be applied.
      * @return a new db value with the transaction speculatively applied.

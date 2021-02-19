@@ -16,7 +16,7 @@ import java.time.Duration;
 
 import static crux.api.TestUtils.*;
 import static org.junit.Assert.*;
-import static crux.api.CruxDocument.buildDoc;
+import static crux.api.CruxDocument.build;
 
 // tag::creating-0[]
 import static crux.api.tx.Transaction.buildTx;
@@ -290,7 +290,7 @@ public class TransactionsTest {
 
         CruxDocument fromConsumer =
         // tag::doc-consumer[]
-        buildDoc("pablo-picasso", doc -> {
+        build("pablo-picasso", doc -> {
             doc.put("name", "Pablo");
             doc.put("lastName", "Picasso");
         });

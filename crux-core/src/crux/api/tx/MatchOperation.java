@@ -45,11 +45,6 @@ public final class MatchOperation extends TransactionOperation {
     }
 
     @Override
-    public final Type getType() {
-        return Type.MATCH;
-    }
-
-    @Override
     public <E> E accept(Visitor<E> visitor) {
         return visitor.visit(this);
     }
@@ -66,6 +61,6 @@ public final class MatchOperation extends TransactionOperation {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.MATCH, id, document, atValidTime);
+        return Objects.hash("match", id, document, atValidTime);
     }
 }

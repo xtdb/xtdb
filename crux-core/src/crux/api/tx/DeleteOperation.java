@@ -39,11 +39,6 @@ public final class DeleteOperation extends TransactionOperation {
     }
 
     @Override
-    public final Type getType() {
-        return Type.DELETE;
-    }
-
-    @Override
     public <E> E accept(Visitor<E> visitor) {
         return visitor.visit(this);
     }
@@ -60,6 +55,6 @@ public final class DeleteOperation extends TransactionOperation {
 
     @Override
     public int hashCode() {
-        return Objects.hash(Type.DELETE, id, startValidTime, endValidTime);
+        return Objects.hash("delete", id, startValidTime, endValidTime);
     }
 }

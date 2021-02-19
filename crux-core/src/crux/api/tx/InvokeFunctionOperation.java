@@ -25,11 +25,6 @@ public final class InvokeFunctionOperation extends TransactionOperation {
     }
 
     @Override
-    public Type getType() {
-        return Type.FN;
-    }
-
-    @Override
     public <E> E accept(Visitor<E> visitor) {
         return visitor.visit(this);
     }

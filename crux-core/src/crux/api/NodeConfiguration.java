@@ -6,6 +6,11 @@ import java.util.Objects;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+/**
+ * Class to configure a Crux node.
+ *
+ * See https://opencrux.com/reference/configuration.html for examples.
+ */
 @SuppressWarnings("unused")
 public final class NodeConfiguration {
     static final NodeConfiguration EMPTY = new NodeConfiguration(new HashMap<>());
@@ -32,17 +37,30 @@ public final class NodeConfiguration {
     public final static class Builder {
         private final Map<String, ModuleConfiguration> modules = new HashMap<>();
 
-        private Builder() {};
+        private Builder() {
+        }
 
+        /**
+         * Adds the given module to the node configuration.
+         * @return this
+         */
         public Builder with(String name, ModuleConfiguration module) {
             modules.put(name, module);
             return this;
         }
 
+        /**
+         * Adds the module to the node configuration, with the default parameters.
+         * @return this
+         */
         public Builder with(String name) {
             return with(name, ModuleConfiguration.EMPTY);
         }
 
+        /**
+         * Adds the given module to the node configuration.
+         * @return this
+         */
         public Builder with(String name, Consumer<ModuleConfiguration.Builder> f) {
             modules.put(name, ModuleConfiguration.buildModule(f));
             return this;
@@ -53,12 +71,13 @@ public final class NodeConfiguration {
         }
     }
 
+    /**
+     * Not for public use - may be removed.
+     */
     public Map<String, ?> toMap() {
         return modules.entrySet()
-                .stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        c -> c.getValue().toMap()));
+            .stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, c -> c.getValue().toMap()));
     }
 
     @Override
