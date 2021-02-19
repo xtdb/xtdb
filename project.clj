@@ -36,6 +36,12 @@
 
   :java-source-paths ["src"]
 
+  :javac-options ["-source" "8" "-target" "8"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
+
   :jvm-opts ["-Xmx2G"
              "-XX:MaxDirectMemorySize=2G"
              "-Dio.netty.tryReflectionSetAccessible=true"
