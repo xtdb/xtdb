@@ -139,6 +139,21 @@
                         :where '[[(text-search :name "Ivan") [[?e ?v]]]
                                  [?e :crux.db/id]]})))))
 
+;; https://github.com/juxt/crux/issues/1428
+
+(t/deftest test-can-search-multiple-entities-with-same-av-pair-bug-1428
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan1 :name "Ivan"}]
+                    [:crux.tx/put {:crux.db/id :ivan2 :name "Ivan"}]
+                    [:crux.tx/put {:crux.db/id :ivan3 :name "Ivan1"}]])
+
+  (with-open [db (c/open-db *api*)]
+    (t/is (= #{[:ivan1] [:ivan2] [:ivan3]}
+             (c/q db {:find '[?e]
+                      :where '[[(text-search :name "Iv*") [[?e]]]]})))
+    (t/is (= #{[:ivan1] [:ivan2] [:ivan3]}
+             (c/q db {:find '[?e]
+                      :where '[[(wildcard-text-search "Iv*") [[?e]]]]})))))
+
 ;; Leaving to document when score is impacted by accumulated temporal data
 #_(t/deftest test-scoring-shouldnt-be-impacted-by-non-matched-past-docs
   (submit+await-tx [[:crux.tx/put {:crux.db/id :real-ivan :name "Ivan Bob"}]])
