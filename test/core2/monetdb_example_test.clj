@@ -48,19 +48,19 @@
     reconstructed-struct))
 
 ;; NOTE: uses one-based indexes
-(defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v ^long min ^long max]
+(defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v ^long min-exclusive ^long max-exclusive]
   (let [selection-vector (BigIntVector. "" a)]
     (cond
       (instance? BigIntVector v)
       (dotimes [idx (.getValueCount v)]
-        (when (< min (.get ^BigIntVector v idx) max)
+        (when (< min-exclusive (.get ^BigIntVector v idx) max-exclusive)
           (append-bigint-vector selection-vector (inc idx))))
 
       (instance? StructVector v)
       (let [^StructVector v v
             ^BigIntVector head (.getChild v "head")
             ^BigIntVector tail (.getChild v "tail")]
-        (with-open [^BigIntVector tail-selection-vector (select a tail min max)]
+        (with-open [^BigIntVector tail-selection-vector (select a tail min-exclusive max-exclusive)]
           (dotimes [idx (.getValueCount tail-selection-vector)]
             (append-bigint-vector selection-vector (.get head (dec (.get tail-selection-vector idx)))))))
 
