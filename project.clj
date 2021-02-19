@@ -68,8 +68,6 @@
    [org.lz4/lz4-java "1.7.1"]
    [commons-codec "1.12"]
    [joda-time "2.9.9"]
-   [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
-   [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
    [org.tukaani/xz "1.8"]
    [com.github.spotbugs/spotbugs-annotations "3.1.9"]
    [org.apache.lucene/lucene-codecs "8.6.1"]

@@ -27,7 +27,7 @@
             [reitit.ring.middleware.exception :as re]
             [reitit.ring.middleware.muuntaja :as rm]
             [reitit.swagger :as swagger]
-            [ring.adapter.jetty :as j]
+            [ring.adapter.jetty9 :as j]
             [ring.middleware.params :as p]
             [ring.util.response :as resp]
             [ring.util.time :as rt])
@@ -469,6 +469,7 @@
                                               (rr/create-resource-handler {:path "/"})
                                               (rr/create-default-handler)))
                             {:port port
+                             :h2c? true
                              :join? false})]
     (log/info "HTTP server started on port: " port)
     (->HTTPServer server options)))

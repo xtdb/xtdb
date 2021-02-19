@@ -52,7 +52,7 @@
                  [com.github.spotbugs/spotbugs-annotations "3.1.9"]
                  [org.reactivestreams/reactive-streams "1.0.3"]
                  [org.codehaus.janino/commons-compiler "3.0.11"]
-                 [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
+                 [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
                  [javax.servlet/javax.servlet-api "4.0.1"]]
 
   :middleware [leiningen.project-version/middleware]

@@ -27,8 +27,8 @@
                  [commons-codec "1.12"]
                  [org.tukaani/xz "1.8"]
                  [org.apache.commons/commons-lang3 "3.9"]
-                 [org.eclipse.jetty/jetty-server "9.4.22.v20191022"]
-                 [org.eclipse.jetty/jetty-io "9.4.30.v20200611"]
+                 [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
+                 [org.eclipse.jetty/jetty-io "9.4.36.v20210114"]
                  [javax.servlet/javax.servlet-api "4.0.1"]
 
                  ;; Junit Tests
@@ -89,7 +89,7 @@
                                    [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                                    [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
                                    [com.github.spotbugs/spotbugs-annotations "3.1.9"]
-                                   [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
-                                   [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
-                                   [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
+                                   [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
+                                   [org.eclipse.jetty/jetty-http "9.4.36.v20210114"]
                                    [javax.servlet/javax.servlet-api "4.0.1"]]}})

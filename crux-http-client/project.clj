@@ -21,9 +21,9 @@
                                    [com.fasterxml.jackson.core/jackson-core "2.10.2"]
                                    [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
                                    [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
-                                   [org.eclipse.jetty/jetty-server "9.4.30.v20200611"]
-                                   [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
-                                   [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]
+                                   [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
+                                   [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
+                                   [org.eclipse.jetty/jetty-http "9.4.36.v20210114"]
                                    [javax.servlet/javax.servlet-api "4.0.1"]]}}
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn)
