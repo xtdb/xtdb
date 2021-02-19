@@ -2,12 +2,14 @@
   (:refer-clojure :exclude [reverse])
   (:require [clojure.test :as t])
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BigIntVector ValueVector]
+           [org.apache.arrow.vector BigIntVector ElementAddressableVector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
            [java.util ArrayList List]))
 
 ;; Follows Figure 4.1 in "The Design and Implementation of Modern
 ;; Column-Oriented Database Systems", Abadi
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn- append-bigint-vector ^org.apache.arrow.vector.BigIntVector [^BigIntVector v ^long x]
   (let [idx (.getValueCount v)]
@@ -33,7 +35,7 @@
       (.add acc (.getObject v n)))
     acc))
 
-(defn- reconstruct ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^BigIntVector v ^BigIntVector selection-vector]
+(defn- reconstruct ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^ValueVector v ^BigIntVector selection-vector]
   (let [reconstructed-struct (StructVector/empty "" a)
         value-count (.getValueCount selection-vector)
         head (.addOrGet reconstructed-struct "head" (.getFieldType (.getField selection-vector)) ValueVector)
@@ -41,28 +43,32 @@
     (dotimes [idx value-count]
       (.copyFromSafe head idx idx selection-vector))
     (.setValueCount head value-count)
-    (dotimes [idx (.getValueCount selection-vector)]
-      (append-bigint-vector tail (.get v (dec (.get selection-vector idx)))))
+    (dotimes [idx value-count]
+      (.copyFromSafe tail (dec (.get selection-vector idx)) idx v))
     (.setValueCount tail value-count)
     (.setValueCount reconstructed-struct value-count)
     reconstructed-struct))
 
 ;; NOTE: uses one-based indexes
-(defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v ^long min-exclusive ^long max-exclusive]
+(defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v min-exclusive max-exclusive]
   (let [selection-vector (BigIntVector. "" a)]
     (cond
       (instance? BigIntVector v)
-      (dotimes [idx (.getValueCount v)]
-        (when (< min-exclusive (.get ^BigIntVector v idx) max-exclusive)
-          (append-bigint-vector selection-vector (inc idx))))
+      (let [^long min-exclusive min-exclusive
+            ^long max-exclusive max-exclusive]
+        (dotimes [idx (.getValueCount v)]
+          (when (< min-exclusive (.get ^BigIntVector v idx) max-exclusive)
+            (append-bigint-vector selection-vector (inc idx)))))
 
       (instance? StructVector v)
       (let [^StructVector v v
             ^BigIntVector head (.getChild v "head")
-            ^BigIntVector tail (.getChild v "tail")]
+            tail (.getChild v "tail")]
         (with-open [^BigIntVector tail-selection-vector (select a tail min-exclusive max-exclusive)]
-          (dotimes [idx (.getValueCount tail-selection-vector)]
-            (append-bigint-vector selection-vector (.get head (dec (.get tail-selection-vector idx)))))))
+          (let [value-count (.getValueCount tail-selection-vector)]
+            (dotimes [idx value-count]
+              (.copyFromSafe selection-vector (dec (.get tail-selection-vector idx)) idx head))
+            (.setValueCount selection-vector value-count))))
 
       :else
       (throw (UnsupportedOperationException.)))
@@ -83,9 +89,9 @@
 (defn- join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
   (let [join-struct (StructVector/empty "" a)
         ^BigIntVector left-head (.getChild left "head")
-        ^BigIntVector left-tail (.getChild left "tail")
+        ^ElementAddressableVector left-tail (.getChild left "tail")
 
-        ^BigIntVector right-head (.getChild right "head")
+        ^ElementAddressableVector right-head (.getChild right "head")
         ^BigIntVector right-tail (.getChild right "tail")
 
         join-head (.addOrGet join-struct "head" (.getFieldType (.getField left-head)) ValueVector)
@@ -93,26 +99,36 @@
 
     ;; NOTE: nested loop join.
     (dotimes [left-idx (.getValueCount left-tail)]
-      (let [l (.get left-tail left-idx)]
+      (let [l (.getDataPointer left-tail left-idx)]
         (dotimes [right-idx (.getValueCount right-head)]
-          (let [r (.get right-head right-idx)]
+          (let [r (.getDataPointer right-head right-idx)]
             (when (= l r)
-              (append-bigint-vector join-head (.get left-head left-idx))
-              (append-bigint-vector join-tail (.get right-tail right-idx))
-              (.setValueCount join-struct (inc (.getValueCount join-struct))))))))
+              (let [value-count (.getValueCount join-struct)]
+                (.copyFromSafe join-head left-idx value-count left-head)
+                (.copyFromSafe join-tail right-idx value-count right-tail)
+                (.setValueCount join-struct (inc value-count))))))))
 
     join-struct))
 
-(defn- void-tail ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^StructVector v]
-  (copy-vector (.getChild v "head") (BigIntVector. "" a)))
+(defn- void-tail ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^StructVector v]
+  (copy-vector (.getChild v "head") (.createVector (.getField (.getChild v "head")) a)))
 
-(defn- sum ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^BigIntVector v]
-  (let [value-count (.getValueCount v)]
-    (loop [acc 0
-           idx 0]
-      (if (= idx value-count)
-        (append-bigint-vector (BigIntVector. "" a) acc)
-        (recur (+ acc (.get v idx)) (inc idx))))))
+(defn- sum ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
+  (cond
+    (instance? StructVector v)
+    (sum a (.getChild ^StructVector v "tail"))
+
+    (instance? BigIntVector v)
+    (let [^BigIntVector v v
+          value-count (.getValueCount v)]
+      (loop [acc 0
+             idx 0]
+        (if (= idx value-count)
+          (append-bigint-vector (BigIntVector. "" a) acc)
+          (recur (+ acc (.get v idx)) (inc idx)))))
+
+    :else
+    (throw (UnsupportedOperationException.))))
 
 
 ;; Corresponding SQL, note that the last range is off compared to the
@@ -178,9 +194,10 @@
                       ;; NOTE: in paper this is displayed as a single
                       ;; vector, not a pair.
                       (with-open [inter7 (reconstruct a ra inter6)]
+                        (t/is (= [4 9] (->list (.getChild inter7 "head"))))
                         (t/is (= [9 19] (->list (.getChild inter7 "tail"))))
 
                         ;; NOTE: scalar is represented as a single
                         ;; element vector in paper.
-                        (with-open [result (sum a (.getChild inter7 "tail"))]
+                        (with-open [result (sum a inter7)]
                           (t/is (= [28] (->list result))))))))))))))))
