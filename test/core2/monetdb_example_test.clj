@@ -2,6 +2,7 @@
   (:refer-clojure :exclude [reverse])
   (:require [clojure.test :as t])
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
+           org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector BigIntVector ElementAddressableVector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
            org.apache.arrow.vector.types.pojo.FieldType
@@ -100,9 +101,11 @@
 (defn- join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
   (let [^BigIntVector left-head (head left)
         ^ElementAddressableVector left-tail (tail left)
+        left-pointer (ArrowBufPointer.)
 
         ^ElementAddressableVector right-head (head right)
         ^BigIntVector right-tail (tail right)
+        right-pointer (ArrowBufPointer.)
 
         join-struct (->bat a (field-type left-head) (field-type right-tail))
         join-head (head join-struct)
@@ -110,14 +113,14 @@
 
     ;; NOTE: nested loop join.
     (dotimes [left-idx (.getValueCount left-tail)]
-      (let [l (.getDataPointer left-tail left-idx)]
-        (dotimes [right-idx (.getValueCount right-head)]
-          (let [r (.getDataPointer right-head right-idx)]
-            (when (= l r)
-              (let [value-count (.getValueCount join-struct)]
-                (.copyFromSafe join-head left-idx value-count left-head)
-                (.copyFromSafe join-tail right-idx value-count right-tail)
-                (.setValueCount join-struct (inc value-count))))))))
+      (.getDataPointer left-tail left-idx left-pointer)
+      (dotimes [right-idx (.getValueCount right-head)]
+        (.getDataPointer right-head right-idx right-pointer)
+        (when (= left-pointer right-pointer)
+          (let [value-count (.getValueCount join-struct)]
+            (.copyFromSafe join-head left-idx value-count left-head)
+            (.copyFromSafe join-tail right-idx value-count right-tail)
+            (.setValueCount join-struct (inc value-count))))))
 
     join-struct))
 
