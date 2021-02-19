@@ -4,7 +4,7 @@
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector.util VectorBatchAppender]
-           [org.apache.arrow.vector BaseIntVector BigIntVector ElementAddressableVector FloatingPointVector ValueVector]
+           [org.apache.arrow.vector BaseIntVector BigIntVector ElementAddressableVector FloatingPointVector Float8Vector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
            org.apache.arrow.vector.types.pojo.FieldType
            [java.util.function Predicate IntPredicate LongPredicate DoublePredicate]
@@ -17,11 +17,16 @@
 
 (defn- append-bigint-vector ^org.apache.arrow.vector.BigIntVector [^BigIntVector v ^long x]
   (let [idx (.getValueCount v)]
-    (.setSafe v idx x)
+    (.set v idx x)
     (.setValueCount v (inc idx))
     v))
 
+(defn- ensure-capacity [^ValueVector v ^long capacity]
+  (.setInitialCapacity v capacity)
+  (.allocateNew v))
+
 (defn- populate-bigint-vector ^org.apache.arrow.vector.BigIntVector [^BigIntVector v values]
+  (ensure-capacity v (count values))
   (doseq [^long n values]
     (append-bigint-vector v n))
   v)
@@ -52,31 +57,31 @@
 
 (defn- reconstruct ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^ValueVector v ^BigIntVector selection-vector]
   (let [reconstructed-struct (->bat a (field-type selection-vector) (field-type v))
+        value-count (.getValueCount selection-vector)
         new-head (head reconstructed-struct)
-        new-tail (tail reconstructed-struct)
-        value-count (.getValueCount selection-vector)]
+        new-tail (doto (tail reconstructed-struct)
+                   (ensure-capacity value-count))]
+    (copy-vector selection-vector new-head)
     (dotimes [idx value-count]
-      (.copyFromSafe new-head idx idx selection-vector))
-    (.setValueCount new-head value-count)
-    (dotimes [idx value-count]
-      (.copyFromSafe new-tail (dec (.get selection-vector idx)) idx v))
-    (.setValueCount new-tail value-count)
+      (.copyFrom new-tail (dec (.get selection-vector idx)) idx v))
     (.setValueCount reconstructed-struct value-count)
     reconstructed-struct))
 
 ;; NOTE: uses one-based indexes
 (defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v pred]
-  (let [selection-vector (BigIntVector. "" a)]
+  (let [value-count (.getValueCount v)
+        selection-vector (doto (BigIntVector. "" a)
+                           (ensure-capacity value-count))]
     (cond
       (and (instance? BaseIntVector v)
            (instance? LongPredicate pred))
-      (dotimes [idx (.getValueCount v)]
+      (dotimes [idx value-count]
         (when (.test ^LongPredicate pred (.getValueAsLong ^BaseIntVector v idx))
           (append-bigint-vector selection-vector (inc idx))))
 
       (and (instance? FloatingPointVector v)
            (instance? DoublePredicate pred))
-      (dotimes [idx (.getValueCount v)]
+      (dotimes [idx value-count]
         (when (.test ^DoublePredicate pred (.getValueAsDouble ^FloatingPointVector v idx))
           (append-bigint-vector selection-vector (inc idx))))
 
@@ -85,12 +90,17 @@
         (let [value-count (.getValueCount tail-selection-vector)
               from-head (head v)]
           (dotimes [idx value-count]
-            (.copyFromSafe selection-vector (dec (.get tail-selection-vector idx)) idx from-head))
+            (.copyFrom selection-vector (dec (.get tail-selection-vector idx)) idx from-head))
           (.setValueCount selection-vector value-count)))
 
+      (instance? Predicate v)
+      (dotimes [idx value-count]
+        (when (.test ^Predicate pred (.getObject v idx))
+          (append-bigint-vector selection-vector (inc idx))))
+
       :else
-      (dotimes [idx (.getValueCount v)]
-        (when (.test ^Predicate pred (.getObject ^FloatingPointVector v idx))
+      (dotimes [idx value-count]
+        (when (pred (.getObject v idx))
           (append-bigint-vector selection-vector (inc idx)))))
 
     selection-vector))
@@ -138,14 +148,29 @@
     (instance? StructVector v)
     (sum a (tail v))
 
-    (instance? BigIntVector v)
-    (let [^BigIntVector v v
+    (instance? BaseIntVector v)
+    (let [^BaseIntVector v v
           value-count (.getValueCount v)]
       (loop [acc 0
              idx 0]
         (if (= idx value-count)
-          (append-bigint-vector (BigIntVector. "" a) acc)
-          (recur (+ acc (.get v idx)) (inc idx)))))
+          (doto (BigIntVector. "" a)
+            (ensure-capacity 1)
+            (.set 0 acc)
+            (.setValueCount 1))
+          (recur (+ acc (.getValueAsLong v idx)) (inc idx)))))
+
+    (instance? FloatingPointVector v)
+    (let [^FloatingPointVector v v
+          value-count (.getValueCount v)]
+      (loop [acc 0.0
+             idx 0]
+        (if (= idx value-count)
+          (doto (Float8Vector. "" a)
+            (ensure-capacity 1)
+            (.set 0 acc)
+            (.setValueCount 1))
+          (recur (+ acc (.getValueAsDouble v idx)) (inc idx)))))
 
     :else
     (throw (UnsupportedOperationException.))))
