@@ -434,6 +434,8 @@
                     (t/is (= second-half-tx-instant (.awaitTx il second-half-tx-instant (Duration/ofSeconds 5))))
                     (t/is (= second-half-tx-instant (.latestCompletedTx il))))
 
+                  (Thread/sleep 1000) ;; for now
+
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (.object-store node)]]
                     (t/is (= 11 (count @(.listObjects os "metadata-*"))))
