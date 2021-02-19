@@ -126,7 +126,7 @@
   [attr index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
   (mapcat (fn [[^Document doc score]]
             (let [v (.get ^Document doc field-crux-val)]
-              (for [eid (db/ave index-snapshot attr v nil entity-resolver-fn)]
+              (for [eid (doall (db/ave index-snapshot attr v nil entity-resolver-fn))]
                 [(db/decode-value index-snapshot eid) v score])))
           search-results))
 
@@ -144,7 +144,7 @@
   (mapcat (fn [[^Document doc score]]
             (let [v (.get ^Document doc field-crux-val)
                   a (keyword (.get ^Document doc field-crux-attr))]
-              (for [eid (db/ave index-snapshot a v nil entity-resolver-fn)]
+              (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
                 [(db/decode-value index-snapshot eid) v a score])))
           search-results))
 
