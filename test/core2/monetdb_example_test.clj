@@ -3,9 +3,11 @@
   (:require [clojure.test :as t])
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector BigIntVector ElementAddressableVector ValueVector]
+           [org.apache.arrow.vector.util VectorBatchAppender]
+           [org.apache.arrow.vector BaseIntVector BigIntVector ElementAddressableVector FloatingPointVector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
            org.apache.arrow.vector.types.pojo.FieldType
+           [java.util.function Predicate IntPredicate LongPredicate DoublePredicate]
            [java.util ArrayList List]))
 
 ;; Follows Figure 4.1 in "The Design and Implementation of Modern
@@ -25,11 +27,8 @@
   v)
 
 (defn- copy-vector [^ValueVector from ^ValueVector to]
-  (let [value-count (.getValueCount from)]
-    (dotimes [idx value-count]
-      (.copyFromSafe to idx idx from))
-    (.setValueCount to value-count)
-    to))
+  (VectorBatchAppender/batchAppend to (into-array [from]))
+  to)
 
 (defn- ->list ^java.util.List [^ValueVector v]
   (let [acc (ArrayList.)]
@@ -38,10 +37,10 @@
     acc))
 
 (defn- head ^org.apache.arrow.vector.ValueVector [^StructVector v]
-  (.getChild v "head"))
+  (.getChildByOrdinal v 0))
 
 (defn- tail ^org.apache.arrow.vector.ValueVector [^StructVector v]
-  (.getChild v "tail"))
+  (.getChildByOrdinal v 1))
 
 (defn- ->bat ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^FieldType head-type ^FieldType tail-type]
   (doto (StructVector/empty "" a)
@@ -66,18 +65,23 @@
     reconstructed-struct))
 
 ;; NOTE: uses one-based indexes
-(defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v min-exclusive max-exclusive]
+(defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v pred]
   (let [selection-vector (BigIntVector. "" a)]
     (cond
-      (instance? BigIntVector v)
-      (let [^long min-exclusive min-exclusive
-            ^long max-exclusive max-exclusive]
-        (dotimes [idx (.getValueCount v)]
-          (when (< min-exclusive (.get ^BigIntVector v idx) max-exclusive)
-            (append-bigint-vector selection-vector (inc idx)))))
+      (and (instance? BaseIntVector v)
+           (instance? LongPredicate pred))
+      (dotimes [idx (.getValueCount v)]
+        (when (.test ^LongPredicate pred (.getValueAsLong ^BaseIntVector v idx))
+          (append-bigint-vector selection-vector (inc idx))))
+
+      (and (instance? FloatingPointVector v)
+           (instance? DoublePredicate pred))
+      (dotimes [idx (.getValueCount v)]
+        (when (.test ^DoublePredicate pred (.getValueAsDouble ^FloatingPointVector v idx))
+          (append-bigint-vector selection-vector (inc idx))))
 
       (instance? StructVector v)
-      (with-open [^BigIntVector tail-selection-vector (select a (tail v) min-exclusive max-exclusive)]
+      (with-open [^BigIntVector tail-selection-vector (select a (tail v) pred)]
         (let [value-count (.getValueCount tail-selection-vector)
               from-head (head v)]
           (dotimes [idx value-count]
@@ -85,7 +89,9 @@
           (.setValueCount selection-vector value-count)))
 
       :else
-      (throw (UnsupportedOperationException.)))
+      (dotimes [idx (.getValueCount v)]
+        (when (.test ^Predicate pred (.getObject ^FloatingPointVector v idx))
+          (append-bigint-vector selection-vector (inc idx)))))
 
     selection-vector))
 
@@ -125,12 +131,12 @@
     join-struct))
 
 (defn- void-tail ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^StructVector v]
-  (copy-vector (.getChild v "head") (.createVector (.getField (.getChild v "head")) a)))
+  (copy-vector (head v) (.createVector (.getField (head v)) a)))
 
 (defn- sum ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
   (cond
     (instance? StructVector v)
-    (sum a (.getChild ^StructVector v "tail"))
+    (sum a (tail v))
 
     (instance? BigIntVector v)
     (let [^BigIntVector v v
@@ -169,38 +175,44 @@
     (doseq [^ValueVector v [ra rb rc sa sb]]
       (t/is (= 10 (.getValueCount v))))
 
-    (with-open [^BigIntVector inter1 (select a ra 5 20)]
+    (with-open [^BigIntVector inter1 (select a ra (reify LongPredicate
+                                                    (test [_ x]
+                                                      (< 5 x 20))))]
       (t/is (= [2 4 5 7 9] (->list inter1)))
 
       (with-open [inter2 (reconstruct a rb inter1)]
-        (t/is (= [2 4 5 7 9] (->list (.getChild inter2 "head"))))
-        (t/is (= [34 45 49 97 42] (->list (.getChild inter2 "tail"))))
+        (t/is (= [2 4 5 7 9] (->list (head inter2))))
+        (t/is (= [34 45 49 97 42] (->list (tail inter2))))
 
         ;; NOTE: this range is different from figure and SQL.
-        (with-open [^BigIntVector inter3 (select a inter2 40 50)]
+        (with-open [^BigIntVector inter3 (select a inter2 (reify LongPredicate
+                                                            (test [_ x]
+                                                              (< 40 x 50))))]
           (t/is (= [4 5 9] (->list inter3)))
 
           (with-open [join-input-r (reconstruct a rc inter3)]
-            (t/is (= [4 5 9] (->list (.getChild join-input-r "head"))))
-            (t/is (= [23 78 29] (->list (.getChild join-input-r "tail"))))
+            (t/is (= [4 5 9] (->list (head join-input-r))))
+            (t/is (= [23 78 29] (->list (tail join-input-r ))))
 
             ;; NOTE: this range is different from figure and SQL, and
             ;; neither return the displayed indexes, which the below
             ;; does.
-            (with-open [^BigIntVector inter4 (select a sa 49 65)]
+            (with-open [^BigIntVector inter4 (select a sa (reify LongPredicate
+                                                            (test [_ x]
+                                                              (< 49 x 65))))]
               (t/is (= [3 5 7 8 10] (->list inter4)))
 
               (with-open [inter5 (reconstruct a sb inter4)]
-                (t/is (= [3 5 7 8 10] (->list (.getChild inter5 "head"))))
-                (t/is (= [62 29 19 81 23] (->list (.getChild inter5 "tail"))))
+                (t/is (= [3 5 7 8 10] (->list (head inter5))))
+                (t/is (= [62 29 19 81 23] (->list (tail inter5))))
 
                 (with-open [join-input-s (reverse a inter5)]
-                  (t/is (= [62 29 19 81 23] (->list (.getChild join-input-s "head"))))
-                  (t/is (= [3 5 7 8 10] (->list (.getChild join-input-s "tail"))))
+                  (t/is (= [62 29 19 81 23] (->list (head join-input-s))))
+                  (t/is (= [3 5 7 8 10] (->list (tail join-input-s))))
 
                   (with-open [join-res-r-s (join a join-input-r join-input-s)]
-                    (t/is (= [4 9] (->list (.getChild join-res-r-s "head"))))
-                    (t/is (= [10 5] (->list (.getChild join-res-r-s "tail"))))
+                    (t/is (= [4 9] (->list (head join-res-r-s))))
+                    (t/is (= [10 5] (->list (tail join-res-r-s))))
 
                     (with-open [inter6 (void-tail a join-res-r-s)]
                       (t/is (= [4 9] (->list inter6)))
@@ -208,8 +220,8 @@
                       ;; NOTE: in paper this is displayed as a single
                       ;; vector, not a pair.
                       (with-open [inter7 (reconstruct a ra inter6)]
-                        (t/is (= [4 9] (->list (.getChild inter7 "head"))))
-                        (t/is (= [9 19] (->list (.getChild inter7 "tail"))))
+                        (t/is (= [4 9] (->list (head inter7))))
+                        (t/is (= [9 19] (->list (tail inter7))))
 
                         ;; NOTE: scalar is represented as a single
                         ;; element vector in paper.
