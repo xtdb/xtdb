@@ -4,6 +4,7 @@
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector ElementAddressableVector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
+           org.apache.arrow.vector.types.pojo.FieldType
            [java.util ArrayList List]))
 
 ;; Follows Figure 4.1 in "The Design and Implementation of Modern
@@ -35,17 +36,31 @@
       (.add acc (.getObject v n)))
     acc))
 
+(defn- head ^org.apache.arrow.vector.ValueVector [^StructVector v]
+  (.getChild v "head"))
+
+(defn- tail ^org.apache.arrow.vector.ValueVector [^StructVector v]
+  (.getChild v "tail"))
+
+(defn- ->bat ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^FieldType head-type ^FieldType tail-type]
+  (doto (StructVector/empty "" a)
+    (.addOrGet "head" head-type ValueVector)
+    (.addOrGet "tail" tail-type ValueVector)))
+
+(defn- ^org.apache.arrow.vector.types.pojo.FieldType field-type [^ValueVector v]
+  (.getFieldType (.getField v)))
+
 (defn- reconstruct ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^ValueVector v ^BigIntVector selection-vector]
-  (let [reconstructed-struct (StructVector/empty "" a)
-        value-count (.getValueCount selection-vector)
-        head (.addOrGet reconstructed-struct "head" (.getFieldType (.getField selection-vector)) ValueVector)
-        tail (.addOrGet reconstructed-struct "tail" (.getFieldType (.getField v)) ValueVector)]
+  (let [reconstructed-struct (->bat a (field-type selection-vector) (field-type v))
+        new-head (head reconstructed-struct)
+        new-tail (tail reconstructed-struct)
+        value-count (.getValueCount selection-vector)]
     (dotimes [idx value-count]
-      (.copyFromSafe head idx idx selection-vector))
-    (.setValueCount head value-count)
+      (.copyFromSafe new-head idx idx selection-vector))
+    (.setValueCount new-head value-count)
     (dotimes [idx value-count]
-      (.copyFromSafe tail (dec (.get selection-vector idx)) idx v))
-    (.setValueCount tail value-count)
+      (.copyFromSafe new-tail (dec (.get selection-vector idx)) idx v))
+    (.setValueCount new-tail value-count)
     (.setValueCount reconstructed-struct value-count)
     reconstructed-struct))
 
@@ -61,14 +76,12 @@
             (append-bigint-vector selection-vector (inc idx)))))
 
       (instance? StructVector v)
-      (let [^StructVector v v
-            ^BigIntVector head (.getChild v "head")
-            tail (.getChild v "tail")]
-        (with-open [^BigIntVector tail-selection-vector (select a tail min-exclusive max-exclusive)]
-          (let [value-count (.getValueCount tail-selection-vector)]
-            (dotimes [idx value-count]
-              (.copyFromSafe selection-vector (dec (.get tail-selection-vector idx)) idx head))
-            (.setValueCount selection-vector value-count))))
+      (with-open [^BigIntVector tail-selection-vector (select a (tail v) min-exclusive max-exclusive)]
+        (let [value-count (.getValueCount tail-selection-vector)
+              from-head (head v)]
+          (dotimes [idx value-count]
+            (.copyFromSafe selection-vector (dec (.get tail-selection-vector idx)) idx from-head))
+          (.setValueCount selection-vector value-count)))
 
       :else
       (throw (UnsupportedOperationException.)))
@@ -76,26 +89,24 @@
     selection-vector))
 
 (defn- reverse ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector v]
-  (let [reversed-struct (StructVector/empty "" a)
-        head (.getChild v "head")
-        tail (.getChild v "tail")
-        new-head (.addOrGet reversed-struct "head" (.getFieldType (.getField head)) ValueVector)
-        new-tail (.addOrGet reversed-struct "tail" (.getFieldType (.getField tail)) ValueVector)]
-    (copy-vector tail new-head)
-    (copy-vector head new-tail)
+  (let [old-head (head v)
+        old-tail (tail v)
+        reversed-struct (->bat a (field-type old-tail) (field-type old-head))]
+    (copy-vector old-tail (head reversed-struct))
+    (copy-vector old-head (tail reversed-struct))
     (.setValueCount reversed-struct (.getValueCount v))
     reversed-struct))
 
 (defn- join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
-  (let [join-struct (StructVector/empty "" a)
-        ^BigIntVector left-head (.getChild left "head")
-        ^ElementAddressableVector left-tail (.getChild left "tail")
+  (let [^BigIntVector left-head (head left)
+        ^ElementAddressableVector left-tail (tail left)
 
-        ^ElementAddressableVector right-head (.getChild right "head")
-        ^BigIntVector right-tail (.getChild right "tail")
+        ^ElementAddressableVector right-head (head right)
+        ^BigIntVector right-tail (tail right)
 
-        join-head (.addOrGet join-struct "head" (.getFieldType (.getField left-head)) ValueVector)
-        join-tail (.addOrGet join-struct "tail" (.getFieldType (.getField right-tail)) ValueVector)]
+        join-struct (->bat a (field-type left-head) (field-type right-tail))
+        join-head (head join-struct)
+        join-tail (tail join-struct)]
 
     ;; NOTE: nested loop join.
     (dotimes [left-idx (.getValueCount left-tail)]
