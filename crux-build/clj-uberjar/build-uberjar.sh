@@ -2,11 +2,11 @@
 mkdir -p config
 cp crux.edn config/
 
-clojure -Sdeps '{:deps {pack/pack.alpha {:git/url "https://github.com/juxt/pack.alpha.git", :sha "c70740ffc10805f34836da2160fa1899601fac02"}}}' \
-        -m mach.pack.alpha.capsule ${UBERJAR_NAME:-crux.jar} \
-        -e config \
-        --application-id crux \
-        --application-version crux-git-version \
-        -m crux.main
+clojure -Sdeps '{:aliases {:depstar {:replace-deps {seancorfield/depstar {:mvn/version "2.0.171"}}}}}' \
+        -X:depstar \
+        hf.depstar/uberjar \
+        :jar ${UBERJAR_NAME:-crux.jar} \
+        :main-class crux.main \
+        :aot true
 
 rm -rf config/
