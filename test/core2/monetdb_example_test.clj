@@ -114,6 +114,13 @@
         (append-bigint-vector (BigIntVector. "" a) acc)
         (recur (+ acc (.get v idx)) (inc idx))))))
 
+
+;; Corresponding SQL, note that the last range is off compared to the
+;; selected indexes in the figure, so we use 49 < S.a < 65
+
+;; select sum(R.a) from R, S where R.c = S.b and 5 < R.a < 20 and 40 <
+;; R.b < 50 and 30 < S.a < 40
+
 (t/deftest mal-algebra-abadi-figure-4_1-example
   (with-open [a (RootAllocator.)
               ra (BigIntVector. "r.a" a)
