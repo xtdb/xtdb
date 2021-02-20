@@ -1,5 +1,4 @@
 (ns core2.monetdb-example-test
-  (:refer-clojure :exclude [reverse])
   (:require [clojure.test :as t])
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
@@ -106,7 +105,7 @@
 
     selection-vector))
 
-(defn- reverse ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector v]
+(defn- reverse-vec ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector v]
   (let [old-head (head v)
         old-tail (tail v)
         reversed-struct (->bat a (field-type old-tail) (field-type old-head))]
@@ -144,34 +143,62 @@
 (defn- void-tail ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^StructVector v]
   (copy-vector (head v) (.createVector (.getField (head v)) a)))
 
-(defn- sum ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
+(defmacro ^:private scalar-vec [v value]
+  `(doto ~v
+     (ensure-capacity 1)
+     (.set 0 ~value)
+     (.setValueCount 1)))
+
+(defmacro ^:private reduce-vec [v ret init reduce-fn access-fn]
+  `(let [v# ~v
+         value-count# (.getValueCount v#)]
+     (loop [acc# ~init
+            idx# 0]
+       (if (= idx# value-count#)
+         (scalar-vec ~ret acc#)
+         (recur (~reduce-fn acc# (~access-fn v# idx#)) (inc idx#))))))
+
+(defn- ^org.apache.arrow.vector.BigIntVector count-vec [^BufferAllocator a ^ValueVector v]
+  (scalar-vec (BigIntVector. "" a) (.getValueCount v)))
+
+(defn- sum-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
   (cond
     (instance? StructVector v)
-    (sum a (tail v))
+    (sum-vec a (tail v))
 
     (instance? BaseIntVector v)
-    (let [^BaseIntVector v v
-          value-count (.getValueCount v)]
-      (loop [acc 0
-             idx 0]
-        (if (= idx value-count)
-          (doto (BigIntVector. "" a)
-            (ensure-capacity 1)
-            (.set 0 acc)
-            (.setValueCount 1))
-          (recur (+ acc (.getValueAsLong v idx)) (inc idx)))))
+    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) 0 + .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (let [^FloatingPointVector v v
-          value-count (.getValueCount v)]
-      (loop [acc 0.0
-             idx 0]
-        (if (= idx value-count)
-          (doto (Float8Vector. "" a)
-            (ensure-capacity 1)
-            (.set 0 acc)
-            (.setValueCount 1))
-          (recur (+ acc (.getValueAsDouble v idx)) (inc idx)))))
+    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) 0.0 + .getValueAsDouble)
+
+    :else
+    (throw (UnsupportedOperationException.))))
+
+(defn- min-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
+  (cond
+    (instance? StructVector v)
+    (min-vec a (tail v))
+
+    (instance? BaseIntVector v)
+    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) Long/MAX_VALUE min .getValueAsLong)
+
+    (instance? FloatingPointVector v)
+    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) Double/MAX_VALUE min .getValueAsDouble)
+
+    :else
+    (throw (UnsupportedOperationException.))))
+
+(defn- max-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
+  (cond
+    (instance? StructVector v)
+    (max-vec a (tail v))
+
+    (instance? BaseIntVector v)
+    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) Long/MIN_VALUE max .getValueAsLong)
+
+    (instance? FloatingPointVector v)
+    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) Double/MIN_VALUE max .getValueAsDouble)
 
     :else
     (throw (UnsupportedOperationException.))))
@@ -232,7 +259,7 @@
                 (t/is (= [3 5 7 8 10] (->list (head inter5))))
                 (t/is (= [62 29 19 81 23] (->list (tail inter5))))
 
-                (with-open [join-input-s (reverse a inter5)]
+                (with-open [join-input-s (reverse-vec a inter5)]
                   (t/is (= [62 29 19 81 23] (->list (head join-input-s))))
                   (t/is (= [3 5 7 8 10] (->list (tail join-input-s))))
 
@@ -251,5 +278,15 @@
 
                         ;; NOTE: scalar is represented as a single
                         ;; element vector in paper.
-                        (with-open [result (sum a inter7)]
-                          (t/is (= [28] (->list result))))))))))))))))
+                        (with-open [result (sum-vec a inter7)]
+                          (t/is (= [28] (->list result))))
+
+                        ;; NOTE: other aggregations, not in example.
+                        (with-open [result (count-vec a inter7)]
+                          (t/is (= [2] (->list result))))
+
+                        (with-open [result (min-vec a inter7)]
+                          (t/is (= [9] (->list result))))
+
+                        (with-open [result (max-vec a inter7)]
+                          (t/is (= [19] (->list result))))))))))))))))
