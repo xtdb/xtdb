@@ -21,9 +21,10 @@
     (.setValueCount v (inc idx))
     v))
 
-(defn- ensure-capacity [^ValueVector v ^long capacity]
-  (.setInitialCapacity v capacity)
-  (.allocateNew v))
+(defn- ensure-capacity ^org.apache.arrow.vector.ValueVector [^ValueVector v ^long capacity]
+  (doto v
+    (.setInitialCapacity capacity)
+    (.allocateNew)))
 
 (defn- populate-bigint-vector ^org.apache.arrow.vector.BigIntVector [^BigIntVector v values]
   (ensure-capacity v (count values))
@@ -31,7 +32,7 @@
     (append-bigint-vector v n))
   v)
 
-(defn- copy-vector [^ValueVector from ^ValueVector to]
+(defn- copy-vector ^org.apache.arrow.vector.ValueVector [^ValueVector from ^ValueVector to]
   (VectorBatchAppender/batchAppend to (into-array [from]))
   to)
 
@@ -52,7 +53,7 @@
     (.addOrGet "head" head-type ValueVector)
     (.addOrGet "tail" tail-type ValueVector)))
 
-(defn- ^org.apache.arrow.vector.types.pojo.FieldType field-type [^ValueVector v]
+(defn- field-type ^org.apache.arrow.vector.types.pojo.FieldType [^ValueVector v]
   (.getFieldType (.getField v)))
 
 (defn- reconstruct ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^ValueVector v ^BigIntVector selection-vector]
