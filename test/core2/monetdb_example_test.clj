@@ -3,7 +3,8 @@
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector.util VectorBatchAppender]
-           [org.apache.arrow.vector BaseIntVector BigIntVector ElementAddressableVector FloatingPointVector Float8Vector ValueVector]
+           [org.apache.arrow.vector BaseIntVector BaseVariableWidthVector BigIntVector BitVector ElementAddressableVector
+            FloatingPointVector Float8Vector TimeStampVector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
            org.apache.arrow.vector.types.pojo.FieldType
            [java.util.function Predicate IntPredicate LongPredicate DoublePredicate]
@@ -67,6 +68,9 @@
     (.setValueCount reconstructed-struct value-count)
     reconstructed-struct))
 
+(definterface ArrowBufPointerPredicate
+  (^boolean test [^org.apache.arrow.memory.util.ArrowBufPointer pointer]))
+
 ;; NOTE: uses one-based indexes
 (defn- select ^org.apache.arrow.vector.BigIntVector [^BufferAllocator a ^ValueVector v pred]
   (let [value-count (.getValueCount v)
@@ -77,6 +81,12 @@
            (instance? LongPredicate pred))
       (dotimes [idx value-count]
         (when (.test ^LongPredicate pred (.getValueAsLong ^BaseIntVector v idx))
+          (append-bigint-vector selection-vector (inc idx))))
+
+      (and (instance? TimeStampVector v)
+           (instance? LongPredicate pred))
+      (dotimes [idx value-count]
+        (when (.test ^LongPredicate pred (.get ^TimeStampVector v idx))
           (append-bigint-vector selection-vector (inc idx))))
 
       (and (instance? FloatingPointVector v)
@@ -92,6 +102,14 @@
           (dotimes [idx value-count]
             (.copyFrom selection-vector (dec (.get tail-selection-vector idx)) idx from-head))
           (.setValueCount selection-vector value-count)))
+
+      (and (instance? ElementAddressableVector v)
+           (instance? ArrowBufPointerPredicate v))
+      (let [pointer (ArrowBufPointer.)]
+        (dotimes [idx value-count]
+          (.getDataPointer ^ElementAddressableVector v idx pointer)
+          (when (.test ^ArrowBufPointerPredicate pred pointer)
+            (append-bigint-vector selection-vector (inc idx)))))
 
       (instance? Predicate v)
       (dotimes [idx value-count]
@@ -143,13 +161,13 @@
 (defn- void-tail ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^StructVector v]
   (copy-vector (head v) (.createVector (.getField (head v)) a)))
 
-(defmacro ^:private scalar-vec [v value]
+(defmacro ^:private scalar-fixed-width-vec [v value]
   `(doto ~v
      (ensure-capacity 1)
      (.set 0 ~value)
      (.setValueCount 1)))
 
-(defmacro ^:private reduce-vec [v ret reduce-fn access-fn]
+(defmacro ^:private reduce-fixed-width-vec [v ret reduce-fn access-fn]
   `(let [v# ~v
          ret# ~ret
          value-count# (.getValueCount v#)]
@@ -158,11 +176,34 @@
        (loop [acc# (~access-fn v# (int 0))
               idx# (int 1)]
          (if (= idx# value-count#)
-           (scalar-vec ret# acc#)
+           (scalar-fixed-width-vec ret# acc#)
            (recur (~reduce-fn acc# (~access-fn v# idx#)) (inc idx#)))))))
 
+(defmacro ^:private scalar-variable-width-vec [v value]
+  `(let [value# ~value]
+     (doto ~v
+       (ensure-capacity 1)
+       (.set 0 (.getOffset value#) (.getLength value#) (.getBuf value#))
+       (.setValueCount 1))))
+
+(defmacro min-max-variable-width-vec [^BaseVariableWidthVector v ^BaseVariableWidthVector ret diff-fn]
+  `(let [v# ~v
+         ret# ~ret
+         value-count# (.getValueCount v#)]
+     (if (zero? value-count#)
+       ret#
+       (loop [acc# (.getDataPointer v# (int 0))
+              idx# (int 1)]
+        (if (= idx# value-count#)
+          (scalar-variable-width-vec ret# acc#)
+          (let [pointer# (.getDataPointer v# idx#)]
+            (recur (if (~diff-fn (.compareTo acc# pointer#))
+                     acc#
+                     pointer#)
+                   (inc idx#))))))))
+
 (defn- ^org.apache.arrow.vector.BigIntVector count-vec [^BufferAllocator a ^ValueVector v]
-  (scalar-vec (BigIntVector. "" a) (.getValueCount v)))
+  (scalar-fixed-width-vec (BigIntVector. "" a) (.getValueCount v)))
 
 (defn- sum-vec ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^ValueVector v]
   (cond
@@ -170,10 +211,10 @@
     (sum-vec a (tail v))
 
     (instance? BaseIntVector v)
-    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) + .getValueAsLong)
+    (reduce-fixed-width-vec ^BaseIntVector v (BigIntVector. "" a) + .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) + .getValueAsDouble)
+    (reduce-fixed-width-vec ^FloatingPointVector v (Float8Vector. "" a) + .getValueAsDouble)
 
     :else
     (throw (UnsupportedOperationException.))))
@@ -183,11 +224,20 @@
     (instance? StructVector v)
     (min-vec a (tail v))
 
+    (instance? BitVector v)
+    (reduce-fixed-width-vec ^BitVector v (BitVector. "" a) min .get)
+
     (instance? BaseIntVector v)
-    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) min .getValueAsLong)
+    (reduce-fixed-width-vec ^BaseIntVector v (BigIntVector. "" a) min .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) min .getValueAsDouble)
+    (reduce-fixed-width-vec ^FloatingPointVector v (Float8Vector. "" a) min .getValueAsDouble)
+
+    (instance? TimeStampVector v)
+    (reduce-fixed-width-vec ^TimeStampVector v ^TimeStampVector (.createVector (.getField v) a) min .get)
+
+    (instance? BaseVariableWidthVector v)
+    (min-max-variable-width-vec ^BaseVariableWidthVector v ^BaseVariableWidthVector (.createVector (.getField v) a) neg?)
 
     :else
     (throw (UnsupportedOperationException.))))
@@ -197,11 +247,20 @@
     (instance? StructVector v)
     (max-vec a (tail v))
 
+    (instance? BitVector v)
+    (reduce-fixed-width-vec ^BitVector v (BitVector. "" a) max .get)
+
     (instance? BaseIntVector v)
-    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) max .getValueAsLong)
+    (reduce-fixed-width-vec ^BaseIntVector v (BigIntVector. "" a) max .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) max .getValueAsDouble)
+    (reduce-fixed-width-vec ^FloatingPointVector v (Float8Vector. "" a) max .getValueAsDouble)
+
+    (instance? TimeStampVector v)
+    (reduce-fixed-width-vec ^TimeStampVector v ^TimeStampVector (.createVector (.getField v) a) max .get)
+
+    (instance? BaseVariableWidthVector v)
+    (min-max-variable-width-vec ^BaseVariableWidthVector v ^BaseVariableWidthVector (.createVector (.getField v) a) pos?)
 
     :else
     (throw (UnsupportedOperationException.))))
