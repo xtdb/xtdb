@@ -32,9 +32,9 @@
 (defn ^String keyword->k [k]
   (subs (str k) 1))
 
-(def ^:const ^:private field-crux-id "_crux_id")
-(def ^:const ^:private field-crux-val "_crux_val")
-(def ^:const ^:private field-crux-attr "_crux_attr")
+(def ^:const field-crux-id "_crux_id")
+(def ^:const field-crux-val "_crux_val")
+(def ^:const field-crux-attr "_crux_attr")
 
 (defn- ^IndexWriter index-writer [lucene-store]
   (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
@@ -137,7 +137,7 @@
   (let [resolver (partial resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
     (pred-constraint #'build-query resolver pred-ctx)))
 
-(defn- resolve-search-results-a-v-wildcard
+(defn resolve-search-results-a-v-wildcard
   "Given search results each containing a single A/V pair document,
   perform a temporal resolution against A/V to resolve the eid."
   [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
