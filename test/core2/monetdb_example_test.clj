@@ -149,14 +149,17 @@
      (.set 0 ~value)
      (.setValueCount 1)))
 
-(defmacro ^:private reduce-vec [v ret init reduce-fn access-fn]
+(defmacro ^:private reduce-vec [v ret reduce-fn access-fn]
   `(let [v# ~v
+         ret# ~ret
          value-count# (.getValueCount v#)]
-     (loop [acc# ~init
-            idx# 0]
-       (if (= idx# value-count#)
-         (scalar-vec ~ret acc#)
-         (recur (~reduce-fn acc# (~access-fn v# idx#)) (inc idx#))))))
+     (if (zero? value-count#)
+       ret#
+       (loop [acc# (~access-fn v# (int 0))
+              idx# (int 1)]
+         (if (= idx# value-count#)
+           (scalar-vec ret# acc#)
+           (recur (~reduce-fn acc# (~access-fn v# idx#)) (inc idx#)))))))
 
 (defn- ^org.apache.arrow.vector.BigIntVector count-vec [^BufferAllocator a ^ValueVector v]
   (scalar-vec (BigIntVector. "" a) (.getValueCount v)))
@@ -167,10 +170,10 @@
     (sum-vec a (tail v))
 
     (instance? BaseIntVector v)
-    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) 0 + .getValueAsLong)
+    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) + .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) 0.0 + .getValueAsDouble)
+    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) + .getValueAsDouble)
 
     :else
     (throw (UnsupportedOperationException.))))
@@ -181,10 +184,10 @@
     (min-vec a (tail v))
 
     (instance? BaseIntVector v)
-    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) Long/MAX_VALUE min .getValueAsLong)
+    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) min .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) Double/MAX_VALUE min .getValueAsDouble)
+    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) min .getValueAsDouble)
 
     :else
     (throw (UnsupportedOperationException.))))
@@ -195,10 +198,10 @@
     (max-vec a (tail v))
 
     (instance? BaseIntVector v)
-    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) Long/MIN_VALUE max .getValueAsLong)
+    (reduce-vec ^BaseIntVector v (BigIntVector. "" a) max .getValueAsLong)
 
     (instance? FloatingPointVector v)
-    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) Double/MIN_VALUE max .getValueAsDouble)
+    (reduce-vec ^FloatingPointVector v (Float8Vector. "" a) max .getValueAsDouble)
 
     :else
     (throw (UnsupportedOperationException.))))
