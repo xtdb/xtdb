@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
+import crux.api.tx.Transaction;
 
 /**
  *  Provides API access to Crux.
@@ -64,43 +65,38 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
-     * Returns a db as of the given valid time and transaction.
+     * Returns a db as of the given basis.
      *
-     * dbBasis: (optional map, all keys optional)
-     * - `:crux.db/valid-time` (Date):
-     *     If provided, DB won't return any data with a valid-time greater than the given time.
-     *     Defaults to now.
-     * - `:crux.tx/tx` (Map):
-     *     If provided, DB will be a snapshot as of the given transaction.
-     *     Defaults to the latest completed transaction.
-     * - `:crux.tx/tx-time` (Date):
-     *     Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
-     *
-     * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
     ICruxDatasource db(DBBasis dbBasis) throws NodeOutOfSyncException;
 
     /**
-     * Returns a db as of the given valid time and transaction.
+     * Returns a db as of the TransactionInstant, with valid-time set to the invocation time of this method.
      *
-     * dbBasis: (optional map, all keys optional)
-     * - `:crux.db/valid-time` (Date):
-     *     If provided, DB won't return any data with a valid-time greater than the given time.
-     *     Defaults to now.
-     * - `:crux.tx/tx` (Map):
-     *     If provided, DB will be a snapshot as of the given transaction.
-     *     Defaults to the latest completed transaction.
-     * - `:crux.tx/tx-time` (Date):
-     *     Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
+     */
+    ICruxDatasource db(TransactionInstant txInstant) throws NodeOutOfSyncException;
+
+    /**
+     * Returns a db as of the given basis.
      *
      * This method returns a DB that opens resources shared between method calls
      * - it must be `.close`d when you've finished using it.
      *
-     * @param dbBasis map specifying the basis of the DB snapshot
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
     ICruxDatasource openDB(DBBasis dbBasis) throws NodeOutOfSyncException;
+
+    /**
+     * Returns a db as of the TransactionInstant, with valid-time set to the invocation time of this method.
+     *
+     * This method returns a DB that opens resources shared between method calls
+     * - it must be `.close`d when you've finished using it.
+     *
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
+     */
+    ICruxDatasource openDB(TransactionInstant txInstant) throws NodeOutOfSyncException;
 
     /**
      * Returns the status of this node as a map.
@@ -112,8 +108,8 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     /**
      * Checks if a submitted tx was successfully committed.
      *
-     * @param submittedTx must be a map returned from {@link
-     * #submitTx(List txOps)}.
+     * @param submittedTx must be a transaction instant returned from {@link
+     * #submitTx(Transaction txOps)}.
      * @return true if the submitted transaction was committed, false if it was not committed.
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */

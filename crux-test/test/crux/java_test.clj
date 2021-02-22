@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [crux.api :as crux]
             [crux.fixtures :as fix :refer [*api*]])
-  (:import [java.util ArrayList List HashMap]))
+  (:import java.util.HashMap))
 
 (t/use-fixtures :each fix/with-node)
 
