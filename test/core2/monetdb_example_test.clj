@@ -7,8 +7,8 @@
             FloatingPointVector Float8Vector TimeStampVector ValueVector]
            [org.apache.arrow.vector.complex StructVector]
            org.apache.arrow.vector.types.pojo.FieldType
-           [java.util.function Predicate IntPredicate LongPredicate DoublePredicate]
-           [java.util ArrayList List]))
+           [java.util.function Function Predicate LongPredicate DoublePredicate]
+           [java.util ArrayList List HashMap Map]))
 
 ;; Follows Figure 4.1 in "The Design and Implementation of Modern
 ;; Column-Oriented Database Systems", Abadi
@@ -132,7 +132,45 @@
     (.setValueCount reversed-struct (.getValueCount v))
     reversed-struct))
 
-(defn- join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
+(defn- hash-join-build ^java.util.Map [^BufferAllocator a ^ValueVector build-indexes ^ElementAddressableVector build-values]
+  (let [join-map (HashMap.)]
+    (dotimes [idx (.getValueCount build-values)]
+      (let [pointer (.getDataPointer build-values idx)
+            ^BigIntVector hash-vec (.computeIfAbsent join-map pointer (reify Function
+                                                                        (apply [_ k]
+                                                                          (BigIntVector. "" a))))
+            value-count (.getValueCount hash-vec)]
+        (.copyFromSafe hash-vec idx value-count build-indexes)
+        (.setValueCount hash-vec (inc value-count))))
+    join-map))
+
+(defn- hash-join-probe ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^Map join-map ^ValueVector probe-indexes ^ElementAddressableVector probe-values]
+  (let [join-struct (->bat a (field-type probe-indexes) (field-type probe-indexes))
+
+        join-head (head join-struct)
+        join-tail (tail join-struct)
+
+        pointer (ArrowBufPointer.)]
+    (dotimes [probe-idx (.getValueCount probe-values)]
+      (.getDataPointer probe-values probe-idx pointer)
+      (when-let [^BigIntVector build-head (.get join-map pointer)]
+        (dotimes [build-idx (.getValueCount build-head)]
+          (let [value-count (.getValueCount join-struct)]
+            (.copyFromSafe join-head probe-idx value-count probe-indexes)
+            (.copyFromSafe join-tail build-idx value-count build-head)
+            (.setValueCount join-struct (inc value-count))))))
+
+    join-struct))
+
+(defn- hash-join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
+  (let [join-map (hash-join-build a (tail right) (head right))]
+    (try
+      (hash-join-probe a join-map (head left) (tail left))
+      (finally
+        (doseq [^BigIntVector hash-vec (vals join-map)]
+          (.close hash-vec))))))
+
+(defn- nested-loop-join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
   (let [left-head (head left)
         ^ElementAddressableVector left-tail (tail left)
         left-pointer (ArrowBufPointer.)
@@ -157,6 +195,9 @@
             (.setValueCount join-struct (inc value-count))))))
 
     join-struct))
+
+(defn- join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
+  (hash-join a left right))
 
 (defn- void-tail ^org.apache.arrow.vector.ValueVector [^BufferAllocator a ^StructVector v]
   (copy-vector (head v) (.createVector (.getField (head v)) a)))
