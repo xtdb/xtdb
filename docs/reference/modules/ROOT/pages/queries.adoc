@@ -574,9 +574,11 @@ control the result order.
 include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-1,indent=0]
 ----
 
-Use of `:order-by` will typically require that results are fully-realised by
-the query engine, however this happens transparently and it will automatically
-spill to disk when sorting large result sets.
+Use of `:order-by` will typically require that results are fully-realised by the
+query engine, however this happens transparently and it will automatically spill
+to disk when sorting large numbers results. Ordered results are returned as
+bags, not sets, so you may wish to deduplicate consecutive identical result
+tuples (e.g. using `clojure.core/dedupe` or similar).
 
 Basic `:offset` and `:limit` options are supported however typical pagination
 use-cases will need a more comprehensive approach because `:offset` will
@@ -743,7 +745,9 @@ Note that because Crux is schemaless there is no need to have elsewhere declared
 
 Query results can also be streamed, particularly for queries whose results may
 not fit into memory. For these, we use `crux.api/open-q`, which returns a
-`Closeable` sequence.
+`Closeable` sequence. Note that results are returned as bags, not sets, so you
+may wish to deduplicate consecutive identical result tuples (e.g. using
+`clojure.core/dedupe` or similar).
 
 We'd recommend using `with-open` to ensure that the sequence is closed properly.
 Additionally, ensure that the sequence (as much of it as you need) is eagerly
