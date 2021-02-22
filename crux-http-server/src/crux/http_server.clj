@@ -452,6 +452,12 @@
 
 (alter-meta! #'->crux-handler assoc :arglists '([crux-node {:keys [jwks read-only? server-label]}]))
 
+(s/def ::ssl-port ::sys/nat-int)
+(s/def ::keystore ::sys/path)
+(s/def ::key-password ::sys/string)
+(s/def ::keystore-type ::sys/string)
+(s/def ::ssl-opts (s/keys :req-un [::ssl-port ::keystore ::key-password ::keystore-type]))
+
 (defn ->server {::sys/deps {:crux-node :crux/node}
                 ::sys/args {:port {:spec ::sys/nat-int
                                    :doc "Port to start the HTTP server on"
@@ -461,15 +467,20 @@
                                          :default false}
                             :jwks {:spec ::sys/string
                                    :doc "JWKS string to validate against"}
-                            :server-label {:spec ::sys/string}}}
-  [{:keys [crux-node port] :as options}]
+                            :server-label {:spec ::sys/string}
+                            :ssl-opts {:spec ::ssl-opts
+                                       :doc "Optional SSL options for the server"
+                                       :default nil}}}
+  [{:keys [crux-node port ssl-opts] :as options}]
   (let [server (j/run-jetty (rr/ring-handler (->crux-router {:crux-node crux-node
                                                              :http-options (dissoc options :crux-node)})
                                              (rr/routes
                                               (rr/create-resource-handler {:path "/"})
                                               (rr/create-default-handler)))
-                            {:port port
-                             :h2c? true
-                             :join? false})]
+                            (cond-> {:port port
+                                     :h2c? true
+                                     :h2? true
+                                     :join? false}
+                              ssl-opts (merge {:ssl? true} (update ssl-opts :keystore str))))]
     (log/info "HTTP server started on port: " port)
     (->HTTPServer server options)))
