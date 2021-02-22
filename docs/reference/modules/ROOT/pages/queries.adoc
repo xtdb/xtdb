@@ -147,10 +147,10 @@ If you have the entity ID(s) in hand, you can call `project` or `project-many` d
 
 [source,clojure]
 ----
-include::example$src/docs/examples.clj[tags=eql-project]
-include::example$src/docs/examples.clj[tags=eql-project-r]
-include::example$src/docs/examples.clj[tags=eql-project-many]
-include::example$src/docs/examples.clj[tags=eql-project-many-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-project]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-project-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-project-many]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-project-many-r]
 ----
 
 We can navigate to other entities (and hence build up nested results) using 'joins'.
@@ -177,8 +177,8 @@ You can quickly grab the whole document by specifying `*` in the projection spec
 
 [source,clojure]
 ----
-include::example$src/docs/examples.clj[tags=eql-query-6]
-include::example$src/docs/examples.clj[tags=eql-query-6-r]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6]
+include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6-r]
 ----
 
 === Attribute parameters
@@ -209,7 +209,7 @@ Crux supports a handful of custom https://edn-query-language.org/eql/1.0.0/speci
                                   {(:user/_profession {:as :users, :into #{}})
                                    [:user/id :user/name]}])]
  :where [[?profession :profession/name]]}
- 
+
 ;; => [{:profession/name "Doctor",
 ;;      :users #{{:user/id 1, :user/name "Ivan"},
 ;;               {:user/id 3, :user/name "Petr"}}},

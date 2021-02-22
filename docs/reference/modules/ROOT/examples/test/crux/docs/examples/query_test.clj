@@ -440,6 +440,35 @@
            ;; end::eql-query-6[]
            ))))
 
+(comment
+  ;; TODO resurrected from git history, need to be tested though
+
+  ;; tag::eql-project[]
+  ;; using `project`:
+  (crux/project
+   (crux/db node)
+   [:user/name :user/profession]
+   :ivan)
+  ;; end::eql-project[]
+
+  ;; tag::eql-project-r[]
+  ;; => {:user/name "Ivan", :user/profession :doctor}
+  ;; end::eql-project-r[]
+
+  ;; tag::eql-project-many[]
+  ;; using `project-many`:
+  (crux/project-many
+   (crux/db node)
+   [:user/name :user/profession]
+   [:ivan :sergei])
+  ;; end::eql-project-many[]
+
+  ;; tag::eql-project-many-r[]
+  ;; => [{:user/name "Ivan", :user/profession :doctor},
+  ;;     {:user/name "Sergei", :user/profession :lawyer}]
+  ;; end::eql-project-many-r[]
+  )
+
 (t/deftest test-return-maps
   (fix/submit+await-tx
    (fix/maps->tx-ops
