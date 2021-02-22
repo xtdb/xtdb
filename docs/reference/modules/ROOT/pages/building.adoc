@@ -60,7 +60,7 @@ To run the clojure uberjar, use the following command `java -jar crux.jar`. This
 === Building a JAR (Maven tooling)
 
 Similarly to building a JAR using the Clojure CLI tooling, we can also build an uberjar using Maven.
-In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `crux.edn` file as before, and then run `build-uberjar.sh` to create the uberjar. To run the maven generated uberjar, use the following command: `java -cp <uberjar-name>.jar clojure.main -m crux.main`
+In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `crux.edn` file as before, and then run `build-uberjar.sh` to create the uberjar. To run the maven generated uberjar, use the following command: `java -jar crux.jar`
 
 === Building a Docker Container
 
