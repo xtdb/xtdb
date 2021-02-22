@@ -73,6 +73,8 @@ EDN::
 ----
 ====
 
+It is generally advised to use independent RocksDB instances for each component, although using a single instance for the transaction log and document store is possible. Do not share the RocksDB instance used for the index store with other components as you cannot then perform Crux version upgrades.
+
 == Dependencies
 
 * `metrics` (function, default no-op): enable xref:#monitoring[RocksDB metrics].

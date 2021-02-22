@@ -1,6 +1,7 @@
 .Reference
 * xref:installation.adoc[Installation]
 * xref:configuration.adoc[Configuration]
+** xref:upgrading-configuration.adoc[Upgrading]
 ** xref:query-configuration.adoc[Query Engine]
 * xref:transactions.adoc[Transactions]
 * xref:queries.adoc[Queries]
