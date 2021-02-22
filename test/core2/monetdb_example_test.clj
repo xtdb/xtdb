@@ -96,7 +96,7 @@
           (append-bigint-vector selection-vector (inc idx))))
 
       (instance? StructVector v)
-      (with-open [^BigIntVector tail-selection-vector (select a (tail v) pred)]
+      (with-open [tail-selection-vector (select a (tail v) pred)]
         (let [value-count (.getValueCount tail-selection-vector)
               from-head (head v)]
           (dotimes [idx value-count]
@@ -133,12 +133,12 @@
     reversed-struct))
 
 (defn- join ^org.apache.arrow.vector.complex.StructVector [^BufferAllocator a ^StructVector left ^StructVector right]
-  (let [^BigIntVector left-head (head left)
+  (let [left-head (head left)
         ^ElementAddressableVector left-tail (tail left)
         left-pointer (ArrowBufPointer.)
 
         ^ElementAddressableVector right-head (head right)
-        ^BigIntVector right-tail (tail right)
+        right-tail (tail right)
         right-pointer (ArrowBufPointer.)
 
         join-struct (->bat a (field-type left-head) (field-type right-tail))
@@ -186,21 +186,25 @@
        (.set 0 (.getOffset value#) (.getLength value#) (.getBuf value#))
        (.setValueCount 1))))
 
-(defmacro min-max-variable-width-vec [^BaseVariableWidthVector v ^BaseVariableWidthVector ret diff-fn]
+(defmacro ^:private min-max-variable-width-vec [v ret diff-fn]
   `(let [v# ~v
          ret# ~ret
          value-count# (.getValueCount v#)]
      (if (zero? value-count#)
        ret#
        (loop [acc# (.getDataPointer v# (int 0))
+              pointer# (ArrowBufPointer.)
               idx# (int 1)]
         (if (= idx# value-count#)
           (scalar-variable-width-vec ret# acc#)
-          (let [pointer# (.getDataPointer v# idx#)]
-            (recur (if (~diff-fn (.compareTo acc# pointer#))
-                     acc#
-                     pointer#)
-                   (inc idx#))))))))
+          (do (.getDataPointer v# idx# pointer#)
+              (if (~diff-fn (.compareTo acc# pointer#))
+                (recur acc#
+                       pointer#
+                       (inc idx#))
+                (recur pointer#
+                       acc#
+                       (inc idx#)))))))))
 
 (defn- ^org.apache.arrow.vector.BigIntVector count-vec [^BufferAllocator a ^ValueVector v]
   (scalar-fixed-width-vec (BigIntVector. "" a) (.getValueCount v)))
