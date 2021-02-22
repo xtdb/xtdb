@@ -3,4 +3,5 @@ title: Crux
 version: master
 start_page: ROOT:what-is-crux.adoc
 nav:
-  - modules/ROOT/nav.adoc
+  - modules/ROOT/articles-nav.adoc
+  - modules/ROOT/about-nav.adoc

@@ -1,5 +1,3 @@
-.About Crux
+.Articles
 * xref:what-is-crux.adoc[What is Crux?]
 * xref:bitemporality.adoc[Bitemporality]
-* xref:support.adoc[Support]
-* xref:references.adoc[References]

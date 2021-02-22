@@ -1,0 +1,3 @@
+.About Crux
+* xref:support.adoc[Support]
+* xref:references.adoc[References]
