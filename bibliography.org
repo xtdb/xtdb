@@ -30,3 +30,6 @@ papers:
 ** CMU Courses
 - [[https://15445.courses.cs.cmu.edu/fall2019/schedule.html][Intro to Database Systems (Fall 2019)]]
 - [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html][Advanced Database Systems (Spring 2020)]]
+
+** Misc
+- [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
