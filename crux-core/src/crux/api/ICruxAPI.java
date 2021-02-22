@@ -72,6 +72,15 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
     ICruxDatasource db(DBBasis dbBasis) throws NodeOutOfSyncException;
 
     /**
+     * Returns a db as of the given basis.
+     *
+     * @deprecated in favour of {@link #db(DBBasis)}
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
+     */
+    @Deprecated
+    ICruxDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+
+    /**
      * Returns a db as of the TransactionInstant, with valid-time set to the invocation time of this method.
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
@@ -87,6 +96,18 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
     ICruxDatasource openDB(DBBasis dbBasis) throws NodeOutOfSyncException;
+
+    /**
+     * Returns a db as of the given basis.
+     *
+     * This method returns a DB that opens resources shared between method calls
+     * - it must be `.close`d when you've finished using it.
+     *
+     * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
+     * @deprecated in favour of {@link #openDB(DBBasis)} or {@link #openDB(TransactionInstant)}
+     */
+    @Deprecated
+    ICruxDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the TransactionInstant, with valid-time set to the invocation time of this method.
@@ -114,6 +135,17 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
      */
     boolean hasTxCommitted(TransactionInstant submittedTx) throws NodeOutOfSyncException;
+
+    /**
+     * Checks if a submitted tx was successfully committed.
+     *
+     * @param submittedTx must be a transaction instant returned from {@link #submitTx(List)})}.
+     * @deprecated in favour of {@link #hasTxCommitted(TransactionInstant)}
+     * @return true if the submitted transaction was committed, false if it was not committed.
+     * @throws NodeOutOfSyncException if the node has not yet indexed the transaction.
+     */
+    @Deprecated
+    boolean hasTxCommitted(Map<Keyword, ?> submittedTx) throws NodeOutOfSyncException;
 
     /**
      * Blocks until the node has caught up indexing to the latest tx available
@@ -148,6 +180,19 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @return the latest known transaction.
      */
     TransactionInstant awaitTx(TransactionInstant tx, Duration timeout);
+
+    /**
+     * Blocks until the node has indexed a transaction that is at or past the
+     * supplied tx. Will throw on timeout. Returns the most recent tx indexed by
+     * the node.
+     *
+     * @param tx Transaction to await, as returned from submitTx.
+     * @param timeout max time to wait, can be null for the default.
+     * @deprecated in favour of {@link #awaitTx(TransactionInstant, Duration)}
+     * @return the latest known transaction.
+     */
+    @Deprecated
+    Map<Keyword, ?> awaitTx(Map<Keyword, ?> tx, Duration timeout);
 
     /**
      * Temporary helper value to pass to `listen`, to subscribe to tx-indexed events.
