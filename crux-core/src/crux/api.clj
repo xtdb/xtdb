@@ -11,6 +11,7 @@
            crux.api.tx.Transaction
            [java.lang AutoCloseable]
            [java.util List Map Date]
+           java.util.concurrent.CompletableFuture
            [java.time Duration]
            [java.util.function Supplier]))
 
@@ -447,5 +448,13 @@
   (^Map submitTx [_ ^List tx] (submit-tx client tx))
 
   (openTxLog [_ after-tx-id with-ops?] (open-tx-log client after-tx-id with-ops?))
-  (submitTxAsync [_ tx-ops] (submit-tx-async client tx-ops))
+
+  (^CompletableFuture submitTxAsync [_ ^Transaction tx]
+   (CompletableFuture/supplyAsync
+    (reify Supplier
+      (get [_]
+        (TransactionInstant/factory ^Map @(submit-tx-async client (.toVector tx)))))))
+
+  (^IDeref submitTxAsync [_ ^List tx-ops] (submit-tx-async client tx-ops))
+
   (close [_] (.close client)))
