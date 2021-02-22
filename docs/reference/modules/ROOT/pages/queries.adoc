@@ -127,7 +127,7 @@ User-defined aggregates are supported by adding a new method (via Clojure `defme
 [#eql-projection]
 === EQL Projection
 
-*ALPHA* - subject to change without warning between releases.
+*WARNING: ALPHA* - subject to change without warning between releases.
 
 Crux queries support a 'projection' syntax, allowing you to decouple specifying which entities you want from what data you'd like about those entities in your queries.
 Crux's support is based on the excellent https://edn-query-language.org/eql/1.0.0/what-is-eql.html[EDN Query Language (EQL)^] library.
@@ -141,6 +141,16 @@ include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-1-r,inden
 
 include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-2,indent=0]
 include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-2-r,indent=0]
+----
+
+If you have the entity ID(s) in hand, you can call `project` or `project-many` directly:
+
+[source,clojure]
+----
+include::example$src/docs/examples.clj[tags=eql-project]
+include::example$src/docs/examples.clj[tags=eql-project-r]
+include::example$src/docs/examples.clj[tags=eql-project-many]
+include::example$src/docs/examples.clj[tags=eql-project-many-r]
 ----
 
 We can navigate to other entities (and hence build up nested results) using 'joins'.
@@ -163,11 +173,24 @@ include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-5,indent=
 include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-5-r,indent=0]
 ----
 
-To rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
+You can quickly grab the whole document by specifying `*` in the projection spec:
 
 [source,clojure]
 ----
-{:find [(eql/project ?profession [:profession/name {(:user/_profession {:as :users}) [:user/id :user/name]}])]
+include::example$src/docs/examples.clj[tags=eql-query-6]
+include::example$src/docs/examples.clj[tags=eql-query-6-r]
+----
+
+=== Attribute parameters
+
+Crux supports a handful of custom https://edn-query-language.org/eql/1.0.0/specification.html#_parameters[EQL parameters], specified by wrapping the `:attribute` key in a pair: `(:attribute {:param :value, ...})`.
+
+* `:as` - to rename attributes in the result, wrap the attribute in `(:source-attribute {:as :output-name})`:
++
+[source,clojure]
+----
+{:find [(eql/project ?profession [:profession/name
+                                  {(:user/_profession {:as :users}) [:user/id :user/name]}])]
  :where [[?profession :profession/name]]}
 
 ;; => [{:profession/name "Doctor",
@@ -176,14 +199,24 @@ To rename attributes in the result, wrap the attribute in `(:source-attribute {:
 ;;     {:profession/name "Lawyer",
 ;;      :users [{:user/id 2, :user/name "Sergei"}]}]
 ----
-
-You can quickly grab the whole document by specifying `*` in the projection spec:
-
+* `:limit` - limit the amount of values returned under the given property/join: `(:attribute {:limit 5})`
+* `:default` - specify a default value if the matched document doesn't contain the given attribute: `(:attribute {:default "default"})`
+* `:into` - specify the collection to pour the results into: `(:attribute {:into #{}})`
++
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=eql-query-6-r,indent=0]
+{:find [(eql/project ?profession [:profession/name
+                                  {(:user/_profession {:as :users, :into #{}})
+                                   [:user/id :user/name]}])]
+ :where [[?profession :profession/name]]}
+ 
+;; => [{:profession/name "Doctor",
+;;      :users #{{:user/id 1, :user/name "Ivan"},
+;;               {:user/id 3, :user/name "Petr"}}},
+;;     {:profession/name "Lawyer",
+;;      :users #{{:user/id 2, :user/name "Sergei"}}}]
 ----
+* `:cardinality` (reverse joins) - by default, reverse joins put their values in a collection - for many-to-one/one-to-one reverse joins, specify `{:cardinality :one}` to return a single value.
 
 For full details on what's supported in the projection-spec, see the https://edn-query-language.org/eql/1.0.0/specification.html[EQL specification^]
 
@@ -634,7 +667,6 @@ include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-d1,inden
 
 include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-d2,indent=0]
 ----
-* `:cardinality` (reverse joins) - by default, reverse joins put their values in a collection - for many-to-one/one-to-one reverse joins, specify `{:cardinality :one}` to return a single value.
 
 Here, we have `put` different documents in Crux with different Valid Times.
 
