@@ -5,7 +5,7 @@
             [core2.types :as t]
             [core2.util :as util]
             [core2.metadata :as meta])
-  (:import core2.metadata.IMetadataManager
+  (:import clojure.lang.IReduceInit core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.tx TransactionInstant Watermark]
            java.io.Closeable
@@ -81,46 +81,53 @@
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
-(defn- with-slices [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block, f]
+(defn ->slices [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
   (let [^BigIntVector row-id-vec (.getVector root (.getName t/row-id-field))
         row-count (.getRowCount root)]
 
-    (loop [start-idx 0
-           target-row-id (+ start-row-id max-rows-per-block)]
-      (let [len (loop [len 0]
-                  (let [idx (+ start-idx len)]
-                    (if (or (>= idx row-count)
-                            (>= (.get row-id-vec idx) target-row-id))
-                      len
-                      (recur (inc len)))))
-            end-idx (+ start-idx ^long len)]
+    (reify IReduceInit
+      (reduce [_ f init]
+        (loop [acc init
+               start-idx 0
+               target-row-id (+ start-row-id max-rows-per-block)]
+          (let [len (loop [len 0]
+                      (let [idx (+ start-idx len)]
+                        (if (or (>= idx row-count)
+                                (>= (.get row-id-vec idx) target-row-id))
+                          len
+                          (recur (inc len)))))
+                end-idx (+ start-idx ^long len)
+                acc (with-open [^VectorSchemaRoot sliced-root (util/slice-root root start-idx len)]
+                      (f acc sliced-root))]
 
-        (with-open [^VectorSchemaRoot sliced-root (util/slice-root root start-idx len)]
-          (f sliced-root))
+            (if (< end-idx row-count)
+              (recur acc end-idx (+ target-row-id max-rows-per-block))
+              (f acc))))))))
 
-        (when (< end-idx row-count)
-          (recur end-idx (+ target-row-id max-rows-per-block)))))))
+(defn ->live-slices [^Watermark watermark, ^String col-name]
+  (if-let [root (-> ^Map (.column->root watermark)
+                    (get col-name))]
+    (->slices root
+              (.chunk-idx watermark)
+              (.max-rows-per-block watermark))
+    []))
 
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
-(defn- ->watermark ^core2.tx.Watermark [^long chunk-idx ^long row-count ^Map column->root ^TransactionInstant tx-instant]
-  (tx/->Watermark chunk-idx
-                  row-count
-                  (Collections/unmodifiableSortedMap
-                   (reduce
-                    (fn [^Map acc ^Map$Entry kv]
-                      (let [k (.getKey kv)
-                            v (util/slice-root ^VectorSchemaRoot (.getValue kv) 0)]
-                        (doto acc
-                          (.put k v))))
-                    (TreeMap.)
-                    column->root))
-                  tx-instant
-                  (AtomicInteger. 1)))
+(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant ^long max-rows-per-block]
+  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant (AtomicInteger. 1) max-rows-per-block))
 
-(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant (AtomicInteger. 1)))
+(defn- snapshot-roots [^Map live-roots]
+  (Collections/unmodifiableSortedMap
+   (reduce
+    (fn [^Map acc ^Map$Entry kv]
+      (let [k (.getKey kv)
+            v (util/slice-root ^VectorSchemaRoot (.getValue kv) 0)]
+        (doto acc
+          (.put k v))))
+    (TreeMap.)
+    live-roots)))
 
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
@@ -151,8 +158,14 @@
           next-row-id (+ chunk-idx row-count)
           number-of-new-rows (.indexTx this tx-instant tx-ops next-row-id)
           new-chunk-row-count (+ row-count number-of-new-rows)]
-      (with-open [old-watermark watermark]
-        (set! (.watermark this) (->watermark chunk-idx new-chunk-row-count live-roots tx-instant)))
+      (with-open [_old-watermark watermark]
+        (set! (.watermark this)
+              (tx/->Watermark chunk-idx
+                              new-chunk-row-count
+                              (snapshot-roots live-roots)
+                              tx-instant
+                              (AtomicInteger. 1)
+                              max-rows-per-block)))
       (when (>= new-chunk-row-count max-rows-per-chunk)
         (.finishChunk this)))
 
@@ -203,11 +216,13 @@
             chunk-idx (.chunk-idx watermark)]
         (util/build-arrow-ipc-byte-buffer write-root :file
           (fn [write-batch!]
-            (with-slices live-root chunk-idx max-rows-per-block
-              (fn [sliced-root]
-                (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                  (.load loader arb)
-                  (write-batch!)))))))))
+            (->> (->slices live-root chunk-idx max-rows-per-block)
+                 (reduce (completing
+                          (fn [_ sliced-root]
+                            (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                              (.load loader arb)
+                              (write-batch!))))
+                         nil)))))))
 
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
@@ -231,7 +246,7 @@
                    (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
           (with-open [old-watermark watermark]
-            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)))))
+            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark) max-rows-per-block))))
         (finally
           (.closeCols this)))))
 
@@ -264,4 +279,4 @@
                max-rows-per-chunk
                max-rows-per-block
                (ConcurrentSkipListMap.)
-               (->empty-watermark chunk-idx latest-tx)))))
+               (->empty-watermark chunk-idx latest-tx max-rows-per-block)))))

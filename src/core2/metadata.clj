@@ -5,11 +5,12 @@
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
            core2.object_store.ObjectStore
-           core2.select.IVectorPredicate
+           [core2.select IVectorCompare IVectorPredicate]
            core2.types.ReadWrite
            java.io.Closeable
            [java.util Comparator Date List SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
+           java.util.function.IntPredicate
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -128,10 +129,10 @@
         (sel/select (.getVector metadata-root field-name-field)
                     (sel/->str-pred sel/pred= field-name))
 
-        (sel/select (.getVector metadata-root type-id-field)
-                    (sel/->vec-pred sel/pred= (doto (NullableTinyIntHolder.)
-                                                (-> .isSet (set! 1))
-                                                (-> .value (set! type-id)))))
+        (cond-> minor-type (sel/select (.getVector metadata-root type-id-field)
+                                       (sel/->vec-pred sel/pred= (doto (NullableTinyIntHolder.)
+                                                                   (-> .isSet (set! 1))
+                                                                   (-> .value (set! type-id))))))
         (.nextValue 0))))
 
 (defn- read-max-value [^VectorSchemaRoot metadata-root, ^long idx, ^ValueHolder out-holder]
@@ -158,11 +159,28 @@
 (defn- test-duv-value [^DenseUnionVector duv, ^long idx, ^IVectorPredicate vec-pred]
   (.test vec-pred (.getVectorByType duv (.getTypeId duv idx)) (.getOffset duv idx)))
 
-(defn test-min-value [^VectorSchemaRoot metadata-root, ^long idx, ^IVectorPredicate vec-pred]
+(defn- test-min-value [^VectorSchemaRoot metadata-root, ^long idx, ^IVectorPredicate vec-pred]
   (test-duv-value (.getVector metadata-root "min") idx vec-pred))
 
-(defn test-max-value [^VectorSchemaRoot metadata-root, ^long idx, ^IVectorPredicate vec-pred]
+(defn- test-max-value [^VectorSchemaRoot metadata-root, ^long idx, ^IVectorPredicate vec-pred]
   (test-duv-value (.getVector metadata-root "max") idx vec-pred))
+
+(defn matching-chunk-pred [col-name, ^IVectorPredicate vec-pred, ^Types$MinorType minor-type]
+  (let [test-min-max? (and (instance? IntPredicate vec-pred) (instance? IVectorCompare vec-pred))
+
+        ;; LT/LTE/EQ: we're not interested if everything is _greater_, i.e. min > this
+        min-vec-pred (when (and test-min-max? (not (.test ^IntPredicate vec-pred 1)))
+                       (sel/compare->pred sel/pred<= vec-pred))
+
+        ;; EQ/GTE/GT: we're not interested if everything is _lesser_, i.e. max < this
+        max-vec-pred (when (and test-min-max? (not (.test ^IntPredicate vec-pred -1)))
+                       (sel/compare->pred sel/pred>= vec-pred))]
+
+    (fn [^VectorSchemaRoot metadata-root]
+      (let [idx (field-idx metadata-root col-name col-name minor-type)]
+        (boolean (and (not (neg? idx))
+                      (or (nil? min-vec-pred) (test-min-value metadata-root idx min-vec-pred))
+                      (or (nil? max-vec-pred) (test-max-value metadata-root idx max-vec-pred))))))))
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
