@@ -16,6 +16,7 @@
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.select.IVectorPredicate
+           core2.tx.Watermark
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
@@ -234,10 +235,11 @@
          ingest-loop (->ingest-loop log-reader indexer opts)]
      (Node. allocator log-reader object-store metadata-manager indexer ingest-loop buffer-pool))))
 
-(defn- with-root-futs [^Node node watermark chunk-idxs col-name block-stream-f]
+(defn- with-root-futs [^Node node ^Watermark watermark chunk-idxs col-name block-stream-f]
   (let [^BufferAllocator allocator (.allocator node)
         ^BufferPool buffer-pool (.buffer-pool node)
-        futs (vec (for [chunk-idx chunk-idxs]
+        futs (vec (for [^long chunk-idx chunk-idxs
+                        :while (< chunk-idx (.chunk-idx watermark))]
                     (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                         (util/then-apply
                           (fn [buffer]
