@@ -1,6 +1,7 @@
 package crux.api;
 
 import java.io.Closeable;
+import java.util.List;
 import java.util.Map;
 
 import clojure.lang.Keyword;
@@ -18,6 +19,16 @@ public interface ICruxIngestAPI extends Closeable {
      * @return      a map with details about the submitted transaction.
      */
     TransactionInstant submitTx(Transaction transaction);
+
+    /**
+     * Writes transactions to the log for processing.
+     *
+     * @param transaction the transaction to be processed.
+     * @return      a map with details about the submitted transaction.
+     * @deprecated in favour of {@link #submitTx(Transaction)}
+     */
+    @Deprecated
+    Map<Keyword, ?> submitTx(List<List<?>> transaction);
 
     /**
      * Reads the transaction log. Optionally includes  operations, which allow the contents

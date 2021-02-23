@@ -3,6 +3,7 @@ package crux.api;
 import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.function.Consumer;
@@ -432,6 +433,18 @@ public class TransactionTest {
         });
 
         assertPabloVersion(1);
+    }
+
+    @Test
+    @SuppressWarnings({"unchecked", "deprecation"})
+    public void testLegacyMethods() {
+        Map<Keyword, ?> submitted = node.submitTx((List<List<?>>) Transaction.builder().put(pablo(0)).build().toVector());
+
+        node.awaitTx(submitted, Duration.ofSeconds(1));
+
+        assertTrue(node.hasTxCommitted(submitted));
+
+        assertEquals(pablo(0), node.db(submitted).entity(pabloId));
     }
 
     private void submitTx(boolean shouldAbort, Consumer<Transaction.Builder> f) {
