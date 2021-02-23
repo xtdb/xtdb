@@ -3,13 +3,16 @@
   (:import [core2.select IVectorCompare IVectorPredicate]
            core2.types.ReadWrite
            java.nio.charset.StandardCharsets
-           java.util.Comparator
+           [java.util Comparator List]
            [java.util.function IntConsumer IntPredicate]
            java.util.stream.IntStream
+           org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
-           [org.apache.arrow.vector ElementAddressableVector FieldVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector ElementAddressableVector FieldVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.holders.ValueHolder
+           [org.apache.arrow.vector.holders NullableBigIntHolder ValueHolder]
+           org.apache.arrow.vector.util.Text
+           org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
 (defmacro ^:private def-pred [sym [binding] & body]
@@ -115,3 +118,60 @@
                          (.add res idx))))))
 
      res)))
+
+(defn ->row-id-bitmap ^org.roaringbitmap.longlong.Roaring64Bitmap [^RoaringBitmap idxs ^BigIntVector row-id-vec]
+  (let [res (Roaring64Bitmap.)]
+    (-> (.stream idxs)
+        (.forEach (reify IntConsumer
+                    (accept [_ n]
+                      (.addLong res (.get row-id-vec n))))))
+    res))
+
+(defn- <-row-id-bitmap ^org.roaringbitmap.RoaringBitmap [^Roaring64Bitmap row-ids ^BigIntVector row-id-vec]
+  (let [res (RoaringBitmap.)]
+    (dotimes [idx (.getValueCount row-id-vec)]
+      (when (.contains row-ids (.get row-id-vec idx))
+        (.add res idx)))
+    res))
+
+
+(defn- project-vec ^org.apache.arrow.vector.FieldVector [^FieldVector field-vec ^RoaringBitmap idxs ^FieldVector out-vec]
+  (.setInitialCapacity out-vec (.getLongCardinality idxs))
+  (.allocateNew out-vec)
+  (-> (.stream idxs)
+      (.forEach (reify IntConsumer
+                  (accept [_ idx]
+                    (let [out-idx (.getValueCount out-vec)]
+                      (.setValueCount out-vec (inc out-idx))
+                      (.copyFrom out-vec idx out-idx field-vec))))))
+  out-vec)
+
+(defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator, ^List vsrs, ^Roaring64Bitmap row-id-bitmap]
+  (let [out-vecs (reduce (fn [acc ^VectorSchemaRoot vsr]
+                           (let [row-id-vec (.getVector vsr 0)
+                                 in-vec (.getVector vsr 1)
+                                 idxs (<-row-id-bitmap row-id-bitmap row-id-vec)]
+
+                             (cond-> acc
+                               (empty? acc) (conj (project-vec row-id-vec idxs (BigIntVector. "_row-id" allocator)))
+                               :always (conj (project-vec in-vec idxs
+                                                          (.getNewVector (.getMinorType in-vec)
+                                                                         (.getField in-vec)
+                                                                         allocator
+                                                                         nil))))))
+                         []
+                         vsrs)
+
+        res-vsr (VectorSchemaRoot. ^java.util.List out-vecs)]
+    (.setRowCount res-vsr (.getLongCardinality row-id-bitmap))
+    res-vsr))
+
+(letfn []
+
+  )
+
+;; got a roaringbitmap of indices
+()
+
+
+;; aligned vector
