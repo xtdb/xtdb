@@ -440,3 +440,87 @@ What is 'committed'?
 - 'written to object store' might be much later than 'committed'
 - 'can reliably reproduce this state from the log' -> committed
   - I need to know that no more transactions can now be inserted _before_ this watermark
+
+** Low-level algebra <2021-02-23 Tue>
+Operators: select, project, join, group/aggregate, order, top-n (slice)
+
+what's the most helpful data structures they can be given, and what's the easiest thing for them to produce?
+
+alignment is a cross-cutting concern:
+- is it only select that needs to deal with this?
+- other operators, if given aligned vectors, will return aligned vectors
+- do we /force/ project to align its output?
+
+'direct alignment': two vectors are aligned iff the same row-id is at the same index
+implies same length
+
+'indirect alignment': could be solved by mapping
+
+'alignable': can find the right elements for a row-id
+
+scan:
+
+operation A:
+- for a vector of row-ids + cols, get me an aligned VSR
+- exclude any rows that don't have all the cols present
+- is this included in 'select'?
+
+select a, b, c from foo where foo.a < 20 && foo.b < 10
+- select a < 20 - output col is trivially aligned
+- select b < 10
+- intersecting selection vectors
+- a valid output is unchanged a and b, plus intersected selection vector of row-ids
+
+op 1: a -> select foo.a < 20
+op 2: b -> select foo.b < 10
+  - optionally input selection vector from a
+
+communication between operations:
+- VSR + (possibly nil) selection vector of row-ids
+- aligned VSR + selection vector of indices
+
+select:
+- 'a < 20' - does depend on aligned a - alignment of a single is trivial
+- 'a < 20 && b < 10' - do them one by one, 'and' the row-ids, /then/ execute opA to align them
+- 'a < b' - does depend on at-least-indirect alignment
+  - could be rejected as part of opA - essentially inlining the select
+  - is there benefit to combining these two operators?
+- first happens in column space, second happens in row space
+- 'a + b < 20' is projection followed by selection
+- /something/ needs to do vector alignment
+- output options:
+  - two dimensions here - aligned/not-aligned x selection vector applied
+  - aligned VSR with selection vector applied
+    - '/everything/ is aligned' -> simple
+  - unchanged input VSR + selection vector of row-ids (vector contains filtered-out values)
+    - avoid copies
+    - aligned?
+      - could return selection vector of indices
+  - just outputs the selection vector
+- select could also know a little about projection - given a set of columns to output
+
+project:
+- n cols -> n + 1 cols
+- operation: "a -> a, c -> a + b"
+  - input is a VSR with a and b vectors
+- doesn't strictly need alignment, just that input is alignable
+- is projection a filter in our world?
+
+join:
+- pipeline-breaking operator
+  - 'free' to copy things, because we'll need to anyway
+  - can inline until this point, at this point we have to do some work
+    - 'terminal' vs 'intermediate' in Stream parlance
+  - can save direct alignment until this point
+
+group/aggregate:
+- not required, but would benefit from being aligned
+
+order:
+- doesn't change shape
+- requires input vectors to be directly aligned
+
+top-n (slice):
+- doesn't change shape of input data
+- requires input vectors to be directly aligned
+- essentially return a slice
