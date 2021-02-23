@@ -6,11 +6,13 @@
   - [[https://db.in.tum.de/~muehlbau/papers/mvcc.pdf][Fast Serializable Multi-Version Concurrency Controlfor Main-Memory Database Systems]]
   - [[https://www.cs.cmu.edu/~pavlo/courses/fall2013/static/papers/p731-sikka.pdf][Efficient Transaction Processing in SAP HANA Database –The End of a Column Store Myth]]
 
-MonetDB:
+MonetDB/VectorWise:
 - [[http://www.cs.cmu.edu/~natassa/courses/15-823/syllabus/papers/boncz99database.pdf][Database Architecture Optimized for the new Bottleneck: Memory Access]]
 - [[https://strum355.netsoc.co/books/PDF/MonetDB-X100%20-%20Hyper-Pipelining%20Query%20Execution%20(CIDR%202005%20P19).pdf][MonetDB/X100: Hyper-Pipelining Query Execution]]
 - [[https://pdfs.semanticscholar.org/3854/4aae01b27a3a429c2e3accd70cc932531136.pdf][Database Architecture Evolution: Mammals Flourished long before Dinosaurs became Extinct]]
 - [[https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.43.8552&rep=rep1&type=pdf][MIL Primitives for Querying a Fragmented World]]
+- [[https://ir.cwi.nl/pub/18687/18687B.pdf][The Story of Vectorwise]] (BDA Keynote)
+- [[https://www.monetdb.org/Assets/MonetDB-wiki/MonetDB-Insight.pdf][Open-source Database Technology Beyond Textbooks]] (presentation)
 
 ** Separating Storage from Compute
 blog posts:
