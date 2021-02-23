@@ -155,23 +155,10 @@
                              (cond-> acc
                                (empty? acc) (conj (project-vec row-id-vec idxs (BigIntVector. "_row-id" allocator)))
                                :always (conj (project-vec in-vec idxs
-                                                          (.getNewVector (.getMinorType in-vec)
-                                                                         (.getField in-vec)
-                                                                         allocator
-                                                                         nil))))))
+                                                          (.createVector (.getField in-vec) allocator))))))
                          []
                          vsrs)
 
         res-vsr (VectorSchemaRoot. ^java.util.List out-vecs)]
     (.setRowCount res-vsr (.getLongCardinality row-id-bitmap))
     res-vsr))
-
-(letfn []
-
-  )
-
-;; got a roaringbitmap of indices
-()
-
-
-;; aligned vector
