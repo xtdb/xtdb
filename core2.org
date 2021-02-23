@@ -458,13 +458,13 @@ implies same length
 
 'alignable': can find the right elements for a row-id
 
-scan:
+four levels:
+- user-facing query engine(s) - planner that generates a relalg tree from a user query
+- high-level, relalg tree - knows about relalg operators. logical plan
+- intermediate-level - add opA, physical plan
+- lower-level MIL-like column primitives
 
-operation A:
-- for a vector of row-ids + cols, get me an aligned VSR
-- exclude any rows that don't have all the cols present
-- is this included in 'select'?
-
+*** example select:
 select a, b, c from foo where foo.a < 20 && foo.b < 10
 - select a < 20 - output col is trivially aligned
 - select b < 10
@@ -475,9 +475,18 @@ op 1: a -> select foo.a < 20
 op 2: b -> select foo.b < 10
   - optionally input selection vector from a
 
+*** operators:
+
+scan:
+
+operation A:
+- for a vector of row-ids + cols, get me an aligned VSR
+- exclude any rows that don't have all the cols present
+- is this included in 'select'?
+
 communication between operations:
 - VSR + (possibly nil) selection vector of row-ids
-- aligned VSR + selection vector of indices
+- aligned VSR (including row-id cols) + (possibly nil) selection vector of indices <--
 
 select:
 - 'a < 20' - does depend on aligned a - alignment of a single is trivial
