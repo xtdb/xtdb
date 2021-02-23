@@ -1,5 +1,6 @@
 (ns core2.select
-  (:require [core2.types :as t])
+  (:require [core2.types :as t]
+            [core2.util :as u])
   (:import [core2.select IVectorCompare IVectorPredicate]
            core2.types.ReadWrite
            java.nio.charset.StandardCharsets
@@ -139,11 +140,23 @@
   (.setInitialCapacity out-vec (.getLongCardinality idxs))
   (.allocateNew out-vec)
   (-> (.stream idxs)
-      (.forEach (reify IntConsumer
-                  (accept [_ idx]
-                    (let [out-idx (.getValueCount out-vec)]
-                      (.setValueCount out-vec (inc out-idx))
-                      (.copyFrom out-vec idx out-idx field-vec))))))
+      (.forEach (if (instance? DenseUnionVector field-vec)
+                  (reify IntConsumer
+                    (accept [_ idx]
+                      (let [field-vec ^DenseUnionVector field-vec
+                            out-idx (.getValueCount out-vec)
+                            type-id (.getTypeId field-vec idx)
+                            offset (u/write-type-id out-vec (.getValueCount out-vec) type-id)]
+                        (u/set-value-count out-vec (inc out-idx))
+                        (.copyFrom (.getVectorByType ^DenseUnionVector out-vec type-id)
+                                   (.getOffset field-vec idx)
+                                   offset
+                                   (.getVectorByType field-vec type-id)))))
+                  (reify IntConsumer
+                    (accept [_ idx]
+                      (let [out-idx (.getValueCount out-vec)]
+                        (u/set-value-count out-vec (inc out-idx))
+                        (.copyFrom out-vec idx out-idx field-vec)))))))
   out-vec)
 
 (defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator, ^List vsrs, ^Roaring64Bitmap row-id-bitmap]

@@ -73,10 +73,10 @@
 (defn primitive-type->arrow-type [type-k]
   (.getType ^Types$MinorType (->minor-type type-k)))
 
-(defn ->primitive-dense-union-field ^org.apache.arrow.vector.types.pojo.Field
-  ([field-name]
+(defn ->primitive-dense-union-field
+  (^org.apache.arrow.vector.types.pojo.Field [field-name]
    (->primitive-dense-union-field field-name primitive-types))
-  ([^String field-name type-ks]
+  (^org.apache.arrow.vector.types.pojo.Field [^String field-name type-ks]
    (let [type-ks (sort-by (comp arrow-type->type-id primitive-type->arrow-type) type-ks)
          type-ids (int-array (for [type-k type-ks]
                                (-> type-k primitive-type->arrow-type arrow-type->type-id)))]

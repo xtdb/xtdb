@@ -1,10 +1,13 @@
 (ns core2.select-test
   (:require [clojure.test :as t]
             [core2.select :as sel]
+            [core2.util :as util]
+            [core2.types :as ty]
             [core2.test-util :as tu])
   (:import java.util.List
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector VarCharVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.holders.NullableBigIntHolder
            org.apache.arrow.vector.util.Text))
 
@@ -74,14 +77,28 @@
       (t/is (= [] (search 40)))
       (t/is (= [] (search 60))))))
 
+(def ^:private ^long bigint-type-id
+  (-> (ty/primitive-type->arrow-type :bigint)
+      (ty/arrow-type->type-id)))
+
+(def ^:private ^long varchar-type-id
+  (-> (ty/primitive-type->arrow-type :varchar)
+      (ty/arrow-type->type-id)))
+
 (t/deftest test-align
-  (with-open [age-vec (doto (BigIntVector. "age" *allocator*)
-                        (.setValueCount 5)
-                        (.setSafe 0 12)
-                        (.setSafe 1 42)
-                        (.setSafe 2 15)
-                        (.setSafe 3 83)
-                        (.setSafe 4 25))
+  (with-open [age-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "age" #{:bigint}) *allocator*)
+                        (util/set-value-count 5)
+                        (util/write-type-id 0 bigint-type-id)
+                        (util/write-type-id 1 bigint-type-id)
+                        (util/write-type-id 2 bigint-type-id)
+                        (util/write-type-id 3 bigint-type-id)
+                        (util/write-type-id 4 bigint-type-id)
+                        (-> (.getBigIntVector bigint-type-id)
+                            (doto (.setSafe 0 12)
+                              (.setSafe 1 42)
+                              (.setSafe 2 15)
+                              (.setSafe 3 83)
+                              (.setSafe 4 25))))
 
               age-row-id-vec (doto (BigIntVector. "_row-id" *allocator*)
                                (.setValueCount 5)
@@ -94,12 +111,17 @@
               age-vsr (let [^List vecs [age-row-id-vec age-vec]]
                         (VectorSchemaRoot. vecs))
 
-              name-vec (doto (VarCharVector. "name" *allocator*)
-                         (.setValueCount 4)
-                         (.setSafe 0 (Text. "Al"))
-                         (.setSafe 1 (Text. "Dave"))
-                         (.setSafe 2 (Text. "Bob"))
-                         (.setSafe 3 (Text. "Steve")))
+              name-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "name" #{:varchar}) *allocator*)
+                         (util/set-value-count 4)
+                         (util/write-type-id 0 varchar-type-id)
+                         (util/write-type-id 1 varchar-type-id)
+                         (util/write-type-id 2 varchar-type-id)
+                         (util/write-type-id 3 varchar-type-id)
+                         (-> (.getVarCharVector varchar-type-id)
+                             (doto (.setSafe 0 (Text. "Al"))
+                               (.setSafe 1 (Text. "Dave"))
+                               (.setSafe 2 (Text. "Bob"))
+                               (.setSafe 3 (Text. "Steve")))))
 
               name-row-id-vec (doto (BigIntVector. "_row-id" *allocator*)
                                 (.setValueCount 4)
@@ -111,11 +133,15 @@
               name-vsr (let [^List vecs [name-row-id-vec name-vec]]
                          (VectorSchemaRoot. vecs))]
 
-    (let [row-ids (doto (sel/->row-id-bitmap (sel/select age-vec (sel/->vec-pred sel/pred<= (doto (NullableBigIntHolder.)
-                                                                                              (-> .isSet (set! 1))
-                                                                                              (-> .value (set! 30)))))
+    (let [row-ids (doto (sel/->row-id-bitmap (sel/select age-vec (sel/->dense-union-pred
+                                                                  (sel/->vec-pred sel/pred<= (doto (NullableBigIntHolder.)
+                                                                                               (-> .isSet (set! 1))
+                                                                                               (-> .value (set! 30))))
+                                                                  bigint-type-id))
                                              age-row-id-vec)
-                    (.and (sel/->row-id-bitmap (sel/select name-vec (sel/->str-pred sel/pred<= "Frank"))
+                    (.and (sel/->row-id-bitmap (sel/select name-vec (sel/->dense-union-pred
+                                                                     (sel/->str-pred sel/pred<= "Frank")
+                                                                     varchar-type-id))
                                                name-row-id-vec)))]
       (with-open [^VectorSchemaRoot vsr (sel/align-vectors *allocator* [name-vsr age-vsr] row-ids)]
         (t/is (= [[2 (Text. "Dave") 12]
