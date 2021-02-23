@@ -17,13 +17,6 @@ Resources:
         # and confirming via e.g. `curl -Ls -o /dev/null -w %{url_effective} opencrux.com/docs`
         RoutingRules:
         - RoutingRuleCondition:
-            KeyPrefixEquals: 'support'
-          RedirectRule:
-            ReplaceKeyWith: 'main/public-beta.html'
-            HostName: www.opencrux.com
-            Protocol: https
-            HttpRedirectCode: 302
-        - RoutingRuleCondition:
             KeyPrefixEquals: 'docs'
           RedirectRule:
             ReplaceKeyWith: 'reference/installation.html'
