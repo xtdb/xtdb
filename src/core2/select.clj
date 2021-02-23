@@ -69,12 +69,15 @@
 (defn ->str-pred [^IntPredicate compare-pred ^String comparison-value]
   (compare->pred compare-pred (->str-compare comparison-value)))
 
+(deftype DenseUnionPredicate [^IVectorPredicate vec-pred, ^long type-id]
+  IVectorPredicate
+  (test [_ field-vec idx]
+    (let [^DenseUnionVector field-vec field-vec]
+      (and (= (.getTypeId field-vec idx) type-id)
+           (.test vec-pred (.getVectorByType field-vec type-id) (.getOffset field-vec idx))))))
+
 (defn ->dense-union-pred [^IVectorPredicate vec-pred, ^long type-id]
-  (reify IVectorPredicate
-    (test [_ field-vec idx]
-      (let [^DenseUnionVector field-vec field-vec]
-        (and (= (.getTypeId field-vec idx) type-id)
-             (.test vec-pred (.getVectorByType field-vec type-id) (.getOffset field-vec idx)))))))
+  (->DenseUnionPredicate vec-pred type-id))
 
 (defn search ^org.roaringbitmap.RoaringBitmap [^FieldVector field-vec, ^IVectorCompare vec-compare]
   (let [value-count (.getValueCount field-vec)
@@ -103,22 +106,34 @@
 
             1 (recur low (dec mid))))))))
 
+(defn- dense-union-with-single-child? [^FieldVector field-vec ^IVectorPredicate vec-predicate]
+  (and (instance? DenseUnionVector field-vec)
+       (instance? DenseUnionPredicate vec-predicate)
+       (= (.getValueCount field-vec)
+          (.getValueCount (.getVectorByType ^DenseUnionVector field-vec (.type-id ^DenseUnionPredicate vec-predicate))))))
+
 (defn select
   (^org.roaringbitmap.RoaringBitmap [^FieldVector field-vec, ^IVectorPredicate vec-predicate]
    (select nil field-vec vec-predicate))
 
   (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap idx-bitmap, ^FieldVector field-vec, ^IVectorPredicate vec-predicate]
-   (assert (or (nil? idx-bitmap) (< (.last idx-bitmap) (.getValueCount field-vec))))
-   (let [res (RoaringBitmap.)]
-     (-> ^IntStream (if idx-bitmap
-                      (.stream idx-bitmap)
-                      (IntStream/range 0 (.getValueCount field-vec)))
-         (.forEach (reify IntConsumer
-                     (accept [_ idx]
-                       (when (.test vec-predicate field-vec idx)
-                         (.add res idx))))))
+   (if (dense-union-with-single-child? field-vec vec-predicate)
+     (recur idx-bitmap
+            (.getVectorByType ^DenseUnionVector field-vec (.type-id ^DenseUnionPredicate vec-predicate))
+            (.vec-pred ^DenseUnionPredicate vec-predicate))
 
-     res)))
+     (do (assert (or (nil? idx-bitmap) (< (.last idx-bitmap) (.getValueCount field-vec))))
+         (let [res (RoaringBitmap.)]
+
+           (-> ^IntStream (if idx-bitmap
+                            (.stream idx-bitmap)
+                            (IntStream/range 0 (.getValueCount field-vec)))
+               (.forEach (reify IntConsumer
+                           (accept [_ idx]
+                             (when (.test vec-predicate field-vec idx)
+                               (.add res idx))))))
+
+           res)))))
 
 (defn ->row-id-bitmap ^org.roaringbitmap.longlong.Roaring64Bitmap [^RoaringBitmap idxs ^BigIntVector row-id-vec]
   (let [res (Roaring64Bitmap.)]
@@ -134,7 +149,6 @@
       (when (.contains row-ids (.get row-id-vec idx))
         (.add res idx)))
     res))
-
 
 (defn- project-vec ^org.apache.arrow.vector.FieldVector [^FieldVector field-vec ^RoaringBitmap idxs ^FieldVector out-vec]
   (.setInitialCapacity out-vec (.getLongCardinality idxs))
