@@ -142,8 +142,10 @@
                     (.and (sel/->row-id-bitmap (sel/select name-vec (sel/->dense-union-pred
                                                                      (sel/->str-pred sel/pred<= "Frank")
                                                                      varchar-type-id))
-                                               name-row-id-vec)))]
-      (with-open [^VectorSchemaRoot vsr (sel/align-vectors *allocator* [name-vsr age-vsr] row-ids)]
+                                               name-row-id-vec)))
+          vsrs [name-vsr age-vsr]]
+      (with-open [^VectorSchemaRoot vsr (VectorSchemaRoot/create (sel/roots->aligned-schema vsrs) *allocator*)]
+        (sel/align-vectors vsrs row-ids vsr)
         (t/is (= [[2 (Text. "Dave") 12]
                   [9 (Text. "Bob") 15]]
                  (tu/vsr->rows vsr)))))))

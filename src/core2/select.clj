@@ -7,12 +7,12 @@
            [java.util Comparator List]
            [java.util.function IntConsumer IntPredicate]
            java.util.stream.IntStream
-           org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
            [org.apache.arrow.vector BigIntVector ElementAddressableVector FieldVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.holders NullableBigIntHolder ValueHolder]
            org.apache.arrow.vector.util.Text
+           org.apache.arrow.vector.types.pojo.Schema
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
@@ -173,19 +173,23 @@
                         (.copyFrom out-vec idx out-idx field-vec)))))))
   out-vec)
 
-(defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator, ^List vsrs, ^Roaring64Bitmap row-id-bitmap]
-  (let [out-vecs (reduce (fn [acc ^VectorSchemaRoot vsr]
-                           (let [row-id-vec (.getVector vsr 0)
-                                 in-vec (.getVector vsr 1)
-                                 idxs (<-row-id-bitmap row-id-bitmap row-id-vec)]
+(defn roots->aligned-schema ^org.apache.arrow.vector.types.pojo.Schema [roots]
+  (Schema. (reduce (fn [acc ^VectorSchemaRoot root]
+                     (cond-> acc
+                       (empty? acc) (conj t/row-id-field)
+                       :always (conj (.get (.getFields (.getSchema root)) 1))))
+                   []
+                   roots)))
 
-                             (cond-> acc
-                               (empty? acc) (conj (project-vec row-id-vec idxs (BigIntVector. "_row-id" allocator)))
-                               :always (conj (project-vec in-vec idxs
-                                                          (.createVector (.getField in-vec) allocator))))))
-                         []
-                         vsrs)
+(defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^List vsrs, ^Roaring64Bitmap row-id-bitmap ^VectorSchemaRoot out-vsr]
+  (.clear out-vsr)
+  (doseq [^VectorSchemaRoot vsr vsrs
+          :let [row-id-vec (.getVector vsr 0)
+                in-vec (.getVector vsr 1)
+                idxs (<-row-id-bitmap row-id-bitmap row-id-vec)]]
+    (when (identical? vsr (first vsrs))
+      (project-vec row-id-vec idxs (.getVector out-vsr t/row-id-field)))
+    (project-vec in-vec idxs (.getVector out-vsr (.getField in-vec))))
 
-        res-vsr (VectorSchemaRoot. ^java.util.List out-vecs)]
-    (.setRowCount res-vsr (.getLongCardinality row-id-bitmap))
-    res-vsr))
+  (u/set-vector-schema-root-row-count out-vsr (.getLongCardinality row-id-bitmap))
+  out-vsr)
