@@ -3,9 +3,9 @@
             [clojure.test :as t])
   (:import [org.apache.arrow.vector FieldVector VectorSchemaRoot]))
 
-(defn vsr->rows [^VectorSchemaRoot vsr]
-  (let [field-vecs (.getFieldVectors vsr)]
+(defn root->rows [^VectorSchemaRoot root]
+  (let [field-vecs (.getFieldVectors root)]
     (mapv (fn [idx]
             (vec (for [^FieldVector field-vec field-vecs]
                    (.getObject field-vec idx))))
-          (range (.getRowCount vsr)))))
+          (range (.getRowCount root)))))

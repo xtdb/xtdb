@@ -108,8 +108,8 @@
                                (.setSafe 3 12)
                                (.setSafe 4 13))
 
-              age-vsr (let [^List vecs [age-row-id-vec age-vec]]
-                        (VectorSchemaRoot. vecs))
+              age-root (let [^List vecs [age-row-id-vec age-vec]]
+                         (VectorSchemaRoot. vecs))
 
               name-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "name" #{:varchar}) *allocator*)
                          (util/set-value-count 4)
@@ -130,8 +130,8 @@
                                 (.setSafe 2 9)
                                 (.setSafe 3 13))
 
-              name-vsr (let [^List vecs [name-row-id-vec name-vec]]
-                         (VectorSchemaRoot. vecs))]
+              name-root (let [^List vecs [name-row-id-vec name-vec]]
+                          (VectorSchemaRoot. vecs))]
 
     (let [row-ids (doto (sel/->row-id-bitmap (sel/select age-vec (sel/->dense-union-pred
                                                                   (sel/->vec-pred sel/pred<= (doto (NullableBigIntHolder.)
@@ -143,9 +143,9 @@
                                                                      (sel/->str-pred sel/pred<= "Frank")
                                                                      varchar-type-id))
                                                name-row-id-vec)))
-          vsrs [name-vsr age-vsr]]
-      (with-open [^VectorSchemaRoot vsr (VectorSchemaRoot/create (sel/roots->aligned-schema vsrs) *allocator*)]
-        (sel/align-vectors vsrs row-ids vsr)
+          roots [name-root age-root]]
+      (with-open [^VectorSchemaRoot out-root (VectorSchemaRoot/create (sel/roots->aligned-schema roots) *allocator*)]
+        (sel/align-vectors roots row-ids out-root)
         (t/is (= [[2 (Text. "Dave") 12]
                   [9 (Text. "Bob") 15]]
-                 (tu/vsr->rows vsr)))))))
+                 (tu/root->rows out-root)))))))

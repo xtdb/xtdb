@@ -173,7 +173,7 @@
                         (.copyFrom out-vec idx out-idx field-vec)))))))
   out-vec)
 
-(defn roots->aligned-schema ^org.apache.arrow.vector.types.pojo.Schema [roots]
+(defn roots->aligned-schema ^org.apache.arrow.vector.types.pojo.Schema [^List roots]
   (Schema. (reduce (fn [acc ^VectorSchemaRoot root]
                      (cond-> acc
                        (empty? acc) (conj t/row-id-field)
@@ -181,15 +181,15 @@
                    []
                    roots)))
 
-(defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^List vsrs, ^Roaring64Bitmap row-id-bitmap ^VectorSchemaRoot out-vsr]
-  (.clear out-vsr)
-  (doseq [^VectorSchemaRoot vsr vsrs
-          :let [row-id-vec (.getVector vsr 0)
-                in-vec (.getVector vsr 1)
+(defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^List roots, ^Roaring64Bitmap row-id-bitmap ^VectorSchemaRoot out-root]
+  (.clear out-root)
+  (doseq [^VectorSchemaRoot root roots
+          :let [row-id-vec (.getVector root 0)
+                in-vec (.getVector root 1)
                 idxs (<-row-id-bitmap row-id-bitmap row-id-vec)]]
-    (when (identical? vsr (first vsrs))
-      (project-vec row-id-vec idxs (.getVector out-vsr t/row-id-field)))
-    (project-vec in-vec idxs (.getVector out-vsr (.getField in-vec))))
+    (when (identical? root (first roots))
+      (project-vec row-id-vec idxs (.getVector out-root t/row-id-field)))
+    (project-vec in-vec idxs (.getVector out-root (.getField in-vec))))
 
-  (u/set-vector-schema-root-row-count out-vsr (.getLongCardinality row-id-bitmap))
-  out-vsr)
+  (doto out-root
+    (u/set-vector-schema-root-row-count (.getLongCardinality row-id-bitmap))))
