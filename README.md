@@ -23,16 +23,16 @@ used to express complex joins and recursive graph traversals.
   <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-core</artifactId>
-    <version>21.01-1.14.0-beta</version>
+    <version>21.02-1.15.0-beta</version>
   </dependency>
   ```
 
   ```clojure
-  [juxt/crux-core "21.01-1.14.0-beta"]
+  [juxt/crux-core "21.02-1.15.0-beta"]
   ```
 
   ```clojure
-  juxt/crux-core {:mvn/version "21.01-1.14.0-beta"}
+  juxt/crux-core {:mvn/version "21.02-1.15.0-beta"}
   ```
 * [Release notes](https://github.com/juxt/crux/releases)
 * Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/juxt/crux/discussions) | crux@juxt.pro
