@@ -1,0 +1,3 @@
+.Articles
+* xref:what-is-crux.adoc[What is Crux?]
+* xref:bitemporality.adoc[Bitemporality]

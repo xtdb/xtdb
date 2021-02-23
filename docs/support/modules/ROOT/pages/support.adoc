@@ -1,0 +1,3 @@
+= Support
+:page-layout: support
+:page-nav: black-nav

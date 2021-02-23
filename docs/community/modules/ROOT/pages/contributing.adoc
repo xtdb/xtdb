@@ -1,3 +1,6 @@
+= Contributing
+:page-aliases: about::contributing.adoc
+
 == Thanks
 
 Crux would not exist without the community of vibrant open source projects on which it depends, and we hope that the Crux community will serve to extend and reflect our gratitude.
