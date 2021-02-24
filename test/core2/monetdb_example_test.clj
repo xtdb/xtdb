@@ -1,5 +1,6 @@
 (ns core2.monetdb-example-test
-  (:require [clojure.test :as t])
+  (:require [clojure.test :as t]
+            [core2.test-util :as tu])
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector.util VectorBatchAppender]
@@ -35,12 +36,6 @@
 (defn- copy-vector ^org.apache.arrow.vector.ValueVector [^ValueVector from ^ValueVector to]
   (VectorBatchAppender/batchAppend to (into-array [from]))
   to)
-
-(defn- ->list ^java.util.List [^ValueVector v]
-  (let [acc (ArrayList.)]
-    (dotimes [n (.getValueCount v)]
-      (.add acc (.getObject v n)))
-    acc))
 
 (defn- head ^org.apache.arrow.vector.ValueVector [^StructVector v]
   (.getChildByOrdinal v 0))
@@ -338,21 +333,21 @@
     (with-open [^BigIntVector inter1 (select a ra (reify LongPredicate
                                                     (test [_ x]
                                                       (< 5 x 20))))]
-      (t/is (= [2 4 5 7 9] (->list inter1)))
+      (t/is (= [2 4 5 7 9] (tu/->list inter1)))
 
       (with-open [inter2 (reconstruct a rb inter1)]
-        (t/is (= [2 4 5 7 9] (->list (head inter2))))
-        (t/is (= [34 45 49 97 42] (->list (tail inter2))))
+        (t/is (= [2 4 5 7 9] (tu/->list (head inter2))))
+        (t/is (= [34 45 49 97 42] (tu/->list (tail inter2))))
 
         ;; NOTE: this range is different from figure and SQL.
         (with-open [^BigIntVector inter3 (select a inter2 (reify LongPredicate
                                                             (test [_ x]
                                                               (< 40 x 50))))]
-          (t/is (= [4 5 9] (->list inter3)))
+          (t/is (= [4 5 9] (tu/->list inter3)))
 
           (with-open [join-input-r (reconstruct a rc inter3)]
-            (t/is (= [4 5 9] (->list (head join-input-r))))
-            (t/is (= [23 78 29] (->list (tail join-input-r ))))
+            (t/is (= [4 5 9] (tu/->list (head join-input-r))))
+            (t/is (= [23 78 29] (tu/->list (tail join-input-r ))))
 
             ;; NOTE: this range is different from figure and SQL, and
             ;; neither return the displayed indexes, which the below
@@ -360,40 +355,40 @@
             (with-open [^BigIntVector inter4 (select a sa (reify LongPredicate
                                                             (test [_ x]
                                                               (< 49 x 65))))]
-              (t/is (= [3 5 7 8 10] (->list inter4)))
+              (t/is (= [3 5 7 8 10] (tu/->list inter4)))
 
               (with-open [inter5 (reconstruct a sb inter4)]
-                (t/is (= [3 5 7 8 10] (->list (head inter5))))
-                (t/is (= [62 29 19 81 23] (->list (tail inter5))))
+                (t/is (= [3 5 7 8 10] (tu/->list (head inter5))))
+                (t/is (= [62 29 19 81 23] (tu/->list (tail inter5))))
 
                 (with-open [join-input-s (reverse-vec a inter5)]
-                  (t/is (= [62 29 19 81 23] (->list (head join-input-s))))
-                  (t/is (= [3 5 7 8 10] (->list (tail join-input-s))))
+                  (t/is (= [62 29 19 81 23] (tu/->list (head join-input-s))))
+                  (t/is (= [3 5 7 8 10] (tu/->list (tail join-input-s))))
 
                   (with-open [join-res-r-s (join a join-input-r join-input-s)]
-                    (t/is (= [4 9] (->list (head join-res-r-s))))
-                    (t/is (= [10 5] (->list (tail join-res-r-s))))
+                    (t/is (= [4 9] (tu/->list (head join-res-r-s))))
+                    (t/is (= [10 5] (tu/->list (tail join-res-r-s))))
 
                     (with-open [inter6 (void-tail a join-res-r-s)]
-                      (t/is (= [4 9] (->list inter6)))
+                      (t/is (= [4 9] (tu/->list inter6)))
 
                       ;; NOTE: in paper this is displayed as a single
                       ;; vector, not a pair.
                       (with-open [inter7 (reconstruct a ra inter6)]
-                        (t/is (= [4 9] (->list (head inter7))))
-                        (t/is (= [9 19] (->list (tail inter7))))
+                        (t/is (= [4 9] (tu/->list (head inter7))))
+                        (t/is (= [9 19] (tu/->list (tail inter7))))
 
                         ;; NOTE: scalar is represented as a single
                         ;; element vector in paper.
                         (with-open [result (sum-vec a inter7)]
-                          (t/is (= [28] (->list result))))
+                          (t/is (= [28] (tu/->list result))))
 
                         ;; NOTE: other aggregations, not in example.
                         (with-open [result (count-vec a inter7)]
-                          (t/is (= [2] (->list result))))
+                          (t/is (= [2] (tu/->list result))))
 
                         (with-open [result (min-vec a inter7)]
-                          (t/is (= [9] (->list result))))
+                          (t/is (= [9] (tu/->list result))))
 
                         (with-open [result (max-vec a inter7)]
-                          (t/is (= [19] (->list result))))))))))))))))
+                          (t/is (= [19] (tu/->list result))))))))))))))))
