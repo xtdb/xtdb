@@ -16,12 +16,12 @@ dependencies {
     implementation("org.clojure", "tools.logging", "1.1.0")
     implementation("org.apache.arrow", "arrow-vector", "3.0.0")
     implementation("org.apache.arrow", "arrow-memory-netty", "3.0.0")
-    implementation("org.roaringbitmap", "RoaringBitmap", "0.9.3")
+    implementation("org.roaringbitmap", "RoaringBitmap", "0.9.8")
 
     testImplementation("org.clojure", "data.csv", "1.0.0")
 
     devImplementation("nrepl", "nrepl", "0.6.0")
-    devImplementation("cider:cider-nrepl:0.25.2")
+    devImplementation("cider", "cider-nrepl", "0.25.8")
 }
 
 sourceSets {
