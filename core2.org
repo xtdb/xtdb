@@ -441,7 +441,8 @@ What is 'committed'?
 - 'can reliably reproduce this state from the log' -> committed
   - I need to know that no more transactions can now be inserted _before_ this watermark
 
-** Low-level algebra <2021-02-23 Tue>
+** Low-level algebra
+*** <2021-02-23 Tue>
 Operators: select, project, join, group/aggregate, order, top-n (slice)
 
 what's the most helpful data structures they can be given, and what's the easiest thing for them to produce?
@@ -464,7 +465,7 @@ four levels:
 - intermediate-level - add opA, physical plan
 - lower-level MIL-like column primitives
 
-*** example select:
+**** example select:
 select a, b, c from foo where foo.a < 20 && foo.b < 10
 - select a < 20 - output col is trivially aligned
 - select b < 10
@@ -475,7 +476,7 @@ op 1: a -> select foo.a < 20
 op 2: b -> select foo.b < 10
   - optionally input selection vector from a
 
-*** operators:
+**** operators:
 
 scan:
 
@@ -533,3 +534,35 @@ top-n (slice):
 - doesn't change shape of input data
 - requires input vectors to be directly aligned
 - essentially return a slice
+
+*** <2021-02-24 Wed>
+
+scan, deals with metadata, returns a (spl-)iterator of blocks - I/O operator
+scan pure operator takes metadata root and decides whether it's worthy
+
+question: how does iterator + async work?
+JS - looks like a generator of promises, can use something similar here
+tryAdvance takes a consumer, which would work with async by calling the consumer asynchronously, but that's probably not what you want?
+traditional hasNext/next - hasNext would need to be async, next then wouldn't (assuming a buffer)
+tryAdvance taking a consumer works better for resource management, if we wanted to re-use the VSR for the next block, say
+downstream, will anything be async?
+
+hasNext/next
+hasNext :: CompletableFuture<Boolean>
+next :: VectorSchemaRoot
+
+real tryAdvance :: Consumer<A> -> Boolean
+
+async tryAdvance :: Consumer<VectorSchemaRoot>, Executor -> CompletableFuture<Boolean>
+async tryAdvance :: Consumer<VectorSchemaRoot?>, Executor -> void
+async tryAdvance :: Consumer<CompletableFuture<VSR>> -> boolean
+
+streams of VSRs?
+
+flow/reactive-streams
+
+then select
+
+- case 1: select based on a single column
+- case 2: select based on multiple columns sharing a row-ids
+- case 3: select based on multiple columns with different row-ids

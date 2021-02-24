@@ -289,16 +289,10 @@
         footer-bb (.nioBuffer ipc-file-format-buffer footer-position footer-size)]
     (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
-(def ^:private try-open-reflective-access
-  (try
-    (Class/forName "java.lang.Module")
-    (eval
-     '(fn open-reflective-access [^Class from ^Class to]
-        (let [this-module (.getModule from)]
-          (when-not (.isNamed this-module)
-            (.addOpens (.getModule to) (.getName (.getPackage to)) this-module)))))
-    (catch ClassNotFoundException e
-      (fn open-reflective-access-nop [_ _]))))
+(defn- try-open-reflective-access [^Class from ^Class to]
+  (let [this-module (.getModule from)]
+    (when-not (.isNamed this-module)
+      (.addOpens (.getModule to) (.getName (.getPackage to)) this-module))))
 
 (defonce ^:private direct-byte-buffer-access
   (try-open-reflective-access ArrowBuf (class (ByteBuffer/allocateDirect 0))))

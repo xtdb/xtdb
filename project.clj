@@ -36,7 +36,7 @@
 
   :java-source-paths ["src"]
 
-  :javac-options ["-source" "8" "-target" "8"
+  :javac-options ["-source" "11" "-target" "11"
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
                   "-Werror"
