@@ -38,9 +38,10 @@
                arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
                           (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
                idx-sym 'idx
-               acc-sym 'acc]
+               acc-sym 'ac               return-type-class (resolve return-type)]
            `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
-              ~(if (.isAssignableFrom ValueVector (resolve return-type))
+              ~(if (and (instance? Class (resolve return-type))
+                        (.isAssignableFrom ValueVector (resolve return-type)))
                  `(let [~acc-sym (new ~return-type "" *allocator*)
                         value-count# (.getValueCount ~(first arg-syms))
                         ~@inits]
@@ -454,11 +455,21 @@
    (min a (.get b idx))]
   [[Double Float8Vector Double]
    (min a (.get b idx))]
+  [[bytes VarBinaryVector bytes]
+   (let [x (.get b idx)]
+     (if (neg? (Arrays/compareUnsigned a x))
+       a
+       x))]
   [[String VarCharVector String]
    (let [x (str (.getObject b idx))]
      (if (neg? (.compareTo a x))
        a
        x))]
+  [[Date TimeStampVector Date]
+   (let [x (.get b idx)]
+     (if (< (.getTime a) x)
+       a
+       (Date. x)))]
   [[Comparable ValueVector Comparable]
    (let [x ^Comparable (.getObject b idx)]
      (if (neg? (.compareTo a x))
@@ -474,10 +485,20 @@
    (max a (.get b idx))]
   [[Double Float8Vector Double]
    (max a (.get b idx))]
+  [[bytes VarBinaryVector bytes]
+   (let [x (.get b idx)]
+     (if (neg? (Arrays/compareUnsigned a x))
+       x
+       a))]
   [[String VarCharVector String]
    (let [x (str (.getObject b idx))]
      (if (neg? (.compareTo a x))
        x
+       a))]
+  [[Date TimeStampVector Date]
+   (let [x (.get b idx)]
+     (if (< (.getTime a) x)
+       (Date. x)
        a))]
   [[Comparable ValueVector Comparable]
    (let [x ^Comparable (.getObject b idx)]
