@@ -7,6 +7,7 @@
            [java.util.function DoublePredicate LongPredicate Predicate DoubleBinaryOperator LongBinaryOperator
             DoubleUnaryOperator LongUnaryOperator LongToDoubleFunction DoubleToLongFunction Function
             ToDoubleFunction ToLongFunction ToDoubleBiFunction ToLongBiFunction]
+           java.lang.reflect.Modifier
            [java.util Arrays Date]))
 
 ;; Arrow compute kernels spike, loosely based on
@@ -35,19 +36,23 @@
                arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
                           (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
                idx-sym 'idx
-               acc-sym 'acc]
+               acc-sym 'acc
+               resolved-return-type (resolve return-type)]
            `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
               ~(cond
-                 (and (instance? Class (resolve return-type))
-                      (.isAssignableFrom ValueVector (resolve return-type)))
-                 `(let [~acc-sym (new ~return-type "" *allocator*)
+                 (and (instance? Class resolved-return-type)
+                      (.isAssignableFrom ValueVector resolved-return-type))
+                 `(let [~acc-sym ~(let [mods (.getModifiers ^Class resolved-return-type)]
+                                    (when-not (or (Modifier/isAbstract mods)
+                                                  (Modifier/isInterface mods))
+                                      `(new ~return-type "" *allocator*)))
                         value-count# (.getValueCount ~(first arg-syms))
                         ~@inits]
-                    (do (.allocateNew ~acc-sym value-count#)
-                        (dotimes [~idx-sym value-count#]
-                          (.set ~acc-sym ~idx-sym ~expression))
-                        (.setValueCount ~acc-sym value-count#)
-                        ~acc-sym))
+                    (.allocateNew ~acc-sym value-count#)
+                    (dotimes [~idx-sym value-count#]
+                      (.set ~acc-sym ~idx-sym ~expression))
+                    (.setValueCount ~acc-sym value-count#)
+                    ~acc-sym)
 
                  (= 1 (count arg-types))
                  `(let [value-count# (.getValueCount ~(last arg-syms))
