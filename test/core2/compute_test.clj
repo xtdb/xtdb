@@ -4,8 +4,10 @@
   (:import [org.apache.arrow.memory BufferAllocator RootAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector BaseIntVector BaseVariableWidthVector BigIntVector BitVector ElementAddressableVector
-            FloatingPointVector Float8Vector TimeStampVector VarCharVector ValueVector]
-           java.util.Date
+            FloatingPointVector Float8Vector TimeStampVector TimeStampMilliVector VarBinaryVector VarCharVector ValueVector]
+           org.apache.arrow.vector.util.Text
+           [java.util.function DoublePredicate LongPredicate Predicate DoubleUnaryOperator LongUnaryOperator Function]
+           [java.util Arrays Date]
            clojure.lang.MapEntry))
 
 ;; Arrow compute kernels spike, loosely based on
@@ -15,18 +17,23 @@
 
 (def ^:dynamic ^BufferAllocator *allocator*)
 
-(defn ->primitive-type-sym [^Class c]
+(defn maybe-primitive-type-sym [c]
   (get '{Double double Long long} c c))
+
+(defn maybe-array-type-form [c]
+  (case c
+    bytes `(Class/forName "[B")
+    c))
 
 (defmacro def-binop [name & op-signatures]
   `(do
      (defmulti ~(with-meta name {:tag `ValueVector}) (fn [left# right#] (MapEntry/create (type left#) (type right#))))
 
      ~@(for [[left-type right-type out-type expression inits] op-signatures]
-         (let [left-sym (with-meta 'left {:tag (->primitive-type-sym left-type)})
-               right-sym (with-meta 'right {:tag (->primitive-type-sym right-type)})
+         (let [left-sym (with-meta 'left {:tag (maybe-primitive-type-sym left-type)})
+               right-sym (with-meta 'right {:tag (maybe-primitive-type-sym right-type)})
                idx-sym 'idx]
-           `(defmethod ~name [~left-type ~right-type] [~left-sym ~right-sym]
+           `(defmethod ~name [~(maybe-array-type-form left-type) ~(maybe-array-type-form right-type)] [~left-sym ~right-sym]
               (let [out# (new ~out-type "" *allocator*)
                     value-count# (.getValueCount ~left-sym)
                     ~@inits]
@@ -171,6 +178,8 @@
    [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (= (str (.getObject left idx)) right))]
+  [VarBinaryVector bytes BitVector
+   (boolean->bit (Arrays/equals (.get left idx) right))]
   [BitVector BitVector BitVector
    (boolean->bit (= (.get left idx) (.get right idx)))]
   [BitVector Boolean BitVector
@@ -198,6 +207,8 @@
    [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (not= (str (.getObject left idx)) right))]
+  [VarBinaryVector bytes BitVector
+   (boolean->bit (not (Arrays/equals (.get left idx) right)))]
   [BitVector BitVector BitVector
    (boolean->bit (not= (.get left idx) (.get right idx)))]
   [BitVector Boolean BitVector
@@ -229,6 +240,8 @@
    [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (neg? (.compareTo (str (.getObject left idx)) right)))]
+  [VarBinaryVector bytes BitVector
+   (boolean->bit (neg? (Arrays/compareUnsigned (.get left idx) right)))]
   [BitVector BitVector BitVector
    (boolean->bit (< (.get left idx) (.get right idx)))]
   [BitVector Boolean BitVector
@@ -260,6 +273,8 @@
    [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (not (pos? (.compareTo (str (.getObject left idx)) right))))]
+  [VarBinaryVector bytes BitVector
+   (boolean->bit (not (pos? (Arrays/compareUnsigned (.get left idx) right))))]
   [BitVector BitVector BitVector
    (boolean->bit (<= (.get left idx) (.get right idx)))]
   [BitVector Boolean BitVector
@@ -291,6 +306,8 @@
    [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (pos? (.compareTo (str (.getObject left idx)) right)))]
+  [VarBinaryVector bytes BitVector
+   (boolean->bit (pos? (Arrays/compareUnsigned (.get left idx) right)))]
   [BitVector BitVector BitVector
    (boolean->bit (> (.get left idx) (.get right idx)))]
   [BitVector Boolean BitVector
@@ -322,6 +339,8 @@
    [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (not (neg? (.compareTo (str (.getObject left idx)) right))))]
+  [VarBinaryVector bytes BitVector
+   (boolean->bit (not (neg? (Arrays/compareUnsigned (.get left idx) right))))]
   [BitVector BitVector BitVector
    (boolean->bit (>= (.get left idx) (.get right idx)))]
   [BitVector Boolean BitVector
@@ -338,6 +357,36 @@
 (def-binop or-op
   [BitVector BitVector BitVector
    (boolean->bit (or (= 1 (.get left idx)) (= 1 (.get right idx))))])
+
+(def-binop udf-op
+  [BaseIntVector LongPredicate BitVector
+   (boolean->bit (.test right (.getValueAsLong left idx)))]
+  [BaseIntVector DoublePredicate BitVector
+   (boolean->bit (.test right (.getValueAsLong left idx)))]
+  [FloatingPointVector LongPredicate BitVector
+   (boolean->bit (.test right (.getValueAsDouble left idx)))]
+  [FloatingPointVector DoublePredicate BitVector
+   (boolean->bit (.test right (.getValueAsDouble left idx)))]
+  [ValueVector Predicate BitVector
+   (boolean->bit (.test right (.getObject left idx)))]
+  [BaseIntVector LongUnaryOperator BigIntVector
+   (.applyAsLong right (.getValueAsLong left idx))]
+  [BaseIntVector DoubleUnaryOperator Float8Vector
+   (.applyAsDouble right (.getValueAsLong left idx))]
+  [Float8Vector LongUnaryOperator BigIntVector
+   (.applyAsLong right (.getValueAsDouble left idx))]
+  [Float8Vector DoubleUnaryOperator Float8Vector
+   (.applyAsDouble right (.getValueAsDouble left idx))]
+  [BitVector Function BitVector
+   (boolean->bit (.apply right (= 1 (.get left idx))))]
+  [TimeStampVector LongUnaryOperator TimeStampMilliVector
+   (.applyAsLong right (.get left idx))]
+  [TimeStampVector Function TimeStampMilliVector
+   (.getTime ^Date (.apply right (Date. (.get left idx))))]
+  [VarCharVector Function VarCharVector
+   (Text. (str (.apply right (str (.get left idx)))))]
+  [VarBinaryVector Function VarBinaryVector
+   ^bytes (.apply right (.get left idx))])
 
 (t/deftest can-compute-vectors
   (with-open [a (RootAllocator.)]
