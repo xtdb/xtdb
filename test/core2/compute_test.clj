@@ -6,7 +6,9 @@
            [org.apache.arrow.vector BaseIntVector BaseVariableWidthVector BigIntVector BitVector ElementAddressableVector
             FloatingPointVector Float8Vector TimeStampVector TimeStampMilliVector VarBinaryVector VarCharVector ValueVector]
            org.apache.arrow.vector.util.Text
-           [java.util.function DoublePredicate LongPredicate Predicate DoubleUnaryOperator LongUnaryOperator Function]
+           [java.util.function DoublePredicate LongPredicate Predicate
+            DoubleUnaryOperator LongUnaryOperator LongToDoubleFunction DoubleToLongFunction Function
+            ToDoubleFunction ToLongFunction]
            [java.util Arrays Date]
            clojure.lang.MapEntry))
 
@@ -358,10 +360,18 @@
    (.applyAsLong b (.getValueAsLong a idx))]
   [[BaseIntVector DoubleUnaryOperator Float8Vector]
    (.applyAsDouble b (.getValueAsLong a idx))]
+  [[BaseIntVector LongToDoubleFunction Float8Vector]
+   (.applyAsDouble b (.getValueAsLong a idx))]
+  [[ValueVector ToLongFunction BigIntVector]
+   (.applyAsLong b (.getObject a idx))]
   [[Float8Vector LongUnaryOperator BigIntVector]
    (.applyAsLong b (.getValueAsDouble a idx))]
   [[Float8Vector DoubleUnaryOperator Float8Vector]
    (.applyAsDouble b (.getValueAsDouble a idx))]
+  [[Float8Vector DoubleToLongFunction BigIntVector]
+   (.applyAsLong b (.getValueAsDouble a idx))]
+  [[ValueVector ToDoubleFunction Float8Vector]
+   (.applyAsDouble b (.getObject a idx))]
   [[BitVector Function BitVector]
    (boolean->bit (.apply b (= 1 (.get a idx))))]
   [[TimeStampVector LongUnaryOperator TimeStampMilliVector]
