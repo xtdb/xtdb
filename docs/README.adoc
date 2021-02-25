@@ -1,34 +1,30 @@
-= Building the website
+= Crux Documentation
 
-To build the website we are using [Antora](https://docs.antora.org/antora/2.3/) to build the Asciidoctor files within the main Crux repository, and then uploading the built site into S3 (used, with CloudFront, to host the website).## DependenciesTo build the website, you will need:
+We use https://docs.antora.org/antora/2.3/[Antora] to build the Crux documentation.
 
-== Install
+The full website build/deploy is available (to JUXTers) in the private https://github.com/juxt/crux-site[crux-site] repo - for more details, see the README over there.
 
-* Node/NPM
-* `npm i -g @antora/cli @antora/site-generator-default`
-* AWS CLI to deploy
+From here, though, you can build the documentation section in isolation, to check any changes.
 
-== Building
+== Install:
 
-Build the site with `./bin/build.sh`:
-* `--with-local-bundle` to use a local build of the ui-bundle (assuming you have `crux-site` checked out in the same directory as your `crux` repo)
-* `--with-blog` will build the site with the blog section (assuming, as above, you have `crux-site` checked out in the same directory as your `crux` repo)
+* Requires Node/NPM installed.
 
-It's assumed that
-* branches prefixed with `docs-v*` will be included as previous versions
-  * When you release Crux, create one of these `docs-v*` branches on `origin`, and update the version in `reference/antora.yml`
-  * To remove a version from the site, delete the branch
-* you have `https://github.com/juxt/crux` as `origin` - so that if you don't have the `docs-v*` branches locally, Antora will still find them
+== Build:
 
-== Deploying
+* `./bin/build.sh`
+* `./bin/open-local-site.sh` to open up the built version of the site in your browser.
 
-Deploy a publicly-accessible preview
+== Versions:
 
-* Run `./bin/deploy.sh`
-* By default this will deploy to `https://opencrux.com/_<whoami>/`
-* Set `OPENCRUX_PREFIX` to default to something other than `whoami`
+The documentation site includes documentation for previous releases as well as the current master branch.
+These are located by branch name convention - branches prefixed with `docs-v*` will be included.
 
-Deploy to the live site
+=== Release checklist:
 
-* Run `./bin/deploy.sh /`
-* Note that `/` implies the use of top-level domain routes
+1. Create a `docs-v<new-version>` branch
+2. Update docs/reference/antora.yml:
+  a. Delete `prerelease: indeed` and `display-version: master` lines
+  b. Update `version: master` to `version: <new-version>`
+3. Commit, push branch to the main JUXT Crux repo
+4. Head over to `crux-site` to deploy the docs.

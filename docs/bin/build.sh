@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -x
 set -e
 
 OPTS=
@@ -16,5 +15,8 @@ done
 
 (
     cd $(dirname "$0")/..
-    antora --clean --redirect-facility static --fetch $OPTS $PLAYBOOK
+    ANTORA="$(npm bin)/antora"
+    [[ -e "$ANTORA" ]] || npm install
+    $ANTORA --clean --redirect-facility static --fetch $OPTS $PLAYBOOK
+    echo "Built: file://$(pwd)/build/site/index.html"
 )
