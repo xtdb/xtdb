@@ -298,7 +298,7 @@
   [[BitVector Boolean BitVector]
    (boolean->bit (> (.get a idx) (boolean->bit b)))])
 
-(defop op
+(defop :>=
   [[BaseIntVector Double BitVector]
    (boolean->bit (>= (.getValueAsLong a idx) b))]
   [[BaseIntVector Long BitVector]
