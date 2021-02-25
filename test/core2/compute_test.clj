@@ -27,8 +27,8 @@
     bytes `(Class/forName "[B")
     c))
 
-(defmulti ^ValueVector op (fn [name & args]
-                            (vec (cons name (map type args)))))
+(defmulti op (fn [name & args]
+               (vec (cons name (map type args)))))
 
 (defmacro defop [name & op-signatures]
   `(do
@@ -37,16 +37,30 @@
                return-type (last signature)
                arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
                           (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
-               idx-sym 'idx]
+               idx-sym 'idx
+               acc-sym 'acc]
            `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
-              (let [out# (new ~return-type "" *allocator*)
-                    value-count# (.getValueCount ~(first arg-syms))
-                    ~@inits]
-                (.allocateNew out# value-count#)
-                (dotimes [~idx-sym value-count#]
-                  (.set out# ~idx-sym ~expression))
-                (.setValueCount out# value-count#)
-                out#))))))
+              ~(if (.isAssignableFrom ValueVector (resolve return-type))
+                 `(let [~acc-sym (new ~return-type "" *allocator*)
+                        value-count# (.getValueCount ~(first arg-syms))
+                        ~@inits]
+                    (do (.allocateNew ~acc-sym value-count#)
+                        (dotimes [~idx-sym value-count#]
+                          (.set ~acc-sym ~idx-sym ~expression))
+                        (.setValueCount ~acc-sym value-count#)
+                        ~acc-sym))
+                 (let [cast-acc? (and (not= (maybe-primitive-type-sym return-type) return-type)
+                                      (not= return-type (first arg-types)))
+                       acc-sym (with-meta (first arg-syms) {})]
+                   `(let [value-count# (.getValueCount ~(last arg-syms))
+                          ~@inits]
+                      (loop [~idx-sym (int 0)
+                             ~acc-sym ~(cond->> acc-sym
+                                         cast-acc? (list (maybe-primitive-type-sym return-type)))]
+                        (if (= value-count# ~idx-sym)
+                          ~acc-sym
+                          (recur (inc ~idx-sym) ~(cond->> expression
+                                                   cast-acc? (list (maybe-primitive-type-sym return-type))))))))))))))
 
 (defop :+
   [[BaseIntVector Double Float8Vector]
@@ -421,6 +435,59 @@
   [[VarBinaryVector Function VarBinaryVector]
    ^bytes (.apply b (.get a idx))])
 
+(defop :sum
+  [[Long BigIntVector Long]
+   (+ a (.get b idx))]
+  [[Double BigIntVector Long]
+   (+ a (.get b idx))]
+  [[Long Float8Vector Double]
+   (+ a (.get b idx))]
+  [[Double Float8Vector Double]
+   (+ a (.get b idx))])
+
+(defop :min
+  [[Long BigIntVector Long]
+   (min a (.get b idx))]
+  [[Double BigIntVector Long]
+   (min a (.get b idx))]
+  [[Long Float8Vector Double]
+   (min a (.get b idx))]
+  [[Double Float8Vector Double]
+   (min a (.get b idx))]
+  [[String VarCharVector String]
+   (let [x (str (.getObject b idx))]
+     (if (neg? (.compareTo a x))
+       a
+       x))]
+  [[Comparable ValueVector Comparable]
+   (let [x ^Comparable (.getObject b idx)]
+     (if (neg? (.compareTo a x))
+       a
+       x))])
+
+(defop :max
+  [[Long BigIntVector Long]
+   (max a (.get b idx))]
+  [[Double BigIntVector Long]
+   (max a (.get b idx))]
+  [[Long Float8Vector Double]
+   (max a (.get b idx))]
+  [[Double Float8Vector Double]
+   (max a (.get b idx))]
+  [[String VarCharVector String]
+   (let [x (str (.getObject b idx))]
+     (if (neg? (.compareTo a x))
+       x
+       a))]
+  [[Comparable ValueVector Comparable]
+   (let [x ^Comparable (.getObject b idx)]
+     (if (neg? (.compareTo a x))
+       x
+       a))])
+
+(defmethod op [:count ValueVector] [_ ^ValueVector a]
+  (.getValueCount a))
+
 (t/deftest can-compute-vectors
   (with-open [a (RootAllocator.)]
     (binding [*allocator* a]
@@ -436,14 +503,14 @@
                        (.setSafe 1 2.0)
                        (.setSafe 2 3.0)
                        (.setValueCount 3))
-                  is+f (op :+ is 2.0)
-                  is+i (op :+ is 2)
-                  is+fs (op :+ is fs)
-                  is+is (op :+ is is)
-                  fs+i (op :+ fs 2)
-                  fs+f (op :+ fs 2.0)
-                  fs+is (op :+ fs is)
-                  fs+fs (op :+ fs fs)]
+                  is+f ^ValueVector (op :+ is 2.0)
+                  is+i ^ValueVector (op :+ is 2)
+                  is+fs ^ValueVector (op :+ is fs)
+                  is+is ^ValueVector (op :+ is is)
+                  fs+i ^ValueVector (op :+ fs 2)
+                  fs+f ^ValueVector (op :+ fs 2.0)
+                  fs+is ^ValueVector (op :+ fs is)
+                  fs+fs ^ValueVector (op :+ fs fs)]
 
         (t/is (= [3.0 4.0 5.0] (tu/->list is+f)))
         (t/is (= [3 4 5] (tu/->list is+i)))
@@ -453,4 +520,16 @@
         (t/is (= [3.0 4.0 5.0] (tu/->list fs+i)))
         (t/is (= [3.0 4.0 5.0] (tu/->list fs+f)))
         (t/is (= [2.0 4.0 6.0] (tu/->list fs+is)))
-        (t/is (= [2.0 4.0 6.0] (tu/->list fs+fs)))))))
+        (t/is (= [2.0 4.0 6.0] (tu/->list fs+fs)))
+
+        (t/is (= 6 (op :sum 0 is)))
+        (t/is (= 6 (op :sum 0.0 is)))
+        (t/is (= 6.0 (op :sum 0 fs)))
+        (t/is (= 6.0 (op :sum 0.0 fs)))
+
+        (t/is (= 1.0 (op :min Double/MAX_VALUE fs)))
+        (t/is (= 1 (op :min Long/MAX_VALUE is)))
+        (t/is (= 3.0 (op :max Double/MIN_VALUE fs)))
+        (t/is (= 3 (op :max Long/MIN_VALUE is)))
+
+        (t/is (= 3 (op :count fs)))))))
