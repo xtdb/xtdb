@@ -54,5 +54,6 @@
         (t/is (= 1 (cc/op :min Long/MAX_VALUE is)))
         (t/is (= 3.0 (cc/op :max Double/MIN_VALUE fs)))
         (t/is (= 3 (cc/op :max Long/MIN_VALUE is)))
+        (t/is (= 3.0 (cc/op :max Long/MIN_VALUE fs)))
 
         (t/is (= 3 (cc/op :count fs)))))))
