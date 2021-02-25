@@ -25,17 +25,20 @@
     bytes `(Class/forName "[B")
     c))
 
-(defmacro def-binop [name & op-signatures]
-  `(do
-     (defmulti ~(with-meta name {:tag `ValueVector}) (fn [left# right#] (MapEntry/create (type left#) (type right#))))
+(defmulti ^ValueVector op (fn [name & args]
+                            (vec (cons name (map type args)))))
 
-     ~@(for [[left-type right-type out-type expression inits] op-signatures]
-         (let [left-sym (with-meta 'left {:tag (maybe-primitive-type-sym left-type)})
-               right-sym (with-meta 'right {:tag (maybe-primitive-type-sym right-type)})
+(defmacro defop [name & op-signatures]
+  `(do
+     ~@(for [[signature expression inits] op-signatures]
+         (let [arg-types (butlast signature)
+               return-type (last signature)
+               arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
+                          (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
                idx-sym 'idx]
-           `(defmethod ~name [~(maybe-array-type-form left-type) ~(maybe-array-type-form right-type)] [~left-sym ~right-sym]
-              (let [out# (new ~out-type "" *allocator*)
-                    value-count# (.getValueCount ~left-sym)
+           `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
+              (let [out# (new ~return-type "" *allocator*)
+                    value-count# (.getValueCount ~(first arg-syms))
                     ~@inits]
                 (.allocateNew out# value-count#)
                 (dotimes [~idx-sym value-count#]
@@ -43,350 +46,332 @@
                 (.setValueCount out# value-count#)
                 out#))))))
 
-(defmacro def-unop [name & op-signatures]
-  `(do
-     (defmulti ~(with-meta name {:tag `ValueVector}) (fn [in#] (type in#)))
+(defop :+
+  [[BaseIntVector Double Float8Vector]
+   (+ (.getValueAsLong a idx) b)]
+  [[BaseIntVector Long BigIntVector]
+   (+ (.getValueAsLong a idx) b)]
+  [[BaseIntVector BaseIntVector BigIntVector]
+   (+ (.getValueAsLong a idx)
+      (.getValueAsLong b idx))]
+  [[BaseIntVector FloatingPointVector Float8Vector]
+   (+ (.getValueAsLong a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector Double Float8Vector]
+   (+ (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector Long Float8Vector]
+   (+ (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector FloatingPointVector Float8Vector]
+   (+ (.getValueAsDouble a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector BaseIntVector Float8Vector]
+   (+ (.getValueAsDouble a idx)
+      (.getValueAsLong b idx))])
 
-     ~@(for [[in-type out-type expression] op-signatures]
-         (let [in-sym (with-meta 'in {:tag (->primitive-type-sym in-type)})
-               idx-sym 'idx]
-           `(defmethod ~name ~in-type [~in-sym]
-              (let [out# (new ~out-type "" *allocator*)
-                    value-count# (.getValueCount ~in-sym)]
-                (.allocateNew out# value-count#)
-                (dotimes [~idx-sym value-count#]
-                  (.set out# ~idx-sym ~expression))
-                (.setValueCount out# value-count#)
-                out#))))))
+(defop :-
+  [[BaseIntVector BigIntVector]
+   (- (.getValueAsLong a idx))]
+  [[FloatingPointVector Float8Vector]
+   (- (.getValueAsDouble a idx))]
+  [[BaseIntVector Double Float8Vector]
+   (- (.getValueAsLong a idx) b)]
+  [[BaseIntVector Long BigIntVector]
+   (- (.getValueAsLong a idx) b)]
+  [[BaseIntVector BaseIntVector BigIntVector]
+   (- (.getValueAsLong a idx)
+      (.getValueAsLong b idx))]
+  [[BaseIntVector FloatingPointVector Float8Vector]
+   (- (.getValueAsLong a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector Double Float8Vector]
+   (- (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector Long Float8Vector]
+   (- (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector FloatingPointVector Float8Vector]
+   (- (.getValueAsDouble a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector BaseIntVector Float8Vector]
+   (- (.getValueAsDouble a idx)
+      (.getValueAsLong b idx))])
 
-(def-binop add-op
-  [BaseIntVector Double Float8Vector
-   (+ (.getValueAsLong left idx) right)]
-  [BaseIntVector Long BigIntVector
-   (+ (.getValueAsLong left idx) right)]
-  [BaseIntVector BaseIntVector BigIntVector
-   (+ (.getValueAsLong left idx)
-      (.getValueAsLong right idx))]
-  [BaseIntVector FloatingPointVector Float8Vector
-   (+ (.getValueAsLong left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector Double Float8Vector
-   (+ (.getValueAsDouble left idx) right)]
-  [FloatingPointVector Long Float8Vector
-   (+ (.getValueAsDouble left idx) right)]
-  [FloatingPointVector FloatingPointVector Float8Vector
-   (+ (.getValueAsDouble left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector BaseIntVector Float8Vector
-   (+ (.getValueAsDouble left idx)
-      (.getValueAsLong right idx))])
+(defop :*
+  [[BaseIntVector Double Float8Vector]
+   (* (.getValueAsLong a idx) b)]
+  [[BaseIntVector Long BigIntVector]
+   (* (.getValueAsLong a idx) b)]
+  [[BaseIntVector BaseIntVector BigIntVector]
+   (* (.getValueAsLong a idx)
+      (.getValueAsLong b idx))]
+  [[BaseIntVector FloatingPointVector Float8Vector]
+   (* (.getValueAsLong a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector Double Float8Vector]
+   (* (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector Long Float8Vector]
+   (* (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector FloatingPointVector Float8Vector]
+   (* (.getValueAsDouble a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector BaseIntVector Float8Vector]
+   (* (.getValueAsDouble a idx)
+      (.getValueAsLong b idx))])
 
-(def-binop sub-op
-  [BaseIntVector Double Float8Vector
-   (- (.getValueAsLong left idx) right)]
-  [BaseIntVector Long BigIntVector
-   (- (.getValueAsLong left idx) right)]
-  [BaseIntVector BaseIntVector BigIntVector
-   (- (.getValueAsLong left idx)
-      (.getValueAsLong right idx))]
-  [BaseIntVector FloatingPointVector Float8Vector
-   (- (.getValueAsLong left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector Double Float8Vector
-   (- (.getValueAsDouble left idx) right)]
-  [FloatingPointVector Long Float8Vector
-   (- (.getValueAsDouble left idx) right)]
-  [FloatingPointVector FloatingPointVector Float8Vector
-   (- (.getValueAsDouble left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector BaseIntVector Float8Vector
-   (- (.getValueAsDouble left idx)
-      (.getValueAsLong right idx))])
-
-(def-binop mul-op
-  [BaseIntVector Double Float8Vector
-   (* (.getValueAsLong left idx) right)]
-  [BaseIntVector Long BigIntVector
-   (* (.getValueAsLong left idx) right)]
-  [BaseIntVector BaseIntVector BigIntVector
-   (* (.getValueAsLong left idx)
-      (.getValueAsLong right idx))]
-  [BaseIntVector FloatingPointVector Float8Vector
-   (* (.getValueAsLong left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector Double Float8Vector
-   (* (.getValueAsDouble left idx) right)]
-  [FloatingPointVector Long Float8Vector
-   (* (.getValueAsDouble left idx) right)]
-  [FloatingPointVector FloatingPointVector Float8Vector
-   (* (.getValueAsDouble left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector BaseIntVector Float8Vector
-   (* (.getValueAsDouble left idx)
-      (.getValueAsLong right idx))])
-
-(def-binop div-op
-  [BaseIntVector Double Float8Vector
-   (/ (.getValueAsLong left idx) right)]
-  [BaseIntVector Long BigIntVector
-   (quot (.getValueAsLong left idx) right)]
-  [BaseIntVector BaseIntVector BigIntVector
-   (quot (.getValueAsLong left idx)
-         (.getValueAsLong right idx))]
-  [BaseIntVector FloatingPointVector Float8Vector
-   (/ (.getValueAsLong left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector Double Float8Vector
-   (/ (.getValueAsDouble left idx) right)]
-  [FloatingPointVector Long Float8Vector
-   (/ (.getValueAsDouble left idx) right)]
-  [FloatingPointVector FloatingPointVector Float8Vector
-   (/ (.getValueAsDouble left idx)
-      (.getValueAsDouble right idx))]
-  [FloatingPointVector BaseIntVector Float8Vector
-   (/ (.getValueAsDouble left idx)
-      (.getValueAsLong right idx))])
-
-(def-unop neg-op
-  [BaseIntVector BigIntVector
-   (- (.getValueAsLong in idx))]
-  [FloatingPointVector Float8Vector
-   (- (.getValueAsDouble in idx))])
+(defop :/
+  [[BaseIntVector Double Float8Vector]
+   (/ (.getValueAsLong a idx) b)]
+  [[BaseIntVector Long BigIntVector]
+   (quot (.getValueAsLong a idx) b)]
+  [[BaseIntVector BaseIntVector BigIntVector]
+   (quot (.getValueAsLong a idx)
+         (.getValueAsLong b idx))]
+  [[BaseIntVector FloatingPointVector Float8Vector]
+   (/ (.getValueAsLong a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector Double Float8Vector]
+   (/ (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector Long Float8Vector]
+   (/ (.getValueAsDouble a idx) b)]
+  [[FloatingPointVector FloatingPointVector Float8Vector]
+   (/ (.getValueAsDouble a idx)
+      (.getValueAsDouble b idx))]
+  [[FloatingPointVector BaseIntVector Float8Vector]
+   (/ (.getValueAsDouble a idx)
+      (.getValueAsLong b idx))])
 
 (defmacro boolean->bit [b]
   `(if ~b 1 0))
 
-(def-binop eq-op
-  [BaseIntVector Double BitVector
-   (boolean->bit (== (.getValueAsLong left idx) right))]
-  [BaseIntVector Long BitVector
-   (boolean->bit (= (.getValueAsLong left idx) right))]
-  [BaseIntVector FloatingPointVector BitVector
-   (boolean->bit (== (.getValueAsLong left idx)
-                     (.getValueAsDouble right idx)))]
-  [FloatingPointVector Double BitVector
-   (boolean->bit (= (.getValueAsDouble left idx) right))]
-  [FloatingPointVector Long BitVector
-   (boolean->bit (== (.getValueAsDouble left idx) right))]
-  [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (= (.getDataPointer left idx left-pointer)
-                    (.getDataPointer right idx right-pointer)))
-   [left-pointer (ArrowBufPointer.)
-    right-pointer (ArrowBufPointer.)]]
-  [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (= (.getDataPointer left idx left-pointer) right))
-   [left-pointer (ArrowBufPointer.)]]
-  [VarCharVector String BitVector
-   (boolean->bit (= (str (.getObject left idx)) right))]
-  [VarBinaryVector bytes BitVector
-   (boolean->bit (Arrays/equals (.get left idx) right))]
-  [BitVector BitVector BitVector
-   (boolean->bit (= (.get left idx) (.get right idx)))]
-  [BitVector Boolean BitVector
-   (boolean->bit (= (.get left idx) (boolean->bit right)))])
+(defop :=
+  [[BaseIntVector Double BitVector]
+   (boolean->bit (== (.getValueAsLong a idx) b))]
+  [[BaseIntVector Long BitVector]
+   (boolean->bit (= (.getValueAsLong a idx) b))]
+  [[BaseIntVector FloatingPointVector BitVector]
+   (boolean->bit (== (.getValueAsLong a idx)
+                     (.getValueAsDouble b idx)))]
+  [[FloatingPointVector Double BitVector]
+   (boolean->bit (= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector Long BitVector]
+   (boolean->bit (== (.getValueAsDouble a idx) b))]
+  [[ElementAddressableVector ElementAddressableVector BitVector]
+   (boolean->bit (= (.getDataPointer a idx a-pointer)
+                    (.getDataPointer b idx b-pointer)))
+   [a-pointer (ArrowBufPointer.)
+    b-pointer (ArrowBufPointer.)]]
+  [[ElementAddressableVector ArrowBufPointer BitVector]
+   (boolean->bit (= (.getDataPointer a idx a-pointer) b))
+   [a-pointer (ArrowBufPointer.)]]
+  [[VarCharVector String BitVector]
+   (boolean->bit (= (str (.getObject a idx)) b))]
+  [[VarBinaryVector bytes BitVector]
+   (boolean->bit (Arrays/equals (.get a idx) b))]
+  [[BitVector BitVector BitVector]
+   (boolean->bit (= (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (= (.get a idx) (boolean->bit b)))])
 
-(def-binop neq-op
-  [BaseIntVector Double BitVector
-   (boolean->bit (not= (.getValueAsLong left idx) right))]
-  [BaseIntVector Long BitVector
-   (boolean->bit (not= (.getValueAsLong left idx) right))]
-  [BaseIntVector FloatingPointVector BitVector
-   (boolean->bit (not= (.getValueAsLong left idx)
-                       (.getValueAsDouble right idx)))]
-  [FloatingPointVector Double BitVector
-   (boolean->bit (not= (.getValueAsDouble left idx) right))]
-  [FloatingPointVector Long BitVector
-   (boolean->bit (not= (.getValueAsDouble left idx) right))]
-  [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (not= (.getDataPointer left idx left-pointer)
-                       (.getDataPointer right idx right-pointer)))
-   [left-pointer (ArrowBufPointer.)
-    right-pointer (ArrowBufPointer.)]]
-  [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (not= (.getDataPointer left idx left-pointer) right))
-   [left-pointer (ArrowBufPointer.)]]
-  [VarCharVector String BitVector
-   (boolean->bit (not= (str (.getObject left idx)) right))]
-  [VarBinaryVector bytes BitVector
-   (boolean->bit (not (Arrays/equals (.get left idx) right)))]
-  [BitVector BitVector BitVector
-   (boolean->bit (not= (.get left idx) (.get right idx)))]
-  [BitVector Boolean BitVector
-   (boolean->bit (not= (.get left idx) (boolean->bit right)))])
+(defop :!=
+  [[BaseIntVector Double BitVector]
+   (boolean->bit (not= (.getValueAsLong a idx) b))]
+  [[BaseIntVector Long BitVector]
+   (boolean->bit (not= (.getValueAsLong a idx) b))]
+  [[BaseIntVector FloatingPointVector BitVector]
+   (boolean->bit (not= (.getValueAsLong a idx)
+                       (.getValueAsDouble b idx)))]
+  [[FloatingPointVector Double BitVector]
+   (boolean->bit (not= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector Long BitVector]
+   (boolean->bit (not= (.getValueAsDouble a idx) b))]
+  [[ElementAddressableVector ElementAddressableVector BitVector]
+   (boolean->bit (not= (.getDataPointer a idx a-pointer)
+                       (.getDataPointer b idx b-pointer)))
+   [a-pointer (ArrowBufPointer.)
+    b-pointer (ArrowBufPointer.)]]
+  [[ElementAddressableVector ArrowBufPointer BitVector]
+   (boolean->bit (not= (.getDataPointer a idx a-pointer) b))
+   [a-pointer (ArrowBufPointer.)]]
+  [[VarCharVector String BitVector]
+   (boolean->bit (not= (str (.getObject a idx)) b))]
+  [[VarBinaryVector bytes BitVector]
+   (boolean->bit (not (Arrays/equals (.get a idx) b)))]
+  [[BitVector BitVector BitVector]
+   (boolean->bit (not= (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (not= (.get a idx) (boolean->bit b)))])
 
-(def-binop lt-op
-  [BaseIntVector Double BitVector
-   (boolean->bit (< (.getValueAsLong left idx) right))]
-  [BaseIntVector Long BitVector
-   (boolean->bit (< (.getValueAsLong left idx) right))]
-  [BaseIntVector FloatingPointVector BitVector
-   (boolean->bit (< (.getValueAsLong left idx)
-                    (.getValueAsDouble right idx)))]
-  [FloatingPointVector Double BitVector
-   (boolean->bit (< (.getValueAsDouble left idx) right))]
-  [FloatingPointVector Long BitVector
-   (boolean->bit (< (.getValueAsDouble left idx) right))]
-  [TimeStampVector Long BitVector
-   (boolean->bit (< (.get left idx) right))]
-  [TimeStampVector Date BitVector
-   (boolean->bit (< (.get left idx) (.getTime right)))]
-  [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (neg? (.compareTo (.getDataPointer left idx left-pointer)
-                                   (.getDataPointer right idx right-pointer))))
-   [left-pointer (ArrowBufPointer.)
-    right-pointer (ArrowBufPointer.)]]
-  [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (neg? (.compareTo (.getDataPointer left idx left-pointer) right)))
-   [left-pointer (ArrowBufPointer.)]]
-  [VarCharVector String BitVector
-   (boolean->bit (neg? (.compareTo (str (.getObject left idx)) right)))]
-  [VarBinaryVector bytes BitVector
-   (boolean->bit (neg? (Arrays/compareUnsigned (.get left idx) right)))]
-  [BitVector BitVector BitVector
-   (boolean->bit (< (.get left idx) (.get right idx)))]
-  [BitVector Boolean BitVector
-   (boolean->bit (< (.get left idx) (boolean->bit right)))])
+(defop :<
+  [[BaseIntVector Double BitVector]
+   (boolean->bit (< (.getValueAsLong a idx) b))]
+  [[BaseIntVector Long BitVector]
+   (boolean->bit (< (.getValueAsLong a idx) b))]
+  [[BaseIntVector FloatingPointVector BitVector]
+   (boolean->bit (< (.getValueAsLong a idx)
+                    (.getValueAsDouble b idx)))]
+  [[FloatingPointVector Double BitVector]
+   (boolean->bit (< (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector Long BitVector]
+   (boolean->bit (< (.getValueAsDouble a idx) b))]
+  [[TimeStampVector Long BitVector]
+   (boolean->bit (< (.get a idx) b))]
+  [[TimeStampVector Date BitVector]
+   (boolean->bit (< (.get a idx) (.getTime b)))]
+  [[ElementAddressableVector ElementAddressableVector BitVector]
+   (boolean->bit (neg? (.compareTo (.getDataPointer a idx a-pointer)
+                                   (.getDataPointer b idx b-pointer))))
+   [a-pointer (ArrowBufPointer.)
+    b-pointer (ArrowBufPointer.)]]
+  [[ElementAddressableVector ArrowBufPointer BitVector]
+   (boolean->bit (neg? (.compareTo (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)]]
+  [[VarCharVector String BitVector]
+   (boolean->bit (neg? (.compareTo (str (.getObject a idx)) b)))]
+  [[VarBinaryVector bytes BitVector]
+   (boolean->bit (neg? (Arrays/compareUnsigned (.get a idx) b)))]
+  [[BitVector BitVector BitVector]
+   (boolean->bit (< (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (< (.get a idx) (boolean->bit b)))])
 
-(def-binop le-op
-  [BaseIntVector Double BitVector
-   (boolean->bit (<= (.getValueAsLong left idx) right))]
-  [BaseIntVector Long BitVector
-   (boolean->bit (<= (.getValueAsLong left idx) right))]
-  [BaseIntVector FloatingPointVector BitVector
-   (boolean->bit (<= (.getValueAsLong left idx)
-                    (.getValueAsDouble right idx)))]
-  [FloatingPointVector Double BitVector
-   (boolean->bit (<= (.getValueAsDouble left idx) right))]
-  [FloatingPointVector Long BitVector
-   (boolean->bit (<= (.getValueAsDouble left idx) right))]
-  [TimeStampVector Long BitVector
-   (boolean->bit (<= (.get left idx) right))]
-  [TimeStampVector Date BitVector
-   (boolean->bit (<= (.get left idx) (.getTime right)))]
-  [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (not (pos? (.compareTo (.getDataPointer left idx left-pointer)
-                                        (.getDataPointer right idx right-pointer)))))
-   [left-pointer (ArrowBufPointer.)
-    right-pointer (ArrowBufPointer.)]]
-  [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (not (pos? (.compareTo (.getDataPointer left idx left-pointer) right))))
-   [left-pointer (ArrowBufPointer.)]]
-  [VarCharVector String BitVector
-   (boolean->bit (not (pos? (.compareTo (str (.getObject left idx)) right))))]
-  [VarBinaryVector bytes BitVector
-   (boolean->bit (not (pos? (Arrays/compareUnsigned (.get left idx) right))))]
-  [BitVector BitVector BitVector
-   (boolean->bit (<= (.get left idx) (.get right idx)))]
-  [BitVector Boolean BitVector
-   (boolean->bit (<= (.get left idx) (boolean->bit right)))])
+(defop :<=
+  [[BaseIntVector Double BitVector]
+   (boolean->bit (<= (.getValueAsLong a idx) b))]
+  [[BaseIntVector Long BitVector]
+   (boolean->bit (<= (.getValueAsLong a idx) b))]
+  [[BaseIntVector FloatingPointVector BitVector]
+   (boolean->bit (<= (.getValueAsLong a idx)
+                    (.getValueAsDouble b idx)))]
+  [[FloatingPointVector Double BitVector]
+   (boolean->bit (<= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector Long BitVector]
+   (boolean->bit (<= (.getValueAsDouble a idx) b))]
+  [[TimeStampVector Long BitVector]
+   (boolean->bit (<= (.get a idx) b))]
+  [[TimeStampVector Date BitVector]
+   (boolean->bit (<= (.get a idx) (.getTime b)))]
+  [[ElementAddressableVector ElementAddressableVector BitVector]
+   (boolean->bit (not (pos? (.compareTo (.getDataPointer a idx a-pointer)
+                                        (.getDataPointer b idx b-pointer)))))
+   [a-pointer (ArrowBufPointer.)
+    b-pointer (ArrowBufPointer.)]]
+  [[ElementAddressableVector ArrowBufPointer BitVector]
+   (boolean->bit (not (pos? (.compareTo (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)]]
+  [[VarCharVector String BitVector]
+   (boolean->bit (not (pos? (.compareTo (str (.getObject a idx)) b))))]
+  [[VarBinaryVector bytes BitVector]
+   (boolean->bit (not (pos? (Arrays/compareUnsigned (.get a idx) b))))]
+  [[BitVector BitVector BitVector]
+   (boolean->bit (<= (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (<= (.get a idx) (boolean->bit b)))])
 
-(def-binop gt-op
-  [BaseIntVector Double BitVector
-   (boolean->bit (> (.getValueAsLong left idx) right))]
-  [BaseIntVector Long BitVector
-   (boolean->bit (> (.getValueAsLong left idx) right))]
-  [BaseIntVector FloatingPointVector BitVector
-   (boolean->bit (> (.getValueAsLong left idx)
-                    (.getValueAsDouble right idx)))]
-  [FloatingPointVector Double BitVector
-   (boolean->bit (> (.getValueAsDouble left idx) right))]
-  [FloatingPointVector Long BitVector
-   (boolean->bit (> (.getValueAsDouble left idx) right))]
-  [TimeStampVector Long BitVector
-   (boolean->bit (> (.get left idx) right))]
-  [TimeStampVector Date BitVector
-   (boolean->bit (> (.get left idx) (.getTime right)))]
-  [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (pos? (.compareTo (.getDataPointer left idx left-pointer)
-                                   (.getDataPointer right idx right-pointer))))
-   [left-pointer (ArrowBufPointer.)
-    right-pointer (ArrowBufPointer.)]]
-  [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (pos? (.compareTo (.getDataPointer left idx left-pointer) right)))
-   [left-pointer (ArrowBufPointer.)]]
-  [VarCharVector String BitVector
-   (boolean->bit (pos? (.compareTo (str (.getObject left idx)) right)))]
-  [VarBinaryVector bytes BitVector
-   (boolean->bit (pos? (Arrays/compareUnsigned (.get left idx) right)))]
-  [BitVector BitVector BitVector
-   (boolean->bit (> (.get left idx) (.get right idx)))]
-  [BitVector Boolean BitVector
-   (boolean->bit (> (.get left idx) (boolean->bit right)))])
+(defop :>
+  [[BaseIntVector Double BitVector]
+   (boolean->bit (> (.getValueAsLong a idx) b))]
+  [[BaseIntVector Long BitVector]
+   (boolean->bit (> (.getValueAsLong a idx) b))]
+  [[BaseIntVector FloatingPointVector BitVector]
+   (boolean->bit (> (.getValueAsLong a idx)
+                    (.getValueAsDouble b idx)))]
+  [[FloatingPointVector Double BitVector]
+   (boolean->bit (> (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector Long BitVector]
+   (boolean->bit (> (.getValueAsDouble a idx) b))]
+  [[TimeStampVector Long BitVector]
+   (boolean->bit (> (.get a idx) b))]
+  [[TimeStampVector Date BitVector]
+   (boolean->bit (> (.get a idx) (.getTime b)))]
+  [[ElementAddressableVector ElementAddressableVector BitVector]
+   (boolean->bit (pos? (.compareTo (.getDataPointer a idx a-pointer)
+                                   (.getDataPointer b idx b-pointer))))
+   [a-pointer (ArrowBufPointer.)
+    b-pointer (ArrowBufPointer.)]]
+  [[ElementAddressableVector ArrowBufPointer BitVector]
+   (boolean->bit (pos? (.compareTo (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)]]
+  [[VarCharVector String BitVector]
+   (boolean->bit (pos? (.compareTo (str (.getObject a idx)) b)))]
+  [[VarBinaryVector bytes BitVector]
+   (boolean->bit (pos? (Arrays/compareUnsigned (.get a idx) b)))]
+  [[BitVector BitVector BitVector]
+   (boolean->bit (> (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (> (.get a idx) (boolean->bit b)))])
 
-(def-binop ge-op
-  [BaseIntVector Double BitVector
-   (boolean->bit (>= (.getValueAsLong left idx) right))]
-  [BaseIntVector Long BitVector
-   (boolean->bit (>= (.getValueAsLong left idx) right))]
-  [BaseIntVector FloatingPointVector BitVector
-   (boolean->bit (>= (.getValueAsLong left idx)
-                    (.getValueAsDouble right idx)))]
-  [FloatingPointVector Double BitVector
-   (boolean->bit (>= (.getValueAsDouble left idx) right))]
-  [FloatingPointVector Long BitVector
-   (boolean->bit (>= (.getValueAsDouble left idx) right))]
-  [TimeStampVector Long BitVector
-   (boolean->bit (>= (.get left idx) right))]
-  [TimeStampVector Date BitVector
-   (boolean->bit (>= (.get left idx) (.getTime right)))]
-  [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (not (neg? (.compareTo (.getDataPointer left idx left-pointer)
-                                        (.getDataPointer right idx right-pointer)))))
-   [left-pointer (ArrowBufPointer.)
-    right-pointer (ArrowBufPointer.)]]
-  [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (not (neg? (.compareTo (.getDataPointer left idx left-pointer) right))))
-   [left-pointer (ArrowBufPointer.)]]
-  [VarCharVector String BitVector
-   (boolean->bit (not (neg? (.compareTo (str (.getObject left idx)) right))))]
-  [VarBinaryVector bytes BitVector
-   (boolean->bit (not (neg? (Arrays/compareUnsigned (.get left idx) right))))]
-  [BitVector BitVector BitVector
-   (boolean->bit (>= (.get left idx) (.get right idx)))]
-  [BitVector Boolean BitVector
-   (boolean->bit (>= (.get left idx) (boolean->bit right)))])
+(defop op
+  [[BaseIntVector Double BitVector]
+   (boolean->bit (>= (.getValueAsLong a idx) b))]
+  [[BaseIntVector Long BitVector]
+   (boolean->bit (>= (.getValueAsLong a idx) b))]
+  [[BaseIntVector FloatingPointVector BitVector]
+   (boolean->bit (>= (.getValueAsLong a idx)
+                    (.getValueAsDouble b idx)))]
+  [[FloatingPointVector Double BitVector]
+   (boolean->bit (>= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector Long BitVector]
+   (boolean->bit (>= (.getValueAsDouble a idx) b))]
+  [[TimeStampVector Long BitVector]
+   (boolean->bit (>= (.get a idx) b))]
+  [[TimeStampVector Date BitVector]
+   (boolean->bit (>= (.get a idx) (.getTime b)))]
+  [[ElementAddressableVector ElementAddressableVector BitVector]
+   (boolean->bit (not (neg? (.compareTo (.getDataPointer a idx a-pointer)
+                                        (.getDataPointer b idx b-pointer)))))
+   [a-pointer (ArrowBufPointer.)
+    b-pointer (ArrowBufPointer.)]]
+  [[ElementAddressableVector ArrowBufPointer BitVector]
+   (boolean->bit (not (neg? (.compareTo (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)]]
+  [[VarCharVector String BitVector]
+   (boolean->bit (not (neg? (.compareTo (str (.getObject a idx)) b))))]
+  [[VarBinaryVector bytes BitVector]
+   (boolean->bit (not (neg? (Arrays/compareUnsigned (.get a idx) b))))]
+  [[BitVector BitVector BitVector]
+   (boolean->bit (>= (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (>= (.get a idx) (boolean->bit b)))])
 
-(def-unop not-op
-  [BitVector BitVector
-   (if (= 1 (.get in idx)) 0 1)])
+(defop :not
+  [[BitVector BitVector]
+   (if (= 1 (.get a idx)) 0 1)])
 
-(def-binop and-op
-  [BitVector BitVector BitVector
-   (boolean->bit (= 1 (.get left idx) (.get right idx)))])
+(defop :and
+  [[BitVector BitVector BitVector]
+   (boolean->bit (= 1 (.get a idx) (.get b idx)))])
 
-(def-binop or-op
-  [BitVector BitVector BitVector
-   (boolean->bit (or (= 1 (.get left idx)) (= 1 (.get right idx))))])
+(defop :or
+  [[BitVector BitVector BitVector]
+   (boolean->bit (or (= 1 (.get a idx)) (= 1 (.get b idx))))])
 
-(def-binop udf-op
-  [BaseIntVector LongPredicate BitVector
-   (boolean->bit (.test right (.getValueAsLong left idx)))]
-  [BaseIntVector DoublePredicate BitVector
-   (boolean->bit (.test right (.getValueAsLong left idx)))]
-  [FloatingPointVector LongPredicate BitVector
-   (boolean->bit (.test right (.getValueAsDouble left idx)))]
-  [FloatingPointVector DoublePredicate BitVector
-   (boolean->bit (.test right (.getValueAsDouble left idx)))]
-  [ValueVector Predicate BitVector
-   (boolean->bit (.test right (.getObject left idx)))]
-  [BaseIntVector LongUnaryOperator BigIntVector
-   (.applyAsLong right (.getValueAsLong left idx))]
-  [BaseIntVector DoubleUnaryOperator Float8Vector
-   (.applyAsDouble right (.getValueAsLong left idx))]
-  [Float8Vector LongUnaryOperator BigIntVector
-   (.applyAsLong right (.getValueAsDouble left idx))]
-  [Float8Vector DoubleUnaryOperator Float8Vector
-   (.applyAsDouble right (.getValueAsDouble left idx))]
-  [BitVector Function BitVector
-   (boolean->bit (.apply right (= 1 (.get left idx))))]
-  [TimeStampVector LongUnaryOperator TimeStampMilliVector
-   (.applyAsLong right (.get left idx))]
-  [TimeStampVector Function TimeStampMilliVector
-   (.getTime ^Date (.apply right (Date. (.get left idx))))]
-  [VarCharVector Function VarCharVector
-   (Text. (str (.apply right (str (.get left idx)))))]
-  [VarBinaryVector Function VarBinaryVector
-   ^bytes (.apply right (.get left idx))])
+(defop :udf
+  [[BaseIntVector LongPredicate BitVector]
+   (boolean->bit (.test b (.getValueAsLong a idx)))]
+  [[BaseIntVector DoublePredicate BitVector]
+   (boolean->bit (.test b (.getValueAsLong a idx)))]
+  [[FloatingPointVector LongPredicate BitVector]
+   (boolean->bit (.test b (.getValueAsDouble a idx)))]
+  [[FloatingPointVector DoublePredicate BitVector]
+   (boolean->bit (.test b (.getValueAsDouble a idx)))]
+  [[ValueVector Predicate BitVector]
+   (boolean->bit (.test b (.getObject a idx)))]
+  [[BaseIntVector LongUnaryOperator BigIntVector]
+   (.applyAsLong b (.getValueAsLong a idx))]
+  [[BaseIntVector DoubleUnaryOperator Float8Vector]
+   (.applyAsDouble b (.getValueAsLong a idx))]
+  [[Float8Vector LongUnaryOperator BigIntVector]
+   (.applyAsLong b (.getValueAsDouble a idx))]
+  [[Float8Vector DoubleUnaryOperator Float8Vector]
+   (.applyAsDouble b (.getValueAsDouble a idx))]
+  [[BitVector Function BitVector]
+   (boolean->bit (.apply b (= 1 (.get a idx))))]
+  [[TimeStampVector LongUnaryOperator TimeStampMilliVector]
+   (.applyAsLong b (.get a idx))]
+  [[TimeStampVector Function TimeStampMilliVector]
+   (.getTime ^Date (.apply b (Date. (.get a idx))))]
+  [[VarCharVector Function VarCharVector]
+   (Text. (str (.apply b (str (.get a idx)))))]
+  [[VarBinaryVector Function VarBinaryVector]
+   ^bytes (.apply b (.get a idx))])
 
 (t/deftest can-compute-vectors
   (with-open [a (RootAllocator.)]
@@ -403,14 +388,14 @@
                        (.setSafe 1 2.0)
                        (.setSafe 2 3.0)
                        (.setValueCount 3))
-                  is+f (add-op is 2.0)
-                  is+i (add-op is 2)
-                  is+fs (add-op is fs)
-                  is+is (add-op is is)
-                  fs+i (add-op fs 2)
-                  fs+f (add-op fs 2.0)
-                  fs+is (add-op fs is)
-                  fs+fs (add-op fs fs)]
+                  is+f (op :+ is 2.0)
+                  is+i (op :+ is 2)
+                  is+fs (op :+ is fs)
+                  is+is (op :+ is is)
+                  fs+i (op :+ fs 2)
+                  fs+f (op :+ fs 2.0)
+                  fs+is (op :+ fs is)
+                  fs+fs (op :+ fs fs)]
 
         (t/is (= [3.0 4.0 5.0] (tu/->list is+f)))
         (t/is (= [3 4 5] (tu/->list is+i)))
