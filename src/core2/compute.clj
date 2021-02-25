@@ -606,3 +606,12 @@
 
 (defmethod op [:avg FloatingPointVector] [_ ^FloatingPointVector a]
   (/ ^double (op :sum a) ^long (op :count a)))
+
+(defmethod op [:filter ValueVector BitVector] [_ ^ValueVector a ^BitVector b]
+  (let [out (.createVector (.getField a) *allocator*)]
+    (dotimes [n (.getValueCount a)]
+      (when (= 1 (.get b n))
+        (let [value-count (.getValueCount out)]
+          (.copyFromSafe out n value-count a)
+          (.setValueCount out (inc value-count)))))
+    out))
