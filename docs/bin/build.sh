@@ -10,9 +10,6 @@ while [[ "$#" -gt 0 ]]; do
         --with-local-bundle)
             OPTS+=" --ui-bundle-url=../../crux-site/build/ui-bundle.zip"
             shift;;
-        --with-blog)
-            PLAYBOOK="antora-playbook-blog.yml"
-            shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
