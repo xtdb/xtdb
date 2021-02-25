@@ -6,9 +6,9 @@
            [org.apache.arrow.vector BaseIntVector BaseVariableWidthVector BigIntVector BitVector ElementAddressableVector
             FloatingPointVector Float8Vector TimeStampVector TimeStampMilliVector VarBinaryVector VarCharVector ValueVector]
            org.apache.arrow.vector.util.Text
-           [java.util.function DoublePredicate LongPredicate Predicate
+           [java.util.function DoublePredicate LongPredicate Predicate DoubleBinaryOperator LongBinaryOperator
             DoubleUnaryOperator LongUnaryOperator LongToDoubleFunction DoubleToLongFunction Function
-            ToDoubleFunction ToLongFunction]
+            ToDoubleFunction ToLongFunction ToDoubleBiFunction ToLongBiFunction]
            [java.util Arrays Date]
            clojure.lang.MapEntry))
 
@@ -241,7 +241,7 @@
    (boolean->bit (<= (.getValueAsLong a idx) b))]
   [[BaseIntVector FloatingPointVector BitVector]
    (boolean->bit (<= (.getValueAsLong a idx)
-                    (.getValueAsDouble b idx)))]
+                     (.getValueAsDouble b idx)))]
   [[FloatingPointVector Double BitVector]
    (boolean->bit (<= (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
@@ -362,16 +362,28 @@
    (.applyAsDouble b (.getValueAsLong a idx))]
   [[BaseIntVector LongToDoubleFunction Float8Vector]
    (.applyAsDouble b (.getValueAsLong a idx))]
+  [[BaseIntVector BaseIntVector LongBinaryOperator BigIntVector]
+   (.applyAsLong c (.getValueAsLong a idx) (.getValueAsLong b idx))]
+  [[BaseIntVector BaseIntVector DoubleBinaryOperator Float8Vector]
+   (.applyAsDouble c (.getValueAsLong a idx) (.getValueAsLong b idx))]
   [[ValueVector ToLongFunction BigIntVector]
    (.applyAsLong b (.getObject a idx))]
-  [[Float8Vector LongUnaryOperator BigIntVector]
+  [[ValueVector ValueVector ToLongBiFunction BigIntVector]
+   (.applyAsLong c (.getObject a idx) (.getObject b idx))]
+  [[FloatingPointVector LongUnaryOperator BigIntVector]
    (.applyAsLong b (.getValueAsDouble a idx))]
-  [[Float8Vector DoubleUnaryOperator Float8Vector]
+  [[FloatingPointVector DoubleUnaryOperator Float8Vector]
    (.applyAsDouble b (.getValueAsDouble a idx))]
-  [[Float8Vector DoubleToLongFunction BigIntVector]
+  [[FloatingPointVector DoubleToLongFunction BigIntVector]
    (.applyAsLong b (.getValueAsDouble a idx))]
+  [[FloatingPointVector FloatingPointVector LongBinaryOperator BigIntVector]
+   (.applyAsLong c (.getValueAsDouble a idx) (.getValueAsDouble b idx))]
+  [[FloatingPointVector FloatingPointVector DoubleBinaryOperator Float8Vector]
+   (.applyAsDouble c (.getValueAsDouble a idx) (.getValueAsDouble b idx))]
   [[ValueVector ToDoubleFunction Float8Vector]
    (.applyAsDouble b (.getObject a idx))]
+  [[ValueVector ValueVector ToDoubleBiFunction Float8Vector]
+   (.applyAsDouble c (.getObject a idx) (.getObject b idx))]
   [[BitVector Function BitVector]
    (boolean->bit (.apply b (= 1 (.get a idx))))]
   [[TimeStampVector LongUnaryOperator TimeStampMilliVector]
