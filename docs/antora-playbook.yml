@@ -1,27 +1,9 @@
 site:
   title: Crux
-  start_page: main::index.adoc
-  url: https://opencrux.com
+  start_page: reference::index.adoc
+  url: https://opencrux.com/
 content:
   sources:
-    - url: ../
-      start_path: docs/main
-      branches: HEAD
-    - url: ../
-      start_path: docs/training
-      branches: HEAD
-    - url: ../
-      start_path: docs/support
-      branches: HEAD
-    - url: ../
-      start_path: docs/about
-      branches: HEAD
-    - url: ../
-      start_path: docs/community
-      branches: HEAD
-    - url: ../
-      start_path: docs/tutorials
-      branches: HEAD
     - url: ../
       start_path: docs/reference
       branches:
