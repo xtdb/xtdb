@@ -22,13 +22,14 @@
   `(do
      (defmulti ~(with-meta name {:tag `ValueVector}) (fn [left# right#] (MapEntry/create (type left#) (type right#))))
 
-     ~@(for [[left-type right-type out-type expression] op-signatures]
+     ~@(for [[left-type right-type out-type expression inits] op-signatures]
          (let [left-sym (with-meta 'left {:tag (->primitive-type-sym left-type)})
                right-sym (with-meta 'right {:tag (->primitive-type-sym right-type)})
                idx-sym 'idx]
            `(defmethod ~name [~left-type ~right-type] [~left-sym ~right-sym]
               (let [out# (new ~out-type "" *allocator*)
-                    value-count# (.getValueCount ~left-sym)]
+                    value-count# (.getValueCount ~left-sym)
+                    ~@inits]
                 (.allocateNew out# value-count#)
                 (dotimes [~idx-sym value-count#]
                   (.set out# ~idx-sym ~expression))
@@ -161,10 +162,13 @@
   [FloatingPointVector Long BitVector
    (boolean->bit (== (.getValueAsDouble left idx) right))]
   [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (= (.getDataPointer left idx)
-                    (.getDataPointer right idx)))]
+   (boolean->bit (= (.getDataPointer left idx left-pointer)
+                    (.getDataPointer right idx right-pointer)))
+   [left-pointer (ArrowBufPointer.)
+    right-pointer (ArrowBufPointer.)]]
   [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (= (.getDataPointer left idx) right))]
+   (boolean->bit (= (.getDataPointer left idx left-pointer) right))
+   [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (= (str (.getObject left idx)) right))]
   [BitVector BitVector BitVector
@@ -185,10 +189,13 @@
   [FloatingPointVector Long BitVector
    (boolean->bit (not= (.getValueAsDouble left idx) right))]
   [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (not= (.getDataPointer left idx)
-                       (.getDataPointer right idx)))]
+   (boolean->bit (not= (.getDataPointer left idx left-pointer)
+                       (.getDataPointer right idx right-pointer)))
+   [left-pointer (ArrowBufPointer.)
+    right-pointer (ArrowBufPointer.)]]
   [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (not= (.getDataPointer left idx) right))]
+   (boolean->bit (not= (.getDataPointer left idx left-pointer) right))
+   [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (not= (str (.getObject left idx)) right))]
   [BitVector BitVector BitVector
@@ -213,10 +220,13 @@
   [TimeStampVector Date BitVector
    (boolean->bit (< (.get left idx) (.getTime right)))]
   [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (neg? (.compareTo (.getDataPointer left idx)
-                                   (.getDataPointer right idx))))]
+   (boolean->bit (neg? (.compareTo (.getDataPointer left idx left-pointer)
+                                   (.getDataPointer right idx right-pointer))))
+   [left-pointer (ArrowBufPointer.)
+    right-pointer (ArrowBufPointer.)]]
   [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (neg? (.compareTo (.getDataPointer left idx) right)))]
+   (boolean->bit (neg? (.compareTo (.getDataPointer left idx left-pointer) right)))
+   [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (neg? (.compareTo (str (.getObject left idx)) right)))]
   [BitVector BitVector BitVector
@@ -241,10 +251,13 @@
   [TimeStampVector Date BitVector
    (boolean->bit (<= (.get left idx) (.getTime right)))]
   [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (not (pos? (.compareTo (.getDataPointer left idx)
-                                        (.getDataPointer right idx)))))]
+   (boolean->bit (not (pos? (.compareTo (.getDataPointer left idx left-pointer)
+                                        (.getDataPointer right idx right-pointer)))))
+   [left-pointer (ArrowBufPointer.)
+    right-pointer (ArrowBufPointer.)]]
   [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (not (pos? (.compareTo (.getDataPointer left idx) right))))]
+   (boolean->bit (not (pos? (.compareTo (.getDataPointer left idx left-pointer) right))))
+   [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (not (pos? (.compareTo (str (.getObject left idx)) right))))]
   [BitVector BitVector BitVector
@@ -269,10 +282,13 @@
   [TimeStampVector Date BitVector
    (boolean->bit (> (.get left idx) (.getTime right)))]
   [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (pos? (.compareTo (.getDataPointer left idx)
-                                   (.getDataPointer right idx))))]
+   (boolean->bit (pos? (.compareTo (.getDataPointer left idx left-pointer)
+                                   (.getDataPointer right idx right-pointer))))
+   [left-pointer (ArrowBufPointer.)
+    right-pointer (ArrowBufPointer.)]]
   [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (pos? (.compareTo (.getDataPointer left idx) right)))]
+   (boolean->bit (pos? (.compareTo (.getDataPointer left idx left-pointer) right)))
+   [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (pos? (.compareTo (str (.getObject left idx)) right)))]
   [BitVector BitVector BitVector
@@ -297,10 +313,13 @@
   [TimeStampVector Date BitVector
    (boolean->bit (>= (.get left idx) (.getTime right)))]
   [ElementAddressableVector ElementAddressableVector BitVector
-   (boolean->bit (not (neg? (.compareTo (.getDataPointer left idx)
-                                        (.getDataPointer right idx)))))]
+   (boolean->bit (not (neg? (.compareTo (.getDataPointer left idx left-pointer)
+                                        (.getDataPointer right idx right-pointer)))))
+   [left-pointer (ArrowBufPointer.)
+    right-pointer (ArrowBufPointer.)]]
   [ElementAddressableVector ArrowBufPointer BitVector
-   (boolean->bit (not (neg? (.compareTo (.getDataPointer left idx) right))))]
+   (boolean->bit (not (neg? (.compareTo (.getDataPointer left idx left-pointer) right))))
+   [left-pointer (ArrowBufPointer.)]]
   [VarCharVector String BitVector
    (boolean->bit (not (neg? (.compareTo (str (.getObject left idx)) right))))]
   [BitVector BitVector BitVector
