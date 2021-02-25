@@ -1,0 +1,10 @@
+{
+  "name": "crux-docs",
+  "version": "1.0.0",
+  "description": "Crux Documentation",
+  "author": "JUXT",
+  "dependencies": {
+    "@antora/cli": "^2.3.4",
+    "@antora/site-generator-default": "^2.3.4"
+  }
+}
