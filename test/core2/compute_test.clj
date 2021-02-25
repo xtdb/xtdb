@@ -155,6 +155,9 @@
    (boolean->bit (= (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
    (boolean->bit (== (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector BaseIntVector BitVector]
+   (boolean->bit (== (.getValueAsDouble a idx)
+                     (.getValueAsLong b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (= (.getDataPointer a idx a-pointer)
                     (.getDataPointer b idx b-pointer)))
@@ -184,6 +187,9 @@
    (boolean->bit (not= (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
    (boolean->bit (not= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector BaseIntVector BitVector]
+   (boolean->bit (not= (.getValueAsDouble a idx)
+                       (.getValueAsLong b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (not= (.getDataPointer a idx a-pointer)
                        (.getDataPointer b idx b-pointer)))
@@ -213,10 +219,15 @@
    (boolean->bit (< (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
    (boolean->bit (< (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector BaseIntVector BitVector]
+   (boolean->bit (< (.getValueAsDouble a idx)
+                    (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (< (.get a idx) b))]
   [[TimeStampVector Date BitVector]
    (boolean->bit (< (.get a idx) (.getTime b)))]
+  [[TimeStampVector TimeStampVector BitVector]
+   (boolean->bit (< (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (neg? (.compareTo (.getDataPointer a idx a-pointer)
                                    (.getDataPointer b idx b-pointer))))
@@ -246,10 +257,15 @@
    (boolean->bit (<= (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
    (boolean->bit (<= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector BaseIntVector BitVector]
+   (boolean->bit (<= (.getValueAsDouble a idx)
+                     (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (<= (.get a idx) b))]
   [[TimeStampVector Date BitVector]
    (boolean->bit (<= (.get a idx) (.getTime b)))]
+  [[TimeStampVector TimeStampVector BitVector]
+   (boolean->bit (<= (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (not (pos? (.compareTo (.getDataPointer a idx a-pointer)
                                         (.getDataPointer b idx b-pointer)))))
@@ -279,10 +295,15 @@
    (boolean->bit (> (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
    (boolean->bit (> (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector BaseIntVector BitVector]
+   (boolean->bit (> (.getValueAsDouble a idx)
+                    (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (> (.get a idx) b))]
   [[TimeStampVector Date BitVector]
    (boolean->bit (> (.get a idx) (.getTime b)))]
+  [[TimeStampVector TimeStampVector BitVector]
+   (boolean->bit (> (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (pos? (.compareTo (.getDataPointer a idx a-pointer)
                                    (.getDataPointer b idx b-pointer))))
@@ -312,10 +333,15 @@
    (boolean->bit (>= (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
    (boolean->bit (>= (.getValueAsDouble a idx) b))]
+  [[FloatingPointVector BaseIntVector BitVector]
+   (boolean->bit (>= (.getValueAsDouble a idx)
+                     (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (>= (.get a idx) b))]
   [[TimeStampVector Date BitVector]
    (boolean->bit (>= (.get a idx) (.getTime b)))]
+  [[TimeStampVector TimeStampVector BitVector]
+   (boolean->bit (>= (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (not (neg? (.compareTo (.getDataPointer a idx a-pointer)
                                         (.getDataPointer b idx b-pointer)))))
