@@ -38,10 +38,11 @@
                arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
                           (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
                idx-sym 'idx
-               acc-sym 'ac               return-type-class (resolve return-type)]
+               acc-sym 'acc]
            `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
-              ~(if (and (instance? Class (resolve return-type))
-                        (.isAssignableFrom ValueVector (resolve return-type)))
+              ~(cond
+                 (and (instance? Class (resolve return-type))
+                      (.isAssignableFrom ValueVector (resolve return-type)))
                  `(let [~acc-sym (new ~return-type "" *allocator*)
                         value-count# (.getValueCount ~(first arg-syms))
                         ~@inits]
@@ -50,6 +51,18 @@
                           (.set ~acc-sym ~idx-sym ~expression))
                         (.setValueCount ~acc-sym value-count#)
                         ~acc-sym))
+
+                 (= 1 (count arg-types))
+                 `(let [value-count# (.getValueCount ~(last arg-syms))
+                        ~@inits]
+                    (loop [~idx-sym (int 0)
+                           ~acc-sym ~expression]
+                      (let [~idx-sym (inc ~idx-sym)]
+                        (if (= value-count# ~idx-sym)
+                          ~acc-sym
+                          (recur ~idx-sym ~expression)))))
+
+                 :else
                  (let [cast-acc? (and (not= (maybe-primitive-type-sym return-type) return-type)
                                       (not= return-type (first arg-types)))
                        acc-sym (with-meta (first arg-syms) {})]
@@ -437,39 +450,79 @@
    ^bytes (.apply b (.get a idx))])
 
 (defop :sum
-  [[Long BigIntVector Long]
-   (+ a (.get b idx))]
-  [[Double BigIntVector Long]
-   (+ a (.get b idx))]
-  [[Long Float8Vector Double]
-   (+ a (.get b idx))]
-  [[Double Float8Vector Double]
-   (+ a (.get b idx))])
+  [[BaseIntVector Long]
+   (+ acc (.getValueAsLong a idx))
+   [acc 0]]
+  [[FloatingPointVector Double]
+   (+ acc (.getValueAsDouble a idx))
+   [acc 0.0]]
+  [[Long BaseIntVector Long]
+   (+ a (.getValueAsLong b idx))]
+  [[Double BaseIntVector Long]
+   (+ a (.getValueAsLong b idx))]
+  [[Long FloatingPointVector Double]
+   (+ a (.getValueAsDouble b idx))]
+  [[Double FloatingPointVector Double]
+   (+ a (.getValueAsDouble b idx))])
 
 (defop :min
-  [[Long BigIntVector Long]
-   (min a (.get b idx))]
-  [[Double BigIntVector Long]
-   (min a (.get b idx))]
-  [[Long Float8Vector Double]
-   (min a (.get b idx))]
-  [[Double Float8Vector Double]
-   (min a (.get b idx))]
+  [[BaseIntVector Long]
+   (min acc (.getValueAsLong a idx))
+   [acc Long/MAX_VALUE]]
+  [[FloatingPointVector Double]
+   (min acc (.getValueAsDouble a idx))
+   [acc Double/MAX_VALUE]]
+  [[Long BaseIntVector Long]
+   (min a (.getValueAsLong b idx))]
+  [[Double BaseIntVector Long]
+   (min a (.getValueAsLong b idx))]
+  [[Long FloatingPointVector Double]
+   (min a (.getValueAsDouble b idx))]
+  [[Double FloatingPointVector Double]
+   (min a (.getValueAsDouble b idx))]
+  [[VarBinaryVector bytes]
+   (let [x (.get a idx)]
+     (cond
+       (nil? acc) x
+       (neg? (Arrays/compareUnsigned acc x)) acc
+       :else x))
+   [^bytes acc nil]]
   [[bytes VarBinaryVector bytes]
    (let [x (.get b idx)]
      (if (neg? (Arrays/compareUnsigned a x))
        a
        x))]
+  [[VarCharVector String]
+   (let [x (str (.getObject a idx))]
+     (cond
+       (nil? acc) x
+       (neg? (.compareTo acc x)) acc
+       :else x))
+   [^String acc nil]]
   [[String VarCharVector String]
    (let [x (str (.getObject b idx))]
      (if (neg? (.compareTo a x))
        a
        x))]
+  [[TimeStampVector Date]
+   (let [x (.get a idx)]
+     (cond
+       (nil? acc) (Date. x)
+       (< (.getTime acc) x) acc
+       :else (Date. x)))
+   [^Date acc nil]]
   [[Date TimeStampVector Date]
    (let [x (.get b idx)]
      (if (< (.getTime a) x)
        a
        (Date. x)))]
+  [[ValueVector Comparable]
+   (let [x ^Comparable (.getObject a idx)]
+     (cond
+       (nil? acc) x
+       (neg? (.compareTo acc x)) acc
+       :else x))
+   [^Comparable acc nil]]
   [[Comparable ValueVector Comparable]
    (let [x ^Comparable (.getObject b idx)]
      (if (neg? (.compareTo a x))
@@ -477,29 +530,63 @@
        x))])
 
 (defop :max
-  [[Long BigIntVector Long]
-   (max a (.get b idx))]
-  [[Double BigIntVector Long]
-   (max a (.get b idx))]
-  [[Long Float8Vector Double]
-   (max a (.get b idx))]
-  [[Double Float8Vector Double]
-   (max a (.get b idx))]
+  [[BaseIntVector Long]
+   (max acc (.getValueAsLong a idx))
+   [acc Long/MIN_VALUE]]
+  [[FloatingPointVector Double]
+   (max acc (.getValueAsDouble a idx))
+   [acc Double/MIN_VALUE]]
+  [[Long BaseIntVector Long]
+   (max a (.getValueAsLong b idx))]
+  [[Double BaseIntVector Long]
+   (max a (.getValueAsLong b idx))]
+  [[Long FloatingPointVector Double]
+   (max a (.getValueAsDouble b idx))]
+  [[Double FloatingPointVector Double]
+   (max a (.getValueAsDouble b idx))]
+  [[VarBinaryVector bytes]
+   (let [x (.get a idx)]
+     (cond
+       (nil? acc) x
+       (neg? (Arrays/compareUnsigned acc x)) x
+       :else acc))
+   [^bytes acc nil]]
   [[bytes VarBinaryVector bytes]
    (let [x (.get b idx)]
      (if (neg? (Arrays/compareUnsigned a x))
        x
        a))]
+  [[VarCharVector String]
+   (let [x (str (.getObject a idx))]
+     (cond
+       (nil? acc) x
+       (neg? (.compareTo acc x)) x
+       :else acc))
+   [^String acc nil]]
   [[String VarCharVector String]
    (let [x (str (.getObject b idx))]
      (if (neg? (.compareTo a x))
        x
        a))]
+  [[TimeStampVector Date]
+   (let [x (.get a idx)]
+     (cond
+       (nil? acc) (Date. x)
+       (< (.getTime acc) x) (Date. x)
+       :else acc))
+   [^Date acc nil]]
   [[Date TimeStampVector Date]
    (let [x (.get b idx)]
      (if (< (.getTime a) x)
        (Date. x)
        a))]
+  [[ValueVector Comparable]
+   (let [x ^Comparable (.getObject a idx)]
+     (cond
+       (nil? acc) x
+       (neg? (.compareTo acc x)) x
+       :else acc))
+   [^Comparable acc nil]]
   [[Comparable ValueVector Comparable]
    (let [x ^Comparable (.getObject b idx)]
      (if (neg? (.compareTo a x))
@@ -508,6 +595,10 @@
 
 (defmethod op [:count ValueVector] [_ ^ValueVector a]
   (.getValueCount a))
+
+(defmethod op [:count Long ValueVector] [_ ^long a ^ValueVector b]
+  (+ a (.getValueCount b)))
+
 
 (t/deftest can-compute-vectors
   (with-open [a (RootAllocator.)]
@@ -543,10 +634,16 @@
         (t/is (= [2.0 4.0 6.0] (tu/->list fs+is)))
         (t/is (= [2.0 4.0 6.0] (tu/->list fs+fs)))
 
+        (t/is (= 6 (op :sum is)))
         (t/is (= 6 (op :sum 0 is)))
         (t/is (= 6 (op :sum 0.0 is)))
         (t/is (= 6.0 (op :sum 0 fs)))
         (t/is (= 6.0 (op :sum 0.0 fs)))
+
+        (t/is (= 1.0 (op :min fs)))
+        (t/is (= 1 (op :min is)))
+        (t/is (= 3.0 (op :max fs)))
+        (t/is (= 3 (op :max is)))
 
         (t/is (= 1.0 (op :min Double/MAX_VALUE fs)))
         (t/is (= 1 (op :min Long/MAX_VALUE is)))
