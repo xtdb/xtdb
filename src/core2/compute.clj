@@ -17,10 +17,10 @@
 
 (def ^:dynamic ^BufferAllocator *allocator*)
 
-(defn maybe-primitive-type-sym [c]
+(defn- maybe-primitive-type-sym [c]
   (get '{Double double Long long} c c))
 
-(defn maybe-array-type-form [c]
+(defn- maybe-array-type-form [c]
   (case c
     bytes `(Class/forName "[B")
     c))
@@ -600,3 +600,9 @@
 
 (defmethod op [:count Long ValueVector] [_ ^long a ^ValueVector b]
   (+ a (.getValueCount b)))
+
+(defmethod op [:avg BaseIntVector] [_ ^BaseIntVector a]
+  (double (/ ^long (op :sum a) ^long (op :count a))))
+
+(defmethod op [:avg FloatingPointVector] [_ ^FloatingPointVector a]
+  (/ ^double (op :sum a) ^long (op :count a)))

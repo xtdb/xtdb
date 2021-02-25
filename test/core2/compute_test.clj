@@ -50,6 +50,9 @@
         (t/is (= 3.0 (cc/op :max fs)))
         (t/is (= 3 (cc/op :max is)))
 
+        (t/is (= 2.0 (cc/op :avg is)))
+        (t/is (= 2.0 (cc/op :avg fs)))
+
         (t/is (= 1.0 (cc/op :min Double/MAX_VALUE fs)))
         (t/is (= 1 (cc/op :min Long/MAX_VALUE is)))
         (t/is (= 3.0 (cc/op :max Double/MIN_VALUE fs)))
