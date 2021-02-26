@@ -11,7 +11,7 @@
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.memory :as mem]
-            [crux.eql-project :as project]
+            [crux.pull :as pull]
             [crux.bus :as bus]
             [crux.api :as api]
             [crux.tx :as tx]
@@ -117,9 +117,9 @@
 
 (s/def ::find-arg
   (s/or :logic-var logic-var?
-        :project (s/cat :project #{'eql/project}
-                        :logic-var logic-var?
-                        :project-spec ::eql/query)
+        :pull (s/cat :pull #{'pull}
+                     :logic-var logic-var?
+                     :pull-spec ::eql/query)
         :aggregate ::aggregate))
 
 (s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
@@ -1587,7 +1587,7 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [projection-cache]}]
+(defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [pull-cache]}]
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
@@ -1597,18 +1597,18 @@
                               (fn [value {:keys [entity-resolver-fn]}]
                                 (or (when (c/valid-id? value)
                                       (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-                                        (project/let-docs [docs #{hash}]
-                                          (get docs (c/new-id hash)))))
+                                        (pull/let-docs [docs #{hash}]
+                                                       (get docs (c/new-id hash)))))
                                     value))
                               (fn [value _]
                                 value))}
-      :project {:logic-var (:logic-var arg)
-                :var-type :project
-                :var-binding (var->bindings (:logic-var arg))
-                :->result (cache/compute-if-absent projection-cache (:project-spec arg)
-                                                   identity
-                                                   (fn [spec]
-                                                     (project/compile-project-spec (s/unform ::eql/query spec))))}
+      :pull {:logic-var (:logic-var arg)
+             :var-type :pull
+             :var-binding (var->bindings (:logic-var arg))
+             :->result (cache/compute-if-absent pull-cache (:pull-spec arg)
+                                                identity
+                                                (fn [spec]
+                                                  (pull/compile-pull-spec (s/unform ::eql/query spec))))}
       :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
                      {:logic-var (:logic-var arg)
                       :var-type :aggregate
@@ -1701,7 +1701,7 @@
           compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
-          project? (or (contains? var-types :project) full-results?)
+          pull? (or (contains? var-types :pull) full-results?)
           return-maps? (some q [:keys :syms :strs])
           var-bindings (mapv :var-binding compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find
@@ -1723,7 +1723,7 @@
          order-by (cio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
-         project? (project/->project-result db compiled-find q-conformed)
+         pull? (pull/->pull-result db compiled-find q-conformed)
          return-maps? (map (->return-maps q)))))))
 
 (defn entity-tx [{:keys [valid-time tx-id] :as db} index-snapshot eid]
@@ -1761,7 +1761,7 @@
 (defrecord QueryDatasource [document-store index-store bus tx-ingester
                             ^Date valid-time ^Date tx-time ^Long tx-id
                             ^ScheduledExecutorService interrupt-executor
-                            conform-cache query-cache projection-cache
+                            conform-cache query-cache pull-cache
                             index-snapshot
                             entity-resolver-fn
                             fn-allow-list]
@@ -1837,20 +1837,20 @@
                                             ::query safe-query
                                             ::query-id query-id})))))))
 
-  (project [db projection eid]
+  (pull [db projection eid]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
       (->> (api/q db
-                  {:find [(list 'eql/project ?eid projection)]
+                  {:find [(list 'pull ?eid projection)]
                    :in [?eid]}
                   eid)
            ffirst)))
 
-  (project-many [db projection eids]
+  (pull-many [db projection eids]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
       (->> (api/q db
-                  {:find [(list 'eql/project ?eid projection)]
+                  {:find [(list 'pull ?eid projection)]
                    :in [[?eid '...]]}
                   eids)
            (mapv first))))
@@ -1934,7 +1934,7 @@
 
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus !pred-ctx
-                        query-cache conform-cache projection-cache]
+                        query-cache conform-cache pull-cache]
   api/DBProvider
   (db [this] (api/db this nil))
   (db [this valid-time tx-time] (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
@@ -2002,8 +2002,8 @@
                                                 :cache-size 10240}
                                   :conform-cache {:crux/module 'crux.cache/->cache
                                                   :cache-size 10240}
-                                  :projection-cache {:crux/module 'crux.cache/->cache
-                                                     :cache-size 10240}}
+                                  :pull-cache {:crux/module 'crux.cache/->cache
+                                               :cache-size 10240}}
                       ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
                                                       :default (* 32 1024)
                                                       :spec ::sys/nat-int}

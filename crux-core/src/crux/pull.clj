@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.eql-project
+(ns ^:no-doc crux.pull
   (:require [crux.codec :as c]
             [crux.db :as db]
             [edn-query-language.core :as eql]
@@ -19,7 +19,7 @@
   (when-let [hashes (not-empty (::hashes (meta v)))]
     (db/fetch-docs document-store hashes)))
 
-(defmacro let-docs [[binding hashes] & body]
+(defmacro let-docs {:style/indent 1} [[binding hashes] & body]
   `(-> (fn ~'let-docs [~binding]
          ~@body)
        (with-meta {::hashes ~hashes})))
@@ -45,10 +45,10 @@
 
 (defrecord RecurseState [seen-vs child-fns])
 
-(declare project-child-fns)
+(declare pull-child-fns)
 
-(defn- ->project-child [{:keys [query] :as join}]
-  (letfn [(project-child [v db ^RecurseState recurse-state]
+(defn- ->pull-child [{:keys [query] :as join}]
+  (letfn [(pull-child [v db ^RecurseState recurse-state]
             (if (contains? (.seen-vs recurse-state) v)
               {:crux.db/id v}
               (let [recurse-state ^RecurseState (update recurse-state :seen-vs conj v)]
@@ -59,29 +59,29 @@
                      (after-doc-lookup (fn [res]
                                          (into {} (mapcat identity) res)))))))]
     (cond
-      (= '... query) project-child
+      (= '... query) pull-child
       (int? query) (fn [v db ^RecurseState recurse-state]
                      (when (<= (count (.seen-vs recurse-state)) ^long query)
-                       (project-child v db recurse-state)))
-      :else (let [recurse-state (RecurseState. #{} (project-child-fns join))]
+                       (pull-child v db recurse-state)))
+      :else (let [recurse-state (RecurseState. #{} (pull-child-fns join))]
               (fn [v db _]
-                (project-child v db recurse-state))))))
+                (pull-child v db recurse-state))))))
 
 (defn- forward-joins-child-fn [{:keys [props special forward-joins unions]}]
   (when-not (every? empty? [props special forward-joins unions])
     (let [forward-join-child-fns (for [{:keys [dispatch-key] :as join} forward-joins]
                                    (let [into-coll (get-in join [:params :into])
                                          limit (get-in join [:params :limit])
-                                         project-child (->project-child join)
+                                         pull-child (->pull-child join)
                                          k (or (get-in join [:params :as] dispatch-key))]
                                      (fn [doc db recurse-state]
                                        (when-let [v (get doc dispatch-key)]
                                          (->> (if (c/multiple-values? v)
                                                 (->> (cond->> v
                                                        limit (take limit))
-                                                     (mapv #(project-child % db recurse-state))
+                                                     (mapv #(pull-child % db recurse-state))
                                                      (raise-doc-lookup-out-of-coll))
-                                                (project-child v db recurse-state))
+                                                (pull-child v db recurse-state))
                                               (after-doc-lookup (fn [res]
                                                                   (when res
                                                                     (MapEntry/create k (cond->> res
@@ -89,12 +89,12 @@
 
           union-child-fns (for [{:keys [dispatch-key children]} unions
                                 {:keys [union-key] :as child} (get-in children [0 :children])]
-                            (let [project-child (->project-child child)]
+                            (let [pull-child (->pull-child child)]
                               (fn [value doc db recurse-state]
                                 (->> (c/vectorize-value (get doc dispatch-key))
                                      (keep (fn [v]
                                              (when (= v union-key)
-                                               (project-child value db recurse-state))))))))
+                                               (pull-child value db recurse-state))))))))
 
           prop-child-fns (->> (for [{:keys [dispatch-key params]} props]
                                 (let [{into-coll :into, :keys [as limit]} params
@@ -129,7 +129,7 @@
                                                    (keep (fn [[k v]]
                                                            ((get prop-child-fns k default-prop-fn) k v)))
                                                    doc)
-                                              res)))))))))))
+                                             res)))))))))))
 
 (defn- reverse-joins-child-fn [reverse-joins]
   (when-not (empty? reverse-joins)
@@ -139,14 +139,14 @@
                                          forward-key (keyword (namespace dispatch-key)
                                                               (subs (name dispatch-key) 1))
                                          one? (= :one (get-in join [:params :cardinality]))
-                                         project-child (->project-child join)
+                                         pull-child (->pull-child join)
                                          k (or (get-in join [:params :as]) dispatch-key)]
                                      (fn [value-buffer {:keys [index-snapshot entity-resolver-fn] :as db} recurse-state]
                                        (->> (vec (for [v (cond->> (db/ave index-snapshot (c/->id-buffer forward-key) value-buffer nil entity-resolver-fn)
                                                            one? (take 1)
                                                            limit (take limit)
                                                            :always vec)]
-                                                   (project-child (db/decode-value index-snapshot v) db recurse-state)))
+                                                   (pull-child (db/decode-value index-snapshot v) db recurse-state)))
                                             (raise-doc-lookup-out-of-coll)
                                             (after-doc-lookup (fn [res]
                                                                 (when-let [res (seq (remove nil? res))]
@@ -160,11 +160,11 @@
                        (f value-buffer db recurse-state)))
                (raise-doc-lookup-out-of-coll)))))))
 
-(defn- project-child-fns [project-spec]
+(defn- pull-child-fns [pull-spec]
   (let [{special :special,
          props :prop,
          joins :join,
-         unions :union} (->> (:children project-spec)
+         unions :union} (->> (:children pull-spec)
                              (group-by (some-fn recognise-union
                                                 :type
                                                 (constantly :special))))
@@ -176,12 +176,12 @@
           (reverse-joins-child-fn reverse-joins)]
          (remove nil?))))
 
-(defn compile-project-spec [project-spec]
-  (let [project-child (->project-child (eql/query->ast project-spec))]
+(defn compile-pull-spec [pull-spec]
+  (let [pull-child (->pull-child (eql/query->ast pull-spec))]
     (fn [value db]
-      (project-child value db nil))))
+      (pull-child value db nil))))
 
-(defn ->project-result [db compiled-find q-conformed res]
+(defn ->pull-result [db compiled-find q-conformed res]
   (->> res
        (map (fn [row]
               (mapv (fn [value ->result]

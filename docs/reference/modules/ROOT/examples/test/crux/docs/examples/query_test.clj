@@ -346,11 +346,11 @@
 
   (let [node *api*]
     (t/is (=
-           ;; tag::eql-query-1-r[]
+           ;; tag::pull-query-1-r[]
            #{[1 "Ivan" :doctor] [2 "Sergei" :lawyer], [3 "Petr" :doctor]}
-           ;; end::eql-query-1-r[]
+           ;; end::pull-query-1-r[]
 
-           ;; tag::eql-query-1[]
+           ;; tag::pull-query-1[]
            ;; with just 'query':
            (crux/q
             (crux/db node)
@@ -358,31 +358,31 @@
               :where [[?user :user/id ?uid]
                       [?user :user/name ?name]
                       [?user :user/profession ?profession]]})
-           ;; end::eql-query-1[]
+           ;; end::pull-query-1[]
            ))
 
     (t/is (=
-           ;; tag::eql-query-2-r[]
+           ;; tag::pull-query-2-r[]
            #{[{:user/name "Ivan" :user/profession :doctor}]
              [{:user/name "Sergei" :user/profession :lawyer}]
              [{:user/name "Petr" :user/profession :doctor}]}
-           ;; end::eql-query-2-r[]
+           ;; end::pull-query-2-r[]
 
-           ;; tag::eql-query-2[]
-           ;; using `eql/project`:
+           ;; tag::pull-query-2[]
+           ;; using `pull`:
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?user [:user/name :user/profession])]
+            '{:find [(pull ?user [:user/name :user/profession])]
               :where [[?user :user/id ?uid]]})
-           ;; end::eql-query-2[]
+           ;; end::pull-query-2[]
            ))
 
     (t/is (=
-           ;; tag::eql-query-3-r[]
+           ;; tag::pull-query-3-r[]
            #{[1 "Ivan" "Doctor"] [2 "Sergei" "Lawyer"] [3 "Petr" "Doctor"]}
-           ;; end::eql-query-3-r[]
+           ;; end::pull-query-3-r[]
 
-           ;; tag::eql-query-3[]
+           ;; tag::pull-query-3[]
            ;; with just 'query':
            (crux/q
             (crux/db node)
@@ -391,82 +391,82 @@
                       [?user :user/name ?name]
                       [?user :user/profession ?profession]
                       [?profession :profession/name ?profession-name]]})
-           ;; end::eql-query-3[]
+           ;; end::pull-query-3[]
            ))
 
     (t/is (=
-           ;; tag::eql-query-4-r[]
+           ;; tag::pull-query-4-r[]
            #{[{:user/name "Ivan" :user/profession {:profession/name "Doctor"}}]
              [{:user/name "Sergei" :user/profession {:profession/name "Lawyer"}}]
              [{:user/name "Petr" :user/profession {:profession/name "Doctor"}}]}
-           ;; end::eql-query-4-r[]
+           ;; end::pull-query-4-r[]
 
-           ;; tag::eql-query-4[]
-           ;; using `eql/project`:
+           ;; tag::pull-query-4[]
+           ;; using `pull`:
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}])]
+            '{:find [(pull ?user [:user/name {:user/profession [:profession/name]}])]
               :where [[?user :user/id ?uid]]})
-           ;; end::eql-query-4[]
+           ;; end::pull-query-4[]
            ))
 
     (t/is (=
-           ;; tag::eql-query-5-r[]
+           ;; tag::pull-query-5-r[]
            #{[{:profession/name "Doctor"
                :user/_profession [{:user/id 1 :user/name "Ivan"},
                                   {:user/id 3 :user/name "Petr"}]}]
              [{:profession/name "Lawyer"
                :user/_profession [{:user/id 2 :user/name "Sergei"}]}]}
-           ;; end::eql-query-5-r[]
+           ;; end::pull-query-5-r[]
 
-           ;; tag::eql-query-5[]
+           ;; tag::pull-query-5[]
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
+            '{:find [(pull ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
               :where [[?profession :profession/name]]})
-           ;; end::eql-query-5[]
+           ;; end::pull-query-5[]
            ))
 
     (t/is (=
-           ;; tag::eql-query-6-r[]
+           ;; tag::pull-query-6-r[]
            #{[{:crux.db/id :ivan :user/id 1, :user/name "Ivan", :user/profession :doctor}]}
-           ;; end::eql-query-6-r[]
+           ;; end::pull-query-6-r[]
 
-           ;; tag::eql-query-6[]
+           ;; tag::pull-query-6[]
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?user [*])]
+            '{:find [(pull ?user [*])]
               :where [[?user :user/id 1]]})
-           ;; end::eql-query-6[]
+           ;; end::pull-query-6[]
            ))))
 
 (comment
   ;; TODO resurrected from git history, need to be tested though
 
-  ;; tag::eql-project[]
-  ;; using `project`:
-  (crux/project
+  ;; tag::pull[]
+  ;; using `pull`:
+  (crux/pull
    (crux/db node)
    [:user/name :user/profession]
    :ivan)
-  ;; end::eql-project[]
+  ;; end::pull[]
 
-  ;; tag::eql-project-r[]
+  ;; tag::pull-r[]
   ;; => {:user/name "Ivan", :user/profession :doctor}
-  ;; end::eql-project-r[]
+  ;; end::pull-r[]
 
-  ;; tag::eql-project-many[]
-  ;; using `project-many`:
-  (crux/project-many
+  ;; tag::pull-many[]
+  ;; using `pull-many`:
+  (crux/pull-many
    (crux/db node)
    [:user/name :user/profession]
    [:ivan :sergei])
-  ;; end::eql-project-many[]
+  ;; end::pull-many[]
 
-  ;; tag::eql-project-many-r[]
+  ;; tag::pull-many-r[]
   ;; => [{:user/name "Ivan", :user/profession :doctor},
   ;;     {:user/name "Sergei", :user/profession :lawyer}]
-  ;; end::eql-project-many-r[]
+  ;; end::pull-many-r[]
   )
 
 (t/deftest test-return-maps

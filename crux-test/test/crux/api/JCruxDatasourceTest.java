@@ -15,11 +15,11 @@ public class JCruxDatasourceTest {
     private static List<CruxDocument> documents;
     private static List<TransactionInstant> transactions;
 
-    private static final Keyword projectId1 = Keyword.intern("project1");
-    private static final Keyword projectId2 = Keyword.intern("project2");
+    private static final Keyword pullId1 = Keyword.intern("pull1");
+    private static final Keyword pullId2 = Keyword.intern("pull2");
 
-    private static final CruxDocument projectDocument1 = CruxDocument.create(projectId1).plus("foo", "foo").plus("bar", 1);
-    private static final CruxDocument projectDocument2 = CruxDocument.create(projectId2).plus("foo", "bar").plus("bar", 2);
+    private static final CruxDocument pullDocument1 = CruxDocument.create(pullId1).plus("foo", "foo").plus("bar", 1);
+    private static final CruxDocument pullDocument2 = CruxDocument.create(pullId2).plus("foo", "bar").plus("bar", 2);
 
     private static ICruxAPI node;
 
@@ -35,8 +35,8 @@ public class JCruxDatasourceTest {
 
         ArrayList<TransactionInstant> _transactions = new ArrayList<TransactionInstant>();
 
-        TestUtils.put(node, projectDocument1, null, null);
-        TestUtils.put(node, projectDocument2, null, null);
+        TestUtils.put(node, pullDocument1, null, null);
+        TestUtils.put(node, pullDocument2, null, null);
         sleep(20);
         _transactions.add(put(0, date(-10000), null));
         sleep(20);
@@ -117,44 +117,44 @@ public class JCruxDatasourceTest {
     }
 
     @Test
-    public void projectTest() {
+    public void pullTest() {
         ICruxDatasource db = node.db();
         String projection = "[:crux.db/id :foo :bar]";
 
-        Map<Keyword, ?> result = db.project(projection, projectId1);
+        Map<Keyword, ?> result = db.pull(projection, pullId1);
 
-        assertEquals(projectDocument1.toMap(), result);
+        assertEquals(pullDocument1.toMap(), result);
 
         close(db);
     }
 
     @Test
-    public void projectManyIterableTest() {
+    public void pullManyIterableTest() {
         ICruxDatasource db = node.db();
         String projection = "[:crux.db/id :foo :bar]";
 
-        List<Map<Keyword, ?>> results = db.projectMany(projection, projectId1, projectId2);
+        List<Map<Keyword, ?>> results = db.pullMany(projection, pullId1, pullId2);
 
         assertEquals(2, results.size());
-        assertTrue(results.contains(projectDocument1.toMap()));
-        assertTrue(results.contains(projectDocument2.toMap()));
+        assertTrue(results.contains(pullDocument1.toMap()));
+        assertTrue(results.contains(pullDocument2.toMap()));
 
         close(db);
     }
 
     @Test
-    public void projectManyCollectionTest() {
+    public void pullManyCollectionTest() {
         ICruxDatasource db = node.db();
         String projection = "[:crux.db/id :foo :bar]";
         ArrayList<Keyword> ids = new ArrayList<>();
-        ids.add(projectId1);
-        ids.add(projectId2);
+        ids.add(pullId1);
+        ids.add(pullId2);
 
-        List<Map<Keyword, ?>> results = db.projectMany(projection, ids);
+        List<Map<Keyword, ?>> results = db.pullMany(projection, ids);
 
         assertEquals(2, results.size());
-        assertTrue(results.contains(projectDocument1.toMap()));
-        assertTrue(results.contains(projectDocument2.toMap()));
+        assertTrue(results.contains(pullDocument1.toMap()));
+        assertTrue(results.contains(pullDocument2.toMap()));
 
         close(db);
     }

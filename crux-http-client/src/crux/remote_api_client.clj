@@ -146,20 +146,20 @@
                                        :args (vec args)}})]
       (cio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
 
-  (project [this projection eid]
+  (pull [this projection eid]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
       (->> (api/q this
-                  {:find [(list 'eql/project ?eid projection)]
+                  {:find [(list 'pull ?eid projection)]
                    :in [?eid]}
                   eid)
            ffirst)))
 
-  (project-many [this projection eids]
+  (pull-many [this projection eids]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
       (->> (api/q this
-                  {:find [(list 'eql/project ?eid projection)]
+                  {:find [(list 'pull ?eid projection)]
                    :in [[?eid '...]]}
                   this)
            (mapv first))))

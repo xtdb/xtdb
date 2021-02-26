@@ -144,21 +144,21 @@
 
   Once the sequence is closed, attempting to iterate it is undefined.")
 
-  (project [db query eid]
+  (pull [db query eid]
     "Returns the requested data for the given entity ID, based on the projection spec
 
-  e.g. `(project db [:film/name :film/year] :spectre)`
+  e.g. `(pull db [:film/name :film/year] :spectre)`
     => `{:film/name \"Spectre\", :film/year 2015}`
 
-  See https://opencrux.com/reference/queries.html#eql-projection for details of the spec format.")
+  See https://opencrux.com/reference/queries.html#pull for details of the spec format.")
 
-  (project-many [db query eids]
+  (pull-many [db query eids]
     "Returns the requested data for the given entity IDs, based on the projection spec
 
-  e.g. `(project-many db [:film/name :film/year] #{:spectre :skyfall})`
+  e.g. `(pull-many db [:film/name :film/year] #{:spectre :skyfall})`
     => `[{:film/name \"Spectre\", :film/year 2015}, {:film/name \"Skyfall\", :film/year 2012}]`
 
-  See https://opencrux.com/reference/queries.html#eql-projection for details of the spec format.")
+  See https://opencrux.com/reference/queries.html#pull for details of the spec format.")
 
   (entity-history
     [db eid sort-order]
