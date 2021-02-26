@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-set -x
 set -e
 
 OPTS=
@@ -10,14 +9,14 @@ while [[ "$#" -gt 0 ]]; do
         --with-local-bundle)
             OPTS+=" --ui-bundle-url=../../crux-site/build/ui-bundle.zip"
             shift;;
-        --with-blog)
-            PLAYBOOK="antora-playbook-blog.yml"
-            shift;;
         *) echo "Unknown parameter passed: $1"; exit 1;;
     esac
 done
 
 (
     cd $(dirname "$0")/..
-    antora --clean --redirect-facility static --fetch $OPTS $PLAYBOOK
+    ANTORA="$(npm bin)/antora"
+    [[ -e "$ANTORA" ]] || npm install
+    $ANTORA --clean --redirect-facility static --fetch $OPTS $PLAYBOOK
+    echo "Built: file://$(pwd)/build/site/index.html"
 )
