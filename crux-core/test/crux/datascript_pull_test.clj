@@ -37,15 +37,15 @@
 (t/deftest test-pull-attr-spec
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{:name "Petr" :aka #{"Devil" "Tupen"}}]}
-             (crux/q db '{:find [(eql/project ?e [:name :aka])]
+             (crux/q db '{:find [(pull ?e [:name :aka])]
                           :where [[?e :crux.db/id :petr]]})))
 
     (t/is (= #{[{:name "Matthew" :parent [{:crux.db/id :thomas}] :crux.db/id :matthew}]}
-             (crux/q db '{:find [(eql/project ?e [:name :crux.db/id {:parent [:crux.db/id]}])]
+             (crux/q db '{:find [(pull ?e [:name :crux.db/id {:parent [:crux.db/id]}])]
                           :where [[?e :crux.db/id :matthew]]})))
 
     (t/is (= #{[{:name "Petr"}] [{:name "Elizabeth"}] [{:name "Eunan"}] [{:name "Rebecca"}]}
-             (crux/q db '{:find [(eql/project ?e [:name])]
+             (crux/q db '{:find [(pull ?e [:name])]
                           :where [[?e :crux.db/id #{:petr :elizabeth :eunan :rebecca}]]})))))
 
 (t/deftest test-pull-reverse-attr-spec
@@ -53,7 +53,7 @@
     ;; TODO reverse props
     #_
     (t/is (= #{[{:name "Thomas" :_parent [:matthew]}]}
-             (crux/q db '{:find [(eql/project ?e [:name :_parent])]
+             (crux/q db '{:find [(pull ?e [:name :_parent])]
                           :where [[?e :crux.db/id :thomas]]})))
 
     #_
@@ -61,21 +61,21 @@
              (d/pull test-db '[:name :_parent] 1)))
 
     (t/is (= #{[{:name "Thomas" :_parent [{:name "Matthew"}]}]}
-             (crux/q db '{:find [(eql/project ?e [:name {:_parent [:name]}])]
+             (crux/q db '{:find [(pull ?e [:name {:_parent [:name]}])]
                           :where [[?e :crux.db/id :thomas]]})))
 
     (t/is (= #{[{:name "Petr" :_parent [{:name "David"} {:name "Thomas"}]}]}
-             (crux/q db '{:find [(eql/project ?e [:name {:_parent [:name]}])]
+             (crux/q db '{:find [(pull ?e [:name {:_parent [:name]}])]
                           :where [[?e :crux.db/id :petr]]})))))
 
 (t/deftest test-pull-wildcard
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{:crux.db/id :petr :name "Petr" :aka #{"Devil" "Tupen"}}]}
-             (crux/q db '{:find [(eql/project ?e [*])]
+             (crux/q db '{:find [(pull ?e [*])]
                           :where [[?e :crux.db/id :petr]]})))
 
     (t/is (= #{[{:crux.db/id :david, :name "David", :parent [{:crux.db/id :petr}]}]}
-             (crux/q db '{:find [(eql/project ?e [* {:parent [:crux.db/id]}])]
+             (crux/q db '{:find [(pull ?e [* {:parent [:crux.db/id]}])]
                           :where [[?e :crux.db/id :david]]})))))
 
 (t/deftest test-pull-limit
@@ -95,14 +95,14 @@
       (t/is (= 2000 (->> (d/pull db '[(limit :aka nil)] 8) :aka count))))
 
     (t/testing "Explicit limit can reduce the default"
-      (t/is (= 500 (->> (crux/q db '{:find [(eql/project ?e [(:aka {:limit 500})])]
+      (t/is (= 500 (->> (crux/q db '{:find [(pull ?e [(:aka {:limit 500})])]
                                      :where [[?e :crux.db/id :elizabeth]]})
                         ffirst
                         :aka
                         count))))
 
     (t/testing "Explicit limit can increase the default"
-      (t/is (= 1500 (->> (crux/q db '{:find [(eql/project ?e [(:aka {:limit 1500})])]
+      (t/is (= 1500 (->> (crux/q db '{:find [(pull ?e [(:aka {:limit 1500})])]
                                       :where [[?e :crux.db/id :elizabeth]]})
                          ffirst
                          :aka
@@ -110,33 +110,33 @@
 
     (t/testing "Limits can be used as map specification keys"
       (t/is (= #{[{:name "Elizabeth", :friend #{{:name "Kerri"} {:name "Matthew"}}}]}
-               (crux/q db '{:find [(eql/project ?e [:name {(:friend {:limit 2, :into #{}}) [:name]}])]
+               (crux/q db '{:find [(pull ?e [:name {(:friend {:limit 2, :into #{}}) [:name]}])]
                             :where [[?e :crux.db/id :elizabeth]]}))))))
 
 (t/deftest test-pull-default
   (let [db (submit-test-docs people-docs)]
     ;; Datascript returns nil here, because there's no matching datom
     (t/is (= #{[{}]}
-             (crux/q db '{:find [(eql/project ?e [:foo])]
+             (crux/q db '{:find [(pull ?e [:foo])]
                           :where [[?e :crux.db/id :petr]]}))
           "Missing attrs return empty map")
 
     (t/is (= #{[{:foo "bar"}]}
-             (crux/q db '{:find [(eql/project ?e [(:foo {:default "bar"})])]
+             (crux/q db '{:find [(pull ?e [(:foo {:default "bar"})])]
                           :where [[?e :crux.db/id :petr]]}))
           "A default can be used to replace nil results")))
 
 (t/deftest test-pull-as
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{"Name" "Petr", :alias #{"Devil" "Tupen"}}]}
-             (crux/q db '{:find [(eql/project ?e [(:name {:as "Name"})
+             (crux/q db '{:find [(pull ?e [(:name {:as "Name"})
                                                   (:aka {:as :alias})])]
                           :where [[?e :crux.db/id :petr]]})))))
 
 (t/deftest test-pull-attr-with-opts
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{"Name" "Nothing"}]}
-             (crux/q db '{:find [(eql/project ?e [(:x {:as "Name", :default "Nothing"})])]
+             (crux/q db '{:find [(pull ?e [(:x {:as "Name", :default "Nothing"})])]
                           :where [[?e :crux.db/id :petr]]})))))
 
 (t/deftest test-pull-map
@@ -144,24 +144,24 @@
              (submit-test-docs people-docs)
              (submit-test-docs part-docs))]
     (t/is (= #{[{:name "Matthew" :parent [{:name "Thomas"}]}]}
-             (crux/q db '{:find [(eql/project ?e [:name {:parent [:name]}])]
+             (crux/q db '{:find [(pull ?e [:name {:parent [:name]}])]
                           :where [[?e :crux.db/id :matthew]]}))
           "Single attrs yield a map")
 
     (t/is (= #{[{:name "Petr" :children [{:name "David"} {:name "Thomas"}]}]}
-             (crux/q db '{:find [(eql/project ?e [:name {(:_parent {:as :children}) [:name]}])]
+             (crux/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:name]}])]
                           :where [[?e :crux.db/id :petr]]}))
           "Multi attrs yield a collection of maps")
 
     (t/is (= #{[{:name "Petr"}]}
-             (crux/q db '{:find [(eql/project ?e [:name {:parent [:name]}])]
+             (crux/q db '{:find [(pull ?e [:name {:parent [:name]}])]
                           :where [[?e :crux.db/id :petr]]}))
           "Missing attrs are dropped")
 
     ;; Datascript returns `{:name "Petr", :children []}` for this, but we've matched documents,
     ;; so we can say 'there are two children, but they don't have `:foo`'
     (t/is (= #{[{:name "Petr" :children [{} {}]}]}
-             (crux/q db '{:find [(eql/project ?e [:name {(:_parent {:as :children}) [:foo]}])]
+             (crux/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:foo]}])]
                           :where [[?e :crux.db/id :petr]]}))
           "Non matching results are removed from collections")
 
@@ -169,11 +169,11 @@
       (let [parts #{[{:part-name "Part A" :_part-of [{:part-name "Part A.A"}
                                                      {:part-name "Part A.B"}]}]}]
         (t/is (= parts
-                 (crux/q db '{:find [(eql/project ?e [:part-name {:_part-of [:part-name]}])]
+                 (crux/q db '{:find [(pull ?e [:part-name {:_part-of [:part-name]}])]
                               :where [[?e :crux.db/id :a]]})))
 
         (t/is (= parts
-                 (crux/q db '{:find [(eql/project ?e [:part-name {:_part-of 1}])]
+                 (crux/q db '{:find [(pull ?e [:part-name {:_part-of 1}])]
                               :where [[?e :crux.db/id :a]]})))))))
 
 (t/deftest test-pull-recursion
@@ -197,20 +197,20 @@
                           :enemy [{:name "Kerri"}]}]}]
 
     (t/is (= #{[friends]}
-             (crux/q db '{:find [(eql/project ?e [:name {:friend ...}])]
+             (crux/q db '{:find [(pull ?e [:name {:friend ...}])]
                           :where [[?e :crux.db/id :lucy]]}))
           "Infinite recursion")
 
     ;; EQL doesn't support this
     #_
     (t/is (= #{[enemies]}
-             (crux/q db '{:find [(eql/project ?e [:name {:friend 2, :enemy 2}])]
+             (crux/q db '{:find [(pull ?e [:name {:friend 2, :enemy 2}])]
                           :where [[?e :crux.db/id :lucy]]}))
           "Multiple recursion specs in one pattern")
 
     (let [db (crux/with-tx db [[:crux.tx/put {:crux.db/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
       (t/is (= #{[(assoc-in friends (take 7 (cycle [:friend 0])) [{:name "Kerri" :friend [{:crux.db/id :lucy}]}])]}
-               (crux/q db '{:find [(eql/project ?e [:name {:friend ...}])]
+               (crux/q db '{:find [(pull ?e [:name {:friend ...}])]
                             :where [[?e :crux.db/id :lucy]]}))
             "Cycles are handled by returning only the :crux.db/id of entities which have been seen before"))))
 
@@ -234,7 +234,7 @@
                                :part {:crux.db/id 1,
                                       :spec {:crux.db/id 2},
                                       :part {:crux.db/id 2}}}}}]}
-             (crux/q db '{:find [(eql/project ?e [:crux.db/id {:part ...} {:spec ...}])]
+             (crux/q db '{:find [(pull ?e [:crux.db/id {:part ...} {:spec ...}])]
                           :where [[?e :crux.db/id 1]]})))))
 
 #_
@@ -254,7 +254,7 @@
 
     (t/is (= (str "Person-" depth)
              (-> (crux/q db
-                         '{:find [(eql/project ?e [:name {:friend ...}])]
+                         '{:find [(pull ?e [:name {:friend ...}])]
                            :in [start]
                            :where [[?e :crux.db/id start]]}
                          start)

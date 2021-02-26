@@ -1,12 +1,9 @@
 (ns crux.http-server.json-test
   (:require [clj-http.client :as http]
             [clojure.test :as t]
-            [crux.fixtures :as fix :refer [*api*]]
+            [crux.fixtures :as fix]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
-            [jsonista.core :as json]
-            [crux.codec :as c]
-            [crux.api :as crux]
-            [crux.tx :as tx]))
+            [jsonista.core :as json]))
 
 (t/use-fixtures :each fh/with-http-server fix/with-node)
 
@@ -71,7 +68,7 @@
     (t/is (= #{["sal"] ["jed"] ["colin"]}
              (set (json-get {:url "/_crux/query"
                              :qps {"queryEdn" (pr-str '{:find [e]
-                                                         :where [[e :crux.db/id]]})}}))))
+                                                        :where [[e :crux.db/id]]})}}))))
     (t/is (= (pr-str '{:find [e]
                        :where [[e :crux.db/id]]})
              (-> (json-get {:url "/_crux/recent-queries"})
@@ -79,38 +76,38 @@
     (t/is (json-get
            {:url "/_crux/query"
             :qps {"queryEdn" (pr-str '{:find [e]
-                                        :where [[e :crux.db/id]]})}}))
+                                       :where [[e :crux.db/id]]})}}))
     (t/is (= #{["Sally"] ["Colin"]}
              (set
               (json-get
                {:url "/_crux/query"
                 :qps {"queryEdn" (pr-str '{:find [first-name]
-                                            :where [[e :firstName first-name]
-                                                    [e :lastName "Example"]]})}}))))
+                                           :where [[e :firstName first-name]
+                                                   [e :lastName "Example"]]})}}))))
     (t/is (= [[{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]]
              (json-get
               {:url "/_crux/query"
                :qps {"queryEdn" (pr-str '{:find [e]
-                                           :where [[e :firstName "Sally"]]
-                                           :full-results? true})}})))
+                                          :where [[e :firstName "Sally"]]
+                                          :full-results? true})}})))
 
-    (t/testing "eql project"
+    (t/testing "pull"
       (let [{:strs [txId] :as tx} (submit-tx [["put" {"crux.db/id" "link", "linking" "jed"}]])]
         (t/is (= tx
                  (json-get {:url "/_crux/await-tx"
                             :qps {"txId" txId}})))
         (t/is (= [[{"crux.db/id" "sal" "firstName" "Sally", "lastName" "Example"}]]
                  (json-get {:url "/_crux/query"
-                            :qps {"queryEdn" (pr-str '{:find [(eql/project e [*])]
-                                                        :where [[e :firstName "Sally"]]})}})))
+                            :qps {"queryEdn" (pr-str '{:find [(pull e [*])]
+                                                       :where [[e :firstName "Sally"]]})}})))
         (t/is (= [[{"firstName" "Jed", "lastName" "Test"}]]
                  (json-get {:url "/_crux/query"
-                            :qps {"queryEdn" (pr-str '{:find [(eql/project e [:firstName :lastName])]
-                                                        :where [[e :firstName "Jed"]]})}})))
+                            :qps {"queryEdn" (pr-str '{:find [(pull e [:firstName :lastName])]
+                                                       :where [[e :firstName "Jed"]]})}})))
         (t/is (= [[{"linking" {"firstName" "Jed", "lastName" "Test"}}]]
                  (json-get {:url "/_crux/query"
-                            :qps {"queryEdn" (pr-str '{:find [(eql/project e [{:linking [:firstName :lastName]}])]
-                                                        :where [[e :linking linking]]})}})))))))
+                            :qps {"queryEdn" (pr-str '{:find [(pull e [{:linking [:firstName :lastName]}])]
+                                                       :where [[e :linking linking]]})}})))))))
 
 (t/deftest test-history
   (let [{:strs [txTime] :as tx} (submit-tx [["put" {"crux.db/id" "test-person", "first-name" "George"}]])

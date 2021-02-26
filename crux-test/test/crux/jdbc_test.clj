@@ -89,7 +89,7 @@
 
     (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
              (api/q db
-                    '{:find [(eql/project ?e [*])]
+                    '{:find [(pull ?e [*])]
                       :where [[?e :crux.db/id :foo]]})))
 
     (t/is (= {:crux.db/id :foo, :foo :bar}
@@ -97,5 +97,5 @@
 
     (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
              (api/q db
-                    '{:find [(eql/project ?e [*])]
+                    '{:find [(pull ?e [*])]
                       :where [[?e :crux.db/id :foo]]})))))

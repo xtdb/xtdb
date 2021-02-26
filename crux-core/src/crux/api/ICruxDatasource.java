@@ -55,38 +55,38 @@ public interface ICruxDatasource extends Closeable {
     /**
      * Returns the requested data for the given entity ID, based on the projection spec
      *
-     * e.g. `db.project("[:film/name :film/year]", "spectre")`
+     * e.g. `db.pull("[:film/name :film/year]", "spectre")`
      *   => `{:film/name "Spectre", :film/year 2015}`
      *
-     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#eql-projection
+     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#pull
      * @param eid entity ID
      * @return the requested projection starting at the given entity
      */
-    Map<Keyword, ?> project(Object projection, Object eid);
+    Map<Keyword, ?> pull(Object projection, Object eid);
 
     /**
      * Returns the requested data for the given entity IDs, based on the projection spec
      *
-     * e.g. `db.projectMany("[:film/name :film/year]", Arrays.asList("spectre", "skyfall"))`
+     * e.g. `db.pullMany("[:film/name :film/year]", Arrays.asList("spectre", "skyfall"))`
      *   => `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
      *
-     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#eql-projection
+     * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#pull
      * @param eids entity IDs
      * @return the requested projections starting at the given entities
      */
-    List<Map<Keyword, ?>> projectMany(Object projection, Iterable<?> eids);
+    List<Map<Keyword, ?>> pullMany(Object projection, Iterable<?> eids);
 
     /**
      * Returns the requested data for the given entity IDs, based on the projection spec
      *
-     * e.g. `db.projectMany("[:film/name :film/year]", "spectre", "skyfall")`
+     * e.g. `db.pullMany("[:film/name :film/year]", "spectre", "skyfall")`
      *   => `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
      *
-     * @param projection An EQL projection spec - see https://opencrux.com/reference/queries.html#eql-projection
+     * @param projection An EQL projection spec - see https://opencrux.com/reference/queries.html#pull
      * @param eids entity IDs
      * @return the requested projections starting at the given entities
      */
-    List<Map<Keyword, ?>> projectMany(Object projection, Object... eids);
+    List<Map<Keyword, ?>> pullMany(Object projection, Object... eids);
 
     /**
      * Eagerly retrieves entity history for the given entity.

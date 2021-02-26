@@ -829,7 +829,7 @@
       (fix/submit+await-tx [[:crux.tx/put foo]])
 
       (t/is (= #{[foo]}
-               (api/q (api/db *api*) '{:find [(eql/project ?e [*])]
+               (api/q (api/db *api*) '{:find [(pull ?e [*])]
                                        :where [[?e :foo {:bar #{"hello" 7}}]]}))))
 
     (let [foo {:crux.db/id :foo
@@ -838,7 +838,7 @@
       (fix/submit+await-tx [[:crux.tx/put foo]])
 
       (t/is (= #{[foo]}
-               (api/q (api/db *api*) '{:find [(eql/project ?e [*])]
+               (api/q (api/db *api*) '{:find [(pull ?e [*])]
                                        :where [[?e :foo {{:foo 2} :foo2, {:foo 1} :foo1}]]}))))))
 
 (t/deftest overlapping-valid-time-ranges-434
