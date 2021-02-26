@@ -483,11 +483,23 @@
 
 (defop :and
   [[BitVector BitVector BitVector]
-   (boolean->bit (= 1 (.get a idx) (.get b idx)))])
+   (boolean->bit (= 1 (.get a idx) (.get b idx)))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (= 1 (.get a idx) b))
+   [b (boolean->bit b)]]
+  [[BitVector Number BitVector]
+   (boolean->bit (= 1 (.get a idx) b))
+   [^long b b]])
 
 (defop :or
   [[BitVector BitVector BitVector]
-   (boolean->bit (or (= 1 (.get a idx)) (= 1 (.get b idx))))])
+   (boolean->bit (or (= 1 (.get a idx)) (= 1 (.get b idx))))]
+  [[BitVector Boolean BitVector]
+   (boolean->bit (or (= 1 (.get a idx)) (= 1 b)))
+   [b (boolean->bit b)]]
+  [[BitVector Number BitVector]
+   (boolean->bit (or (= 1 (.get a idx)) (= 1 b)))
+   [^long b b]])
 
 (defmethod op [:not Boolean] [_ a]
   (not a))
