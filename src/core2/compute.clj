@@ -29,55 +29,57 @@
 (defmulti op (fn [name & args]
                (vec (cons name (map type args)))))
 
+(defmacro defop-overload [name signature expression inits]
+  (let [arg-types (butlast signature)
+        return-type (last signature)
+        arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
+                   (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
+        idx-sym 'idx
+        acc-sym 'acc
+        resolved-return-type (resolve return-type)]
+    `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
+       ~(cond
+          (and (instance? Class resolved-return-type)
+               (.isAssignableFrom ValueVector resolved-return-type))
+          `(let [~acc-sym ~(let [mods (.getModifiers ^Class resolved-return-type)]
+                             (when-not (or (Modifier/isAbstract mods)
+                                           (Modifier/isInterface mods))
+                               `(new ~return-type "" *allocator*)))
+                 value-count# (.getValueCount ~(first arg-syms))
+                 ~@inits]
+             (.allocateNew ~acc-sym value-count#)
+             (dotimes [~idx-sym value-count#]
+               (.set ~acc-sym ~idx-sym ~expression))
+             (.setValueCount ~acc-sym value-count#)
+             ~acc-sym)
+
+          (= 1 (count arg-types))
+          `(let [value-count# (.getValueCount ~(last arg-syms))
+                 ~@inits]
+             (loop [~idx-sym (int 0)
+                    ~acc-sym ~expression]
+               (let [~idx-sym (inc ~idx-sym)]
+                 (if (= value-count# ~idx-sym)
+                   ~acc-sym
+                   (recur ~idx-sym ~expression)))))
+
+          :else
+          (let [cast-acc? (and (not= (maybe-primitive-type-sym return-type) return-type)
+                               (not= return-type (first arg-types)))
+                acc-sym (with-meta (first arg-syms) {})]
+            `(let [value-count# (.getValueCount ~(last arg-syms))
+                   ~@inits]
+               (loop [~idx-sym (int 0)
+                      ~acc-sym ~(cond->> acc-sym
+                                  cast-acc? (list (maybe-primitive-type-sym return-type)))]
+                 (if (= value-count# ~idx-sym)
+                   ~acc-sym
+                   (recur (inc ~idx-sym) ~(cond->> expression
+                                            cast-acc? (list (maybe-primitive-type-sym return-type))))))))))))
+
 (defmacro defop [name & op-signatures]
-  `(do
-     ~@(for [[signature expression inits] op-signatures]
-         (let [arg-types (butlast signature)
-               return-type (last signature)
-               arg-syms (for [[^long n arg-type] (map-indexed vector arg-types)]
-                          (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
-               idx-sym 'idx
-               acc-sym 'acc
-               resolved-return-type (resolve return-type)]
-           `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
-              ~(cond
-                 (and (instance? Class resolved-return-type)
-                      (.isAssignableFrom ValueVector resolved-return-type))
-                 `(let [~acc-sym ~(let [mods (.getModifiers ^Class resolved-return-type)]
-                                    (when-not (or (Modifier/isAbstract mods)
-                                                  (Modifier/isInterface mods))
-                                      `(new ~return-type "" *allocator*)))
-                        value-count# (.getValueCount ~(first arg-syms))
-                        ~@inits]
-                    (.allocateNew ~acc-sym value-count#)
-                    (dotimes [~idx-sym value-count#]
-                      (.set ~acc-sym ~idx-sym ~expression))
-                    (.setValueCount ~acc-sym value-count#)
-                    ~acc-sym)
-
-                 (= 1 (count arg-types))
-                 `(let [value-count# (.getValueCount ~(last arg-syms))
-                        ~@inits]
-                    (loop [~idx-sym (int 0)
-                           ~acc-sym ~expression]
-                      (let [~idx-sym (inc ~idx-sym)]
-                        (if (= value-count# ~idx-sym)
-                          ~acc-sym
-                          (recur ~idx-sym ~expression)))))
-
-                 :else
-                 (let [cast-acc? (and (not= (maybe-primitive-type-sym return-type) return-type)
-                                      (not= return-type (first arg-types)))
-                       acc-sym (with-meta (first arg-syms) {})]
-                   `(let [value-count# (.getValueCount ~(last arg-syms))
-                          ~@inits]
-                      (loop [~idx-sym (int 0)
-                             ~acc-sym ~(cond->> acc-sym
-                                         cast-acc? (list (maybe-primitive-type-sym return-type)))]
-                        (if (= value-count# ~idx-sym)
-                          ~acc-sym
-                          (recur (inc ~idx-sym) ~(cond->> expression
-                                                   cast-acc? (list (maybe-primitive-type-sym return-type))))))))))))))
+  `(do ~@(for [[signature expression inits] op-signatures]
+           `(defop-overload ~name ~signature ~expression ~inits))))
 
 (defop :+
   [[BaseIntVector Double Float8Vector]
