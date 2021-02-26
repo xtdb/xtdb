@@ -290,9 +290,12 @@
     (ArrowFooter. (Footer/getRootAsFooter footer-bb))))
 
 (defn- try-open-reflective-access [^Class from ^Class to]
-  (let [this-module (.getModule from)]
-    (when-not (.isNamed this-module)
-      (.addOpens (.getModule to) (.getName (.getPackage to)) this-module))))
+  (try
+    (let [this-module (.getModule from)]
+      (when-not (.isNamed this-module)
+        (.addOpens (.getModule to) (.getName (.getPackage to)) this-module)))
+    (catch Exception e
+      (log/warn e "could not open reflective access from" from "to" to))))
 
 (defonce ^:private direct-byte-buffer-access
   (try-open-reflective-access ArrowBuf (class (ByteBuffer/allocateDirect 0))))

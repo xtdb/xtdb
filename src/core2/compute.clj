@@ -1,4 +1,5 @@
 (ns core2.compute
+  (:require [clojure.tools.logging :as log])
   (:import [org.apache.arrow.memory BufferAllocator]
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.vector BaseIntVector BaseVariableWidthVector BigIntVector BitVector ElementAddressableVector
@@ -615,3 +616,16 @@
           (.copyFromSafe out n value-count a)
           (.setValueCount out (inc value-count)))))
     out))
+
+(defn- try-enable-simd []
+  (try
+    (require 'core2.compute.simd)
+    (log/info "SIMD enabled")
+    true
+    (catch clojure.lang.Compiler$CompilerException e
+      (if (instance? ClassNotFoundException (.getCause e))
+        (log/info "SIMD not enabled")
+        (throw e))
+      false)))
+
+(defonce simd-enabled? (try-enable-simd))
