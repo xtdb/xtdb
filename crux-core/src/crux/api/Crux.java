@@ -24,7 +24,7 @@ public final class Crux {
 
     private static ICruxAPI startNode(Object config) {
         Object cruxNode = resolve("crux.api/start-node").invoke(config);
-        return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(cruxNode);
+        return (ICruxAPI) resolve("crux.api.java/->JCruxNode").invoke(cruxNode);
     }
 
     /**
@@ -117,7 +117,7 @@ public final class Crux {
      */
     public static ICruxAPI newApiClient(String url) {
         Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url);
-        return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(apiClient);
+        return (ICruxAPI) resolve("crux.api.java/->JCruxNode").invoke(apiClient);
     }
 
     /**
@@ -133,7 +133,7 @@ public final class Crux {
      */
     public static ICruxAPI newApiClient(String url, RemoteClientOptions options) {
         Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url, options);
-        return (ICruxAPI) resolve("crux.api/->JCruxNode").invoke(apiClient);
+        return (ICruxAPI) resolve("crux.api.java/->JCruxNode").invoke(apiClient);
     }
 
     /**
@@ -149,7 +149,7 @@ public final class Crux {
      */
     public static ICruxAsyncIngestAPI newIngestClient(Map<?,?> options) {
         Object ingestClient = resolve("crux.ingest-client/open-ingest-client").invoke(options);
-        return (ICruxAsyncIngestAPI) resolve("crux.api/->JCruxIngestClient").invoke(ingestClient);
+        return (ICruxAsyncIngestAPI) resolve("crux.api.java/->JCruxIngestClient").invoke(ingestClient);
     }
 
     /**

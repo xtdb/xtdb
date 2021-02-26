@@ -2,6 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [crux.api :as api]
+            [crux.api.java :as java]
             [crux.bus :as bus]
             [crux.fixtures :as f]
             [crux.io :as cio]
@@ -20,7 +21,7 @@
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
     (try
-      (let [n ^ICruxAPI (api/->JCruxNode (api/start-node {}))]
+      (let [n ^ICruxAPI (java/->JCruxNode (api/start-node {}))]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -83,11 +84,12 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n ^ICruxAPI (Crux/startNode {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                             :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                             :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
-                                             ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
-                                                                  :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
+    (with-open [n ^ICruxAPI (Crux/startNode (let [^Map m {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                          :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                          :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+                                                          ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                                               :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
+                                              m))]
       (t/is n)
 
       (let [valid-time (Date.)
@@ -101,11 +103,12 @@
                                       :where [[e :name "Ivan"]]}
                                     (object-array 0)))))
 
-      (with-open [n2 ^ICruxAPI (Crux/startNode {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
-                                                ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
-                                                                     :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}})]
+      (with-open [^ICruxAPI n2 (Crux/startNode (let [^Map m {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                             :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                             :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+                                                             ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                                                  :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
+                                                 m))]
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]

@@ -1,6 +1,7 @@
 (ns crux.node
   (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
+            [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.bus :as bus]
             [crux.codec :as c]
@@ -13,15 +14,13 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe]
-            [clojure.tools.logging :as log])
-  (:import [crux.api ICruxAsyncIngestAPI ICruxDatasource ICursor ICruxIngestAPI]
+            [crux.tx.event :as txe])
+  (:import crux.api.ICursor
            [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
            java.util.concurrent.TimeoutException
-           [java.util Date Map]
-           java.util.function.Consumer))
+           java.util.Date))
 
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]

@@ -6,14 +6,11 @@
             [crux.codec :as c]
             [crux.io :as cio]
             [crux.system :as sys])
-  (:import clojure.lang.IDeref
-           [crux.api Crux ICruxAPI RemoteClientOptions ICruxAsyncIngestAPI ICruxDatasource TransactionInstant CruxDocument DBBasis]
-           crux.api.tx.Transaction
-           [java.lang AutoCloseable]
-           [java.util List Map Date]
-           java.util.concurrent.CompletableFuture
-           [java.time Duration]
-           [java.util.function Supplier]))
+  (:import [crux.api Crux RemoteClientOptions]
+           java.lang.AutoCloseable
+           java.time.Duration
+           [java.util Date Map]
+           java.util.function.Supplier))
 
 (s/def :crux.db/id c/valid-id?)
 (s/def :crux.db/evicted? boolean?)
@@ -383,78 +380,3 @@
                                       end-tx-id :crux.tx/tx-id} :end}])]
   (alter-meta! #'entity-history assoc :arglists arglists)
   (alter-meta! #'open-entity-history assoc :arglists arglists))
-
-(defrecord JCruxDatasource [^java.io.Closeable datasource]
-  ICruxDatasource
-  (entity [_ eid] (CruxDocument/factory (entity datasource eid)))
-  (entityTx [_ eid] (entity-tx datasource eid))
-  (query [_ query args] (q* datasource query args))
-  (openQuery [_ query args] (open-q* datasource query args))
-  (project [_ projection eid] (project datasource projection eid))
-  (^java.util.List projectMany [_ projection ^Iterable eids] (project-many datasource projection eids))
-  (^java.util.List projectMany [_ projection ^"[Ljava.lang.Object;" eids] (project-many datasource projection (seq eids)))
-  (^java.util.List entityHistory [_ eid ^crux.api.HistoryOptions opts] (entity-history datasource eid (.getSortOrderKey opts) (.toMap opts)))
-  (^crux.api.ICursor openEntityHistory [_ eid ^crux.api.HistoryOptions opts] (open-entity-history datasource eid (.getSortOrderKey opts) (.toMap opts)))
-  (validTime [_] (valid-time datasource))
-  (transactionTime [_] (transaction-time datasource))
-  (dbBasis [_] (DBBasis/factory (db-basis datasource)))
-  (^ICruxDatasource withTx [_ ^Transaction tx] (->JCruxDatasource (with-tx datasource (.toVector tx))))
-  (^ICruxDatasource withTx [_ ^List tx-ops] (->JCruxDatasource (with-tx datasource tx-ops)))
-  (close [_] (.close datasource)))
-
-(defrecord JCruxNode [^java.io.Closeable node]
-  ICruxAPI
-  (^ICruxDatasource db [_] (->JCruxDatasource (db node)))
-  (^ICruxDatasource db [_ ^Date valid-time] (->JCruxDatasource (db node valid-time)))
-  (^ICruxDatasource db [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (db node valid-time tx-time)))
-  (^ICruxDatasource db [_ ^DBBasis basis] (->JCruxDatasource (db node (.toMap basis))))
-  (^ICruxDatasource db [_ ^TransactionInstant tx-instant] (->JCruxDatasource (db node (.toMap tx-instant))))
-  (^ICruxDatasource db [_ ^Map db-basis] (->JCruxDatasource (db node db-basis)))
-
-  (^ICruxDatasource openDB [_] (->JCruxDatasource (open-db node)))
-  (^ICruxDatasource openDB [_ ^Date valid-time] (->JCruxDatasource (open-db node valid-time)))
-  (^ICruxDatasource openDB [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (open-db node valid-time tx-time)))
-  (^ICruxDatasource openDB [_ ^DBBasis basis] (->JCruxDatasource (open-db node (.toMap basis))))
-  (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (open-db node basis)))
-  (^ICruxDatasource openDB [_ ^TransactionInstant tx-instant] (->JCruxDatasource (open-db node (.toMap tx-instant))))
-
-  (status [_] (status node))
-  (attributeStats [_] (attribute-stats node))
-
-  (^Map submitTx [_ ^List tx] (submit-tx node tx))
-  (^TransactionInstant submitTx [_ ^Transaction tx] (TransactionInstant/factory ^Map (submit-tx node (.toVector tx))))
-
-  (^boolean hasTxCommitted [_ ^Map transaction] (tx-committed? node transaction))
-  (^boolean hasTxCommitted [_ ^TransactionInstant transaction] (tx-committed? node (.toMap transaction)))
-
-  (openTxLog [_ after-tx-id with-ops?] (open-tx-log node after-tx-id with-ops?))
-  (sync [_ timeout] (sync node timeout))
-
-  (awaitTxTime [_ tx-time timeout] (await-tx-time node tx-time timeout))
-  (^TransactionInstant awaitTx [_ ^TransactionInstant submitted-tx ^Duration timeout] (TransactionInstant/factory ^Map (await-tx node (.toMap submitted-tx) timeout)))
-  (^Map awaitTx [_ ^Map submitted-tx ^Duration timeout] (await-tx node submitted-tx timeout))
-
-  (listen [_ event-opts consumer] (listen node event-opts #(.accept consumer %)))
-  (latestCompletedTx [_] (TransactionInstant/factory ^Map (latest-completed-tx node)))
-  (latestSubmittedTx [_] (TransactionInstant/factory ^Map (latest-submitted-tx node)))
-  (activeQueries [_] (active-queries node))
-  (recentQueries [_] (recent-queries node))
-  (slowestQueries [_] (slowest-queries node))
-  (close [_] (.close node)))
-
-(defrecord JCruxIngestClient [^java.io.Closeable client]
-  ICruxAsyncIngestAPI
-  (^TransactionInstant submitTx [_ ^Transaction tx] (TransactionInstant/factory ^Map (submit-tx client (.toVector tx))))
-  (^Map submitTx [_ ^List tx] (submit-tx client tx))
-
-  (openTxLog [_ after-tx-id with-ops?] (open-tx-log client after-tx-id with-ops?))
-
-  (^CompletableFuture submitTxAsync [_ ^Transaction tx]
-   (CompletableFuture/supplyAsync
-    (reify Supplier
-      (get [_]
-        (TransactionInstant/factory ^Map @(submit-tx-async client (.toVector tx)))))))
-
-  (^IDeref submitTxAsync [_ ^List tx-ops] (submit-tx-async client tx-ops))
-
-  (close [_] (.close client)))
