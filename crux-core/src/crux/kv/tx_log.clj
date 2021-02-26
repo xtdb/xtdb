@@ -104,13 +104,13 @@
   Closeable
   (close [_]
     (try
-      (.shutdown tx-submit-executor)
+      (.shutdownNow tx-submit-executor)
       (catch Exception e
         (log/warn e "Error shutting down tx-submit-executor")))
 
     (when tx-ingest-executor
       (try
-        (.shutdown tx-ingest-executor)
+        (.shutdownNow tx-ingest-executor)
         (catch Exception e
           (log/warn e "Error shutting down tx-ingest-executor"))))
 

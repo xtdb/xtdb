@@ -1208,3 +1208,24 @@
                           [:crux.tx/evict :bar]])
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
       (t/is (empty? (db/av index-snapshot :evict-me? nil))))))
+
+(t/deftest node-shutdown-interrupts-tx-ingestion
+  (let [op-count 10
+        !calls (atom 0)]
+    (with-redefs [tx/index-tx-event (let [f tx/index-tx-event]
+                                      (fn [& args]
+                                        (let [target-time (+ (System/currentTimeMillis) 200)]
+                                          (while (< (System/currentTimeMillis) target-time)))
+                                        (swap! !calls inc)
+                                        (apply f args)))]
+      @(with-open [node (crux/start-node {})]
+         (let [tx (crux/submit-tx node (repeat op-count [:crux.tx/put {:crux.db/id :foo}]))
+               await-fut (future
+                           (t/is (thrown? InterruptedException
+                                          (try
+                                            (crux/await-tx node tx)
+                                            (catch Throwable t
+                                              (throw (.getCause t)))))))]
+           (Thread/sleep 100) ; to ensure the await starts before the node closes
+           await-fut)))
+    (t/is (< @!calls op-count))))
