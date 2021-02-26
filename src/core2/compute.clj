@@ -173,6 +173,27 @@
    (/ (.getValueAsDouble a idx)
       (.getValueAsLong b idx))])
 
+(set! *unchecked-math* true)
+
+(defmethod op [:+ Number Number] [_ a b]
+  (+ a b))
+
+(defmethod op [:- Number] [_ a]
+  (- a))
+
+(defmethod op [:- Number Number] [_ a b]
+  (- a b))
+
+(defmethod op [:* Number Number] [_ a b]
+  (* a b))
+
+(defmethod op [:/ Number Number] [_ a b]
+  (let [x (/ a b)]
+    (cond-> x
+      (ratio? x) (double))))
+
+(set! *unchecked-math* :warn-on-boxed)
+
 (defmacro boolean->bit [b]
   `(if ~b 1 0))
 
@@ -239,6 +260,30 @@
    (boolean->bit (not= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
    (boolean->bit (not= (.get a idx) (boolean->bit b)))])
+
+(def ^:private bytes-class (Class/forName "[B"))
+
+(defmethod op [:= Object Object] [_ a b]
+  (= a b))
+
+(defmethod op [:!= Object Object] [_ a b]
+  (not= a b))
+
+(set! *unchecked-math* true)
+
+(defmethod op [:= Number Number] [_ a b]
+  (== a b))
+
+(defmethod op [:!= Number Number] [_ a b]
+  (not (== a b)))
+
+(set! *unchecked-math* :warn-on-boxed)
+
+(defmethod op [:= bytes-class bytes-class] [_ ^bytes a ^bytes b]
+  (Arrays/equals a b))
+
+(defmethod op [:!= bytes-class bytes-class] [_ ^bytes a ^bytes b]
+  (not (Arrays/equals a b)))
 
 (defop :<
   [[BaseIntVector Double BitVector]
@@ -392,6 +437,46 @@
   [[BitVector Boolean BitVector]
    (boolean->bit (>= (.get a idx) (boolean->bit b)))])
 
+(set! *unchecked-math* true)
+
+(defmethod op [:< Number Number] [_ a b]
+  (< a b))
+
+(defmethod op [:<= Number Number] [_ a b]
+  (<= a b))
+
+(defmethod op [:> Number Number] [_ a b]
+  (> a b))
+
+(defmethod op [:>= Number Number] [_ a b]
+  (>= a b))
+
+(set! *unchecked-math* :warn-on-boxed)
+
+(defmethod op [:< Comparable Comparable] [_ ^Comparable a ^Comparable b]
+  (neg? (.compareTo a b)))
+
+(defmethod op [:<= Comparable Comparable] [_ ^Comparable a ^Comparable b]
+  (not (pos? (.compareTo a b))))
+
+(defmethod op [:> Comparable Comparable] [_ ^Comparable a ^Comparable b]
+  (pos? (.compareTo a b)))
+
+(defmethod op [:>= Comparable Comparable] [_ ^Comparable a ^Comparable b]
+  (not (neg? (.compareTo a b))))
+
+(defmethod op [:< bytes-class bytes-class] [_ ^bytes a ^bytes b]
+  (neg? (Arrays/compareUnsigned a b)))
+
+(defmethod op [:<= bytes-class bytes-class] [_ ^bytes a ^bytes b]
+  (not (pos? (Arrays/compareUnsigned a b))))
+
+(defmethod op [:> bytes-class bytes-class] [_ ^bytes a ^bytes b]
+  (pos? (Arrays/compareUnsigned a b)))
+
+(defmethod op [:>= bytes-class bytes-class] [_ ^bytes a ^bytes b]
+  (not (neg? (Arrays/compareUnsigned a b))))
+
 (defop :not
   [[BitVector BitVector]
    (if (= 1 (.get a idx)) 0 1)])
@@ -403,6 +488,24 @@
 (defop :or
   [[BitVector BitVector BitVector]
    (boolean->bit (or (= 1 (.get a idx)) (= 1 (.get b idx))))])
+
+(defmethod op [:not Boolean] [_ a]
+  (not a))
+
+(defmethod op [:and Boolean Boolean] [_ a b]
+  (and a b))
+
+(defmethod op [:or Boolean Boolean] [_ a b]
+  (or a))
+
+(defmethod op [:not Number] [_ a]
+  (if (= 1 a) 0 1))
+
+(defmethod op [:and Number Number] [_ a b]
+  (= 1 a b))
+
+(defmethod op [:or Number Number] [_ a b]
+  (or (= 1 a) (= 1 b)))
 
 (defop :udf
   [[BaseIntVector LongPredicate BitVector]
