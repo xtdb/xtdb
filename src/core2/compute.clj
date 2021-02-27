@@ -14,6 +14,10 @@
 ;; Arrow compute kernels spike, loosely based on
 ;; https://arrow.apache.org/docs/cpp/compute.html
 
+;; TODO:
+;; scalar first operations
+;; use ArrowBufPointer and ByteArrayHelpers via init of bytes for VarChar/Binary literal operators.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:dynamic ^BufferAllocator *allocator*)
