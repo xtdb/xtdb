@@ -38,11 +38,18 @@
 (defmulti op (fn [name & args]
                (vec (cons name (map type args)))))
 
-(defn- validate-value-count [& vecs]
-  (let [vcs (for [^ValueVector vec vecs]
-              (.getValueCount vec))]
-    (assert (= 1 (count (distinct vcs))))
-    (first vcs)))
+(defn- validate-value-count
+  ([^ValueVector a] (.getValueCount a))
+  ([^ValueVector a ^ValueVector b]
+   (let [a-count (.getValueCount a)
+         b-count (.getValueCount b)]
+     (assert (= a-count b-count))
+     a-count))
+  ([a b & vecs]
+   (let [vcs (for [^ValueVector vec (cons a (cons b vecs))]
+               (.getValueCount vec))]
+     (assert (= 1 (count (distinct vcs))))
+     (first vcs))))
 
 (defmacro defop-overload [name signature expression inits]
   (let [arg-types (butlast signature)
