@@ -30,8 +30,19 @@
     bytes `(Class/forName "[B")
     c))
 
+(defn- vector-type? [arg-type-sym]
+  (let [resolved (resolve arg-type-sym)]
+    (and (instance? Class resolved)
+         (.isAssignableFrom ValueVector resolved))))
+
 (defmulti op (fn [name & args]
                (vec (cons name (map type args)))))
+
+(defn- validate-value-count [& vecs]
+  (let [vcs (for [^ValueVector vec vecs]
+              (.getValueCount vec))]
+    (assert (= 1 (count (distinct vcs))))
+    (first vcs)))
 
 (defmacro defop-overload [name signature expression inits]
   (let [arg-types (butlast signature)
@@ -40,16 +51,17 @@
                    (with-meta (symbol (str (char (+ (int \a)  n)))) {:tag (maybe-primitive-type-sym arg-type)}))
         idx-sym 'idx
         acc-sym 'acc
-        resolved-return-type (resolve return-type)]
+        vec-syms (vec (for [[arg-sym arg-type] (map vector arg-syms arg-types)
+                            :when (vector-type? arg-type)]
+                        arg-sym))]
     `(defmethod op ~(vec (cons name (map maybe-array-type-form arg-types))) ~(vec (cons '_ arg-syms))
        ~(cond
-          (and (instance? Class resolved-return-type)
-               (.isAssignableFrom ValueVector resolved-return-type))
-          `(let [~acc-sym ~(let [mods (.getModifiers ^Class resolved-return-type)]
+          (and (vector-type? return-type))
+          `(let [~acc-sym ~(let [mods (.getModifiers ^Class (resolve return-type))]
                              (when-not (or (Modifier/isAbstract mods)
                                            (Modifier/isInterface mods))
                                `(new ~return-type "" *allocator*)))
-                 value-count# (.getValueCount ~(first arg-syms))
+                 value-count# (validate-value-count ~@vec-syms)
                  ~@inits]
              (.allocateNew ~acc-sym value-count#)
              (dotimes [~idx-sym value-count#]
@@ -58,7 +70,7 @@
              ~acc-sym)
 
           (= 1 (count arg-types))
-          `(let [value-count# (.getValueCount ~(last arg-syms))
+          `(let [value-count# (validate-value-count ~@vec-syms)
                  ~@inits]
              (loop [~idx-sym (int 0)
                     ~acc-sym ~expression]
@@ -71,7 +83,7 @@
           (let [cast-acc? (and (not= (maybe-primitive-type-sym return-type) return-type)
                                (not= return-type (first arg-types)))
                 acc-sym (with-meta (first arg-syms) {})]
-            `(let [value-count# (.getValueCount ~(last arg-syms))
+            `(let [value-count# (validate-value-count ~@vec-syms)
                    ~@inits]
                (loop [~idx-sym (int 0)
                       ~acc-sym ~(cond->> acc-sym
