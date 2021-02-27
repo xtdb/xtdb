@@ -1,7 +1,7 @@
 (ns core2.compute
   (:require [clojure.tools.logging :as log])
   (:import [org.apache.arrow.memory BufferAllocator]
-           org.apache.arrow.memory.util.ArrowBufPointer
+           [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
            [org.apache.arrow.vector BaseIntVector BaseVariableWidthVector BigIntVector BitVector ElementAddressableVector
             FloatingPointVector Float8Vector TimeStampVector TimeStampMilliVector VarBinaryVector VarCharVector ValueVector]
            org.apache.arrow.vector.util.Text
@@ -9,6 +9,7 @@
             DoubleUnaryOperator LongUnaryOperator LongToDoubleFunction DoubleToLongFunction Function
             ToDoubleFunction ToLongFunction ToDoubleBiFunction ToLongBiFunction]
            java.lang.reflect.Modifier
+           java.nio.charset.StandardCharsets
            [java.util Arrays Date]))
 
 ;; Arrow compute kernels spike, loosely based on
@@ -16,7 +17,6 @@
 
 ;; TODO:
 ;; scalar first operations
-;; use ArrowBufPointer and ByteArrayHelpers via init of bytes for VarChar/Binary literal operators.
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -201,6 +201,12 @@
 (defmacro boolean->bit [b]
   `(if ~b 1 0))
 
+(defmacro compare-pointer-to-bytes [a b]
+  `(let [a# ~a
+         b# ~b]
+     (ByteFunctionHelpers/compare (.getBuf a#) (.getOffset a#) (+ (.getOffset a#) (.getLength a#))
+                                  b# 0 (alength b#))))
+
 (defop :=
   [[BaseIntVector Double BitVector]
    (boolean->bit (== (.getValueAsLong a idx) b))]
@@ -225,9 +231,12 @@
    (boolean->bit (= (.getDataPointer a idx a-pointer) b))
    [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
-   (boolean->bit (= (str (.getObject a idx)) b))]
+   (boolean->bit (zero? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)
+    b (.getBytes ^String b StandardCharsets/UTF_8)]]
   [[VarBinaryVector bytes BitVector]
-   (boolean->bit (Arrays/equals (.get a idx) b))]
+   (boolean->bit (zero? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)]]
   [[BitVector BitVector BitVector]
    (boolean->bit (= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
@@ -257,9 +266,12 @@
    (boolean->bit (not= (.getDataPointer a idx a-pointer) b))
    [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
-   (boolean->bit (not= (str (.getObject a idx)) b))]
+   (boolean->bit (not (zero? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)
+    b (.getBytes ^String b StandardCharsets/UTF_8)]]
   [[VarBinaryVector bytes BitVector]
-   (boolean->bit (not (Arrays/equals (.get a idx) b)))]
+   (boolean->bit (not (zero? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)]]
   [[BitVector BitVector BitVector]
    (boolean->bit (not= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
@@ -307,7 +319,8 @@
   [[TimeStampVector Long BitVector]
    (boolean->bit (< (.get a idx) b))]
   [[TimeStampVector Date BitVector]
-   (boolean->bit (< (.get a idx) (.getTime b)))]
+   (boolean->bit (< (.get a idx) b))
+   [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
    (boolean->bit (< (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
@@ -319,9 +332,12 @@
    (boolean->bit (neg? (.compareTo (.getDataPointer a idx a-pointer) b)))
    [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
-   (boolean->bit (neg? (.compareTo (str (.getObject a idx)) b)))]
+   (boolean->bit (neg? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)
+    b (.getBytes ^String b StandardCharsets/UTF_8)]]
   [[VarBinaryVector bytes BitVector]
-   (boolean->bit (neg? (Arrays/compareUnsigned (.get a idx) b)))]
+   (boolean->bit (neg? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)]]
   [[BitVector BitVector BitVector]
    (boolean->bit (< (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
@@ -345,7 +361,8 @@
   [[TimeStampVector Long BitVector]
    (boolean->bit (<= (.get a idx) b))]
   [[TimeStampVector Date BitVector]
-   (boolean->bit (<= (.get a idx) (.getTime b)))]
+   (boolean->bit (<= (.get a idx) b))
+   [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
    (boolean->bit (<= (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
@@ -357,9 +374,12 @@
    (boolean->bit (not (pos? (.compareTo (.getDataPointer a idx a-pointer) b))))
    [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
-   (boolean->bit (not (pos? (.compareTo (str (.getObject a idx)) b))))]
+   (boolean->bit (not (pos? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)
+    b (.getBytes ^String b StandardCharsets/UTF_8)]]
   [[VarBinaryVector bytes BitVector]
-   (boolean->bit (not (pos? (Arrays/compareUnsigned (.get a idx) b))))]
+   (boolean->bit (not (pos? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)]]
   [[BitVector BitVector BitVector]
    (boolean->bit (<= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
@@ -383,7 +403,8 @@
   [[TimeStampVector Long BitVector]
    (boolean->bit (> (.get a idx) b))]
   [[TimeStampVector Date BitVector]
-   (boolean->bit (> (.get a idx) (.getTime b)))]
+   (boolean->bit (> (.get a idx) b))
+   [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
    (boolean->bit (> (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
@@ -395,9 +416,12 @@
    (boolean->bit (pos? (.compareTo (.getDataPointer a idx a-pointer) b)))
    [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
-   (boolean->bit (pos? (.compareTo (str (.getObject a idx)) b)))]
+   (boolean->bit (pos? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)
+    b (.getBytes ^String b StandardCharsets/UTF_8)]]
   [[VarBinaryVector bytes BitVector]
-   (boolean->bit (pos? (Arrays/compareUnsigned (.get a idx) b)))]
+   (boolean->bit (pos? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
+   [a-pointer (ArrowBufPointer.)]]
   [[BitVector BitVector BitVector]
    (boolean->bit (> (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
@@ -421,7 +445,8 @@
   [[TimeStampVector Long BitVector]
    (boolean->bit (>= (.get a idx) b))]
   [[TimeStampVector Date BitVector]
-   (boolean->bit (>= (.get a idx) (.getTime b)))]
+   (boolean->bit (>= (.get a idx) b))
+   [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
    (boolean->bit (>= (.get a idx) (.get b idx)))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
@@ -433,9 +458,12 @@
    (boolean->bit (not (neg? (.compareTo (.getDataPointer a idx a-pointer) b))))
    [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
-   (boolean->bit (not (neg? (.compareTo (str (.getObject a idx)) b))))]
+   (boolean->bit (not (neg? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)
+    b (.getBytes ^String b StandardCharsets/UTF_8)]]
   [[VarBinaryVector bytes BitVector]
-   (boolean->bit (not (neg? (Arrays/compareUnsigned (.get a idx) b))))]
+   (boolean->bit (not (neg? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
+   [a-pointer (ArrowBufPointer.)]]
   [[BitVector BitVector BitVector]
    (boolean->bit (>= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
