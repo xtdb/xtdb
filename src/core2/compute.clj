@@ -307,9 +307,6 @@
                     (.getDataPointer b idx b-pointer)))
    [a-pointer (ArrowBufPointer.)
     b-pointer (ArrowBufPointer.)]]
-  [[ElementAddressableVector ArrowBufPointer BitVector]
-   (boolean->bit (= (.getDataPointer a idx a-pointer) b))
-   [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
    (boolean->bit (zero? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
    [a-pointer (ArrowBufPointer.)
@@ -342,9 +339,6 @@
                        (.getDataPointer b idx b-pointer)))
    [a-pointer (ArrowBufPointer.)
     b-pointer (ArrowBufPointer.)]]
-  [[ElementAddressableVector ArrowBufPointer BitVector]
-   (boolean->bit (not= (.getDataPointer a idx a-pointer) b))
-   [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
    (boolean->bit (not (zero? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
    [a-pointer (ArrowBufPointer.)
@@ -398,7 +392,7 @@
                     (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (< (.get a idx) b))]
-  [[TimeStampVector Date BitVector]
+  [[TimeStampMilliVector Date BitVector]
    (boolean->bit (< (.get a idx) b))
    [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
@@ -408,9 +402,6 @@
                                    (.getDataPointer b idx b-pointer))))
    [a-pointer (ArrowBufPointer.)
     b-pointer (ArrowBufPointer.)]]
-  [[ElementAddressableVector ArrowBufPointer BitVector]
-   (boolean->bit (neg? (.compareTo (.getDataPointer a idx a-pointer) b)))
-   [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
    (boolean->bit (neg? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
    [a-pointer (ArrowBufPointer.)
@@ -440,7 +431,7 @@
                      (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (<= (.get a idx) b))]
-  [[TimeStampVector Date BitVector]
+  [[TimeStampMilliVector Date BitVector]
    (boolean->bit (<= (.get a idx) b))
    [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
@@ -450,9 +441,6 @@
                                         (.getDataPointer b idx b-pointer)))))
    [a-pointer (ArrowBufPointer.)
     b-pointer (ArrowBufPointer.)]]
-  [[ElementAddressableVector ArrowBufPointer BitVector]
-   (boolean->bit (not (pos? (.compareTo (.getDataPointer a idx a-pointer) b))))
-   [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
    (boolean->bit (not (pos? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
    [a-pointer (ArrowBufPointer.)
@@ -482,7 +470,7 @@
                     (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (> (.get a idx) b))]
-  [[TimeStampVector Date BitVector]
+  [[TimeStampMilliVector Date BitVector]
    (boolean->bit (> (.get a idx) b))
    [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
@@ -492,9 +480,6 @@
                                    (.getDataPointer b idx b-pointer))))
    [a-pointer (ArrowBufPointer.)
     b-pointer (ArrowBufPointer.)]]
-  [[ElementAddressableVector ArrowBufPointer BitVector]
-   (boolean->bit (pos? (.compareTo (.getDataPointer a idx a-pointer) b)))
-   [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
    (boolean->bit (pos? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b)))
    [a-pointer (ArrowBufPointer.)
@@ -524,7 +509,7 @@
                      (.getValueAsLong b idx)))]
   [[TimeStampVector Long BitVector]
    (boolean->bit (>= (.get a idx) b))]
-  [[TimeStampVector Date BitVector]
+  [[TimeStampMilliVector Date BitVector]
    (boolean->bit (>= (.get a idx) b))
    [b (.getTime b)]]
   [[TimeStampVector TimeStampVector BitVector]
@@ -534,9 +519,6 @@
                                         (.getDataPointer b idx b-pointer)))))
    [a-pointer (ArrowBufPointer.)
     b-pointer (ArrowBufPointer.)]]
-  [[ElementAddressableVector ArrowBufPointer BitVector]
-   (boolean->bit (not (neg? (.compareTo (.getDataPointer a idx a-pointer) b))))
-   [a-pointer (ArrowBufPointer.)]]
   [[VarCharVector String BitVector]
    (boolean->bit (not (neg? (compare-pointer-to-bytes (.getDataPointer a idx a-pointer) b))))
    [a-pointer (ArrowBufPointer.)
@@ -598,20 +580,14 @@
    (boolean->bit (= 1 (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
    (boolean->bit (= 1 (.get a idx) b))
-   [b (boolean->bit b)]]
-  [[BitVector Number BitVector]
-   (boolean->bit (= 1 (.get a idx) b))
-   [^long b b]])
+   [b (boolean->bit b)]])
 
 (defop :or
   [[BitVector BitVector BitVector]
    (boolean->bit (or (= 1 (.get a idx)) (= 1 (.get b idx))))]
   [[BitVector Boolean BitVector]
    (boolean->bit (or (= 1 (.get a idx)) (= 1 b)))
-   [b (boolean->bit b)]]
-  [[BitVector Number BitVector]
-   (boolean->bit (or (= 1 (.get a idx)) (= 1 b)))
-   [^long b b]])
+   [b (boolean->bit b)]])
 
 (defmethod op [:not Boolean] [_ a]
   (not a))
@@ -621,15 +597,6 @@
 
 (defmethod op [:or Boolean Boolean] [_ a b]
   (or a))
-
-(defmethod op [:not Number] [_ a]
-  (if (= 1 a) 0 1))
-
-(defmethod op [:and Number Number] [_ a b]
-  (= 1 a b))
-
-(defmethod op [:or Number Number] [_ a b]
-  (or (= 1 a) (= 1 b)))
 
 (defop :udf
   [[BaseIntVector LongPredicate BitVector]
@@ -674,7 +641,7 @@
    (boolean->bit (.apply b (= 1 (.get a idx))))]
   [[TimeStampVector LongUnaryOperator TimeStampMilliVector]
    (.applyAsLong b (.get a idx))]
-  [[TimeStampVector Function TimeStampMilliVector]
+  [[TimeStampMilliVector Function TimeStampMilliVector]
    (.getTime ^Date (.apply b (Date. (.get a idx))))]
   [[VarCharVector Function VarCharVector]
    (Text. (str (.apply b (str (.get a idx)))))]
@@ -736,14 +703,14 @@
      (if (neg? (.compareTo a x))
        a
        x))]
-  [[TimeStampVector Date]
+  [[TimeStampMilliVector Date]
    (let [x (.get a idx)]
      (cond
        (nil? acc) (Date. x)
        (< (.getTime acc) x) acc
        :else (Date. x)))
    [^Date acc nil]]
-  [[Date TimeStampVector Date]
+  [[Date TimeStampMilliVector Date]
    (let [x (.get b idx)]
      (if (< (.getTime a) x)
        a
@@ -800,14 +767,14 @@
      (if (neg? (.compareTo a x))
        x
        a))]
-  [[TimeStampVector Date]
+  [[TimeStampMilliVector Date]
    (let [x (.get a idx)]
      (cond
        (nil? acc) (Date. x)
        (< (.getTime acc) x) (Date. x)
        :else acc))
    [^Date acc nil]]
-  [[Date TimeStampVector Date]
+  [[Date TimeStampMilliVector Date]
    (let [x (.get b idx)]
      (if (< (.getTime a) x)
        (Date. x)
