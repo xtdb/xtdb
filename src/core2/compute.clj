@@ -244,19 +244,19 @@
 
 (defop :!=
   [[BaseIntVector Double BitVector]
-   (boolean->bit (not= (.getValueAsLong a idx) b))]
+   (boolean->bit (not (== (.getValueAsLong a idx) b)))]
   [[BaseIntVector Long BitVector]
    (boolean->bit (not= (.getValueAsLong a idx) b))]
   [[BaseIntVector FloatingPointVector BitVector]
-   (boolean->bit (not= (.getValueAsLong a idx)
-                       (.getValueAsDouble b idx)))]
+   (boolean->bit (not (== (.getValueAsLong a idx)
+                          (.getValueAsDouble b idx))))]
   [[FloatingPointVector Double BitVector]
    (boolean->bit (not= (.getValueAsDouble a idx) b))]
   [[FloatingPointVector Long BitVector]
-   (boolean->bit (not= (.getValueAsDouble a idx) b))]
+   (boolean->bit (not (== (.getValueAsDouble a idx) b)))]
   [[FloatingPointVector BaseIntVector BitVector]
-   (boolean->bit (not= (.getValueAsDouble a idx)
-                       (.getValueAsLong b idx)))]
+   (boolean->bit (not (== (.getValueAsDouble a idx)
+                          (.getValueAsLong b idx))))]
   [[ElementAddressableVector ElementAddressableVector BitVector]
    (boolean->bit (not= (.getDataPointer a idx a-pointer)
                        (.getDataPointer b idx b-pointer)))
@@ -751,11 +751,41 @@
 (defmethod op [:count Long ValueVector] [_ ^long a ^ValueVector b]
   (+ a (.getValueCount b)))
 
+(set! *unchecked-math* true)
+
+(definterface IAverage
+  (^Number numerator [])
+  (^Number denominator []))
+
+(defn- ->avarge [^Number numerator ^Number denominator]
+  (proxy [Number IAverage Comparable] []
+    (doubleValue [] (double (/ numerator denominator)))
+    (floatValue [] (.doubleValue ^Number this))
+    (intValue [] (.doubleValue ^Number this))
+    (longValue [] (.doubleValue ^Number this))
+    (numerator [] numerator)
+    (denominator [] denominator)
+    (toString [] (str numerator "/" denominator))
+    (equals [other] (and (instance? Number other)
+                         (== (.doubleValue ^Number this) (.doubleValue ^Number other))))
+    (comapreTo [other] (and (instance? Number other)
+                            (Double/compare (.doubleValue ^Number this) (.doubleValue ^Number other))))))
+
 (defmethod op [:avg BaseIntVector] [_ ^BaseIntVector a]
-  (double (/ ^long (op :sum a) ^long (op :count a))))
+  (->avarge (op :sum a) (op :count a)))
+
+(defmethod op [:avg IAverage BaseIntVector] [_ ^IAverage a ^BaseIntVector b]
+  (->avarge (+ (.numerator a) (op :sum b))
+            (+ (.denominator a) (op :count b))))
 
 (defmethod op [:avg FloatingPointVector] [_ ^FloatingPointVector a]
-  (/ ^double (op :sum a) ^long (op :count a)))
+  (->avarge (op :sum a) (op :count a)))
+
+(defmethod op [:avg IAverage FloatingPointVector] [_ ^IAverage a ^FloatingPointVector b]
+  (->avarge (+ (.numerator a) (op :sum b))
+            (+ (.denominator a) (op :count b))))
+
+(set! *unchecked-math* false)
 
 (defmethod op [:filter ValueVector BitVector] [_ ^ValueVector a ^BitVector b]
   (let [out (.createVector (.getField a) *allocator*)]
