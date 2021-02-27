@@ -16,7 +16,8 @@
 ;; https://arrow.apache.org/docs/cpp/compute.html
 
 ;; TODO:
-;; scalar first operations
+;; scalar first operations?
+;; clean up the udf part, add udf reductions ObjLongConsumer LongBinaryOperator etc.
 
 (set! *unchecked-math* :warn-on-boxed)
 
