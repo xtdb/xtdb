@@ -23,6 +23,7 @@
                   out-fs (Float8Vector. "" cc/*allocator*)
                   is+f ^ValueVector (cc/op :+ is 2.0 {:out out-fs})
                   is+i ^ValueVector (cc/op :+ is 2)
+                  i+is ^ValueVector (cc/op :+ 2 is)
                   is+fs ^ValueVector (cc/op :+ is fs)
                   is+is ^ValueVector (cc/op :+ is is)
                   fs+i ^ValueVector (cc/op :+ fs 2)
@@ -34,6 +35,7 @@
 
         (t/is (= [3.0 4.0 5.0] (tu/->list is+f)))
         (t/is (= [3 4 5] (tu/->list is+i)))
+        (t/is (= [3 4 5] (tu/->list i+is)))
         (t/is (= [2.0 4.0 6.0] (tu/->list is+fs)))
         (t/is (= [2 4 6] (tu/->list is+is)))
 
