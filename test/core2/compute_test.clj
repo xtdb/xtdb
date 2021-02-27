@@ -20,7 +20,8 @@
                        (.setSafe 1 2.0)
                        (.setSafe 2 3.0)
                        (.setValueCount 3))
-                  is+f ^ValueVector (cc/op :+ is 2.0)
+                  out-fs (Float8Vector. "" cc/*allocator*)
+                  is+f ^ValueVector (cc/op :+ is 2.0 {:out out-fs})
                   is+i ^ValueVector (cc/op :+ is 2)
                   is+fs ^ValueVector (cc/op :+ is fs)
                   is+is ^ValueVector (cc/op :+ is is)
@@ -28,6 +29,8 @@
                   fs+f ^ValueVector (cc/op :+ fs 2.0)
                   fs+is ^ValueVector (cc/op :+ fs is)
                   fs+fs ^ValueVector (cc/op :+ fs fs)]
+
+        (t/is (identical? is+f out-fs))
 
         (t/is (= [3.0 4.0 5.0] (tu/->list is+f)))
         (t/is (= [3 4 5] (tu/->list is+i)))
