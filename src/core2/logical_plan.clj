@@ -27,7 +27,7 @@
                          :order (s/coll-of (s/tuple ::column (s/? #{:asc :desc})) :kind vector?)
                          :relation ::ra-expression))
 
-(s/def ::aggregate (s/cat :function '#{count min max sum avg} :column ::column))
+(s/def ::aggregate (s/cat :function symbol? :column ::column))
 (s/def ::group-by (s/cat :op #{:γ :gamma :group-by}
                          :group-by (s/? (s/coll-of ::column :kind vector?))
                          :aggregates (s/coll-of (s/tuple ::aggregate ::column) :kind vector?)
