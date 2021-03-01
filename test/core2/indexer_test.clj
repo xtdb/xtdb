@@ -4,29 +4,25 @@
             [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.core :as c2]
-            [core2.indexer :as c2i]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
+            [core2.select :as sel]
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
-            [core2.types :as types]
             [core2.util :as util]
-            [core2.select :as sel])
+            [core2.test-util :as tu])
   (:import clojure.lang.MapEntry
            [core2.buffer_pool BufferPool MemoryMappedBufferPool]
            [core2.core IngestLoop Node]
            core2.indexer.Indexer
            core2.metadata.IMetadataManager
            [core2.object_store FileSystemObjectStore ObjectStore]
-           core2.select.IVectorPredicate
            core2.tx.TransactionInstant
            [java.nio.file Files Path]
            [java.time Clock Duration ZoneId]
-           java.util.concurrent.CompletableFuture
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector VarCharVector VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector]
+           [org.apache.arrow.vector VarCharVector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.types.Types$MinorType))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
@@ -53,17 +49,6 @@
       (t/is (= (json/parse-string (Files/readString (.resolve expected-path (.getFileName path))))
                (json/parse-string (Files/readString path)))
             (str path)))))
-
-(defn then-await-tx
-  ([^CompletableFuture submit-tx-fut, ^IngestLoop il]
-   (-> submit-tx-fut
-       (then-await-tx il (Duration/ofSeconds 2))))
-
-  ([^CompletableFuture submit-tx-fut, ^IngestLoop il, timeout]
-   (-> submit-tx-fut
-       (util/then-apply
-         (fn [tx]
-           (.awaitTx il tx timeout))))))
 
 (def txs
   [[{:op :put
@@ -231,7 +216,7 @@
             ^IngestLoop il (.ingest-loop node)]
 
         @(-> (.submitTx tx-producer tx-ops)
-             (then-await-tx il))
+             (tu/then-await-tx il))
 
         (.finishChunk i)
 
@@ -465,7 +450,7 @@
             ^IngestLoop il (.ingest-loop node)]
 
         @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 0}}])
-             (then-await-tx il))
+             (tu/then-await-tx il))
 
         (.finishChunk i)
 
@@ -473,7 +458,7 @@
                                  {:op :put, :doc {:name "Dan", :id 2}}])
 
         @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jon", :id 3}}])
-             (then-await-tx il))
+             (tu/then-await-tx il))
 
         (.finishChunk i)
 
@@ -489,7 +474,7 @@
 
             (with-open [watermark (.getWatermark i)]
               @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
-                   (then-await-tx il))
+                   (tu/then-await-tx il))
 
               (t/is (= {1 "James", 3 "Jon"}
                        (query-ivan watermark))))

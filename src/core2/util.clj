@@ -233,7 +233,7 @@
 (defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
   (try
     (write-type-id-no-realloc duv idx type-id)
-    (catch IndexOutOfBoundsException retry
+    (catch IndexOutOfBoundsException _retry
       (.reAlloc duv)
       (write-type-id-no-realloc duv idx type-id))))
 
