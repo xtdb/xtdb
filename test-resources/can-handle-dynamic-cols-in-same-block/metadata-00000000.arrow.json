@@ -33,7 +33,7 @@
       },
       "children" : [{
         "name" : "$data$",
-        "nullable" : false,
+        "nullable" : true,
         "type" : {
           "name" : "null"
         },
@@ -96,7 +96,7 @@
       },
       "children" : [{
         "name" : "$data$",
-        "nullable" : false,
+        "nullable" : true,
         "type" : {
           "name" : "null"
         },
