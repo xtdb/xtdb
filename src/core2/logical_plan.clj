@@ -67,7 +67,7 @@
                      :left ::ra-expression
                      :right ::ra-expression))
 
-(s/def ::ra-expression (s/or :scan ::table-scan
+(s/def ::ra-expression (s/or :table-scan ::table-scan
                              :projection ::projection
                              :selection ::selection
                              :rename ::rename
