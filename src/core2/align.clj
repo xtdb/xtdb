@@ -10,13 +10,18 @@
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
-(defn ->row-id-bitmap ^org.roaringbitmap.longlong.Roaring64Bitmap [^RoaringBitmap idxs ^BigIntVector row-id-vec]
-  (let [res (Roaring64Bitmap.)]
-    (-> (.stream idxs)
-        (.forEach (reify IntConsumer
-                    (accept [_ n]
-                      (.addLong res (.get row-id-vec n))))))
-    res))
+(defn ->row-id-bitmap
+  (^org.roaringbitmap.longlong.Roaring64Bitmap [^BigIntVector row-id-vec]
+   (->row-id-bitmap nil row-id-vec))
+
+  (^org.roaringbitmap.longlong.Roaring64Bitmap [^RoaringBitmap idxs ^BigIntVector row-id-vec]
+   (let [res (Roaring64Bitmap.)]
+     (-> (or (some-> idxs .stream)
+             (IntStream/range 0 (.getValueCount row-id-vec)))
+         (.forEach (reify IntConsumer
+                     (accept [_ n]
+                       (.addLong res (.get row-id-vec n))))))
+     res)))
 
 (defn- <-row-id-bitmap ^org.roaringbitmap.RoaringBitmap [^Roaring64Bitmap row-ids ^BigIntVector row-id-vec]
   (let [res (RoaringBitmap.)]
