@@ -7,31 +7,32 @@
 ;; https://calcite.apache.org/javadocAggregate/org/apache/calcite/tools/RelBuilder.html
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
-(s/def ::relation symbol?)
-(s/def ::column symbol?)
+(s/def ::named (some-fn keyword? symbol?))
+(s/def ::relation ::named)
+(s/def ::column ::named)
 
 (s/def ::expression (s/or :column ::column
-                          :expression (s/and vector? (s/cat :op keyword? :args (s/* ::expression)))
-                          :atom (complement vector?)))
+                          :expression (s/cat :op ::named :args (s/* ::expression))
+                          :atom (constantly true)))
 
-(s/def ::table-scan (s/cat :op #{:scan}
-                           :as (s/? ::relation)
-                           :columns (s/coll-of (s/cat :column ::column :predicate (s/? ::expression)) :min-count 1)))
+(s/def ::scan (s/cat :op #{:scan}
+                     :columns (s/coll-of (s/cat :column ::column :predicate (s/? ::expression)) :min-count 1)
+                     :as (s/? ::relation)))
 
-(s/def ::projection (s/cat :op #{:π :pi :project}
-                           :projections (s/coll-of (s/cat :column ::column :extend (s/? ::expression)) :min-count 1)
-                           :relation ::ra-expression))
+(s/def ::project (s/cat :op #{:π :pi :project}
+                        :projections (s/coll-of (s/cat :column ::column :extend (s/? ::expression)) :min-count 1)
+                        :relation ::ra-expression))
 
-(s/def ::selection (s/cat :op #{:σ :sigma :select}
-                          :predicate ::expression
-                          :relation ::ra-expression))
+(s/def ::select (s/cat :op #{:σ :sigma :select}
+                       :predicate ::expression
+                       :relation ::ra-expression))
 
 (s/def ::rename (s/cat :op #{:ρ :rho :rename}
                        :as (s/? ::relation)
                        :columns (s/? (s/coll-of (s/cat :column ::column :as ::column)))
                        :relation ::ra-expression))
 
-(s/def ::order-by (s/cat :op #{:τ :tau :order-by}
+(s/def ::order-by (s/cat :op '#{:τ :tau :order-by order-by}
                          :order (s/coll-of (s/cat :column ::column :direction #{:asc :desc}))
                          :relation ::ra-expression))
 
@@ -45,15 +46,15 @@
                       :limit (s/nilable nat-int?)
                       :relation ::ra-expression))
 
-(s/def ::intersection (s/cat :op '#{:∩ :intersect}
-                             :left ::ra-expression
-                             :right ::ra-expression))
+(s/def ::intersect (s/cat :op #{:∩ :intersect}
+                          :left ::ra-expression
+                          :right ::ra-expression))
 
 (s/def ::union (s/cat :op #{:∪ :union}
                       :left ::ra-expression
                       :right ::ra-expression))
 
-(s/def ::difference (s/cat :op #{:- :except}
+(s/def ::difference (s/cat :op #{:- :except :difference}
                            :left ::ra-expression
                            :right ::ra-expression))
 
@@ -67,17 +68,37 @@
                      :left ::ra-expression
                      :right ::ra-expression))
 
-(s/def ::ra-expression (s/or :table-scan ::table-scan
-                             :projection ::projection
-                             :selection ::selection
+(s/def ::ra-expression (s/or :relation ::relation
+                             :scan ::table-scan
+                             :project ::projection
+                             :select ::select
                              :rename ::rename
                              :order-by ::order-by
                              :group-by ::group-by
                              :slice ::slice
-                             :intersection ::intersection
+                             :intersect ::intersect
                              :union ::union
                              :difference ::difference
                              :cross-join ::cross-join
                              :join ::join))
 
 (s/def ::logical-plan ::ra-expression)
+
+(comment
+  (s/conform
+   ::logical-plan
+   [:π [[:Account/cid]]
+    [:σ [:> :sum 1000]
+     [:γ [:Account/cid] [[[:sum :Account/balance] :sum]]
+      [:⋈ [:= :Account/cid :Customer/cid]
+       [:scan [[:Account/cid] [:Account/balance]]]
+       [:scan [[:Customer/cid]]]]]]])
+
+  (s/conform
+   ::logical-plan
+   '[:project [[cid]]
+     [:select (> sum 1000)
+      [:group-by [cid] [[(sum balance) sum]]
+       [:join
+        [:project [[cid] [balance]] Account]
+        [:project [[cid]] Customer]]]]]))
