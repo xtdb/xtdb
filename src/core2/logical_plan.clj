@@ -6,12 +6,13 @@
 
 (s/def ::relation symbol?)
 (s/def ::column symbol?)
-(s/def ::expression list?)
+
+(s/def ::expression (s/or :variable ::column
+                          :expression (s/and vector? (s/cat :op keyword? :args (s/* ::expression)))
+                          :atom (complement vector?)))
 
 (s/def ::projection (s/cat :op #{:π :pi :project}
-                           :projections (s/coll-of (s/or :column ::column
-                                                         :expression (s/tuple ::expression ::column))
-                                                   :kind vector?)
+                           :projections (s/coll-of (s/tuple ::expression ::column) :kind vector?)
                            :relation ::ra-expression))
 
 (s/def ::selection (s/cat :op #{:σ :sigma :select}
@@ -27,10 +28,9 @@
                          :order (s/coll-of (s/tuple ::column (s/? #{:asc :desc})) :kind vector?)
                          :relation ::ra-expression))
 
-(s/def ::aggregate (s/cat :function symbol? :column ::column))
 (s/def ::group-by (s/cat :op #{:γ :gamma :group-by}
                          :group-by (s/? (s/coll-of ::column :kind vector?))
-                         :aggregates (s/coll-of (s/tuple ::aggregate ::column) :kind vector?)
+                         :aggregates (s/coll-of (s/tuple ::expression ::column) :kind vector?)
                          :relation ::ra-expression))
 
 (s/def ::slice (s/cat :op #{:slice}
@@ -55,8 +55,7 @@
                            :right ::ra-expression))
 
 (s/def ::join (s/cat :op #{:⋈ :join}
-                     :expression (s/? (s/or :equi-join (s/cat :op '#{=} :left ::column :right ::column)
-                                            :theta-join ::expression))
+                     :expression (s/? ::expression)
                      :left ::ra-expression
                      :right ::ra-expression))
 
