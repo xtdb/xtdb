@@ -272,6 +272,9 @@
 (defmethod op [:* Number Number] [_ a b]
   (* a b))
 
+(defmethod op [:/ Long Long] [_ a b]
+  (quot a b))
+
 (defmethod op [:/ Number Number] [_ a b]
   (let [x (/ a b)]
     (cond-> x
@@ -318,7 +321,8 @@
   [[BitVector BitVector BitVector]
    (boolean->bit (= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
-   (boolean->bit (= (.get a idx) (boolean->bit b)))])
+   (boolean->bit (= (.get a idx) b))
+   [b (boolean->bit b)]])
 
 (defop :!=
   [[BaseIntVector Double BitVector]
@@ -350,7 +354,8 @@
   [[BitVector BitVector BitVector]
    (boolean->bit (not= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
-   (boolean->bit (not= (.get a idx) (boolean->bit b)))])
+   (boolean->bit (not= (.get a idx) b))
+   [b (boolean->bit b)]])
 
 (def ^:private bytes-class (Class/forName "[B"))
 
@@ -413,7 +418,8 @@
   [[BitVector BitVector BitVector]
    (boolean->bit (< (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
-   (boolean->bit (< (.get a idx) (boolean->bit b)))])
+   (boolean->bit (< (.get a idx) b))
+   [b (boolean->bit b)]])
 
 (defop :<=
   [[BaseIntVector Double BitVector]
@@ -452,7 +458,8 @@
   [[BitVector BitVector BitVector]
    (boolean->bit (<= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
-   (boolean->bit (<= (.get a idx) (boolean->bit b)))])
+   (boolean->bit (<= (.get a idx) b))
+   [b (boolean->bit b)]])
 
 (defop :>
   [[BaseIntVector Double BitVector]
@@ -491,7 +498,8 @@
   [[BitVector BitVector BitVector]
    (boolean->bit (> (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
-   (boolean->bit (> (.get a idx) (boolean->bit b)))])
+   (boolean->bit (> (.get a idx) b))
+   [b (boolean->bit b)]])
 
 (defop :>=
   [[BaseIntVector Double BitVector]
@@ -530,7 +538,8 @@
   [[BitVector BitVector BitVector]
    (boolean->bit (>= (.get a idx) (.get b idx)))]
   [[BitVector Boolean BitVector]
-   (boolean->bit (>= (.get a idx) (boolean->bit b)))])
+   (boolean->bit (>= (.get a idx) b))
+   [b (boolean->bit b)]])
 
 (set! *unchecked-math* true)
 
@@ -597,7 +606,7 @@
   (and a b))
 
 (defmethod op [:or Boolean Boolean] [_ a b]
-  (or a))
+  (or a b))
 
 (defop :udf
   [[BaseIntVector LongPredicate BitVector]
@@ -805,7 +814,7 @@
   (^Number numerator [])
   (^Number denominator []))
 
-(defn- ->avarge [^Number numerator ^Number denominator]
+(defn- ->average [^Number numerator ^Number denominator]
   (proxy [Number IAverage Comparable] []
     (doubleValue [] (double (/ numerator denominator)))
     (floatValue [] (.doubleValue ^Number this))
@@ -816,22 +825,22 @@
     (toString [] (str numerator "/" denominator))
     (equals [other] (and (instance? Number other)
                          (== (.doubleValue ^Number this) (.doubleValue ^Number other))))
-    (comapreTo [other] (and (instance? Number other)
+    (compareTo [other] (and (instance? Number other)
                             (Double/compare (.doubleValue ^Number this) (.doubleValue ^Number other))))))
 
 (defmethod op [:avg BaseIntVector] [_ ^BaseIntVector a]
-  (->avarge (op :sum a) (op :count a)))
+  (->average (op :sum a) (op :count a)))
 
 (defmethod op [:avg IAverage BaseIntVector] [_ ^IAverage a ^BaseIntVector b]
-  (->avarge (+ (.numerator a) (op :sum b))
+  (->average (+ (.numerator a) (op :sum b))
             (+ (.denominator a) (op :count b))))
 
 (defmethod op [:avg FloatingPointVector] [_ ^FloatingPointVector a]
-  (->avarge (op :sum a) (op :count a)))
+  (->average (op :sum a) (op :count a)))
 
 (defmethod op [:avg IAverage FloatingPointVector] [_ ^IAverage a ^FloatingPointVector b]
-  (->avarge (+ (.numerator a) (op :sum b))
-            (+ (.denominator a) (op :count b))))
+  (->average (+ (.numerator a) (op :sum b))
+             (+ (.denominator a) (op :count b))))
 
 (set! *unchecked-math* false)
 
