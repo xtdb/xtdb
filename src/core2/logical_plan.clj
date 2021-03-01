@@ -33,6 +33,11 @@
                          :aggregates (s/coll-of (s/tuple ::aggregate ::column) :kind vector?)
                          :relation ::ra-expression))
 
+(s/def ::slice (s/cat :op #{:slice}
+                      :offset (s/nilable nat-int?)
+                      :limit (s/nilable nat-int?)
+                      :relation ::ra-expression))
+
 (s/def ::intersection (s/cat :op '#{:∩ :intersect}
                              :left ::ra-expression
                              :right ::ra-expression))
@@ -55,22 +60,17 @@
                      :left ::ra-expression
                      :right ::ra-expression))
 
-(s/def ::slice (s/cat :op #{:slice}
-                      :offset (s/nilable nat-int?)
-                      :limit (s/nilable nat-int?)
-                      :relation ::ra-expression))
-
 (s/def ::ra-expression (s/or :relation ::relation
                              :projection ::projection
                              :selection ::selection
                              :rename ::rename
                              :order-by ::order-by
                              :group-by ::group-by
+                             :slice ::slice
                              :intersection ::intersection
                              :union ::union
                              :difference ::difference
                              :cross-join ::cross-join
-                             :join ::join
-                             :slice ::slice))
+                             :join ::join))
 
 (s/def ::logical-plan ::ra-expression)
