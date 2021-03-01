@@ -13,11 +13,11 @@
 
 (s/def ::projection (s/cat :op #{:π :pi :project}
                            :projections (s/coll-of (s/or :column ::column
-                                                         :expression (s/cat :expression ::expression :as ::column)))
+                                                         :extend (s/cat :expression ::expression :as ::column)))
                            :relation ::ra-expression))
 
 (s/def ::selection (s/cat :op #{:σ :sigma :select}
-                          :expression ::expression
+                          :predicate ::expression
                           :relation ::ra-expression))
 
 (s/def ::rename (s/cat :op #{:ρ :rho :rename}
@@ -26,7 +26,7 @@
                        :relation ::ra-expression))
 
 (s/def ::order-by (s/cat :op #{:τ :tau :order-by}
-                         :order (s/coll-of (s/cat :column ::column :direction (s/? #{:asc :desc})))
+                         :order (s/coll-of (s/cat :column ::column :direction #{:asc :desc}))
                          :relation ::ra-expression))
 
 (s/def ::group-by (s/cat :op #{:γ :gamma :group-by}
