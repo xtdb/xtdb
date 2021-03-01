@@ -84,11 +84,13 @@
             (ArrowType$Union. UnionMode/Dense type-ids)
             false
             (for [type-k type-ks]
-              (->field (if (= type-k :null)
-                         "$data$"
-                         (name type-k))
-                       (primitive-type->arrow-type type-k)
-                       false))))))
+              (if (= type-k :null)
+                (->field "$data$"
+                         (primitive-type->arrow-type type-k)
+                         true)
+                (->field (name type-k)
+                         (primitive-type->arrow-type type-k)
+                         false)))))))
 
 (defn holder-minor-type ^org.apache.arrow.vector.types.Types$MinorType [holder]
   (condp = (type holder)
