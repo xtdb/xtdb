@@ -1,13 +1,16 @@
 (ns core2.scan
   (:require [core2.align :as align]
+            [core2.indexer :as idx]
             [core2.metadata :as meta]
             [core2.select :as sel]
+            core2.tx
             [core2.types :as t]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.buffer_pool.BufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
+           core2.tx.Watermark
            core2.util.IChunkCursor
            [java.util LinkedHashMap LinkedList List Map Queue]
            java.util.function.Consumer
@@ -16,13 +19,16 @@
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (defn- next-roots [col-names chunks]
-  (let [in-roots (LinkedHashMap.)]
-    (when (every? true? (for [col-name col-names]
-                          (.tryAdvance ^ICursor (get chunks col-name)
-                                       (reify Consumer
-                                         (accept [_ root]
-                                           (.put in-roots col-name root))))))
-      in-roots)))
+  (when (= (count col-names) (count chunks))
+    (let [in-roots (LinkedHashMap.)]
+      (when (every? true? (for [col-name col-names
+                                :let [^ICursor chunk (get chunks col-name)]
+                                :when chunk]
+                            (.tryAdvance chunk
+                                         (reify Consumer
+                                           (accept [_ root]
+                                             (.put in-roots col-name root))))))
+        in-roots))))
 
 (defn- ->row-id-bitmap [^VectorSchemaRoot root vec-pred]
   (-> (when vec-pred
@@ -40,11 +46,13 @@
 
 (deftype ScanCursor [^BufferAllocator allocator
                      ^BufferPool buffer-pool
+                     ^Watermark watermark
                      ^Queue #_<Long> chunk-idxs
                      ^List col-names
                      ^Map col-preds
                      ^:unsynchronized-mutable ^VectorSchemaRoot root
-                     ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks]
+                     ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks
+                     ^:unsynchronized-mutable ^boolean live-chunk-done?]
   ICursor
   (tryAdvance [this c]
     (letfn [(next-block [chunks ^VectorSchemaRoot root]
@@ -85,9 +93,23 @@
                     (set! (.root this) root)
 
                     (or (next-block chunks root)
-                        (recur))))))]
+                        (recur))))))
 
-      (or (when chunks
+            (live-chunk []
+              (let [chunks (idx/->live-slices watermark col-names)
+                    root (VectorSchemaRoot/create (align/align-schemas (for [^IChunkCursor chunk (vals chunks)]
+                                                                         (.getSchema chunk)))
+                                                  allocator)]
+                (set! (.chunks this) chunks)
+                (set! (.root this) root)
+
+                (next-block chunks root)))]
+
+      (or (when-not live-chunk-done?
+            (set! (.live-chunk-done? this) true)
+            (live-chunk))
+
+          (when chunks
             (next-block chunks root))
 
           (next-chunk)
@@ -102,12 +124,13 @@
 
 (defn- ->scan-cursor [^BufferAllocator allocator
                       ^BufferPool buffer-pool
+                      ^Watermark watermark
                       ^List col-names
                       ^Map col-preds
                       ^Queue chunk-idxs]
-  (ScanCursor. allocator buffer-pool
+  (ScanCursor. allocator buffer-pool watermark
                chunk-idxs col-names col-preds
-               nil nil))
+               nil nil false))
 
 (definterface IScanFactory
   (^core2.ICursor scanBlocks [^core2.tx.Watermark watermark
@@ -121,4 +144,4 @@
   IScanFactory
   (scanBlocks [_ watermark col-names metadata-pred col-preds]
     (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
-      (->scan-cursor allocator buffer-pool col-names col-preds chunk-idxs))))
+      (->scan-cursor allocator buffer-pool watermark col-names col-preds chunk-idxs))))

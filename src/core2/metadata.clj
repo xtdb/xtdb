@@ -186,7 +186,7 @@
 
 (defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
   (->> (for [^long chunk-idx (.knownChunks metadata-mgr)
-             :while (<= chunk-idx (.chunk-idx watermark))]
+             :while (< chunk-idx (.chunk-idx watermark))]
          (MapEntry/create chunk-idx (with-metadata metadata-mgr chunk-idx metadata-pred)))
        vec (filter (comp deref val)) keys))
 
