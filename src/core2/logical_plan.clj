@@ -11,6 +11,10 @@
                           :expression (s/and vector? (s/cat :op keyword? :args (s/* ::expression)))
                           :atom (complement vector?)))
 
+(s/def ::table-scan (s/cat :op #{:scan}
+                           :as (s/? ::relation)
+                           :columns (s/coll-of (s/cat :column ::column :predicate (s/? ::expression)) :min-count 1)))
+
 (s/def ::projection (s/cat :op #{:π :pi :project}
                            :projections (s/coll-of (s/or :column ::column
                                                          :extend (s/cat :expression ::expression :as ::column)))
@@ -61,7 +65,7 @@
                      :left ::ra-expression
                      :right ::ra-expression))
 
-(s/def ::ra-expression (s/or :relation ::relation
+(s/def ::ra-expression (s/or :scan ::table-scan
                              :projection ::projection
                              :selection ::selection
                              :rename ::rename
