@@ -78,7 +78,7 @@
                     (.and (align/->row-id-bitmap (sel/select name-vec (sel/->dense-union-pred
                                                                        (sel/->str-pred sel/pred<= "Frank")
                                                                        varchar-type-id))
-                                               name-row-id-vec)))
+                                                 name-row-id-vec)))
           roots [name-root age-root]]
       (with-open [^VectorSchemaRoot out-root (VectorSchemaRoot/create (align/roots->aligned-schema roots) tu/*allocator*)]
         (align/align-vectors roots row-ids out-root)
