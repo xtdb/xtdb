@@ -29,7 +29,7 @@
 
 (s/def ::rename (s/cat :op #{:ρ :rho :rename}
                        :as (s/? ::relation)
-                       :columns (s/? (s/coll-of (s/cat :column ::column :as ::column)))
+                       :columns (s/? (s/coll-of (s/cat :as ::column :column ::column)))
                        :relation ::ra-expression))
 
 (s/def ::order-by (s/cat :op '#{:τ :tau :order-by order-by}
@@ -38,7 +38,7 @@
 
 (s/def ::group-by (s/cat :op #{:γ :gamma :group-by}
                          :group-by (s/? (s/coll-of ::column))
-                         :aggregates (s/coll-of (s/cat :expression ::expression :as ::column))
+                         :aggregates (s/coll-of (s/cat :as ::column :expression ::expression))
                          :relation ::ra-expression))
 
 (s/def ::slice (s/cat :op #{:slice}
@@ -89,7 +89,7 @@
    ::logical-plan
    [:π [[:Account/cid]]
     [:σ [:> :sum 1000]
-     [:γ [:Account/cid] [[[:sum :Account/balance] :sum]]
+     [:γ [:Account/cid] [[:sum [:sum :Account/balance]]]
       [:⋈ [:= :Account/cid :Customer/cid]
        [:scan [[:Account/cid] [:Account/balance]]]
        [:scan [[:Customer/cid]]]]]]])
@@ -98,7 +98,7 @@
    ::logical-plan
    '[:project [[cid]]
      [:select (> sum 1000)
-      [:group-by [cid] [[(sum balance) sum]]
+      [:group-by [cid] [[sum (sum balance)]]
        [:join
         [:project [[cid] [balance]] Account]
         [:project [[cid]] Customer]]]]]))
