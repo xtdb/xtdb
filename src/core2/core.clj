@@ -235,48 +235,6 @@
          ingest-loop (->ingest-loop log-reader indexer opts)]
      (Node. allocator log-reader object-store metadata-manager indexer ingest-loop buffer-pool))))
 
-(defn- with-root-futs [^Node node ^Watermark watermark chunk-idxs col-name block-stream-f]
-  (let [^BufferAllocator allocator (.allocator node)
-        ^BufferPool buffer-pool (.buffer-pool node)
-        futs (vec (for [^long chunk-idx chunk-idxs
-                        :while (< chunk-idx (.chunk-idx watermark))]
-                    (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
-                        (util/then-apply
-                          (fn [buffer]
-                            (when buffer
-                              (with-open [^ArrowBuf buffer buffer]
-                                (block-stream-f (util/block-stream buffer allocator)))))))))
-
-        live-results (block-stream-f (indexer/->live-slices watermark col-name))]
-
-    (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
-        (util/then-apply
-          (fn [_]
-            (into [live-results] (map deref) futs))))))
-
-(defn matching-chunks [^Node node ^String col-name ^IVectorPredicate vec-pred ^Types$MinorType minor-type]
-  (let [^IMetadataManager metadata-mgr (.metadata-manager node)
-        matching-chunk? (meta/matching-chunk-pred col-name vec-pred minor-type)]
-    (->> (for [chunk-idx (.knownChunks metadata-mgr)]
-           (MapEntry/create chunk-idx (meta/with-metadata metadata-mgr chunk-idx matching-chunk?)))
-         vec (filter (comp deref val)) keys)))
-
-(defn scan [^Node node watermark ^String col-name vec-pred ^Types$MinorType minor-type project-fn]
-  (let [matching-chunks (matching-chunks node col-name vec-pred minor-type)]
-    (letfn [(scan-col [^VectorSchemaRoot col]
-              (let [^DenseUnionVector col-vec (.getVector col col-name)
-                    ^BigIntVector row-id-vec (.getVector col "_row-id")
-                    type-id (t/arrow-type->type-id (.getType minor-type))]
-                (vec (for [idx (-> (sel/select col-vec (-> vec-pred (sel/->dense-union-pred type-id)))
-                                   .stream .iterator iterator-seq)]
-                       (project-fn (.get row-id-vec idx)
-                                   (.getVectorByType col-vec type-id)
-                                   (.getOffset col-vec idx))))))]
-      (with-root-futs node watermark matching-chunks col-name
-        (fn [block-stream]
-          (->> block-stream
-               (into [] (mapcat scan-col))))))))
-
 (defn -main [& [node-dir :as args]]
   (if node-dir
     (let [node-dir (util/->path node-dir)]

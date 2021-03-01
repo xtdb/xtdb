@@ -4,14 +4,17 @@
             [core2.select :as sel]
             [core2.scan :as scan]
             [core2.util :as util]
-            [core2.test-util :as tu])
+            [core2.test-util :as tu]
+            [core2.metadata :as meta]
+            [core2.types :as ty])
   (:import clojure.lang.MapEntry
            core2.core.IngestLoop
            core2.indexer.Indexer
            core2.scan.ScanFactory
            java.util.function.Consumer
            org.apache.arrow.vector.types.Types$MinorType
-           [org.apache.arrow.vector VarCharVector VectorSchemaRoot]))
+           [org.apache.arrow.vector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector.util Text]))
 
 (t/deftest test-find-gt-ivan
   (let [node-dir (doto (util/->path "target/test-find-gt-ivan")
@@ -37,33 +40,32 @@
 
         (.finishChunk i)
 
-        (let [scan-factory (ScanFactory. allocator metadata-mgr buffer-pool)
-              !results (atom [])]
-          (with-open [chunk-scanner (.scanBlocks scan-factory ["name"])]
-            (while (.tryAdvance chunk-scanner
-                                (reify Consumer
-                                  (accept [_ root]
-                                    (swap! !results into (tu/root->rows root)))))))
-          (t/is (= [] @!results)))
-
-        #_
-        (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")]
-          (t/is (= [1] (c2/matching-chunks node "name" ivan-pred Types$MinorType/VARCHAR))
+        (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
+              metadata-pred (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)]
+          (t/is (= [1] (meta/matching-chunks metadata-mgr metadata-pred))
                 "only needs to scan chunk 1")
 
-          (letfn [(query-ivan [watermark]
-                    (->> @(c2/scan node watermark "name" ivan-pred Types$MinorType/VARCHAR
-                                   (fn [row-id ^VarCharVector field-vec idx]
-                                     (MapEntry/create row-id (str (.getObject field-vec ^int idx)))))
-                         (into {} (mapcat seq))))]
+          (let [scan-factory (ScanFactory. allocator metadata-mgr buffer-pool)]
 
-            (with-open [watermark (.getWatermark i)]
-              @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
-                   (tu/then-await-tx il))
+            (letfn [(query-ivan [watermark]
+                      (let [!results (atom [])]
+                        (with-open [chunk-scanner (.scanBlocks scan-factory ["name"] metadata-pred
+                                                               {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))})]
+                          (while (.tryAdvance chunk-scanner
+                                              (reify Consumer
+                                                (accept [_ root]
+                                                  (swap! !results into (tu/root->rows root)))))))
+                        @!results))]
+              (with-open [watermark (.getWatermark i)]
+                @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
+                     (tu/then-await-tx il))
 
-              (t/is (= {1 "James", 3 "Jon"}
-                       (query-ivan watermark))))
+                (t/is (= [[1 (Text. "James")]
+                          [3 (Text. "Jon")]]
+                         (query-ivan watermark))))
 
-            (with-open [watermark (.getWatermark i)]
-              (t/is (= {1 "James", 3 "Jon", 4 "Jeremy"}
-                       (query-ivan watermark))))))))))
+              (with-open [watermark (.getWatermark i)]
+                (t/is (= [[1 (Text. "James")]
+                          [3 (Text. "Jon")]
+                          [4 (Text. "Jeremy")]]
+                         (query-ivan watermark)))))))))))

@@ -1,19 +1,15 @@
 (ns core2.select
-  (:require [core2.types :as t]
-            [core2.util :as u])
+  (:require [core2.types :as t])
   (:import [core2.select IVectorCompare IVectorPredicate]
            core2.types.ReadWrite
            java.nio.charset.StandardCharsets
-           [java.util Comparator List]
+           java.util.Comparator
            [java.util.function IntConsumer IntPredicate]
            java.util.stream.IntStream
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
-           [org.apache.arrow.vector BigIntVector ElementAddressableVector FieldVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector ElementAddressableVector FieldVector]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.holders NullableBigIntHolder ValueHolder]
-           org.apache.arrow.vector.util.Text
-           org.apache.arrow.vector.types.pojo.Schema
-           org.roaringbitmap.longlong.Roaring64Bitmap
+           org.apache.arrow.vector.holders.ValueHolder
            org.roaringbitmap.RoaringBitmap))
 
 (defmacro ^:private def-pred [sym [binding] & body]

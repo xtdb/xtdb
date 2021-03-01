@@ -3,14 +3,15 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
-  (:import core2.buffer_pool.BufferPool
+  (:import clojure.lang.MapEntry
+           core2.buffer_pool.BufferPool
            core2.object_store.ObjectStore
            [core2.select IVectorCompare IVectorPredicate]
            core2.types.ReadWrite
            java.io.Closeable
            [java.util Comparator Date List SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
-           java.util.function.IntPredicate
+           [java.util.function IntPredicate Predicate]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -181,6 +182,11 @@
         (boolean (and (not (neg? idx))
                       (or (nil? min-vec-pred) (test-min-value metadata-root idx min-vec-pred))
                       (or (nil? max-vec-pred) (test-max-value metadata-root idx max-vec-pred))))))))
+
+(defn matching-chunks [^IMetadataManager metadata-mgr metadata-pred]
+  (->> (for [chunk-idx (.knownChunks metadata-mgr)]
+         (MapEntry/create chunk-idx (with-metadata metadata-mgr chunk-idx metadata-pred)))
+       vec (filter (comp deref val)) keys))
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
