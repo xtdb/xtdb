@@ -70,7 +70,7 @@
 
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
-                             :project ::projection
+                             :project ::project
                              :select ::select
                              :rename ::rename
                              :order-by ::order-by
