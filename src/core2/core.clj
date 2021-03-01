@@ -5,28 +5,24 @@
             [core2.log :as l]
             [core2.metadata :as meta]
             [core2.object-store :as os]
-            [core2.select :as sel]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
-  (:import clojure.lang.MapEntry
-           core2.buffer_pool.BufferPool
+  (:import core2.buffer_pool.BufferPool
            [core2.indexer Indexer TransactionIndexer]
            [core2.log LogReader LogRecord LogWriter]
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
-           core2.select.IVectorPredicate
-           core2.tx.Watermark
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
            [java.util LinkedHashMap LinkedHashSet Set]
-           [java.util.concurrent CompletableFuture Executors ExecutorService Future TimeoutException]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
+           [java.util.concurrent Executors ExecutorService Future TimeoutException]
+           [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (set! *unchecked-math* :warn-on-boxed)
 

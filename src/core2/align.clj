@@ -53,16 +53,17 @@
                         (.copyFrom out-vec idx out-idx field-vec)))))))
   out-vec)
 
-(defn roots->aligned-schema ^org.apache.arrow.vector.types.pojo.Schema [^List roots]
-  (Schema. (reduce (fn [acc ^VectorSchemaRoot root]
+(defn align-schemas ^org.apache.arrow.vector.types.pojo.Schema [^List schemas]
+  (Schema. (reduce (fn [acc ^Schema schema]
                      (cond-> acc
                        (empty? acc) (conj t/row-id-field)
-                       :always (conj (.get (.getFields (.getSchema root)) 1))))
+                       :always (conj (-> (.getFields schema) (.get 1)))))
                    []
-                   roots)))
+                   schemas)))
 
 (defn align-vectors ^org.apache.arrow.vector.VectorSchemaRoot [^List roots, ^Roaring64Bitmap row-id-bitmap ^VectorSchemaRoot out-root]
   (.clear out-root)
+
   (doseq [^VectorSchemaRoot root roots
           :let [row-id-vec (.getVector root 0)
                 in-vec (.getVector root 1)

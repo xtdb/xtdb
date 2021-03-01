@@ -120,7 +120,6 @@
                          @(.submitTx tx-producer tx-ops)))))
 
         (t/is (= last-tx-instant
-
                  (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
 
         (t/testing "watermark"

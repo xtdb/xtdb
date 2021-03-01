@@ -1,71 +1,41 @@
 (ns core2.scan
   (:require [core2.align :as align]
             [core2.metadata :as meta]
-            [core2.util :as util]
-            core2.tx
+            [core2.select :as sel]
             [core2.types :as t]
-            [core2.select :as sel])
-  (:import core2.ICursor
+            [core2.util :as util])
+  (:import clojure.lang.MapEntry
            core2.buffer_pool.BufferPool
+           core2.ICursor
            core2.metadata.IMetadataManager
-           core2.select.IVectorPredicate
-           java.io.Closeable
-           [java.util LinkedList List Queue Map]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.ipc.message.ArrowRecordBatch
+           core2.util.IChunkCursor
+           [java.util LinkedHashMap LinkedList List Map Queue]
+           java.util.function.Consumer
+           org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.VectorSchemaRoot
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
-(definterface IChunk
-  (^org.roaringbitmap.longlong.Roaring64Bitmap rowIdBitmap [])
-  (^boolean loadNextBlock []))
+(defn- next-roots [col-names chunks]
+  (let [in-roots (LinkedHashMap.)]
+    (when (every? true? (for [col-name col-names]
+                          (.tryAdvance ^ICursor (get chunks col-name)
+                                       (reify Consumer
+                                         (accept [_ root]
+                                           (.put in-roots col-name root))))))
+      in-roots)))
 
-(deftype Chunk [^IVectorPredicate vec-pred
-                ^ArrowBuf buf,
-                ^Queue blocks
-                ^VectorSchemaRoot root
-                ^VectorLoader loader
-                ^:unsynchronized-mutable ^ArrowRecordBatch current-record-batch]
-  IChunk
-  (loadNextBlock [_]
-    (when current-record-batch
-      (.close current-record-batch))
+(defn- ->row-id-bitmap [^VectorSchemaRoot root vec-pred]
+  (-> (when vec-pred
+        (sel/select (.getVector root 1) vec-pred))
+      (align/->row-id-bitmap (.getVector root t/row-id-field))))
 
-    (if-let [block (.poll blocks)]
-      (let [record-batch (util/->arrow-record-batch-view block buf)]
-        (.load loader record-batch)
-        true)
-      false))
-
-  (rowIdBitmap [_]
-    (-> (when vec-pred
-          (sel/select (.getVector root 1) vec-pred))
-        (align/->row-id-bitmap (.getVector root t/row-id-field))))
-
-  Closeable
-  (close [_]
-    (when current-record-batch
-      (.close current-record-batch))
-    (.close root)
-    (.close buf)))
-
-(defn- ->chunk [^BufferAllocator allocator ^IVectorPredicate vec-pred ^ArrowBuf buf]
-  (let [footer (util/read-arrow-footer buf)
-        root (VectorSchemaRoot/create (.getSchema footer) allocator)]
-    (Chunk. vec-pred
-            buf
-            (LinkedList. (.getRecordBatches footer))
-            root
-            (VectorLoader. root)
-            nil)))
-
-(defn align-roots [chunks ^VectorSchemaRoot out-root]
-  (let [row-id-bitmaps (for [^Chunk chunk chunks]
-                         (.rowIdBitmap chunk))
+(defn- align-roots [^List col-names ^Map col-preds ^Map in-roots ^VectorSchemaRoot out-root]
+  (let [row-id-bitmaps (for [col-name col-names]
+                         (->row-id-bitmap (get in-roots col-name) (get col-preds col-name)))
         row-id-bitmap (reduce #(.and ^Roaring64Bitmap %1 %2)
                               (first row-id-bitmaps)
                               (rest row-id-bitmaps))]
-    (align/align-vectors (map #(.root ^Chunk %) chunks) row-id-bitmap out-root)
+    (align/align-vectors (vals in-roots) row-id-bitmap out-root)
     out-root))
 
 (deftype ScanCursor [^BufferAllocator allocator
@@ -74,48 +44,58 @@
                      ^List col-names
                      ^Map col-preds
                      ^:unsynchronized-mutable ^VectorSchemaRoot root
-                     ^:unsynchronized-mutable ^List #_<Chunk> chunks]
+                     ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks]
   ICursor
   (tryAdvance [this c]
     (letfn [(next-block [chunks ^VectorSchemaRoot root]
-              (if (every? true? (map #(.loadNextBlock ^Chunk %) chunks))
-                (do
-                  (align-roots chunks root)
-                  (if (pos? (.getRowCount root))
-                    (do
-                      (.accept c root)
-                      true)
-                    (recur chunks root)))
-                (do
-                  (doseq [^Chunk chunk chunks]
-                    (.close chunk))
-                  (set! (.chunks this) nil)
+              (loop []
+                (if-let [in-roots (next-roots col-names chunks)]
+                  (do
+                    (align-roots col-names col-preds in-roots root)
+                    (if (pos? (.getRowCount root))
+                      (do
+                        (.accept c root)
+                        true)
+                      (recur)))
 
-                  (.close root)
-                  (set! (.root this) nil)
+                  (do
+                    (doseq [^ICursor chunk (vals chunks)]
+                      (.close chunk))
+                    (set! (.chunks this) nil)
 
-                  false)))]
+                    (.close root)
+                    (set! (.root this) nil)
+
+                    false))))
+
+            (next-chunk []
+              (loop []
+                (when-let [chunk-idx (.poll chunk-idxs)]
+                  (let [chunks (->> (for [col-name col-names]
+                                      (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                                          (util/then-apply
+                                            (fn [buf]
+                                              (MapEntry/create col-name (util/->chunks buf allocator))))))
+                                    vec
+                                    (into {} (map deref)))
+                        root (VectorSchemaRoot/create (align/align-schemas (for [^IChunkCursor chunk (vals chunks)]
+                                                                             (.getSchema chunk)))
+                                                      allocator)]
+                    (set! (.chunks this) chunks)
+                    (set! (.root this) root)
+
+                    (or (next-block chunks root)
+                        (recur))))))]
 
       (or (when chunks
             (next-block chunks root))
 
-          (when-let [chunk-idx (.poll chunk-idxs)]
-            (let [chunks (->> (for [col-name col-names]
-                                (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
-                                    (util/then-apply
-                                      (fn [buf]
-                                        (->chunk allocator (get col-preds col-name) buf)))))
-                              vec
-                              (mapv deref))]
-              (set! (.chunks this) chunks)
-              (set! (.root this)
-                    (VectorSchemaRoot/create (align/roots->aligned-schema (map #(.root ^Chunk %) chunks)) allocator))
-              (next-block chunks root)))
+          (next-chunk)
 
           false)))
 
   (close [_]
-    (doseq [^Chunk chunk chunks]
+    (doseq [^ICursor chunk (vals chunks)]
       (.close chunk))
     (when root
       (.close root))))
@@ -130,7 +110,8 @@
                nil nil))
 
 (definterface IScanFactory
-  (^core2.ICursor scanBlocks [^java.util.List #_<String> colNames,
+  (^core2.ICursor scanBlocks [^core2.tx.Watermark watermark
+                              ^java.util.List #_<String> colNames,
                               metadataPred
                               ^java.util.Map #_#_<String, IVectorPredicate> colPreds]))
 
@@ -138,6 +119,6 @@
                       ^IMetadataManager metadata-mgr
                       ^BufferPool buffer-pool]
   IScanFactory
-  (scanBlocks [_ col-names metadata-pred col-preds]
-    (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr metadata-pred))]
+  (scanBlocks [_ watermark col-names metadata-pred col-preds]
+    (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
       (->scan-cursor allocator buffer-pool col-names col-preds chunk-idxs))))

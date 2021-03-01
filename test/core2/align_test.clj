@@ -80,7 +80,8 @@
                                                                        varchar-type-id))
                                                  name-row-id-vec)))
           roots [name-root age-root]]
-      (with-open [^VectorSchemaRoot out-root (VectorSchemaRoot/create (align/roots->aligned-schema roots) tu/*allocator*)]
+      (with-open [out-root (VectorSchemaRoot/create (align/align-schemas [(.getSchema name-root) (.getSchema age-root)])
+                                                    tu/*allocator*)]
         (align/align-vectors roots row-ids out-root)
         (t/is (= [[2 (Text. "Dave") 12]
                   [9 (Text. "Bob") 15]]

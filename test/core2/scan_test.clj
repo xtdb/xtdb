@@ -42,14 +42,13 @@
 
         (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
               metadata-pred (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)]
-          (t/is (= [1] (meta/matching-chunks metadata-mgr metadata-pred))
-                "only needs to scan chunk 1")
 
           (let [scan-factory (ScanFactory. allocator metadata-mgr buffer-pool)]
 
             (letfn [(query-ivan [watermark]
                       (let [!results (atom [])]
-                        (with-open [chunk-scanner (.scanBlocks scan-factory ["name"] metadata-pred
+                        (with-open [chunk-scanner (.scanBlocks scan-factory watermark
+                                                               ["name"] metadata-pred
                                                                {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))})]
                           (while (.tryAdvance chunk-scanner
                                               (reify Consumer
@@ -57,6 +56,9 @@
                                                   (swap! !results into (tu/root->rows root)))))))
                         @!results))]
               (with-open [watermark (.getWatermark i)]
+                (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
+                      "only needs to scan chunk 1")
+
                 @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
                      (tu/then-await-tx il))
 
