@@ -17,7 +17,8 @@
 
 (s/def ::projection (s/cat :op #{:π :pi :project}
                            :projections (s/coll-of (s/or :column ::column
-                                                         :extend (s/cat :expression ::expression :as ::column)))
+                                                         :extend (s/cat :expression ::expression :as ::column))
+                                                   :min-count 1)
                            :relation ::ra-expression))
 
 (s/def ::selection (s/cat :op #{:σ :sigma :select}
