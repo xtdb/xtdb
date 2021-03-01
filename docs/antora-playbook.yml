@@ -9,6 +9,12 @@ content:
       branches:
         - HEAD
         - docs-v*
+    - url: ../
+      start_path: docs/about
+      branches: master
+    - url: ../
+      start_path: docs/community
+      branches: master
 ui:
   bundle:
     url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip
