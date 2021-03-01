@@ -56,7 +56,8 @@
                            :right ::ra-expression))
 
 (s/def ::join (s/cat :op #{:⋈ :join}
-                     :expression (s/? ::expression)
+                     :join-type (s/? (s/or :equi-join (s/and (s/tuple #{:=} ::column ::column) ::expression)
+                                           :theta-join ::expression))
                      :left ::ra-expression
                      :right ::ra-expression))
 
