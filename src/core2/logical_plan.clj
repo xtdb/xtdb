@@ -13,14 +13,16 @@
 
 (s/def ::expression (s/or :column ::column
                           :expression (s/cat :op ::named :args (s/* ::expression))
-                          :atom (constantly true)))
+                          :atom any?))
+
+(s/def ::column-expression (s/map-of ::column ::expression :count 1 :conform-keys true))
 
 (s/def ::scan (s/cat :op #{:scan}
-                     :columns (s/coll-of (s/cat :column ::column :predicate (s/? ::expression)) :min-count 1)
+                     :columns (s/coll-of (s/or :column ::column :select ::column-expression) :min-count 1)
                      :as (s/? ::relation)))
 
 (s/def ::project (s/cat :op #{:π :pi :project}
-                        :projections (s/coll-of (s/cat :column ::column :extend (s/? ::expression)) :min-count 1)
+                        :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
                         :relation ::ra-expression))
 
 (s/def ::select (s/cat :op #{:σ :sigma :select}
@@ -29,16 +31,15 @@
 
 (s/def ::rename (s/cat :op #{:ρ :rho :rename}
                        :as (s/? ::relation)
-                       :columns (s/? (s/coll-of (s/cat :as ::column :column ::column)))
+                       :columns (s/? (s/map-of ::column ::column :conform-keys true))
                        :relation ::ra-expression))
 
 (s/def ::order-by (s/cat :op '#{:τ :tau :order-by order-by}
-                         :order (s/coll-of (s/cat :column ::column :direction #{:asc :desc}))
+                         :order (s/coll-of (s/or :column ::column :direction (s/map-of ::column #{:asc :desc} :count 1 :conform-keys true)))
                          :relation ::ra-expression))
 
 (s/def ::group-by (s/cat :op #{:γ :gamma :group-by}
-                         :group-by (s/? (s/coll-of ::column))
-                         :aggregates (s/coll-of (s/cat :as ::column :expression ::expression))
+                         :columns (s/coll-of (s/or :group-by ::column :aggregate ::column-expression) :min-count 1)
                          :relation ::ra-expression))
 
 (s/def ::slice (s/cat :op #{:slice}
@@ -87,18 +88,27 @@
 (comment
   (s/conform
    ::logical-plan
-   [:π [[:Account/cid]]
-    [:σ [:> :sum 1000]
-     [:γ [:Account/cid] [[:sum [:sum :Account/balance]]]
+   [:π [:Account/cid]
+    [:σ [:> :Account/sum 1000]
+     [:γ [:Account/cid {:Account/sum [:sum :Account/balance]}]
       [:⋈ [:= :Account/cid :Customer/cid]
-       [:scan [[:Account/cid] [:Account/balance]]]
-       [:scan [[:Customer/cid]]]]]]])
+       [:scan [:Account/cid :Account/balance]]
+       [:scan [:Customer/cid]]]]]])
 
   (s/conform
    ::logical-plan
-   '[:project [[cid]]
+   '[:π [:Account/cid]
+     [:σ (> :Account/sum 1000)
+      [:γ [:Account/cid {:Account/sum (sum :Account/balance)}]
+       [:⋈ (= :Account/cid :Customer/cid)
+        [:scan [:Account/cid :Account/balance]]
+        [:scan [:Customer/cid]]]]]])
+
+  (s/conform
+   ::logical-plan
+   '[:project [cid]
      [:select (> sum 1000)
-      [:group-by [cid] [[sum (sum balance)]]
+      [:group-by [cid {sum (sum balance)}]
        [:join
-        [:project [[cid] [balance]] Account]
-        [:project [[cid]] Customer]]]]]))
+        [:project [cid balance] Account]
+        [:project [cid] Customer]]]]]))
