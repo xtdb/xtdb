@@ -33,7 +33,12 @@
                                        (util/project-vec (.getVector in-root field)
                                                          idx-bitmap
                                                          (.getVector out-root field))))))))))
-    (.accept c out-root))
+
+    (if (pos? (.getRowCount out-root))
+      (do
+        (.accept c out-root)
+        true)
+      false))
 
   (close [_]
     (util/try-close out-root)
