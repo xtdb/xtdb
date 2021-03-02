@@ -5,13 +5,16 @@
             [core2.types :as t]
             [core2.util :as util]
             [core2.metadata :as meta])
-  (:import clojure.lang.IReduceInit core2.metadata.IMetadataManager
+  (:import clojure.lang.MapEntry
+           core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.tx TransactionInstant Watermark]
+           core2.util.IChunkCursor
            java.io.Closeable
            [java.util Collections Date Map Map$Entry TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
+           java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
@@ -81,36 +84,57 @@
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
-(defn ->slices [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
-  (let [^BigIntVector row-id-vec (.getVector root (.getName t/row-id-field))
-        row-count (.getRowCount root)]
+(deftype SliceCursor [^VectorSchemaRoot root
+                      ^long max-rows-per-block
+                      ^:unsynchronized-mutable ^long start-row-id
+                      ^:unsynchronized-mutable ^int start-idx
+                      ^:unsynchronized-mutable ^VectorSchemaRoot current-slice]
+  IChunkCursor
+  (getSchema [_] (.getSchema root))
 
-    (reify IReduceInit
-      (reduce [_ f init]
-        (loop [acc init
-               start-idx 0
-               target-row-id (+ start-row-id max-rows-per-block)]
-          (let [len (loop [len 0]
-                      (let [idx (+ start-idx len)]
-                        (if (or (>= idx row-count)
-                                (>= (.get row-id-vec idx) target-row-id))
-                          len
-                          (recur (inc len)))))
-                end-idx (+ start-idx ^long len)
-                acc (with-open [^VectorSchemaRoot sliced-root (util/slice-root root start-idx len)]
-                      (f acc sliced-root))]
+  (tryAdvance [this c]
+    (when current-slice
+      (.close current-slice)
+      (set! (.current-slice this) nil))
 
-            (if (< end-idx row-count)
-              (recur acc end-idx (+ target-row-id max-rows-per-block))
-              (f acc))))))))
+    (let [row-count (.getRowCount root)]
+      (if-not (< start-idx row-count)
+        false
+        (let [^BigIntVector row-id-vec (.getVector root t/row-id-field)
+              target-row-id (+ start-row-id max-rows-per-block)
+              ^long len (loop [len 0]
+                          (let [idx (+ start-idx len)]
+                            (if (or (>= idx row-count)
+                                    (>= (.get row-id-vec idx) target-row-id))
+                              len
+                              (recur (inc len)))))
 
-(defn ->live-slices [^Watermark watermark, ^String col-name]
-  (if-let [root (-> ^Map (.column->root watermark)
-                    (get col-name))]
-    (->slices root
-              (.chunk-idx watermark)
-              (.max-rows-per-block watermark))
-    []))
+              ^VectorSchemaRoot sliced-root (util/slice-root root start-idx len)]
+
+          (set! (.current-slice this) sliced-root)
+          (.accept c sliced-root)
+
+          (set! (.start-row-id this) (+ start-row-id max-rows-per-block))
+          (set! (.start-idx this) (+ start-idx len))
+          true))))
+
+  (close [_]
+    (when current-slice
+      (.close current-slice))))
+
+(defn ->slices ^core2.util.IChunkCursor [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
+  (SliceCursor. root max-rows-per-block start-row-id 0 nil))
+
+(defn ->live-slices [^Watermark watermark, col-names]
+  (into {}
+        (keep (fn [col-name]
+                (when-let [root (-> (.column->root watermark)
+                                    (get col-name))]
+                  (MapEntry/create col-name
+                                   (->slices root
+                                             (.chunk-idx watermark)
+                                             (.max-rows-per-block watermark))))))
+        col-names))
 
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
@@ -216,13 +240,13 @@
             chunk-idx (.chunk-idx watermark)]
         (util/build-arrow-ipc-byte-buffer write-root :file
           (fn [write-batch!]
-            (->> (->slices live-root chunk-idx max-rows-per-block)
-                 (reduce (completing
-                          (fn [_ sliced-root]
-                            (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                              (.load loader arb)
-                              (write-batch!))))
-                         nil)))))))
+            (with-open [^IChunkCursor slices (->slices live-root chunk-idx max-rows-per-block)]
+              (while (.tryAdvance slices
+                                  (reify Consumer
+                                    (accept [_ sliced-root]
+                                      (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                        (.load loader arb)
+                                        (write-batch!))))))))))))
 
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]

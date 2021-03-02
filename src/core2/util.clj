@@ -1,7 +1,8 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import java.io.ByteArrayOutputStream
+  (:import core2.ICursor
+           java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
            [java.lang.reflect Field Method]
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
@@ -11,7 +12,7 @@
            [java.nio.file Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time LocalDateTime ZoneId]
-           [java.util ArrayList Date List]
+           [java.util ArrayList Date LinkedList List Queue]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Function IntUnaryOperator Supplier]
@@ -21,7 +22,7 @@
            [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter MessageSerializer]))
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowRecordBatch ArrowFooter MessageSerializer]))
 
 ;;; IO
 
@@ -421,19 +422,45 @@
                       (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
-(defn block-stream [^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
-  (when ipc-file-format-buffer
-    ;; `Stream`, when we go to Java
-    (reify
-      clojure.lang.IReduceInit
-      (reduce [_ f init]
-        (let [footer (read-arrow-footer ipc-file-format-buffer)]
-          (with-open [root (VectorSchemaRoot/create (.getSchema footer) allocator)]
-            (let [loader (VectorLoader. root)]
-              (f (reduce
-                  (fn [acc record-batch]
-                    (with-open [batch (->arrow-record-batch-view record-batch ipc-file-format-buffer)]
-                      (.load loader batch)
-                      (f acc root)))
-                  init
-                  (.getRecordBatches footer))))))))))
+(gen-interface
+ :name core2.util.IChunkCursor
+ :extends [core2.ICursor]
+ :methods [[getSchema [] org.apache.arrow.vector.types.pojo.Schema]])
+
+(import core2.util.IChunkCursor)
+
+(deftype ChunkCursor [^ArrowBuf buf,
+                      ^Queue blocks
+                      ^VectorSchemaRoot root
+                      ^VectorLoader loader
+                      ^:unsynchronized-mutable ^ArrowRecordBatch current-batch]
+  IChunkCursor
+  (getSchema [_]
+    (.getSchema root))
+
+  (tryAdvance [this c]
+    (when current-batch
+      (.close current-batch)
+      (set! (.current-batch this) nil))
+
+    (if-let [block (.poll blocks)]
+      (let [record-batch (->arrow-record-batch-view block buf)]
+        (set! (.current-batch this) record-batch)
+        (.load loader record-batch)
+        (.accept c root)
+        true)
+      false))
+
+  (close [_]
+    (when current-batch
+      (.close current-batch))
+    (.close root)))
+
+(defn ->chunks ^core2.util.IChunkCursor [^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
+  (let [footer (read-arrow-footer ipc-file-format-buffer)
+        root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+    (ChunkCursor. ipc-file-format-buffer
+                  (LinkedList. (.getRecordBatches footer))
+                  root
+                  (VectorLoader. root)
+                  nil)))

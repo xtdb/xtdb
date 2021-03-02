@@ -3,14 +3,16 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
-  (:import core2.buffer_pool.BufferPool
+  (:import clojure.lang.MapEntry
+           core2.buffer_pool.BufferPool
            core2.object_store.ObjectStore
            [core2.select IVectorCompare IVectorPredicate]
+           core2.tx.Watermark
            core2.types.ReadWrite
            java.io.Closeable
            [java.util Comparator Date List SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
-           java.util.function.IntPredicate
+           [java.util.function Consumer IntPredicate]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -182,6 +184,12 @@
                       (or (nil? min-vec-pred) (test-min-value metadata-root idx min-vec-pred))
                       (or (nil? max-vec-pred) (test-max-value metadata-root idx max-vec-pred))))))))
 
+(defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
+  (->> (for [^long chunk-idx (.knownChunks metadata-mgr)
+             :while (< chunk-idx (.chunk-idx watermark))]
+         (MapEntry/create chunk-idx (with-metadata metadata-mgr chunk-idx metadata-pred)))
+       vec (filter (comp deref val)) keys))
+
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^BufferPool buffer-pool
@@ -202,17 +210,22 @@
     (-> (.getBuffer buffer-pool (->metadata-obj-key chunk-idx))
         (util/then-apply
           (fn [^ArrowBuf metadata-buffer]
-            (if metadata-buffer
-              (try
-                (reduce (completing
-                         (fn [_ metadata-root]
-                           (reduced (.apply f metadata-root))))
-                        nil
-                        (util/block-stream metadata-buffer allocator))
-                (finally
-                  (.close metadata-buffer)))
+            (assert metadata-buffer)
 
-              (f nil))))))
+            (when metadata-buffer
+              (let [res (promise)]
+                (try
+                  (with-open [chunk (util/->chunks metadata-buffer allocator)]
+                    (.tryAdvance chunk
+                                 (reify Consumer
+                                   (accept [_ metadata-root]
+                                     (deliver res (.apply f metadata-root))))))
+
+                  (assert (realized? res))
+                  @res
+
+                  (finally
+                    (.close metadata-buffer)))))))))
 
   (knownChunks [_] known-chunks)
 

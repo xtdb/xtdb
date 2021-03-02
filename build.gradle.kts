@@ -3,7 +3,7 @@ version = "0.1.0-SNAPSHOT"
 
 plugins {
     `java-library`
-    id("dev.clojurephant.clojure") version "0.6.0-beta.1"
+    id("dev.clojurephant.clojure") version "0.6.0"
 }
 
 repositories {
@@ -19,19 +19,30 @@ dependencies {
     implementation("org.roaringbitmap", "RoaringBitmap", "0.9.8")
 
     testImplementation("org.clojure", "data.csv", "1.0.0")
+    testRuntimeOnly("org.ajoberstar", "jovial", "0.3.0")
 
     devImplementation("nrepl", "nrepl", "0.6.0")
     devImplementation("cider", "cider-nrepl", "0.25.8")
 }
 
 sourceSets {
+    remove(dev.get())
+
     main {
-        resources.srcDir("src")
+        java.srcDirs.clear()
+        java.srcDir("src")
+
+        resources.srcDirs.clear()
+        resources.srcDir("src").removeAll { it.endsWith(".java") }
         resources.srcDir("resources")
     }
     test {
+        java.srcDirs.clear()
+        java.srcDir("test")
+
+        resources.srcDirs.clear()
         resources.srcDir("data")
-        resources.srcDir("test")
+        resources.srcDir("test").removeAll { it.endsWith(".java") }
     }
 }
 
