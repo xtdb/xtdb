@@ -1,5 +1,6 @@
 (ns core2.operator
   (:require [core2.operator.scan :as scan]
+            [core2.operator.select :as select]
             [core2.operator.slice :as slice])
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
@@ -46,6 +47,9 @@
     (scan [_ watermark col-names metadata-pred col-preds]
       (scan/->scan-cursor allocator metadata-mgr buffer-pool
                           watermark col-names metadata-pred col-preds))
+
+    (select [_ in-cursor pred]
+      (select/->select-cursor allocator in-cursor pred))
 
     (slice [_ in-cursor offset limit]
       (slice/->slice-cursor in-cursor offset limit))))
