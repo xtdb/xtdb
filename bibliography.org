@@ -45,3 +45,8 @@ papers:
 ** Misc
 - [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
 - [[https://arxiv.org/pdf/1610.09166.pdf][Push vs. Pull-Based Loop Fusion in Query Engines]]
+
+** Array Programming
+- [[https://www.eecg.utoronto.ca/~jzhu/csc326/readings/iverson.pdf][Notation as a Tool of Thought]]
+- [[https://www.jsoftware.com/help/learning/contents.htm][Learning J]]
+- [[https://code.kx.com/q4m3/][Q for Mortals - An introduction to q programming]]
