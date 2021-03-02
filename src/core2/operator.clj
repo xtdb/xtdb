@@ -1,5 +1,6 @@
 (ns core2.operator
-  (:require [core2.operator.scan :as scan])
+  (:require [core2.operator.scan :as scan]
+            [core2.operator.slice :as slice])
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            org.apache.arrow.memory.BufferAllocator))
@@ -31,7 +32,9 @@
                          ^java.util.List #_#_<Pair<String, Direction>> orderSpec])
 
   (^core2.ICursor groupBy [^core2.ICursor inCursor
-                           ^java.util.List #_#_#_<Pair<String, Or<String, AggregateExpr>>> aggregateSpecs]))
+                           ^java.util.List #_#_#_<Pair<String, Or<String, AggregateExpr>>> aggregateSpecs])
+
+  (^core2.ICursor slice [^core2.ICursor inCursor, ^Long offset, ^Long limit]))
 
 (defn ->operator-factory
   ^core2.operator.IOperatorFactory
@@ -42,4 +45,7 @@
   (reify IOperatorFactory
     (scan [_ watermark col-names metadata-pred col-preds]
       (scan/->scan-cursor allocator metadata-mgr buffer-pool
-                          watermark col-names metadata-pred col-preds))))
+                          watermark col-names metadata-pred col-preds))
+
+    (slice [_ in-cursor offset limit]
+      (slice/->slice-cursor in-cursor offset limit))))
