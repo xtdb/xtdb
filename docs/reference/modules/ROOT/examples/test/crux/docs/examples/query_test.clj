@@ -558,14 +558,15 @@
            (crux/q
             (crux/db node)
             '{:find [time device-id temperature humidity]
+              :in [my-offset]
               :where [[c :condition/time time]
                       [c :condition/device-id device-id]
                       [(>= device-id my-offset)]
                       [c :condition/temperature temperature]
                       [c :condition/humidity humidity]]
               :order-by [[device-id :asc]]
-              :limit 10
-              :args [{my-offset 150}]})
+              :limit 10}
+            150)
            ;; end::order-and-pagination-3[]
            ))))
 
@@ -594,15 +595,58 @@
              (crux/q
               (crux/db node)
               '{:find [?e2]
+                :in [?e1]
                 :where [(follow ?e1 ?e2)]
-                :args [{?e1 :ivan}]
                 :rules [[(follow ?e1 ?e2)
                          [?e1 :follow ?e2]]
                         [(follow ?e1 ?e2)
                          [?e1 :follow ?t]
                          (follow ?t ?e2)]]}
-              )
+              :ivan)
              ;; end::rules-2[]
+             ))))
+
+(t/deftest test-bound-rule-vars-946
+  (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
+                         [:crux.tx/put {:crux.db/id id, :child child-id :name (str id "-" child-id)}]))
+
+  (let [node *api*
+        parent-id 50
+        expected (set (for [[id child-id] (partition 2 1 (range (inc parent-id) 101))]
+                        [(str id "-" child-id)]))]
+    (t/is (= expected
+             ;; tag::rules-3[]
+             (crux/q
+              (crux/db node)
+              '{:find [child-name]
+                :in [parent]
+                :where [[parent :crux.db/id]
+                        (child-of parent child)
+                        [child :name child-name]]
+                :rules [[(child-of p c)
+                         [p :child c]]
+                        [(child-of p c)
+                         [p :child c1]
+                         (child-of c1 c)]]}
+              parent-id)
+             ;; end::rules-3[]
+             ))
+    (t/is (= expected
+             ;; tag::rules-4[]
+             (crux/q
+              (crux/db node)
+              '{:find [child-name]
+                :in [parent]
+                :where [[parent :crux.db/id]
+                        (child-of parent child)
+                        [child :name child-name]]
+                :rules [[(child-of [p] c)
+                         [p :child c]]
+                        [(child-of [p] c)
+                         [p :child c1]
+                         (child-of c1 c)]]}
+              parent-id)
+             ;; end::rules-4[]
              ))))
 
 (t/deftest test-not

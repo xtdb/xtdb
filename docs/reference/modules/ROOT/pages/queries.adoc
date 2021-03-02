@@ -463,7 +463,7 @@ include::example$test/crux/docs/examples/query_test.clj[tags=or-2,indent=0]
 [#clause-or-join]
 === Or Join
 
-The `or-join` clause allows you to restrict the possibilities for logic variables by asserting that there does not exist a match for a given sequence of clauses.
+The `or-join` clause is satisfied if any of its legs are satisfied.
 
 You declare which logic variables from outside the `or-join` scope are to be used in the join.
 
@@ -620,11 +620,11 @@ include::example$test/crux/docs/examples/query_test.clj[tags=rules-1,indent=0]
 <2> Rule head (i.e. signature)
 <3> Rule body containing one or more clauses
 
-The above defines the rule `adult?` which checks that the supplied entity has an `:age` which is `>=` 18
+The above defines the rule named `adult?` which checks that the supplied entity has an `:age` which is `>=` 18
 
-Multiple rule bodies may be defined for a single rule (i.e. with matching rule heads) which works in a similar fashion to an `or-join`.
+Multiple rule bodies may be defined for a single rule name (i.e. using matching rule heads) which works in a similar fashion to an `or-join`.
 
-The clauses within Rules can also be further Rule invocation clauses. This allows for the recursive traversal of entities.
+The clauses within Rules can also be further Rule invocation clauses. This allows for the recursive traversal of entities and more.
 
 [source,clojure]
 ----
@@ -632,6 +632,28 @@ include::example$test/crux/docs/examples/query_test.clj[tags=rules-2,indent=0]
 ----
 
 This example finds all entities that the entity with `:name` "Smith" is connected to via `:follow`, even if the connection is via intermediaries.
+
+=== Bound arguments
+
+To improve the performance of a rule you can specify that certain arguments in the rule head must be "bound" logic variables (i.e. there must be known values for each argument at the point of evaluation) by enclosing them in a vector in the first argument position. Any remaining arguments will be treated as regular "free" logic variables.
+
+As an analogy, bound variables are input arguments to a function, and free variables are the destructured return values from that function.
+
+Changes are only necessary in the rule head(s) - no changes are required in the body or the usage clauses. Rule heads must always match.
+
+For example, the following query and rule set will work and return the correct results.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=rules-3,indent=0]
+----
+
+However, specifying that the `p` variable should be bound before the rule can be evaluated will improve the evalution time by many orders-of-magnitude for large data sets.
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=rules-4,indent=0]
+----
 
 [#timeout]
 == Timeout
