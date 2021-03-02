@@ -146,3 +146,46 @@
   (scanBlocks [_ watermark col-names metadata-pred col-preds]
     (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
       (->scan-cursor allocator buffer-pool watermark col-names col-preds chunk-idxs))))
+
+#_
+(definterface ISelectFactory
+  (^core2.ICursor selectBlocks [^core2.ICursor inCursor
+                                ^core2.IVectorRootPredicate pred]))
+
+#_
+(definterface IProjectFactory
+  (^core2.ICursor projectBlocks [^core2.ICursor inCursor
+                                 ^java.util.List #_#_<Pair<String, ColExpr>> colSpecs]))
+
+#_
+(definterface IRenameFactory
+  (^core2.ICursor projectBlocks [^core2.ICursor inCursor
+                                 ^java.util.Map #_#_<String, String> renameSpecs]))
+
+#_
+(definterface IEquiJoinFactory
+  (^core2.ICursor joinBlocks [^core2.ICursor leftCursor
+                              ^String leftColName
+                              ^core2.ICursor rightCursor
+                              ^String rightColName]))
+
+#_
+(definterface ICrossJoinFactory
+  (^core2.ICursor joinBlocks [^core2.ICursor leftCursor
+                              ^core2.ICursor rightCursor]))
+
+#_
+(definterface ISliceFactory
+  (^core2.ICursor sliceBlocks [^core2.ICursor inCursor
+                               ^Long offset
+                               ^Long limit]))
+
+#_
+(definterface IOrderByFactory
+  (^core2.ICursor orderBlocks [^core2.ICursor inCursor
+                               ^java.util.List #_#_<Pair<String, Direction>> orderSpec]))
+
+#_
+(definterface IGroupByFactory
+  (^core2.ICursor orderBlocks [^core2.ICursor inCursor
+                               ^java.util.List #_#_#_<Pair<String, Or<String, AggregateExpr>>> aggregateSpecs]))
