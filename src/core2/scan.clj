@@ -123,29 +123,17 @@
     (when out-root
       (.close out-root))))
 
-(defn- ->scan-cursor [^BufferAllocator allocator
-                      ^BufferPool buffer-pool
-                      ^Watermark watermark
-                      ^List col-names
-                      ^Map col-preds
-                      ^Queue chunk-idxs]
-  (ScanCursor. allocator buffer-pool watermark
-               chunk-idxs col-names col-preds
-               nil nil false))
-
-(definterface IScanFactory
-  (^core2.ICursor scanBlocks [^core2.tx.Watermark watermark
-                              ^java.util.List #_<String> colNames,
-                              metadataPred
-                              ^java.util.Map #_#_<String, IVectorPredicate> colPreds]))
-
-(deftype ScanFactory [^BufferAllocator allocator
-                      ^IMetadataManager metadata-mgr
-                      ^BufferPool buffer-pool]
-  IScanFactory
-  (scanBlocks [_ watermark col-names metadata-pred col-preds]
-    (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
-      (->scan-cursor allocator buffer-pool watermark col-names col-preds chunk-idxs))))
+(defn ->scan-cursor [^BufferAllocator allocator
+                     ^IMetadataManager metadata-mgr
+                     ^BufferPool buffer-pool
+                     ^Watermark watermark
+                     ^List col-names
+                     metadata-pred ;; TODO derive this from col-preds
+                     ^Map col-preds]
+  (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
+    (ScanCursor. allocator buffer-pool watermark
+                 chunk-idxs col-names col-preds
+                 nil nil false)))
 
 #_
 (definterface ISelectFactory
@@ -173,12 +161,6 @@
 (definterface ICrossJoinFactory
   (^core2.ICursor joinBlocks [^core2.ICursor leftCursor
                               ^core2.ICursor rightCursor]))
-
-#_
-(definterface ISliceFactory
-  (^core2.ICursor sliceBlocks [^core2.ICursor inCursor
-                               ^Long offset
-                               ^Long limit]))
 
 #_
 (definterface IOrderByFactory

@@ -1,19 +1,16 @@
 (ns core2.scan-test
   (:require [clojure.test :as t]
             [core2.core :as c2]
+            [core2.operator :as op]
             [core2.select :as sel]
-            [core2.scan :as scan]
             [core2.util :as util]
             [core2.test-util :as tu]
             [core2.metadata :as meta]
             [core2.types :as ty])
-  (:import clojure.lang.MapEntry
-           core2.core.IngestLoop
+  (:import core2.core.IngestLoop
            core2.indexer.Indexer
-           core2.scan.ScanFactory
            java.util.function.Consumer
            org.apache.arrow.vector.types.Types$MinorType
-           [org.apache.arrow.vector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.util Text]))
 
 (t/deftest test-find-gt-ivan
@@ -42,13 +39,13 @@
 
         (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
               metadata-pred (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)
-              scan-factory (ScanFactory. allocator metadata-mgr buffer-pool)]
+              op-factory (op/->operator-factory allocator metadata-mgr buffer-pool)]
 
           (letfn [(query-ivan [watermark]
                     (let [!results (atom [])]
-                      (with-open [chunk-scanner (.scanBlocks scan-factory watermark
-                                                             ["name"] metadata-pred
-                                                             {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))})]
+                      (with-open [chunk-scanner (.scan op-factory watermark
+                                                       ["name"] metadata-pred
+                                                       {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))})]
                         (while (.tryAdvance chunk-scanner
                                             (reify Consumer
                                               (accept [_ root]
