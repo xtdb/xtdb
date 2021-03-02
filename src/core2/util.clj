@@ -1,8 +1,7 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import core2.ICursor
-           java.io.ByteArrayOutputStream
+  (:import java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
            [java.lang.reflect Field Method]
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
@@ -15,14 +14,15 @@
            [java.util ArrayList Date LinkedList List Queue]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.util.function BiFunction Function IntUnaryOperator Supplier]
+           [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
            [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowRecordBatch ArrowFooter MessageSerializer]))
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowRecordBatch ArrowFooter MessageSerializer]
+           org.roaringbitmap.RoaringBitmap))
 
 ;;; IO
 
@@ -464,3 +464,26 @@
                   root
                   (VectorLoader. root)
                   nil)))
+
+(defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^RoaringBitmap idxs ^ValueVector out-vec]
+  (.setInitialCapacity out-vec (.getLongCardinality idxs))
+  (.allocateNew out-vec)
+  (-> (.stream idxs)
+      (.forEach (if (instance? DenseUnionVector in-vec)
+                  (reify IntConsumer
+                    (accept [_ idx]
+                      (let [in-vec ^DenseUnionVector in-vec
+                            out-idx (.getValueCount out-vec)
+                            type-id (.getTypeId in-vec idx)
+                            offset (write-type-id out-vec (.getValueCount out-vec) type-id)]
+                        (set-value-count out-vec (inc out-idx))
+                        (.copyFrom (.getVectorByType ^DenseUnionVector out-vec type-id)
+                                   (.getOffset in-vec idx)
+                                   offset
+                                   (.getVectorByType in-vec type-id)))))
+                  (reify IntConsumer
+                    (accept [_ idx]
+                      (let [out-idx (.getValueCount out-vec)]
+                        (set-value-count out-vec (inc out-idx))
+                        (.copyFrom out-vec idx out-idx in-vec)))))))
+  out-vec)

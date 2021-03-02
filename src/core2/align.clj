@@ -29,29 +29,6 @@
         (.add res idx)))
     res))
 
-(defn- project-vec ^org.apache.arrow.vector.FieldVector [^FieldVector field-vec ^RoaringBitmap idxs ^FieldVector out-vec]
-  (.setInitialCapacity out-vec (.getLongCardinality idxs))
-  (.allocateNew out-vec)
-  (-> (.stream idxs)
-      (.forEach (if (instance? DenseUnionVector field-vec)
-                  (reify IntConsumer
-                    (accept [_ idx]
-                      (let [field-vec ^DenseUnionVector field-vec
-                            out-idx (.getValueCount out-vec)
-                            type-id (.getTypeId field-vec idx)
-                            offset (util/write-type-id out-vec (.getValueCount out-vec) type-id)]
-                        (util/set-value-count out-vec (inc out-idx))
-                        (.copyFrom (.getVectorByType ^DenseUnionVector out-vec type-id)
-                                   (.getOffset field-vec idx)
-                                   offset
-                                   (.getVectorByType field-vec type-id)))))
-                  (reify IntConsumer
-                    (accept [_ idx]
-                      (let [out-idx (.getValueCount out-vec)]
-                        (util/set-value-count out-vec (inc out-idx))
-                        (.copyFrom out-vec idx out-idx field-vec)))))))
-  out-vec)
-
 (defn align-schemas ^org.apache.arrow.vector.types.pojo.Schema [^List schemas]
   (Schema. (for [^Schema schema schemas]
              (-> (.getFields schema)
@@ -64,7 +41,7 @@
           :let [row-id-vec (.getVector root 0)
                 in-vec (.getVector root 1)
                 idxs (<-row-id-bitmap row-id-bitmap row-id-vec)]]
-    (project-vec in-vec idxs (.getVector out-root (.getField in-vec))))
+    (util/project-vec in-vec idxs (.getVector out-root (.getField in-vec))))
 
   (doto out-root
     (util/set-vector-schema-root-row-count (.getLongCardinality row-id-bitmap))))
