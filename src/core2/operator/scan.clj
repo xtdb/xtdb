@@ -1,4 +1,4 @@
-(ns core2.scan
+(ns core2.operator.scan
   (:require [core2.align :as align]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
@@ -134,40 +134,3 @@
     (ScanCursor. allocator buffer-pool watermark
                  chunk-idxs col-names col-preds
                  nil nil false)))
-
-#_
-(definterface ISelectFactory
-  (^core2.ICursor selectBlocks [^core2.ICursor inCursor
-                                ^core2.IVectorRootPredicate pred]))
-
-#_
-(definterface IProjectFactory
-  (^core2.ICursor projectBlocks [^core2.ICursor inCursor
-                                 ^java.util.List #_#_<Pair<String, ColExpr>> colSpecs]))
-
-#_
-(definterface IRenameFactory
-  (^core2.ICursor projectBlocks [^core2.ICursor inCursor
-                                 ^java.util.Map #_#_<String, String> renameSpecs]))
-
-#_
-(definterface IEquiJoinFactory
-  (^core2.ICursor joinBlocks [^core2.ICursor leftCursor
-                              ^String leftColName
-                              ^core2.ICursor rightCursor
-                              ^String rightColName]))
-
-#_
-(definterface ICrossJoinFactory
-  (^core2.ICursor joinBlocks [^core2.ICursor leftCursor
-                              ^core2.ICursor rightCursor]))
-
-#_
-(definterface IOrderByFactory
-  (^core2.ICursor orderBlocks [^core2.ICursor inCursor
-                               ^java.util.List #_#_<Pair<String, Direction>> orderSpec]))
-
-#_
-(definterface IGroupByFactory
-  (^core2.ICursor orderBlocks [^core2.ICursor inCursor
-                               ^java.util.List #_#_#_<Pair<String, Or<String, AggregateExpr>>> aggregateSpecs]))

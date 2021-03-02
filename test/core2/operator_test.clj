@@ -1,4 +1,4 @@
-(ns core2.scan-test
+(ns core2.operator-test
   (:require [clojure.test :as t]
             [core2.core :as c2]
             [core2.operator :as op]
