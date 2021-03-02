@@ -6,13 +6,12 @@
 
 (defn offset+length [^long offset, ^long limit,
                      ^long idx, ^long row-count]
-  ;; TODO try moving all of the inputs into the same space,
-  ;; intersecting intervals
-  (when (< (- idx offset) limit)
-    (let [root-offset (max (- offset idx) 0)
-          root-length (min limit (- row-count root-offset))]
-      (when (pos? root-length)
-        [root-offset root-length]))))
+  (let [root-offset (max (- offset idx) 0)
+        consumed (max (- idx offset) 0)
+        root-length (min (- limit consumed)
+                         (- row-count root-offset))]
+    (when (pos? root-length)
+      [root-offset root-length])))
 
 (deftype SliceCursor [^ICursor in-cursor
                       ^long offset
