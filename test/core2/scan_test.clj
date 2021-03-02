@@ -61,12 +61,12 @@
               @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
                    (tu/then-await-tx il))
 
-              (t/is (= #{[1 (Text. "James")]
-                         [3 (Text. "Jon")]}
+              (t/is (= #{[(Text. "James")]
+                         [(Text. "Jon")]}
                        (query-ivan watermark))))
 
             (with-open [watermark (.getWatermark i)]
-              (t/is (= #{[1 (Text. "James")]
-                         [3 (Text. "Jon")]
-                         [4 (Text. "Jeremy")]}
+              (t/is (= #{[(Text. "James")]
+                         [(Text. "Jon")]
+                         [(Text. "Jeremy")]}
                        (query-ivan watermark))))))))))
