@@ -1,5 +1,6 @@
 (ns core2.operator
   (:require [core2.operator.project :as project]
+            [core2.operator.rename :as rename]
             [core2.operator.scan :as scan]
             [core2.operator.select :as select]
             [core2.operator.slice :as slice])
@@ -20,7 +21,7 @@
                            ^java.util.List #_<ProjectionSpec> projectionSpecs])
 
   (^core2.ICursor rename [^core2.ICursor inCursor
-                          ^java.util.Map #_#_<String, String> renameSpecs])
+                          ^java.util.Map #_#_<String, String> renameMap])
 
   (^core2.ICursor equiJoin [^core2.ICursor leftCursor
                             ^String leftColName
@@ -54,6 +55,9 @@
 
     (project [_ in-cursor projection-specs]
       (project/->project-cursor allocator in-cursor projection-specs))
+
+    (rename [_ in-cursor rename-map]
+      (rename/->rename-cursor allocator in-cursor rename-map))
 
     (slice [_ in-cursor offset limit]
       (slice/->slice-cursor in-cursor offset limit))))
