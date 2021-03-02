@@ -1,5 +1,6 @@
 (ns core2.operator
-  (:require [core2.operator.scan :as scan]
+  (:require [core2.operator.project :as project]
+            [core2.operator.scan :as scan]
             [core2.operator.select :as select]
             [core2.operator.slice :as slice])
   (:import core2.buffer_pool.BufferPool
@@ -16,7 +17,7 @@
                           ^core2.select.IVectorSchemaRootPredicate pred])
 
   (^core2.ICursor project [^core2.ICursor inCursor
-                           ^java.util.List #_#_<Pair<String, ColExpr>> colSpecs])
+                           ^java.util.List #_<ProjectionSpec> projectionSpecs])
 
   (^core2.ICursor rename [^core2.ICursor inCursor
                           ^java.util.Map #_#_<String, String> renameSpecs])
@@ -50,6 +51,9 @@
 
     (select [_ in-cursor pred]
       (select/->select-cursor allocator in-cursor pred))
+
+    (project [_ in-cursor projection-specs]
+      (project/->project-cursor allocator in-cursor projection-specs))
 
     (slice [_ in-cursor offset limit]
       (slice/->slice-cursor in-cursor offset limit))))
