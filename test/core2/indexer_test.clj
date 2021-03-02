@@ -362,6 +362,7 @@
             (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
             (t/is (= last-tx-instant (.latestCompletedTx il)))
 
+            (Thread/sleep 1000) ;; for now
             (t/is (= 11 (count @(.listObjects os "metadata-*"))))
             (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
             (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
