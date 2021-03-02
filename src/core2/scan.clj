@@ -50,19 +50,20 @@
                      ^Queue #_<Long> chunk-idxs
                      ^List col-names
                      ^Map col-preds
-                     ^:unsynchronized-mutable ^VectorSchemaRoot root
+                     ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
+
   ICursor
   (tryAdvance [this c]
-    (letfn [(next-block [chunks ^VectorSchemaRoot root]
+    (letfn [(next-block [chunks ^VectorSchemaRoot out-root]
               (loop []
                 (if-let [in-roots (next-roots col-names chunks)]
                   (do
-                    (align-roots col-names col-preds in-roots root)
-                    (if (pos? (.getRowCount root))
+                    (align-roots col-names col-preds in-roots out-root)
+                    (if (pos? (.getRowCount out-root))
                       (do
-                        (.accept c root)
+                        (.accept c out-root)
                         true)
                       (recur)))
 
@@ -71,10 +72,20 @@
                       (.close chunk))
                     (set! (.chunks this) nil)
 
-                    (.close root)
-                    (set! (.root this) nil)
+                    (.close out-root)
+                    (set! (.out-root this) nil)
 
                     false))))
+
+            (live-chunk []
+              (let [chunks (idx/->live-slices watermark col-names)
+                    out-root (VectorSchemaRoot/create (align/align-schemas (for [^IChunkCursor chunk (vals chunks)]
+                                                                             (.getSchema chunk)))
+                                                      allocator)]
+                (set! (.chunks this) chunks)
+                (set! (.out-root this) out-root)
+
+                (next-block chunks out-root)))
 
             (next-chunk []
               (loop []
@@ -86,41 +97,31 @@
                                               (MapEntry/create col-name (util/->chunks buf allocator))))))
                                     vec
                                     (into {} (map deref)))
-                        root (VectorSchemaRoot/create (align/align-schemas (for [^IChunkCursor chunk (vals chunks)]
-                                                                             (.getSchema chunk)))
-                                                      allocator)]
+                        out-root (VectorSchemaRoot/create (align/align-schemas (for [^IChunkCursor chunk (vals chunks)]
+                                                                                 (.getSchema chunk)))
+                                                          allocator)]
                     (set! (.chunks this) chunks)
-                    (set! (.root this) root)
+                    (set! (.out-root this) out-root)
 
-                    (or (next-block chunks root)
-                        (recur))))))
+                    (or (next-block chunks out-root)
+                        (recur))))))]
 
-            (live-chunk []
-              (let [chunks (idx/->live-slices watermark col-names)
-                    root (VectorSchemaRoot/create (align/align-schemas (for [^IChunkCursor chunk (vals chunks)]
-                                                                         (.getSchema chunk)))
-                                                  allocator)]
-                (set! (.chunks this) chunks)
-                (set! (.root this) root)
-
-                (next-block chunks root)))]
-
-      (or (when-not live-chunk-done?
-            (set! (.live-chunk-done? this) true)
-            (live-chunk))
-
-          (when chunks
-            (next-block chunks root))
+      (or (when chunks
+            (next-block chunks out-root))
 
           (next-chunk)
+
+          (when-not live-chunk-done?
+            (set! (.live-chunk-done? this) true)
+            (live-chunk))
 
           false)))
 
   (close [_]
     (doseq [^ICursor chunk (vals chunks)]
       (.close chunk))
-    (when root
-      (.close root))))
+    (when out-root
+      (.close out-root))))
 
 (defn- ->scan-cursor [^BufferAllocator allocator
                       ^BufferPool buffer-pool
