@@ -2,7 +2,7 @@
   (:require [core2.util :as util]
             [core2.types :as t])
   (:import core2.ICursor
-           [java.util ArrayList HashMap List Map]
+           [java.util ArrayList HashMap List Map Optional]
            [java.util.function BiConsumer Consumer IntConsumer Function Supplier ObjIntConsumer]
            [java.util.stream Collector IntStream]
            java.time.LocalDateTime
@@ -27,6 +27,9 @@
 
     (instance? LocalDateTime x)
     (util/local-date-time->date x)
+
+    (instance? Optional x)
+    (.orElse ^Optional x nil)
 
     :else
     x))
@@ -97,7 +100,7 @@
       (.close out-root)
       (set! (.out-root this) nil))
 
-    (let [group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))
+    (let [^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))
           aggregate-map (HashMap.)]
       (try
         (.forEachRemaining in-cursor
@@ -111,7 +114,7 @@
 
                                  (dotimes [idx (.getRowCount in-root)]
                                    (let [group-key (reduce
-                                                    (fn [^List acc ^AggregateSpec group-spec]
+                                                    (fn [^List acc ^GroupSpec group-spec]
                                                       (let [from-vec (.getFromVector group-spec in-root)
                                                             k (cond
                                                                 (instance? DenseUnionVector from-vec)
@@ -132,7 +135,7 @@
                                                                 (.getObject from-vec idx))]
                                                         (doto acc
                                                           (.add k))))
-                                                    (ArrayList. (.size aggregate-specs))
+                                                    (ArrayList. (.size group-specs))
                                                     group-specs)
                                          ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
                                                                                                                    (apply [_ _]
