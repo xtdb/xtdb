@@ -45,6 +45,11 @@
       (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [])
                   group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor aggregate-spec)]
+        (t/is (empty? (tu/<-cursor group-by-cursor))))
+
+      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
+                                         [[]])
+                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor aggregate-spec)]
         (t/is (empty? (tu/<-cursor group-by-cursor)))))
 
     (t/testing "multiple group columns (distinct)"

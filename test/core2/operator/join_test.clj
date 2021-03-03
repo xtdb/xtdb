@@ -68,6 +68,24 @@
                                             [])
                   join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
 
+        (t/is (empty? (tu/<-cursor join-cursor))))
+
+      (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                           [])
+                  right-cursor (tu/->cursor (Schema. [b-field])
+                                            [[{:b 12}, {:b 2}]
+                                             [{:b 100} {:b 0}]])
+                  join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
+
+        (t/is (empty? (tu/<-cursor join-cursor))))
+
+      (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                           [[{:a 12}, {:a 0}]
+                                            [{:a 100}]])
+                  right-cursor (tu/->cursor (Schema. [b-field])
+                                            [[]])
+                  join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
+
         (t/is (empty? (tu/<-cursor join-cursor)))))
 
 

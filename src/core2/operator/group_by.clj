@@ -96,10 +96,11 @@
                            (reify Consumer
                              (accept [_ in-root]
                                (let [^VectorSchemaRoot in-root in-root
-                                     aggregate-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
-                                                                 (.getToField aggregate-spec in-root)))
                                      group->idx-bitmap (HashMap.)]
-                                 (set! (.out-root this) (VectorSchemaRoot/create aggregate-schema allocator))
+                                 (when-not out-root
+                                   (let [aggregate-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
+                                                                     (.getToField aggregate-spec in-root)))]
+                                     (set! (.out-root this) (VectorSchemaRoot/create aggregate-schema allocator))))
 
                                  (dotimes [idx (.getRowCount in-root)]
                                    (let [group-key (reduce
@@ -139,11 +140,11 @@
                                    (dotimes [n (.size aggregate-specs)]
                                      (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))))
 
-        (if out-root
-          (let [all-accs (vec (vals aggregate-map))
-                row-count (count all-accs)]
+        (if-not (.isEmpty aggregate-map)
+          (let [^List all-accs (ArrayList. ^List (vals aggregate-map))
+                row-count (.size all-accs)]
             (dotimes [out-idx row-count]
-              (let [^List accs (get all-accs out-idx)]
+              (let [^List accs (.get all-accs out-idx)]
                 (dotimes [n (.size aggregate-specs)]
                   (let [out-vec (.getVector out-root n)
                         v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
