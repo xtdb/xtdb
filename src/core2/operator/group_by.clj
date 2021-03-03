@@ -2,7 +2,7 @@
   (:require [core2.util :as util]
             [core2.types :as t])
   (:import core2.ICursor
-           [java.util ArrayList HashMap List Map Optional]
+           [java.util ArrayList HashMap List Map Optional Spliterator]
            [java.util.function Consumer Function Supplier ObjIntConsumer]
            [java.util.stream Collector IntStream]
            org.apache.arrow.memory.util.ArrowBufPointer
@@ -161,6 +161,9 @@
         (finally
           (doseq [k (keys group->accs)]
             (release-group-key k))))))
+
+  (characteristics [_]
+    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE))
 
   (close [_]
     (util/try-close out-root)
