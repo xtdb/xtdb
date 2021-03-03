@@ -6,8 +6,9 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Schema))
+           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.util.VectorBatchAppender))
 
 (defn- ->join-schema ^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
   (let [fields (concat (.getFields left-schema) (.getFields right-schema))]
@@ -15,13 +16,14 @@
     (Schema. fields)))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
-  (dotimes [right-idx (.getRowCount right-root)]
-    (let [out-idx (.getRowCount out-root)]
-      (doseq [^ValueVector v (.getFieldVectors left-root)]
-        (.copyFromSafe (.getVector out-root (.getField v)) out-idx left-idx v))
-      (doseq [^ValueVector v (.getFieldVectors right-root)]
-        (.copyFromSafe (.getVector out-root (.getField v)) out-idx right-idx v))
-      (util/set-vector-schema-root-row-count out-root (inc out-idx))))
+  (doseq [^ValueVector right-vec (.getFieldVectors right-root)]
+    (VectorBatchAppender/batchAppend (.getVector out-root (.getField right-vec)) (object-array [right-vec])))
+  (let [out-idx (.getRowCount out-root)]
+    (doseq [^ValueVector left-vec (.getFieldVectors left-root)
+            :let [out-vec (.getVector out-root (.getField left-vec))]]
+      (dotimes [right-idx (.getRowCount right-root)]
+        (.copyFromSafe out-vec (+ out-idx right-idx) left-idx left-vec)))
+    (util/set-vector-schema-root-row-count out-root (+ out-idx (.getRowCount right-root))))
   out-root)
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
