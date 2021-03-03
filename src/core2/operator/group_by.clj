@@ -3,15 +3,13 @@
             [core2.types :as t])
   (:import core2.ICursor
            [java.util ArrayList HashMap List Map Optional]
-           [java.util.function BiConsumer Consumer IntConsumer Function Supplier ObjIntConsumer]
+           [java.util.function Consumer Function Supplier ObjIntConsumer]
            [java.util.stream Collector IntStream]
-           java.time.LocalDateTime
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
-           org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
 (definterface AggregateSpec
