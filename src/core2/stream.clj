@@ -9,7 +9,7 @@
            org.apache.arrow.vector.util.Text
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]
-           org.apache.arrow.vector.complex.VectorWithOrdinal
+           [org.apache.arrow.vector.complex DenseUnionVector VectorWithOrdinal]
            org.apache.arrow.vector.complex.reader.FieldReader
            org.apache.arrow.vector.util.VectorBatchAppender))
 
@@ -183,6 +183,13 @@
   ValueVector
   (->spliterator [this]
     (->ValueVectorSpliterator this 0 (.getValueCount this) default-characteristics))
+
+  DenseUnionVector
+  (->spliterator [this]
+    (let [v (util/maybe-single-child-dense-union this)]
+      (if (instance? DenseUnionVector v)
+        (->ValueVectorSpliterator this 0 (.getValueCount this) default-characteristics)
+        (->spliterator v))))
 
   NullVector
   (->spliterator [this]
