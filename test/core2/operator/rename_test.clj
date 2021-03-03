@@ -13,8 +13,9 @@
         b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                     [[{:a 12, :b 10}, {:a 0, :b 15}]
-                                     [{:a 100, :b 83}]])]
+                                     [{:a 100, :b 83}]])
+                rename-cursor (rename/->rename-cursor tu/*allocator* cursor
+                                                      {"a" "c"})]
       (t/is (= [[{:c 12, :b 10}, {:c 0, :b 15}]
                 [{:c 100, :b 83}]]
-               (tu/<-cursor (rename/->rename-cursor tu/*allocator* cursor
-                                                    {"a" "c"})))))))
+               (tu/<-cursor rename-cursor))))))

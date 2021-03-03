@@ -36,5 +36,5 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->rename-cursor [^BufferAllocator allocator, ^ICursor in-cursor, ^Map #_#_<String, String> rename-map]
+(defn ->rename-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^Map #_#_<String, String> rename-map]
   (RenameCursor. allocator in-cursor rename-map nil))

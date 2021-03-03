@@ -45,5 +45,5 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->project-cursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<ProjectionSpec> projection-specs]
+(defn ->project-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<ProjectionSpec> projection-specs]
   (ProjectCursor. allocator in-cursor projection-specs nil))

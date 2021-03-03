@@ -51,8 +51,9 @@
                 [{:idx 2}, {:idx 3}]]]
     (letfn [(slice [offset length]
               (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (.getType Types$MinorType/BIGINT) false)])
-                                              blocks)]
-                (tu/<-cursor (slice/->slice-cursor cursor offset length))))]
+                                              blocks)
+                          slice-cursor (slice/->slice-cursor cursor offset length)]
+                (tu/<-cursor slice-cursor)))]
       (t/is (= blocks (slice nil nil)))
 
       (t/is (= [[{:idx 0}, {:idx 1}]

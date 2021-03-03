@@ -59,7 +59,7 @@
 
         idx-bitmap))))
 
-(defn ->select-cursor [^BufferAllocator allocator,
-                       ^ICursor in-cursor,
-                       ^IVectorSchemaRootSelector selector]
+(defn ->select-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                      ^ICursor in-cursor,
+                                      ^IVectorSchemaRootSelector selector]
   (SelectCursor. allocator in-cursor selector nil))

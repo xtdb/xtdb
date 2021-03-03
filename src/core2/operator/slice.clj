@@ -50,5 +50,5 @@
 
     (.close in-cursor)))
 
-(defn ->slice-cursor [in-cursor offset limit]
+(defn ->slice-cursor ^core2.ICursor [in-cursor offset limit]
   (SliceCursor. in-cursor (or offset 0) (or limit Long/MAX_VALUE) 0 nil))

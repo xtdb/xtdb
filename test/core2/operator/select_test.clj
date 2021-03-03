@@ -17,11 +17,12 @@
                                     [[{:a 12, :b 10}
                                       {:a 0, :b 15}]
                                      [{:a 100, :b 83}]
-                                     [{:a 83, :b 100}]])]
+                                     [{:a 83, :b 100}]])
+                select-cursor (select/->select-cursor tu/*allocator* cursor
+                                                      (select/pred->selector (reify IVectorSchemaRootPredicate
+                                                                               (test [_ root idx]
+                                                                                 (> (.get ^BigIntVector (.getVector root a-field) idx)
+                                                                                    (.get ^BigIntVector (.getVector root b-field) idx))))))]
       (t/is (= [[{:a 12, :b 10}]
                 [{:a 100, :b 83}]]
-               (tu/<-cursor (select/->select-cursor tu/*allocator* cursor
-                                                    (select/pred->selector (reify IVectorSchemaRootPredicate
-                                                                             (test [_ root idx]
-                                                                               (> (.get ^BigIntVector (.getVector root a-field) idx)
-                                                                                  (.get ^BigIntVector (.getVector root b-field) idx))))))))))))
+               (tu/<-cursor select-cursor))))))

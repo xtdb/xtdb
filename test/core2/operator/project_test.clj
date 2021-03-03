@@ -16,18 +16,19 @@
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                     [[{:a 12, :b 10}
                                       {:a 0, :b 15}]
-                                     [{:a 100, :b 83}]])]
+                                     [{:a 100, :b 83}]])
+                project-cursor (project/->project-cursor tu/*allocator* cursor
+                                                         [(project/->identity-projection-spec "a")
+                                                          (reify ProjectionSpec
+                                                            (project [_ in-root allocator]
+                                                              (let [^BigIntVector a-vec (.getVector in-root a-field)
+                                                                    ^BigIntVector b-vec (.getVector in-root b-field)
+                                                                    ^BigIntVector c-vec (.createVector (ty/->field "c" (.getType Types$MinorType/BIGINT) false) tu/*allocator*)
+                                                                    row-count (.getRowCount in-root)]
+                                                                (.setValueCount c-vec row-count)
+                                                                (dotimes [idx row-count]
+                                                                  (.set c-vec idx (+ (.get a-vec idx) (.get b-vec idx))))
+                                                                c-vec)))])]
       (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
                 [{:a 100, :c 183}]]
-               (tu/<-cursor (project/->project-cursor tu/*allocator* cursor
-                                                      [(project/->identity-projection-spec "a")
-                                                       (reify ProjectionSpec
-                                                         (project [_ in-root allocator]
-                                                           (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                                 ^BigIntVector b-vec (.getVector in-root b-field)
-                                                                 ^BigIntVector c-vec (.createVector (ty/->field "c" (.getType Types$MinorType/BIGINT) false) tu/*allocator*)
-                                                                 row-count (.getRowCount in-root)]
-                                                             (.setValueCount c-vec row-count)
-                                                             (dotimes [idx row-count]
-                                                               (.set c-vec idx (+ (.get a-vec idx) (.get b-vec idx))))
-                                                             c-vec)))])))))))
+               (tu/<-cursor project-cursor))))))

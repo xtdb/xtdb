@@ -72,7 +72,7 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->cross-join-cursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
+(defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (CrossJoinCursor. allocator left-cursor right-cursor nil nil))
 
 (deftype EquiJoinCursor [^BufferAllocator allocator
@@ -176,5 +176,5 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->equi-join-cursor [^BufferAllocator allocator, ^ICursor left-cursor, ^String left-column-name, ^ICursor right-cursor, ^String right-column-name]
+(defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^String left-column-name, ^ICursor right-cursor, ^String right-column-name]
   (EquiJoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) nil nil))
