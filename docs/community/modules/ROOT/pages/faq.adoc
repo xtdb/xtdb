@@ -33,6 +33,15 @@ If you want to see the gritty details, turn your log level up to "DEBUG" for the
 
 If you are writing acceptance, integration, or end-to-end tests which require an active Crux node in the mix, you can rely on an in-memory node that you spin up in the tests themselves. There are examples of such tests in the https://github.com/juxt/crux/blob/224a3dc04b0b9d9d5336c54f0ea9ee0d0aeb003b/crux-test/test/crux/bitemporal_tale_test.clj#L6[tutorial source] and in the https://github.com/juxt/crux/blob/d8f251c2f9b3930453239681de1ed87e636ff2a3/crux-core/test/crux/codec_test.clj#L194-L202[crux-core tests themselves].
 
+[#uniqueconstraint]
+== How can I add the equivalent of a Unique Constraint?
+
+A uniqueness constraint can be handled 3 ways:
+
+. Encode the unique value in the ID (e.g. store the value(s) in a string ID, or use a map ID) of an entity representing that value, with a reference to the other entity that currently "owns" the value.
+. Use :crux.tx/match, however this takes time to confirm successful assertions and when there is contention you need to implement retry logic at each client.
+. Use a xref:reference::transactions#transaction-functions[transaction function]. This is slower still, though at least avoids the need to worry about contention & retrying. You can also express very complex constraints in these functions.
+
 [#bitemporality]
 == Do I need to think about bitemporality to make use of Crux?
 
