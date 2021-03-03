@@ -487,3 +487,12 @@
                         (set-value-count out-vec (inc out-idx))
                         (.copyFrom out-vec idx out-idx in-vec)))))))
   out-vec)
+
+(defn maybe-single-child-dense-union ^org.apache.arrow.vector.ValueVector [^ValueVector v]
+  (or (when (instance? DenseUnionVector v)
+        (let [children-with-elements (for [^ValueVector child (.getChildrenFromFields ^DenseUnionVector v)
+                                           :when (pos? (.getValueCount child))]
+                                       child)]
+          (when (= 1 (count children-with-elements))
+            (first children-with-elements))))
+      v))

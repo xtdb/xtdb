@@ -5,7 +5,8 @@
            [java.util.function Consumer Function]
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector ElementAddressableVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector BitVector ElementAddressableVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema))
 
 (defn- ->join-schema ^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
@@ -71,8 +72,6 @@
 (defn ->cross-join-cursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (CrossJoinCursor. allocator left-cursor right-cursor nil nil))
 
-;; TODO: will not work with DUVs or BitVectors.
-
 (deftype EquiJoinCursor [^BufferAllocator allocator
                          ^ICursor left-cursor
                          ^String left-column-name
@@ -95,16 +94,28 @@
                              (let [^VectorSchemaRoot left-root in-root
                                    left-root-idx (.size left-roots)]
                                (.add left-roots (util/slice-root left-root 0))
-                               (let [^ElementAddressableVector left-vec (.getVector left-root left-column-name)
-                                     left-pointer (ArrowBufPointer.)]
-                                 (dotimes [left-idx (.getValueCount left-vec)]
-                                   (.getDataPointer left-vec left-idx left-pointer)
-                                   (-> ^List (.computeIfAbsent join-map left-pointer (reify Function
-                                                                                       (apply [_ x]
-                                                                                         (ArrayList.))))
-                                       (.add (doto (int-array 2)
-                                               (aset 0 left-root-idx)
-                                               (aset 1 left-idx)))))))))))
+                               (let [build-phase (fn [^long left-idx left-key]
+                                                   (-> ^List (.computeIfAbsent join-map left-key (reify Function
+                                                                                                   (apply [_ x]
+                                                                                                     (ArrayList.))))
+                                                       (.add (doto (int-array 2)
+                                                               (aset 0 left-root-idx)
+                                                               (aset 1 left-idx)))))
+                                     left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
+                                 (cond
+                                   (instance? DenseUnionVector left-vec)
+                                   (let [^DenseUnionVector left-vec left-vec]
+                                     (dotimes [left-idx (.getValueCount left-vec)]
+                                       (let [^ElementAddressableVector left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
+                                         (build-phase left-idx (.getDataPointer left-vec left-idx (ArrowBufPointer.))))))
+
+                                   (instance? BitVector left-vec)
+                                   (dotimes [left-idx (.getValueCount left-vec)]
+                                     (build-phase left-idx (= (.get ^BitVector left-vec left-idx) 1)))
+
+                                   :else
+                                   (dotimes [left-idx (.getValueCount left-vec)]
+                                     (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx (ArrowBufPointer.)))))))))))
 
     (if (and left-roots (.isEmpty left-roots))
       false
@@ -117,15 +128,28 @@
                                      join-schema (->join-schema left-schema (.getSchema right-root))]
                                  (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator))))
 
-                             (let [^ElementAddressableVector right-vec (.getVector right-root right-column-name)
-                                   right-pointer (ArrowBufPointer.)]
-                               (dotimes [n (.getValueCount right-vec)]
-                                 (.getDataPointer right-vec right-pointer)
-                                 (doseq [^ints idx-pair (.get join-map right-pointer)
-                                         :let [left-root-idx (aget idx-pair 0)
-                                               left-idx (aget idx-pair 1)
-                                               left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
-                                   (cross-product left-root left-idx right-root out-root))))))))
+                             (let [probe-phase (fn [right-pointer]
+                                                 (doseq [^ints idx-pair (.get join-map right-pointer)
+                                                         :let [left-root-idx (aget idx-pair 0)
+                                                               left-idx (aget idx-pair 1)
+                                                               left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
+                                                   (cross-product left-root left-idx right-root out-root)))
+                                   right-pointer (ArrowBufPointer.)
+                                   right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))]
+                               (cond
+                                 (instance? DenseUnionVector right-vec)
+                                 (let [^DenseUnionVector right-vec right-vec]
+                                   (dotimes [right-idx (.getValueCount right-vec)]
+                                     (let [^ElementAddressableVector right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
+                                       (probe-phase (.getDataPointer right-vec right-idx right-pointer)))))
+
+                                 (instance? BitVector right-vec)
+                                 (dotimes [right-idx (.getValueCount right-vec)]
+                                   (probe-phase (= (.get ^BitVector right-vec right-idx) 1)))
+
+                                 :else
+                                 (dotimes [right-idx (.getValueCount right-vec)]
+                                   (probe-phase (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))))))))
         (do
           (.accept c out-root)
           true)
