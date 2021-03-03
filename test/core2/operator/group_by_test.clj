@@ -25,7 +25,7 @@
                         (group-by/->function-spec "b" "min" (Collectors/minBy (Comparator/naturalOrder)))
                         (group-by/->function-spec "b" "max" (Collectors/maxBy (Comparator/naturalOrder)))]]
     (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
-                                       [[{:a 1 :b 10},
+                                       [[{:a 1 :b 10}
                                          {:a 1 :b 20}
                                          {:a 2 :b 30}
                                          {:a 2 :b 40}]
@@ -45,4 +45,27 @@
       (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [])
                   group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor aggregate-spec)]
-        (t/is (empty? (tu/<-cursor group-by-cursor)))))))
+        (t/is (empty? (tu/<-cursor group-by-cursor)))))
+
+    (t/testing "multiple group columns (distinct)"
+      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
+                                         [[{:a 1 :b 10}
+                                           {:a 1 :b 20}
+                                           {:a 2 :b 10}
+                                           {:a 2 :b 20}]
+                                          [{:a 1 :b 10}
+                                           {:a 1 :b 20}
+                                           {:a 2 :b 10}
+                                           {:a 3 :b 20}
+                                           {:a 3 :b 10}]])
+                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->group-spec "a")
+                                                                                        (group-by/->group-spec "b")
+                                                                                        (group-by/->function-spec "b" "cnt" (Collectors/counting))])]
+
+        (t/is (= [#{{:a 1, :b 10, :cnt 2}
+                    {:a 1, :b 20, :cnt 2}
+                    {:a 2, :b 10, :cnt 2}
+                    {:a 2, :b 20, :cnt 1}
+                    {:a 3, :b 10, :cnt 1}
+                    {:a 3, :b 20, :cnt 1}}]
+                 (mapv set (tu/<-cursor group-by-cursor))))))))
