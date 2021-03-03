@@ -60,6 +60,9 @@
     (rename [_ in-cursor rename-map]
       (rename/->rename-cursor allocator in-cursor rename-map))
 
+    (equiJoin [_ left-cursor left-column-name right-cursor right-column-name]
+      (join/->equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
+
     (crossJoin [_ left-cursor right-cursor]
       (join/->cross-join-cursor allocator left-cursor right-cursor))
 
