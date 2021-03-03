@@ -18,12 +18,13 @@
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (doseq [^ValueVector right-vec (.getFieldVectors right-root)]
     (VectorBatchAppender/batchAppend (.getVector out-root (.getField right-vec)) (object-array [right-vec])))
-  (let [out-idx (.getRowCount out-root)]
+  (let [out-idx (.getRowCount out-root)
+        right-row-count (.getRowCount right-root)]
     (doseq [^ValueVector left-vec (.getFieldVectors left-root)
             :let [out-vec (.getVector out-root (.getField left-vec))]]
-      (dotimes [right-idx (.getRowCount right-root)]
-        (.copyFromSafe out-vec (+ out-idx right-idx) left-idx left-vec)))
-    (util/set-vector-schema-root-row-count out-root (+ out-idx (.getRowCount right-root))))
+      (dotimes [n right-row-count]
+        (.copyFromSafe out-vec left-idx (+ out-idx n) left-vec)))
+    (util/set-vector-schema-root-row-count out-root (+ out-idx right-row-count)))
   out-root)
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
