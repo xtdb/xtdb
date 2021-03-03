@@ -17,7 +17,7 @@
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (doseq [^ValueVector right-vec (.getFieldVectors right-root)]
-    (VectorBatchAppender/batchAppend (.getVector out-root (.getField right-vec)) (object-array [right-vec])))
+    (VectorBatchAppender/batchAppend (.getVector out-root (.getField right-vec)) (into-array ValueVector [right-vec])))
   (let [out-idx (.getRowCount out-root)
         right-row-count (.getRowCount right-root)]
     (doseq [^ValueVector left-vec (.getFieldVectors left-root)
@@ -57,7 +57,7 @@
 
                              (doseq [^VectorSchemaRoot left-root left-roots]
                                (dotimes [left-idx (.getRowCount left-root)]
-                                 (cross-product left-root left-idx right-root out-root)))))))
+                                 (cross-product left-root left-idx right-root (.out-root this))))))))
         (do
           (.accept c out-root)
           true)
