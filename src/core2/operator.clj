@@ -1,5 +1,6 @@
 (ns core2.operator
-  (:require [core2.operator.join :as join]
+  (:require [core2.operator.group-by :as group-by]
+            [core2.operator.join :as join]
             [core2.operator.project :as project]
             [core2.operator.rename :as rename]
             [core2.operator.scan :as scan]
@@ -36,7 +37,7 @@
                          ^java.util.List #_#_<Pair<String, Direction>> orderSpec])
 
   (^core2.ICursor groupBy [^core2.ICursor inCursor
-                           ^java.util.List #_#_#_<Pair<String, Or<String, AggregateExpr>>> aggregateSpecs])
+                           ^java.util.List #_<AggregateSpec> aggregateSpecs])
 
   (^core2.ICursor slice [^core2.ICursor inCursor, ^Long offset, ^Long limit]))
 

@@ -1,5 +1,6 @@
 (ns core2.test-util
   (:require [clojure.test :as t]
+            [core2.core]
             [core2.types :as ty]
             [core2.util :as util])
   (:import core2.core.IngestLoop
