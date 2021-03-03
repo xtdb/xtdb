@@ -66,5 +66,8 @@
     (crossJoin [_ left-cursor right-cursor]
       (join/->cross-join-cursor allocator left-cursor right-cursor))
 
+    (groupBy [_ in-cursor aggregate-specs]
+      (group-by/->group-by-cursor allocator in-cursor aggregate-specs))
+
     (slice [_ in-cursor offset limit]
       (slice/->slice-cursor in-cursor offset limit))))
