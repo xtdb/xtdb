@@ -15,6 +15,12 @@
     (assert (apply distinct? fields))
     (Schema. fields)))
 
+(defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root]
+  (let [out-idx (.getRowCount out-root)]
+    (doseq [^ValueVector in-vec (.getFieldVectors in-root)
+            :let [out-vec (.getVector out-root (.getField in-vec))]]
+      (.copyFromSafe out-vec idx out-idx in-vec))))
+
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
         right-row-count (.getRowCount right-root)]
@@ -46,24 +52,26 @@
                            (accept [_ in-root]
                              (.add left-roots (util/slice-root in-root 0))))))
 
-    (if (and left-roots (.isEmpty left-roots))
-      false
-      (if (.tryAdvance right-cursor
-                       (reify Consumer
-                         (accept [_ in-root]
-                           (let [^VectorSchemaRoot right-root in-root]
-                             (when-not out-root
-                               (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
-                                     join-schema (->join-schema left-schema (.getSchema right-root))]
-                                 (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator))))
+    (while (and left-roots
+                (not (.isEmpty left-roots))
+                (nil? out-root)
+                (.tryAdvance right-cursor
+                             (reify Consumer
+                               (accept [_ in-root]
+                                 (let [^VectorSchemaRoot right-root in-root]
+                                   (when (pos? (.getRowCount right-root))
+                                     (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
+                                           join-schema (->join-schema left-schema (.getSchema right-root))]
+                                       (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator)))
 
-                             (doseq [^VectorSchemaRoot left-root left-roots]
-                               (dotimes [left-idx (.getRowCount left-root)]
-                                 (cross-product left-root left-idx right-root (.out-root this))))))))
-        (do
-          (.accept c out-root)
-          true)
-        false)))
+                                     (doseq [^VectorSchemaRoot left-root left-roots]
+                                       (dotimes [left-idx (.getRowCount left-root)]
+                                         (cross-product left-root left-idx right-root (.out-root this)))))))))))
+    (if out-root
+      (do
+        (.accept c out-root)
+        true)
+      false))
 
   (close [_]
     (util/try-close out-root)
@@ -89,7 +97,8 @@
   ICursor
   (tryAdvance [this c]
     (when out-root
-      (.close out-root))
+      (.close out-root)
+      (set! (.out-root this) nil))
 
     (when-not left-roots
       (set! (.left-roots this) (ArrayList.))
@@ -126,47 +135,56 @@
                                    (dotimes [left-idx (.getValueCount left-vec)]
                                      (build-phase left-idx (.getObject left-vec left-idx))))))))))
 
-    (if (and left-roots (.isEmpty left-roots))
-      false
-      (if (.tryAdvance right-cursor
-                       (reify Consumer
-                         (accept [_ in-root]
-                           (let [^VectorSchemaRoot right-root in-root]
-                             (when-not out-root
-                               (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
-                                     join-schema (->join-schema left-schema (.getSchema right-root))]
-                                 (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator))))
+    (while (and left-roots
+                (not (.isEmpty left-roots))
+                (nil? out-root)
+                (.tryAdvance right-cursor
+                             (reify Consumer
+                               (accept [_ in-root]
+                                 (let [^VectorSchemaRoot right-root in-root]
+                                   (when (pos? (.getRowCount right-root))
+                                     (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
+                                           join-schema (->join-schema left-schema (.getSchema right-root))
+                                           out-root (VectorSchemaRoot/create join-schema allocator)
+                                           probe-phase (fn [^long right-idx right-key]
+                                                         (let [idx-pairs (.get join-map right-key)]
+                                                           (doseq [^ints idx-pair idx-pairs
+                                                                   :let [left-root-idx (aget idx-pair 0)
+                                                                         left-idx (aget idx-pair 1)
+                                                                         left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
+                                                             (copy-tuple left-root left-idx out-root)
+                                                             (copy-tuple right-root right-idx out-root))
+                                                           (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) (count idx-pairs)))))
+                                           right-pointer (ArrowBufPointer.)
+                                           right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))]
+                                       (cond
+                                         (instance? DenseUnionVector right-vec)
+                                         (let [^DenseUnionVector right-vec right-vec]
+                                           (dotimes [right-idx (.getValueCount right-vec)]
+                                             (let [right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
+                                               (probe-phase right-idx
+                                                            (if (and (instance? ElementAddressableVector right-vec)
+                                                                     (not (instance? BitVector right-vec)))
+                                                              (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)
+                                                              (.getObject right-vec right-idx))))))
 
-                             (let [probe-phase (fn [right-pointer]
-                                                 (doseq [^ints idx-pair (.get join-map right-pointer)
-                                                         :let [left-root-idx (aget idx-pair 0)
-                                                               left-idx (aget idx-pair 1)
-                                                               left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
-                                                   (cross-product left-root left-idx right-root out-root)))
-                                   right-pointer (ArrowBufPointer.)
-                                   right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))]
-                               (cond
-                                 (instance? DenseUnionVector right-vec)
-                                 (let [^DenseUnionVector right-vec right-vec]
-                                   (dotimes [right-idx (.getValueCount right-vec)]
-                                     (let [right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
-                                       (probe-phase (if (and (instance? ElementAddressableVector right-vec)
-                                                             (not (instance? BitVector right-vec)))
-                                                      (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)
-                                                      (.getObject right-vec right-idx))))))
+                                         (and (instance? ElementAddressableVector right-vec)
+                                              (not (instance? BitVector right-vec)))
+                                         (dotimes [right-idx (.getValueCount right-vec)]
+                                           (probe-phase right-idx (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
 
-                                 (and (instance? ElementAddressableVector right-vec)
-                                      (not (instance? BitVector right-vec)))
-                                 (dotimes [right-idx (.getValueCount right-vec)]
-                                   (probe-phase (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
+                                         :else
+                                         (dotimes [right-idx (.getValueCount right-vec)]
+                                           (probe-phase right-idx (.getObject right-vec right-idx))))
 
-                                 :else
-                                 (dotimes [right-idx (.getValueCount right-vec)]
-                                   (probe-phase (.getObject right-vec right-idx)))))))))
-        (do
-          (.accept c out-root)
-          true)
-        false)))
+                                       (when (pos? (.getRowCount out-root))
+                                         (set! (.out-root this) out-root))))))))))
+
+    (if out-root
+      (do
+        (.accept c out-root)
+        true)
+      false))
 
   (close [_]
     (util/try-close out-root)

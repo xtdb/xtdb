@@ -29,4 +29,55 @@
                 #{{:a 12, :b 83, :c 3}
                   {:a 0, :b 83, :c 3}
                   {:a 100, :b 83, :c 3}}]
-               (mapv set (tu/<-cursor join-cursor)))))))
+               (mapv set (tu/<-cursor join-cursor)))))
+
+    (t/testing "empty input and output"
+      (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                           [[{:a 12}, {:a 0}]
+                                            [{:a 100}]])
+                  right-cursor (tu/->cursor (Schema. [b-field c-field])
+                                            [])
+                  join-cursor (join/->cross-join-cursor tu/*allocator* left-cursor right-cursor)]
+
+        (t/is (empty? (tu/<-cursor join-cursor)))))))
+
+
+(t/deftest test-equi-join
+  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
+        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
+        c-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
+
+    (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                         [[{:a 12}, {:a 0}]
+                                          [{:a 100}]])
+                right-cursor (tu/->cursor (Schema. [b-field])
+                                          [[{:b 12}, {:b 2}]
+                                           [{:b 100} {:b 0}]])
+                join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
+
+      (t/is (= [#{{:a 12, :b 12}}
+                #{{:a 100, :b 100}
+                  {:a 0, :b 0}}]
+               (mapv set (tu/<-cursor join-cursor)))))
+
+    (t/testing "empty input"
+      (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                           [[{:a 12}, {:a 0}]
+                                            [{:a 100}]])
+                  right-cursor (tu/->cursor (Schema. [b-field])
+                                            [])
+                  join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
+
+        (t/is (empty? (tu/<-cursor join-cursor)))))
+
+
+    (t/testing "empty output"
+      (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                           [[{:a 12}, {:a 0}]
+                                            [{:a 100}]])
+                  right-cursor (tu/->cursor (Schema. [b-field c-field])
+                                            [[{:b 10 :c 1}, {:b 15 :c 2}]
+                                             [{:b 83 :c 3}]])
+                  join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "b")]
+
+        (t/is (empty? (tu/<-cursor join-cursor)))))))
