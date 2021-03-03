@@ -87,7 +87,7 @@
                          ^String left-column-name
                          ^ICursor right-cursor
                          ^String right-column-name
-                         ^Map join-map
+                         ^Map join-key->left-idx-pairs
                          ^List left-roots
                          ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
 
@@ -104,9 +104,11 @@
                                  left-root-idx (.size left-roots)]
                              (.add left-roots left-root)
                              (let [build-phase (fn [^long left-idx left-key]
-                                                 (-> ^List (.computeIfAbsent join-map left-key (reify Function
-                                                                                                 (apply [_ x]
-                                                                                                   (ArrayList.))))
+                                                 (-> ^List (.computeIfAbsent join-key->left-idx-pairs
+                                                                             left-key
+                                                                             (reify Function
+                                                                               (apply [_ x]
+                                                                                 (ArrayList.))))
                                                      (.add (doto (int-array 2)
                                                              (aset 0 left-root-idx)
                                                              (aset 1 left-idx)))))
@@ -141,7 +143,7 @@
                                            join-schema (->join-schema left-schema (.getSchema right-root))
                                            out-root (VectorSchemaRoot/create join-schema allocator)
                                            probe-phase (fn [^long right-idx right-key]
-                                                         (let [idx-pairs (.get join-map right-key)]
+                                                         (let [idx-pairs (.get join-key->left-idx-pairs right-key)]
                                                            (doseq [^ints idx-pair idx-pairs
                                                                    :let [left-root-idx (aget idx-pair 0)
                                                                          left-idx (aget idx-pair 1)
@@ -186,7 +188,7 @@
       (doseq [root left-roots]
         (util/try-close root))
       (.clear left-roots))
-    (.clear join-map)
+    (.clear join-key->left-idx-pairs)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
