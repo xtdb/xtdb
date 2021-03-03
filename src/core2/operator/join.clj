@@ -37,7 +37,7 @@
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
                           ^ICursor right-cursor
-                          ^:unsynchronized-mutable ^List left-roots
+                          ^List left-roots
                           ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
   ICursor
   (tryAdvance [this c]
@@ -45,15 +45,12 @@
       (.close out-root)
       (set! (.out-root this) nil))
 
-    (when-not left-roots
-      (set! (.left-roots this) (ArrayList.))
-      (.forEachRemaining left-cursor
-                         (reify Consumer
-                           (accept [_ in-root]
-                             (.add left-roots (util/slice-root in-root 0))))))
+    (.forEachRemaining left-cursor
+                       (reify Consumer
+                         (accept [_ in-root]
+                           (.add left-roots (util/slice-root in-root 0)))))
 
-    (while (and left-roots
-                (not (.isEmpty left-roots))
+    (while (and (not (.isEmpty left-roots))
                 (nil? out-root)
                 (.tryAdvance right-cursor
                              (reify Consumer
@@ -83,7 +80,7 @@
     (util/try-close right-cursor)))
 
 (defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (CrossJoinCursor. allocator left-cursor right-cursor nil nil))
+  (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil))
 
 (deftype EquiJoinCursor [^BufferAllocator allocator
                          ^ICursor left-cursor
@@ -91,7 +88,7 @@
                          ^ICursor right-cursor
                          ^String right-column-name
                          ^Map join-map
-                         ^:unsynchronized-mutable ^List left-roots
+                         ^List left-roots
                          ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
 
   ICursor
@@ -100,43 +97,40 @@
       (.close out-root)
       (set! (.out-root this) nil))
 
-    (when-not left-roots
-      (set! (.left-roots this) (ArrayList.))
-      (.forEachRemaining left-cursor
-                         (reify Consumer
-                           (accept [_ in-root]
-                             (let [^VectorSchemaRoot left-root in-root
-                                   left-root-idx (.size left-roots)]
-                               (.add left-roots (util/slice-root left-root 0))
-                               (let [build-phase (fn [^long left-idx left-key]
-                                                   (-> ^List (.computeIfAbsent join-map left-key (reify Function
-                                                                                                   (apply [_ x]
-                                                                                                     (ArrayList.))))
-                                                       (.add (doto (int-array 2)
-                                                               (aset 0 left-root-idx)
-                                                               (aset 1 left-idx)))))
-                                     left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
-                                 (cond
-                                   (instance? DenseUnionVector left-vec)
-                                   (let [^DenseUnionVector left-vec left-vec]
-                                     (dotimes [left-idx (.getValueCount left-vec)]
-                                       (let [left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                         (build-phase left-idx (if (and (instance? ElementAddressableVector left-vec)
-                                                                        (not (instance? BitVector left-vec)))
-                                                                 (.getDataPointer ^ElementAddressableVector left-vec left-idx)
-                                                                 (.getObject left-vec left-idx))))))
-
-                                   (and (instance? ElementAddressableVector left-vec)
-                                        (not (instance? BitVector left-vec)))
+    (.forEachRemaining left-cursor
+                       (reify Consumer
+                         (accept [_ in-root]
+                           (let [^VectorSchemaRoot left-root (util/slice-root in-root 0)
+                                 left-root-idx (.size left-roots)]
+                             (.add left-roots left-root)
+                             (let [build-phase (fn [^long left-idx left-key]
+                                                 (-> ^List (.computeIfAbsent join-map left-key (reify Function
+                                                                                                 (apply [_ x]
+                                                                                                   (ArrayList.))))
+                                                     (.add (doto (int-array 2)
+                                                             (aset 0 left-root-idx)
+                                                             (aset 1 left-idx)))))
+                                   left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
+                               (cond
+                                 (instance? DenseUnionVector left-vec)
+                                 (let [^DenseUnionVector left-vec left-vec]
                                    (dotimes [left-idx (.getValueCount left-vec)]
-                                     (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx)))
+                                     (let [left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
+                                       (build-phase left-idx (if (and (instance? ElementAddressableVector left-vec)
+                                                                      (not (instance? BitVector left-vec)))
+                                                               (.getDataPointer ^ElementAddressableVector left-vec left-idx)
+                                                               (.getObject left-vec left-idx))))))
 
-                                   :else
-                                   (dotimes [left-idx (.getValueCount left-vec)]
-                                     (build-phase left-idx (.getObject left-vec left-idx))))))))))
+                                 (and (instance? ElementAddressableVector left-vec)
+                                      (not (instance? BitVector left-vec)))
+                                 (dotimes [left-idx (.getValueCount left-vec)]
+                                   (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx)))
 
-    (while (and left-roots
-                (not (.isEmpty left-roots))
+                                 :else
+                                 (dotimes [left-idx (.getValueCount left-vec)]
+                                   (build-phase left-idx (.getObject left-vec left-idx)))))))))
+
+    (while (and (not (.isEmpty left-roots))
                 (nil? out-root)
                 (.tryAdvance right-cursor
                              (reify Consumer
@@ -196,5 +190,9 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^String left-column-name, ^ICursor right-cursor, ^String right-column-name]
-  (EquiJoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) nil nil))
+(defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                         ^ICursor left-cursor,
+                                         ^String left-column-name,
+                                         ^ICursor right-cursor,
+                                         ^String right-column-name]
+  (EquiJoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (ArrayList.) nil))

@@ -14,12 +14,6 @@
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
-;; NOTE: the use of getObject here is problematic, apart from
-;; performance, the returned values cannot be set back onto the
-;; vectors. set-safe tries to deal with that, but doesn't handle
-;; Arrow's own return types at times, for Text, LocalDateTime
-;; etc. Further, byte arrays are not hashable.
-
 (definterface AggregateSpec
   (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
   (^org.apache.arrow.vector.ValueVector getFromVector [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
@@ -81,85 +75,102 @@
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
   (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
 
+(defn- retain-group-key [k]
+  (doseq [x k
+          :when (instance? ArrowBufPointer x)]
+    (.retain (.getBuf ^ArrowBufPointer x)))
+  k)
+
+(defn- release-group-key [k]
+  (doseq [x k
+          :when (instance? ArrowBufPointer x)]
+    (.release (.getBuf ^ArrowBufPointer x)))
+  k)
+
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
                         ^List aggregate-specs
                         ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
   ICursor
   (tryAdvance [this c]
-    (util/try-close out-root)
-    (if-not out-root
-      (let [group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))
-            aggregate-map (HashMap.)]
+    (when out-root
+      (.close out-root)
+      (set! (.out-root this) nil))
+
+    (let [group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))
+          aggregate-map (HashMap.)]
+      (try
         (.forEachRemaining in-cursor
                            (reify Consumer
                              (accept [_ in-root]
-                               (let [^VectorSchemaRoot in-root in-root]
-                                 (when-not out-root
-                                   (let [aggregate-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
-                                                                     (.getToField aggregate-spec in-root)))]
-                                     (set! (.out-root this) (VectorSchemaRoot/create aggregate-schema allocator))))
+                               (let [^VectorSchemaRoot in-root in-root
+                                     aggregate-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
+                                                                 (.getToField aggregate-spec in-root)))
+                                     group->idx-bitmap (HashMap.)]
+                                 (set! (.out-root this) (VectorSchemaRoot/create aggregate-schema allocator))
 
-                                 (let [group->idx-bitmap (HashMap.)]
-                                   (dotimes [idx (.getRowCount in-root)]
-                                     (let [group-key (reduce
-                                                      (fn [^List acc ^AggregateSpec group-spec]
-                                                        (let [from-vec (.getFromVector group-spec in-root)
-                                                              k (cond
-                                                                  (instance? DenseUnionVector from-vec)
-                                                                  (let [^DenseUnionVector from-vec from-vec
-                                                                        from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
+                                 (dotimes [idx (.getRowCount in-root)]
+                                   (let [group-key (reduce
+                                                    (fn [^List acc ^AggregateSpec group-spec]
+                                                      (let [from-vec (.getFromVector group-spec in-root)
+                                                            k (cond
+                                                                (instance? DenseUnionVector from-vec)
+                                                                (let [^DenseUnionVector from-vec from-vec
+                                                                      from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
 
 
-                                                                    (if (and (instance? ElementAddressableVector from-vec)
-                                                                             (not (instance? BitVector from-vec)))
-                                                                      (.getDataPointer ^ElementAddressableVector from-vec idx)
-                                                                      (.getObject from-vec idx)))
+                                                                  (if (and (instance? ElementAddressableVector from-vec)
+                                                                           (not (instance? BitVector from-vec)))
+                                                                    (.getDataPointer ^ElementAddressableVector from-vec idx)
+                                                                    (.getObject from-vec idx)))
 
-                                                                  (and (instance? ElementAddressableVector from-vec)
-                                                                       (not (instance? BitVector from-vec)))
-                                                                  (.getDataPointer ^ElementAddressableVector from-vec idx)
+                                                                (and (instance? ElementAddressableVector from-vec)
+                                                                     (not (instance? BitVector from-vec)))
+                                                                (.getDataPointer ^ElementAddressableVector from-vec idx)
 
-                                                                  :else
-                                                                  (.getObject from-vec idx))]
-                                                          (doto acc
-                                                            (.add k))))
-                                                      (ArrayList. (.size aggregate-specs))
-                                                      group-specs)
-                                           ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
-                                                                                                                     (apply [_ _]
-                                                                                                                       (RoaringBitmap.))))]
-                                       (.add idx-bitmap idx)))
+                                                                :else
+                                                                (.getObject from-vec idx))]
+                                                        (doto acc
+                                                          (.add k))))
+                                                    (ArrayList. (.size aggregate-specs))
+                                                    group-specs)
+                                         ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
+                                                                                                                   (apply [_ _]
+                                                                                                                     (RoaringBitmap.))))]
+                                     (.add idx-bitmap idx)))
 
-                                   (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
-                                           :let [^List accs (.computeIfAbsent aggregate-map
-                                                                              group-key
-                                                                              (reify Function
-                                                                                (apply [_ _]
-                                                                                  (ArrayList. ^List (repeat (.size aggregate-specs) nil)))))]]
-                                     (dotimes [n (.size aggregate-specs)]
-                                       (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap)))))))))
+                                 (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
+                                         :let [^List accs (if-let [accs (.get aggregate-map group-key)]
+                                                            accs
+                                                            (doto (ArrayList. ^List (repeat (.size aggregate-specs) nil))
+                                                              (->> (.put aggregate-map (retain-group-key group-key)))))]]
+                                   (dotimes [n (.size aggregate-specs)]
+                                     (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))))
 
-        (let [all-accs (vec (vals aggregate-map))
-              row-count (count all-accs)]
-          (dotimes [out-idx row-count]
-            (let [^List accs (get all-accs out-idx)]
-              (dotimes [n (.size aggregate-specs)]
-                (let [out-vec (.getVector out-root n)
-                      v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
-                  (if (instance? DenseUnionVector out-vec)
-                    (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                          value-offset (util/write-type-id out-vec out-idx type-id)]
-                      (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
-                    (t/set-safe! out-vec out-idx v))))))
-          (util/set-vector-schema-root-row-count out-root row-count)
-          (.accept c out-root)
-          true))
-      false))
+        (if out-root
+          (let [all-accs (vec (vals aggregate-map))
+                row-count (count all-accs)]
+            (dotimes [out-idx row-count]
+              (let [^List accs (get all-accs out-idx)]
+                (dotimes [n (.size aggregate-specs)]
+                  (let [out-vec (.getVector out-root n)
+                        v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
+                    (if (instance? DenseUnionVector out-vec)
+                      (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                            value-offset (util/write-type-id out-vec out-idx type-id)]
+                        (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
+                      (t/set-safe! out-vec out-idx v))))))
+            (util/set-vector-schema-root-row-count out-root row-count)
+            (.accept c out-root)
+            true)
+          false)
+        (finally
+          (doseq [k (keys aggregate-map)]
+            (release-group-key k))))))
 
   (close [_]
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->group-by-cursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List aggregate-specs]
+(defn ->group-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List aggregate-specs]
   (GroupByCursor. allocator in-cursor aggregate-specs nil))
