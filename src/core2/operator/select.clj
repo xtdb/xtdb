@@ -15,26 +15,30 @@
   ICursor
   (tryAdvance [this c]
     (when out-root
-      (.clear out-root))
+      (.close out-root)
+      (set! (.out-root this) nil))
 
-    (while (and (or (nil? out-root) (zero? (.getRowCount out-root)))
+    (while (and (nil? out-root)
                 (.tryAdvance in-cursor
                              (reify Consumer
                                (accept [_ in-root]
                                  (let [^VectorSchemaRoot in-root in-root
                                        schema (.getSchema in-root)
-                                       ^VectorSchemaRoot out-root (or (.out-root this)
-                                                                      (VectorSchemaRoot/create schema allocator))]
+                                       idx-bitmap (.select selector in-root)
+                                       selected-count (.getCardinality idx-bitmap)]
 
-                                   (set! (.out-root this) out-root)
+                                   (when (pos? selected-count)
+                                     (let [^VectorSchemaRoot out-root (VectorSchemaRoot/create schema allocator)]
+                                       (set! (.out-root this) out-root)
 
-                                   (let [idx-bitmap (.select selector in-root)]
-                                     (doseq [^Field field (.getFields schema)]
-                                       (util/project-vec (.getVector in-root field)
-                                                         idx-bitmap
-                                                         (.getVector out-root field))))))))))
+                                       (doseq [^Field field (.getFields schema)]
+                                         (util/project-vec (.getVector in-root field)
+                                                           idx-bitmap
+                                                           (.getVector out-root field)))
 
-    (if (pos? (.getRowCount out-root))
+                                       (util/set-vector-schema-root-row-count out-root selected-count)))))))))
+
+    (if out-root
       (do
         (.accept c out-root)
         true)
