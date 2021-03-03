@@ -17,8 +17,8 @@
 (definterface AggregateSpec
   (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
   (^org.apache.arrow.vector.ValueVector getFromVector [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
-  (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object init ^org.roaringbitmap.RoaringBitmap idx-bitmap])
-  (^Object finish [^Object accumulator]))
+  (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
+  (^Object finish [^Object container]))
 
 (deftype GroupSpec [^String name]
   AggregateSpec
@@ -28,11 +28,11 @@
   (getFromVector [_ in-root]
     (.getVector in-root name))
 
-  (aggregate [this in-root init idx-bitmap]
-    (or init (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
+  (aggregate [this in-root container idx-bitmap]
+    (or container (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
 
-  (finish [_ acc]
-    acc))
+  (finish [_ container]
+    container))
 
 (defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String name]
   (GroupSpec. name))
@@ -45,21 +45,21 @@
   (getFromVector [_ in-root]
     (.getVector in-root from-name))
 
-  (aggregate [this in-root init idx-bitmap]
+  (aggregate [this in-root container idx-bitmap]
     (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
           accumulator (.accumulator collector)]
       (.collect ^IntStream (.stream idx-bitmap)
-                (if init
+                (if container
                   (reify Supplier
-                    (get [_] init))
+                    (get [_] container))
                   (.supplier collector))
                 (reify ObjIntConsumer
                   (accept [_ acc idx]
                     (.accept accumulator acc (.getObject from-vec idx))))
                 accumulator)))
 
-  (finish [_ acc]
-    (let [result (.apply (.finisher collector) acc)]
+  (finish [_ container]
+    (let [result (.apply (.finisher collector) container)]
       (if (instance? Optional result)
         (.orElse ^Optional result nil)
         result))))
@@ -116,7 +116,7 @@
       (set! (.out-root this) nil))
 
     (let [^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))
-          aggregate-map (HashMap.)]
+          group->accs (HashMap.)]
       (try
         (.forEachRemaining in-cursor
                            (reify Consumer
@@ -124,9 +124,9 @@
                                (let [^VectorSchemaRoot in-root in-root
                                      group->idx-bitmap (HashMap.)]
                                  (when-not out-root
-                                   (let [aggregate-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
-                                                                     (.getToField aggregate-spec in-root)))]
-                                     (set! (.out-root this) (VectorSchemaRoot/create aggregate-schema allocator))))
+                                   (let [group-by-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
+                                                                    (.getToField aggregate-spec in-root)))]
+                                     (set! (.out-root this) (VectorSchemaRoot/create group-by-schema allocator))))
 
                                  (dotimes [idx (.getRowCount in-root)]
                                    (let [group-key (->group-key in-root group-specs idx)
@@ -136,15 +136,15 @@
                                      (.add idx-bitmap idx)))
 
                                  (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
-                                         :let [^List accs (if-let [accs (.get aggregate-map group-key)]
+                                         :let [^List accs (if-let [accs (.get group->accs group-key)]
                                                             accs
                                                             (doto (ArrayList. ^List (repeat (.size aggregate-specs) nil))
-                                                              (->> (.put aggregate-map (retain-group-key group-key)))))]]
+                                                              (->> (.put group->accs (retain-group-key group-key)))))]]
                                    (dotimes [n (.size aggregate-specs)]
                                      (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))))
 
-        (if-not (.isEmpty aggregate-map)
-          (let [^List all-accs (ArrayList. ^List (vals aggregate-map))
+        (if-not (.isEmpty group->accs)
+          (let [^List all-accs (ArrayList. ^List (vals group->accs))
                 row-count (.size all-accs)]
             (dotimes [out-idx row-count]
               (let [^List accs (.get all-accs out-idx)]
@@ -161,7 +161,7 @@
             true)
           false)
         (finally
-          (doseq [k (keys aggregate-map)]
+          (doseq [k (keys group->accs)]
             (release-group-key k))))))
 
   (close [_]
