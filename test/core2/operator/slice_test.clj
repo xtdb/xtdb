@@ -1,6 +1,12 @@
 (ns core2.operator.slice-test
-  (:require [core2.operator.slice :as slice]
-            [clojure.test :as t]))
+  (:require [clojure.test :as t]
+            [core2.operator.slice :as slice]
+            [core2.test-util :as tu]
+            [core2.types :as ty])
+  (:import org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.types.Types$MinorType))
+
+(t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-offset+length
   (t/testing "no limit"
@@ -39,3 +45,30 @@
     (t/is (nil? (slice/offset+length 0 5 5 10)))
     (t/is (nil? (slice/offset+length 10 5 15 10)))
     (t/is (nil? (slice/offset+length 20 15 35 10)))))
+
+(t/deftest test-slice
+  (let [blocks [[{:idx 0}, {:idx 1}]
+                [{:idx 2}, {:idx 3}]]]
+    (letfn [(slice [offset length]
+              (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (.getType Types$MinorType/BIGINT) false)])
+                                              blocks)]
+                (tu/<-cursor (slice/->slice-cursor cursor offset length))))]
+      (t/is (= blocks (slice nil nil)))
+
+      (t/is (= [[{:idx 0}, {:idx 1}]
+                [{:idx 2}]]
+               (slice nil 3)))
+
+      (t/is (= [[{:idx 1}]
+                [{:idx 2}]]
+               (slice 1 2)))
+
+      (t/testing "doesn't yield empty roots"
+        (t/is (= [[{:idx 0}, {:idx 1}]]
+                 (slice nil 2)))
+
+        (t/is (= [[{:idx 2}, {:idx 3}]]
+                 (slice 2 nil)))
+
+        (t/is (= [[{:idx 3}]]
+                 (slice 3 nil)))))))
