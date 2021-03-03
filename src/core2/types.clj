@@ -1,6 +1,8 @@
 (ns core2.types
-  (:require [clojure.string :as str])
+  (:require [clojure.string :as str]
+            [core2.util :as util])
   (:import [java.util Comparator Date]
+           java.time.LocalDateTime
            org.apache.arrow.memory.util.ByteFunctionHelpers
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -40,7 +42,9 @@
   (set-null! [this idx] (.setNull this ^int idx))
 
   TimeStampMilliVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (.getTime ^Date v)))
+  (set-safe! [this idx v] (.setSafe this ^int idx (.getTime (if (instance? LocalDateTime v)
+                                                              (util/local-date-time->date v)
+                                                              ^Date v))))
   (set-null! [this idx] (.setNull this ^int idx))
 
   Float8Vector
@@ -56,7 +60,9 @@
   (set-null! [this idx] (.setNull this ^int idx))
 
   VarCharVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (Text. (str v))))
+  (set-safe! [this idx v] (.setSafe this ^int idx (if (instance? Text v)
+                                                    ^Text v
+                                                    (Text. (str v)))))
   (set-null! [this idx] (.setNull this ^int idx)))
 
 (def ->minor-type

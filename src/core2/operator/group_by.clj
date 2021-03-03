@@ -20,20 +20,6 @@
   (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object init ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object accumulator]))
 
-(defn- arrow->clojure [x]
-  (cond
-    (instance? Text x)
-    (str x)
-
-    (instance? LocalDateTime x)
-    (util/local-date-time->date x)
-
-    (instance? Optional x)
-    (.orElse ^Optional x nil)
-
-    :else
-    x))
-
 (deftype GroupSpec [^String name]
   AggregateSpec
   (getToField [this in-root]
@@ -46,7 +32,7 @@
     (or init (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
 
   (finish [_ acc]
-    (arrow->clojure acc)))
+    acc))
 
 (defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String name]
   (GroupSpec. name))
@@ -73,7 +59,10 @@
                 accumulator)))
 
   (finish [_ acc]
-    (arrow->clojure (.apply (.finisher collector) acc))))
+    (let [result (.apply (.finisher collector) acc)]
+      (if (instance? Optional result)
+        (.orElse ^Optional result nil)
+        result))))
 
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
   (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
