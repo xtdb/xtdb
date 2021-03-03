@@ -1,5 +1,6 @@
 (ns core2.operator
-  (:require [core2.operator.project :as project]
+  (:require [core2.operator.join :as join]
+            [core2.operator.project :as project]
             [core2.operator.rename :as rename]
             [core2.operator.scan :as scan]
             [core2.operator.select :as select]
@@ -58,6 +59,9 @@
 
     (rename [_ in-cursor rename-map]
       (rename/->rename-cursor allocator in-cursor rename-map))
+
+    (crossJoin [_ left-cursor right-cursor]
+      (join/->cross-join-cursor allocator left-cursor right-cursor))
 
     (slice [_ in-cursor offset limit]
       (slice/->slice-cursor in-cursor offset limit))))
