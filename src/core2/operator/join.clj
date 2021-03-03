@@ -6,7 +6,7 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ElementAddressableVector NullVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.VectorBatchAppender))
 
@@ -110,11 +110,13 @@
                                    (let [^DenseUnionVector left-vec left-vec]
                                      (dotimes [left-idx (.getValueCount left-vec)]
                                        (let [^ElementAddressableVector left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                         (build-phase left-idx (if (instance? BitVector left-vec)
+                                         (build-phase left-idx (if (or (instance? BitVector left-vec)
+                                                                       (instance? NullVector left-vec))
                                                                  (.getObject left-vec left-idx)
                                                                  (.getDataPointer left-vec left-idx))))))
 
-                                   (instance? BitVector left-vec)
+                                   (or (instance? BitVector left-vec)
+                                       (instance? NullVector left-vec))
                                    (dotimes [left-idx (.getValueCount left-vec)]
                                      (build-phase left-idx (.getObject ^BitVector left-vec left-idx)))
 
@@ -146,11 +148,13 @@
                                  (let [^DenseUnionVector right-vec right-vec]
                                    (dotimes [right-idx (.getValueCount right-vec)]
                                      (let [^ElementAddressableVector right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
-                                       (probe-phase (if (instance? BitVector right-vec)
+                                       (probe-phase (if (or (instance? BitVector right-vec)
+                                                            (instance? NullVector right-vec))
                                                       (.getObject right-vec right-idx)
                                                       (.getDataPointer right-vec right-idx right-pointer))))))
 
-                                 (instance? BitVector right-vec)
+                                 (or (instance? BitVector right-vec)
+                                     (instance? NullVector right-vec))
                                  (dotimes [right-idx (.getValueCount right-vec)]
                                    (probe-phase (.getObject ^BitVector right-vec right-idx)))
 

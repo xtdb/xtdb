@@ -9,7 +9,7 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ElementAddressableVector NullVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
@@ -105,18 +105,20 @@
                                                       (fn [^List acc ^AggregateSpec group-spec]
                                                         (let [from-vec (.getFromVector group-spec in-root)
                                                               k (cond
-                                                                (instance? DenseUnionVector from-vec)
-                                                                (let [^DenseUnionVector from-vec from-vec
-                                                                      from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
-                                                                  (if (instance? BitVector from-vec)
-                                                                    (.getObject from-vec idx)
-                                                                    (.getDataPointer ^ElementAddressableVector from-vec idx)))
+                                                                  (instance? DenseUnionVector from-vec)
+                                                                  (let [^DenseUnionVector from-vec from-vec
+                                                                        from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
+                                                                    (if (or (instance? BitVector from-vec)
+                                                                            (instance? NullVector from-vec))
+                                                                      (.getObject from-vec idx)
+                                                                      (.getDataPointer ^ElementAddressableVector from-vec idx)))
 
-                                                                (instance? BitVector from-vec)
-                                                                (.getObject from-vec idx)
+                                                                  (or (instance? BitVector from-vec)
+                                                                      (instance? NullVector from-vec))
+                                                                  (.getObject from-vec idx)
 
-                                                                :else
-                                                                (.getDataPointer ^ElementAddressableVector from-vec idx))]
+                                                                  :else
+                                                                  (.getDataPointer ^ElementAddressableVector from-vec idx))]
                                                           (doto acc
                                                             (.add k))))
                                                       (ArrayList. (.size aggregate-specs))
