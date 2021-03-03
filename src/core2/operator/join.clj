@@ -8,6 +8,21 @@
            [org.apache.arrow.vector ElementAddressableVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema))
 
+(defn- ->join-schema ^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
+  (let [fields (concat (.getFields left-schema) (.getFields right-schema))]
+    (assert (apply distinct? fields))
+    (Schema. fields)))
+
+(defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
+  (dotimes [right-idx (.getRowCount right-root)]
+    (let [out-idx (.getRowCount out-root)]
+      (doseq [^ValueVector v (.getFieldVectors left-root)]
+        (.copyFromSafe (.getVector out-root (.getField v)) out-idx left-idx v))
+      (doseq [^ValueVector v (.getFieldVectors right-root)]
+        (.copyFromSafe (.getVector out-root (.getField v)) out-idx right-idx v))
+      (util/set-vector-schema-root-row-count out-root (inc out-idx))))
+  out-root)
+
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
                           ^ICursor right-cursor
@@ -33,20 +48,12 @@
                            (let [^VectorSchemaRoot right-root in-root]
                              (when-not out-root
                                (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
-                                     right-schema (.getSchema right-root)
-                                     fields (concat (.getFields left-schema) (.getFields right-schema))]
-                                 (assert (apply distinct? fields))
-                                 (set! (.out-root this) (VectorSchemaRoot/create (Schema. fields) allocator))))
+                                     join-schema (->join-schema left-schema (.getSchema right-root))]
+                                 (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator))))
 
                              (doseq [^VectorSchemaRoot left-root left-roots]
                                (dotimes [left-idx (.getRowCount left-root)]
-                                 (dotimes [right-idx (.getRowCount right-root)]
-                                   (let [out-idx (.getRowCount out-root)]
-                                     (doseq [^ValueVector v (.getFieldVectors left-root)]
-                                       (.copyFromSafe (.getVector out-root (.getField v)) out-idx left-idx v))
-                                     (doseq [^ValueVector v (.getFieldVectors right-root)]
-                                       (.copyFromSafe (.getVector out-root (.getField v)) out-idx right-idx v))
-                                     (util/set-vector-schema-root-row-count out-root (inc out-idx))))))))))
+                                 (cross-product left-root left-idx right-root out-root)))))))
         (do
           (.accept c out-root)
           true)
@@ -92,12 +99,12 @@
                                      left-pointer (ArrowBufPointer.)]
                                  (dotimes [left-idx (.getValueCount left-vec)]
                                    (.getDataPointer left-vec left-idx left-pointer)
-                                   (let [^List left-indexes (.computeIfAbsent join-map left-pointer (reify Function
-                                                                                                      (apply [_ x]
-                                                                                                        (ArrayList.))))]
-                                     (.add left-indexes (doto (int-array 2)
-                                                          (aset 0 left-root-idx)
-                                                          (aset 1 left-idx)))))))))))
+                                   (-> ^List (.computeIfAbsent join-map left-pointer (reify Function
+                                                                                       (apply [_ x]
+                                                                                         (ArrayList.))))
+                                       (.add (doto (int-array 2)
+                                               (aset 0 left-root-idx)
+                                               (aset 1 left-idx)))))))))))
 
     (if (and left-roots (.isEmpty left-roots))
       false
@@ -107,27 +114,18 @@
                            (let [^VectorSchemaRoot right-root in-root]
                              (when-not out-root
                                (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
-                                     right-schema (.getSchema right-root)
-                                     fields (concat (.getFields left-schema) (.getFields right-schema))]
-                                 (assert (apply distinct? fields))
-                                 (set! (.out-root this) (VectorSchemaRoot/create (Schema. fields) allocator))))
+                                     join-schema (->join-schema left-schema (.getSchema right-root))]
+                                 (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator))))
 
                              (let [^ElementAddressableVector right-vec (.getVector right-root right-column-name)
                                    right-pointer (ArrowBufPointer.)]
                                (dotimes [n (.getValueCount right-vec)]
                                  (.getDataPointer right-vec right-pointer)
-                                 (let [left-indexes (.get join-map right-pointer)]
-                                   (doseq [^ints idx-pair left-indexes
-                                           :let [left-root-idx (aget idx-pair 0)
-                                                 left-idx (aget idx-pair 1)
-                                                 left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
-                                     (dotimes [right-idx (.getRowCount right-root)]
-                                       (let [out-idx (.getRowCount out-root)]
-                                         (doseq [^ValueVector v (.getFieldVectors left-root)]
-                                           (.copyFromSafe (.getVector out-root (.getField v)) out-idx left-idx v))
-                                         (doseq [^ValueVector v (.getFieldVectors right-root)]
-                                           (.copyFromSafe (.getVector out-root (.getField v)) out-idx right-idx v))
-                                         (util/set-vector-schema-root-row-count out-root (inc out-idx))))))))))))
+                                 (doseq [^ints idx-pair (.get join-map right-pointer)
+                                         :let [left-root-idx (aget idx-pair 0)
+                                               left-idx (aget idx-pair 1)
+                                               left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
+                                   (cross-product left-root left-idx right-root out-root))))))))
         (do
           (.accept c out-root)
           true)
