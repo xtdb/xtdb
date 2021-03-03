@@ -6,7 +6,7 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector NullVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.VectorBatchAppender))
 
@@ -109,20 +109,20 @@
                                    (instance? DenseUnionVector left-vec)
                                    (let [^DenseUnionVector left-vec left-vec]
                                      (dotimes [left-idx (.getValueCount left-vec)]
-                                       (let [^ElementAddressableVector left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                         (build-phase left-idx (if (or (instance? BitVector left-vec)
-                                                                       (instance? NullVector left-vec))
-                                                                 (.getObject left-vec left-idx)
-                                                                 (.getDataPointer left-vec left-idx))))))
+                                       (let [left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
+                                         (build-phase left-idx (if (and (instance? ElementAddressableVector left-vec)
+                                                                        (not (instance? BitVector left-vec)))
+                                                                 (.getDataPointer ^ElementAddressableVector left-vec left-idx)
+                                                                 (.getObject left-vec left-idx))))))
 
-                                   (or (instance? BitVector left-vec)
-                                       (instance? NullVector left-vec))
+                                   (and (instance? ElementAddressableVector left-vec)
+                                        (not (instance? BitVector left-vec)))
                                    (dotimes [left-idx (.getValueCount left-vec)]
-                                     (build-phase left-idx (.getObject ^BitVector left-vec left-idx)))
+                                     (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx)))
 
                                    :else
                                    (dotimes [left-idx (.getValueCount left-vec)]
-                                     (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx))))))))))
+                                     (build-phase left-idx (.getObject left-vec left-idx))))))))))
 
     (if (and left-roots (.isEmpty left-roots))
       false
@@ -147,20 +147,20 @@
                                  (instance? DenseUnionVector right-vec)
                                  (let [^DenseUnionVector right-vec right-vec]
                                    (dotimes [right-idx (.getValueCount right-vec)]
-                                     (let [^ElementAddressableVector right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
-                                       (probe-phase (if (or (instance? BitVector right-vec)
-                                                            (instance? NullVector right-vec))
-                                                      (.getObject right-vec right-idx)
-                                                      (.getDataPointer right-vec right-idx right-pointer))))))
+                                     (let [right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
+                                       (probe-phase (if (and (instance? ElementAddressableVector right-vec)
+                                                             (not (instance? BitVector right-vec)))
+                                                      (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)
+                                                      (.getObject right-vec right-idx))))))
 
-                                 (or (instance? BitVector right-vec)
-                                     (instance? NullVector right-vec))
+                                 (and (instance? ElementAddressableVector right-vec)
+                                      (not (instance? BitVector right-vec)))
                                  (dotimes [right-idx (.getValueCount right-vec)]
-                                   (probe-phase (.getObject ^BitVector right-vec right-idx)))
+                                   (probe-phase (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
 
                                  :else
                                  (dotimes [right-idx (.getValueCount right-vec)]
-                                   (probe-phase (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))))))))
+                                   (probe-phase (.getObject right-vec right-idx)))))))))
         (do
           (.accept c out-root)
           true)
