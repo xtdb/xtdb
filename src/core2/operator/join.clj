@@ -67,7 +67,7 @@
     (util/try-close out-root)
     (when left-roots
       (doseq [root left-roots]
-        (util/try-close left-roots))
+        (util/try-close root))
       (.clear left-roots))
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
@@ -162,7 +162,7 @@
     (util/try-close out-root)
     (when left-roots
       (doseq [root left-roots]
-        (util/try-close left-roots))
+        (util/try-close root))
       (.clear left-roots))
     (.clear join-map)
     (util/try-close left-cursor)
