@@ -79,6 +79,32 @@
     (.release (.getBuf ^ArrowBufPointer x)))
   k)
 
+(defn- ->group-key [^VectorSchemaRoot in-root ^List group-specs ^long idx]
+  (reduce
+   (fn [^List acc ^GroupSpec group-spec]
+     (let [from-vec (.getFromVector group-spec in-root)
+           k (cond
+               (instance? DenseUnionVector from-vec)
+               (let [^DenseUnionVector from-vec from-vec
+                     from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
+
+
+                 (if (and (instance? ElementAddressableVector from-vec)
+                          (not (instance? BitVector from-vec)))
+                   (.getDataPointer ^ElementAddressableVector from-vec idx)
+                   (.getObject from-vec idx)))
+
+               (and (instance? ElementAddressableVector from-vec)
+                    (not (instance? BitVector from-vec)))
+               (.getDataPointer ^ElementAddressableVector from-vec idx)
+
+               :else
+               (.getObject from-vec idx))]
+       (doto acc
+         (.add k))))
+   (ArrayList. (.size group-specs))
+   group-specs))
+
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
                         ^List aggregate-specs
@@ -103,30 +129,7 @@
                                      (set! (.out-root this) (VectorSchemaRoot/create aggregate-schema allocator))))
 
                                  (dotimes [idx (.getRowCount in-root)]
-                                   (let [group-key (reduce
-                                                    (fn [^List acc ^GroupSpec group-spec]
-                                                      (let [from-vec (.getFromVector group-spec in-root)
-                                                            k (cond
-                                                                (instance? DenseUnionVector from-vec)
-                                                                (let [^DenseUnionVector from-vec from-vec
-                                                                      from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
-
-
-                                                                  (if (and (instance? ElementAddressableVector from-vec)
-                                                                           (not (instance? BitVector from-vec)))
-                                                                    (.getDataPointer ^ElementAddressableVector from-vec idx)
-                                                                    (.getObject from-vec idx)))
-
-                                                                (and (instance? ElementAddressableVector from-vec)
-                                                                     (not (instance? BitVector from-vec)))
-                                                                (.getDataPointer ^ElementAddressableVector from-vec idx)
-
-                                                                :else
-                                                                (.getObject from-vec idx))]
-                                                        (doto acc
-                                                          (.add k))))
-                                                    (ArrayList. (.size group-specs))
-                                                    group-specs)
+                                   (let [group-key (->group-key in-root group-specs idx)
                                          ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
                                                                                                                    (apply [_ _]
                                                                                                                      (RoaringBitmap.))))]
