@@ -16,10 +16,11 @@
     (Schema. fields)))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
-  (doseq [^ValueVector right-vec (.getFieldVectors right-root)]
-    (VectorBatchAppender/batchAppend (.getVector out-root (.getField right-vec)) (into-array ValueVector [right-vec])))
   (let [out-idx (.getRowCount out-root)
         right-row-count (.getRowCount right-root)]
+    (doseq [^ValueVector right-vec (.getFieldVectors right-root)
+            :let [out-vec (.getVector out-root (.getField right-vec))]]
+      (VectorBatchAppender/batchAppend out-vec (into-array ValueVector [right-vec])))
     (doseq [^ValueVector left-vec (.getFieldVectors left-root)
             :let [out-vec (.getVector out-root (.getField left-vec))]]
       (dotimes [n right-row-count]
@@ -35,7 +36,8 @@
   ICursor
   (tryAdvance [this c]
     (when out-root
-      (.close out-root))
+      (.close out-root)
+      (set! (.out-root this) nil))
 
     (when-not left-roots
       (set! (.left-roots this) (ArrayList.))

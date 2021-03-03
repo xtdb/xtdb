@@ -69,12 +69,12 @@
 
 (defn <-cursor [^ICursor cursor]
   (let [!res (volatile! (transient []))]
-    (while (.tryAdvance cursor
-                        (reify Consumer
-                          (accept [_ root]
-                            (let [ks (->> (.getFields (.getSchema ^VectorSchemaRoot root))
-                                          (into [] (map (comp keyword #(.getName ^Field %)))))]
-                              (vswap! !res conj! (mapv (fn [row] (zipmap ks row)) (root->rows root))))))))
+    (.forEachRemaining cursor
+                       (reify Consumer
+                         (accept [_ root]
+                           (let [ks (->> (.getFields (.getSchema ^VectorSchemaRoot root))
+                                         (into [] (map (comp keyword #(.getName ^Field %)))))]
+                             (vswap! !res conj! (mapv (fn [row] (zipmap ks row)) (root->rows root)))))))
     (persistent! @!res)))
 
 (t/deftest round-trip-cursor
