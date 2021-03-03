@@ -107,7 +107,7 @@
                                    (let [^DenseUnionVector left-vec left-vec]
                                      (dotimes [left-idx (.getValueCount left-vec)]
                                        (let [^ElementAddressableVector left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                         (build-phase left-idx (.getDataPointer left-vec left-idx (ArrowBufPointer.))))))
+                                         (build-phase left-idx (.getDataPointer left-vec left-idx)))))
 
                                    (instance? BitVector left-vec)
                                    (dotimes [left-idx (.getValueCount left-vec)]
@@ -115,7 +115,7 @@
 
                                    :else
                                    (dotimes [left-idx (.getValueCount left-vec)]
-                                     (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx (ArrowBufPointer.)))))))))))
+                                     (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx))))))))))
 
     (if (and left-roots (.isEmpty left-roots))
       false
