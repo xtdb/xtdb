@@ -4,7 +4,7 @@
   (:import core2.ICursor
            [java.util ArrayList HashMap List Map]
            [java.util.function BiConsumer Consumer IntConsumer Function Supplier ObjIntConsumer]
-           java.util.stream.IntStream
+           [java.util.stream Collector IntStream]
            java.time.LocalDateTime
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
@@ -23,7 +23,7 @@
 (definterface AggregateSpec
   (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
   (^org.apache.arrow.vector.ValueVector getFromVector [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
-  (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object accumulator ^org.roaringbitmap.RoaringBitmap idx-bitmap])
+  (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object init ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object accumulator]))
 
 (defn- arrow->clojure [x]
@@ -45,16 +45,16 @@
   (getFromVector [_ in-root]
     (.getVector in-root name))
 
-  (aggregate [this in-root accumulator idx-bitmap]
-    (or accumulator (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
+  (aggregate [this in-root init idx-bitmap]
+    (or init (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
 
-  (finish [_ accumulator]
-    (arrow->clojure accumulator)))
+  (finish [_ acc]
+    (arrow->clojure acc)))
 
 (defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String name]
   (GroupSpec. name))
 
-(deftype FunctionSpec [^String from-name ^Field field aggregate-fn]
+(deftype FunctionSpec [^String from-name ^Field field ^Collector collector]
   AggregateSpec
   (getToField [_ in-root]
     field)
@@ -62,23 +62,24 @@
   (getFromVector [_ in-root]
     (.getVector in-root from-name))
 
-  (aggregate [this in-root accumulator idx-bitmap]
-    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))]
+  (aggregate [this in-root init idx-bitmap]
+    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
+          accumulator (.accumulator collector)]
       (.collect ^IntStream (.stream idx-bitmap)
-                (reify Supplier
-                  (get [_] (or accumulator (aggregate-fn))))
+                (if init
+                  (reify Supplier
+                    (get [_] init))
+                  (.supplier collector))
                 (reify ObjIntConsumer
-                  (accept [_ accumulator idx]
-                    (aggregate-fn accumulator (.getObject from-vec idx))))
-                (reify BiConsumer
-                  (accept [_ x y]
-                    (aggregate-fn x y))))))
+                  (accept [_ acc idx]
+                    (.accept accumulator acc (.getObject from-vec idx))))
+                accumulator)))
 
-  (finish [_ accumulator]
-    (arrow->clojure (aggregate-fn accumulator))))
+  (finish [_ acc]
+    (arrow->clojure (.apply (.finisher collector) acc))))
 
-(defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String out-name aggregate-fn]
-  (FunctionSpec. from-name (t/->primitive-dense-union-field out-name) aggregate-fn))
+(defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
+  (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
