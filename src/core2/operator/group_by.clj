@@ -91,7 +91,10 @@
                                      (let [group-key (reduce
                                                       (fn [acc ^AggregateSpec group-spec]
                                                         (let [from-vec (.getFromVector group-spec in-root)]
-                                                          (conj acc (.getObject from-vec idx))))
+                                                          (conj acc (if (and (instance? ElementAddressableVector from-vec)
+                                                                             (not (instance? BitVector from-vec)))
+                                                                      (.getDataPointer ^ElementAddressableVector from-vec idx)
+                                                                      (.getObject from-vec idx)))))
                                                       []
                                                       group-specs)
                                            ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
