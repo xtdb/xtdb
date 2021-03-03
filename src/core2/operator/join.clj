@@ -110,11 +110,13 @@
                                    (let [^DenseUnionVector left-vec left-vec]
                                      (dotimes [left-idx (.getValueCount left-vec)]
                                        (let [^ElementAddressableVector left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                         (build-phase left-idx (.getDataPointer left-vec left-idx)))))
+                                         (build-phase left-idx (if (instance? BitVector left-vec)
+                                                                 (.getObject left-vec left-idx)
+                                                                 (.getDataPointer left-vec left-idx))))))
 
                                    (instance? BitVector left-vec)
                                    (dotimes [left-idx (.getValueCount left-vec)]
-                                     (build-phase left-idx (= (.get ^BitVector left-vec left-idx) 1)))
+                                     (build-phase left-idx (.getObject ^BitVector left-vec left-idx)))
 
                                    :else
                                    (dotimes [left-idx (.getValueCount left-vec)]
@@ -144,11 +146,13 @@
                                  (let [^DenseUnionVector right-vec right-vec]
                                    (dotimes [right-idx (.getValueCount right-vec)]
                                      (let [^ElementAddressableVector right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
-                                       (probe-phase (.getDataPointer right-vec right-idx right-pointer)))))
+                                       (probe-phase (if (instance? BitVector right-vec)
+                                                      (.getObject right-vec right-idx)
+                                                      (.getDataPointer right-vec right-idx right-pointer))))))
 
                                  (instance? BitVector right-vec)
                                  (dotimes [right-idx (.getValueCount right-vec)]
-                                   (probe-phase (= (.get ^BitVector right-vec right-idx) 1)))
+                                   (probe-phase (.getObject ^BitVector right-vec right-idx)))
 
                                  :else
                                  (dotimes [right-idx (.getValueCount right-vec)]

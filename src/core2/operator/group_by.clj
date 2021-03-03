@@ -5,11 +5,13 @@
            [java.util ArrayList HashMap List Map]
            [java.util.function BiConsumer Consumer IntConsumer Function Supplier ObjIntConsumer]
            java.util.stream.IntStream
+           java.time.LocalDateTime
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
+           org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
 ;; NOTE: the use of getObject here is problematic, apart from
@@ -24,6 +26,17 @@
   (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object accumulator ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object accumulator]))
 
+(defn- arrow->clojure [x]
+  (cond
+    (instance? Text x)
+    (str x)
+
+    (instance? LocalDateTime x)
+    (util/local-date-time->date x)
+
+    :else
+    x))
+
 (deftype GroupSpec [^String name]
   AggregateSpec
   (getToField [this in-root]
@@ -36,7 +49,7 @@
     (or accumulator (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
 
   (finish [_ accumulator]
-    accumulator))
+    (arrow->clojure accumulator)))
 
 (defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String name]
   (GroupSpec. name))
@@ -62,7 +75,7 @@
                     (aggregate-fn x y))))))
 
   (finish [_ accumulator]
-    (aggregate-fn accumulator)))
+    (arrow->clojure (aggregate-fn accumulator))))
 
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String out-name aggregate-fn]
   (FunctionSpec. from-name (t/->primitive-dense-union-field out-name) aggregate-fn))
@@ -89,13 +102,24 @@
                                  (let [group->idx-bitmap (HashMap.)]
                                    (dotimes [idx (.getRowCount in-root)]
                                      (let [group-key (reduce
-                                                      (fn [acc ^AggregateSpec group-spec]
-                                                        (let [from-vec (.getFromVector group-spec in-root)]
-                                                          (conj acc (if (and (instance? ElementAddressableVector from-vec)
-                                                                             (not (instance? BitVector from-vec)))
-                                                                      (.getDataPointer ^ElementAddressableVector from-vec idx)
-                                                                      (.getObject from-vec idx)))))
-                                                      []
+                                                      (fn [^List acc ^AggregateSpec group-spec]
+                                                        (let [from-vec (.getFromVector group-spec in-root)
+                                                              k (cond
+                                                                (instance? DenseUnionVector from-vec)
+                                                                (let [^DenseUnionVector from-vec from-vec
+                                                                      from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
+                                                                  (if (instance? BitVector from-vec)
+                                                                    (.getObject from-vec idx)
+                                                                    (.getDataPointer ^ElementAddressableVector from-vec idx)))
+
+                                                                (instance? BitVector from-vec)
+                                                                (.getObject from-vec idx)
+
+                                                                :else
+                                                                (.getDataPointer ^ElementAddressableVector from-vec idx))]
+                                                          (doto acc
+                                                            (.add k))))
+                                                      (ArrayList. (.size aggregate-specs))
                                                       group-specs)
                                            ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
                                                                                                                      (apply [_ _]
