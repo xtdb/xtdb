@@ -181,12 +181,15 @@
 
 ;;; Arrow
 
+(defn root-field-count ^long [^VectorSchemaRoot root]
+  (.size (.getFields (.getSchema root))))
+
 (defn slice-root
   (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx]
    (slice-root root start-idx (- (.getRowCount root) start-idx)))
 
   (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx ^long len]
-   (let [num-fields (.size (.getFields (.getSchema root)))
+   (let [num-fields (root-field-count root)
          acc (ArrayList. num-fields)]
      (dotimes [n num-fields]
        (let [field-vec (.getVector root n)]
@@ -245,7 +248,7 @@
 (defn set-vector-schema-root-row-count [^VectorSchemaRoot root ^long row-count]
   (let [row-count (int row-count)]
     (.set vector-schema-root-row-count-field root row-count)
-    (dotimes [n (.size (.getFields (.getSchema root)))]
+    (dotimes [n (root-field-count root)]
       (set-value-count (.getVector root n) row-count))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}

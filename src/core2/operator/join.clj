@@ -17,22 +17,24 @@
 
 (defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)]
-    (doseq [^ValueVector in-vec (.getFieldVectors in-root)
-            :let [out-vec (.getVector out-root (.getField in-vec))]]
-      (.copyFromSafe out-vec idx out-idx in-vec))))
+    (dotimes [n (util/root-field-count in-root)]
+      (let [^ValueVector in-vec (.getVector in-root n)
+            out-vec (.getVector out-root (.getField in-vec))]
+        (.copyFromSafe out-vec idx out-idx in-vec)))))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
         right-row-count (.getRowCount right-root)]
-    (doseq [^ValueVector right-vec (.getFieldVectors right-root)
-            :let [out-vec (.getVector out-root (.getField right-vec))]]
-      (VectorBatchAppender/batchAppend out-vec (into-array ValueVector [right-vec])))
-    (doseq [^ValueVector left-vec (.getFieldVectors left-root)
-            :let [out-vec (.getVector out-root (.getField left-vec))]]
-      (dotimes [n right-row-count]
-        (.copyFromSafe out-vec left-idx (+ out-idx n) left-vec)))
-    (util/set-vector-schema-root-row-count out-root (+ out-idx right-row-count)))
-  out-root)
+    (dotimes [n (util/root-field-count right-root)]
+      (let [^ValueVector right-vec (.getVector right-root n)
+            out-vec (.getVector out-root (.getField right-vec))]
+        (VectorBatchAppender/batchAppend out-vec (into-array ValueVector [right-vec]))))
+    (dotimes [n (util/root-field-count left-root)]
+      (let [^ValueVector left-vec (.getVector left-root n)
+            out-vec (.getVector out-root (.getField left-vec))]
+        (dotimes [idx right-row-count]
+          (.copyFromSafe out-vec left-idx (+ out-idx idx) left-vec))))
+    (util/set-vector-schema-root-row-count out-root (+ out-idx right-row-count))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
                           ^ICursor left-cursor
