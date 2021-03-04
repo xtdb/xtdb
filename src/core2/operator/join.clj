@@ -6,7 +6,7 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ElementAddressableVector IntVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.VectorBatchAppender))
 
@@ -116,14 +116,15 @@
                                  left-root-idx (.size left-roots)]
                              (.add left-roots left-root)
                              (let [build-phase (fn [^long left-idx left-key]
-                                                 (-> ^List (.computeIfAbsent join-key->left-idx-pairs
-                                                                             left-key
-                                                                             (reify Function
-                                                                               (apply [_ x]
-                                                                                 (ArrayList.))))
-                                                     (.add (doto (int-array 2)
-                                                             (aset 0 left-root-idx)
-                                                             (aset 1 left-idx)))))
+                                                 (let [^IntVector idx-pairs-vec (.computeIfAbsent join-key->left-idx-pairs
+                                                                                                  left-key
+                                                                                                  (reify Function
+                                                                                                    (apply [_ x]
+                                                                                                      (IntVector. "" allocator))))
+                                                       idx (.getValueCount idx-pairs-vec)]
+                                                   (.setValueCount idx-pairs-vec (+ idx 2))
+                                                   (.set idx-pairs-vec idx left-root-idx)
+                                                   (.set idx-pairs-vec (inc idx) left-idx)))
                                    left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
                                (cond
                                  (instance? DenseUnionVector left-vec)
@@ -155,14 +156,17 @@
                                            join-schema (->join-schema left-schema (.getSchema right-root))
                                            out-root (VectorSchemaRoot/create join-schema allocator)
                                            probe-phase (fn [^long right-idx right-key]
-                                                         (when-let [^List idx-pairs (.get join-key->left-idx-pairs right-key)]
-                                                           (doseq [^ints idx-pair idx-pairs
-                                                                   :let [left-root-idx (aget idx-pair 0)
-                                                                         left-idx (aget idx-pair 1)
-                                                                         left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]]
-                                                             (copy-tuple left-root left-idx out-root))
-                                                           (copy-tuple-repeated right-root right-idx out-root (.size idx-pairs))
-                                                           (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) (.size idx-pairs)))))
+                                                         (when-let [^IntVector idx-pairs-vec (.get join-key->left-idx-pairs right-key)]
+                                                           (loop [n 0]
+                                                             (when (< n (.getValueCount idx-pairs-vec))
+                                                               (let [left-root-idx (.get idx-pairs-vec n)
+                                                                     left-idx (.get idx-pairs-vec (inc n))
+                                                                     left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]
+                                                                 (copy-tuple left-root left-idx out-root)
+                                                                 (recur (+ n 2)))))
+                                                           (let [row-count (quot (.getValueCount idx-pairs-vec) 2)]
+                                                             (copy-tuple-repeated right-root right-idx out-root row-count)
+                                                             (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) row-count)))))
                                            right-pointer (ArrowBufPointer.)
                                            right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))]
                                        (cond
@@ -200,6 +204,8 @@
       (doseq [root left-roots]
         (util/try-close root))
       (.clear left-roots))
+    (doseq [idx-pair (vals join-key->left-idx-pairs)]
+      (util/try-close idx-pair))
     (.clear join-key->left-idx-pairs)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
