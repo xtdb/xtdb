@@ -18,10 +18,9 @@
                                      [{:a 83, :b 100}]])
                 order-by-cursor (order-by/->order-by-cursor tu/*allocator*
                                                             cursor
-                                                            [(order-by/->order-spec "a" :asc)]
-                                                            {:out-block-size 3})]
-      (t/is (= [[{:a 12, :b 10}
-                 {:a 0, :b 15}
-                 {:a 100, :b 83}]
-                [{:a 83, :b 100}]]
+                                                            [(order-by/->order-spec "a" :asc)])]
+      (t/is (= [[{:a 0, :b 15}
+                 {:a 12, :b 10}
+                 {:a 83, :b 100}
+                 {:a 100, :b 83}]]
                (tu/<-cursor order-by-cursor))))))
