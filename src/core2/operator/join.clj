@@ -85,6 +85,66 @@
 (defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil))
 
+(defn- build-phase [^BufferAllocator allocator
+                    ^VectorSchemaRoot left-root
+                    ^List left-roots
+                    ^Map join-key->left-idx-pairs
+                    ^String left-column-name]
+  (let [^VectorSchemaRoot left-root (util/slice-root left-root 0)
+        left-root-idx (.size left-roots)]
+    (.add left-roots left-root)
+    (let [left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
+      (dotimes [left-idx (.getValueCount left-vec)]
+        (let [^IntVector idx-pairs-vec (.computeIfAbsent join-key->left-idx-pairs
+                                                         (.hashCode left-vec left-idx)
+                                                         (reify Function
+                                                           (apply [_ x]
+                                                             (IntVector. "" allocator))))
+              idx (.getValueCount idx-pairs-vec)]
+          (.setValueCount idx-pairs-vec (+ idx 2))
+          (.set idx-pairs-vec idx left-root-idx)
+          (.set idx-pairs-vec (inc idx) left-idx))))))
+
+(defn- probe-phase ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator
+                                                              ^VectorSchemaRoot right-root
+                                                              ^List left-roots
+                                                              ^Map join-key->left-idx-pairs
+                                                              ^String left-column-name
+                                                              ^String right-column-name]
+  (when (pos? (.getRowCount right-root))
+    (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
+          join-schema (->join-schema left-schema (.getSchema right-root))
+          out-root (VectorSchemaRoot/create join-schema allocator)
+          right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))
+          left-pointer (ArrowBufPointer.)
+          right-pointer (ArrowBufPointer.)]
+      (dotimes [right-idx (.getValueCount right-vec)]
+        (when-let [^IntVector idx-pairs-vec (.get join-key->left-idx-pairs (.hashCode right-vec right-idx))]
+          (let [^ValueVector right-vec (util/vector-at-index right-vec right-idx)
+                right-vec-element-addressable? (util/element-addressable-vector? right-vec)]
+            (loop [n 0
+                   matches 0]
+              (if (= n (.getValueCount idx-pairs-vec))
+                (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) matches))
+                (let [left-root-idx (.get idx-pairs-vec n)
+                      left-idx (.get idx-pairs-vec (inc n))
+                      left-root ^VectorSchemaRoot (.get left-roots left-root-idx)
+                      left-vec (.getVector left-root left-column-name)
+                      ^ValueVector left-vec (util/vector-at-index left-vec left-idx)
+                      match? (if right-vec-element-addressable?
+                               (and (util/element-addressable-vector? left-vec)
+                                    (= (.getDataPointer ^ElementAddressableVector left-vec left-idx left-pointer)
+                                       (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
+                               (= (.getObject left-vec left-idx)
+                                  (.getObject right-vec right-idx)))]
+                  (when match?
+                    (copy-tuple left-root left-idx out-root)
+                    (copy-tuple right-root right-idx out-root))
+                  (recur (+ n 2)
+                         (cond-> matches
+                           match? (inc)))))))))
+      out-root)))
+
 (deftype EquiJoinCursor [^BufferAllocator allocator
                          ^ICursor left-cursor
                          ^String left-column-name
@@ -103,62 +163,17 @@
     (.forEachRemaining left-cursor
                        (reify Consumer
                          (accept [_ in-root]
-                           (let [^VectorSchemaRoot left-root (util/slice-root in-root 0)
-                                 left-root-idx (.size left-roots)]
-                             (.add left-roots left-root)
-                             (let [left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
-                               (dotimes [left-idx (.getValueCount left-vec)]
-                                 (let [^IntVector idx-pairs-vec (.computeIfAbsent join-key->left-idx-pairs
-                                                                                  (.hashCode left-vec left-idx)
-                                                                                  (reify Function
-                                                                                    (apply [_ x]
-                                                                                      (IntVector. "" allocator))))
-                                       idx (.getValueCount idx-pairs-vec)]
-                                   (.setValueCount idx-pairs-vec (+ idx 2))
-                                   (.set idx-pairs-vec idx left-root-idx)
-                                   (.set idx-pairs-vec (inc idx) left-idx))))))))
+                           (build-phase allocator in-root left-roots join-key->left-idx-pairs left-column-name))))
 
     (while (and (not (.isEmpty left-roots))
                 (nil? out-root)
                 (.tryAdvance right-cursor
                              (reify Consumer
                                (accept [_ in-root]
-                                 (let [^VectorSchemaRoot right-root in-root]
-                                   (when (pos? (.getRowCount right-root))
-                                     (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
-                                           join-schema (->join-schema left-schema (.getSchema right-root))
-                                           out-root (VectorSchemaRoot/create join-schema allocator)
-                                           right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))
-                                           left-pointer (ArrowBufPointer.)
-                                           right-pointer (ArrowBufPointer.)]
-                                       (dotimes [right-idx (.getValueCount right-vec)]
-                                         (when-let [^IntVector idx-pairs-vec (.get join-key->left-idx-pairs (.hashCode right-vec right-idx))]
-                                           (let [^ValueVector right-vec (util/vector-at-index right-vec right-idx)
-                                                 right-vec-element-addressable? (util/element-addressable-vector? right-vec)]
-                                             (loop [n 0
-                                                    matches 0]
-                                               (if (= n (.getValueCount idx-pairs-vec))
-                                                 (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) matches))
-                                                 (let [left-root-idx (.get idx-pairs-vec n)
-                                                       left-idx (.get idx-pairs-vec (inc n))
-                                                       left-root ^VectorSchemaRoot (.get left-roots left-root-idx)
-                                                       left-vec (.getVector left-root left-column-name)
-                                                       ^ValueVector left-vec (util/vector-at-index left-vec left-idx)
-                                                       match? (if right-vec-element-addressable?
-                                                                (and (util/element-addressable-vector? left-vec)
-                                                                     (= (.getDataPointer ^ElementAddressableVector left-vec left-idx left-pointer)
-                                                                        (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
-                                                                (= (.getObject left-vec left-idx)
-                                                                   (.getObject right-vec right-idx)))]
-                                                   (when match?
-                                                     (copy-tuple left-root left-idx out-root)
-                                                     (copy-tuple right-root right-idx out-root))
-                                                   (recur (+ n 2)
-                                                          (cond-> matches
-                                                            match? (inc)))))))))
-
-                                       (when (pos? (.getRowCount out-root))
-                                         (set! (.out-root this) out-root))))))))))
+                                 (when-let [out-root (probe-phase allocator in-root left-roots join-key->left-idx-pairs
+                                                                  left-column-name right-column-name)]
+                                   (when (pos? (.getRowCount out-root))
+                                     (set! (.out-root this) out-root))))))))
 
     (if out-root
       (do

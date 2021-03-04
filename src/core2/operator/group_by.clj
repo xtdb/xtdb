@@ -106,6 +106,41 @@
    (ArrayList. (.size group-specs))
    group-specs))
 
+(defn- aggregate-groups [^BufferAllocator allocator ^VectorSchemaRoot in-root ^List aggregate-specs ^Map group->accs]
+  (let [group->idx-bitmap (HashMap.)
+        ^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))]
+
+    (dotimes [idx (.getRowCount in-root)]
+      (let [group-key (->group-key in-root group-specs idx)
+            ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
+                                                                                      (apply [_ _]
+                                                                                        (RoaringBitmap.))))]
+        (.add idx-bitmap idx)))
+
+    (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
+            :let [^List accs (if-let [accs (.get group->accs group-key)]
+                               accs
+                               (doto (ArrayList. ^List (repeat (.size aggregate-specs) nil))
+                                 (->> (.put group->accs (copy-group-key allocator group-key)))))]]
+      (dotimes [n (.size aggregate-specs)]
+        (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))
+
+(defn- finish-groups ^org.apache.arrow.vector.VectorSchemaRoot [^List aggregate-specs ^Map group->accs ^VectorSchemaRoot out-root]
+  (let [^List all-accs (ArrayList. ^List (vals group->accs))
+        row-count (.size all-accs)]
+    (dotimes [out-idx row-count]
+      (let [^List accs (.get all-accs out-idx)]
+        (dotimes [n (.size aggregate-specs)]
+          (let [out-vec (.getVector out-root n)
+                v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
+            (if (instance? DenseUnionVector out-vec)
+              (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                    value-offset (util/write-type-id out-vec out-idx type-id)]
+                (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
+              (t/set-safe! out-vec out-idx v))))))
+    (util/set-vector-schema-root-row-count out-root row-count)
+    out-root))
+
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^ICursor in-cursor
                         ^List aggregate-specs
@@ -116,50 +151,20 @@
       (.close out-root)
       (set! (.out-root this) nil))
 
-    (let [^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))
-          group->accs (HashMap.)]
+    (let [group->accs (HashMap.)]
       (try
         (.forEachRemaining in-cursor
                            (reify Consumer
                              (accept [_ in-root]
-                               (let [^VectorSchemaRoot in-root in-root
-                                     group->idx-bitmap (HashMap.)]
-                                 (when-not out-root
-                                   (let [group-by-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
-                                                                    (.getToField aggregate-spec in-root)))]
-                                     (set! (.out-root this) (VectorSchemaRoot/create group-by-schema allocator))))
-
-                                 (dotimes [idx (.getRowCount in-root)]
-                                   (let [group-key (->group-key in-root group-specs idx)
-                                         ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
-                                                                                                                   (apply [_ _]
-                                                                                                                     (RoaringBitmap.))))]
-                                     (.add idx-bitmap idx)))
-
-                                 (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
-                                         :let [^List accs (if-let [accs (.get group->accs group-key)]
-                                                            accs
-                                                            (doto (ArrayList. ^List (repeat (.size aggregate-specs) nil))
-                                                              (->> (.put group->accs (copy-group-key allocator group-key)))))]]
-                                   (dotimes [n (.size aggregate-specs)]
-                                     (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))))
+                               (when-not (.out-root this)
+                                 (let [group-by-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
+                                                                  (.getToField aggregate-spec ^VectorSchemaRoot in-root)))]
+                                   (set! (.out-root this) (VectorSchemaRoot/create group-by-schema allocator))))
+                               (aggregate-groups allocator in-root aggregate-specs group->accs))))
 
         (if-not (.isEmpty group->accs)
-          (let [^List all-accs (ArrayList. ^List (vals group->accs))
-                row-count (.size all-accs)]
-            (dotimes [out-idx row-count]
-              (let [^List accs (.get all-accs out-idx)]
-                (dotimes [n (.size aggregate-specs)]
-                  (let [out-vec (.getVector out-root n)
-                        v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
-                    (if (instance? DenseUnionVector out-vec)
-                      (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                            value-offset (util/write-type-id out-vec out-idx type-id)]
-                        (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
-                      (t/set-safe! out-vec out-idx v))))))
-            (util/set-vector-schema-root-row-count out-root row-count)
-            (.accept c out-root)
-            true)
+          (do (.accept c (finish-groups aggregate-specs group->accs out-root))
+              true)
           false)
         (finally
           (doseq [k (keys group->accs)]
