@@ -85,22 +85,10 @@
 (defn- ->group-key [^VectorSchemaRoot in-root ^List group-specs ^long idx]
   (reduce
    (fn [^List acc ^GroupSpec group-spec]
-     (let [from-vec (.getFromVector group-spec in-root)
-           k (cond
-               (instance? DenseUnionVector from-vec)
-               (let [^DenseUnionVector from-vec from-vec
-                     from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
-
-
-                 (if (util/element-addressable-vector? from-vec)
-                   (.getDataPointer ^ElementAddressableVector from-vec idx)
-                   (.getObject from-vec idx)))
-
-               (util/element-addressable-vector? from-vec)
+     (let [from-vec (util/vector-at-index (.getFromVector group-spec in-root) idx)
+           k (if (util/element-addressable-vector? from-vec)
                (.getDataPointer ^ElementAddressableVector from-vec idx)
-
-               :else
-               (.getObject from-vec idx))]
+               (.getObject ^ValueVector from-vec idx))]
        (doto acc
          (.add k))))
    (ArrayList. (.size group-specs))
@@ -128,16 +116,16 @@
 (defn- finish-groups ^org.apache.arrow.vector.VectorSchemaRoot [^List aggregate-specs ^Map group->accs ^VectorSchemaRoot out-root]
   (let [^List all-accs (ArrayList. ^List (vals group->accs))
         row-count (.size all-accs)]
-    (dotimes [out-idx row-count]
-      (let [^List accs (.get all-accs out-idx)]
-        (dotimes [n (.size aggregate-specs)]
-          (let [out-vec (.getVector out-root n)
-                v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
-            (if (instance? DenseUnionVector out-vec)
-              (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                    value-offset (util/write-type-id out-vec out-idx type-id)]
-                (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
-              (t/set-safe! out-vec out-idx v))))))
+    (dotimes [n (.size aggregate-specs)]
+      (let [out-vec (.getVector out-root n)]
+        (dotimes [out-idx row-count]
+          (let [^List accs (.get all-accs out-idx)]
+            (let [v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
+              (if (instance? DenseUnionVector out-vec)
+                (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                      value-offset (util/write-type-id out-vec out-idx type-id)]
+                  (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
+                (t/set-safe! out-vec out-idx v)))))))
     (util/set-vector-schema-root-row-count out-root row-count)
     out-root))
 
