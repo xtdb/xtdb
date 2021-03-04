@@ -6,7 +6,7 @@
 
   :repositories {"jcenter" {:url "https://jcenter.bintray.com"}}
 
-  :dependencies [[org.clojure/clojure "1.10.2"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "0.6.0"]
                  [org.clojure/spec.alpha "0.2.194"]
                  [org.apache.arrow/arrow-algorithm "3.0.0"]
