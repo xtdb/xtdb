@@ -503,3 +503,9 @@
 (defn element-addressable-vector? [^ValueVector v]
   (and (instance? ElementAddressableVector v)
        (not (instance? BitVector v))))
+
+(defn vector-at-index ^org.apache.arrow.vector.ValueVector [^ValueVector v ^long idx]
+  (if (instance? DenseUnionVector v)
+    (let [^DenseUnionVector v v]
+      (.getVectorByType v (.getTypeId v idx)))
+    v))

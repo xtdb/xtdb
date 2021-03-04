@@ -18,18 +18,9 @@
 (defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)]
     (dotimes [n (util/root-field-count in-root)]
-      (let [^ValueVector in-vec (.getVector in-root n)
+      (let [in-vec (.getVector in-root n)
             out-vec (.getVector out-root (.getField in-vec))]
         (.copyFromSafe out-vec idx out-idx in-vec)))))
-
-(defn- copy-tuple-repeated [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long repeat]
-  (let [out-idx (.getRowCount out-root)]
-    (dotimes [n (util/root-field-count in-root)]
-      (let [^ValueVector in-vec (.getVector in-root n)
-            out-vec (.getVector out-root (.getField in-vec))]
-        (util/set-value-count out-vec (+ out-idx repeat))
-        (dotimes [m repeat]
-          (.copyFrom out-vec idx (+ out-idx m) in-vec))))))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
@@ -115,33 +106,17 @@
                            (let [^VectorSchemaRoot left-root (util/slice-root in-root 0)
                                  left-root-idx (.size left-roots)]
                              (.add left-roots left-root)
-                             (let [build-phase (fn [^long left-idx left-key]
-                                                 (let [^IntVector idx-pairs-vec (.computeIfAbsent join-key->left-idx-pairs
-                                                                                                  left-key
-                                                                                                  (reify Function
-                                                                                                    (apply [_ x]
-                                                                                                      (IntVector. "" allocator))))
-                                                       idx (.getValueCount idx-pairs-vec)]
-                                                   (.setValueCount idx-pairs-vec (+ idx 2))
-                                                   (.set idx-pairs-vec idx left-root-idx)
-                                                   (.set idx-pairs-vec (inc idx) left-idx)))
-                                   left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
-                               (cond
-                                 (instance? DenseUnionVector left-vec)
-                                 (let [^DenseUnionVector left-vec left-vec]
-                                   (dotimes [left-idx (.getValueCount left-vec)]
-                                     (let [left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                       (build-phase left-idx (if (util/element-addressable-vector? left-vec)
-                                                               (.getDataPointer ^ElementAddressableVector left-vec left-idx)
-                                                               (.getObject left-vec left-idx))))))
-
-                                 (util/element-addressable-vector? left-vec)
-                                 (dotimes [left-idx (.getValueCount left-vec)]
-                                   (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx)))
-
-                                 :else
-                                 (dotimes [left-idx (.getValueCount left-vec)]
-                                   (build-phase left-idx (.getObject left-vec left-idx)))))))))
+                             (let [left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
+                               (dotimes [left-idx (.getValueCount left-vec)]
+                                 (let [^IntVector idx-pairs-vec (.computeIfAbsent join-key->left-idx-pairs
+                                                                                  (.hashCode left-vec left-idx)
+                                                                                  (reify Function
+                                                                                    (apply [_ x]
+                                                                                      (IntVector. "" allocator))))
+                                       idx (.getValueCount idx-pairs-vec)]
+                                   (.setValueCount idx-pairs-vec (+ idx 2))
+                                   (.set idx-pairs-vec idx left-root-idx)
+                                   (.set idx-pairs-vec (inc idx) left-idx))))))))
 
     (while (and (not (.isEmpty left-roots))
                 (nil? out-root)
@@ -153,37 +128,31 @@
                                      (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
                                            join-schema (->join-schema left-schema (.getSchema right-root))
                                            out-root (VectorSchemaRoot/create join-schema allocator)
-                                           probe-phase (fn [^long right-idx right-key]
-                                                         (when-let [^IntVector idx-pairs-vec (.get join-key->left-idx-pairs right-key)]
-                                                           (loop [n 0]
-                                                             (when (< n (.getValueCount idx-pairs-vec))
-                                                               (let [left-root-idx (.get idx-pairs-vec n)
-                                                                     left-idx (.get idx-pairs-vec (inc n))
-                                                                     left-root ^VectorSchemaRoot (.get left-roots left-root-idx)]
-                                                                 (copy-tuple left-root left-idx out-root)
-                                                                 (recur (+ n 2)))))
-                                                           (let [row-count (quot (.getValueCount idx-pairs-vec) 2)]
-                                                             (copy-tuple-repeated right-root right-idx out-root row-count)
-                                                             (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) row-count)))))
-                                           right-pointer (ArrowBufPointer.)
-                                           right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))]
-                                       (cond
-                                         (instance? DenseUnionVector right-vec)
-                                         (let [^DenseUnionVector right-vec right-vec]
-                                           (dotimes [right-idx (.getValueCount right-vec)]
-                                             (let [right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
-                                               (probe-phase right-idx
-                                                            (if (util/element-addressable-vector? right-vec)
-                                                              (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)
-                                                              (.getObject right-vec right-idx))))))
-
-                                         (util/element-addressable-vector? right-vec)
-                                         (dotimes [right-idx (.getValueCount right-vec)]
-                                           (probe-phase right-idx (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
-
-                                         :else
-                                         (dotimes [right-idx (.getValueCount right-vec)]
-                                           (probe-phase right-idx (.getObject right-vec right-idx))))
+                                           right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))
+                                           left-pointer (ArrowBufPointer.)
+                                           right-pointer (ArrowBufPointer.)]
+                                       (dotimes [right-idx (.getValueCount right-vec)]
+                                         (when-let [^IntVector idx-pairs-vec (.get join-key->left-idx-pairs (.hashCode right-vec right-idx))]
+                                           (let [^ValueVector right-vec (util/vector-at-index right-vec right-idx)
+                                                 right-vec-element-addressable? (util/element-addressable-vector? right-vec)]
+                                             (loop [n 0]
+                                               (when (< n (.getValueCount idx-pairs-vec))
+                                                 (let [left-root-idx (.get idx-pairs-vec n)
+                                                       left-idx (.get idx-pairs-vec (inc n))
+                                                       left-root ^VectorSchemaRoot (.get left-roots left-root-idx)
+                                                       left-vec (.getVector left-root left-column-name)
+                                                       ^ValueVector left-vec (util/vector-at-index left-vec left-idx)]
+                                                   (when (if right-vec-element-addressable?
+                                                           (and (util/element-addressable-vector? left-vec)
+                                                                (= (.getDataPointer ^ElementAddressableVector left-vec left-idx left-pointer)
+                                                                   (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
+                                                           (= (.getObject left-vec left-idx)
+                                                              (.getObject right-vec right-idx)))
+                                                     (copy-tuple left-root left-idx out-root)
+                                                     (copy-tuple right-root right-idx out-root))
+                                                   (recur (+ n 2))))))
+                                           (let [row-count (quot (.getValueCount idx-pairs-vec) 2)]
+                                             (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) row-count)))))
 
                                        (when (pos? (.getRowCount out-root))
                                          (set! (.out-root this) out-root))))))))))
