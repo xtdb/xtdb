@@ -11,9 +11,6 @@
 
 (deftype OrderSpec [^String col-name, ^Keyword direction])
 
-(definterface IdxComparator
-  (^int compareIdx [^int leftIdx, ^int rightIdx]))
-
 (defn ->order-spec [col-name direction]
   (OrderSpec. col-name direction))
 
