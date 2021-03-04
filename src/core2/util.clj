@@ -18,7 +18,7 @@
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector ValueVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowRecordBatch ArrowFooter MessageSerializer]
@@ -499,3 +499,7 @@
           (when (= 1 (count children-with-elements))
             (first children-with-elements))))
       v))
+
+(defn element-addressable-vector? [^ValueVector v]
+  (and (instance? ElementAddressableVector v)
+       (not (instance? BitVector v))))

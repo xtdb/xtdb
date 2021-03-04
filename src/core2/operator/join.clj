@@ -131,13 +131,11 @@
                                  (let [^DenseUnionVector left-vec left-vec]
                                    (dotimes [left-idx (.getValueCount left-vec)]
                                      (let [left-vec (.getVectorByType left-vec (.getTypeId left-vec left-idx))]
-                                       (build-phase left-idx (if (and (instance? ElementAddressableVector left-vec)
-                                                                      (not (instance? BitVector left-vec)))
+                                       (build-phase left-idx (if (util/element-addressable-vector? left-vec)
                                                                (.getDataPointer ^ElementAddressableVector left-vec left-idx)
                                                                (.getObject left-vec left-idx))))))
 
-                                 (and (instance? ElementAddressableVector left-vec)
-                                      (not (instance? BitVector left-vec)))
+                                 (util/element-addressable-vector? left-vec)
                                  (dotimes [left-idx (.getValueCount left-vec)]
                                    (build-phase left-idx (.getDataPointer ^ElementAddressableVector left-vec left-idx)))
 
@@ -175,13 +173,11 @@
                                            (dotimes [right-idx (.getValueCount right-vec)]
                                              (let [right-vec (.getVectorByType right-vec (.getTypeId right-vec right-idx))]
                                                (probe-phase right-idx
-                                                            (if (and (instance? ElementAddressableVector right-vec)
-                                                                     (not (instance? BitVector right-vec)))
+                                                            (if (util/element-addressable-vector? right-vec)
                                                               (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)
                                                               (.getObject right-vec right-idx))))))
 
-                                         (and (instance? ElementAddressableVector right-vec)
-                                              (not (instance? BitVector right-vec)))
+                                         (util/element-addressable-vector? right-vec)
                                          (dotimes [right-idx (.getValueCount right-vec)]
                                            (probe-phase right-idx (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
 

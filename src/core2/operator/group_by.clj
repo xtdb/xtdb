@@ -87,13 +87,11 @@
                      from-vec (.getVectorByType from-vec (.getTypeId from-vec idx))]
 
 
-                 (if (and (instance? ElementAddressableVector from-vec)
-                          (not (instance? BitVector from-vec)))
+                 (if (util/element-addressable-vector? from-vec)
                    (.getDataPointer ^ElementAddressableVector from-vec idx)
                    (.getObject from-vec idx)))
 
-               (and (instance? ElementAddressableVector from-vec)
-                    (not (instance? BitVector from-vec)))
+               (util/element-addressable-vector? from-vec)
                (.getDataPointer ^ElementAddressableVector from-vec idx)
 
                :else
