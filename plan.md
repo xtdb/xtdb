@@ -32,28 +32,34 @@ Shared object store for persistence.
 Milestone 1: Ingest and Data Access
 Ingest and chunk dependency system. We want the query engine to avoid generating its dependent data.
 Multiple local nodes sharing local file storage.
-Eviction.
 Code-level queries, basic relation operators.
 Transaction timeslice index. We want to capture the context that some rows might not be valid at T.
 MVCC based on above.
 
-Milestone 2: Cloud and Benchmarks (maybe Dan? Matt?)
-Kafka/Kinesis and S3.
-AWS benchmarks.
+--- As yet unsorted
+
+Temporal indexing.
+Expressions
+JMH
 TPC-H.
-Watdiv.
-Subset of EDN Datalog, WCOJ.
 
 --- Temporal Q2
 
-Milestone 3:
-Temporal indexing.
-EDN Datalog, the good parts (rules etc.).
-Subset of TPC-BiH.
+Milestone 2:
+Bitemporal, subset of TPC-BiH.
+
+Milestone 3: Cloud and Benchmarks (maybe Dan? Matt?)
+Kafka/Kinesis and S3.
+AWS benchmarks.
+Watdiv.
+Subset of EDN Datalog, WCOJ.
+
 
 --- Alpha, wider team Q2/Q3
 
 Milestone 4: Multi-cloud, operations (most of team)
+Eviction.
+EDN Datalog, the good parts (rules etc.).
 Tx fns.
 Speculative txs.
 GCP Pub/Sub and Cloud Storage.
@@ -70,52 +76,3 @@ Milestone 5: Q3/Q4
 Defined data model and public APIs.
 Parity with parts of Crux we want to keep.
 Migration.
-
----- current implementation notes:
-
-;;; ingest
-;; DONE object store protocol, store chunks and metadata. Local directory implementation.
-;; DONE log protocol. Local directory implementation.
-;; DONE figure out last tx-id/row-id from latest chunk and resume ingest on start.
-;; TODO sanity checking of multiple nodes sharing a log/object-store
-;; TODO (bonus) refactor ingest to use holders / simplify union code.
-;; TODO (bonus) unnest ops similar to metadata.
-;; TODO (bonus) blocks vs chunks in object store?
-
-;;; query
-;; TODO 7. reading any blocks - select battery_level from db (simple code-level query)
-;; TODO 7b. fetch metadata and find further chunks based on metadata.
-;; TODO 8. reading live blocks
-;; TODO 8a. reading chunks already written to disk
-;; TODO 8b. reading blocks already written to disk
-;; TODO 8c. reading current block not yet written to disk
-;; TODO 8d. VSR committed read slice
-
-;;; future
-;; TODO dealing with schema that changes throughout an ingest (promotable unions, including nulls)
-;; TODO metadata
-;; TODO   block-level metadata - where do we store it?
-;; TODO   bloom filters in metadata.
-;; TODO dictionaries
-;; TODO consider eviction
-;; TODO writer?
-;; TODO handle deletes
-;; TODO JMH + JSON tests
-;; TODO vectorised operations in the indexer
-;; TODO tx-ids? storing as binary in the columns?
-;; TODO in-memory object-store/log?
-
-;; directions?
-;; 1. e2e? submit-tx + some code-level queries
-;;    transactions, evictions, timelines, etc.
-;; 2. quickly into JMH, experimentation
-
-;; once we've sealed a _chunk_ (/ block?), throw away in-memory? mmap or load
-;; abstract over this - we don't need to know whether it's mmap'd or in-memory
-
-;; reading a block before it's sealed?
-;; theory: if we're only appending, we should be ok?
-
-;; two different cases:
-;; live chunk, reading sealed block (maybe) written to disk
-;; live chunk, reading unsealed block in memory

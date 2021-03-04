@@ -566,3 +566,7 @@ then select
 - case 1: select based on a single column
 - case 2: select based on multiple columns sharing a row-ids
 - case 3: select based on multiple columns with different row-ids
+
+** Post operators plan <2021-03-04 Thu>
+Next aim:
+- Updates/deletes + transaction-time timeslice queries
