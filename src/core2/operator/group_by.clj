@@ -65,16 +65,21 @@
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
   (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
 
-(defn- retain-group-key [k]
-  (doseq [x k
-          :when (instance? ArrowBufPointer x)]
-    (.retain (.getBuf ^ArrowBufPointer x)))
+(defn- copy-group-key [^BufferAllocator allocator ^List k]
+  (dotimes [n (.size k)]
+    (let [x (.get k n)]
+      (when (instance? ArrowBufPointer x)
+        (let [^ArrowBufPointer x x
+              length (.getLength x)
+              buffer-copy (.buffer allocator length)]
+          (.setBytes buffer-copy 0 (.getBuf x) (.getOffset x) length)
+          (.set k n (ArrowBufPointer. buffer-copy 0 length))))))
   k)
 
 (defn- release-group-key [k]
   (doseq [x k
           :when (instance? ArrowBufPointer x)]
-    (.release (.getBuf ^ArrowBufPointer x)))
+    (util/try-close (.getBuf ^ArrowBufPointer x)))
   k)
 
 (defn- ->group-key [^VectorSchemaRoot in-root ^List group-specs ^long idx]
@@ -135,7 +140,7 @@
                                          :let [^List accs (if-let [accs (.get group->accs group-key)]
                                                             accs
                                                             (doto (ArrayList. ^List (repeat (.size aggregate-specs) nil))
-                                                              (->> (.put group->accs (retain-group-key group-key)))))]]
+                                                              (->> (.put group->accs (copy-group-key allocator group-key)))))]]
                                    (dotimes [n (.size aggregate-specs)]
                                      (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))))
 
