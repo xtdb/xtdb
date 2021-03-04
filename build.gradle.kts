@@ -15,6 +15,7 @@ dependencies {
     implementation("org.clojure", "clojure", "1.10.2")
     implementation("org.clojure", "tools.logging", "1.1.0")
     implementation("org.apache.arrow", "arrow-vector", "3.0.0")
+    implementation("org.apache.arrow", "arrow-algorithm", "3.0.0")
     implementation("org.apache.arrow", "arrow-memory-netty", "3.0.0")
     implementation("org.roaringbitmap", "RoaringBitmap", "0.9.8")
 
