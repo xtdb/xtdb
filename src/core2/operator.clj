@@ -1,6 +1,7 @@
 (ns core2.operator
   (:require [core2.operator.group-by :as group-by]
             [core2.operator.join :as join]
+            [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
             [core2.operator.rename :as rename]
             [core2.operator.scan :as scan]
@@ -33,8 +34,8 @@
   (^core2.ICursor crossJoin [^core2.ICursor leftCursor
                              ^core2.ICursor rightCursor])
 
-  (^core2.ICursor order [^core2.ICursor inCursor
-                         ^java.util.List #_#_<Pair<String, Direction>> orderSpec])
+  (^core2.ICursor orderBy [^core2.ICursor inCursor
+                           ^java.util.List #_<SortSpec> orderSpecs])
 
   (^core2.ICursor groupBy [^core2.ICursor inCursor
                            ^java.util.List #_<AggregateSpec> aggregateSpecs])
@@ -69,6 +70,9 @@
 
     (groupBy [_ in-cursor aggregate-specs]
       (group-by/->group-by-cursor allocator in-cursor aggregate-specs))
+
+    (orderBy [_ in-cursor order-specs]
+      (order-by/->order-by-cursor allocator in-cursor order-specs))
 
     (slice [_ in-cursor offset limit]
       (slice/->slice-cursor in-cursor offset limit))))
