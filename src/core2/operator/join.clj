@@ -196,10 +196,9 @@
 
   (close [_]
     (util/try-close out-root)
-    (when left-roots
-      (doseq [root left-roots]
-        (util/try-close root))
-      (.clear left-roots))
+    (doseq [root left-roots]
+      (util/try-close root))
+    (.clear left-roots)
     (doseq [idx-pair (vals join-key->left-idx-pairs)]
       (util/try-close idx-pair))
     (.clear join-key->left-idx-pairs)
