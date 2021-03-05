@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.kv.index-store
   (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [crux.cache :as cache]
             [crux.cache.nop :as nop-cache]
             [crux.codec :as c]
@@ -12,14 +13,14 @@
             [crux.memory :as mem]
             [crux.morton :as morton]
             [crux.status :as status]
-            [crux.system :as sys]
-            [clojure.tools.logging :as log])
+            [crux.system :as sys])
   (:import clojure.lang.MapEntry
            crux.api.IndexVersionOutOfSyncException
            [crux.codec EntityTx Id]
            java.io.Closeable
            java.nio.ByteOrder
            [java.util Date HashMap Map NavigableSet TreeSet]
+           [java.util.concurrent Semaphore TimeUnit]
            java.util.concurrent.atomic.AtomicBoolean
            java.util.function.Supplier
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]))
@@ -540,30 +541,36 @@
   (snapshot-opened [_ snapshot])
   (snapshot-closed [_ snapshot]))
 
-(defrecord ThreadManager [^Map snapshot-threads]
+(deftype ThreadManager [^Map snapshot-threads
+                        ^:volatile-mutable ^Semaphore closing-semaphore]
   PThreadManager
   (snapshot-opened [this snapshot]
     (locking this
+      (when closing-semaphore
+        (throw (IllegalStateException. "closing")))
+
       (.put snapshot-threads snapshot (Thread/currentThread))))
 
   (snapshot-closed [this snapshot]
     (locking this
       (.remove snapshot-threads snapshot)
-      (.notifyAll this)))
+      (when closing-semaphore
+        (.release closing-semaphore))))
 
   Closeable
   (close [this]
-    (locking this
-      (doseq [^Thread thread (vals snapshot-threads)]
-        (.interrupt thread))
+    (let [open-thread-count (locking this
+                              (when-not closing-semaphore
+                                (set! (.closing-semaphore this) (Semaphore. 0))
 
-      (let [target-ms (+ (System/currentTimeMillis) 60000)]
-        (loop []
-          (when-not (.isEmpty snapshot-threads)
-            (let [remaining-ms (- target-ms (System/currentTimeMillis))]
-              (if (pos? remaining-ms)
-                (do (.wait this remaining-ms) (recur))
-                (log/warn "Failed to shut down index-store after 60s due to outstanding snapshots" (pr-str snapshot-threads))))))))))
+                                (let [open-threads (vals snapshot-threads)]
+                                  (doseq [^Thread thread open-threads]
+                                    (.interrupt thread))
+                                  (count open-threads))))]
+
+      (when-not (.tryAcquire closing-semaphore open-thread-count 60 TimeUnit/SECONDS)
+        (log/warn "Failed to shut down index-store after 60s due to outstanding snapshots"
+                  (pr-str snapshot-threads))))))
 
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
@@ -967,4 +974,4 @@
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store cav-cache canonical-buffer-cache] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store (->ThreadManager (HashMap.)) cav-cache canonical-buffer-cache))
+  (->KvIndexStore kv-store (ThreadManager. (HashMap.) nil) cav-cache canonical-buffer-cache))
