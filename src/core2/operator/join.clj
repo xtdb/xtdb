@@ -6,7 +6,7 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector IntVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.VectorBatchAppender))
 
@@ -98,12 +98,12 @@
     (.put left-idx->root left-root-idx left-root)
     (let [left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
       (dotimes [left-idx (.getValueCount left-vec)]
-        (let [^IntVector left-idxs-vec (.computeIfAbsent join-key->left-idxs
-                                                         (.hashCode left-vec left-idx)
-                                                         (reify Function
-                                                           (apply [_ x]
-                                                             (doto (IntVector. "" allocator)
-                                                           (.setInitialCapacity 32)))))
+        (let [^BigIntVector left-idxs-vec (.computeIfAbsent join-key->left-idxs
+                                                            (.hashCode left-vec left-idx)
+                                                            (reify Function
+                                                              (apply [_ x]
+                                                                (doto (BigIntVector. "" allocator)
+                                                                  (.setInitialCapacity 32)))))
               idx (.getValueCount left-idxs-vec)
               total-left-idx (+ left-root-idx left-idx)]
           (.setValueCount left-idxs-vec (inc idx))
@@ -123,7 +123,7 @@
           left-pointer (ArrowBufPointer.)
           right-pointer (ArrowBufPointer.)]
       (dotimes [right-idx (.getValueCount right-vec)]
-        (when-let [^IntVector left-idxs-vec (.get join-key->left-idxs-vec (.hashCode right-vec right-idx))]
+        (when-let [^BigIntVector left-idxs-vec (.get join-key->left-idxs-vec (.hashCode right-vec right-idx))]
           (let [^ValueVector right-vec (util/vector-at-index right-vec right-idx)
                 right-vec-element-addressable? (util/element-addressable-vector? right-vec)]
             (loop [n 0
