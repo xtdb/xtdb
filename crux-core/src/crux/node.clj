@@ -15,8 +15,7 @@
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
-  (:import crux.api.ICursor
-           [java.io Closeable Writer]
+  (:import [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
            java.util.concurrent.TimeoutException
@@ -35,28 +34,33 @@
 
 (defn- await-tx [{:keys [bus tx-ingester] :as node} tx-k awaited-tx ^Duration timeout]
   (let [tx-v (get awaited-tx tx-k)
-        {:keys [timeout? ingester-error node-closed? tx] :as res}
-        (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closed}
-                        :->result (letfn [(tx->result [tx]
-                                            (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
-                                              {:tx tx}))]
-                                    (fn
-                                      ([] (or
-                                           (tx->result (api/latest-completed-tx node))
-                                           (when-let [ingester-error (db/ingester-error tx-ingester)]
-                                             {:ingester-error ingester-error})))
-                                      ([{:keys [crux/event-type] :as ev}]
-                                       (case event-type
-                                         ::tx/indexed-tx (tx->result (:submitted-tx ev))
-                                         ::tx/ingester-error {:ingester-error (:ingester-error ev)}
-                                         ::node-closed {:node-closed? true}))))
-                        :timeout timeout
-                        :timeout-value {:timeout? true}})]
+        fut (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
+                            :->result (letfn [(tx->result [tx]
+                                                (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
+                                                  {:tx tx}))]
+                                        (fn
+                                          ([] (or
+                                               (tx->result (api/latest-completed-tx node))
+                                               (when-let [ingester-error (db/ingester-error tx-ingester)]
+                                                 {:ingester-error ingester-error})))
+                                          ([{:keys [crux/event-type] :as ev}]
+                                           (case event-type
+                                             ::tx/indexed-tx (tx->result (:submitted-tx ev))
+                                             ::tx/ingester-error {:ingester-error (:ingester-error ev)}
+                                             ::node-closing {:node-closing? true}))))})
+
+        {:keys [timeout? ingester-error node-closing? tx]} (if timeout
+                                                             (deref fut (.toMillis timeout) {:timeout? true})
+                                                             (deref fut))]
+
+    (when timeout?
+      (future-cancel fut))
+
     (cond
       ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
       timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
                                               ", index has: " (pr-str (api/latest-completed-tx node)))))
-      node-closed? (throw (InterruptedException. "Node closed."))
+      node-closing? (throw (InterruptedException. "Node closed."))
       tx tx)))
 
 (defn- query-expired? [{:keys [finished-at] :as query} ^Duration max-age]
@@ -88,9 +92,9 @@
     (when close-fn
       (cio/with-write-lock lock
         (when (not @closed?)
+          (bus/send bus {:crux/event-type ::node-closing})
           (close-fn)
-          (reset! closed? true)
-          (bus/send bus {:crux/event-type ::node-closed})))))
+          (reset! closed? true)))))
 
   api/DBProvider
   (db [this] (api/db this {}))
