@@ -17,7 +17,7 @@
            [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
-           [org.apache.arrow.memory.util ByteFunctionHelpers MemoryUtil]
+           [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
@@ -509,3 +509,18 @@
     (let [^DenseUnionVector v v]
       (.getVectorByType v (.getTypeId v idx)))
     v))
+
+(defn pointer-or-object
+  ([^ValueVector v ^long idx]
+   (pointer-or-object v idx nil))
+  ([^ValueVector v ^long idx ^ArrowBufPointer pointer]
+   (cond
+     (element-addressable-vector? v)
+     (.getDataPointer ^ElementAddressableVector v idx (or pointer (ArrowBufPointer.)))
+
+     (instance? DenseUnionVector v)
+     (let [v ^DenseUnionVector v]
+       (recur (.getVectorByType v (.getTypeId v idx)) idx pointer))
+
+     :else
+     (.getObject v idx))))

@@ -85,10 +85,8 @@
 (defn- ->group-key [^VectorSchemaRoot in-root ^List group-specs ^long idx]
   (reduce
    (fn [^List acc ^GroupSpec group-spec]
-     (let [from-vec (util/vector-at-index (.getFromVector group-spec in-root) idx)
-           k (if (util/element-addressable-vector? from-vec)
-               (.getDataPointer ^ElementAddressableVector from-vec idx)
-               (.getObject ^ValueVector from-vec idx))]
+     (let [from-vec (.getFromVector group-spec in-root)
+           k (util/pointer-or-object from-vec idx)]
        (doto acc
          (.add k))))
    (ArrayList. (.size group-specs))

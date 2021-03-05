@@ -124,8 +124,7 @@
           right-pointer (ArrowBufPointer.)]
       (dotimes [right-idx (.getValueCount right-vec)]
         (when-let [^BigIntVector left-idxs-vec (.get join-key->left-idxs-vec (.hashCode right-vec right-idx))]
-          (let [^ValueVector right-vec (util/vector-at-index right-vec right-idx)
-                right-vec-element-addressable? (util/element-addressable-vector? right-vec)]
+          (let [right-pointer-or-object (util/pointer-or-object right-vec right-idx right-pointer)]
             (loop [n 0
                    matches 0]
               (if (= n (.getValueCount left-idxs-vec))
@@ -135,20 +134,12 @@
                       ^long left-root-idx (.getKey left-idx-entry)
                       ^VectorSchemaRoot left-root (.getValue left-idx-entry)
                       left-idx (- total-left-idx left-root-idx)
-                      left-vec (.getVector left-root left-column-name)
-                      ^ValueVector left-vec (util/vector-at-index left-vec left-idx)
-                      match? (if right-vec-element-addressable?
-                               (and (util/element-addressable-vector? left-vec)
-                                    (= (.getDataPointer ^ElementAddressableVector left-vec left-idx left-pointer)
-                                       (.getDataPointer ^ElementAddressableVector right-vec right-idx right-pointer)))
-                               (= (.getObject left-vec left-idx)
-                                  (.getObject right-vec right-idx)))]
-                  (when match?
-                    (copy-tuple left-root left-idx out-root)
-                    (copy-tuple right-root right-idx out-root))
-                  (recur (inc n)
-                         (cond-> matches
-                           match? (inc)))))))))
+                      left-vec (.getVector left-root left-column-name)]
+                  (if (= (util/pointer-or-object left-vec left-idx left-pointer) right-pointer-or-object)
+                    (do (copy-tuple left-root left-idx out-root)
+                        (copy-tuple right-root right-idx out-root)
+                        (recur (inc n) (inc matches)))
+                    (recur (inc n) matches))))))))
       out-root)))
 
 (deftype EquiJoinCursor [^BufferAllocator allocator
