@@ -5,11 +5,11 @@
             [crux.io :as cio]
             [crux.system :as sys])
   (:import java.io.Closeable
-           java.time.Duration
-           [java.util.concurrent Executor Executors ExecutorService TimeUnit]))
+           java.util.function.BiConsumer
+           [java.util.concurrent CompletableFuture Executor Executors ExecutorService TimeUnit]))
 
 (defprotocol EventSource
-  (await [bus opts]
+  (await ^java.util.concurrent.CompletableFuture [bus opts]
     "opts :: {:crux/event-types, :->result, :timeout, :timeout-value}
      (->result): if it returns a value, we'll return this immediately, otherwise, we'll listen for the events.
      (->result event): if it returns a value, we'll yield that value and close the listener.
@@ -18,7 +18,9 @@
 
   (listen ^java.io.Closeable [bus listen-opts f]))
 
-(alter-meta! #'await assoc :arglists '([bus {:keys [crux/event-types ->result ^Duration timeout timeout-value]}]))
+(alter-meta! #'await assoc :arglists '(^java.util.concurrent.CompletableFuture
+                                       [bus {:keys [crux/event-types ->result]}]))
+
 (alter-meta! #'listen assoc :arglists '(^java.io.Closeable
                                         [bus {:crux/keys [event-types], ::keys [executor]} f]))
 
@@ -44,34 +46,33 @@
 
 (defrecord EventBus [!listeners ^ExecutorService await-solo-pool sync?]
   EventSource
-  (await [this {:keys [crux/event-types ->result ^Duration timeout timeout-value]}]
-    (if-let [res (->result) ]
-      res ; fast path - don't serialise calls unless we need to
-      (let [!latch (promise)]
-        (with-open [^java.io.Closeable
-                    listener @(.submit await-solo-pool
-                                       ^Callable
-                                       (fn []
-                                         (let [listener (listen this {:crux/event-types event-types
-                                                                      ::executor await-solo-pool}
-                                                                (fn [evt]
-                                                                  (try
-                                                                    (when-let [res (->result evt)]
-                                                                      (deliver !latch {:res res}))
-                                                                    (catch Exception e
-                                                                      (deliver !latch {:error e})))))]
-                                           (try
-                                             (when-let [res (->result)]
-                                               (deliver !latch {:res res}))
-                                             (catch Exception e
-                                               (deliver !latch {:error e})))
-                                           listener)))]
-          (let [{:keys [res error]} (if timeout
-                                      (deref !latch (.toMillis timeout) {:res timeout-value})
-                                      (deref !latch))]
-            (or res (throw error)))))))
+  (await [this {:keys [crux/event-types ->result]}]
+    (if-let [res (->result)]
+      (CompletableFuture/completedFuture res) ; fast path - don't serialise calls unless we need to
+      (let [fut (CompletableFuture.)
+            ^java.io.Closeable listener @(.submit await-solo-pool
+                                                  ^Callable
+                                                  (fn []
+                                                    (let [listener (listen this {:crux/event-types event-types
+                                                                                 ::executor await-solo-pool}
+                                                                           (fn [evt]
+                                                                             (try
+                                                                               (when-let [res (->result evt)]
+                                                                                 (.complete fut res))
+                                                                               (catch Exception e
+                                                                                 (.completeExceptionally fut e)))))]
+                                                      (try
+                                                        (when-let [res (->result)]
+                                                          (.complete fut res))
+                                                        (catch Exception e
+                                                          (.completeExceptionally fut e)))
+                                                      listener)))]
+        (-> fut
+            (.whenComplete (reify BiConsumer
+                             (accept [_ res e]
+                               (.close listener))))))))
 
-  (listen [this {:crux/keys [event-types], ::keys [executor]} f]
+  (listen [_ {:crux/keys [event-types], ::keys [executor]} f]
     (let [close-executor? (nil? executor)
           executor (or executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener")))
           listener {:executor executor
@@ -115,7 +116,7 @@
                                  :default false
                                  :spec ::sys/boolean}}}
   ([] (->bus {}))
-  ([{:keys [sync?] :as opts}]
+  ([{:keys [sync?]}]
    (->EventBus (atom {})
                (Executors/newSingleThreadExecutor (cio/thread-factory "crux-bus-await-thread"))
                sync?)))

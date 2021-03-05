@@ -168,13 +168,12 @@
         (t/is (= tx1 (await-tx tx1 nil)))))
 
     (t/testing "times out if it's not quite ready"
-      (let [!latch (promise)]
-        (future
-          (Thread/sleep 100)
-          (bus/send bus (assoc-in tx-evt [:submitted-tx ::tx/tx-id] 0)))
+      (future
+        (Thread/sleep 100)
+        (bus/send bus (assoc-in tx-evt [:submitted-tx ::tx/tx-id] 0)))
 
-        (with-latest-tx nil
-          (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500)))))))
+      (with-latest-tx nil
+        (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500))))))
 
     (t/testing "throws on ingester error"
       (future
@@ -189,7 +188,7 @@
     (t/testing "throws if node closed"
       (future
         (Thread/sleep 100)
-        (bus/send bus {:crux/event-type ::n/node-closed}))
+        (bus/send bus {:crux/event-type ::n/node-closing}))
 
       (with-latest-tx nil
         (t/is (thrown? InterruptedException (await-tx tx1 nil)))))))
