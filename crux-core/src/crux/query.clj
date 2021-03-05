@@ -122,7 +122,9 @@
                         :project-spec ::eql/query)
         :aggregate ::aggregate))
 
-(s/def ::find (s/coll-of ::find-arg :kind vector? :min-count 1))
+(s/def ::find (s/or :unwrapped (s/and ::find-arg
+                                      (s/conformer vector))
+                    :wrapped (s/coll-of ::find-arg :kind vector? :min-count 1)))
 
 (s/def ::keys (s/coll-of symbol? :kind vector?))
 (s/def ::syms (s/coll-of symbol? :kind vector?))
@@ -1587,35 +1589,37 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [projection-cache]}]
-  (for [[var-type arg] conformed-find]
-    (case var-type
-      :logic-var {:logic-var arg
-                  :var-type :logic-var
-                  :var-binding (var->bindings arg)
-                  :->result (if full-results?
-                              (fn [value {:keys [entity-resolver-fn]}]
-                                (or (when (c/valid-id? value)
-                                      (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-                                        (project/let-docs [docs #{hash}]
-                                          (get docs (c/new-id hash)))))
-                                    value))
-                              (fn [value _]
-                                value))}
-      :project {:logic-var (:logic-var arg)
-                :var-type :project
-                :var-binding (var->bindings (:logic-var arg))
-                :->result (cache/compute-if-absent projection-cache (:project-spec arg)
-                                                   identity
-                                                   (fn [spec]
-                                                     (project/compile-project-spec (s/unform ::eql/query spec))))}
-      :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
-                     {:logic-var (:logic-var arg)
-                      :var-type :aggregate
-                      :var-binding (var->bindings (:logic-var arg))
-                      :aggregate-fn (apply aggregate (:aggregate-fn arg) (:args arg))
-                      :->result (fn [value _]
-                                  value)}))))
+(defn- compile-find [[wrapped-k find-args] {:keys [var->bindings full-results?]} {:keys [projection-cache]}]
+  (let [wrapped? (= wrapped-k :wrapped)]
+    {:find-wrapped? wrapped?
+     :find-args (for [[var-type arg] find-args]
+                  (case var-type
+                    :logic-var {:logic-var arg
+                                :var-type :logic-var
+                                :var-binding (var->bindings arg)
+                                :->result (if full-results?
+                                            (fn [value {:keys [entity-resolver-fn]}]
+                                              (or (when (c/valid-id? value)
+                                                    (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
+                                                      (project/let-docs [docs #{hash}]
+                                                                        (get docs (c/new-id hash)))))
+                                                  value))
+                                            (fn [value _]
+                                              value))}
+                    :project {:logic-var (:logic-var arg)
+                              :var-type :project
+                              :var-binding (var->bindings (:logic-var arg))
+                              :->result (cache/compute-if-absent projection-cache (:project-spec arg)
+                                                                 identity
+                                                                 (fn [spec]
+                                                                   (project/compile-project-spec (s/unform ::eql/query spec))))}
+                    :aggregate (do (s/assert ::aggregate-args [(:aggregate-fn arg) (vec (:args arg))])
+                                   {:logic-var (:logic-var arg)
+                                    :var-type :aggregate
+                                    :var-binding (var->bindings (:logic-var arg))
+                                    :aggregate-fn (apply aggregate (:aggregate-fn arg) (:args arg))
+                                    :->result (fn [value _]
+                                                value)})))}))
 
 (defn- aggregate-result [compiled-find result]
   (let [indexed-compiled-find (map-indexed vector compiled-find)
@@ -1698,18 +1702,19 @@
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
           {:keys [n-ary-join] :as built-query} (build-sub-query index-snapshot db where in in-args rule-name->rules stats)
-          compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
-          var-types (set (map :var-type compiled-find))
+          {:keys [find-wrapped? find-args]} (compile-find find (assoc built-query :full-results? full-results?) db)
+          var-types (set (map :var-type find-args))
           aggregate? (contains? var-types :aggregate)
           project? (or (contains? var-types :project) full-results?)
           return-maps? (some q [:keys :syms :strs])
-          var-bindings (mapv :var-binding compiled-find)]
-      (doseq [{:keys [logic-var var-binding]} compiled-find
+          var-bindings (mapv :var-binding find-args)]
+      (doseq [{:keys [logic-var var-binding]} find-args
               :when (nil? var-binding)]
         (throw (err/illegal-arg :find-unknown-var
                                 {::err/message (str "Find refers to unknown variable: " logic-var)})))
+
       (doseq [{:keys [find-arg]} order-by
-              :when (not (some #{find-arg} find))]
+              :when (not (some #{find-arg} (second find)))]
         (throw (err/illegal-arg :order-by-requires-find-element
                                 {::err/message  (str "Order by requires an element from :find. unreturned element: " find-arg)})))
 
@@ -1719,12 +1724,13 @@
                           (bound-result-for-var index-snapshot var-binding join-keys))
                         var-bindings))
 
-         aggregate? (aggregate-result compiled-find)
-         order-by (cio/external-sort (order-by-comparator find order-by))
+         aggregate? (aggregate-result find-args)
+         order-by (cio/external-sort (order-by-comparator (second find) order-by))
          offset (drop offset)
          limit (take limit)
-         project? (project/->project-result db compiled-find q-conformed)
-         return-maps? (map (->return-maps q)))))))
+         project? (project/->project-result db find-args q-conformed)
+         return-maps? (map (->return-maps q))
+         (not find-wrapped?) (map first))))))
 
 (defn entity-tx [{:keys [valid-time tx-id] :as db} index-snapshot eid]
   (when tx-id

@@ -363,16 +363,16 @@
 
     (t/is (=
            ;; tag::eql-query-2-r[]
-           #{[{:user/name "Ivan" :user/profession :doctor}]
-             [{:user/name "Sergei" :user/profession :lawyer}]
-             [{:user/name "Petr" :user/profession :doctor}]}
+           #{{:user/name "Ivan" :user/profession :doctor}
+             {:user/name "Sergei" :user/profession :lawyer}
+             {:user/name "Petr" :user/profession :doctor}}
            ;; end::eql-query-2-r[]
 
            ;; tag::eql-query-2[]
            ;; using `eql/project`:
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?user [:user/name :user/profession])]
+            '{:find (eql/project ?user [:user/name :user/profession])
               :where [[?user :user/id ?uid]]})
            ;; end::eql-query-2[]
            ))
@@ -396,33 +396,33 @@
 
     (t/is (=
            ;; tag::eql-query-4-r[]
-           #{[{:user/name "Ivan" :user/profession {:profession/name "Doctor"}}]
-             [{:user/name "Sergei" :user/profession {:profession/name "Lawyer"}}]
-             [{:user/name "Petr" :user/profession {:profession/name "Doctor"}}]}
+           #{{:user/name "Ivan" :user/profession {:profession/name "Doctor"}}
+             {:user/name "Sergei" :user/profession {:profession/name "Lawyer"}}
+             {:user/name "Petr" :user/profession {:profession/name "Doctor"}}}
            ;; end::eql-query-4-r[]
 
            ;; tag::eql-query-4[]
            ;; using `eql/project`:
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?user [:user/name {:user/profession [:profession/name]}])]
+            '{:find (eql/project ?user [:user/name {:user/profession [:profession/name]}])
               :where [[?user :user/id ?uid]]})
            ;; end::eql-query-4[]
            ))
 
     (t/is (=
            ;; tag::eql-query-5-r[]
-           #{[{:profession/name "Doctor"
-               :user/_profession [{:user/id 1 :user/name "Ivan"},
-                                  {:user/id 3 :user/name "Petr"}]}]
-             [{:profession/name "Lawyer"
-               :user/_profession [{:user/id 2 :user/name "Sergei"}]}]}
+           #{{:profession/name "Doctor"
+              :user/_profession [{:user/id 1 :user/name "Ivan"},
+                                 {:user/id 3 :user/name "Petr"}]}
+             {:profession/name "Lawyer"
+              :user/_profession [{:user/id 2 :user/name "Sergei"}]}}
            ;; end::eql-query-5-r[]
 
            ;; tag::eql-query-5[]
            (crux/q
             (crux/db node)
-            '{:find [(eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])]
+            '{:find (eql/project ?profession [:profession/name {:user/_profession [:user/id :user/name]}])
               :where [[?profession :profession/name]]})
            ;; end::eql-query-5[]
            ))
@@ -747,7 +747,7 @@
 (t/deftest test-generic
   (fix/submit+await-tx
    (fix/maps->tx-ops
-    [{:crux.db/id :ivan :name "Ivan" :last-name "Ivan"}]))
+    [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}]))
 
   (let [node *api*]
     (t/is (= #{[:ivan]}
@@ -755,51 +755,50 @@
              (crux/q
               (crux/db node) ;;<1>
               '{:find [p1] ;;<2>
-                :where [[p1 :name n]
-                        [p1 :last-name n]
-                        [p1 :name name]]
-                :in [name]}
+                :in [name]
+                :where [[p1 :name name]
+                        [p1 :last-name last-name]]}
               "Ivan") ;;<3>
              ;; end::anatomy[]
              ))
 
-    (t/is (= #{["Ivan"]}
+    (t/is (= #{"Ivanov"}
              ;; tag::triple[]
              (crux/q
               (crux/db node)
-              '{:find [n]
-                :where [[p :last-name n]]})
+              '{:find last-name
+                :where [[p :last-name last-name]]})
              ;; end::triple[]
              ))
 
     (t/is (=
-           #{[:ivan]}
+           #{:ivan}
            ;; tag::double[]
            (crux/q
             (crux/db node)
-            '{:find [p]
-              :where [[p :name]]}) ;;<1>
+            '{:find p
+              :where [[p :name]]}) ;; <1>
            ;; end::double[]
            ))
 
     (t/is (=
-           #{[:ivan]}
+           #{:ivan}
            ;; tag::triple-2[]
            (crux/q
             (crux/db node)
-            '{:find [p]
-              :where [[p :name "Ivan"]]}) ;;<2>
+            '{:find p
+              :where [[p :name "Ivan"]]}) ;; <2>
            ;; end::triple-2[]
            ))
 
     (t/is (=
-           #{[:ivan]}
+           #{:ivan}
            ;; tag::triple-3[]
            (crux/q
             (crux/db node)
-            '{:find [p]
-              :where [[q :name n]
-                      [p :last-name n]]}) ;;<3>
+            '{:find p
+              :where [[p :name name]
+                      [p :last-name last-name]]}) ;; <3>
            ;; end::triple-3[]
            ))))
 
@@ -816,13 +815,13 @@
   (let [node *api*]
     (t/is (=
            ;; tag::or-join-r[]
-           #{[:ivan] [:sergei]} ;;<4>
+           #{:ivan :sergei} ;;<4>
            ;; end::or-join-r[]
 
            ;; tag::or-join[]
            (crux/q
             (crux/db node)
-            '{:find [p]
+            '{:find p
               :where [[p :crux.db/id]
                       (or-join [p] ;;<2>
                                (and [p :age a] ;;<3>
@@ -843,22 +842,22 @@
 
   (let [node *api*]
     (t/is (=
-           #{[:sergei]}
+           #{:sergei}
            ;; tag::range-1[]
            (crux/q
             (crux/db node)
-            '{:find [p] ;;<1>
+            '{:find p ;;<1>
               :where [[p :age a]
                       [(> a 18)]]})
            ;; end::range-1[]
            ))
 
     (t/is (=
-           #{[:petr] [:sergei]}
+           #{:petr :sergei}
            ;; tag::range-2[]
            (crux/q
             (crux/db node)
-            '{:find [p] ;;<2>
+            '{:find p ;;<2>
               :where [[p :age a]
                       [q :age b]
                       [(> a b)]]})
@@ -866,11 +865,11 @@
            ))
 
     (t/is (=
-           #{[:ivan] [:petr]}
+           #{:ivan :petr}
            ;; tag::range-3[]
            (crux/q
             (crux/db node)
-            '{:find [p] ;;<3>
+            '{:find p ;;<3>
               :where [[p :age a]
                       [(> 18 a)]]})
            ;; end::range-3[]
@@ -878,50 +877,48 @@
 
     (t/is (=
            ;; tag::query-with-pred-1-r[]
-           #{[:petr] [:sergei]}
+           #{:petr :sergei}
            ;; end::query-with-pred-1-r[]
 
            ;; tag::query-with-pred-1[]
            (crux/q
             (crux/db node)
-            '{:find [p]
+            '{:find p
               :where [[p :age age]
                       [(odd? age)]]})
            ;; end::query-with-pred-1[]
-           ))
-
-    ))
+           ))))
 
 (t/deftest test-full-results
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::full-results-data[]
-    [{:crux.db/id :foo :bar :baz}]
+    [{:crux.db/id :foo, :bar :baz}]
     ;; end::full-results-data[]
     ))
 
   (let [node *api*]
     (t/is (=
            ;; tag::full-results-1-r[]
-           #{[:foo]}
+           #{:foo}
            ;; end::full-results-1-r[]
            ;; tag::full-results-1[]
            (crux/q
             (crux/db node)
-            '{:find [p]
+            '{:find p
               :where [[p :bar :baz]]})
            ;; end::full-results-1[]
            ))
 
     (t/is (=
            ;; tag::full-results-2-r[]
-           #{[{:crux.db/id :foo :bar :baz}]}
+           #{{:crux.db/id :foo, :bar :baz}}
            ;; end::full-results-2-r[]
 
            ;; tag::full-results-2[]
            (crux/q
             (crux/db node)
-            '{:find [p]
+            '{:find p
               :where [[p :bar :baz]]
               :full-results? true})
            ;; end::full-results-2[]

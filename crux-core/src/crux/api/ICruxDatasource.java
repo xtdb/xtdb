@@ -37,6 +37,8 @@ public interface ICruxDatasource extends Closeable {
      * This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
      * otherwise, it will return a vector of result tuples.
      *
+     * NOTE: This function does not support the single find-arg variant - `:find` arguments must be wrapped in a vector.
+     *
      * @param query the query in map, vector or string form.
      * @param args  bindings for in.
      * @return      a set or vector of result tuples.
@@ -45,6 +47,8 @@ public interface ICruxDatasource extends Closeable {
 
     /**
      * Queries the db lazily.
+     *
+     * NOTE: This function does not support the single find-arg variant - `:find` arguments must be wrapped in a vector.
      *
      * @param query the query in map, vector or string form.
      * @param args  bindings for in.

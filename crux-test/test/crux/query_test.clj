@@ -23,18 +23,20 @@
                                     {:crux.db/id :petr :name "Petr" :last-name "Petrov"}]))
 
   (t/testing "Can query value by single field"
-    (t/is (= #{["Ivan"]} (api/q (api/db *api*) '{:find [name]
-                                                 :where [[e :name "Ivan"]
-                                                         [e :name name]]})))
-    (t/is (= #{["Petr"]} (api/q (api/db *api*) '{:find [name]
-                                                 :where [[e :name "Petr"]
-                                                         [e :name name]]}))))
+    (t/is (= #{"Ivan"} (api/q (api/db *api*) '{:find name
+                                               :where [[e :name "Ivan"]
+                                                       [e :name name]]})))
+    (t/is (= #{"Petr"} (api/q (api/db *api*) '{:find name
+                                               :where [[e :name "Petr"]
+                                                       [e :name name]]}))))
 
   (t/testing "Can query entity by single field"
-    (t/is (= #{[:ivan]} (api/q (api/db *api*) '{:find [e]
-                                                :where [[e :name "Ivan"]]})))
-    (t/is (= #{[:petr]} (api/q (api/db *api*) '{:find [e]
-                                                :where [[e :name "Petr"]]}))))
+    (t/is (= #{:ivan}
+             (api/q (api/db *api*) '{:find e
+                                     :where [[e :name "Ivan"]]})))
+    (t/is (= #{:petr}
+             (api/q (api/db *api*) '{:find e
+                                     :where [[e :name "Petr"]]}))))
 
   (t/testing "Can query using multiple terms"
     (t/is (= #{["Ivan" "Ivanov"]} (api/q (api/db *api*) '{:find [name last-name]
