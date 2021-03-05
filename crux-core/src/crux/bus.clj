@@ -96,12 +96,12 @@
   EventSink
   (send [_ {:crux/keys [event-type] :as event}]
     (s/assert ::event event)
-    (doseq [{:keys [^Executor executor f] :as listener} (get @!listeners event-type)]
-      (if sync?
-        (try
+    (doseq [{:keys [^Executor executor f]} (get @!listeners event-type)]
+      (try
+        (if sync?
           (f event)
-          (catch Exception e))
-        (.execute executor ^Runnable #(f event)))))
+          (.execute executor ^Runnable #(f event)))
+        (catch Exception _))))
 
   Closeable
   (close [_]
