@@ -1974,8 +1974,8 @@
   (close [_]
     (when interrupt-executor
       (doto interrupt-executor
-        (.shutdown)
-        (.awaitTermination 60000 TimeUnit/MILLISECONDS)))))
+        (.shutdownNow)
+        (.awaitTermination 5000 TimeUnit/MILLISECONDS)))))
 
 (def default-allow-list
   (->> (slurp (io/resource "query-allowlist.edn"))

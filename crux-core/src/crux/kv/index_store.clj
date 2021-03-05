@@ -12,7 +12,8 @@
             [crux.memory :as mem]
             [crux.morton :as morton]
             [crux.status :as status]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [clojure.tools.logging :as log])
   (:import clojure.lang.MapEntry
            crux.api.IndexVersionOutOfSyncException
            [crux.codec EntityTx Id]
@@ -535,6 +536,35 @@
                     (new-prefix-kv-iterator tx-time-mapping-prefix))]
     (latest-completed-tx-i i)))
 
+(defprotocol PThreadManager
+  (snapshot-opened [_ snapshot])
+  (snapshot-closed [_ snapshot]))
+
+(defrecord ThreadManager [^Map snapshot-threads]
+  PThreadManager
+  (snapshot-opened [this snapshot]
+    (locking this
+      (.put snapshot-threads snapshot (Thread/currentThread))))
+
+  (snapshot-closed [this snapshot]
+    (locking this
+      (.remove snapshot-threads snapshot)
+      (.notifyAll this)))
+
+  Closeable
+  (close [this]
+    (locking this
+      (doseq [^Thread thread (vals snapshot-threads)]
+        (.interrupt thread))
+
+      (let [target-ms (+ (System/currentTimeMillis) 60000)]
+        (loop []
+          (when-not (.isEmpty snapshot-threads)
+            (let [remaining-ms (- target-ms (System/currentTimeMillis))]
+              (if (pos? remaining-ms)
+                (do (.wait this remaining-ms) (recur))
+                (log/warn "Failed to shut down index-store after 60s due to outstanding snapshots" (pr-str snapshot-threads))))))))))
+
 (defrecord KvIndexSnapshot [snapshot
                             close-snapshot?
                             level-1-iterator-delay
@@ -543,6 +573,7 @@
                             decode-value-iterator-delay
                             cache-iterator-delay
                             nested-index-snapshot-state
+                            thread-mgr
                             cav-cache
                             canonical-buffer-cache
                             ^Map temp-hash-cache
@@ -556,7 +587,8 @@
               :when (realized? i)]
         (cio/try-close @i))
       (when close-snapshot?
-        (cio/try-close snapshot))))
+        (cio/try-close snapshot)
+        (snapshot-closed thread-mgr snapshot))))
 
   db/IndexSnapshot
   (av [_ a min-v]
@@ -715,7 +747,7 @@
           :else latest-tx))))
 
   (open-nested-index-snapshot [_]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot false cav-cache canonical-buffer-cache temp-hash-cache)]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
       nested-index-snapshot))
 
@@ -723,7 +755,10 @@
   (-read-index-meta [_ k not-found]
     (read-meta-snapshot snapshot k not-found)))
 
-(defn- new-kv-index-snapshot [snapshot close-snapshot? cav-cache canonical-buffer-cache temp-hash-cache]
+(defn- new-kv-index-snapshot [snapshot close-snapshot? thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
+  (when close-snapshot?
+    (snapshot-opened thread-mgr snapshot))
+
   (->KvIndexSnapshot snapshot
                      close-snapshot?
                      (delay (kv/new-iterator snapshot))
@@ -732,6 +767,7 @@
                      (delay (kv/new-iterator snapshot))
                      (delay (kv/new-iterator snapshot))
                      (atom [])
+                     thread-mgr
                      cav-cache
                      canonical-buffer-cache
                      temp-hash-cache
@@ -759,7 +795,7 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids cav-cache canonical-buffer-cache temp-hash-cache]
+(defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
     (let [crux-db-id (c/->id-buffer :crux.db/id)
@@ -863,19 +899,19 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true
+    (fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true thread-mgr
                                                            cav-cache canonical-buffer-cache temp-hash-cache)
                                     (fork/->CappedIndexSnapshot (:crux.db/valid-time fork-at)
                                                                 (get fork-at :crux.tx/tx-id (:crux.tx/tx-id tx))))
-                                (new-kv-index-snapshot (kv/new-snapshot transient-kv-store) true
+                                (new-kv-index-snapshot (kv/new-snapshot transient-kv-store) true thread-mgr
                                                        cav-cache canonical-buffer-cache temp-hash-cache)
                                 @!evicted-eids)))
 
-(defrecord KvIndexStore [kv-store cav-cache canonical-buffer-cache]
+(defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache]
   db/IndexStore
   (begin-index-tx [_ tx fork-at]
     (->KvIndexStoreTx kv-store (mut-kv/->mutable-kv-store) tx fork-at
-                      (atom #{})
+                      (atom #{}) thread-mgr
                       (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) (HashMap.)))
 
   ;; TODO, make use of this fn in unindex-eids
@@ -912,13 +948,17 @@
 
   db/IndexSnapshotFactory
   (open-index-snapshot [_]
-    (new-kv-index-snapshot (kv/new-snapshot kv-store) true cav-cache canonical-buffer-cache (HashMap.)))
+    (new-kv-index-snapshot (kv/new-snapshot kv-store) true thread-mgr cav-cache canonical-buffer-cache (HashMap.)))
 
   status/Status
   (status-map [this]
     {:crux.index/index-version (current-index-version kv-store)
      :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
-     :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)}))
+     :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)})
+
+  Closeable
+  (close [_]
+    (cio/try-close thread-mgr)))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
                                     :cav-cache 'crux.cache/->cache
@@ -927,4 +967,4 @@
                                                               :doc "Skip an index version bump. For example, to skip from v10 to v11, specify [10 11]"}}}
   [{:keys [kv-store cav-cache canonical-buffer-cache] :as opts}]
   (check-and-store-index-version opts)
-  (->KvIndexStore kv-store cav-cache canonical-buffer-cache))
+  (->KvIndexStore kv-store (->ThreadManager (HashMap.)) cav-cache canonical-buffer-cache))

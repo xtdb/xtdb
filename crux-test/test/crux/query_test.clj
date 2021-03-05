@@ -3751,3 +3751,31 @@
                             [(is-truthy? [?v])
                              (not (is-nil? ?v))
                              (not (is-false? ?v))]]}))))
+
+(t/deftest closing-node-interrupts-open-snapshots
+  (t/testing "open-db left open"
+    (let [node (api/start-node {})]
+      @(try
+         (let [fut (future
+                     (with-open [_db (api/open-db node)]
+                       (t/is (thrown? InterruptedException (Thread/sleep 2000)))))]
+           (Thread/sleep 100)
+           fut)
+         (finally
+           (.close node)))))
+
+  (t/testing "long-running query"
+    (let [node (api/start-node {})]
+      @(try
+         (let [fut (future
+                     (with-redefs [idx/layered-idx->seq (let [f idx/layered-idx->seq]
+                                                          (fn [& args]
+                                                            (Thread/sleep 1000)
+                                                            (apply f args)))]
+                       (t/is (thrown? InterruptedException
+                                      (api/q (api/db node)
+                                             '{:find [?e] :where [[?e :crux.db/id]]})))))]
+           (Thread/sleep 100)
+           fut)
+         (finally
+           (.close node))))))
