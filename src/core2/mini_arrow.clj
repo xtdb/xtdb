@@ -448,20 +448,6 @@
      (throw (NullPointerException.)))
    (.getDouble ^ByteBuffer (aget buffers 1) (* Double/BYTES index)))
 
-  (equals [this other]
-    (and (instance? ArrowArray other)
-         (zero? (.compareTo this other))))
-
-  (hashCode [_]
-    (.hashCode ^List (mapv ->comparable-buffer children)))
-
-  Comparable
-  (compareTo [_ other]
-    (if (instance? ArrowArray other)
-      (compare (mapv ->comparable-buffer children)
-               (mapv ->comparable-buffer (.children ^ArrowArray other)))
-      (throw (IllegalArgumentException.))))
-
   AutoCloseable
   (close [_]
     (Arrays/fill buffers nil)
