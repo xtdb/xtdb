@@ -60,8 +60,8 @@
   ([^String format ^String name children]
    (->ArrowSchema format name nil 0 children nil)))
 
-(defn- ->comparable-buffer ^java.nio.Buffer [^ByteBuffer b]
-  (.asCharBuffer b))
+(defn compare-buffers-unsigned ^long [^ByteBuffer a ^ByteBuffer b]
+  (.compareTo (.asCharBuffer a) (.asCharBuffer b)))
 
 (defn- ts-format->zone-id ^java.time.ZoneId [^String format]
   (let [maybe-tz (.split format ":")]
