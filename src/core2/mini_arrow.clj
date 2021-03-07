@@ -451,6 +451,8 @@
   AutoCloseable
   (close [_]
     (Arrays/fill buffers nil)
+    (doseq [child children]
+      (.close ^AutoCloseable child))
     (Arrays/fill children nil)))
 
 (defn map->ArrowArray [{:keys [length null-count offset buffers children dictionary format schema]
@@ -460,8 +462,9 @@
 (def ^:private ^{:tag 'long} default-capacity 64)
 (def ^:private ^{:tag 'long} alignment 64)
 
-(defn- round-up-to-nearest-power-of-2 ^long [^long x ^long power]
-  (bit-and-not (+ x power) (dec power)))
+(defn- round-up-to-nearest-power-of-2 ^long [^long x ^long power-of-two]
+  (assert (= 1 (Long/bitCount power-of-two)))
+  (bit-and-not (+ x (dec power-of-two)) (dec power-of-two)))
 
 (def ^:dynamic *allocate-buffer*
   (fn [^long capacity]
