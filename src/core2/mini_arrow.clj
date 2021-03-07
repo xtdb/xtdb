@@ -68,6 +68,11 @@
     (when (= 2 (alength maybe-tz))
       (ZoneId/of (aget maybe-tz 1)))))
 
+(defn- ->instant ^java.time.Instant [ts]
+  (if (instance? Instant ts)
+    ts
+    (.toInstant ^ZonedDateTime ts)))
+
 (definterface INullableArray
   (^boolean isNull [^int index]))
 
@@ -147,18 +152,18 @@
                (.add this (.toNanoOfDay ^LocalTime e)))
        "tss" (if (nil? e)
                (add-null-primitive Long/BYTES)
-               (.add this (.toEpochSecond ^ZonedDateTime e)))
+               (.add this (quot (.toEpochMilli (->instant e)) 1000)))
        "tsm" (if (nil? e)
                (add-null-primitive Long/BYTES)
-               (.add this (.toEpochMilli (.toInstant ^ZonedDateTime e))))
+               (.add this (.toEpochMilli (->instant e))))
        "tsu" (if (nil? e)
                (add-null-primitive Long/BYTES)
-               (let [instant (.toInstant ^ZonedDateTime e)]
+               (let [instant (->instant e)]
                  (.add this (+ (* (.getEpochSecond instant) 1000000)
                                (quot (.getNano instant) 1000)))))
        "tsn" (if (nil? e)
                (add-null-primitive Long/BYTES)
-               (let [instant (.toInstant ^ZonedDateTime e)]
+               (let [instant (->instant e)]
                  (.add this (+ (* (.getEpochSecond instant) 1000000000)
                                (.getNano instant)))))
        "tDs" (if (nil? e)
