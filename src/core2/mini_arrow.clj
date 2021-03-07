@@ -73,8 +73,9 @@
     ts
     (.toInstant ^ZonedDateTime ts)))
 
-(definterface INullableArray
-  (^boolean isNull [^int index]))
+(definterface IArrowArray
+  (^boolean isNull [^int index])
+  (^core2.mini_arrow.IArrowArray finish []))
 
 ;; TODO: wants to extend java.util.AbstractList
 (deftype ArrowArray [^:unsynchronized-mutable ^long length
@@ -86,14 +87,23 @@
                      ^String format
                      ^String base-format
                      ^ArrowSchema schema]
-  RandomAccess
-  INullableArray
+  IArrowArray
   (^boolean isNull [this ^int index]
    (let [validity-buffer (aget buffers 0)]
      (and (< index length)
           (some? validity-buffer)
           (zero? (get-bit validity-buffer index)))))
 
+  (^core2.mini_arrow.IArrowArray finish [this]
+   (dotimes [n (alength buffers)]
+     (let [^ByteBuffer buffer (aget buffers n)]
+       (aset buffers n (.asReadOnlyBuffer (.flip buffer)))))
+   (dotimes [n (alength children)]
+     (let [^ArrowArray child (aget children n)]
+       (aset children n (.finish child))))
+   this)
+
+  RandomAccess
   List
   (^boolean add [this ^Object e]
    (let [add-null-primitive (fn add-null-primitive [^long width]
@@ -103,7 +113,6 @@
                                                               (aset buffers 0 (realloc data-buffer))
                                                               data-buffer)]
                                 (.position data-buffer new-length)
-                                (.limit data-buffer new-length)
                                 (set! (.length this) (inc length))
                                 (set! (.null-count this) (inc null-count))
                                 true))]
@@ -358,7 +367,6 @@
   (^boolean add [this ^byte e]
    (let [^ByteBuffer data-buffer (aget buffers 1)]
      (try
-       (.limit data-buffer (+ Byte/BYTES (.position data-buffer)))
        (.put data-buffer e)
        (aset buffers 0 (set-bit (aget buffers 0) length))
        (set! length (inc length))
@@ -369,7 +377,6 @@
   (^boolean add [this ^short e]
    (let [^ByteBuffer data-buffer (aget buffers 1)]
      (try
-       (.limit data-buffer (+ Short/BYTES (.position data-buffer)))
        (.putShort data-buffer e)
        (aset buffers 0 (set-bit (aget buffers 0) length))
        (set! length (inc length))
@@ -380,7 +387,6 @@
   (^boolean add [this ^int e]
    (let [^ByteBuffer data-buffer (aget buffers 1)]
      (try
-       (.limit data-buffer (+ Integer/BYTES (.position data-buffer)))
        (.putInt data-buffer e)
        (aset buffers 0 (set-bit (aget buffers 0) length))
        (set! length (inc length))
@@ -391,7 +397,6 @@
   (^boolean add [this ^long e]
    (let [^ByteBuffer data-buffer (aget buffers 1)]
      (try
-       (.limit data-buffer (+ Long/BYTES (.position data-buffer)))
        (.putLong data-buffer e)
        (aset buffers 0 (set-bit (aget buffers 0) length))
        (set! length (inc length))
@@ -402,7 +407,6 @@
   (^boolean add [this ^float e]
    (let [^ByteBuffer data-buffer (aget buffers 1)]
      (try
-       (.limit data-buffer (+ Float/BYTES (.position data-buffer)))
        (.putFloat data-buffer e)
        (aset buffers 0 (set-bit (aget buffers 0) length))
        (set! length (inc length))
@@ -413,7 +417,6 @@
   (^boolean add [this ^double e]
    (let [^ByteBuffer data-buffer (aget buffers 1)]
      (try
-       (.limit data-buffer (+ Double/BYTES (.position data-buffer)))
        (.putDouble data-buffer e)
        (aset buffers 0 (set-bit (aget buffers 0) length))
        (set! length (inc length))
@@ -494,7 +497,7 @@
   (^java.nio.ByteBuffer [^java.nio.ByteBuffer b]
    (realloc b (* (.capacity b) 2)))
   (^java.nio.ByteBuffer [^java.nio.ByteBuffer b ^long new-capacity]
-   (.limit (.put ^ByteBuffer (allocate-buffer new-capacity) ^ByteBuffer b) (.limit b))))
+   (.put ^ByteBuffer (allocate-buffer new-capacity) (.flip ^ByteBuffer b))))
 
 (defn realloc-array ^core2.mini_arrow_test.ArrowArray [^ArrowArray a]
   (let [^objects buffers (.buffers a)]
