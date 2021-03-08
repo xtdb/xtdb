@@ -1,4 +1,4 @@
-name: about
+name: articles
 title: Crux
 version: master
 start_page: ROOT:what-is-crux.adoc

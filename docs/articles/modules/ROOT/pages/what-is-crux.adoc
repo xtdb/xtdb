@@ -1,4 +1,5 @@
 = What is Crux?
+:page-aliases: about::what-is-crux.adoc
 
 Crux—to use Martin Kleppmann’s phrase—is an _unbundled_ database.
 

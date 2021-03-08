@@ -10,7 +10,7 @@ content:
         - HEAD
         - docs-v*
     - url: ../
-      start_path: docs/about
+      start_path: docs/articles
       branches: master
     - url: ../
       start_path: docs/community

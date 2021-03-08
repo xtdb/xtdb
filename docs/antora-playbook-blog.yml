@@ -8,28 +8,30 @@ content:
       start_path: docs/main
       branches: HEAD
     - url: ../
-      start_path: docs/training
-      branches: HEAD
-    - url: ../
-      start_path: docs/support
-      branches: HEAD
-    - url: ../
-      start_path: docs/about
-      branches: HEAD
-    - url: ../
-      start_path: docs/community
+      start_path: docs/articles
       branches: HEAD
     - url: ../
       start_path: docs/tutorials
-      branches: HEAD
-    - url: ../../crux-site
-      start_path: blog
       branches: HEAD
     - url: ../
       start_path: docs/reference
       branches:
         - HEAD
         - docs-v*
+    # the remaining components do not belong in crux/docs:
+    - url: ../../crux-site
+      start_path: blog
+      branches: HEAD
+    - url: ../
+      start_path: docs/training
+      branches: HEAD
+    - url: ../
+      start_path: docs/support
+      branches: HEAD
+    - url: ../
+      start_path: docs/community
+      branches: HEAD
+
 ui:
   bundle:
     url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip

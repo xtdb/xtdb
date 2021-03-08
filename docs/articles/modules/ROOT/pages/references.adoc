@@ -1,4 +1,5 @@
 = References
+:page-aliases: about::references.adoc
 
 == Racket Datalog
 
