@@ -97,7 +97,7 @@
   (db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
       (api/db this {:crux.db/valid-time valid-time-or-basis})
-      (api/open-db this valid-time-or-basis)))
+      (api/db query-engine valid-time-or-basis)))
   (db [this valid-time tx-time]
     (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
 

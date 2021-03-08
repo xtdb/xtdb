@@ -316,7 +316,9 @@
                                  (when-let [docs (seq (concat docs tombstones))]
                                    (db/submit-docs document-store-tx docs)))
 
-                               (recur (concat new-tx-events more-tx-events)))))))]
+                               (if (Thread/interrupted)
+                                 (throw (InterruptedException.))
+                                 (recur (concat new-tx-events more-tx-events))))))))]
           (when abort?
             (reset! !tx-state :abort-only))
 
