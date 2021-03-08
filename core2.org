@@ -346,6 +346,78 @@ questions from above:
 - 'when was this row-id valid?' (temporal ranges)
   - just check row-id bloom filters, ignore above temporal filters
 
+*** Temporal musing (jms) <2021-03-08 Mon>
+
+what things do append-only make difficult?
+
+one concern is around looking up the history of IBM's ticker.
+- let's say you model it using ticker name, you're then going to get a lot of rows with "IBM" as :ticker/name
+- you could model it as the entity ID, but that's only useful for one such attribute
+- split it out per-attribute, and slowly changing data can still go under the same entity id - but you have to resolve per-attribute
+- this would also make a row 'partially valid' - some of the attributes will remain the same, others will be out of date.
+
+you can't go back and edit the end time of a row, so you can't then say when this row is valid until.
+maybe I'm not interested in that - maybe I'm interested in whether this one column is still valid.
+
+at 2021-01-01, select price where ticker/name = "IBM"
+
+presumably you quickly get to a point where you have the possibly matching entity-ids at hand.
+it's not distinct, but it is deduped
+
+let's say we don't include a value in metadata (specifically, the Bloom filter) if it's not new
+that would mean that searching for =:ticker/name "IBM"= would give us the first instance of that entity, get us _one_ entity ID to resolve.
+it may be that later entity-ids for the IBM ticker also have =:ticker/name "IBM"=, but if we're doing a timeslice query, we'll only have one row to re-check.
+bitemp? we could only look back at the values we're replacing, potentially.
+this would introduce deduping - we wouldn't want duplicate IBMs in the result
+  but presumably this is an issue already? why might it not be an issue already?
+    atm we find all rows with IBM, filter by what's valid
+  two bloom filters?
+
+problem: when we have n versions of an entity, and we search by an unchanging attribute, we want closer to 1 lookup than n
+idea: bringing the attribute values into the temporal index?
+will be an issue for wide docs
+more general idea here is that however we store the temporal index also gives us an idea (without further lookups) of the delta of a document
+
+the dual of this is that, if we were to only store deltas, this index would give us an idea of the where the rest of the row was
+- which other row-ids (chunks? blocks?) have values that are still live in this row?
+  - would this actually make selected queries faster?
+  - how does this work in bitemp when you're not necessarily only replacing one row, and maybe only for part of its range?
+  - what would this look like?
+
+looking at the use cases, and their queries:
+- tweets
+  - tweet by id
+    - only one tweet with that id.
+    - don't want to make too many (any?) requests to confirm it's the current version
+  - timeline for a user
+    - find tweets for a user, order by time desc
+    - scan for =:tweet/user-id "jarohen"=,
+    - again, for each tweet, don't want to make too many requests to confirm it's the current version
+- customer details
+  - customer by id, current
+    - same as tweet-by-id
+  - customer by id, as-of
+    - same, but with a watermark
+  - customer by unique key (email, say)
+    - similar to timeline-for-a-user
+- orders
+  - order by id, current state
+  - order by id, history
+- active sessions
+- share prices (modelled by valid-time, eid = ticker)
+  - current price
+  - price as-of vt
+  - price history
+
+thoughts while writing out the above:
+- real handy if we didn't need to scan for temporal data - e.g. if it were block-aligned with the data itself.
+- TPC-BiH uses user-defined times as valid-times - do we want to do the same?
+- sibling temporal indices - like eviction, we could add revisions for the temporal index of a chunk
+
+'just enough schema'
+- would a =:crux/type= key really help us out here, as a means of partitioning data, even if the schema of a type isn't fixed, and an entity isn't restricted to one type over time?
+- maybe partitioning by the attribute namespace?
+
 ** <2021-01-25 Mon>
 *** Metadata
 Problem: how do we efficiently intersect content + bitemporal?
