@@ -14,6 +14,10 @@ MonetDB/VectorWise:
 - [[https://ir.cwi.nl/pub/18687/18687B.pdf][The Story of Vectorwise]] (BDA Keynote)
 - [[https://www.monetdb.org/Assets/MonetDB-wiki/MonetDB-Insight.pdf][Open-source Database Technology Beyond Textbooks]] (presentation)
 
+SingleStore (formerly MemSQL):
+- https://www.singlestore.com/blog/linux-off-cpu-investigation/ - issues with =mmap=
+- [[https://www.singlestore.com/blog/memsql-singlestore-then-there-was-one/][Erasing any apparent difference between today's rowstore and columnstore tables]]
+
 ** Separating Storage from Compute
 blog posts:
 - https://ajstorm.medium.com/separating-compute-and-storage-59def4f27d64
