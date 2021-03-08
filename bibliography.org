@@ -30,7 +30,7 @@ papers:
 - [[https://www.eecg.utoronto.ca/~ashvin/publications/hailstorm.pdf][Hailstorm: Disaggregated Compute and Storage for Distributed LSM-based Databases]] - more of a cloud LSM implementation paper.
 
 ** CMU Courses
-- [[https://15445.courses.cs.cmu.edu/fall2020/][Intro to Database Systems (Fall 2020)]]
+- [[https://15445.courses.cs.cmu.edu/fall2020/schedule.html][Intro to Database Systems (Fall 2020)]]
 - [[https://15721.courses.cs.cmu.edu/spring2020/schedule.html][Advanced Database Systems (Spring 2020)]]
 
 ** Temporal
