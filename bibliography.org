@@ -55,11 +55,16 @@ papers:
   - [[https://drum.lib.umd.edu/bitstream/handle/1903/889/CS-TR-3764.pdf][Designing Access Methods for Bitemporal Databases]] advocates keeping two separate R*-trees - one for current (TT) data, one for historical
 - [[http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf][Comparison of Access Methods for Time-Evolving Data]]
 
-** Misc
-- [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
-- [[https://arxiv.org/pdf/1610.09166.pdf][Push vs. Pull-Based Loop Fusion in Query Engines]]
+** Trees
+- [[https://www.researchgate.net/profile/Susana-Ladra/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation/links/0fcfd51080b06db631000000/k2-Trees-for-Compact-Web-Graph-Representation.pdf?origin=publication_detail][k^{2}-trees for Compact Web Graph Representation]]
+- [[https://en.wikipedia.org/wiki/K-d_tree][k-d tree]] (wikipedia)
+- [[https://en.wikipedia.org/wiki/R*_tree][R* trees]]
 
 ** Array Programming
 - [[https://www.eecg.utoronto.ca/~jzhu/csc326/readings/iverson.pdf][Notation as a Tool of Thought]]
 - [[https://www.jsoftware.com/help/learning/contents.htm][Learning J]]
 - [[https://code.kx.com/q4m3/][Q for Mortals - An introduction to q programming]]
+
+** Misc
+- [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
+- [[https://arxiv.org/pdf/1610.09166.pdf][Push vs. Pull-Based Loop Fusion in Query Engines]]
