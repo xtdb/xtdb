@@ -68,12 +68,7 @@
 (defn- copy-group-key [^BufferAllocator allocator ^List k]
   (dotimes [n (.size k)]
     (let [x (.get k n)]
-      (when (instance? ArrowBufPointer x)
-        (let [^ArrowBufPointer x x
-              length (.getLength x)
-              buffer-copy (.buffer allocator length)]
-          (.setBytes buffer-copy 0 (.getBuf x) (.getOffset x) length)
-          (.set k n (ArrowBufPointer. buffer-copy 0 length))))))
+      (.set k n (util/maybe-copy-pointer allocator x))))
   k)
 
 (defn- release-group-key [k]
