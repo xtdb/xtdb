@@ -45,6 +45,7 @@ papers:
     - [[https://people.cs.aau.dk/~csj/Thesis/pdf/chapter36.pdf][R-Tree Based Indexing of Now-Relative Bitemporal Data]] - Ch 36
     - [[https://people.cs.aau.dk/~csj/Thesis/pdf/chapter37.pdf][Light-Weight Indexing of General Bitemporal Data]] - Ch 37
 - [[https://core.ac.uk/download/pdf/143854032.pdf][The POINT Approach to Represent now in Bitemporal Databases]]
+- [[http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf][Comparison of Access Methods for Time-Evolving Data]]
 
 ** Misc
 - [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
