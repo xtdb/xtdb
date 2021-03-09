@@ -1,12 +1,14 @@
 (ns core2.indexer
   (:require core2.metadata
             core2.object-store
+            core2.temporal
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
             [core2.metadata :as meta])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataManager
+           core2.temporal.ITemporalManager
            core2.object_store.ObjectStore
            [core2.tx TransactionInstant Watermark]
            core2.util.IChunkCursor
@@ -53,7 +55,7 @@
 
     (util/set-vector-schema-root-row-count content-root (inc value-count))))
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-time-field
+(def ^:private ^Field tx-time-field
   (t/->primitive-dense-union-field "_tx-time" #{:timestampmilli}))
 
 (def ^:private timestampmilli-type-id
@@ -67,7 +69,7 @@
     (-> (.getTimeStampMilliVector timestampmilli-type-id)
         (.setSafe 0 (.getTime tx-time)))))
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Field tx-id-field
+(def ^:private ^Field tx-id-field
   (t/->primitive-dense-union-field "_tx-id" #{:bigint}))
 
 (def ^:private bigint-type-id
@@ -156,6 +158,7 @@
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
+                  ^ITemporalManager temporal-mgr
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
                   ^Map live-roots
@@ -211,7 +214,8 @@
       (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
             op-type-ids (object-array (mapv (fn [^Field field]
                                               (keyword (.getName field)))
-                                            (.getChildren (.getField tx-ops-vec))))]
+                                            (.getChildren (.getField tx-ops-vec))))
+            tx-time-ms (.getTime ^Date (.tx-time tx-instant))]
         (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
                 op-vec (.getStruct tx-ops-vec op-type-id)
@@ -221,6 +225,9 @@
                          row-id (+ next-row-id per-op-offset)]
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
+
+                       (when (= "_id" (.getName value-vec))
+                         (.updateTxEndTime temporal-mgr (.getObject value-vec per-op-offset) row-id tx-time-ms))
 
                        (copy-safe! (.getLiveRoot this (.getName value-vec))
                                    value-vec per-op-offset row-id))
@@ -283,12 +290,14 @@
 (defn ->indexer
   (^core2.indexer.Indexer [^BufferAllocator allocator
                            ^ObjectStore object-store
-                           ^IMetadataManager metadata-mgr]
-   (->indexer allocator object-store metadata-mgr {}))
+                           ^IMetadataManager metadata-mgr
+                           ^ITemporalManager temporal-mgr]
+   (->indexer allocator object-store metadata-mgr temporal-mgr {}))
 
   (^core2.indexer.Indexer [^BufferAllocator allocator
                            ^ObjectStore object-store
                            ^IMetadataManager metadata-mgr
+                           ^ITemporalManager temporal-mgr
                            {:keys [max-rows-per-chunk max-rows-per-block]
                             :or {max-rows-per-chunk 10000
                                  max-rows-per-block 1000}}]
@@ -300,6 +309,7 @@
      (Indexer. allocator
                object-store
                metadata-mgr
+               temporal-mgr
                max-rows-per-chunk
                max-rows-per-block
                (ConcurrentSkipListMap.)

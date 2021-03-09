@@ -7,6 +7,7 @@
             [core2.json :as c2-json]
             [core2.metadata :as meta]
             [core2.select :as sel]
+            core2.temporal
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
             [core2.util :as util]
@@ -16,6 +17,7 @@
            [core2.core IngestLoop Node]
            core2.indexer.Indexer
            core2.metadata.IMetadataManager
+           core2.temporal.TemporalManager
            [core2.object_store FileSystemObjectStore ObjectStore]
            core2.tx.TransactionInstant
            [java.nio.file Files Path]
@@ -23,7 +25,8 @@
            java.util.Date
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector VarCharVector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.types.Types$MinorType))
+           org.apache.arrow.vector.types.Types$MinorType
+           org.apache.arrow.vector.util.Text))
 
 (defn- ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
@@ -110,7 +113,8 @@
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)
-            ^IMetadataManager mm (.metadata-manager node)]
+            ^IMetadataManager mm (.metadata-manager node)
+            ^TemporalManager tm (.temporal-manager node)]
 
         (t/is (every? nil? @(meta/with-latest-metadata mm
                               (juxt meta/latest-tx meta/latest-row-id))))
@@ -134,6 +138,14 @@
                        [(key first-column) (.getRowCount ^VectorSchemaRoot (val first-column))]))
               (t/is (= ["time" 2]
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
+
+        (t/testing "temporal"
+          (t/is (= {(Text. "device-info-demo000000") 0
+                    (Text. "reading-demo000000") 1
+                    (Text. "device-info-demo000001") 2
+                    (Text. "reading-demo000001") 3}
+                   (.id->row-id tm)))
+          (t/is (empty? (.row-id->tx-end-time tm))))
 
         (.finishChunk i)
 
@@ -397,7 +409,8 @@
             (let [^Indexer i (.indexer node)
                   ^IngestLoop il (.ingest-loop node)
                   ^ObjectStore os (.object-store node)
-                  ^IMetadataManager mm (.metadata-manager node)]
+                  ^IMetadataManager mm (.metadata-manager node)
+                  ^TemporalManager tm (.temporal-manager node)]
               (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
               (t/is (= first-half-tx-instant (.latestCompletedTx il)))
 
@@ -408,7 +421,10 @@
 
                 (t/is (= 5 (count @(.listObjects os "metadata-*"))))
                 (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
-                (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*")))))
+                (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*"))))
+
+                (t/is (= 3500 (count (.row-id->tx-end-time tm))))
+                (t/is (= 2000 (count (.id->row-id tm)))))
 
               (let [^TransactionInstant
                     second-half-tx-instant @(reduce
@@ -423,10 +439,14 @@
 
                 (with-open [new-node (c2/->local-node node-dir opts)]
                   (doseq [^Node node [new-node node]
-                          :let [^IngestLoop il (.ingest-loop node)]]
+                          :let [^IngestLoop il (.ingest-loop node)
+                                ^TemporalManager tm (.temporal-manager node)]]
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (.latestCompletedTx il))
-                              (.tx-id second-half-tx-instant))))
+                              (.tx-id second-half-tx-instant)))
+
+                    (t/is (>= (count (.row-id->tx-end-time tm)) 3500))
+                    (t/is (>= (count (.id->row-id tm)) 2000)))
 
                   (doseq [^Node node [new-node node]
                           :let [^IngestLoop il (.ingest-loop node)]]
@@ -436,7 +456,11 @@
                   (Thread/sleep 1000) ;; for now
 
                   (doseq [^Node node [new-node node]
-                          :let [^ObjectStore os (.object-store node)]]
+                          :let [^ObjectStore os (.object-store node)
+                                ^TemporalManager tm (.temporal-manager node)]]
                     (t/is (= 11 (count @(.listObjects os "metadata-*"))))
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
-                    (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))))))
+                    (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))
+
+                    (t/is (= 9000 (count (.row-id->tx-end-time tm))))
+                    (t/is (= 2000 (count (.id->row-id tm))))))))))))))

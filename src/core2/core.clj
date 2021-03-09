@@ -5,6 +5,7 @@
             [core2.log :as l]
             [core2.metadata :as meta]
             [core2.object-store :as os]
+            [core2.temporal :as temporal]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
@@ -12,6 +13,7 @@
            [core2.indexer Indexer TransactionIndexer]
            [core2.log LogReader LogRecord LogWriter]
            core2.metadata.IMetadataManager
+           core2.temporal.ITemporalManager
            core2.object_store.ObjectStore
            java.io.Closeable
            java.nio.file.Path
@@ -203,6 +205,7 @@
                ^LogReader log-reader
                ^ObjectStore object-store
                ^IMetadataManager metadata-manager
+               ^ITemporalManager temporal-manager
                ^Indexer indexer
                ^IngestLoop ingest-loop
                ^BufferPool buffer-pool]
@@ -227,9 +230,10 @@
          object-store (os/->file-system-object-store object-dir opts)
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
          metadata-manager (meta/->metadata-manager allocator object-store buffer-pool)
-         indexer (indexer/->indexer allocator object-store metadata-manager opts)
+         temporal-manager (temporal/->temporal-manager allocator buffer-pool metadata-manager)
+         indexer (indexer/->indexer allocator object-store metadata-manager temporal-manager opts)
          ingest-loop (->ingest-loop log-reader indexer opts)]
-     (Node. allocator log-reader object-store metadata-manager indexer ingest-loop buffer-pool))))
+     (Node. allocator log-reader object-store metadata-manager temporal-manager indexer ingest-loop buffer-pool))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
