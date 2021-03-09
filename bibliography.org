@@ -44,7 +44,11 @@ papers:
   - Implementation
     - [[https://people.cs.aau.dk/~csj/Thesis/pdf/chapter36.pdf][R-Tree Based Indexing of Now-Relative Bitemporal Data]] - Ch 36
     - [[https://people.cs.aau.dk/~csj/Thesis/pdf/chapter37.pdf][Light-Weight Indexing of General Bitemporal Data]] - Ch 37
-- [[https://core.ac.uk/download/pdf/143854032.pdf][The POINT Approach to Represent now in Bitemporal Databases]]
+- [[https://core.ac.uk/download/pdf/143854032.pdf][The POINT Approach to Represent now in Bitemporal Databases]], uses [[https://en.wikipedia.org/wiki/R*_tree][R* trees]]
+  Implementing spatial indexes using Long/MAX_VALUE to denote 'still valid' is inefficient, because this creates big rectangles in vt/tt space.
+  Spatial indexes perform better with smaller rectangles, because each level in the tree is represented by the bounding box of all of the points/lines/rectangles within.
+  By implementing 'still valid' as start-vt=end-vt, this reduces the size of the bounding boxes.
+  Cost is that queries then need to do a disjunction of 'rectangles that overlap ∨ points within', but this is offset in practice by more efficient use of the index.
 - [[http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf][Comparison of Access Methods for Time-Evolving Data]]
 
 ** Misc
