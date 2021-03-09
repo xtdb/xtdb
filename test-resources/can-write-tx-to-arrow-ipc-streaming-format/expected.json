@@ -304,14 +304,20 @@
             }]
           }]
         }]
-      },{
-        "name" : "delete",
-        "nullable" : false,
-        "type" : {
-          "name" : "struct"
-        },
-        "children" : [ ]
-      }]
+      },{"name": "delete",
+         "nullable": false,
+         "type": {
+           "name": "struct"
+         },
+         "children": [{
+             "name": "document",
+             "nullable": false,
+             "type": {
+               "name": "struct"
+             },
+             "children": []
+         }]
+        }]
     }]
   },
   "batches" : [{
@@ -529,7 +535,12 @@
       },{
         "name" : "delete",
         "count" : 0,
-        "VALIDITY" : [ ]
+        "VALIDITY" : [ ],
+          "children": [{
+              "name": "document",
+              "count": 0,
+              "VALIDITY": []
+          }]
       }]
     }]
   }]

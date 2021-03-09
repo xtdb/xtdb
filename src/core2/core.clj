@@ -31,20 +31,26 @@
 (definterface TxProducer
   (^java.util.concurrent.CompletableFuture submitTx [_]))
 
-(defn- ->put-k-types [tx-ops]
-  (let [put-k-types (LinkedHashMap.)]
+(defn- ->doc-k-types [tx-ops op-type]
+  (let [doc-k-types (LinkedHashMap.)]
     (doseq [{:keys [op] :as tx-op} tx-ops
-            :when [(= :put op)]
-            :let [doc (:doc tx-op)]
-            [k v] doc]
-      (let [^Set field-types (.computeIfAbsent put-k-types k (util/->jfn (fn [_] (LinkedHashSet.))))]
+            :when (= op-type op)
+            [k v] (:doc tx-op)]
+      (let [^Set field-types (.computeIfAbsent doc-k-types k (util/->jfn (fn [_] (LinkedHashSet.))))]
         (.add field-types (t/->arrow-type (type v)))))
 
-    put-k-types))
+    doc-k-types))
 
-(defn- ->put-fields [put-k-types]
+(defn- transform-deletes [tx-ops]
+  (for [{:keys [op doc] :as tx-op} tx-ops]
+    (if (= :delete op)
+      (do (assert (= #{:_id} (set (keys doc))))
+          (assoc tx-op :doc {:_id (:_id doc) :_tombstone true}))
+      tx-op)))
+
+(defn- ->doc-fields [doc-k-types]
   (apply t/->field "document" (.getType Types$MinorType/STRUCT) false
-         (for [[k v-types] put-k-types
+         (for [[k v-types] doc-k-types
                :let [v-types (sort-by #(.getFlatbufID (.getTypeID ^ArrowType %)) v-types)]]
            (apply t/->field
                   (name k)
@@ -56,34 +62,35 @@
                     (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type false))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (let [put-k-types (->put-k-types tx-ops)
+  (let [tx-ops (transform-deletes tx-ops)
+        put-k-types (->doc-k-types tx-ops :put)
+        delete-k-types (->doc-k-types tx-ops :delete)
         tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
-                                       (t/->field "put" (.getType Types$MinorType/STRUCT) false (->put-fields put-k-types))
-                                       (t/->field "delete" (.getType Types$MinorType/STRUCT) false))])]
+                                       (t/->field "put" (.getType Types$MinorType/STRUCT) false (->doc-fields put-k-types))
+                                       (t/->field "delete" (.getType Types$MinorType/STRUCT) false (->doc-fields delete-k-types)))])]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
-      (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")
-            ^StructVector put-vec (.getStruct tx-ops-duv 0)
-            ^StructVector document-vec (.getChild put-vec "document" StructVector)]
+      (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
 
         (dotimes [tx-op-n (count tx-ops)]
           (let [{:keys [op] :as tx-op} (nth tx-ops tx-op-n)
-                tx-op-offset (util/write-type-id tx-ops-duv tx-op-n (case op :put 0, :delete 1))]
+                op-type-id (case op :put 0, :delete 1)
+                ^StructVector op-vec (.getStruct tx-ops-duv op-type-id)
+                ^StructVector document-vec (.getChild op-vec "document" StructVector)
+                tx-op-offset (util/write-type-id tx-ops-duv tx-op-n op-type-id)]
             (case op
-              :put (do
-                     (.setIndexDefined put-vec tx-op-offset)
-                     (.setIndexDefined document-vec tx-op-offset)
+              (:put :delete) (do
+                               (.setIndexDefined op-vec tx-op-offset)
+                               (.setIndexDefined document-vec tx-op-offset)
 
-                     (let [{:keys [doc]} tx-op]
-                       (doseq [[k v] doc
-                               :let [^DenseUnionVector value-duv (.getChild document-vec (name k) DenseUnionVector)]]
-                         (if (some? v)
-                           (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                                 value-offset (util/write-type-id value-duv tx-op-offset type-id)]
-                             (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
+                               (let [{:keys [doc]} tx-op]
+                                 (doseq [[k v] doc
+                                         :let [^DenseUnionVector value-duv (.getChild document-vec (name k) DenseUnionVector)]]
+                                   (if (some? v)
+                                     (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                                           value-offset (util/write-type-id value-duv tx-op-offset type-id)]
+                                       (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
 
-                           (util/set-value-count value-duv (inc (.getValueCount value-duv)))))))
-
-              :delete nil)))
+                                     (util/set-value-count value-duv (inc (.getValueCount value-duv))))))))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
 

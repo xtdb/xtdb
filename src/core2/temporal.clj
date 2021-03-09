@@ -20,6 +20,8 @@
 
 (definterface ITemporalManager
   (^void updateTxEndTime [^Object id ^long row-id ^long tx-time])
+  (^void registerTombstone [^long row-id])
+  (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
   (^org.apache.arrow.vector.VectorSchemaRoot createTxEndTimeRoot [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-end-time-field
@@ -34,7 +36,8 @@
 (deftype TemporalManager [^BufferAllocator allocator
                           ^BufferPool buffer-pool
                           ^Map row-id->tx-end-time
-                          ^Map id->row-id]
+                          ^Map id->row-id
+                          ^Roaring64Bitmap tombstone-row-ids]
   ITemporalManager
   (updateTxEndTime [_ id row-id tx-time]
     (let [id (if (bytes? id)
@@ -43,6 +46,13 @@
       (when-let [prev-row-id (.get id->row-id id)]
         (.put row-id->tx-end-time prev-row-id tx-time))
       (.put id->row-id id row-id)))
+
+  (removeTombstonesFrom [_ row-id-bitmap]
+    (doto row-id-bitmap
+      (.andNot tombstone-row-ids)))
+
+  (registerTombstone [_ row-id]
+    (.addLong tombstone-row-ids row-id))
 
   (createTxEndTimeRoot [_ row-id-bitmap]
     (let [out-root (VectorSchemaRoot/create allocator tx-end-time-schema)
@@ -66,13 +76,16 @@
   Closeable
   (close [_]
     (.clear row-id->tx-end-time)
-    (.clear id->row-id)))
+    (.clear id->row-id)
+    (.clear tombstone-row-ids)))
 
 (defn- populate-known-chunks [^TemporalManager temporal-manager ^SortedSet known-chunks]
   (->> (for [chunk-idx known-chunks
              fut [(-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_id"))
                       (util/then-apply util/try-close))
                   (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tx-time"))
+                      (util/then-apply util/try-close))
+                  (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tombstone"))
                       (util/then-apply util/try-close))]]
          fut)
        (vec)
@@ -100,10 +113,23 @@
                                                             (.updateTxEndTime temporal-manager
                                                                               (.getObject id-vec n)
                                                                               (.get row-id-vec n)
-                                                                              (.get tx-time-vec n)))))))))))))))
+                                                                              (.get tx-time-vec n)))))))))))))
+
+    (when-let [^ArrowBuf tombstone-buffer @(.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tombstone"))]
+      (with-open [tombstone-buffer tombstone-buffer
+                  tombstone-chunks (util/->chunks tombstone-buffer (.allocator temporal-manager))]
+        (.forEachRemaining tombstone-chunks
+                           (reify Consumer
+                             (accept [_ tombstone-root]
+                               (let [^VectorSchemaRoot tombstone-root tombstone-root
+                                     ^BigIntVector row-id-vec (.getVector tombstone-root 0)
+                                     ^DenseUnionVector tombstone-duv-vec (.getVector tombstone-root 1)]
+                                 (dotimes [n (.getRowCount tombstone-root)]
+                                   (when (.getObject tombstone-duv-vec n)
+                                     (.registerTombstone temporal-manager (.get row-id-vec n))))))))))))
 
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
                                                            ^BufferPool buffer-pool
                                                            ^IMetadataManager metadata-manager]
-  (doto (TemporalManager. allocator buffer-pool (ConcurrentHashMap.) (HashMap.))
+  (doto (TemporalManager. allocator buffer-pool (ConcurrentHashMap.) (HashMap.) (Roaring64Bitmap.))
     (populate-known-chunks (.knownChunks metadata-manager))))

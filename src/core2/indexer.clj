@@ -221,22 +221,26 @@
                 op-vec (.getStruct tx-ops-vec op-type-id)
                 per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
             (case (aget op-type-ids op-type-id)
-              :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
-                         row-id (+ next-row-id per-op-offset)]
-                     (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
-                             :when (not (neg? (.getTypeId value-vec per-op-offset)))]
+              (:put :delete) (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
+                                   row-id (+ next-row-id per-op-offset)]
+                               (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
+                                       :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
-                       (when (= "_id" (.getName value-vec))
-                         (.updateTxEndTime temporal-mgr (.getObject value-vec per-op-offset) row-id tx-time-ms))
+                                 (when (= "_id" (.getName value-vec))
+                                   (.updateTxEndTime temporal-mgr (.getObject value-vec per-op-offset) row-id tx-time-ms))
 
-                       (copy-safe! (.getLiveRoot this (.getName value-vec))
-                                   value-vec per-op-offset row-id))
+                                 (when (and (= "_tombstone" (.getName value-vec))
+                                            (.getObject value-vec per-op-offset))
+                                   (.registerTombstone temporal-mgr row-id))
 
-                     (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
-                                 tx-time-vec 0 row-id)
+                                 (copy-safe! (.getLiveRoot this (.getName value-vec))
+                                             value-vec per-op-offset row-id))
 
-                     (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
-                                 tx-id-vec 0 row-id)))))
+                               (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
+                                           tx-time-vec 0 row-id)
+
+                               (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
+                                           tx-id-vec 0 row-id)))))
 
         (.getValueCount tx-ops-vec))))
 

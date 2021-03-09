@@ -44,9 +44,11 @@
   (let [row-id-bitmaps (for [col-name col-names
                              :when (not (tx-end-time-col? col-name))]
                          (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
-        row-id-bitmap (reduce #(.and ^Roaring64Bitmap %1 %2)
+        row-id-bitmap (reduce #(doto ^Roaring64Bitmap %1
+                                 (.and %2))
                               (first row-id-bitmaps)
                               (rest row-id-bitmaps))
+        row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
         tx-end-time-root (when (some tx-end-time-col? col-names)
                            (.createTxEndTimeRoot temporal-manager row-id-bitmap))]
     (try
