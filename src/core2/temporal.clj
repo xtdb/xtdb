@@ -22,14 +22,14 @@
   (^void updateTxEndTime [^Object id ^long row-id ^long tx-time])
   (^org.apache.arrow.vector.VectorSchemaRoot createTxEndTimeRoot [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
-(def ^:private ^Field tx-end-time-field
+(def ^org.apache.arrow.vector.types.pojo.Field tx-end-time-field
   (t/->primitive-dense-union-field "_tx-end-time" #{:timestampmilli}))
 
 (def ^:private timestampmilli-type-id
   (-> (t/primitive-type->arrow-type :timestampmilli)
       (t/arrow-type->type-id)))
 
-(def ^:private tx-end-time-schema (Schema. [t/row-id-field tx-end-time-field]))
+(def ^org.apache.arrow.vector.types.pojo.Schema tx-end-time-schema (Schema. [t/row-id-field tx-end-time-field]))
 
 (deftype TemporalManager [^BufferAllocator allocator
                           ^BufferPool buffer-pool

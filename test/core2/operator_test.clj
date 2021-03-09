@@ -21,6 +21,7 @@
       (let [allocator (.allocator node)
             buffer-pool (.buffer-pool node)
             metadata-mgr (.metadata-manager node)
+            temporal-mgr (.temporal-manager node)
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)]
 
@@ -39,7 +40,7 @@
 
         (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
               metadata-pred (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)
-              op-factory (op/->operator-factory allocator metadata-mgr buffer-pool)]
+              op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)]
 
           (letfn [(query-ivan [watermark]
                     (let [!results (atom [])]

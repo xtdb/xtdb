@@ -6,9 +6,12 @@
             [core2.operator.rename :as rename]
             [core2.operator.scan :as scan]
             [core2.operator.select :as select]
-            [core2.operator.slice :as slice])
+            [core2.operator.slice :as slice]
+            core2.metadata
+            core2.temporal)
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
+           core2.temporal.ITemporalManager
            org.apache.arrow.memory.BufferAllocator))
 
 (definterface IOperatorFactory
@@ -46,11 +49,12 @@
   ^core2.operator.IOperatorFactory
   [^BufferAllocator allocator
    ^IMetadataManager metadata-mgr
+   ^ITemporalManager temporal-mgr
    ^BufferPool buffer-pool]
 
   (reify IOperatorFactory
     (scan [_ watermark col-names metadata-pred col-preds]
-      (scan/->scan-cursor allocator metadata-mgr buffer-pool
+      (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
                           watermark col-names metadata-pred col-preds))
 
     (select [_ in-cursor pred]
