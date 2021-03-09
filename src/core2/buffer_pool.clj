@@ -3,7 +3,7 @@
             [core2.util :as util])
   (:import [core2.object_store ObjectStore]
            [java.io Closeable]
-           [java.nio.file CopyOption Files Path StandardCopyOption]
+           [java.nio.file Files Path]
            [java.util Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -22,17 +22,16 @@
         (if-not (= ::not-found v)
           (CompletableFuture/completedFuture (doto ^ArrowBuf v
                                                (.retain)))
-          (let [buffer-path (.resolve root-path k)
-                to-path-temp (.resolveSibling buffer-path (str "." (UUID/randomUUID)))]
+          (let [buffer-path (.resolve root-path k)]
             (util/then-apply
               (if (util/path-exists buffer-path)
                 (CompletableFuture/completedFuture buffer-path)
-                (.getObject object-store k to-path-temp))
-              (fn [^Path to-path-temp]
-                (Files/move to-path-temp buffer-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
-                (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                          (util/->arrow-buf-view allocator (util/->mmap-path buffer-path)))))
-                  (.retain)))))))))
+                (.getObject object-store k buffer-path))
+              (fn [^Path buffer-path]
+                (when buffer-path
+                  (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                            (util/->arrow-buf-view allocator (util/->mmap-path buffer-path)))))
+                    (.retain))))))))))
 
   (evictBuffer [_ k]
     (when-let [^ArrowBuf buffer (.remove buffers k)]

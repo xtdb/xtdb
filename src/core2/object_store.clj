@@ -21,8 +21,13 @@
     (util/completable-future pool
       (let [from-path (.resolve root-path k)]
         (when (util/path-exists from-path)
-          (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
-          to-path))))
+          (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
+            (try
+              (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
+              (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE StandardCopyOption/REPLACE_EXISTING]))
+              to-path
+              (finally
+                (Files/deleteIfExists to-path-temp))))          to-path))))
 
   (putObject [_this k buf]
     (util/completable-future pool
