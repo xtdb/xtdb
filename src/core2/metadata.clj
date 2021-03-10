@@ -76,7 +76,7 @@
     (MinMaxImpl. rw (t/type->comp minor-type) (.newHolder rw) (.newHolder rw) (.newHolder rw))))
 
 (defn- write-min-max [^FieldVector field-vec, ^VectorSchemaRoot metadata-root, idx]
-  (let [^byte type-id (t/arrow-type->type-id (.getType (.getField field-vec)))
+  (let [type-id (byte (t/arrow-type->type-id (.getType (.getField field-vec))))
 
         ^DenseUnionVector min-vec (.getVector metadata-root "min")
         min-offset (util/write-type-id min-vec idx type-id)
@@ -93,7 +93,7 @@
   (letfn [(write-vec-meta [^FieldVector field-vec ^String field-name]
             (when (pos? (.getValueCount field-vec))
               (let [idx (.getRowCount metadata-root)
-                    ^byte type-id (t/arrow-type->type-id (.getType (.getField field-vec)))]
+                    type-id (byte (t/arrow-type->type-id (.getType (.getField field-vec))))]
 
                 (doto ^VarCharVector (.getVector metadata-root column-name-field)
                   (.setSafe idx (Text. col-name)))
