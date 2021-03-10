@@ -124,18 +124,20 @@
     (CompletableFuture/completedFuture nil)))
 
 (defn field-idx ^long [^VectorSchemaRoot metadata-root column-name field-name ^Types$MinorType minor-type]
-  (let [type-id (t/arrow-type->type-id (.getType minor-type))]
-    (-> (sel/search (.getVector metadata-root column-name-field)
-                    (sel/->str-compare column-name))
+  (let [type-id (t/arrow-type->type-id (.getType minor-type))
+        idx-bitmap (-> (sel/search (.getVector metadata-root column-name-field)
+                                   (sel/->str-compare column-name))
 
-        (sel/select (.getVector metadata-root field-name-field)
-                    (sel/->str-pred sel/pred= field-name))
+                       (sel/select (.getVector metadata-root field-name-field)
+                                   (sel/->str-pred sel/pred= field-name))
 
-        (cond-> minor-type (sel/select (.getVector metadata-root type-id-field)
-                                       (sel/->vec-pred sel/pred= (doto (NullableTinyIntHolder.)
-                                                                   (-> .isSet (set! 1))
-                                                                   (-> .value (set! type-id))))))
-        (.nextValue 0))))
+                       (cond-> minor-type (sel/select (.getVector metadata-root type-id-field)
+                                                      (sel/->vec-pred sel/pred= (doto (NullableTinyIntHolder.)
+                                                                                  (-> .isSet (set! 1))
+                                                                                  (-> .value (set! type-id)))))))]
+    (if (.isEmpty idx-bitmap)
+      -1
+      (.first idx-bitmap))))
 
 (defn- read-max-value [^VectorSchemaRoot metadata-root, ^long idx, ^ValueHolder out-holder]
   (t/read-duv-value (.getVector metadata-root "max") idx out-holder))
@@ -186,7 +188,7 @@
 
 (defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
   (->> (for [^long chunk-idx (.knownChunks metadata-mgr)
-             :while (< chunk-idx (.chunk-idx watermark))]
+             :while (or (nil? watermark) (< chunk-idx (.chunk-idx watermark)))]
          (MapEntry/create chunk-idx (with-metadata metadata-mgr chunk-idx metadata-pred)))
        vec (filter (comp deref val)) keys))
 

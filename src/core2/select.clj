@@ -118,7 +118,7 @@
             (.getVectorByType ^DenseUnionVector field-vec (.type-id ^DenseUnionPredicate vec-predicate))
             (.vec-pred ^DenseUnionPredicate vec-predicate))
 
-     (do (assert (or (nil? idx-bitmap) (< (.last idx-bitmap) (.getValueCount field-vec))))
+     (do (assert (or (nil? idx-bitmap) (.isEmpty idx-bitmap) (< (.last idx-bitmap) (.getValueCount field-vec))))
          (let [res (RoaringBitmap.)]
 
            (-> ^IntStream (if idx-bitmap
