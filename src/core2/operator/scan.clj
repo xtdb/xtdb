@@ -50,7 +50,7 @@
                               (rest row-id-bitmaps))
         row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
         tx-time-end-root (when (some tx-time-end-col? col-names)
-                           (.createTemporalRoot temporal-manager [(.getName temporal/tx-time-end-field)] col-preds row-id-bitmap))]
+                           (.createTemporalRoot temporal-manager [(.getName temporal/tx-time-end-field)] row-id-bitmap))]
     (try
       (let [roots (for [col-name col-names]
                     (if (tx-time-end-col? col-name)

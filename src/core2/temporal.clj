@@ -23,7 +23,6 @@
   (^void registerTombstone [^long row-id])
   (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
   (^org.apache.arrow.vector.VectorSchemaRoot createTemporalRoot [^java.util.List columns
-                                                                 ^java.util.Map col-preds
                                                                  ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-time-end-field
@@ -60,7 +59,7 @@
   (registerTombstone [_ row-id]
     (.addLong tombstone-row-ids row-id))
 
-  (createTemporalRoot [_ columns col-preds row-id-bitmap]
+  (createTemporalRoot [_ columns row-id-bitmap]
     (assert (= ["_tx-time-end"] columns))
     (let [out-root (VectorSchemaRoot/create allocator tx-time-end-schema)
           ^BigIntVector row-id-vec (.getVector out-root 0)

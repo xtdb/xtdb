@@ -254,11 +254,10 @@
                                    value-vec per-op-offset row-id)))
 
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
-                        (when (not (neg? (.getTypeId id-vec per-op-offset)))
-                          (.put temporal-coordinates (.getName id-vec) (.getObject id-vec per-op-offset))
+                        (.put temporal-coordinates (.getName id-vec) (.getObject id-vec per-op-offset))
 
-                          (copy-safe! (.getLiveRoot this (.getName id-vec))
-                                      id-vec per-op-offset row-id))))
+                        (copy-safe! (.getLiveRoot this (.getName id-vec))
+                                    id-vec per-op-offset row-id)))
 
             (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
                         tx-time-vec 0 row-id)
