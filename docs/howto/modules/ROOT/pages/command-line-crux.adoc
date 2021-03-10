@@ -10,7 +10,7 @@
 
 Without writing a single line of code, this guide will show you how to spin up an in-memory Crux node on your development machine in less than 2 minutes. Then we'll show you how to talk to it over HTTP from the command line.
 
-NOTE: This blog will be skipping a large amount of information about Crux, how it works, and much of its available functionality. For more information about the Crux HTTP API, please take a look at the https://opencrux.com/reference/http.html[Crux HTTP module documentation].
+NOTE: This guide will be skipping a large amount of information about Crux, how it works, and much of its available functionality. For more information about the Crux HTTP API, please take a look at the https://opencrux.com/reference/http.html[Crux HTTP module documentation].
 Throughout this guide, you will see links to targeted extra reading and information, should you wish to read more.
 
 == Part 1: Getting a Crux node running on your local machine
