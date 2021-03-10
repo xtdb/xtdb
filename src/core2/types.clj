@@ -73,10 +73,10 @@
 (def primitive-types
   #{:null :bigint :float8 :varbinary :varchar :bit :timestampmilli})
 
-(defn arrow-type->type-id [^ArrowType arrow-type]
-  (.getFlatbufID (.getTypeID arrow-type)))
+(defn arrow-type->type-id ^long [^ArrowType arrow-type]
+  (long (.getFlatbufID (.getTypeID arrow-type))))
 
-(defn primitive-type->arrow-type [type-k]
+(defn primitive-type->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [type-k]
   (.getType ^Types$MinorType (->minor-type type-k)))
 
 (defn ->primitive-dense-union-field

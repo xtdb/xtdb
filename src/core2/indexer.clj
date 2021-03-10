@@ -97,7 +97,6 @@
     (-> (.getBitVector bit-type-id)
         (.setSafe 0 (if tombstone? 1 0)))))
 
-
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 

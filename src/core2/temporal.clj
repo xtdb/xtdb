@@ -80,18 +80,18 @@
     (.clear tombstone-row-ids)))
 
 (defn- populate-known-chunks [^TemporalManager temporal-manager ^IMetadataManager metadata-manager]
-  (let [known-chunks (.knownChunks metadata-manager)]
-    (let [futs (reduce (fn [acc chunk-idx]
-                         (conj acc
-                               (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_id"))
-                                   (util/then-apply util/try-close))
-                               (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tx-time"))
-                                   (util/then-apply util/try-close))
-                               (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tombstone"))
-                                   (util/then-apply util/try-close))))
-                       []
-                       known-chunks)]
-      @(CompletableFuture/allOf (into-array CompletableFuture futs)))
+  (let [known-chunks (.knownChunks metadata-manager)
+        futs (reduce (fn [acc chunk-idx]
+                       (conj acc
+                             (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_id"))
+                                 (util/then-apply util/try-close))
+                             (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tx-time"))
+                                 (util/then-apply util/try-close))
+                             (-> (.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tombstone"))
+                                 (util/then-apply util/try-close))))
+                     []
+                     known-chunks)]
+    @(CompletableFuture/allOf (into-array CompletableFuture futs))
     (doseq [chunk-idx known-chunks]
       (with-open [^ArrowBuf id-buffer @(.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_id"))
                   ^ArrowBuf tx-time-buffer @(.getBuffer ^BufferPool (.buffer-pool temporal-manager) (meta/->chunk-obj-key chunk-idx "_tx-time"))
