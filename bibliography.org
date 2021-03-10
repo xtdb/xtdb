@@ -54,6 +54,7 @@ papers:
   Cost is that queries then need to do a disjunction of 'rectangles that overlap ∨ points within', but this is offset in practice by more efficient use of the index.
   - [[https://drum.lib.umd.edu/bitstream/handle/1903/889/CS-TR-3764.pdf][Designing Access Methods for Bitemporal Databases]] advocates keeping two separate R*-trees - one for current (TT) data, one for historical
 - [[http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf][Comparison of Access Methods for Time-Evolving Data]]
+- [[https://standards.iso.org/ittf/PubliclyAvailableStandards/c060394_ISO_IEC_TR_19075-2_2015.zip][ISO/IEC JTC 1/SC 32: SQL Technical Reports — Part 2: SQL Support for Time-Related Information]]
 
 ** Trees
 - [[https://www.researchgate.net/profile/Susana-Ladra/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation/links/0fcfd51080b06db631000000/k2-Trees-for-Compact-Web-Graph-Representation.pdf?origin=publication_detail][k^{2}-trees for Compact Web Graph Representation]]
