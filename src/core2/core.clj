@@ -41,12 +41,11 @@
 
     doc-k-types))
 
-(defn- transform-deletes [tx-ops]
-  (for [{:keys [op doc] :as tx-op} tx-ops]
-    (if (= :delete op)
-      (do (assert (= #{:_id} (set (keys doc))))
-          (assoc tx-op :doc {:_id (:_id doc) :_tombstone true}))
-      tx-op)))
+(defn- validate-tx-ops [tx-ops]
+  (doseq [{:keys [op doc] :as tx-op} tx-ops]
+    (case op
+      :put (assert (contains? doc :_id))
+      :delete (assert (= #{:_id} (set (keys doc)))))))
 
 (defn- ->doc-fields [doc-k-types]
   (apply t/->field "document" (.getType Types$MinorType/STRUCT) false
@@ -62,8 +61,8 @@
                     (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type false))))))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (let [tx-ops (transform-deletes tx-ops)
-        put-k-types (->doc-k-types tx-ops :put)
+  (validate-tx-ops tx-ops)
+  (let [put-k-types (->doc-k-types tx-ops :put)
         delete-k-types (->doc-k-types tx-ops :delete)
         tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
                                        (t/->field "put" (.getType Types$MinorType/STRUCT) false (->doc-fields put-k-types))

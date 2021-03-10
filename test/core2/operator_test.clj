@@ -25,15 +25,15 @@
             ^Indexer i (.indexer node)
             ^IngestLoop il (.ingest-loop node)]
 
-        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :id 0}}])
+        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :_id 0}}])
              (tu/then-await-tx il))
 
         (.finishChunk i)
 
-        @(.submitTx tx-producer [{:op :put, :doc {:name "James", :id 1}}
-                                 {:op :put, :doc {:name "Dan", :id 2}}])
+        @(.submitTx tx-producer [{:op :put, :doc {:name "James", :_id 1}}
+                                 {:op :put, :doc {:name "Dan", :_id 2}}])
 
-        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jon", :id 3}}])
+        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jon", :_id 3}}])
              (tu/then-await-tx il))
 
         (.finishChunk i)
@@ -56,7 +56,7 @@
               (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
                     "only needs to scan chunk 1")
 
-              @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :id 4}}])
+              @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :_id 4}}])
                    (tu/then-await-tx il))
 
               (t/is (= #{[(Text. "James")]

@@ -83,6 +83,21 @@
     (-> (.getBigIntVector bigint-type-id)
         (.setSafe 0 tx-id))))
 
+(def ^:private ^Field tombstone-field
+  (t/->primitive-dense-union-field "_tombstone" #{:bit}))
+
+(def ^:private bit-type-id
+  (-> (t/primitive-type->arrow-type :bit)
+      (t/arrow-type->type-id)))
+
+(defn ->tombstone-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Boolean tombstone?]
+  (doto ^DenseUnionVector (.createVector tombstone-field allocator)
+    (util/set-value-count 1)
+    (util/write-type-id 0 bit-type-id)
+    (-> (.getBitVector bit-type-id)
+        (.setSafe 0 (if tombstone? 1 0)))))
+
+
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
@@ -207,7 +222,8 @@
                 sr (ArrowStreamReader. tx-ops-ch allocator)
                 tx-root (.getVectorSchemaRoot sr)
                 ^DenseUnionVector tx-id-vec (->tx-id-vec allocator (.tx-id tx-instant))
-                ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))]
+                ^DenseUnionVector tx-time-vec (->tx-time-vec allocator (.tx-time tx-instant))
+                ^DenseUnionVector tombstone-vec (->tombstone-vec allocator true)]
 
       (.loadNextBatch sr)
 
@@ -218,29 +234,30 @@
             tx-time-ms (.getTime ^Date (.tx-time tx-instant))]
         (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
+                per-op-offset (.getOffset tx-ops-vec tx-op-idx)
                 op-vec (.getStruct tx-ops-vec op-type-id)
-                per-op-offset (.getOffset tx-ops-vec tx-op-idx)]
-            (case (aget op-type-ids op-type-id)
-              (:put :delete) (let [^StructVector document-vec (.getChild op-vec "document" StructVector)
-                                   row-id (+ next-row-id per-op-offset)]
-                               (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
-                                       :when (not (neg? (.getTypeId value-vec per-op-offset)))]
+                ^StructVector document-vec (.getChild op-vec "document" StructVector)
+                row-id (+ next-row-id per-op-offset)
+                op (aget op-type-ids op-type-id)]
+            (case op
+              (:put :delete) (do (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
+                                         :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
-                                 (when (= "_id" (.getName value-vec))
-                                   (.updateTxEndTime temporal-mgr (.getObject value-vec per-op-offset) row-id tx-time-ms))
+                                   (when (= "_id" (.getName value-vec))
+                                     (.updateTxEndTime temporal-mgr (.getObject value-vec per-op-offset) row-id tx-time-ms))
 
-                                 (when (and (= "_tombstone" (.getName value-vec))
-                                            (.getObject value-vec per-op-offset))
-                                   (.registerTombstone temporal-mgr row-id))
+                                   (copy-safe! (.getLiveRoot this (.getName value-vec))
+                                               value-vec per-op-offset row-id))
 
-                                 (copy-safe! (.getLiveRoot this (.getName value-vec))
-                                             value-vec per-op-offset row-id))
+                                 (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
+                                             tx-time-vec 0 row-id)
 
-                               (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
-                                           tx-time-vec 0 row-id)
-
-                               (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
-                                           tx-id-vec 0 row-id)))))
+                                 (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
+                                             tx-id-vec 0 row-id)))
+            (when (= :delete op)
+              (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
+                          tombstone-vec 0 row-id)
+              (.registerTombstone temporal-mgr row-id))))
 
         (.getValueCount tx-ops-vec))))
 
