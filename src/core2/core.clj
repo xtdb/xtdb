@@ -1,5 +1,6 @@
 (ns core2.core
   (:require [clojure.tools.logging :as log]
+            [clojure.set :as set]
             [core2.buffer-pool :as bp]
             [core2.indexer :as indexer]
             [core2.log :as l]
@@ -43,10 +44,16 @@
     doc-k-types))
 
 (defn- validate-tx-ops [tx-ops]
-  (doseq [{:keys [op] :as tx-op} tx-ops]
+  (doseq [{:keys [op _valid-time _valid-time-end] :as tx-op} tx-ops]
     (case op
       :put (assert (contains? (:doc tx-op) :_id))
-      :delete (assert (= #{:_id} (set (keys tx-op)))))))
+      :delete (assert (and (contains? tx-op :_id)
+                           (set/subset? (set (keys tx-op)) #{:_id :_valid-time :_valid-time-end}))))
+
+    (when _valid-time
+      (assert (inst? _valid-time)))
+    (when _valid-time-end
+      (assert (inst? _valid-time-end)))))
 
 (defn- ->doc-field [k v-types]
   (let [v-types (sort-by #(.getFlatbufID (.getTypeID ^ArrowType %)) v-types)]
@@ -85,7 +92,7 @@
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
 
         (dotimes [tx-op-n (count tx-ops)]
-          (let [{:keys [op valid-time valid-time-end] :as tx-op} (nth tx-ops tx-op-n)
+          (let [{:keys [op _valid-time _valid-time-end] :as tx-op} (nth tx-ops tx-op-n)
                 op-type-id (case op :put 0, :delete 1)
                 ^StructVector op-vec (.getStruct tx-ops-duv op-type-id)
                 tx-op-offset (util/write-type-id tx-ops-duv tx-op-n op-type-id)
@@ -117,11 +124,11 @@
 
                           (util/set-value-count id-duv (inc (.getValueCount id-duv))))))
 
-            (if valid-time
-              (t/set-safe! valid-time-vec tx-op-n valid-time)
+            (if _valid-time
+              (t/set-safe! valid-time-vec tx-op-n _valid-time)
               (util/set-value-count valid-time-vec tx-op-n))
-            (if valid-time-end
-              (t/set-safe! valid-time-end-vec tx-op-n valid-time)
+            (if _valid-time-end
+              (t/set-safe! valid-time-end-vec tx-op-n _valid-time)
               (util/set-value-count valid-time-end-vec tx-op-n))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
