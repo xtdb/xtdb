@@ -303,21 +303,67 @@
               "children" : [ ]
             }]
           }]
+        },{
+          "name" : "_valid-time",
+          "nullable" : true,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MILLISECOND",
+            "timezone" : null
+          },
+          "children" : [ ]
+        },{
+          "name" : "_valid-time-end",
+          "nullable" : true,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MILLISECOND",
+            "timezone" : null
+          },
+          "children" : [ ]
         }]
-      },{"name": "delete",
-         "nullable": false,
-         "type": {
-           "name": "struct"
-         },
-         "children": [{
-             "name": "document",
-             "nullable": false,
-             "type": {
-               "name": "struct"
-             },
-             "children": []
-         }]
+      },{
+        "name" : "delete",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [5]
+          },
+          "children" : [{
+            "name" : "type-5",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "_valid-time",
+          "nullable" : true,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MILLISECOND",
+            "timezone" : null
+          },
+          "children" : [ ]
+        },{
+          "name" : "_valid-time-end",
+          "nullable" : true,
+          "type" : {
+            "name" : "timestamp",
+            "unit" : "MILLISECOND",
+            "timezone" : null
+          },
+          "children" : [ ]
         }]
+      }]
     }]
   },
   "batches" : [{
@@ -531,16 +577,44 @@
               "DATA" : [5.89988922E8]
             }]
           }]
+        },{
+          "name" : "_valid-time",
+          "count" : 2,
+          "VALIDITY" : [0,0],
+          "DATA" : [0,0]
+        },{
+          "name" : "_valid-time-end",
+          "count" : 2,
+          "VALIDITY" : [0,0],
+          "DATA" : [0,0]
         }]
       },{
         "name" : "delete",
         "count" : 0,
         "VALIDITY" : [ ],
-          "children": [{
-              "name": "document",
-              "count": 0,
-              "VALIDITY": []
+        "children" : [{
+          "name" : "_id",
+          "count" : 0,
+          "TYPE_ID" : [ ],
+          "OFFSET" : [ ],
+          "children" : [{
+            "name" : "type-5",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
           }]
+        },{
+          "name" : "_valid-time",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        },{
+          "name" : "_valid-time-end",
+          "count" : 0,
+          "VALIDITY" : [ ],
+          "DATA" : [ ]
+        }]
       }]
     }]
   }]

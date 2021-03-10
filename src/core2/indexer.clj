@@ -18,7 +18,7 @@
            java.util.concurrent.atomic.AtomicInteger
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot VectorUnloader TimeStampVector]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo Field Schema]))
@@ -235,27 +235,42 @@
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
                 per-op-offset (.getOffset tx-ops-vec tx-op-idx)
                 op-vec (.getStruct tx-ops-vec op-type-id)
-                ^StructVector document-vec (.getChild op-vec "document" StructVector)
+
+                valid-time-vecs [(.getChild op-vec "_valid-time") (.getChild op-vec "_valid-time-end")]
                 row-id (+ next-row-id per-op-offset)
                 op (aget op-type-ids op-type-id)
                 temporal-coordinates (doto (HashMap.)
                                        (.put "_row-id" row-id)
                                        (.put "_tx-time" tx-time-ms))]
             (case op
-              (:put :delete) (do (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
-                                         :when (not (neg? (.getTypeId value-vec per-op-offset)))]
+              :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
+                     (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
+                             :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
-                                   (when (= "_id" (.getName value-vec))
-                                     (.put temporal-coordinates (.getName value-vec) (.getObject value-vec per-op-offset)))
+                       (when (= "_id" (.getName value-vec))
+                         (.put temporal-coordinates (.getName value-vec) (.getObject value-vec per-op-offset)))
 
-                                   (copy-safe! (.getLiveRoot this (.getName value-vec))
-                                               value-vec per-op-offset row-id))
+                       (copy-safe! (.getLiveRoot this (.getName value-vec))
+                                   value-vec per-op-offset row-id)))
 
-                                 (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
-                                             tx-time-vec 0 row-id)
+              :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
+                        (when (not (neg? (.getTypeId id-vec per-op-offset)))
+                          (.put temporal-coordinates (.getName id-vec) (.getObject id-vec per-op-offset))
 
-                                 (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
-                                             tx-id-vec 0 row-id)))
+                          (copy-safe! (.getLiveRoot this (.getName id-vec))
+                                      id-vec per-op-offset row-id))))
+
+            (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
+                        tx-time-vec 0 row-id)
+
+            (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
+                        tx-id-vec 0 row-id)
+
+            (doseq [^TimeStampVector v valid-time-vecs
+                    :when (not (.isNull v per-op-offset))]
+              (.put temporal-coordinates (.getName v) (.get v per-op-offset))
+              (copy-safe! (.getLiveRoot this (.getName v))
+                          v per-op-offset row-id))
 
             (.updateTemporalCoordinates temporal-mgr temporal-coordinates)
 
