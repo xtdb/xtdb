@@ -57,7 +57,8 @@
                       tx-end-time-root
                       (.get in-roots col-name)))
             row-id-bitmap (if-let [tx-end-time-pred (.get col-preds (.getName temporal/tx-end-time-field))]
-                            (.and (->row-id-bitmap tx-end-time-root tx-end-time-pred) row-id-bitmap)
+                            (doto (->row-id-bitmap tx-end-time-root tx-end-time-pred)
+                              (.and row-id-bitmap))
                             row-id-bitmap)]
         (align/align-vectors roots row-id-bitmap out-root))
       (finally
