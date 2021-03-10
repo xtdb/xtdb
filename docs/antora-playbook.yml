@@ -5,16 +5,27 @@ site:
 content:
   sources:
     - url: ../
+      start_path: docs/main # index
+      branches: HEAD
+    - url: ../
       start_path: docs/reference
       branches:
         - HEAD
         - docs-v*
     - url: ../
+      start_path: docs/tutorials
+      branches: HEAD
+    - url: ../
+      start_path: docs/howto
+      branches: HEAD
+    - url: ../
       start_path: docs/articles
       branches: master
+    # TODO: the remaining components do not belong in crux/docs:
     - url: ../
       start_path: docs/community
       branches: master
+
 ui:
   bundle:
     url: https://crux-ui-bundle.s3.eu-west-2.amazonaws.com/ui-bundle.zip

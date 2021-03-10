@@ -1,5 +1,5 @@
 name: articles
-title: Crux
+title: Crux Articles
 version: master
 start_page: ROOT:what-is-crux.adoc
 nav:
