@@ -55,6 +55,52 @@ papers:
   - [[https://drum.lib.umd.edu/bitstream/handle/1903/889/CS-TR-3764.pdf][Designing Access Methods for Bitemporal Databases]] advocates keeping two separate R*-trees - one for current (TT) data, one for historical
 - [[http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf][Comparison of Access Methods for Time-Evolving Data]]
 - [[https://standards.iso.org/ittf/PubliclyAvailableStandards/c060394_ISO_IEC_TR_19075-2_2015.zip][ISO/IEC JTC 1/SC 32: SQL Technical Reports — Part 2: SQL Support for Time-Related Information]]
+  time-related predicates:
+
+  overlaps, equals, contains, precedes, succeeds, immediately precedes, immediately succeeds
+
+  application time updates:
+
+  More precisely, the effect of UPDATE statements that contain the FOR PORTION OF clause are as follows:
+  1) Let FT be the first value and ST be the second value specified in the FOR PORTION OF clause.
+  2) For each row R in the table that qualifies for update and whose application-time period overlaps with the
+  period formed by FT and ST, let BPS be its application-time period start value, and let BPE be its application-
+  time period end value.
+  a) If BPS < FT and BPE > FT, then a copy of R with its application-time period end value set to FT is
+  inserted.
+  b) If BPS < ST and BPE > ST, then a copy of R with its application-time period start value set to ST is
+  inserted.
+  c) R is updated with its application-period start value set to the maximum of BPS and FT and the appli-
+  cation-time end value set to the minimum of BPE and ST.
+
+  application time deletes:
+
+  More precisely, the effect of DELETE statements that contain the FOR PORTION OF clause are as follows:
+  1) Let FT be the first value and ST be the second value specified in the FOR PORTION OF clause.
+  2) For each row R in the table that qualifies for deletion and whose application-time period overlaps with the
+  period formed by FT and ST, let BPS be its application-time period start value, and let BPE be its application-
+  time period end value.
+  a) If BPS < FT and BPE > FT, then a copy of R with its application-time period end value set to FT is
+  inserted.
+  b) If BPS < ST and BPE > ST, then a copy of R with its application-time period start value set to ST is
+  inserted.
+  c) R is deleted.
+
+  system time tables:
+
+  (suggested sys_end: 9999-12-31 23:59:59)
+
+  INSERT into a system-versioned table automatically sets the value of Sys_start column to the transaction
+  timestamp, a special value associated with every transaction, and sets the value of Sys_end column to the
+  highest value of the column's data type.
+
+  UPDATE and DELETE on system-versioned tables result in the automatic insertion of a historical system
+  row for every current system row that is updated or deleted.
+
+  An UPDATE statement on a system-versioned table first inserts a copy of the old row with its system-time
+  period end time set to the transaction timestamp, indicating that the row ceased to be current as of the transaction
+  timestamp. It then updates the row while changing its system-period start time to the transaction timestamp,
+  indicating that the updated row to be the current system row as of the transaction timestamp.
 
 ** Trees
 - [[https://www.researchgate.net/profile/Susana-Ladra/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation/links/0fcfd51080b06db631000000/k2-Trees-for-Compact-Web-Graph-Representation.pdf?origin=publication_detail][k^{2}-trees for Compact Web Graph Representation]]
