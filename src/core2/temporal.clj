@@ -11,18 +11,20 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.longlong.Roaring64Bitmap
            java.nio.ByteBuffer
-           [java.util Map HashMap SortedSet]
-           [java.util.function Consumer LongConsumer]
+           [java.util List Map HashMap SortedSet]
+           [java.util.function Consumer Function LongConsumer]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.io.Closeable))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ITemporalManager
-  (^void updateTxEndTime [^Object id ^long row-id ^long tx-time])
+  (^void updateTemporalCoordinates [^java.util.Map coordinates])
   (^void registerTombstone [^long row-id])
   (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
-  (^org.apache.arrow.vector.VectorSchemaRoot createTxEndTimeRoot [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
+  (^org.apache.arrow.vector.VectorSchemaRoot createTemporalRoot [^java.util.List columns
+                                                                 ^java.util.Map col-preds
+                                                                 ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-end-time-field
   (t/->primitive-dense-union-field "_tx-end-time" #{:timestampmilli}))
@@ -40,10 +42,13 @@
                           ^Map id->row-id
                           ^Roaring64Bitmap tombstone-row-ids]
   ITemporalManager
-  (updateTxEndTime [_ id row-id tx-time]
-    (let [id (if (bytes? id)
-               (ByteBuffer/wrap id)
-               id)]
+  (updateTemporalCoordinates [_ coordinates]
+    (let [id (.get coordinates "_id")
+          row-id (.get coordinates "_row-id")
+          tx-time (.get coordinates "_tx-time")
+          id (if (bytes? id)
+                 (ByteBuffer/wrap id)
+                 id)]
       (when-let [prev-row-id (.get id->row-id id)]
         (.put row-id->tx-end-time prev-row-id tx-time))
       (.put id->row-id id row-id)))
@@ -55,14 +60,16 @@
   (registerTombstone [_ row-id]
     (.addLong tombstone-row-ids row-id))
 
-  (createTxEndTimeRoot [_ row-id-bitmap]
+  (createTemporalRoot [_ columns col-preds row-id-bitmap]
+    (assert (= ["_tx-end-time"] columns))
     (let [out-root (VectorSchemaRoot/create allocator tx-end-time-schema)
           ^BigIntVector row-id-vec (.getVector out-root 0)
           ^DenseUnionVector tx-end-time-duv-vec (.getVector out-root 1)
-          ^TimeStampMilliVector tx-end-time-vec (.getVectorByType tx-end-time-duv-vec timestampmilli-type-id)]
-      (util/set-value-count row-id-vec (.getLongCardinality row-id-bitmap))
-      (util/set-value-count tx-end-time-duv-vec (.getLongCardinality row-id-bitmap))
-      (util/set-value-count tx-end-time-vec (.getLongCardinality row-id-bitmap))
+          ^TimeStampMilliVector tx-end-time-vec (.getVectorByType tx-end-time-duv-vec timestampmilli-type-id)
+          value-count (.getLongCardinality row-id-bitmap)]
+      (util/set-value-count row-id-vec value-count)
+      (util/set-value-count tx-end-time-duv-vec value-count)
+      (util/set-value-count tx-end-time-vec value-count)
       (-> (.stream row-id-bitmap)
           (.forEach (reify LongConsumer
                       (accept [_ row-id]
@@ -95,30 +102,41 @@
                      []
                      known-chunks)]
     @(CompletableFuture/allOf (into-array CompletableFuture futs))
-    (doseq [chunk-idx known-chunks]
+    (doseq [chunk-idx known-chunks
+            :let [row-id->temporal-coordinates (HashMap.)]]
       (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                  ^ArrowBuf tx-time-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tx-time"))
-                  id-chunks (util/->chunks id-buffer (.allocator temporal-manager))
-                  tx-time-chunks (util/->chunks tx-time-buffer (.allocator temporal-manager))]
+                  id-chunks (util/->chunks id-buffer (.allocator temporal-manager))]
         (.forEachRemaining id-chunks
                            (reify Consumer
                              (accept [_ id-root]
                                (let [^VectorSchemaRoot id-root id-root
                                      ^BigIntVector row-id-vec (.getVector id-root 0)
                                      id-vec (.getVector id-root 1)]
-                                 (assert (.tryAdvance tx-time-chunks
-                                                      (reify Consumer
-                                                        (accept [_ tx-time-root]
-                                                          (let [^VectorSchemaRoot tx-time-root tx-time-root
-                                                                ^DenseUnionVector tx-time-duv-vec (.getVector tx-time-root 1)
-                                                                ^TimeStampMilliVector tx-time-vec (.getVectorByType tx-time-duv-vec timestampmilli-type-id)]
-                                                            (assert (= (.getRowCount id-root)
-                                                                       (.getRowCount tx-time-root)))
-                                                            (dotimes [n (.getRowCount tx-time-root)]
-                                                              (.updateTxEndTime temporal-manager
-                                                                                (.getObject id-vec n)
-                                                                                (.get row-id-vec n)
-                                                                                (.get tx-time-vec n))))))))))))))
+                                 (dotimes [n (.getRowCount id-root)]
+                                   (let [row-id (.get row-id-vec n)]
+                                     (.put row-id->temporal-coordinates
+                                           row-id
+                                           (doto (HashMap.)
+                                             (.put "_row-id" row-id)
+                                             (.put "_id" (.getObject id-vec n)))))))))))
+
+
+      (with-open [^ArrowBuf tx-time-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tx-time"))
+                  tx-time-chunks (util/->chunks tx-time-buffer (.allocator temporal-manager))]
+        (.forEachRemaining tx-time-chunks
+                           (reify Consumer
+                             (accept [_ tx-time-root]
+                               (let [^VectorSchemaRoot tx-time-root tx-time-root
+                                     ^BigIntVector row-id-vec (.getVector tx-time-root 0)
+                                     ^DenseUnionVector tx-time-duv-vec (.getVector tx-time-root 1)
+                                     ^TimeStampMilliVector tx-time-vec (.getVectorByType tx-time-duv-vec timestampmilli-type-id)]
+                                 (dotimes [n (.getRowCount tx-time-root)]
+                                   (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
+                                       (.put "_tx-time" (.get tx-time-vec n)))))))))
+
+      (doseq [temporal-coordinates (vals row-id->temporal-coordinates)]
+        (.updateTemporalCoordinates temporal-manager temporal-coordinates)))
+
     (doseq [chunk-idx (meta/matching-chunks metadata-manager nil (meta/matching-chunk-pred "_tombstone" nil (t/->minor-type :bit)))]
       (with-open [^ArrowBuf tombstone-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tombstone"))
                   tombstone-chunks (util/->chunks tombstone-buffer (.allocator temporal-manager))]

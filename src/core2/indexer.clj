@@ -13,7 +13,7 @@
            [core2.tx TransactionInstant Watermark]
            core2.util.IChunkCursor
            java.io.Closeable
-           [java.util Collections Date Map Map$Entry TreeMap]
+           [java.util Collections Date HashMap Map Map$Entry TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
            java.util.function.Consumer
@@ -237,13 +237,16 @@
                 op-vec (.getStruct tx-ops-vec op-type-id)
                 ^StructVector document-vec (.getChild op-vec "document" StructVector)
                 row-id (+ next-row-id per-op-offset)
-                op (aget op-type-ids op-type-id)]
+                op (aget op-type-ids op-type-id)
+                temporal-coordinates (doto (HashMap.)
+                                       (.put "_row-id" row-id)
+                                       (.put "_tx-time" tx-time-ms))]
             (case op
               (:put :delete) (do (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                                          :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
                                    (when (= "_id" (.getName value-vec))
-                                     (.updateTxEndTime temporal-mgr (.getObject value-vec per-op-offset) row-id tx-time-ms))
+                                     (.put temporal-coordinates (.getName value-vec) (.getObject value-vec per-op-offset)))
 
                                    (copy-safe! (.getLiveRoot this (.getName value-vec))
                                                value-vec per-op-offset row-id))
@@ -253,6 +256,9 @@
 
                                  (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
                                              tx-id-vec 0 row-id)))
+
+            (.updateTemporalCoordinates temporal-mgr temporal-coordinates)
+
             (when (= :delete op)
               (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
                           tombstone-vec 0 row-id)
