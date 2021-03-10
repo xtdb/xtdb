@@ -26,19 +26,19 @@
                                                                  ^java.util.Map col-preds
                                                                  ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
-(def ^org.apache.arrow.vector.types.pojo.Field tx-end-time-field
-  (t/->primitive-dense-union-field "_tx-end-time" #{:timestampmilli}))
+(def ^org.apache.arrow.vector.types.pojo.Field tx-time-end-field
+  (t/->primitive-dense-union-field "_tx-time-end" #{:timestampmilli}))
 
 (def ^:private timestampmilli-type-id
   (-> (t/primitive-type->arrow-type :timestampmilli)
       (t/arrow-type->type-id)))
 
-(def ^org.apache.arrow.vector.types.pojo.Schema tx-end-time-schema (Schema. [t/row-id-field tx-end-time-field]))
+(def ^org.apache.arrow.vector.types.pojo.Schema tx-time-end-schema (Schema. [t/row-id-field tx-time-end-field]))
 
 (deftype TemporalManager [^BufferAllocator allocator
                           ^BufferPool buffer-pool
                           ^IMetadataManager metadata-manager
-                          ^Map row-id->tx-end-time
+                          ^Map row-id->tx-time-end
                           ^Map id->row-id
                           ^Roaring64Bitmap tombstone-row-ids]
   ITemporalManager
@@ -50,7 +50,7 @@
                  (ByteBuffer/wrap id)
                  id)]
       (when-let [prev-row-id (.get id->row-id id)]
-        (.put row-id->tx-end-time prev-row-id tx-time))
+        (.put row-id->tx-time-end prev-row-id tx-time))
       (.put id->row-id id row-id)))
 
   (removeTombstonesFrom [_ row-id-bitmap]
@@ -61,29 +61,29 @@
     (.addLong tombstone-row-ids row-id))
 
   (createTemporalRoot [_ columns col-preds row-id-bitmap]
-    (assert (= ["_tx-end-time"] columns))
-    (let [out-root (VectorSchemaRoot/create allocator tx-end-time-schema)
+    (assert (= ["_tx-time-end"] columns))
+    (let [out-root (VectorSchemaRoot/create allocator tx-time-end-schema)
           ^BigIntVector row-id-vec (.getVector out-root 0)
-          ^DenseUnionVector tx-end-time-duv-vec (.getVector out-root 1)
-          ^TimeStampMilliVector tx-end-time-vec (.getVectorByType tx-end-time-duv-vec timestampmilli-type-id)
+          ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
+          ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
           value-count (.getLongCardinality row-id-bitmap)]
       (util/set-value-count row-id-vec value-count)
-      (util/set-value-count tx-end-time-duv-vec value-count)
-      (util/set-value-count tx-end-time-vec value-count)
+      (util/set-value-count tx-time-end-duv-vec value-count)
+      (util/set-value-count tx-time-end-vec value-count)
       (-> (.stream row-id-bitmap)
           (.forEach (reify LongConsumer
                       (accept [_ row-id]
                         (let [row-count (.getRowCount out-root)
-                              offset (util/write-type-id tx-end-time-duv-vec row-count timestampmilli-type-id)
-                              ^long tx-end-time (.getOrDefault row-id->tx-end-time row-id Long/MAX_VALUE)]
+                              offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
+                              ^long tx-time-end (.getOrDefault row-id->tx-time-end row-id Long/MAX_VALUE)]
                           (.set row-id-vec row-count row-id)
-                          (.set tx-end-time-vec row-count tx-end-time)
+                          (.set tx-time-end-vec row-count tx-time-end)
                           (util/set-vector-schema-root-row-count out-root row-count))))))
       out-root))
 
   Closeable
   (close [_]
-    (.clear row-id->tx-end-time)
+    (.clear row-id->tx-time-end)
     (.clear id->row-id)
     (.clear tombstone-row-ids)))
 

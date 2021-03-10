@@ -145,7 +145,7 @@
                     (Text. "device-info-demo000001") 2
                     (Text. "reading-demo000001") 3}
                    (.id->row-id tm)))
-          (t/is (empty? (.row-id->tx-end-time tm))))
+          (t/is (empty? (.row-id->tx-time-end tm))))
 
         (.finishChunk i)
 
@@ -423,7 +423,7 @@
                 (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                 (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*"))))
 
-                (t/is (= 3500 (count (.row-id->tx-end-time tm))))
+                (t/is (= 3500 (count (.row-id->tx-time-end tm))))
                 (t/is (= 2000 (count (.id->row-id tm)))))
 
               (let [^TransactionInstant
@@ -445,7 +445,7 @@
                               (.tx-id (.latestCompletedTx il))
                               (.tx-id second-half-tx-instant)))
 
-                    (t/is (>= (count (.row-id->tx-end-time tm)) 3500))
+                    (t/is (>= (count (.row-id->tx-time-end tm)) 3500))
                     (t/is (>= (count (.id->row-id tm)) 2000)))
 
                   (doseq [^Node node [new-node node]
@@ -462,5 +462,5 @@
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))
 
-                    (t/is (= 9000 (count (.row-id->tx-end-time tm))))
+                    (t/is (= 9000 (count (.row-id->tx-time-end tm))))
                     (t/is (= 2000 (count (.id->row-id tm))))))))))))))

@@ -37,32 +37,32 @@
         (sel/select (.getVector root 1) vec-pred))
       (align/->row-id-bitmap (.getVector root t/row-id-field))))
 
-(defn- tx-end-time-col? [^String col-name]
-  (= (.getName temporal/tx-end-time-field) col-name))
+(defn- tx-time-end-col? [^String col-name]
+  (= (.getName temporal/tx-time-end-field) col-name))
 
 (defn- align-roots [^ITemporalManager temporal-manager ^List col-names ^Map col-preds ^Map in-roots ^VectorSchemaRoot out-root]
   (let [row-id-bitmaps (for [col-name col-names
-                             :when (not (tx-end-time-col? col-name))]
+                             :when (not (tx-time-end-col? col-name))]
                          (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
         row-id-bitmap (reduce #(doto ^Roaring64Bitmap %1
                                  (.and %2))
                               (first row-id-bitmaps)
                               (rest row-id-bitmaps))
         row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
-        tx-end-time-root (when (some tx-end-time-col? col-names)
-                           (.createTemporalRoot temporal-manager [(.getName temporal/tx-end-time-field)] col-preds row-id-bitmap))]
+        tx-time-end-root (when (some tx-time-end-col? col-names)
+                           (.createTemporalRoot temporal-manager [(.getName temporal/tx-time-end-field)] col-preds row-id-bitmap))]
     (try
       (let [roots (for [col-name col-names]
-                    (if (tx-end-time-col? col-name)
-                      tx-end-time-root
+                    (if (tx-time-end-col? col-name)
+                      tx-time-end-root
                       (.get in-roots col-name)))
-            row-id-bitmap (if-let [tx-end-time-pred (.get col-preds (.getName temporal/tx-end-time-field))]
-                            (doto (->row-id-bitmap tx-end-time-root tx-end-time-pred)
+            row-id-bitmap (if-let [tx-time-end-pred (.get col-preds (.getName temporal/tx-time-end-field))]
+                            (doto (->row-id-bitmap tx-time-end-root tx-time-end-pred)
                               (.and row-id-bitmap))
                             row-id-bitmap)]
         (align/align-vectors roots row-id-bitmap out-root))
       (finally
-        (util/try-close tx-end-time-root)))
+        (util/try-close tx-time-end-root)))
     out-root))
 
 (deftype ScanCursor [^BufferAllocator allocator
@@ -78,12 +78,12 @@
 
   ICursor
   (tryAdvance [this c]
-    (let [real-col-names (remove tx-end-time-col? col-names)]
+    (let [real-col-names (remove tx-time-end-col? col-names)]
       (letfn [(create-out-root [^Map chunks]
                 (when (= (count chunks) (count real-col-names))
                   (VectorSchemaRoot/create (align/align-schemas (for [col-name col-names]
-                                                                  (if (tx-end-time-col? col-name)
-                                                                    temporal/tx-end-time-schema
+                                                                  (if (tx-time-end-col? col-name)
+                                                                    temporal/tx-time-end-schema
                                                                     (.getSchema ^IChunkCursor (.get chunks col-name)))))
                                            allocator)))
 
