@@ -5,7 +5,6 @@
            [java.util.function Consumer Function]
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector BigIntVector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.VectorBatchAppender))

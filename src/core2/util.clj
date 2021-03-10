@@ -520,7 +520,7 @@
 
      (instance? DenseUnionVector v)
      (let [v ^DenseUnionVector v]
-       (recur (.getVectorByType v (.getTypeId v idx)) idx pointer))
+       (recur (.getVectorByType v (.getTypeId v idx)) (.getOffset v idx) pointer))
 
      :else
      (.getObject v idx))))
