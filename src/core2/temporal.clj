@@ -92,13 +92,9 @@
         ^IMetadataManager metadata-manager (.metadata-manager temporal-manager)
         known-chunks (.knownChunks metadata-manager)
         futs (reduce (fn [acc chunk-idx]
-                       (conj acc
-                             (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                                 (util/then-apply util/try-close))
-                             (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tx-time"))
-                                 (util/then-apply util/try-close))
-                             (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tombstone"))
-                                 (util/then-apply util/try-close))))
+                       (into acc (for [col-name ["_id" "_tx-time" "_valid-time" "_valid-time-end" "_tombstone"]]
+                                   (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                                       (util/then-apply util/try-close)))))
                      []
                      known-chunks)]
     @(CompletableFuture/allOf (into-array CompletableFuture futs))
@@ -121,18 +117,20 @@
                                              (.put "_id" (.getObject id-vec n)))))))))))
 
 
-      (with-open [^ArrowBuf tx-time-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tx-time"))
-                  tx-time-chunks (util/->chunks tx-time-buffer (.allocator temporal-manager))]
-        (.forEachRemaining tx-time-chunks
-                           (reify Consumer
-                             (accept [_ tx-time-root]
-                               (let [^VectorSchemaRoot tx-time-root tx-time-root
-                                     ^BigIntVector row-id-vec (.getVector tx-time-root 0)
-                                     ^DenseUnionVector tx-time-duv-vec (.getVector tx-time-root 1)
-                                     ^TimeStampMilliVector tx-time-vec (.getVectorByType tx-time-duv-vec timestampmilli-type-id)]
-                                 (dotimes [n (.getRowCount tx-time-root)]
-                                   (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
-                                       (.put "_tx-time" (.get tx-time-vec n)))))))))
+      (doseq [col-name ["_tx-time" "_valid-time" "_valid-time-end"]]
+        (when-let [temporal-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))]
+          (with-open [^ArrowBuf temporal-buffer temporal-buffer
+                      temporal-chunks (util/->chunks temporal-buffer (.allocator temporal-manager))]
+            (.forEachRemaining temporal-chunks
+                               (reify Consumer
+                                 (accept [_ temporal-root]
+                                   (let [^VectorSchemaRoot temporal-root temporal-root
+                                         ^BigIntVector row-id-vec (.getVector temporal-root 0)
+                                         ^DenseUnionVector temporal-duv-vec (.getVector temporal-root 1)
+                                         ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec timestampmilli-type-id)]
+                                     (dotimes [n (.getRowCount temporal-root)]
+                                       (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
+                                           (.put col-name (.get temporal-vec n)))))))))))
 
       (doseq [temporal-coordinates (vals row-id->temporal-coordinates)]
         (.updateTemporalCoordinates temporal-manager temporal-coordinates)))
