@@ -46,5 +46,5 @@
             (.finishChunk i)
 
             (t/is (= [last-tx-instant (dec (count tx-ops))]
-                     (meta/with-latest-metadata mm
-                       (juxt meta/latest-tx meta/latest-row-id))))))))))
+                     @(meta/with-latest-metadata mm
+                        (juxt meta/latest-tx meta/latest-row-id))))))))))
