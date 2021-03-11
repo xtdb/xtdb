@@ -101,6 +101,7 @@ papers:
   period end time set to the transaction timestamp, indicating that the row ceased to be current as of the transaction
   timestamp. It then updates the row while changing its system-period start time to the transaction timestamp,
   indicating that the updated row to be the current system row as of the transaction timestamp.
+- [[https://www2.cs.arizona.edu/~rts/pubs/ISDec04.pdf][Modification Semantics in Now-Relative Databases]] (Torp, Jensen, Snodgrass)
 
 ** Trees
 - [[https://www.researchgate.net/profile/Susana-Ladra/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation/links/0fcfd51080b06db631000000/k2-Trees-for-Compact-Web-Graph-Representation.pdf?origin=publication_detail][k^{2}-trees for Compact Web Graph Representation]]
