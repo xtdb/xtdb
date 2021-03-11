@@ -5,6 +5,8 @@
 :page-published: 2019-08-06T09:55Z
 :thumbnail: confluent-cloud
 
+== Introduction
+
 In this guide I will show you how to get going with https://juxt.pro/crux[Crux]
 and https://www.confluent.io/confluent-cloud/[Confluent Cloud] to create a
 highly-scalable
@@ -60,7 +62,7 @@ Under "Tools & client config" click on the "Clients" tab then "Create New Kafka 
 
 === 2. Start a Clojure REPL
 
-Refer to the https://www.opencrux.com/reference/20.09-1.12.1/clojure-api.html[documentation] if you want to understand the Crux APIs.
+Refer to the https://www.opencrux.com/reference/clojure-api.html[documentation] if you want to understand the Crux APIs.
 
 You can launch a `clj` REPL and provide the latest `crux-kafka` on Clojars using:
 [source,sh]

@@ -1,0 +1,152 @@
+= Crux-in-a-Box (on RocksDB)
+:page-subtitle: The simplest possible Crux setup
+:page-author: Steven Deobald
+:page-header: aurora-1197753_1920.jpg
+:page-published: 2021-03-10T22:55Z
+:thumbnail: crux-in-a-box
+
+== Introduction
+
+This guide will show you how to set up Crux with the following properties:
+
+* Records persist to disk
+* One node
+* RocksDB for all 3 stores (tx-log, doc-store, and index-store)
+
+This guide will not discuss high-availability, failover/clustering/replication, or backups. You can use this simple RocksDB configuration in production and back it up as you would any other volume. If you want more advanced features, however, you should consider the xref:reference::kafka.adoc[Kafka] and/or xref:reference::jdbc.adoc[JDBC] modules.
+
+All the code from this guide is compiled into minimal (working) project examples for Clojure you can see in the https://github.com/deobald/crux-in-a-box[crux-in-a-box] GitHub repo.
+
+A Java version of this guide is pending.
+
+== Steps
+
+=== 1. Install Dependencies
+
+Ensure you are using Java 8 or higher:
+
+[source,shell]
+----
+java -version
+----
+
+Add Crux to your Clojure or Java project:
+
+[tabs]
+====
+deps.edn::
++
+[source,clojure,subs=attributes+]
+----
+juxt/crux-core {:mvn/version "{crux_version}-beta"}
+juxt/crux-rocksdb {:mvn/version "{crux_version}-beta"}
+----
+project.clj::
++
+[source,clojure,subs=attributes+]
+----
+[juxt/crux-core "{crux_version}-beta"]
+[juxt/crux-rocksdb "{crux_version}-beta"]
+----
+////
+pom.xml::
++
+[source,xml,subs=attributes+]
+----
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-core</artifactId>
+    <version>{crux_version}-beta</version>
+</dependency>
+<dependency>
+    <groupId>juxt</groupId>
+    <artifactId>crux-rocksdb</artifactId>
+    <version>{crux_version}-beta</version>
+</dependency>
+----
+////
+====
+
+==== Aside: Logging
+
+You can ignore this section for now.
+
+Without setting up logging, you will see a `SLF4J: Defaulting to no-operation (NOP) logger implementation` message on STDOUT from Crux. This is harmless, but in a real application you will want to configure `Logback` with the http://www.slf4j.org[SLF4J] API to see INFO messages from Crux.
+
+To do this in Clojure: (1) https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L10[add Logback, SLF4J, and `tools.logging` as dependencies], (2) set the https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/project.clj#L20[`clojure.tools.logging.factory` JVM option, and (3) create a https://github.com/deobald/crux-in-a-box/blob/4998db33d866a695c7d10049eb28fdada88a46fd/clj/resources/logback.xml[`crux-in-a-box/resources/logback.xml`] file.
+
+// To do this in Java = TODO.
+
+=== 2. Configure Crux
+
+This guide gets you up and running quickly by hard-coding configuration values. Store these configuration values with your favourite configuration library. In Clojure, you might use  https://github.com/juxt/aero[Aero].
+
+This guide also does not make any assumptions about how you manage stateful services. Crux is a stateful service, however, and you should store the Crux node in your favourite state management library. In Clojure, you might use https://github.com/tolitius/mount[Mount].
+
+[tabs]
+====
+Clojure::
++
+[source,clojure,subs=attributes+]
+----
+(ns crux-in-a-box.db
+  (:require [clojure.java.io :as io]
+            [crux.api :as crux]))
+
+(defn start-crux! []
+  (letfn [(kv-store [dir]
+            {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+	                      :db-dir      (io/file dir)
+                        :sync?       true}})]
+    (crux/start-node
+     {:crux/tx-log              (kv-store "data/dev/tx-log")
+	    :crux/document-store      (kv-store "data/dev/doc-store")
+      :crux/index-store         (kv-store "data/dev/index-store")})))
+
+(def crux-node (start-crux!))
+
+(defn stop-crux! []
+  (.close crux-node))
+
+----
+////
+Java::
++
+[source,java,subs=attributes+]
+----
+TODO
+----
+////
+====
+
+=== 3. Take it for a test drive
+
+Time to play with your new Crux node. Try inserting some data, query it back out, and then shut down your node. This guide is not meant to teach you Datalog, the Crux API, or Crux query semantics -- you can look through the Tutorial and Reference Docs to dig deeper. But you should note that Crux is _asynchronous by default_. That means `submit-tx` returns immediately, even if your document hasn't been indexed yet. It's unlikely your query will come back empty, but don't be shocked if it does. Just try it again.
+
+[tabs]
+====
+Clojure REPL::
++
+[source,clojure,subs=attributes+]
+----
+crux-in-a-box.db> (crux/submit-tx crux-node [[:crux.tx/put {:crux.db/id "hi2u" :user/name "zig"}]])
+;; => #:crux.tx{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
+crux-in-a-box.db> (crux/q (crux/db crux-node) '{:find [e]
+                                                :where [[e :user/name "zig"]]} )
+;; => #{["hi2u"]}
+crux-in-a-box.db> (stop-crux!)
+;; => nil
+----
+////
+Java::
++
+[source,xml,subs=attributes+]
+----
+TODO
+----
+////
+====
+
+== Considerations
+
+This is a simple Crux setup with a small footprint. You could use this setup to build a small greenfield project or replace an existing Postgres, MySQL, or MongoDB installation which currently supports CRUD or reference data. With Crux, that database can grow with you. When it eventually requires streaming, replication, or high availability, you can migrate from RocksDB to Kafka or JDBC. But you don't need to involve those modules up-front unless you're sure you need them.
