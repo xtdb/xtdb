@@ -4,3 +4,6 @@ version: master
 start_page: ROOT:command-line-crux.adoc
 nav:
   - modules/ROOT/nav.adoc
+asciidoc:
+  attributes:
+    crux_version: 21.02-1.15.0
