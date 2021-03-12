@@ -12,7 +12,7 @@
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.temporal.ITemporalManager
-           core2.tx.TransactionInstant
+           [core2.tx TransactionInstant Watermark]
            core2.util.IChunkCursor
            [java.util HashMap LinkedList List Map Queue]
            java.util.function.Consumer
