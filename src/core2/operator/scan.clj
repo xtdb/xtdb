@@ -12,7 +12,7 @@
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.temporal.ITemporalManager
-           core2.tx.Watermark
+           core2.tx.TransactionInstant
            core2.util.IChunkCursor
            [java.util HashMap LinkedList List Map Queue]
            java.util.function.Consumer
@@ -40,7 +40,7 @@
 (defn- tx-time-end-col? [^String col-name]
   (= (.getName temporal/tx-time-end-field) col-name))
 
-(defn- align-roots [^ITemporalManager temporal-manager ^List col-names ^Map col-preds ^Map in-roots ^VectorSchemaRoot out-root]
+(defn- align-roots [^ITemporalManager temporal-manager ^TransactionInstant tx-instant ^List col-names ^Map col-preds ^Map in-roots ^VectorSchemaRoot out-root]
   (let [row-id-bitmaps (for [col-name col-names
                              :when (not (tx-time-end-col? col-name))]
                          (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
@@ -50,7 +50,7 @@
                               (rest row-id-bitmaps))
         row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
         tx-time-end-root (when (some tx-time-end-col? col-names)
-                           (.createTemporalRoot temporal-manager [(.getName temporal/tx-time-end-field)] row-id-bitmap))]
+                           (.createTemporalRoot temporal-manager tx-instant [(.getName temporal/tx-time-end-field)] row-id-bitmap))]
     (try
       (let [roots (for [col-name col-names]
                     (if (tx-time-end-col? col-name)
@@ -91,7 +91,7 @@
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
                     (do
-                      (align-roots temporal-manager col-names col-preds in-roots out-root)
+                      (align-roots temporal-manager (.tx-instant watermark) col-names col-preds in-roots out-root)
                       (if (pos? (.getRowCount out-root))
                         (do
                           (.accept c out-root)

@@ -1,10 +1,12 @@
 (ns core2.temporal
   (:require [core2.metadata :as meta]
             [core2.types :as t]
+            core2.tx
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            core2.temporal.TemporalCoordinates
+           core2.tx.TransactionInstant
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector.types.pojo Field Schema]
@@ -12,7 +14,7 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.longlong.Roaring64Bitmap
            java.nio.ByteBuffer
-           [java.util List Map HashMap SortedMap SortedSet TreeMap]
+           [java.util Date List Map HashMap SortedMap SortedSet TreeMap]
            [java.util.function Consumer Function LongConsumer]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.io.Closeable))
@@ -22,7 +24,8 @@
 (definterface ITemporalManager
   (^void updateTemporalCoordinates [^java.util.SortedMap row-id->temporal-coordinates])
   (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
-  (^org.apache.arrow.vector.VectorSchemaRoot createTemporalRoot [^java.util.List columns
+  (^org.apache.arrow.vector.VectorSchemaRoot createTemporalRoot [^core2.tx.TransactionInstant tx-instant
+                                                                 ^java.util.List columns
                                                                  ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-time-end-field
@@ -61,14 +64,15 @@
     (doto row-id-bitmap
       (.andNot tombstone-row-ids)))
 
-  (createTemporalRoot [_ columns row-id-bitmap]
+  (createTemporalRoot [_ tx-instant columns row-id-bitmap]
     (assert (= ["_tx-time-end"] columns))
     (let [out-root (VectorSchemaRoot/create allocator tx-time-end-schema)
           ^BigIntVector row-id-vec (.getVector out-root 0)
           ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
           ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
           row-id-stream (.stream row-id-bitmap) ;; TODO: is this stream really thread safe?
-          value-count (.count row-id-stream)]
+          value-count (.count row-id-stream)
+          tx-time-ms (.getTime ^Date (.tx-time tx-instant))]
       (util/set-value-count row-id-vec value-count)
       (util/set-value-count tx-time-end-duv-vec value-count)
       (util/set-value-count tx-time-end-vec value-count)
@@ -77,7 +81,11 @@
                   (accept [_ row-id]
                     (let [row-count (.getRowCount out-root)
                           offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
-                          ^long tx-time-end (.getOrDefault row-id->tx-time-end row-id Long/MAX_VALUE)]
+                          tx-time-end (.get row-id->tx-time-end row-id)
+                          tx-time-end (if (or (nil? tx-time-end)
+                                              (> ^long tx-time-end tx-time-ms))
+                                        Long/MAX_VALUE
+                                        ^long tx-time-end)]
                       (.set row-id-vec row-count row-id)
                       (.set tx-time-end-vec row-count tx-time-end)
                       (util/set-vector-schema-root-row-count out-root row-count)))))
