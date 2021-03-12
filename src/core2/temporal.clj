@@ -45,8 +45,6 @@
                           ^Roaring64Bitmap tombstone-row-ids]
   ITemporalManager
   (updateTemporalCoordinates [_ row-id->temporal-coordinates]
-    ;; TODO: should this be properly atomic, or do we take a lock
-    ;; between this a root creation?
     (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
             :let [row-id (.rowId coordinates)
                   id (.id coordinates)
@@ -55,14 +53,18 @@
                        id)]]
       (when-let [prev-row-id (.get id->row-id id)]
         (.put row-id->tx-time-end prev-row-id (.txTime coordinates)))
-      (.put id->row-id id row-id)
+      (.put id->row-id id row-id))
 
-      (when (.tombstone coordinates)
-        (.addLong tombstone-row-ids row-id))))
+    ;; TODO: how to avoid this lock without copying?
+    (locking tombstone-row-ids
+      (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
+              :when (.tombstone coordinates)]
+        (.addLong tombstone-row-ids (.rowId coordinates)))))
 
   (removeTombstonesFrom [_ row-id-bitmap]
-    (doto row-id-bitmap
-      (.andNot tombstone-row-ids)))
+    (locking tombstone-row-ids
+      (doto row-id-bitmap
+        (.andNot tombstone-row-ids))))
 
   (createTemporalRoot [_ tx-instant columns row-id-bitmap]
     (assert (= ["_tx-time-end"] columns))
@@ -70,13 +72,12 @@
           ^BigIntVector row-id-vec (.getVector out-root 0)
           ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
           ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
-          row-id-stream (.stream row-id-bitmap) ;; TODO: is this stream really thread safe?
-          value-count (.count row-id-stream)
-          tx-time-ms (.getTime ^Date (.tx-time tx-instant))]
+          tx-time-ms (.getTime ^Date (.tx-time tx-instant))
+          value-count (.getLongCardinality row-id-bitmap)]
       (util/set-value-count row-id-vec value-count)
       (util/set-value-count tx-time-end-duv-vec value-count)
       (util/set-value-count tx-time-end-vec value-count)
-      (.forEach row-id-stream
+      (.forEach (.stream row-id-bitmap)
                 (reify LongConsumer
                   (accept [_ row-id]
                     (let [row-count (.getRowCount out-root)
