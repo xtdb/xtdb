@@ -1,25 +1,22 @@
 (ns core2.indexer
-  (:require core2.metadata
-            core2.object-store
+  (:require [core2.metadata :as meta]
             core2.temporal
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.metadata :as meta])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataManager
-           core2.temporal.ITemporalManager
            core2.object_store.ObjectStore
-           core2.temporal.TemporalCoordinates
+           [core2.temporal ITemporalManager TemporalCoordinates]
            [core2.tx TransactionInstant Watermark]
            core2.util.IChunkCursor
            java.io.Closeable
-           [java.util Collections Date HashMap Map Map$Entry TreeMap]
+           [java.util Collections Date Map Map$Entry TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot VectorUnloader TimeStampVector]
+           [org.apache.arrow.vector BigIntVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo Field Schema]))
@@ -214,7 +211,7 @@
     tx-instant)
 
   (latestCompletedTx [_]
-    (.tx-instant watermark))
+    (some-> watermark .tx-instant))
 
   IndexerPrivate
   (indexTx [this tx-instant tx-ops next-row-id]

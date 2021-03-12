@@ -6,37 +6,21 @@
             [core2.core :as c2]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
-            [core2.select :as sel]
-            core2.temporal
+            [core2.test-util :as tu]
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
-            [core2.util :as util]
-            [core2.test-util :as tu])
-  (:import clojure.lang.MapEntry
-           [core2.buffer_pool BufferPool MemoryMappedBufferPool]
-           [core2.core IngestLoop Node]
-           core2.indexer.Indexer
+            [core2.util :as util])
+  (:import [core2.buffer_pool BufferPool MemoryMappedBufferPool]
+           core2.core.Node
            core2.metadata.IMetadataManager
-           core2.temporal.TemporalManager
            [core2.object_store FileSystemObjectStore ObjectStore]
+           core2.temporal.TemporalManager
            core2.tx.TransactionInstant
            [java.nio.file Files Path]
-           [java.time Clock Duration ZoneId]
-           java.util.Date
+           java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector VarCharVector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.types.Types$MinorType
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.util.Text))
-
-(defn- ->mock-clock ^java.time.Clock [^Iterable dates]
-  (let [times-iterator (.iterator dates)]
-    (proxy [Clock] []
-      (getZone []
-        (ZoneId/of "UTC"))
-      (instant []
-        (if (.hasNext times-iterator)
-          (.toInstant ^Date (.next times-iterator))
-          (throw (IllegalStateException. "out of time")))))))
 
 (defn check-json [^Path expected-path, ^FileSystemObjectStore os]
   (let [^Path os-path (.root-path os)]
@@ -99,8 +83,8 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (tx/->TransactionInstant 6224 #inst "2020-01-02")
+        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
+        last-tx-instant (tx/->TransactionInstant 6240 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -110,8 +94,6 @@
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
       (let [^BufferAllocator a (.allocator node)
             ^ObjectStore os (.object-store node)
-            ^Indexer i (.indexer node)
-            ^IngestLoop il (.ingest-loop node)
             ^BufferPool bp (.buffer-pool node)
             ^IMetadataManager mm (.metadata-manager node)
             ^TemporalManager tm (.temporal-manager node)]
@@ -121,13 +103,13 @@
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
-                         @(.submitTx tx-producer tx-ops)))))
+                         @(c2/submit-tx tx-producer tx-ops)))))
 
         (t/is (= last-tx-instant
-                 (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
+                 (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (with-open [watermark (.getWatermark i)]
+          (with-open [watermark (c2/open-watermark node)]
             (let [column->root (.column->root watermark)
                   first-column (first column->root)
                   last-column (last column->root)]
@@ -147,9 +129,9 @@
                    (.id->row-id tm)))
           (t/is (empty? (.row-id->tx-time-end tm))))
 
-        (.finishChunk i)
+        (tu/finish-chunk node)
 
-        (with-open [watermark (.getWatermark i)]
+        (with-open [watermark (c2/open-watermark node)]
           (t/is (= 4 (.chunk-idx watermark)))
           (t/is (zero? (.row-count watermark)))
           (t/is (empty? (.column->root watermark))))
@@ -211,7 +193,7 @@
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
-        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
+        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
         tx-ops [{:op :put, :doc {:_id "foo"}}
                 {:op :put, :doc {:_id 24.0}}
                 {:op :put, :doc {:_id "bar"}}
@@ -222,41 +204,37 @@
 
     (with-open [node (c2/->local-node node-dir)
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-      (let [^ObjectStore os (.object-store node)
-            ^Indexer i (.indexer node)
-            ^IngestLoop il (.ingest-loop node)]
+      (let [^ObjectStore os (.object-store node)]
 
-        @(-> (.submitTx tx-producer tx-ops)
-             (tu/then-await-tx il))
+        @(-> (c2/submit-tx tx-producer tx-ops)
+             (tu/then-await-tx node))
 
-        (.finishChunk i)
+        (tu/finish-chunk node)
 
         (check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
-        mock-clock (->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (tx/->TransactionInstant 6224 #inst "2020-01-02")]
+        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
+        last-tx-instant (tx/->TransactionInstant 6240 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
     (with-open [node (c2/->local-node node-dir)
                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-      (let [^IngestLoop il (.ingest-loop node)
-            object-dir (.resolve node-dir "objects")]
+      (let [object-dir (.resolve node-dir "objects")]
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
-                         @(.submitTx tx-producer tx-ops)))))
+                         @(c2/submit-tx tx-producer tx-ops)))))
 
         (t/is (= last-tx-instant
-                 (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
-        (t/is (= last-tx-instant (.latestCompletedTx il)))
+                 (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
+        (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
         (with-open [node (c2/->local-node node-dir)]
-          (let [^IngestLoop il (.ingest-loop node)]
-            (t/is (= last-tx-instant
-                     (.awaitTx il last-tx-instant (Duration/ofSeconds 2))))
-            (t/is (= last-tx-instant (.latestCompletedTx il)))))
+          (t/is (= last-tx-instant
+                   (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
+          (t/is (= last-tx-instant (c2/latest-completed-tx node))))
 
         (t/is (zero? (.count (Files/list object-dir))))))))
 
@@ -268,11 +246,7 @@
                 tx-producer (c2/->local-tx-producer node-dir {})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^BufferAllocator a (.allocator node)
-            ^ObjectStore os (.object-store node)
-            ^Indexer i (.indexer node)
-            ^IngestLoop il (.ingest-loop node)
-            ^BufferPool bp (.buffer-pool node)
+      (let [^ObjectStore os (.object-store node)
             ^IMetadataManager mm (.metadata-manager node)
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
@@ -283,17 +257,17 @@
 
         (t/is (= 11000 (count tx-ops)))
 
-        (t/is (nil? (.latestCompletedTx il)))
+        (t/is (nil? (c2/latest-completed-tx node)))
 
         (let [last-tx-instant @(reduce
                                 (fn [_acc tx-ops]
-                                  (.submitTx tx-producer tx-ops))
+                                  (c2/submit-tx tx-producer tx-ops))
                                 nil
                                 (partition-all 100 tx-ops))]
 
-          (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
-          (t/is (= last-tx-instant (.latestCompletedTx il)))
-          (.finishChunk i)
+          (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 5))))
+          (t/is (= last-tx-instant (c2/latest-completed-tx node)))
+          (tu/finish-chunk node)
 
           (t/is [last-tx-instant (dec (count tx-ops))]
                @(meta/with-latest-metadata mm
@@ -364,15 +338,14 @@
 
         (let [last-tx-instant @(reduce
                                 (fn [_ tx-ops]
-                                  (.submitTx tx-producer tx-ops))
+                                  (c2/submit-tx tx-producer tx-ops))
                                 nil
                                 (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [il ^IngestLoop (.ingest-loop node)
-                        os ^ObjectStore (.object-store node)]]
-            (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofSeconds 5))))
-            (t/is (= last-tx-instant (.latestCompletedTx il)))
+                  :let [os ^ObjectStore (.object-store node)]]
+            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 5))))
+            (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; for now
             (t/is (= 11 (count @(.listObjects os "metadata-*"))))
@@ -401,18 +374,16 @@
         (let [^TransactionInstant
               first-half-tx-instant @(reduce
                                       (fn [_ tx-ops]
-                                        (.submitTx tx-producer tx-ops))
+                                        (c2/submit-tx tx-producer tx-ops))
                                       nil
                                       (partition-all 100 first-half-tx-ops))]
 
           (with-open [node (c2/->local-node node-dir opts)]
-            (let [^Indexer i (.indexer node)
-                  ^IngestLoop il (.ingest-loop node)
-                  ^ObjectStore os (.object-store node)
+            (let [^ObjectStore os (.object-store node)
                   ^IMetadataManager mm (.metadata-manager node)
                   ^TemporalManager tm (.temporal-manager node)]
-              (t/is (= first-half-tx-instant (.awaitTx il first-half-tx-instant (Duration/ofSeconds 5))))
-              (t/is (= first-half-tx-instant (.latestCompletedTx il)))
+              (t/is (= first-half-tx-instant (c2/await-tx node first-half-tx-instant (Duration/ofSeconds 5))))
+              (t/is (= first-half-tx-instant (c2/latest-completed-tx node)))
 
               (let [[^TransactionInstant os-tx-instant os-latest-row-id] @(meta/with-latest-metadata mm
                                                                             (juxt meta/latest-tx meta/latest-row-id))]
@@ -429,29 +400,27 @@
               (let [^TransactionInstant
                     second-half-tx-instant @(reduce
                                              (fn [_ tx-ops]
-                                               (.submitTx tx-producer tx-ops))
+                                               (c2/submit-tx tx-producer tx-ops))
                                              nil
                                              (partition-all 100 second-half-tx-ops))]
 
                 (t/is (<= (.tx-id first-half-tx-instant)
-                          (.tx-id (.latestCompletedTx il))
+                          (.tx-id (c2/latest-completed-tx node))
                           (.tx-id second-half-tx-instant)))
 
                 (with-open [new-node (c2/->local-node node-dir opts)]
                   (doseq [^Node node [new-node node]
-                          :let [^IngestLoop il (.ingest-loop node)
-                                ^TemporalManager tm (.temporal-manager node)]]
+                          :let [^TemporalManager tm (.temporal-manager node)]]
                     (t/is (<= (.tx-id first-half-tx-instant)
-                              (.tx-id (.latestCompletedTx il))
+                              (.tx-id (c2/latest-completed-tx node))
                               (.tx-id second-half-tx-instant)))
 
                     (t/is (>= (count (.row-id->tx-time-end tm)) 3500))
                     (t/is (>= (count (.id->row-id tm)) 2000)))
 
-                  (doseq [^Node node [new-node node]
-                          :let [^IngestLoop il (.ingest-loop node)]]
-                    (t/is (= second-half-tx-instant (.awaitTx il second-half-tx-instant (Duration/ofSeconds 5))))
-                    (t/is (= second-half-tx-instant (.latestCompletedTx il))))
+                  (doseq [^Node node [new-node node]]
+                    (t/is (= second-half-tx-instant (c2/await-tx node second-half-tx-instant (Duration/ofSeconds 5))))
+                    (t/is (= second-half-tx-instant (c2/latest-completed-tx node))))
 
                   (Thread/sleep 1000) ;; for now
 

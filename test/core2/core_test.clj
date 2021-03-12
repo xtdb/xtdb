@@ -2,14 +2,14 @@
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.core :as c2]
-            [core2.json :as c2-json])
+            [core2.json :as c2-json]
+            [core2.tx-producer :as txp])
   (:import org.apache.arrow.memory.RootAllocator))
 
 (t/deftest can-write-tx-to-arrow-ipc-streaming-format
   (with-open [a (RootAllocator.)]
     (t/is (= (json/parse-string (slurp (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
-             (-> (c2/serialize-tx-ops
+             (-> (txp/serialize-tx-ops
                   [{:op :put
                     :doc {:_id "device-info-demo000000",
                           :api-version "23",

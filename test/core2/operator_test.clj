@@ -7,9 +7,7 @@
             [core2.test-util :as tu]
             [core2.metadata :as meta]
             [core2.types :as ty])
-  (:import core2.core.IngestLoop
-           core2.indexer.Indexer
-           java.util.function.Consumer
+  (:import java.util.function.Consumer
            org.apache.arrow.vector.types.Types$MinorType
            [org.apache.arrow.vector.util Text]))
 
@@ -21,22 +19,20 @@
       (let [allocator (.allocator node)
             buffer-pool (.buffer-pool node)
             metadata-mgr (.metadata-manager node)
-            temporal-mgr (.temporal-manager node)
-            ^Indexer i (.indexer node)
-            ^IngestLoop il (.ingest-loop node)]
+            temporal-mgr (.temporal-manager node)]
 
-        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Håkan", :_id 0}}])
-             (tu/then-await-tx il))
+        @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Håkan", :_id 0}}])
+             (tu/then-await-tx node))
 
-        (.finishChunk i)
+        (tu/finish-chunk node)
 
-        @(.submitTx tx-producer [{:op :put, :doc {:name "James", :_id 1}}
+        @(c2/submit-tx tx-producer [{:op :put, :doc {:name "James", :_id 1}}
                                  {:op :put, :doc {:name "Dan", :_id 2}}])
 
-        @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jon", :_id 3}}])
-             (tu/then-await-tx il))
+        @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Jon", :_id 3}}])
+             (tu/then-await-tx node))
 
-        (.finishChunk i)
+        (tu/finish-chunk node)
 
         (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
               metadata-pred (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)
@@ -52,18 +48,18 @@
                                               (accept [_ root]
                                                 (swap! !results into (tu/root->rows root)))))))
                       (set @!results)))]
-            (with-open [watermark (.getWatermark i)]
+            (with-open [watermark (c2/open-watermark node)]
               (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
                     "only needs to scan chunk 1")
 
-              @(-> (.submitTx tx-producer [{:op :put, :doc {:name "Jeremy", :_id 4}}])
-                   (tu/then-await-tx il))
+              @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Jeremy", :_id 4}}])
+                   (tu/then-await-tx node))
 
               (t/is (= #{[(Text. "James")]
                          [(Text. "Jon")]}
                        (query-ivan watermark))))
 
-            (with-open [watermark (.getWatermark i)]
+            (with-open [watermark (c2/open-watermark node)]
               (t/is (= #{[(Text. "James")]
                          [(Text. "Jon")]
                          [(Text. "Jeremy")]}

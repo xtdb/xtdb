@@ -1,14 +1,15 @@
 (ns core2.log
   (:require [clojure.tools.logging :as log]
+            [core2.tx :as tx]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
-           [java.nio.channels Channels ClosedByInterruptException FileChannel]
            java.nio.ByteBuffer
-           [java.nio.file Files Path StandardOpenOption]
-           [java.time Clock]
-           [java.util ArrayList Date List]
-           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future TimeUnit]))
+           [java.nio.channels Channels ClosedByInterruptException FileChannel]
+           [java.nio.file Path StandardOpenOption]
+           java.time.Clock
+           [java.util ArrayList Date]
+           [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -19,6 +20,9 @@
   (^java.util.List readRecords [^Long after-offset ^int limit]))
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
+
+(defn log-record->tx-instant ^core2.tx.TransactionInstant [^LogRecord record]
+  (tx/->TransactionInstant (.offset record) (.time record)))
 
 (def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
 

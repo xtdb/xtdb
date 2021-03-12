@@ -5,10 +5,9 @@
             [core2.ts-devices :as ts]
             [core2.core :as c2]
             [core2.util :as util]
-            [core2.metadata :as meta])
-  (:import [core2.core IngestLoop Node]
-           [core2.indexer Indexer]
-           core2.metadata.IMetadataManager
+            [core2.metadata :as meta]
+            [core2.test-util :as tu])
+  (:import core2.metadata.IMetadataManager
            [java.time Duration]))
 
 (t/deftest ^:integration can-ingest-ts-devices-small
@@ -21,9 +20,7 @@
                   tx-producer (c2/->local-tx-producer node-dir {})
                   info-reader (io/reader (io/resource "devices_small_device_info.csv"))
                   readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
-        (let [^Indexer i (.indexer node)
-              ^IngestLoop il (.ingest-loop node)
-              ^IMetadataManager mm (.metadata-manager node)
+        (let [^IMetadataManager mm (.metadata-manager node)
               device-infos (mapv ts/device-info-csv->doc (csv/read-csv info-reader))
               readings (mapv ts/readings-csv->doc (csv/read-csv readings-reader))
               [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -33,17 +30,17 @@
 
           (t/is (= 1001000 (count tx-ops)))
 
-          (t/is (nil? (.latestCompletedTx il)))
+          (t/is (nil? (c2/latest-completed-tx node)))
 
           (let [last-tx-instant @(reduce
-                                  (fn [acc tx-ops]
-                                    (.submitTx tx-producer tx-ops))
+                                  (fn [_acc tx-ops]
+                                    (c2/submit-tx tx-producer tx-ops))
                                   nil
                                   (partition-all 100 tx-ops))]
 
-            (t/is (= last-tx-instant (.awaitTx il last-tx-instant (Duration/ofMinutes 15))))
-            (t/is (= last-tx-instant (.latestCompletedTx il)))
-            (.finishChunk i)
+            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofMinutes 15))))
+            (t/is (= last-tx-instant (c2/latest-completed-tx node)))
+            (tu/finish-chunk node)
 
             (t/is (= [last-tx-instant (dec (count tx-ops))]
                      @(meta/with-latest-metadata mm

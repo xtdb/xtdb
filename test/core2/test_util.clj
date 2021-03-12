@@ -1,12 +1,12 @@
 (ns core2.test-util
   (:require [clojure.test :as t]
-            [core2.core]
+            [core2.core :as c2]
             [core2.types :as ty]
             [core2.util :as util])
-  (:import core2.core.IngestLoop
+  (:import core2.core.Node
            core2.ICursor
-           java.time.Duration
-           [java.util ArrayList LinkedList]
+           [java.time Clock Duration ZoneId]
+           [java.util ArrayList Date LinkedList]
            java.util.concurrent.CompletableFuture
            java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator
@@ -36,15 +36,28 @@
     acc))
 
 (defn then-await-tx
-  ([^CompletableFuture submit-tx-fut, ^IngestLoop il]
+  ([^CompletableFuture submit-tx-fut, ^Node node]
    (-> submit-tx-fut
-       (then-await-tx il (Duration/ofSeconds 2))))
+       (then-await-tx node (Duration/ofSeconds 2))))
 
-  ([^CompletableFuture submit-tx-fut, ^IngestLoop il, timeout]
+  ([^CompletableFuture submit-tx-fut, ^Node node, timeout]
    (-> submit-tx-fut
        (util/then-apply
         (fn [tx]
-          (.awaitTx il tx timeout))))))
+          (c2/await-tx node tx timeout))))))
+
+(defn ->mock-clock ^java.time.Clock [^Iterable dates]
+  (let [times-iterator (.iterator dates)]
+    (proxy [Clock] []
+      (getZone []
+        (ZoneId/of "UTC"))
+      (instant []
+        (if (.hasNext times-iterator)
+          (.toInstant ^Date (.next times-iterator))
+          (throw (IllegalStateException. "out of time")))))))
+
+(defn finish-chunk [^Node node]
+  (.finishChunk ^core2.indexer.Indexer (.indexer node)))
 
 (defn ->cursor ^core2.ICursor [schema blocks]
   (let [blocks (LinkedList. blocks)

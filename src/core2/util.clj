@@ -169,15 +169,9 @@
   ([^ExecutorService pool]
    (shutdown-pool pool 60))
   ([^ExecutorService pool ^long timeout-seconds]
-   (try
-     (.shutdown pool)
-     (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
-       (.shutdownNow pool)
-       (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
-         (log/warn "pool did not terminate" pool)))
-     (catch InterruptedException _
-       (.shutdownNow pool)
-       (.interrupt (Thread/currentThread))))))
+   (.shutdownNow pool)
+   (when-not (.awaitTermination pool timeout-seconds TimeUnit/SECONDS)
+     (log/warn "pool did not terminate" pool))))
 
 ;;; Arrow
 
