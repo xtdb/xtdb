@@ -17,6 +17,7 @@
            [java.util Date List Map HashMap SortedMap SortedSet TreeMap]
            [java.util.function Consumer Function LongConsumer]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
+           java.util.concurrent.locks.StampedLock
            java.io.Closeable))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -42,7 +43,8 @@
                           ^IMetadataManager metadata-manager
                           ^Map row-id->tx-time-end
                           ^Map id->row-id
-                          ^Roaring64Bitmap tombstone-row-ids]
+                          ^Roaring64Bitmap tombstone-row-ids
+                          ^StampedLock tombstone-row-ids-lock]
   ITemporalManager
   (updateTemporalCoordinates [_ row-id->temporal-coordinates]
     (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
@@ -56,15 +58,21 @@
       (.put id->row-id id row-id))
 
     ;; TODO: how to avoid this lock without copying?
-    (locking tombstone-row-ids
-      (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
-              :when (.tombstone coordinates)]
-        (.addLong tombstone-row-ids (.rowId coordinates)))))
+    (let [stamp (.writeLock tombstone-row-ids-lock)]
+      (try
+        (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
+                :when (.tombstone coordinates)]
+          (.addLong tombstone-row-ids (.rowId coordinates)))
+        (finally
+          (.unlock tombstone-row-ids-lock stamp)))))
 
   (removeTombstonesFrom [_ row-id-bitmap]
-    (locking tombstone-row-ids
-      (doto row-id-bitmap
-        (.andNot tombstone-row-ids))))
+    (let [stamp (.readLock tombstone-row-ids-lock)]
+      (try
+        (doto row-id-bitmap
+          (.andNot tombstone-row-ids))
+        (finally
+          (.unlock tombstone-row-ids-lock stamp)))))
 
   (createTemporalRoot [_ tx-instant columns row-id-bitmap]
     (assert (= ["_tx-time-end"] columns))
@@ -166,5 +174,5 @@
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
                                                            ^BufferPool buffer-pool
                                                            ^IMetadataManager metadata-manager]
-  (-> (TemporalManager. allocator buffer-pool metadata-manager (ConcurrentHashMap.) (HashMap.) (Roaring64Bitmap.))
+  (-> (TemporalManager. allocator buffer-pool metadata-manager (ConcurrentHashMap.) (HashMap.) (Roaring64Bitmap.) (StampedLock.))
       (populate-known-chunks)))
