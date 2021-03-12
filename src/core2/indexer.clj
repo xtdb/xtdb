@@ -230,7 +230,8 @@
             op-type-ids (object-array (mapv (fn [^Field field]
                                               (keyword (.getName field)))
                                             (.getChildren (.getField tx-ops-vec))))
-            tx-time-ms (.getTime ^Date (.tx-time tx-instant))]
+            tx-time-ms (.getTime ^Date (.tx-time tx-instant))
+            row-id->temporal-coordinates (TreeMap.)]
         (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
                 per-op-offset (.getOffset tx-ops-vec tx-op-idx)
@@ -242,6 +243,7 @@
                 temporal-coordinates (doto (HashMap.)
                                        (.put "_row-id" row-id)
                                        (.put "_tx-time" tx-time-ms))]
+            (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
@@ -257,7 +259,11 @@
                         (.put temporal-coordinates (.getName id-vec) (.getObject id-vec per-op-offset))
 
                         (copy-safe! (.getLiveRoot this (.getName id-vec))
-                                    id-vec per-op-offset row-id)))
+                                    id-vec per-op-offset row-id)
+
+                        (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
+                                    tombstone-vec 0 row-id)
+                        (.put temporal-coordinates "_tombstone" true)))
 
             (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
                         tx-time-vec 0 row-id)
@@ -269,14 +275,9 @@
                     :when (not (.isNull v per-op-offset))]
               (.put temporal-coordinates (.getName v) (.get v per-op-offset))
               (copy-safe! (.getLiveRoot this (.getName v))
-                          v per-op-offset row-id))
+                          v per-op-offset row-id))))
 
-            (.updateTemporalCoordinates temporal-mgr temporal-coordinates)
-
-            (when (= :delete op)
-              (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
-                          tombstone-vec 0 row-id)
-              (.registerTombstone temporal-mgr row-id))))
+        (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
 
         (.getValueCount tx-ops-vec))))
 

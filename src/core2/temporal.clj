@@ -11,7 +11,7 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.longlong.Roaring64Bitmap
            java.nio.ByteBuffer
-           [java.util List Map HashMap SortedSet]
+           [java.util List Map HashMap SortedMap SortedSet TreeMap]
            [java.util.function Consumer Function LongConsumer]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.io.Closeable))
@@ -19,8 +19,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ITemporalManager
-  (^void updateTemporalCoordinates [^java.util.Map coordinates])
-  (^void registerTombstone [^long row-id])
+  (^void updateTemporalCoordinates [^java.util.SortedMap row-id->temporal-coordinates])
   (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
   (^org.apache.arrow.vector.VectorSchemaRoot createTemporalRoot [^java.util.List columns
                                                                  ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
@@ -41,23 +40,26 @@
                           ^Map id->row-id
                           ^Roaring64Bitmap tombstone-row-ids]
   ITemporalManager
-  (updateTemporalCoordinates [_ coordinates]
-    (let [id (.get coordinates "_id")
-          row-id (.get coordinates "_row-id")
-          tx-time (.get coordinates "_tx-time")
-          id (if (bytes? id)
-                 (ByteBuffer/wrap id)
-                 id)]
+  (updateTemporalCoordinates [_ row-id->temporal-coordinates]
+    ;; TODO: should this be properly atomic, or do we take a lock
+    ;; between this a root creation?
+    (doseq [^Map coordinates (vals row-id->temporal-coordinates)
+            :let [id (.get coordinates "_id")
+                  row-id (.get coordinates "_row-id")
+                  tx-time (.get coordinates "_tx-time")
+                  id (if (bytes? id)
+                       (ByteBuffer/wrap id)
+                       id)]]
       (when-let [prev-row-id (.get id->row-id id)]
         (.put row-id->tx-time-end prev-row-id tx-time))
-      (.put id->row-id id row-id)))
+      (.put id->row-id id row-id)
+
+      (when (.get coordinates "_tombstone")
+        (.addLong tombstone-row-ids row-id))))
 
   (removeTombstonesFrom [_ row-id-bitmap]
     (doto row-id-bitmap
       (.andNot tombstone-row-ids)))
-
-  (registerTombstone [_ row-id]
-    (.addLong tombstone-row-ids row-id))
 
   (createTemporalRoot [_ columns row-id-bitmap]
     (assert (= ["_tx-time-end"] columns))
@@ -65,19 +67,20 @@
           ^BigIntVector row-id-vec (.getVector out-root 0)
           ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
           ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
-          value-count (.getLongCardinality row-id-bitmap)]
+          row-id-stream (.stream row-id-bitmap) ;; TODO: is this stream really thread safe?
+          value-count (.count row-id-stream)]
       (util/set-value-count row-id-vec value-count)
       (util/set-value-count tx-time-end-duv-vec value-count)
       (util/set-value-count tx-time-end-vec value-count)
-      (-> (.stream row-id-bitmap)
-          (.forEach (reify LongConsumer
-                      (accept [_ row-id]
-                        (let [row-count (.getRowCount out-root)
-                              offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
-                              ^long tx-time-end (.getOrDefault row-id->tx-time-end row-id Long/MAX_VALUE)]
-                          (.set row-id-vec row-count row-id)
-                          (.set tx-time-end-vec row-count tx-time-end)
-                          (util/set-vector-schema-root-row-count out-root row-count))))))
+      (.forEach row-id-stream
+                (reify LongConsumer
+                  (accept [_ row-id]
+                    (let [row-count (.getRowCount out-root)
+                          offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
+                          ^long tx-time-end (.getOrDefault row-id->tx-time-end row-id Long/MAX_VALUE)]
+                      (.set row-id-vec row-count row-id)
+                      (.set tx-time-end-vec row-count tx-time-end)
+                      (util/set-vector-schema-root-row-count out-root row-count)))))
       out-root))
 
   Closeable
@@ -98,7 +101,7 @@
                      known-chunks)]
     @(CompletableFuture/allOf (into-array CompletableFuture futs))
     (doseq [chunk-idx known-chunks
-            :let [row-id->temporal-coordinates (HashMap.)]]
+            :let [row-id->temporal-coordinates (TreeMap.)]]
       (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
                   id-chunks (util/->chunks id-buffer (.allocator temporal-manager))]
         (.forEachRemaining id-chunks
@@ -131,21 +134,22 @@
                                        (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
                                            (.put col-name (.get temporal-vec n)))))))))))
 
-      (doseq [temporal-coordinates (vals row-id->temporal-coordinates)]
-        (.updateTemporalCoordinates temporal-manager temporal-coordinates)))
+      (when-let [tombstone-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tombstone"))]
+        (with-open [^ArrowBuf tombstone-buffer tombstone-buffer
+                    tombstone-chunks (util/->chunks tombstone-buffer (.allocator temporal-manager))]
+          (.forEachRemaining tombstone-chunks
+                             (reify Consumer
+                               (accept [_ tombstone-root]
+                                 (let [^VectorSchemaRoot tombstone-root tombstone-root
+                                       ^BigIntVector row-id-vec (.getVector tombstone-root 0)
+                                       ^DenseUnionVector tombstone-duv-vec (.getVector tombstone-root 1)]
+                                   (dotimes [n (.getRowCount tombstone-root)]
+                                     (when (.getObject tombstone-duv-vec n)
+                                       (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
+                                           (.put "_tombstone" true))))))))))
 
-    (doseq [chunk-idx (meta/matching-chunks metadata-manager nil (meta/matching-chunk-pred "_tombstone" nil (t/->minor-type :bit)))]
-      (with-open [^ArrowBuf tombstone-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tombstone"))
-                  tombstone-chunks (util/->chunks tombstone-buffer (.allocator temporal-manager))]
-        (.forEachRemaining tombstone-chunks
-                           (reify Consumer
-                             (accept [_ tombstone-root]
-                               (let [^VectorSchemaRoot tombstone-root tombstone-root
-                                     ^BigIntVector row-id-vec (.getVector tombstone-root 0)
-                                     ^DenseUnionVector tombstone-duv-vec (.getVector tombstone-root 1)]
-                                 (dotimes [n (.getRowCount tombstone-root)]
-                                   (when (.getObject tombstone-duv-vec n)
-                                     (.registerTombstone temporal-manager (.get row-id-vec n))))))))))
+      (.updateTemporalCoordinates temporal-manager row-id->temporal-coordinates))
+
     temporal-manager))
 
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
