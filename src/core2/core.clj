@@ -126,10 +126,14 @@
 
             (if _valid-time
               (t/set-safe! valid-time-vec tx-op-n _valid-time)
-              (t/set-null! valid-time-vec tx-op-n))
+              (doto valid-time-vec
+                (util/set-value-count tx-op-n)
+                (t/set-null! tx-op-n)))
             (if _valid-time-end
               (t/set-safe! valid-time-end-vec tx-op-n _valid-time)
-              (t/set-null! valid-time-end-vec tx-op-n))))
+              (doto valid-time-end-vec
+                (util/set-value-count tx-op-n)
+                (t/set-null! tx-op-n)))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
 
