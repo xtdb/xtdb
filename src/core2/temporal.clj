@@ -4,6 +4,7 @@
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
+           core2.temporal.TemporalCoordinates
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector.types.pojo Field Schema]
@@ -43,18 +44,17 @@
   (updateTemporalCoordinates [_ row-id->temporal-coordinates]
     ;; TODO: should this be properly atomic, or do we take a lock
     ;; between this a root creation?
-    (doseq [^Map coordinates (vals row-id->temporal-coordinates)
-            :let [id (.get coordinates "_id")
-                  row-id (.get coordinates "_row-id")
-                  tx-time (.get coordinates "_tx-time")
+    (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
+            :let [row-id (.rowId coordinates)
+                  id (.id coordinates)
                   id (if (bytes? id)
                        (ByteBuffer/wrap id)
                        id)]]
       (when-let [prev-row-id (.get id->row-id id)]
-        (.put row-id->tx-time-end prev-row-id tx-time))
+        (.put row-id->tx-time-end prev-row-id (.txTime coordinates)))
       (.put id->row-id id row-id)
 
-      (when (.get coordinates "_tombstone")
+      (when (.tombstone coordinates)
         (.addLong tombstone-row-ids row-id))))
 
   (removeTombstonesFrom [_ row-id-bitmap]
@@ -111,12 +111,10 @@
                                      ^BigIntVector row-id-vec (.getVector id-root 0)
                                      id-vec (.getVector id-root 1)]
                                  (dotimes [n (.getRowCount id-root)]
-                                   (let [row-id (.get row-id-vec n)]
-                                     (.put row-id->temporal-coordinates
-                                           row-id
-                                           (doto (HashMap.)
-                                             (.put "_row-id" row-id)
-                                             (.put "_id" (.getObject id-vec n)))))))))))
+                                   (let [row-id (.get row-id-vec n)
+                                         coordinates (TemporalCoordinates. row-id)]
+                                     (set! (.id coordinates) (.getObject id-vec n))
+                                     (.put row-id->temporal-coordinates row-id coordinates))))))))
 
 
       (doseq [col-name ["_tx-time" "_valid-time" "_valid-time-end"]]
@@ -131,8 +129,12 @@
                                          ^DenseUnionVector temporal-duv-vec (.getVector temporal-root 1)
                                          ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec timestampmilli-type-id)]
                                      (dotimes [n (.getRowCount temporal-root)]
-                                       (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
-                                           (.put col-name (.get temporal-vec n)))))))))))
+                                       (let [^TemporalCoordinates coordinates (.get row-id->temporal-coordinates (.get row-id-vec n))
+                                             time-ms (.get temporal-vec n)]
+                                         (case col-name
+                                           "_tx-time" (set! (.txTime coordinates) time-ms)
+                                           "_valid-time" (set! (.validTime coordinates) time-ms)
+                                           "_valid-time-end" (set! (.validTimeEnd coordinates) time-ms)))))))))))
 
       (when-let [tombstone-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tombstone"))]
         (with-open [^ArrowBuf tombstone-buffer tombstone-buffer
@@ -145,8 +147,8 @@
                                        ^DenseUnionVector tombstone-duv-vec (.getVector tombstone-root 1)]
                                    (dotimes [n (.getRowCount tombstone-root)]
                                      (when (.getObject tombstone-duv-vec n)
-                                       (-> ^Map (.get row-id->temporal-coordinates (.get row-id-vec n))
-                                           (.put "_tombstone" true))))))))))
+                                       (let [coordinates ^TemporalCoordinates (.get row-id->temporal-coordinates (.get row-id-vec n))]
+                                         (set! (.tombstone coordinates) true))))))))))
 
       (.updateTemporalCoordinates temporal-manager row-id->temporal-coordinates))
 

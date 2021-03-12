@@ -10,6 +10,7 @@
            core2.metadata.IMetadataManager
            core2.temporal.ITemporalManager
            core2.object_store.ObjectStore
+           core2.temporal.TemporalCoordinates
            [core2.tx TransactionInstant Watermark]
            core2.util.IChunkCursor
            java.io.Closeable
@@ -237,12 +238,12 @@
                 per-op-offset (.getOffset tx-ops-vec tx-op-idx)
                 op-vec (.getStruct tx-ops-vec op-type-id)
 
-                valid-time-vecs [(.getChild op-vec "_valid-time") (.getChild op-vec "_valid-time-end")]
+                ^TimeStampVector valid-time-vec (.getChild op-vec "_valid-time")
+                ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
                 row-id (+ next-row-id per-op-offset)
                 op (aget op-type-ids op-type-id)
-                temporal-coordinates (doto (HashMap.)
-                                       (.put "_row-id" row-id)
-                                       (.put "_tx-time" tx-time-ms))]
+                temporal-coordinates (TemporalCoordinates. row-id)]
+            (set! (.txTime temporal-coordinates) tx-time-ms)
             (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
@@ -250,20 +251,20 @@
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
 
                        (when (= "_id" (.getName value-vec))
-                         (.put temporal-coordinates (.getName value-vec) (.getObject value-vec per-op-offset)))
+                         (set! (.id temporal-coordinates) (.getObject value-vec per-op-offset)))
 
                        (copy-safe! (.getLiveRoot this (.getName value-vec))
                                    value-vec per-op-offset row-id)))
 
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
-                        (.put temporal-coordinates (.getName id-vec) (.getObject id-vec per-op-offset))
+                        (set! (.id temporal-coordinates) (.getObject id-vec per-op-offset))
+                        (set! (.tombstone temporal-coordinates) true)
 
                         (copy-safe! (.getLiveRoot this (.getName id-vec))
                                     id-vec per-op-offset row-id)
 
                         (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
-                                    tombstone-vec 0 row-id)
-                        (.put temporal-coordinates "_tombstone" true)))
+                                    tombstone-vec 0 row-id)))
 
             (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
                         tx-time-vec 0 row-id)
@@ -271,11 +272,15 @@
             (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
                         tx-id-vec 0 row-id)
 
-            (doseq [^TimeStampVector v valid-time-vecs
-                    :when (not (.isNull v per-op-offset))]
-              (.put temporal-coordinates (.getName v) (.get v per-op-offset))
-              (copy-safe! (.getLiveRoot this (.getName v))
-                          v per-op-offset row-id))))
+            (when (not (.isNull valid-time-vec per-op-offset))
+              (set! (.validTime temporal-coordinates) (.get valid-time-vec per-op-offset))
+              (copy-safe! (.getLiveRoot this (.getName valid-time-vec))
+                          valid-time-vec per-op-offset row-id))
+
+            (when (not (.isNull valid-time-end-vec per-op-offset))
+              (set! (.validTimeEnd temporal-coordinates) (.get valid-time-end-vec per-op-offset))
+              (copy-safe! (.getLiveRoot this (.getName valid-time-vec))
+                          valid-time-end-vec per-op-offset row-id))))
 
         (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
 
