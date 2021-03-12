@@ -564,7 +564,7 @@
                                 (set! (.closing-semaphore this) (Semaphore. 0))
 
                                 (let [open-threads (vals snapshot-threads)]
-                                  (doseq [^Thread thread open-threads]
+                                  (doseq [^Thread thread (set open-threads)]
                                     (.interrupt thread))
                                   (count open-threads))))]
 

@@ -1805,37 +1805,35 @@
 
 
   (open-q* [this query args]
-    (let [index-snapshot (open-index-snapshot this)
-          db (assoc this :index-snapshot index-snapshot)
-          entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))
-          db (assoc db
-               :entity-resolver-fn entity-resolver-fn
-               :fn-allow-list fn-allow-list)
-
-          conformed-query (normalize-and-conform-query conform-cache query)
+    (let [conformed-query (normalize-and-conform-query conform-cache query)
           query-id (str (UUID/randomUUID))
-          safe-query (-> conformed-query .q-normalized (dissoc :args))]
-
+          safe-query (-> conformed-query .q-normalized (dissoc :args))
+          index-snapshot (open-index-snapshot this)]
       (when bus
         (bus/send bus {:crux/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
-      (->> (try
-             (crux.query/query db conformed-query args)
-             (catch Exception e
-               (when bus
-                 (bus/send bus {:crux/event-type ::failed-query
-                                ::query safe-query
-                                ::query-id query-id
-                                ::error {:type (cio/pr-edn-str (type e))
-                                         :message (.getMessage e)}}))
-               (throw e)))
-           (cio/->cursor (fn []
-                           (cio/try-close index-snapshot)
-                           (when bus
-                             (bus/send bus {:crux/event-type ::completed-query
-                                            ::query safe-query
-                                            ::query-id query-id})))))))
+      (try
+        (let [db (as-> this db
+                   (assoc db :index-snapshot index-snapshot)
+                   (assoc db :entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))))]
+
+          (->> (crux.query/query db conformed-query args)
+               (cio/->cursor (fn []
+                               (cio/try-close index-snapshot)
+                               (when bus
+                                 (bus/send bus {:crux/event-type ::completed-query
+                                                ::query safe-query
+                                                ::query-id query-id}))))))
+        (catch Exception e
+          (cio/try-close index-snapshot)
+          (when bus
+            (bus/send bus {:crux/event-type ::failed-query
+                           ::query safe-query
+                           ::query-id query-id
+                           ::error {:type (cio/pr-edn-str (type e))
+                                    :message (.getMessage e)}}))
+          (throw e)))))
 
   (pull [db projection eid]
     (let [?eid (gensym '?eid)
