@@ -104,11 +104,11 @@ Clojure::
 (defn start-crux! []
   (letfn [(kv-store [dir]
             {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-	                      :db-dir      (io/file dir)
+                        :db-dir      (io/file dir)
                         :sync?       true}})]
     (crux/start-node
      {:crux/tx-log              (kv-store "data/dev/tx-log")
-	    :crux/document-store      (kv-store "data/dev/doc-store")
+      :crux/document-store      (kv-store "data/dev/doc-store")
       :crux/index-store         (kv-store "data/dev/index-store")})))
 
 (def crux-node (start-crux!))
@@ -184,7 +184,9 @@ Clojure REPL::
 +
 [source,clojure,subs=attributes+]
 ----
-crux-in-a-box.db> (crux/submit-tx crux-node [[:crux.tx/put {:crux.db/id "hi2u" :user/name "zig"}]])
+crux-in-a-box.db> (crux/submit-tx crux-node [[:crux.tx/put
+                                              {:crux.db/id "hi2u"
+                                               :user/name "zig"}]])
 ;; => #:crux.tx{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
 crux-in-a-box.db> (crux/q (crux/db crux-node) '{:find [e]
                                                 :where [[e :user/name "zig"]]} )
