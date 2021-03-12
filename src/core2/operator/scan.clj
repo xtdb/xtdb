@@ -50,7 +50,7 @@
                               (rest row-id-bitmaps))
         row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
         tx-time-end-root (when (some tx-time-end-col? col-names)
-                           (.createTemporalRoot temporal-manager tx-instant [(.getName temporal/tx-time-end-field)] row-id-bitmap))]
+                           (first (.createTemporalRoots temporal-manager tx-instant [(.getName temporal/tx-time-end-field)] row-id-bitmap)))]
     (try
       (let [roots (for [col-name col-names]
                     (if (tx-time-end-col? col-name)
@@ -60,6 +60,9 @@
                             (doto (->row-id-bitmap tx-time-end-root tx-time-end-pred)
                               (.and row-id-bitmap))
                             row-id-bitmap)]
+        ;; We can augment this (and project-vec) to take a row-id/idx
+        ;; -> repetition count map, to make this aligned with the
+        ;; temporal roots with potentially duplicated row-ids.
         (align/align-vectors roots row-id-bitmap out-root))
       (finally
         (util/try-close tx-time-end-root)))

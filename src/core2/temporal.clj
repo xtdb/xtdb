@@ -20,14 +20,69 @@
            java.util.concurrent.locks.StampedLock
            java.io.Closeable))
 
+;; Temporal proof-of-concept plan:
+
+;; From a BCDM point of view, core2 (and Crux) are similar to Jensen's
+;; event log approach, that is, we know tx-time, and we know the vt
+;; range, but not the actual real state as expressed in the Snodgrass'
+;; timestamped tuple approach, which is the relation we want scan to
+;; produce. Theoretically, one can map between these via the BCDM, as
+;; described in the paper for snapshot equivalent representations, and
+;; that serves as a good reference, but not practical.
+
+;; The only update that needs to happen to the append only data is
+;; setting tx-time-end to the current tx-time when closing
+;; rows. Working around this is what the current uni-temporal tx-time
+;; support does. This fact will help later when and if we decide to
+;; store the temporal index per chunk in Arrow and merge between them.
+
+;; Further, I think we can decide that a put or delete always know its
+;; full vt range, that is, if vt-time isn't known it's set to tx-time,
+;; and if vt-time-end isn't know, it's set to end-of-time (at least
+;; for the proof-of-concept).
+
+;; In the temporal index structure, this means that when you do a put
+;; (delete) you find any current rows (tx-time-end == UC) for the id
+;; that overlaps the vt range, and mark those rows with the
+;; tx-time-end to current tx-time (the part that cannot be done append
+;; only). You then insert the new row entry (for put) normally. If the
+;; put (delete) didn't fully overlap you copy the start (and/or) end
+;; partial row entries forward, referring to the original row-id,
+;; updating their vt-time-end (for start) and vt-time (for end) to
+;; match the slice, you also set tx-time to that of the current tx,
+;; and tx-time-end to UC.
+
+;; We assume that the column store has a 1-to-1 mapping between
+;; operations and row-ids, but the temporal index can refer to them
+;; more than once in the case of splits. These could also be stored in
+;; the column store if we later decide to break the 1-to-1 mapping.
+
+;; For simplicitly, let's assume that this structure is an in-memory
+;; kd-tree for now with 6 dimensions: id, row-id, vt-time,
+;; vt-time-end, tx-time, tx-time-end. When updating tx-time-end, one
+;; has a few options, either one deletes the node and reinserts it, or
+;; one can have an extra value (not part of the actual index),
+;; tx-time-delete, which if it exists, supersedes tx-time-end when
+;; doing the element-level comparision. That would imply that these
+;; nodes would needlessly be found by the kd-tree navigation itself,
+;; so moving them might be better. But a reason to try to avoid moving
+;; nodes is that later this tree can be an implicit kd-tree stored as
+;; Arrow, one per chunk, and the query would need to merge them. How
+;; to solve this problem well can be saved for later.
+
+;; Once this structure exists, it could also potentially be used to
+;; replace the tombstone check (to see if a row is a deletion) I added
+;; as those rows won't sit in the tree. But again, we can postpone
+;; that, as this might be superseded by a per-row _op struct.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ITemporalManager
   (^void updateTemporalCoordinates [^java.util.SortedMap row-id->temporal-coordinates])
   (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
-  (^org.apache.arrow.vector.VectorSchemaRoot createTemporalRoot [^core2.tx.TransactionInstant tx-instant
-                                                                 ^java.util.List columns
-                                                                 ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
+  (^java.util.List createTemporalRoots [^core2.tx.TransactionInstant tx-instant
+                                        ^java.util.List columns
+                                        ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (def ^org.apache.arrow.vector.types.pojo.Field tx-time-end-field
   (t/->primitive-dense-union-field "_tx-time-end" #{:timestampmilli}))
@@ -74,7 +129,7 @@
         (finally
           (.unlock tombstone-row-ids-lock stamp)))))
 
-  (createTemporalRoot [_ tx-instant columns row-id-bitmap]
+  (createTemporalRoots [_ tx-instant columns row-id-bitmap]
     (assert (= ["_tx-time-end"] columns))
     (let [out-root (VectorSchemaRoot/create allocator tx-time-end-schema)
           ^BigIntVector row-id-vec (.getVector out-root 0)
@@ -98,7 +153,7 @@
                       (.set row-id-vec row-count row-id)
                       (.set tx-time-end-vec row-count tx-time-end)
                       (util/set-vector-schema-root-row-count out-root row-count)))))
-      out-root))
+      [out-root]))
 
   Closeable
   (close [_]
