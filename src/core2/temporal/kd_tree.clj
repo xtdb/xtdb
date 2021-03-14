@@ -178,7 +178,11 @@
                          (aset 2 0))))]
     (->ImplicitRangeSearchSpliterator kd-tree min-range max-range k stack)))
 
-;; TODO: check counts via stream count. Add pure scan test.
+;; TODO:
+;; Check counts via stream count.
+;; Add pure scan test.
+;; Add internal search tree variant.
+;; Add columnar variant.
 (defn- run-test []
   (assert (= (-> (->kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
                  (kd-tree-range-search [0 0] [8 4])
