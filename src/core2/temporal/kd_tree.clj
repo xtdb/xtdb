@@ -1,6 +1,6 @@
 (ns core2.temporal.kd-tree
-  (:import [java.util ArrayDeque ArrayList Arrays Comparator Deque List Random Spliterator Spliterators]
-           [java.util.function Consumer Function]
+  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Deque List Random Spliterator Spliterators]
+           [java.util.function Consumer Function Predicate]
            [java.util.stream Collectors StreamSupport]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -180,7 +180,6 @@
 
 ;; TODO:
 ;; Check counts via stream count.
-;; Add pure scan test.
 ;; Add internal search tree variant.
 ;; Add columnar variant.
 (defn- run-test []
@@ -208,11 +207,22 @@
 
         _ (prn :gen-queries qs)
         queries (time
-                 (vec (for [n (range qs)]
-                        [(long-array [(.nextLong rng)
-                                      (.nextLong rng)])
-                         (long-array [(.nextLong rng)
-                                      (.nextLong rng)])])))]
+                 (vec (for [n (range qs)
+                            :let [xs [(.nextLong rng)
+                                      (.nextLong rng)]
+                                  ys [(.nextLong rng)
+                                      (.nextLong rng)]]]
+                        [(long-array (sort xs))
+                         (long-array (sort ys))])))]
+
+    (prn :range-queries-scan qs)
+    (time
+     (doseq [[^longs min-range ^longs max-range] queries]
+       (-> (.stream ^Collection points)
+           (.filter (reify Predicate
+                      (test [_ location]
+                        (in-range? min-range ^longs location max-range))))
+           (.count))))
 
     (prn :build-kd-tree ns)
     (let [kd-tree (time
@@ -220,9 +230,9 @@
       (prn :range-queries-kd-tree qs)
       (time
        (doseq [[min-range max-range] queries]
-         (.forEachRemaining (kd-tree-range-search kd-tree min-range max-range)
-                            (reify Consumer
-                              (accept [_ x]))))))
+         (-> (kd-tree-range-search kd-tree min-range max-range)
+             (StreamSupport/stream false)
+             (.count)))))
 
     (prn :build-implicit-kd-tree ns)
     (let [kd-tree (time
@@ -230,6 +240,6 @@
       (prn :range-queries-implicit-kd-tree qs)
       (time
        (doseq [[min-range max-range] queries]
-         (.forEachRemaining (implicit-kd-tree-range-search kd-tree min-range max-range)
-                            (reify Consumer
-                              (accept [_ x]))))))))
+         (-> (implicit-kd-tree-range-search kd-tree min-range max-range)
+             (StreamSupport/stream false)
+             (.count)))))))
