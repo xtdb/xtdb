@@ -1,6 +1,6 @@
 (ns core2.temporal.kd-tree
-  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Deque List Random Spliterator Spliterators]
-           [java.util.function Consumer Function Predicate]
+  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Deque List Random Spliterator Spliterator$OfInt Spliterators]
+           [java.util.function Consumer IntConsumer Function Predicate]
            [java.util.stream Collectors StreamSupport]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -92,7 +92,7 @@
                 (.push (StackEntry. kd-tree 0)))]
     (->RangeSearchSpliterator min-range max-range k stack)))
 
-(defn ->implicit-kd-tree [points]
+(defn ->implicit-kd-tree ^objects [points]
   (let [points (object-array (mapv ->longs points))
         k (alength ^longs (aget points 0))
         stack (doto (ArrayDeque.)
@@ -178,10 +178,86 @@
                          (aset 2 0))))]
     (->ImplicitRangeSearchSpliterator kd-tree min-range max-range k stack)))
 
+(defn ->column-kd-tree ^java.util.List [points]
+  (let [implicit-kd-tree (->implicit-kd-tree points)
+        n (alength implicit-kd-tree)
+        k (alength ^longs (aget implicit-kd-tree 0))]
+    (vec (for [d (range k)]
+           (long-array (map #(aget ^longs % d) implicit-kd-tree))))))
+
+(defmacro ^:private in-range-column? [mins xs idx maxs]
+  (let [col-sym (with-meta (gensym "col") {:tag 'longs})]
+    `(let [idx# ~idx
+           mins# ~mins
+           xs# ~xs
+           maxs# ~maxs
+           len# (.size xs#)]
+       (loop [n# (int 0)]
+         (if (= n# len#)
+           true
+           (let [~col-sym (.get xs# n#)
+                 x# (aget ~col-sym idx#)]
+             (if (and (<= (aget mins# n#) x#)
+                      (<= x# (aget maxs# n#)))
+               (recur (inc n#))
+               false)))))))
+
+(deftype ColumnRangeSearchSpliterator [^List kd-tree ^longs min-range ^longs max-range ^int k ^Deque stack]
+  Spliterator$OfInt
+  (^boolean tryAdvance [_ ^IntConsumer c]
+    (loop []
+      (if-let [^ints entry (.poll stack)]
+        (let [start (aget entry 0)
+              end (aget entry 1)
+              axis (aget entry 2)
+              median (quot (+ start end) 2)
+              ^longs axis-column (.get kd-tree axis)
+              location-axis (aget axis-column median)
+              min-match? (<= (aget min-range axis) location-axis)
+              max-match? (<= location-axis (aget max-range axis))
+              axis (next-axis axis k)]
+
+          (when (and max-match? (< (inc median) end))
+            (.push stack (doto (int-array 3)
+                           (aset 0 (inc median))
+                           (aset 1 end)
+                           (aset 2 axis))))
+          (when (and min-match? (< start median))
+            (.push stack (doto (int-array 3)
+                           (aset 0 start)
+                           (aset 1 median)
+                           (aset 2 axis))))
+
+          (if (and min-match?
+                   max-match?
+                   (in-range-column? min-range kd-tree median max-range))
+            (do (.accept c median)
+                true)
+            (recur)))
+        false)))
+
+  (characteristics [_]
+    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL))
+
+  (estimateSize [_]
+    Long/MAX_VALUE)
+
+  (trySplit [_]))
+
+(defn column-kd-tree-range-search ^java.util.Spliterator$OfInt [^List kd-tree min-range max-range]
+  (let [min-range (->longs min-range)
+        max-range (->longs max-range)
+        k (alength min-range)
+        stack (doto (ArrayDeque.)
+                (.push (doto (int-array 3)
+                         (aset 0 0)
+                         (aset 1 (alength ^longs (first kd-tree)))
+                         (aset 2 0))))]
+    (->ColumnRangeSearchSpliterator kd-tree min-range max-range k stack)))
+
 ;; TODO:
 ;; Check counts via stream count.
 ;; Add internal search tree variant.
-;; Add columnar variant.
 (defn- run-test []
   (assert (= (-> (->kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
                  (kd-tree-range-search [0 0] [8 4])
@@ -193,12 +269,20 @@
                  (implicit-kd-tree-range-search [0 0] [8 4])
                  (StreamSupport/stream false)
                  (.toArray)
-                 (->> (mapv vec))))
+                 (->> (mapv vec)))
+
+             (let [implicit-kd-tree (->implicit-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
+               (-> (->column-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
+                   (column-kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/intStream false)
+                   (.toArray)
+                   (->> (mapv #(vec (aget implicit-kd-tree %)))))))
           "wikipedia-test")
 
   (let [rng (Random. 0)
         ns 100000
         qs 10000
+        ts 5
         _ (prn :gen-points ns)
         points (time
                 (vec (for [n (range ns)]
@@ -228,18 +312,31 @@
     (let [kd-tree (time
                    (->kd-tree points))]
       (prn :range-queries-kd-tree qs)
-      (time
-       (doseq [[min-range max-range] queries]
-         (-> (kd-tree-range-search kd-tree min-range max-range)
-             (StreamSupport/stream false)
-             (.count)))))
+      (dotimes [_ ts]
+        (time
+         (doseq [[min-range max-range] queries]
+           (-> (kd-tree-range-search kd-tree min-range max-range)
+               (StreamSupport/stream false)
+               (.count))))))
 
     (prn :build-implicit-kd-tree ns)
     (let [kd-tree (time
                    (->implicit-kd-tree points))]
       (prn :range-queries-implicit-kd-tree qs)
-      (time
-       (doseq [[min-range max-range] queries]
-         (-> (implicit-kd-tree-range-search kd-tree min-range max-range)
-             (StreamSupport/stream false)
-             (.count)))))))
+      (dotimes [_ ts]
+        (time
+         (doseq [[min-range max-range] queries]
+           (-> (implicit-kd-tree-range-search kd-tree min-range max-range)
+               (StreamSupport/stream false)
+               (.count))))))
+
+    (prn :build-column-kd-tree ns)
+    (let [kd-tree (time
+                   (->column-kd-tree points))]
+      (prn :range-queries-column-kd-tree qs)
+      (dotimes [_ ts]
+        (time
+         (doseq [[min-range max-range] queries]
+           (-> (column-kd-tree-range-search kd-tree min-range max-range)
+               (StreamSupport/intStream false)
+               (.count))))))))
