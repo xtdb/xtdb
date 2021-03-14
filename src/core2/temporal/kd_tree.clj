@@ -346,8 +346,8 @@
     (->ISTRangeSearchSpliterator (.ist kd-tree) (.points kd-tree) min-range max-range k stack)))
 
 ;; TODO:
-;; Check counts via stream count.
-;; Add internal search tree variant.
+;; Sanity check counts via stream count.
+;; Try different implicit orders for implicit/column/ist.
 (defn- run-test []
   (assert (= (-> (->kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
                  (kd-tree-range-search [0 0] [8 4])
