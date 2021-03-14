@@ -5,7 +5,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord Node [^longs location ^Node left ^Node right])
+(defrecord Node [^longs location left right])
 
 (defmacro ^:private next-axis [axis k]
   `(let [next-axis# (unchecked-inc-int ~axis)]
