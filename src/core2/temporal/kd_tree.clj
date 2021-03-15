@@ -432,7 +432,7 @@
                                 vt-end end-of-time}}]
   (let [^Spliterator id-overlap (kd-tree-range-search kd-tree
                                                       (->min-range {:id id :vt-end vt-start :tt-end end-of-time})
-                                                      (->max-range {:id id :vt-start vt-end :tt-end end-of-time}))
+                                                      (->max-range {:id id :vt-start (Date. (dec ^long (inst-ms vt-end))) :tt-end end-of-time}))
         updates (->> (for [coord (map #(zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end] %)
                                       (iterator-seq (Spliterators/iterator id-overlap)))]
                        (cond-> [(assoc coord :tt-end (inst-ms tt-start))
@@ -442,7 +442,9 @@
 
                          (> ^long (:vt-end coord) ^long (inst-ms vt-end))
                          (conj (assoc coord :tt-start (inst-ms tt-start) :vt-start (inst-ms vt-end)))))
-                     (reduce into #{coordinates}))]
+                     (reduce into (if tombstone?
+                                    #{}
+                                    #{coordinates})))]
     (reduce
      kd-tree-insert
      (reduce
@@ -460,9 +462,9 @@
 
 ;; Peter Olsen sells the flat on January 20, 1998.
 
-;; TODO: not working:
-
 ;; Eva actually purchased the flat on January 3, performed on January 23.
+
+;; TODO: not working:
 
 ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
 
@@ -475,6 +477,6 @@
       (put-entity {:id 7797 :row-id 1 :tt-start #inst "1998-01-10"})
       (put-entity {:id 7797 :row-id 2 :tt-start #inst "1998-01-15"})
       (put-entity {:id 7797 :row-id 3 :tt-start #inst "1998-01-20" :tombstone? true})
-      #_(put-entity {:id 7797 :row-id 4 :tt-start #inst "1998-01-23" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-10"})
+      (put-entity {:id 7797 :row-id 4 :tt-start #inst "1998-01-23" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-15"})
       #_(put-entity {:id 7797 :row-id 5 :tt-start #inst "1998-01-26" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-05" :tombstone? true})
       #_(put-entity {:id 7797 :row-id 6 :tt-start #inst "1998-01-28" :vt-start #inst "1998-01-12"})))
