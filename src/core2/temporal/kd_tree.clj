@@ -35,6 +35,26 @@
                (->kd-tree (subvec points 0 median) axis)
                (->kd-tree (subvec points (inc median)) axis))))))
 
+(defn kd-tree-insert ^core2.temporal.kd_tree.Node [^Node kd-tree location]
+  (let [location (->longs location)
+        k (alength location)]
+    (loop [axis 0
+           node kd-tree
+           build-fn identity]
+      (if-not node
+        (build-fn (Node. location nil nil))
+        (let [^longs location-node (.location node)
+              location-axis (aget location-node axis)]
+          (cond
+            (Arrays/equals location location-node)
+            (build-fn node)
+
+            (< (aget location axis) location-axis)
+            (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
+
+            (<= location-axis (aget location axis))
+            (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
+
 (deftype NodeStackEntry [^Node node ^int axis])
 
 (defmacro ^:private in-range? [mins xs maxs]
@@ -200,6 +220,15 @@
                    (.toArray)
                    (->> (mapv vec)))
 
+               (-> (reduce
+                    kd-tree-insert
+                    nil
+                    [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
+                   (kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/stream false)
+                   (.toArray)
+                   (->> (mapv vec)))
+
                (with-open [column-kd-tree (->column-kd-tree allocator [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
                  (-> column-kd-tree
                      (column-kd-tree-range-search [0 0] [8 4])
@@ -239,11 +268,27 @@
                             (in-range? min-range ^longs location max-range))))
                (.count))))
 
-        (prn :build-kd-tree ns)
+        (prn :build-kd-tree-insert ns)
+        (let [kd-tree (time
+                       (reduce
+                        kd-tree-insert
+                        nil
+                        points))]
+
+          (prn :range-queries-kd-tree-insert qs)
+          (dotimes [_ ts]
+            (time
+             (doseq [[min-range max-range] queries]
+               (-> (kd-tree-range-search kd-tree min-range max-range)
+                   (StreamSupport/stream false)
+                   (.count))))))
+
+
+        (prn :build-kd-tree-bulk ns)
         (let [kd-tree (time
                        (->kd-tree points))]
 
-          (prn :range-queries-kd-tree qs)
+          (prn :range-queries-kd-tree-bulk qs)
           (dotimes [_ ts]
             (time
              (doseq [[min-range max-range] queries]
