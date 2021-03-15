@@ -204,25 +204,22 @@
           "wikipedia-test")
 
   (let [rng (Random. 0)
+        k 2
         ns 100000
         qs 10000
         ts 5
         _ (prn :gen-points ns)
         points (time
                 (vec (for [n (range ns)]
-                       (long-array [(.nextLong rng)
-                                    (.nextLong rng)]))))
+                       (long-array (repeatedly k #(.nextLong rng))))))
 
         _ (prn :gen-queries qs)
         queries (time
                  (vec (for [n (range qs)
-                            :let [mins [(.nextLong rng)
-                                        (.nextLong rng)]
-                                  maxs [(.nextLong rng)
-                                        (.nextLong rng)]
-                                  coords (map (comp sort vector) mins maxs)]]
-                        [(long-array (map first coords))
-                         (long-array (map second coords))])))]
+                            :let [min+max-pairs (repeatedly k #(sort [(.nextLong rng)
+                                                                      (.nextLong rng)]))]]
+                        [(long-array (map first min+max-pairs))
+                         (long-array (map second min+max-pairs))])))]
 
     (prn :range-queries-scan qs)
     (time
