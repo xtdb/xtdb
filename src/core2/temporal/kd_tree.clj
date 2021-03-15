@@ -1,5 +1,5 @@
 (ns core2.temporal.kd-tree
-  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Deque List Random Spliterator Spliterator$OfInt Spliterators]
+  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque List Random Spliterator Spliterator$OfInt Spliterators]
            [java.util.function Consumer IntConsumer Function Predicate]
            [java.util.stream Collectors StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
@@ -365,3 +365,116 @@
                (-> (kd-tree-range-search kd-tree min-range max-range)
                    (StreamSupport/intStream false)
                    (.count))))))))))
+
+;; Bitemporal
+
+(def end-of-time #inst "9999-12-31T23:59:59.000Z")
+
+(defn ->location ^longs [{:keys [id row-id tt-start tt-end vt-start vt-end]
+                          :or {vt-start tt-start
+                               tt-end end-of-time
+                               vt-end end-of-time}}]
+  (long-array [id
+               row-id
+               (if (inst? vt-start)
+                 (inst-ms vt-start)
+                 vt-start)
+               (if (inst? vt-end)
+                 (inst-ms vt-end)
+                 vt-end)
+               (if (inst? tt-start)
+                 (inst-ms tt-start)
+                 tt-start)
+               (if (inst? tt-end)
+                 (inst-ms tt-end)
+                 tt-end)]))
+
+(defn ->min-range ^longs [{:keys [id row-id tt-start tt-end vt-start vt-end]}]
+  (long-array [(or id Long/MIN_VALUE)
+               (or row-id Long/MIN_VALUE)
+               (if vt-start
+                 (inst-ms vt-start)
+                 Long/MIN_VALUE)
+               (if vt-end
+                 (inst-ms vt-end)
+                 Long/MIN_VALUE)
+               (if tt-start
+                 (inst-ms tt-start)
+                 Long/MIN_VALUE)
+               (if tt-end
+                 (inst-ms tt-end)
+                 Long/MIN_VALUE)]))
+
+(defn ->max-range ^longs [{:keys [id row-id tt-start tt-end vt-start vt-end]}]
+  (long-array [(or id Long/MAX_VALUE)
+               (or row-id Long/MAX_VALUE)
+               (if vt-start
+                 (inst-ms vt-start)
+                 Long/MAX_VALUE)
+               (if vt-end
+                 (inst-ms vt-end)
+                 Long/MAX_VALUE)
+               (if tt-start
+                 (inst-ms tt-start)
+                 Long/MAX_VALUE)
+               (if tt-end
+                 (inst-ms tt-end)
+                 Long/MAX_VALUE)]))
+
+(defn ->coordinate [^longs location]
+  (let [[id row-id vt-start vt-end tt-start tt-end] location]
+    (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
+            [id row-id  (Date. ^long vt-start) (Date. ^long vt-end) (Date. ^long tt-start) (Date. ^long tt-end)])))
+
+(defn put-entity [kd-tree {:keys [id tt-start vt-start vt-end tombstone?] :as coordinates
+                           :or {vt-start tt-start
+                                tt-end end-of-time
+                                vt-end end-of-time}}]
+  (let [^Spliterator id-overlap (kd-tree-range-search kd-tree
+                                                      (->min-range {:id id :vt-end vt-start :tt-end end-of-time})
+                                                      (->max-range {:id id :vt-start vt-end :tt-end end-of-time}))
+        updates (->> (for [coord (map #(zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end] %)
+                                      (iterator-seq (Spliterators/iterator id-overlap)))]
+                       (cond-> [(assoc coord :tt-end (inst-ms tt-start))
+                                (assoc coord :tombstone? true)]
+                         (< ^long (:vt-start coord) ^long (inst-ms vt-start))
+                         (conj (assoc coord :tt-start (inst-ms tt-start) :vt-end (inst-ms vt-start)))
+
+                         (> ^long (:vt-end coord) ^long (inst-ms vt-end))
+                         (conj (assoc coord :tt-start (inst-ms tt-start) :vt-start (inst-ms vt-end)))))
+                     (reduce into #{coordinates}))]
+    (reduce
+     kd-tree-insert
+     (reduce
+      kd-tree-delete
+      kd-tree
+      (map ->location (filter :tombstone? updates)))
+     (map ->location (remove :tombstone? updates)))))
+
+;; NOTE: This is from the bitemporal chapter in Snodgrass book.
+
+;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
+;; 1998.
+
+;; Peter Olsen buys the flat on January 15, 1998.
+
+;; Peter Olsen sells the flat on January 20, 1998.
+
+;; TODO: not working:
+
+;; Eva actually purchased the flat on January 3, performed on January 23.
+
+;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
+
+;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
+
+;; A nonsequenced deletion performed on January 30: Delete all records of exactly one-week duration.
+
+(defn- run-bitemp-test []
+  (-> nil
+      (put-entity {:id 7797 :row-id 1 :tt-start #inst "1998-01-10"})
+      (put-entity {:id 7797 :row-id 2 :tt-start #inst "1998-01-15"})
+      (put-entity {:id 7797 :row-id 3 :tt-start #inst "1998-01-20" :tombstone? true})
+      #_(put-entity {:id 7797 :row-id 4 :tt-start #inst "1998-01-23" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-10"})
+      #_(put-entity {:id 7797 :row-id 5 :tt-start #inst "1998-01-26" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-05" :tombstone? true})
+      #_(put-entity {:id 7797 :row-id 6 :tt-start #inst "1998-01-28" :vt-start #inst "1998-01-12"})))
