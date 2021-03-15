@@ -370,91 +370,96 @@
 
 (def end-of-time #inst "9999-12-31T23:59:59.000Z")
 
-(defn ->location ^longs [{:keys [id row-id tt-start tt-end vt-start vt-end]
+(defn ->location ^longs [{:keys [id row-id ^Date tt-start ^Date tt-end ^Date vt-start ^Date vt-end]
                           :or {vt-start tt-start
                                tt-end end-of-time
                                vt-end end-of-time}}]
   (long-array [id
                row-id
-               (if (inst? vt-start)
-                 (inst-ms vt-start)
-                 vt-start)
-               (if (inst? vt-end)
-                 (inst-ms vt-end)
-                 vt-end)
-               (if (inst? tt-start)
-                 (inst-ms tt-start)
-                 tt-start)
-               (if (inst? tt-end)
-                 (inst-ms tt-end)
-                 tt-end)]))
+               (.getTime vt-start)
+               (.getTime vt-end)
+               (.getTime tt-start)
+               (.getTime tt-end)]))
 
-(defn ->min-range ^longs [{:keys [id row-id tt-start tt-end vt-start vt-end]}]
+(defn ->min-range ^longs [{:keys [id row-id ^Date vt-start ^Date vt-end ^Date tt-start ^Date tt-end]}]
   (long-array [(or id Long/MIN_VALUE)
                (or row-id Long/MIN_VALUE)
                (if vt-start
-                 (inst-ms vt-start)
+                 (.getTime vt-start)
                  Long/MIN_VALUE)
                (if vt-end
-                 (inst-ms vt-end)
+                 (.getTime vt-end)
                  Long/MIN_VALUE)
                (if tt-start
-                 (inst-ms tt-start)
+                 (.getTime tt-start)
                  Long/MIN_VALUE)
                (if tt-end
-                 (inst-ms tt-end)
+                 (.getTime tt-end)
                  Long/MIN_VALUE)]))
 
-(defn ->max-range ^longs [{:keys [id row-id tt-start tt-end vt-start vt-end]}]
+(defn ->max-range ^longs [{:keys [id row-id ^Date vt-start ^Date vt-end ^Date tt-start ^Date tt-end]}]
   (long-array [(or id Long/MAX_VALUE)
                (or row-id Long/MAX_VALUE)
                (if vt-start
-                 (inst-ms vt-start)
+                 (.getTime vt-start)
                  Long/MAX_VALUE)
                (if vt-end
-                 (inst-ms vt-end)
+                 (.getTime vt-end)
                  Long/MAX_VALUE)
                (if tt-start
-                 (inst-ms tt-start)
+                 (.getTime tt-start)
                  Long/MAX_VALUE)
                (if tt-end
-                 (inst-ms tt-end)
+                 (.getTime tt-end)
                  Long/MAX_VALUE)]))
+
+(defn put-entity [kd-tree {:keys [id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?] :as coordinates
+                           :or {vt-start tt-start
+                                vt-end end-of-time}}]
+  (let [overlap (-> ^Spliterator (kd-tree-range-search
+                                  kd-tree
+                                  (->min-range {:id id :vt-end vt-start :tt-end end-of-time})
+                                  (->max-range {:id id :vt-start (Date. (dec (.getTime vt-end))) :tt-end end-of-time}))
+                    (Spliterators/iterator)
+                    (iterator-seq))
+        vt-start-idx (int 2)
+        vt-end-idx (int 3)
+        tt-start-idx (int 4)
+        tt-end-idx (int 5)
+        tt-start-ms (.getTime tt-start)
+        vt-start-ms (.getTime vt-start)
+        vt-end-ms (.getTime vt-end)
+        kd-tree (reduce
+                 kd-tree-delete
+                 kd-tree
+                 overlap)
+        kd-tree (cond-> kd-tree
+                  (not tombstone?)
+                  (kd-tree-insert (->location coordinates)))]
+    (reduce
+     (fn [kd-tree ^longs coord]
+       (cond-> (kd-tree-insert kd-tree (doto (Arrays/copyOf coord (alength coord))
+                                         (aset tt-end-idx tt-start-ms)))
+         (< (aget coord vt-start-idx) vt-start-ms)
+         (kd-tree-insert (doto (Arrays/copyOf coord (alength coord))
+                           (aset tt-start-idx tt-start-ms)
+                           (aset vt-end-idx vt-start-ms)))
+
+         (> (aget coord vt-end-idx) vt-end-ms)
+         (kd-tree-insert (doto (Arrays/copyOf coord (alength coord))
+                           (aset tt-start-idx tt-start-ms)
+                           (aset vt-start-idx vt-end-ms)))))
+     kd-tree
+     overlap)))
 
 (defn ->coordinate [^longs location]
   (let [[id row-id vt-start vt-end tt-start tt-end] location]
     (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
             [id row-id  (Date. ^long vt-start) (Date. ^long vt-end) (Date. ^long tt-start) (Date. ^long tt-end)])))
 
-(defn put-entity [kd-tree {:keys [id tt-start vt-start vt-end tombstone?] :as coordinates
-                           :or {vt-start tt-start
-                                vt-end end-of-time}}]
-  (let [^Spliterator id-overlap (kd-tree-range-search kd-tree
-                                                      (->min-range {:id id :vt-end vt-start :tt-end end-of-time})
-                                                      (->max-range {:id id :vt-start (Date. (dec ^long (inst-ms vt-end))) :tt-end end-of-time}))
-        updates (->> (for [coord (map #(zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end] %)
-                                      (iterator-seq (Spliterators/iterator id-overlap)))]
-                       (cond-> [(assoc coord :tt-end (inst-ms tt-start))
-                                (assoc coord :tombstone? true)]
-                         (< ^long (:vt-start coord) ^long (inst-ms vt-start))
-                         (conj (assoc coord :tt-start (inst-ms tt-start) :vt-end (inst-ms vt-start)))
-
-                         (> ^long (:vt-end coord) ^long (inst-ms vt-end))
-                         (conj (assoc coord :tt-start (inst-ms tt-start) :vt-start (inst-ms vt-end)))))
-                     (reduce into (if tombstone?
-                                    #{}
-                                    #{coordinates})))]
-    (reduce
-     kd-tree-insert
-     (reduce
-      kd-tree-delete
-      kd-tree
-      (map ->location (filter :tombstone? updates)))
-     (map ->location (remove :tombstone? updates)))))
-
-
 (defn- temporal-rows [kd-tree row-id->row]
-  (vec (for [{:keys [row-id] :as row} (sort-by (juxt :tt-start :row-id) (map ->coordinate (node-kd-tree->seq kd-tree)))]
+  (vec (for [{:keys [row-id] :as row} (->> (map ->coordinate (node-kd-tree->seq kd-tree))
+                                           (sort-by (juxt :tt-start :row-id) ))]
          (merge row (get row-id->row row-id)))))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
