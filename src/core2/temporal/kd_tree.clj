@@ -368,64 +368,34 @@
 
 ;; Bitemporal Spike
 
-(def end-of-time #inst "9999-12-31T23:59:59.000Z")
+(def ^java.util.Date end-of-time #inst "9999-12-31T23:59:59.999Z")
 
-(defn ->location ^longs [{:keys [id row-id ^Date tt-start ^Date tt-end ^Date vt-start ^Date vt-end]
-                          :or {vt-start tt-start
-                               tt-end end-of-time
-                               vt-end end-of-time}}]
-  (long-array [id
-               row-id
-               (.getTime vt-start)
-               (.getTime vt-end)
-               (.getTime tt-start)
-               (.getTime tt-end)]))
-
-(defn ->min-range ^longs [{:keys [id row-id ^Date vt-start ^Date vt-end ^Date tt-start ^Date tt-end]}]
-  (long-array [(or id Long/MIN_VALUE)
-               (or row-id Long/MIN_VALUE)
-               (if vt-start
-                 (.getTime vt-start)
-                 Long/MIN_VALUE)
-               (if vt-end
-                 (.getTime vt-end)
-                 Long/MIN_VALUE)
-               (if tt-start
-                 (.getTime tt-start)
-                 Long/MIN_VALUE)
-               (if tt-end
-                 (.getTime tt-end)
-                 Long/MIN_VALUE)]))
-
-(defn ->max-range ^longs [{:keys [id row-id ^Date vt-start ^Date vt-end ^Date tt-start ^Date tt-end]}]
-  (long-array [(or id Long/MAX_VALUE)
-               (or row-id Long/MAX_VALUE)
-               (if vt-start
-                 (.getTime vt-start)
-                 Long/MAX_VALUE)
-               (if vt-end
-                 (.getTime vt-end)
-                 Long/MAX_VALUE)
-               (if tt-start
-                 (.getTime tt-start)
-                 Long/MAX_VALUE)
-               (if tt-end
-                 (.getTime tt-end)
-                 Long/MAX_VALUE)]))
-
-(defn put-entity [kd-tree {:keys [id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?] :as coordinates
+(defn put-entity [kd-tree {:keys [^long id ^long row-id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?] :as coordinates
                            :or {vt-start tt-start
                                 vt-end end-of-time}}]
-  (let [overlap (-> ^Spliterator (kd-tree-range-search
-                                  kd-tree
-                                  (->min-range {:id id :vt-end vt-start :tt-end end-of-time})
-                                  (->max-range {:id id :vt-start (Date. (dec (.getTime vt-end))) :tt-end end-of-time}))
-                    (Spliterators/iterator)
-                    (iterator-seq))
+  (let [k (int 6)
+        id-idx (int 0)
+        row-id-idx (int 1)
         vt-start-idx (int 2)
         vt-end-idx (int 3)
         tt-start-idx (int 4)
         tt-end-idx (int 5)
+        min-range (doto (long-array k)
+                    (Arrays/fill Long/MIN_VALUE)
+                    (aset id-idx id)
+                    (aset vt-end-idx (.getTime vt-start))
+                    (aset tt-end-idx (.getTime end-of-time)))
+        max-range (doto (long-array k)
+                    (Arrays/fill Long/MAX_VALUE)
+                    (aset id-idx id)
+                    (aset vt-start-idx (dec (.getTime vt-end)))
+                    (aset tt-end-idx (.getTime end-of-time)))
+        overlap (-> ^Spliterator (kd-tree-range-search
+                                  kd-tree
+                                  min-range
+                                  max-range)
+                    (Spliterators/iterator)
+                    (iterator-seq))
         tt-start-ms (.getTime tt-start)
         vt-start-ms (.getTime vt-start)
         vt-end-ms (.getTime vt-end)
@@ -435,24 +405,30 @@
                  overlap)
         kd-tree (cond-> kd-tree
                   (not tombstone?)
-                  (kd-tree-insert (->location coordinates)))]
+                  (kd-tree-insert (doto (long-array k)
+                                    (aset id-idx id)
+                                    (aset row-id-idx row-id)
+                                    (aset vt-start-idx vt-start-ms)
+                                    (aset vt-end-idx vt-end-ms)
+                                    (aset tt-start-idx tt-start-ms)
+                                    (aset tt-end-idx (.getTime end-of-time)))))]
     (reduce
      (fn [kd-tree ^longs coord]
-       (cond-> (kd-tree-insert kd-tree (doto (Arrays/copyOf coord (alength coord))
+       (cond-> (kd-tree-insert kd-tree (doto (Arrays/copyOf coord k)
                                          (aset tt-end-idx tt-start-ms)))
          (< (aget coord vt-start-idx) vt-start-ms)
-         (kd-tree-insert (doto (Arrays/copyOf coord (alength coord))
+         (kd-tree-insert (doto (Arrays/copyOf coord k)
                            (aset tt-start-idx tt-start-ms)
                            (aset vt-end-idx vt-start-ms)))
 
          (> (aget coord vt-end-idx) vt-end-ms)
-         (kd-tree-insert (doto (Arrays/copyOf coord (alength coord))
+         (kd-tree-insert (doto (Arrays/copyOf coord k)
                            (aset tt-start-idx tt-start-ms)
                            (aset vt-start-idx vt-end-ms)))))
      kd-tree
      overlap)))
 
-(defn ->coordinate [^longs location]
+(defn- ->coordinate [^longs location]
   (let [[id row-id vt-start vt-end tt-start tt-end] location]
     (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
             [id row-id  (Date. ^long vt-start) (Date. ^long vt-end) (Date. ^long tt-start) (Date. ^long tt-end)])))
@@ -481,9 +457,9 @@
                    :customer-number 145,
                    :row-id 1,
                    :vt-start #inst "1998-01-10T00:00:00.000-00:00",
-                   :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                   :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                    :tt-start #inst "1998-01-10T00:00:00.000-00:00",
-                   :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                   :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
                  (temporal-rows kd-tree row-id->row)))
 
       ;; Current Update
@@ -496,7 +472,7 @@
                      :row-id 1,
                      :customer-number 145,
                      :vt-start #inst "1998-01-10T00:00:00.000-00:00",
-                     :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                     :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                      :tt-start #inst "1998-01-10T00:00:00.000-00:00",
                      :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
                     {:id 7797,
@@ -505,14 +481,14 @@
                      :vt-start #inst "1998-01-10T00:00:00.000-00:00",
                      :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                      :tt-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                     :tt-end #inst "9999-12-31T23:59:59.999-00:00"}
                     {:id 7797,
                      :row-id 2,
                      :customer-number 827,
                      :vt-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                     :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                      :tt-start #inst "1998-01-15T00:00:00.000-00:00",
-                     :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                     :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
                    (temporal-rows kd-tree row-id->row)))
 
         ;; Current Delete
@@ -526,7 +502,7 @@
                        :customer-number 145,
                        :row-id 1,
                        :vt-start #inst "1998-01-10T00:00:00.000-00:00",
-                       :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                       :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                        :tt-start #inst "1998-01-10T00:00:00.000-00:00",
                        :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
                       {:id 7797,
@@ -535,12 +511,12 @@
                        :vt-start #inst "1998-01-10T00:00:00.000-00:00",
                        :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                        :tt-start #inst "1998-01-15T00:00:00.000-00:00",
-                       :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                       :tt-end #inst "9999-12-31T23:59:59.999-00:00"}
                       {:id 7797,
                        :customer-number 827,
                        :row-id 2,
                        :vt-start #inst "1998-01-15T00:00:00.000-00:00",
-                       :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                       :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                        :tt-start #inst "1998-01-15T00:00:00.000-00:00",
                        :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
                       {:id 7797,
@@ -549,7 +525,7 @@
                        :vt-start #inst "1998-01-15T00:00:00.000-00:00",
                        :vt-end #inst "1998-01-20T00:00:00.000-00:00",
                        :tt-start #inst "1998-01-20T00:00:00.000-00:00",
-                       :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                       :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
                      (temporal-rows kd-tree row-id->row)))
 
           ;; Sequenced Insert
@@ -564,7 +540,7 @@
                          :customer-number 145,
                          :row-id 1,
                          :vt-start #inst "1998-01-10T00:00:00.000-00:00",
-                         :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                         :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                          :tt-start #inst "1998-01-10T00:00:00.000-00:00",
                          :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
                         {:id 7797,
@@ -578,7 +554,7 @@
                          :customer-number 827,
                          :row-id 2,
                          :vt-start #inst "1998-01-15T00:00:00.000-00:00",
-                         :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                         :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                          :tt-start #inst "1998-01-15T00:00:00.000-00:00",
                          :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
                         {:id 7797,
@@ -587,14 +563,14 @@
                          :vt-start #inst "1998-01-15T00:00:00.000-00:00",
                          :vt-end #inst "1998-01-20T00:00:00.000-00:00",
                          :tt-start #inst "1998-01-20T00:00:00.000-00:00",
-                         :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                         :tt-end #inst "9999-12-31T23:59:59.999-00:00"}
                         {:id 7797,
                          :customer-number 145,
                          :row-id 4,
                          :vt-start #inst "1998-01-03T00:00:00.000-00:00",
                          :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                          :tt-start #inst "1998-01-23T00:00:00.000-00:00",
-                         :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                         :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
                        (temporal-rows kd-tree row-id->row)))
 
             ;; NOTE: rows differs from book, but covered area is the same.
@@ -611,7 +587,7 @@
                            :customer-number 145,
                            :row-id 1,
                            :vt-start #inst "1998-01-10T00:00:00.000-00:00",
-                           :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                           :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                            :tt-start #inst "1998-01-10T00:00:00.000-00:00",
                            :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
                           {:id 7797,
@@ -625,7 +601,7 @@
                            :customer-number 827,
                            :row-id 2,
                            :vt-start #inst "1998-01-15T00:00:00.000-00:00",
-                           :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                           :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                            :tt-start #inst "1998-01-15T00:00:00.000-00:00",
                            :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
                           {:id 7797,
@@ -634,7 +610,7 @@
                            :vt-start #inst "1998-01-15T00:00:00.000-00:00",
                            :vt-end #inst "1998-01-20T00:00:00.000-00:00",
                            :tt-start #inst "1998-01-20T00:00:00.000-00:00",
-                           :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                           :tt-end #inst "9999-12-31T23:59:59.999-00:00"}
                           {:id 7797,
                            :customer-number 145,
                            :row-id 4,
@@ -648,7 +624,7 @@
                            :vt-start #inst "1998-01-05T00:00:00.000-00:00",
                            :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                            :tt-start #inst "1998-01-26T00:00:00.000-00:00",
-                           :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                           :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
                          (temporal-rows kd-tree row-id->row)))
 
               ;; NOTE: rows differs from book, but covered area is the same.
@@ -664,7 +640,7 @@
                              :customer-number 145,
                              :row-id 1,
                              :vt-start #inst "1998-01-10T00:00:00.000-00:00",
-                             :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                             :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                              :tt-start #inst "1998-01-10T00:00:00.000-00:00",
                              :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
                             {:id 7797,
@@ -678,7 +654,7 @@
                              :customer-number 827,
                              :row-id 2,
                              :vt-start #inst "1998-01-15T00:00:00.000-00:00",
-                             :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                             :vt-end #inst "9999-12-31T23:59:59.999-00:00",
                              :tt-start #inst "1998-01-15T00:00:00.000-00:00",
                              :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
                             {:id 7797,
@@ -687,7 +663,7 @@
                              :vt-start #inst "1998-01-15T00:00:00.000-00:00",
                              :vt-end #inst "1998-01-20T00:00:00.000-00:00",
                              :tt-start #inst "1998-01-20T00:00:00.000-00:00",
-                             :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                             :tt-end #inst "9999-12-31T23:59:59.999-00:00"}
                             {:id 7797,
                              :customer-number 145,
                              :row-id 4,
@@ -708,12 +684,12 @@
                              :vt-start #inst "1998-01-05T00:00:00.000-00:00",
                              :vt-end #inst "1998-01-12T00:00:00.000-00:00",
                              :tt-start #inst "1998-01-28T00:00:00.000-00:00",
-                             :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                             :tt-end #inst "9999-12-31T23:59:59.999-00:00"}
                             {:id 7797,
                              :customer-number 827,
                              :row-id 6,
                              :vt-start #inst "1998-01-12T00:00:00.000-00:00",
                              :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                              :tt-start #inst "1998-01-28T00:00:00.000-00:00",
-                             :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                             :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
                            (temporal-rows kd-tree row-id->row)))))))))))
