@@ -203,52 +203,53 @@
                                      column-kd-tree))))))
           "wikipedia-test")
 
-  (let [rng (Random. 0)
-        k 2
-        ns 100000
-        qs 10000
-        ts 5
-        _ (prn :gen-points ns)
-        points (time
-                (vec (for [n (range ns)]
-                       (long-array (repeatedly k #(.nextLong rng))))))
+  (doseq [k (range 2 7)]
+    (let [rng (Random. 0)
+          _ (prn :k k)
+          ns 100000
+          qs 10000
+          ts 5
+          _ (prn :gen-points ns)
+          points (time
+                  (vec (for [n (range ns)]
+                         (long-array (repeatedly k #(.nextLong rng))))))
 
-        _ (prn :gen-queries qs)
-        queries (time
-                 (vec (for [n (range qs)
-                            :let [min+max-pairs (repeatedly k #(sort [(.nextLong rng)
-                                                                      (.nextLong rng)]))]]
-                        [(long-array (map first min+max-pairs))
-                         (long-array (map second min+max-pairs))])))]
+          _ (prn :gen-queries qs)
+          queries (time
+                   (vec (for [n (range qs)
+                              :let [min+max-pairs (repeatedly k #(sort [(.nextLong rng)
+                                                                        (.nextLong rng)]))]]
+                          [(long-array (map first min+max-pairs))
+                           (long-array (map second min+max-pairs))])))]
 
-    (prn :range-queries-scan qs)
-    (time
-     (doseq [[^longs min-range ^longs max-range] queries]
-       (-> (.stream ^Collection points)
-           (.filter (reify Predicate
-                      (test [_ location]
-                        (in-range? min-range ^longs location max-range))))
-           (.count))))
+      (prn :range-queries-scan qs)
+      (time
+       (doseq [[^longs min-range ^longs max-range] queries]
+         (-> (.stream ^Collection points)
+             (.filter (reify Predicate
+                        (test [_ location]
+                          (in-range? min-range ^longs location max-range))))
+             (.count))))
 
-    (prn :build-kd-tree ns)
-    (let [kd-tree (time
-                   (->kd-tree points))]
+      (prn :build-kd-tree ns)
+      (let [kd-tree (time
+                     (->kd-tree points))]
 
-      (prn :range-queries-kd-tree qs)
-      (dotimes [_ ts]
-        (time
-         (doseq [[min-range max-range] queries]
-           (-> (kd-tree-range-search kd-tree min-range max-range)
-               (StreamSupport/stream false)
-               (.count))))))
+        (prn :range-queries-kd-tree qs)
+        (dotimes [_ ts]
+          (time
+           (doseq [[min-range max-range] queries]
+             (-> (kd-tree-range-search kd-tree min-range max-range)
+                 (StreamSupport/stream false)
+                 (.count))))))
 
-    (prn :build-column-kd-tree ns)
-    (let [kd-tree (time
-                   (->column-kd-tree points))]
-      (prn :range-queries-column-kd-tree qs)
-      (dotimes [_ ts]
-        (time
-         (doseq [[min-range max-range] queries]
-           (-> (column-kd-tree-range-search kd-tree min-range max-range)
-               (StreamSupport/intStream false)
-               (.count))))))))
+      (prn :build-column-kd-tree ns)
+      (let [kd-tree (time
+                     (->column-kd-tree points))]
+        (prn :range-queries-column-kd-tree qs)
+        (dotimes [_ ts]
+          (time
+           (doseq [[min-range max-range] queries]
+             (-> (column-kd-tree-range-search kd-tree min-range max-range)
+                 (StreamSupport/intStream false)
+                 (.count)))))))))
