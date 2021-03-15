@@ -7,6 +7,12 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defprotocol KdTree
+  (kd-tree-insert [_ location])
+  (kd-tree-delete [_ location])
+  (kd-tree-range-search [_ min-range max-range])
+  (kd-tree-depth-first [_]))
+
 (defrecord Node [^longs location left right deleted?])
 
 (defmacro ^:private next-axis [axis k]
@@ -22,6 +28,16 @@
     xs
     (long-array xs)))
 
+(extend-protocol KdTree
+  nil
+  (kd-tree-insert [_ location]
+    (Node. (->longs location) nil nil false))
+  (kd-tree-delete [_ _])
+  (kd-tree-range-search [_ _ _]
+    (Spliterators/emptySpliterator))
+  (kd-tree-depth-first [_ _ _]
+    (Spliterators/emptySpliterator)))
+
 (defn ->kd-tree
   (^core2.temporal.kd_tree.Node [points]
    (->kd-tree (mapv ->longs points) 0))
@@ -35,46 +51,6 @@
                (->kd-tree (subvec points 0 median) axis)
                (->kd-tree (subvec points (inc median)) axis)
                false)))))
-
-(defn kd-tree-insert ^core2.temporal.kd_tree.Node [^Node kd-tree location]
-  (let [location (->longs location)
-        k (alength location)]
-    (loop [axis 0
-           node kd-tree
-           build-fn identity]
-      (if-not node
-        (build-fn (Node. location nil nil false))
-        (let [^longs location-node (.location node)
-              location-axis (aget location-node axis)]
-          (cond
-            (Arrays/equals location location-node)
-            (build-fn node)
-
-            (< (aget location axis) location-axis)
-            (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
-
-            (<= location-axis (aget location axis))
-            (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
-
-(defn kd-tree-delete ^core2.temporal.kd_tree.Node [^Node kd-tree location]
-  (let [location (->longs location)
-        k (alength location)]
-    (loop [axis 0
-           node kd-tree
-           build-fn identity]
-      (if-not node
-        (build-fn nil)
-        (let [^longs location-node (.location node)
-              location-axis (aget location-node axis)]
-          (cond
-            (Arrays/equals location location-node)
-            (build-fn (assoc node :deleted? true))
-
-            (< (aget location axis) location-axis)
-            (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
-
-            (<= location-axis (aget location axis))
-            (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
 
 (deftype NodeStackEntry [^Node node ^int axis])
 
@@ -128,17 +104,59 @@
 
   (trySplit [_]))
 
-(defn kd-tree-range-search ^java.util.Spliterator [^Node kd-tree min-range max-range]
-  (let [min-range (->longs min-range)
-        max-range (->longs max-range)
-        k (count (some-> kd-tree (.location)))
-        stack (doto (ArrayDeque.)
-                (.push (NodeStackEntry. kd-tree 0)))]
-    (->NodeRangeSearchSpliterator min-range max-range k stack)))
+(extend-protocol KdTree
+  Node
+  (kd-tree-insert [kd-tree location]
+    (let [location (->longs location)
+          k (alength location)]
+      (loop [axis 0
+             node kd-tree
+             build-fn identity]
+        (if-not node
+          (build-fn (Node. location nil nil false))
+          (let [^longs location-node (.location node)
+                location-axis (aget location-node axis)]
+            (cond
+              (Arrays/equals location location-node)
+              (build-fn node)
 
-(defn kd-tree-depth-first ^java.util.Spliterator [^Node kd-tree]
-  (let [k (count (some-> kd-tree (.location)))]
-    (kd-tree-range-search kd-tree (repeat k Long/MIN_VALUE) (repeat k Long/MAX_VALUE))))
+              (< (aget location axis) location-axis)
+              (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
+
+              (<= location-axis (aget location axis))
+              (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
+
+  (kd-tree-delete [kd-tree location]
+    (let [location (->longs location)
+          k (alength location)]
+      (loop [axis 0
+             node kd-tree
+             build-fn identity]
+        (if-not node
+          (build-fn nil)
+          (let [^longs location-node (.location node)
+                location-axis (aget location-node axis)]
+            (cond
+              (Arrays/equals location location-node)
+              (build-fn (assoc node :deleted? true))
+
+              (< (aget location axis) location-axis)
+              (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
+
+              (<= location-axis (aget location axis))
+              (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
+
+  (kd-tree-range-search [kd-tree min-range max-range]
+    (let [min-range (->longs min-range)
+          max-range (->longs max-range)
+          k (count (some-> kd-tree (.location)))
+          stack (doto (ArrayDeque.)
+                  (.push (NodeStackEntry. kd-tree 0)))]
+      (->NodeRangeSearchSpliterator min-range max-range k stack)))
+
+  (kd-tree-depth-first [kd-tree]
+    (let [k (count (some-> kd-tree (.location)))]
+      (kd-tree-range-search kd-tree (repeat k Long/MIN_VALUE) (repeat k Long/MAX_VALUE)))))
 
 (deftype ColumnStackEntry [^int start ^int end ^int axis])
 
@@ -227,17 +245,25 @@
 
   (trySplit [_]))
 
-(defn column-kd-tree-range-search ^java.util.Spliterator$OfInt [^VectorSchemaRoot kd-tree min-range max-range]
-  (let [min-range (->longs min-range)
-        max-range (->longs max-range)
-        k (alength min-range)
-        stack (doto (ArrayDeque.)
-                (.push (ColumnStackEntry. 0 (.getRowCount kd-tree) 0)))]
-    (->ColumnRangeSearchSpliterator kd-tree min-range max-range k stack)))
+(extend-protocol KdTree
+  VectorSchemaRoot
+  (kd-tree-insert [_ location]
+    (throw (UnsupportedOperationException.)))
 
-(defn column-kd-tree-depth-first ^java.util.Spliterator$OfInt [^VectorSchemaRoot kd-tree]
-  (let [k (.size (.getFields (.getSchema kd-tree)))]
-    (column-kd-tree-range-search kd-tree (repeat k Long/MIN_VALUE) (repeat k Long/MAX_VALUE))))
+  (kd-tree-delete [_ location]
+    (throw (UnsupportedOperationException.)))
+
+  (kd-tree-range-search [kd-tree min-range max-range]
+    (let [min-range (->longs min-range)
+          max-range (->longs max-range)
+          k (alength min-range)
+          stack (doto (ArrayDeque.)
+                  (.push (ColumnStackEntry. 0 (.getRowCount kd-tree) 0)))]
+      (->ColumnRangeSearchSpliterator kd-tree min-range max-range k stack)))
+
+  (column-kd-tree-depth-first [kd-tree]
+    (let [k (.size (.getFields (.getSchema kd-tree)))]
+      (kd-tree-range-search kd-tree (repeat k Long/MIN_VALUE) (repeat k Long/MAX_VALUE)))))
 
 ;; TODO:
 ;; Sanity check counts via stream count.
@@ -261,7 +287,7 @@
 
                (with-open [column-kd-tree (->column-kd-tree allocator [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
                  (-> column-kd-tree
-                     (column-kd-tree-range-search [0 0] [8 4])
+                     (kd-tree-range-search [0 0] [8 4])
                      (StreamSupport/intStream false)
                      (.toArray)
                      (->> (mapv #(mapv (fn [^BigIntVector col]
@@ -333,6 +359,6 @@
           (dotimes [_ ts]
             (time
              (doseq [[min-range max-range] queries]
-               (-> (column-kd-tree-range-search kd-tree min-range max-range)
+               (-> (kd-tree-range-search kd-tree min-range max-range)
                    (StreamSupport/intStream false)
                    (.count))))))))))
