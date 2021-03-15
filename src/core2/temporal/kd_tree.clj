@@ -457,10 +457,15 @@
   (vec (for [{:keys [row-id] :as row} (sort-by (juxt :tt-start :row-id) (map ->coordinate (node-kd-tree->seq kd-tree)))]
          (merge row (get row-id->row row-id)))))
 
-;; NOTE: This is from the bitemporal chapter in Snodgrass book.
+;; NOTE: "Developing Time-Oriented Database Applications in SQL",
+;; chapter 10 "Bitemporal Tables".
+
+;; Uses transaction time splitting, so some rectangles differ, but
+;; areas covered are the same. Could or maybe should coalesce.
 (defn- run-bitemp-test []
   (let [kd-tree nil
         row-id->row (HashMap.)]
+    ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
     ;; 1998.
     (let [kd-tree (put-entity kd-tree {:id 7797
@@ -476,6 +481,7 @@
                    :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
                  (temporal-rows kd-tree row-id->row)))
 
+      ;; Current Update
       ;; Peter Olsen buys the flat on January 15, 1998.
       (let [kd-tree (put-entity kd-tree {:id 7797
                                          :row-id 2
@@ -504,6 +510,7 @@
                      :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
                    (temporal-rows kd-tree row-id->row)))
 
+        ;; Current Delete
         ;; Peter Olsen sells the flat on January 20, 1998.
         (let [kd-tree (put-entity kd-tree {:id 7797
                                            :row-id 3
@@ -540,6 +547,7 @@
                        :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
                      (temporal-rows kd-tree row-id->row)))
 
+          ;; Sequenced Insert
           ;; Eva actually purchased the flat on January 3, performed on January 23.
           (let [kd-tree (put-entity kd-tree {:id 7797
                                              :row-id 4
@@ -584,13 +592,13 @@
                          :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
                        (temporal-rows kd-tree row-id->row)))
 
-            ;; TODO: the assertions below aren't validated yet.
-
+            ;; NOTE: rows differs from book, but covered area is the same.
+            ;; Sequenced Delete
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
             (let [kd-tree (put-entity kd-tree {:id 7797
                                                :row-id 5
                                                :tt-start #inst "1998-01-26"
-                                               :vt-start #inst "1998-01-03"
+                                               :vt-start #inst "1998-01-02"
                                                :vt-end #inst "1998-01-05"
                                                :tombstone? true})]
               (.put row-id->row 5 {:customer-number 145})
@@ -638,11 +646,14 @@
                            :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
                          (temporal-rows kd-tree row-id->row)))
 
+              ;; NOTE: rows differs from book, but covered area is the same.
+              ;; Sequenced Update
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
               (let [kd-tree (put-entity kd-tree {:id 7797
                                                  :row-id 6
                                                  :tt-start #inst "1998-01-28"
-                                                 :vt-start #inst "1998-01-12"})]
+                                                 :vt-start #inst "1998-01-12"
+                                                 :vt-end #inst "1998-01-15"})]
                 (.put row-id->row 6 {:customer-number 827})
                 (assert (= [{:id 7797,
                              :customer-number 145,
@@ -671,7 +682,7 @@
                              :vt-start #inst "1998-01-15T00:00:00.000-00:00",
                              :vt-end #inst "1998-01-20T00:00:00.000-00:00",
                              :tt-start #inst "1998-01-20T00:00:00.000-00:00",
-                             :tt-end #inst "1998-01-28T00:00:00.000-00:00"}
+                             :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
                             {:id 7797,
                              :customer-number 145,
                              :row-id 4,
@@ -697,7 +708,7 @@
                              :customer-number 827,
                              :row-id 6,
                              :vt-start #inst "1998-01-12T00:00:00.000-00:00",
-                             :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                             :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                              :tt-start #inst "1998-01-28T00:00:00.000-00:00",
                              :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
                            (temporal-rows kd-tree row-id->row)))))))))))
