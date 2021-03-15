@@ -1,5 +1,5 @@
 (ns core2.temporal.kd-tree
-  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque List Random Spliterator Spliterator$OfInt Spliterators]
+  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap List Random Spliterator Spliterator$OfInt Spliterators]
            [java.util.function Consumer IntConsumer Function Predicate]
            [java.util.stream Collectors StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
@@ -366,7 +366,7 @@
                    (StreamSupport/intStream false)
                    (.count))))))))))
 
-;; Bitemporal
+;; Bitemporal Spike
 
 (def end-of-time #inst "9999-12-31T23:59:59.000Z")
 
@@ -428,7 +428,6 @@
 
 (defn put-entity [kd-tree {:keys [id tt-start vt-start vt-end tombstone?] :as coordinates
                            :or {vt-start tt-start
-                                tt-end end-of-time
                                 vt-end end-of-time}}]
   (let [^Spliterator id-overlap (kd-tree-range-search kd-tree
                                                       (->min-range {:id id :vt-end vt-start :tt-end end-of-time})
@@ -453,30 +452,252 @@
       (map ->location (filter :tombstone? updates)))
      (map ->location (remove :tombstone? updates)))))
 
+
+(defn- temporal-rows [kd-tree row-id->row]
+  (vec (for [{:keys [row-id] :as row} (sort-by (juxt :tt-start :row-id) (map ->coordinate (node-kd-tree->seq kd-tree)))]
+         (merge row (get row-id->row row-id)))))
+
 ;; NOTE: This is from the bitemporal chapter in Snodgrass book.
-
-;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
-;; 1998.
-
-;; Peter Olsen buys the flat on January 15, 1998.
-
-;; Peter Olsen sells the flat on January 20, 1998.
-
-;; Eva actually purchased the flat on January 3, performed on January 23.
-
-;; TODO: not working:
-
-;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
-
-;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
-
-;; A nonsequenced deletion performed on January 30: Delete all records of exactly one-week duration.
-
 (defn- run-bitemp-test []
-  (-> nil
-      (put-entity {:id 7797 :row-id 1 :tt-start #inst "1998-01-10"})
-      (put-entity {:id 7797 :row-id 2 :tt-start #inst "1998-01-15"})
-      (put-entity {:id 7797 :row-id 3 :tt-start #inst "1998-01-20" :tombstone? true})
-      (put-entity {:id 7797 :row-id 4 :tt-start #inst "1998-01-23" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-15"})
-      #_(put-entity {:id 7797 :row-id 5 :tt-start #inst "1998-01-26" :vt-start #inst "1998-01-03" :vt-end #inst "1998-01-05" :tombstone? true})
-      #_(put-entity {:id 7797 :row-id 6 :tt-start #inst "1998-01-28" :vt-start #inst "1998-01-12"})))
+  (let [kd-tree nil
+        row-id->row (HashMap.)]
+    ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
+    ;; 1998.
+    (let [kd-tree (put-entity kd-tree {:id 7797
+                                       :row-id 1
+                                       :tt-start #inst "1998-01-10"})]
+      (.put row-id->row 1 {:customer-number 145})
+      (assert (= [{:id 7797,
+                   :customer-number 145,
+                   :row-id 1,
+                   :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                   :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                   :tt-start #inst "1998-01-10T00:00:00.000-00:00",
+                   :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                 (temporal-rows kd-tree row-id->row)))
+
+      ;; Peter Olsen buys the flat on January 15, 1998.
+      (let [kd-tree (put-entity kd-tree {:id 7797
+                                         :row-id 2
+                                         :tt-start #inst "1998-01-15"})]
+        (.put row-id->row 2 {:customer-number 827})
+        (assert (= [{:id 7797,
+                     :row-id 1,
+                     :customer-number 145,
+                     :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                     :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                     :tt-start #inst "1998-01-10T00:00:00.000-00:00",
+                     :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
+                    {:id 7797,
+                     :customer-number 145,
+                     :row-id 1,
+                     :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                     :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                     :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                    {:id 7797,
+                     :row-id 2,
+                     :customer-number 827,
+                     :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                     :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                     :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                   (temporal-rows kd-tree row-id->row)))
+
+        ;; Peter Olsen sells the flat on January 20, 1998.
+        (let [kd-tree (put-entity kd-tree {:id 7797
+                                           :row-id 3
+                                           :tt-start #inst "1998-01-20"
+                                           :tombstone? true})]
+          (.put row-id->row 3 {:customer-number 827})
+          (assert (= [{:id 7797,
+                       :customer-number 145,
+                       :row-id 1,
+                       :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                       :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                       :tt-start #inst "1998-01-10T00:00:00.000-00:00",
+                       :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
+                      {:id 7797,
+                       :customer-number 145,
+                       :row-id 1,
+                       :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                       :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                       :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                      {:id 7797,
+                       :customer-number 827,
+                       :row-id 2,
+                       :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                       :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
+                      {:id 7797,
+                       :customer-number 827,
+                       :row-id 2,
+                       :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                       :vt-end #inst "1998-01-20T00:00:00.000-00:00",
+                       :tt-start #inst "1998-01-20T00:00:00.000-00:00",
+                       :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                     (temporal-rows kd-tree row-id->row)))
+
+          ;; Eva actually purchased the flat on January 3, performed on January 23.
+          (let [kd-tree (put-entity kd-tree {:id 7797
+                                             :row-id 4
+                                             :tt-start #inst "1998-01-23"
+                                             :vt-start #inst "1998-01-03"
+                                             :vt-end #inst "1998-01-15"})]
+            (.put row-id->row 4 {:customer-number 145})
+            (assert (= [{:id 7797,
+                         :customer-number 145,
+                         :row-id 1,
+                         :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                         :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                         :tt-start #inst "1998-01-10T00:00:00.000-00:00",
+                         :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
+                        {:id 7797,
+                         :customer-number 145,
+                         :row-id 1,
+                         :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                         :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                         :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :tt-end #inst "1998-01-23T00:00:00.000-00:00"}
+                        {:id 7797,
+                         :customer-number 827,
+                         :row-id 2,
+                         :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                         :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
+                        {:id 7797,
+                         :row-id 2,
+                         :customer-number 827,
+                         :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                         :vt-end #inst "1998-01-20T00:00:00.000-00:00",
+                         :tt-start #inst "1998-01-20T00:00:00.000-00:00",
+                         :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                        {:id 7797,
+                         :customer-number 145,
+                         :row-id 4,
+                         :vt-start #inst "1998-01-03T00:00:00.000-00:00",
+                         :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                         :tt-start #inst "1998-01-23T00:00:00.000-00:00",
+                         :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                       (temporal-rows kd-tree row-id->row)))
+
+            ;; TODO: the assertions below aren't validated yet.
+
+            ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
+            (let [kd-tree (put-entity kd-tree {:id 7797
+                                               :row-id 5
+                                               :tt-start #inst "1998-01-26"
+                                               :vt-start #inst "1998-01-03"
+                                               :vt-end #inst "1998-01-05"
+                                               :tombstone? true})]
+              (.put row-id->row 5 {:customer-number 145})
+              (assert (= [{:id 7797,
+                           :customer-number 145,
+                           :row-id 1,
+                           :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                           :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                           :tt-start #inst "1998-01-10T00:00:00.000-00:00",
+                           :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
+                          {:id 7797,
+                           :customer-number 145,
+                           :row-id 1,
+                           :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                           :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                           :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :tt-end #inst "1998-01-23T00:00:00.000-00:00"}
+                          {:id 7797,
+                           :customer-number 827,
+                           :row-id 2,
+                           :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                           :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
+                          {:id 7797,
+                           :customer-number 827,
+                           :row-id 2,
+                           :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                           :vt-end #inst "1998-01-20T00:00:00.000-00:00",
+                           :tt-start #inst "1998-01-20T00:00:00.000-00:00",
+                           :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                          {:id 7797,
+                           :customer-number 145,
+                           :row-id 4,
+                           :vt-start #inst "1998-01-03T00:00:00.000-00:00",
+                           :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                           :tt-start #inst "1998-01-23T00:00:00.000-00:00",
+                           :tt-end #inst "1998-01-26T00:00:00.000-00:00"}
+                          {:id 7797,
+                           :customer-number 145,
+                           :row-id 4,
+                           :vt-start #inst "1998-01-05T00:00:00.000-00:00",
+                           :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                           :tt-start #inst "1998-01-26T00:00:00.000-00:00",
+                           :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                         (temporal-rows kd-tree row-id->row)))
+
+              ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
+              (let [kd-tree (put-entity kd-tree {:id 7797
+                                                 :row-id 6
+                                                 :tt-start #inst "1998-01-28"
+                                                 :vt-start #inst "1998-01-12"})]
+                (.put row-id->row 6 {:customer-number 827})
+                (assert (= [{:id 7797,
+                             :customer-number 145,
+                             :row-id 1,
+                             :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                             :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                             :tt-start #inst "1998-01-10T00:00:00.000-00:00",
+                             :tt-end #inst "1998-01-15T00:00:00.000-00:00"}
+                            {:id 7797,
+                             :customer-number 145,
+                             :row-id 1,
+                             :vt-start #inst "1998-01-10T00:00:00.000-00:00",
+                             :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                             :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                             :tt-end #inst "1998-01-23T00:00:00.000-00:00"}
+                            {:id 7797,
+                             :customer-number 827,
+                             :row-id 2,
+                             :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                             :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                             :tt-start #inst "1998-01-15T00:00:00.000-00:00",
+                             :tt-end #inst "1998-01-20T00:00:00.000-00:00"}
+                            {:id 7797,
+                             :customer-number 827,
+                             :row-id 2,
+                             :vt-start #inst "1998-01-15T00:00:00.000-00:00",
+                             :vt-end #inst "1998-01-20T00:00:00.000-00:00",
+                             :tt-start #inst "1998-01-20T00:00:00.000-00:00",
+                             :tt-end #inst "1998-01-28T00:00:00.000-00:00"}
+                            {:id 7797,
+                             :customer-number 145,
+                             :row-id 4,
+                             :vt-start #inst "1998-01-03T00:00:00.000-00:00",
+                             :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                             :tt-start #inst "1998-01-23T00:00:00.000-00:00",
+                             :tt-end #inst "1998-01-26T00:00:00.000-00:00"}
+                            {:id 7797,
+                             :customer-number 145,
+                             :row-id 4,
+                             :vt-start #inst "1998-01-05T00:00:00.000-00:00",
+                             :vt-end #inst "1998-01-15T00:00:00.000-00:00",
+                             :tt-start #inst "1998-01-26T00:00:00.000-00:00",
+                             :tt-end #inst "1998-01-28T00:00:00.000-00:00"}
+                            {:id 7797,
+                             :customer-number 145,
+                             :row-id 4,
+                             :vt-start #inst "1998-01-05T00:00:00.000-00:00",
+                             :vt-end #inst "1998-01-12T00:00:00.000-00:00",
+                             :tt-start #inst "1998-01-28T00:00:00.000-00:00",
+                             :tt-end #inst "9999-12-31T23:59:59.000-00:00"}
+                            {:id 7797,
+                             :customer-number 827,
+                             :row-id 6,
+                             :vt-start #inst "1998-01-12T00:00:00.000-00:00",
+                             :vt-end #inst "9999-12-31T23:59:59.000-00:00",
+                             :tt-start #inst "1998-01-28T00:00:00.000-00:00",
+                             :tt-end #inst "9999-12-31T23:59:59.000-00:00"}]
+                           (temporal-rows kd-tree row-id->row)))))))))))
