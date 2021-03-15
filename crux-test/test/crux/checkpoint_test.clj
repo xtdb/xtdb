@@ -1,12 +1,13 @@
 (ns crux.checkpoint-test
-  (:require [crux.checkpoint :as cp]
+  (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [clojure.java.io :as io]
-            [crux.fixtures :as fix])
-  (:import (java.util Date)
-           (java.io Closeable File)
-           (java.time Instant Duration)
-           (java.time.temporal ChronoUnit)))
+            [crux.checkpoint :as cp]
+            [crux.fixtures :as fix]
+            [crux.fixtures.checkpoint-store :as fix.cp-store])
+  (:import [java.io Closeable File]
+           [java.time Duration Instant]
+           java.time.temporal.ChronoUnit
+           java.util.Date))
 
 (t/deftest test-cp-seq
   (let [start (Instant/parse "2020-01-01T00:00:00Z")
@@ -85,3 +86,7 @@
                     (deref !latch 500 ::timeout))]
           (t/is (not= ::timeout cps))
           (t/is (= 5 (count cps))))))))
+
+(t/deftest test-fs-checkpoint-store
+  (fix/with-tmp-dirs #{cp-store-dir}
+    (fix.cp-store/test-checkpoint-store (cp/->filesystem-checkpoint-store {:path (.toPath cp-store-dir)}))))

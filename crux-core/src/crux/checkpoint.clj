@@ -1,11 +1,16 @@
 (ns crux.checkpoint
-  (:require [clojure.tools.logging :as log]
+  (:require [clojure.java.io :as io]
+            [clojure.tools.logging :as log]
             [crux.io :as cio]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.tx :as tx])
   (:import [java.io Closeable File]
-           java.nio.file.Path
+           java.net.URI
+           java.nio.charset.StandardCharsets
+           [java.nio.file CopyOption Files FileVisitOption LinkOption OpenOption Path Paths StandardOpenOption]
+           java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
-           [java.util.concurrent Executors TimeUnit]
+           [java.util.concurrent Executors ExecutorService TimeUnit]
            java.util.Date))
 
 (defprotocol CheckpointStore
@@ -106,3 +111,66 @@
                                                      :required? true}}}
   [opts]
   (map->ScheduledCheckpointer opts))
+
+(defn- sync-path [^Path from-root-path ^Path to-root-path]
+  (doseq [^Path from-path (-> (Files/walk from-root-path Integer/MAX_VALUE (make-array FileVisitOption 0))
+                              .iterator
+                              iterator-seq)
+          :let [to-path (.resolve to-root-path (.relativize from-root-path from-path))]]
+    (cond
+      (Files/isDirectory from-path (make-array LinkOption 0))
+      (Files/createDirectories to-path (make-array FileAttribute 0))
+
+      (Files/isRegularFile from-path (make-array LinkOption 0))
+      (Files/copy from-path to-path ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0)))))
+
+(defrecord FileSystemCheckpointStore [^Path root-path]
+  CheckpointStore
+  (available-checkpoints [_ {::keys [cp-format]}]
+    (for [metadata-path (->> (Files/newDirectoryStream root-path "checkpoint-*.edn")
+                             .iterator iterator-seq
+                             (sort #(compare %2 %1)))
+          ;; Files/readString only added in JDK 11
+          :let [cp (-> (Files/readAllBytes metadata-path)
+                       (String. StandardCharsets/UTF_8)
+                       read-string
+                       (update ::cp-path #(Paths/get (URI. %))))]
+          :when (= cp-format (::cp-format cp))]
+      cp))
+
+  (download-checkpoint [_ {::keys [cp-path]} dir]
+    (let [to-path (.toPath ^File dir)]
+      (when-not (or (not (Files/exists to-path (make-array LinkOption 0)))
+                    (empty? (Files/list to-path)))
+        (throw (IllegalArgumentException. "non-empty checkpoint restore dir: " to-path)))
+
+      (try
+        (sync-path cp-path to-path)
+        (catch Exception e
+          (throw (ex-info e "incomplete checkpoint restore"
+                          {:cp-path cp-path
+                           :local-dir to-path}))))))
+
+  (upload-checkpoint [_ dir {:keys [tx ::cp-format]}]
+    (let [from-path (.toPath ^File dir)
+          cp-at (java.util.Date.)
+          cp-prefix (format "checkpoint-%s-%s" (::tx/tx-id tx) (cio/format-rfc3339-date cp-at))
+          to-path (.resolve root-path cp-prefix)]
+      (sync-path from-path to-path)
+
+      (let [cp {::cp-format cp-format,
+                :tx tx
+                ::cp-uri (str to-path)
+                ::checkpoint-at cp-at}]
+        (Files/write (.resolve root-path (str cp-prefix ".edn"))
+                     (.getBytes (pr-str {::cp-format cp-format,
+                                         :tx tx
+                                         ::cp-path (str (.toUri to-path))
+                                         ::checkpoint-at cp-at})
+                                StandardCharsets/UTF_8)
+                     ^"[Ljava.nio.file.OpenOption;"
+                     (into-array OpenOption #{StandardOpenOption/WRITE StandardOpenOption/CREATE_NEW}))
+        cp))))
+
+(defn ->filesystem-checkpoint-store {::sys/args {:path {:spec ::sys/path, :required? true}}} [{:keys [path]}]
+  (->FileSystemCheckpointStore path))
