@@ -38,9 +38,9 @@
   (kd-tree-depth-first [_ _ _]
     (Spliterators/emptySpliterator)))
 
-(defn ->kd-tree
+(defn ->node-kd-tree
   (^core2.temporal.kd_tree.Node [points]
-   (->kd-tree (mapv ->longs points) 0))
+   (->node-kd-tree (mapv ->longs points) 0))
   (^core2.temporal.kd_tree.Node [points ^long axis]
    (when-let [points (not-empty points)]
      (let [k (alength ^longs (first points))
@@ -48,9 +48,12 @@
            median (quot (count points) 2)
            axis (next-axis axis k)]
        (->Node (nth points median)
-               (->kd-tree (subvec points 0 median) axis)
-               (->kd-tree (subvec points (inc median)) axis)
+               (->node-kd-tree (subvec points 0 median) axis)
+               (->node-kd-tree (subvec points (inc median)) axis)
                false)))))
+
+(defn node-kd-tree->seq [^Node kd-tree]
+  (iterator-seq (Spliterators/iterator ^Spliterator (kd-tree-depth-first kd-tree))))
 
 (deftype NodeStackEntry [^Node node ^int axis])
 
@@ -270,7 +273,7 @@
 ;; Try different implicit orders for implicit/column/ist.
 (defn- run-test []
   (with-open [allocator (RootAllocator.)]
-    (assert (= (-> (->kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
+    (assert (= (-> (->node-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
                    (kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/stream false)
                    (.toArray)
@@ -342,7 +345,7 @@
 
         (prn :build-kd-tree-bulk ns)
         (let [kd-tree (time
-                       (->kd-tree points))]
+                       (->node-kd-tree points))]
 
           (prn :range-queries-kd-tree-bulk qs)
           (dotimes [_ ts]
