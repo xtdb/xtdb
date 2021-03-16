@@ -212,7 +212,7 @@
               (< (aget location axis) location-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
 
-              (<= location-axis (aget location axis))
+              :else
               (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
 
   (kd-tree-delete [kd-tree location]
@@ -232,7 +232,7 @@
               (< (aget location axis) location-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
 
-              (<= location-axis (aget location axis))
+              :else
               (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
 
   (kd-tree-range-search [kd-tree min-range max-range]
