@@ -15,7 +15,7 @@
 ;; rebuild and balance the tree when finishing a chunk for now, store this tree as an Arrow chunk later.
 ;; add min/max temporal predicate support to scan, used independently of if temporal columns are scanned.
 ;; augment range query with active row-id min/max range from scan.
-;; limit range query max to tx-time from watermark.
+;; use opaque structure from watermark - the persistent tree itself - for range query.
 ;; ability to turn result coordinates of a range query into a root for scanned temporal columns.
 ;; take the row-ids from the root, and it in scan.
 ;; remove tombstones from temporal manager, the above will filter them out as they aren't in the tree.
