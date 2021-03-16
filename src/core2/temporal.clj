@@ -82,6 +82,12 @@
 
 (def ^java.util.Date end-of-time #inst "9999-12-31T23:59:59.999Z")
 
+(defn row-id->coordinates ^core2.temporal.TemporalCoordinates  [^long row-id]
+  (let [coords (TemporalCoordinates. row-id)]
+    (set! (.validTimeEnd coords) (.getTime end-of-time))
+    (set! (.txTimeEnd coords) (.getTime end-of-time))
+    coords))
+
 (defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id ^long row-id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?]}]
   (let [coords (TemporalCoordinates. row-id)]
     (set! (.id coords) id)
@@ -243,7 +249,7 @@
                                      id-vec (.getVector id-root 1)]
                                  (dotimes [n (.getRowCount id-root)]
                                    (let [row-id (.get row-id-vec n)
-                                         coordinates (TemporalCoordinates. row-id)]
+                                         ^TemporalCoordinates coordinates (row-id->coordinates row-id)]
                                      (set! (.id coordinates) (.getObject id-vec n))
                                      (.put row-id->temporal-coordinates row-id coordinates))))))))
 

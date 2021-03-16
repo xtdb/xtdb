@@ -3,6 +3,7 @@
             core2.temporal
             [core2.tx :as tx]
             [core2.types :as t]
+            [core2.temporal :as temporal]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataManager
@@ -240,7 +241,7 @@
                 ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
                 row-id (+ next-row-id per-op-offset)
                 op (aget op-type-ids op-type-id)
-                temporal-coordinates (TemporalCoordinates. row-id)]
+                ^TemporalCoordinates temporal-coordinates (temporal/row-id->coordinates row-id)]
             (set! (.txTime temporal-coordinates) tx-time-ms)
             (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op

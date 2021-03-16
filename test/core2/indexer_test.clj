@@ -395,7 +395,6 @@
                 (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                 (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*"))))
 
-                (t/is (= 5500 (count (kd/node-kd-tree->seq (.getTemporalWatermark tm)))))
                 (t/is (= 2000 (count (.id->internal-id tm)))))
 
               (let [^TransactionInstant
@@ -432,5 +431,4 @@
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))
 
-                    (t/is (= 11000 (count (kd/node-kd-tree->seq (.getTemporalWatermark tm)))))
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
