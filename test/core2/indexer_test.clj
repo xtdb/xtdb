@@ -6,6 +6,7 @@
             [core2.core :as c2]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
+            [core2.temporal.kd-tree :as kd]
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
@@ -122,12 +123,12 @@
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
 
         (t/testing "temporal"
-          (t/is (= {(Text. "device-info-demo000000") 0
-                    (Text. "reading-demo000000") 1
-                    (Text. "device-info-demo000001") 2
-                    (Text. "reading-demo000001") 3}
-                   (.id->row-id tm)))
-          (t/is (empty? (.row-id->tx-time-end tm))))
+          (t/is (= {(Text. "device-info-demo000000") 1
+                    (Text. "reading-demo000000") 2
+                    (Text. "device-info-demo000001") 3
+                    (Text. "reading-demo000001") 4}
+                   (.id->internal-id tm)))
+          (t/is (= 4 (count (kd/node-kd-tree->seq (.getTemporalWatermark tm))))))
 
         (tu/finish-chunk node)
 
@@ -394,8 +395,8 @@
                 (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                 (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*"))))
 
-                (t/is (= 3500 (count (.row-id->tx-time-end tm))))
-                (t/is (= 2000 (count (.id->row-id tm)))))
+                (t/is (= 5500 (count (kd/node-kd-tree->seq (.getTemporalWatermark tm)))))
+                (t/is (= 2000 (count (.id->internal-id tm)))))
 
               (let [^TransactionInstant
                     second-half-tx-instant @(reduce
@@ -415,8 +416,8 @@
                               (.tx-id (c2/latest-completed-tx node))
                               (.tx-id second-half-tx-instant)))
 
-                    (t/is (>= (count (.row-id->tx-time-end tm)) 3500))
-                    (t/is (>= (count (.id->row-id tm)) 2000)))
+                    (t/is (>= (count (kd/node-kd-tree->seq (.getTemporalWatermark tm))) 3500))
+                    (t/is (>= (count (.id->internal-id tm)) 2000)))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-instant (c2/await-tx node second-half-tx-instant (Duration/ofSeconds 5))))
@@ -431,5 +432,5 @@
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))
 
-                    (t/is (= 9000 (count (.row-id->tx-time-end tm))))
-                    (t/is (= 2000 (count (.id->row-id tm))))))))))))))
+                    (t/is (= 11000 (count (kd/node-kd-tree->seq (.getTemporalWatermark tm)))))
+                    (t/is (= 2000 (count (.id->internal-id tm))))))))))))))

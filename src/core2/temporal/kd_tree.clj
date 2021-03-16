@@ -7,13 +7,6 @@
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            core2.temporal.TemporalCoordinates))
 
-;; TODO:
-;; update the uni-temporal manager to be backed by the kd-tree.
-;; rebuild and balance the tree when finishing a chunk for now, store this tree as an Arrow chunk later.
-;; use opaque structure from watermark - the persistent tree itself - for range query.
-;; ability to turn result coordinates of a range query into a root for scanned temporal columns.
-;; remove tombstones from temporal manager, the above will filter them out as they aren't in the tree.
-
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol KdTree
@@ -44,7 +37,7 @@
   (kd-tree-delete [_ _])
   (kd-tree-range-search [_ _ _]
     (Spliterators/emptySpliterator))
-  (kd-tree-depth-first [_ _ _]
+  (kd-tree-depth-first [_]
     (Spliterators/emptySpliterator)))
 
 (defn ->node-kd-tree

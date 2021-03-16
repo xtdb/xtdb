@@ -21,23 +21,24 @@
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/node-kd-tree->seq kd-tree))
-                                           (sort-by (juxt :tt-start :row-id) ))]
+                                           (sort-by (juxt :tt-start :row-id)))]
          (merge row (get row-id->row row-id)))))
 
 (t/deftest bitemporal-tx-time-split-test
   (let [kd-tree nil
-        id->long-id-map  (doto (HashMap.)
-                           (.put 7797 7797))
-        id->long-id (reify ToLongFunction
-                      (applyAsLong [_ x]
-                        (.get id->long-id-map x)))
+        id->internal-id-map  (doto (HashMap.)
+                               (.put 7797 7797))
+        id->internal-id (reify ToLongFunction
+                          (applyAsLong [_ x]
+                            (.get id->internal-id-map x)))
         row-id->row (HashMap.)]
     ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
     ;; 1998.
-    (let [kd-tree (temporal/insert-coordinates kd-tree id->long-id (temporal/->coordinates {:id 7797
-                                                                                            :row-id 1
-                                                                                            :tt-start #inst "1998-01-10"}))]
+    (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+                                               (temporal/->coordinates {:id 7797
+                                                                        :row-id 1
+                                                                        :tt-start #inst "1998-01-10"}))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
@@ -50,9 +51,10 @@
 
       ;; Current Update
       ;; Peter Olsen buys the flat on January 15, 1998.
-      (let [kd-tree (temporal/insert-coordinates kd-tree id->long-id (temporal/->coordinates {:id 7797
-                                                                                              :row-id 2
-                                                                                              :tt-start #inst "1998-01-15"}))]
+      (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+                                                 (temporal/->coordinates {:id 7797
+                                                                          :row-id 2
+                                                                          :tt-start #inst "1998-01-15"}))]
         (.put row-id->row 2 {:customer-number 827})
         (t/is (= [{:id 7797,
                    :row-id 1,
@@ -79,10 +81,11 @@
 
         ;; Current Delete
         ;; Peter Olsen sells the flat on January 20, 1998.
-        (let [kd-tree (temporal/insert-coordinates kd-tree id->long-id (temporal/->coordinates {:id 7797
-                                                                                                :row-id 3
-                                                                                                :tt-start #inst "1998-01-20"
-                                                                                                :tombstone? true}))]
+        (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+                                                   (temporal/->coordinates {:id 7797
+                                                                            :row-id 3
+                                                                            :tt-start #inst "1998-01-20"
+                                                                            :tombstone? true}))]
           (.put row-id->row 3 {:customer-number 827})
           (t/is (= [{:id 7797,
                      :customer-number 145,
@@ -116,11 +119,12 @@
 
           ;; Sequenced Insert
           ;; Eva actually purchased the flat on January 3, performed on January 23.
-          (let [kd-tree (temporal/insert-coordinates kd-tree id->long-id (temporal/->coordinates {:id 7797
-                                                                                                  :row-id 4
-                                                                                                  :tt-start #inst "1998-01-23"
-                                                                                                  :vt-start #inst "1998-01-03"
-                                                                                                  :vt-end #inst "1998-01-15"}))]
+          (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+                                                     (temporal/->coordinates {:id 7797
+                                                                              :row-id 4
+                                                                              :tt-start #inst "1998-01-23"
+                                                                              :vt-start #inst "1998-01-03"
+                                                                              :vt-end #inst "1998-01-15"}))]
             (.put row-id->row 4 {:customer-number 145})
             (t/is (= [{:id 7797,
                        :customer-number 145,
@@ -162,12 +166,13 @@
             ;; NOTE: rows differs from book, but covered area is the same.
             ;; Sequenced Delete
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
-            (let [kd-tree (temporal/insert-coordinates kd-tree id->long-id (temporal/->coordinates {:id 7797
-                                                                                                    :row-id 5
-                                                                                                    :tt-start #inst "1998-01-26"
-                                                                                                    :vt-start #inst "1998-01-02"
-                                                                                                    :vt-end #inst "1998-01-05"
-                                                                                                    :tombstone? true}))]
+            (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+                                                       (temporal/->coordinates {:id 7797
+                                                                                :row-id 5
+                                                                                :tt-start #inst "1998-01-26"
+                                                                                :vt-start #inst "1998-01-02"
+                                                                                :vt-end #inst "1998-01-05"
+                                                                                :tombstone? true}))]
               (.put row-id->row 5 {:customer-number 145})
               (t/is (= [{:id 7797,
                          :customer-number 145,
@@ -216,11 +221,12 @@
               ;; NOTE: rows differs from book, but covered area is the same.
               ;; Sequenced Update
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
-              (let [kd-tree (temporal/insert-coordinates kd-tree id->long-id (temporal/->coordinates {:id 7797
-                                                                                                      :row-id 6
-                                                                                                      :tt-start #inst "1998-01-28"
-                                                                                                      :vt-start #inst "1998-01-12"
-                                                                                                      :vt-end #inst "1998-01-15"}))]
+              (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+                                                         (temporal/->coordinates {:id 7797
+                                                                                  :row-id 6
+                                                                                  :tt-start #inst "1998-01-28"
+                                                                                  :vt-start #inst "1998-01-12"
+                                                                                  :vt-end #inst "1998-01-15"}))]
                 (.put row-id->row 6 {:customer-number 827})
                 (t/is (= [{:id 7797,
                            :customer-number 145,

@@ -79,7 +79,6 @@
                              :when (not (temporal/temporal-column? col-name))]
                          (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
         row-id-bitmap (reduce roaring64-and row-id-bitmaps)
-        row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
         temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range row-id-bitmap)
         temporal-roots (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)

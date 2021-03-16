@@ -15,10 +15,12 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.longlong.Roaring64Bitmap
            java.nio.ByteBuffer
-           [java.util Arrays Date List Map HashMap SortedMap SortedSet Spliterator Spliterators TreeMap]
-           [java.util.function Consumer Function LongConsumer ToLongFunction]
+           [java.util Arrays Comparator Date List Map HashMap SortedMap SortedSet Spliterator Spliterators TreeMap]
+           [java.util.function Consumer Function LongConsumer Predicate ToLongFunction]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.locks.StampedLock
+           java.util.concurrent.atomic.AtomicLong
+           java.util.stream.StreamSupport
            java.io.Closeable))
 
 ;; Temporal proof-of-concept plan:
@@ -98,9 +100,9 @@
 
 (definterface ITemporalManager
   (^Object getTemporalWatermark [])
+  (^long getInternalId [^Object id])
   (^void registerNewChunk [^long chunk-idx])
   (^void updateTemporalCoordinates [^java.util.SortedMap row-id->temporal-coordinates])
-  (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
   (^core2.temporal.TemporalRoots createTemporalRoots [^core2.tx.Watermark watermark
                                                       ^java.util.List columns
                                                       ^longs temporal-min-range
@@ -108,7 +110,7 @@
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (def ^:private temporal-columns
-  (->> (for [col-name ["_tx-time" "_tx-time-end" "_valid-time" "_valie-time-end"]]
+  (->> (for [col-name ["_tx-time" "_tx-time-end" "_valid-time" "_valid-time-end"]]
          [col-name (t/->primitive-dense-union-field col-name #{:timestampmilli})])
        (into {})))
 
@@ -122,79 +124,101 @@
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
   (Schema. [t/row-id-field (get temporal-columns col-name)]))
 
+(def ^:const ^int k 6)
+
+(def ^:const ^int id-idx 0)
+(def ^:const ^int row-id-idx 1)
+(def ^:const ^int valid-time-idx 2)
+(def ^:const ^int valid-time-end-idx 3)
+(def ^:const ^int tx-time-idx 4)
+(def ^:const ^int tx-time-end-idx 5)
+
+(def ^:private column->idx {"_valid-time" valid-time-idx
+                            "_valid-time-end" valid-time-end-idx
+                            "_tx-time" tx-time-idx
+                            "_tx-time-end" tx-time-end-idx})
+
+(declare insert-coordinates)
+
 (deftype TemporalManager [^BufferAllocator allocator
                           ^BufferPool buffer-pool
                           ^IMetadataManager metadata-manager
-                          ^Map row-id->tx-time-end
-                          ^Map id->row-id
-                          ^Roaring64Bitmap tombstone-row-ids
-                          ^StampedLock tombstone-row-ids-lock]
+                          ^AtomicLong id-counter
+                          ^Map id->internal-id
+                          !kd-tree]
   ITemporalManager
   (getTemporalWatermark [_]
-    nil)
+    @!kd-tree)
 
-  (registerNewChunk [_ chunk-idx])
+  (getInternalId [_ id]
+    (.computeIfAbsent id->internal-id
+                      (if (bytes? id)
+                        (ByteBuffer/wrap id)
+                        id)
+                      (reify Function
+                        (apply [_ x]
+                          (.incrementAndGet id-counter)))))
 
-  (updateTemporalCoordinates [_ row-id->temporal-coordinates]
-    (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
-            :let [row-id (.rowId coordinates)
-                  id (.id coordinates)
-                  id (if (bytes? id)
-                       (ByteBuffer/wrap id)
-                       id)]]
-      (when-let [prev-row-id (.get id->row-id id)]
-        (.put row-id->tx-time-end prev-row-id (.txTime coordinates)))
-      (.put id->row-id id row-id))
+  (registerNewChunk [_ chunk-idx]
+    (swap! !kd-tree (comp kd/->node-kd-tree kd/node-kd-tree->seq)))
 
-    ;; TODO: how to avoid this lock without copying?
-    (let [stamp (.writeLock tombstone-row-ids-lock)]
-      (try
-        (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
-                :when (.tombstone coordinates)]
-          (.addLong tombstone-row-ids (.rowId coordinates)))
-        (finally
-          (.unlock tombstone-row-ids-lock stamp)))))
-
-  (removeTombstonesFrom [_ row-id-bitmap]
-    (let [stamp (.readLock tombstone-row-ids-lock)]
-      (try
-        (doto row-id-bitmap
-          (.andNot tombstone-row-ids))
-        (finally
-          (.unlock tombstone-row-ids-lock stamp)))))
+  (updateTemporalCoordinates [this row-id->temporal-coordinates]
+    (let [id->long-id-fn (reify ToLongFunction
+                           (applyAsLong [_ id]
+                             (.getInternalId this id)))]
+      (swap! !kd-tree
+             (fn [kd-tree]
+               (reduce
+                (fn [kd-tree coordinates]
+                  (insert-coordinates kd-tree id->long-id-fn coordinates))
+                kd-tree
+                (vals row-id->temporal-coordinates))))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
-    (when (not-empty columns)
-      (assert (= ["_tx-time-end"] columns))
-      (let [out-root (VectorSchemaRoot/create allocator (->temporal-root-schema "_tx-time-end"))
-            ^BigIntVector row-id-vec (.getVector out-root 0)
-            ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
-            ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
-            tx-time-ms (.getTime ^Date (.tx-time ^TransactionInstant (.tx-instant watermark)))
-            value-count (.getLongCardinality row-id-bitmap)]
-        (util/set-value-count row-id-vec value-count)
-        (util/set-value-count tx-time-end-duv-vec value-count)
-        (util/set-value-count tx-time-end-vec value-count)
-        (.forEach (.stream row-id-bitmap)
-                  (reify LongConsumer
-                    (accept [_ row-id]
-                      (let [row-count (.getRowCount out-root)
-                            offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
-                            tx-time-end (.get row-id->tx-time-end row-id)
-                            tx-time-end (if (or (nil? tx-time-end)
-                                                (> ^long tx-time-end tx-time-ms))
-                                          Long/MAX_VALUE
-                                          ^long tx-time-end)]
-                        (.set row-id-vec row-count row-id)
-                        (.set tx-time-end-vec row-count tx-time-end)
-                        (util/set-vector-schema-root-row-count out-root row-count)))))
-        (->TemporalRoots row-id-bitmap {"_tx-time-end" out-root}))))
+    (let [kd-tree (.temporal-watermark watermark)
+          row-id-bitmap-out (Roaring64Bitmap.)
+          roots (HashMap.)
+          coordinates (StreamSupport/stream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)]
+      (if (empty? columns)
+        (.forEach coordinates
+                  (reify Consumer
+                    (accept [_ x]
+                      (.addLong row-id-bitmap-out (aget ^longs x row-id-idx)))))
+        (let [coordinates (-> coordinates
+                              (.filter (reify Predicate
+                                         (test [_ x]
+                                           (.contains row-id-bitmap (aget ^longs x row-id-idx)))))
+                              (.sorted (Comparator/comparingLong (reify ToLongFunction
+                                                                   (applyAsLong [_ x]
+                                                                     (aget ^longs x row-id-idx)))))
+                              (.toArray))
+              value-count (count coordinates)]
+          (doseq [col-name columns]
+            (let [col-idx (get column->idx col-name)
+                  out-root (VectorSchemaRoot/create allocator (->temporal-root-schema col-name))
+                  ^BigIntVector row-id-vec (.getVector out-root 0)
+                  ^DenseUnionVector temporal-duv-vec (.getVector out-root 1)
+                  ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec timestampmilli-type-id)]
+              (util/set-value-count row-id-vec value-count)
+              (util/set-value-count temporal-duv-vec value-count)
+              (util/set-value-count temporal-vec value-count)
+              (dotimes [n value-count]
+                (let [offset (util/write-type-id temporal-duv-vec n timestampmilli-type-id)
+                      ^longs coordinate (aget coordinates n)
+                      row-id (aget coordinate row-id-idx)]
+                  (.addLong row-id-bitmap-out row-id)
+                  (.set row-id-vec n row-id)
+                  (.set temporal-vec n (aget coordinate col-idx))))
+              (util/set-vector-schema-root-row-count out-root value-count)
+              (.put roots col-name out-root)))))
+      (->TemporalRoots (doto row-id-bitmap-out
+                         (.and row-id-bitmap))
+                       roots)))
 
   Closeable
   (close [_]
-    (.clear row-id->tx-time-end)
-    (.clear id->row-id)
-    (.clear tombstone-row-ids)))
+    (reset! !kd-tree nil)
+    (.clear id->internal-id)))
 
 (defn- populate-known-chunks ^core2.temporal.ITemporalManager [^TemporalManager temporal-manager]
   (let [^BufferPool buffer-pool (.buffer-pool temporal-manager)
@@ -257,26 +281,18 @@
                                        (let [coordinates ^TemporalCoordinates (.get row-id->temporal-coordinates (.get row-id-vec n))]
                                          (set! (.tombstone coordinates) true))))))))))
 
-      (.updateTemporalCoordinates temporal-manager row-id->temporal-coordinates))
+      (.updateTemporalCoordinates temporal-manager row-id->temporal-coordinates)
+      (.registerNewChunk temporal-manager chunk-idx))
 
     temporal-manager))
 
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
                                                            ^BufferPool buffer-pool
                                                            ^IMetadataManager metadata-manager]
-  (-> (TemporalManager. allocator buffer-pool metadata-manager (ConcurrentHashMap.) (HashMap.) (Roaring64Bitmap.) (StampedLock.))
+  (-> (TemporalManager. allocator buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) (atom nil))
       (populate-known-chunks)))
 
 ;; Bitemporal Spike, this will turn into the temporal manager.
-
-(def ^:const ^int k 6)
-
-(def ^:const ^int id-idx 0)
-(def ^:const ^int row-id-idx 1)
-(def ^:const ^int vt-start-idx 2)
-(def ^:const ^int vt-end-idx 3)
-(def ^:const ^int tt-start-idx 4)
-(def ^:const ^int tt-end-idx 5)
 
 (defn ->min-range ^longs []
   (long-array k Long/MIN_VALUE))
@@ -287,17 +303,17 @@
 (defn ->copy-range ^longs [^longs range]
   (some-> range (Arrays/copyOf (alength range))))
 
-(defn insert-coordinates [kd-tree ^ToLongFunction id->long-id ^TemporalCoordinates coordinates]
-  (let [id (.applyAsLong id->long-id (.id coordinates))
+(defn insert-coordinates [kd-tree ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
+  (let [id (.applyAsLong id->internal-id (.id coordinates))
         row-id (.rowId coordinates)
         min-range (doto (->min-range)
                     (aset id-idx id)
-                    (aset vt-end-idx (.validTime coordinates))
-                    (aset tt-end-idx (.txTimeEnd coordinates)))
+                    (aset valid-time-end-idx (.validTime coordinates))
+                    (aset tx-time-end-idx (.txTimeEnd coordinates)))
         max-range (doto (->max-range)
                     (aset id-idx id)
-                    (aset vt-start-idx (dec (.validTimeEnd coordinates)))
-                    (aset tt-end-idx (.txTimeEnd coordinates)))
+                    (aset valid-time-idx (dec (.validTimeEnd coordinates)))
+                    (aset tx-time-end-idx (.txTimeEnd coordinates)))
         overlap (-> ^Spliterator (kd/kd-tree-range-search
                                   kd-tree
                                   min-range
@@ -314,22 +330,22 @@
                   (kd/kd-tree-insert (doto (long-array k)
                                        (aset id-idx id)
                                        (aset row-id-idx row-id)
-                                       (aset vt-start-idx vt-start-ms)
-                                       (aset vt-end-idx vt-end-ms)
-                                       (aset tt-start-idx tt-start-ms)
-                                       (aset tt-end-idx end-of-time-ms))))]
+                                       (aset valid-time-idx vt-start-ms)
+                                       (aset valid-time-end-idx vt-end-ms)
+                                       (aset tx-time-idx tt-start-ms)
+                                       (aset tx-time-end-idx end-of-time-ms))))]
     (reduce
      (fn [kd-tree ^longs coord]
        (cond-> (kd/kd-tree-insert kd-tree (doto (->copy-range coord)
-                                            (aset tt-end-idx tt-start-ms)))
-         (< (aget coord vt-start-idx) vt-start-ms)
+                                            (aset tx-time-end-idx tt-start-ms)))
+         (< (aget coord valid-time-idx) vt-start-ms)
          (kd/kd-tree-insert (doto (->copy-range coord)
-                              (aset tt-start-idx tt-start-ms)
-                              (aset vt-end-idx vt-start-ms)))
+                              (aset tx-time-idx tt-start-ms)
+                              (aset valid-time-end-idx vt-start-ms)))
 
-         (> (aget coord vt-end-idx) vt-end-ms)
+         (> (aget coord valid-time-end-idx) vt-end-ms)
          (kd/kd-tree-insert (doto (->copy-range coord)
-                              (aset tt-start-idx tt-start-ms)
-                              (aset vt-start-idx vt-end-ms)))))
+                              (aset tx-time-idx tt-start-ms)
+                              (aset valid-time-idx vt-end-ms)))))
      kd-tree
      overlap)))
