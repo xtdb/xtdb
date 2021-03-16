@@ -93,28 +93,37 @@
 (deftype NodeRangeSearchSpliterator [^longs min-range ^longs max-range ^int k ^Deque stack]
   Spliterator
   (forEachRemaining [_ c]
-    (loop []
-      (when-let [^NodeStackEntry entry (.poll stack)]
-        (let [^Node node (.node entry)
-              axis (.axis entry)
-              ^longs location (.location node)
-              location-axis (aget location axis)
-              min-match? (<= (aget min-range axis) location-axis)
-              max-match? (<= location-axis (aget max-range axis))
-              axis (next-axis axis k)]
-          (when-let [right (when max-match?
-                             (.right node))]
-            (.push stack (NodeStackEntry. right axis)))
-          (when-let [left (when min-match?
-                            (.left node))]
-            (.push stack (NodeStackEntry. left axis)))
+    (when-let [^NodeStackEntry entry (.poll stack)]
+      ((fn step [^Node node ^long axis]
+         (let [^longs location (.location node)
+               location-axis (aget location axis)
+               min-match? (<= (aget min-range axis) location-axis)
+               max-match? (<= location-axis (aget max-range axis))
+               axis (next-axis axis k)
+               left (.left node)
+               right (.right node)]
 
-          (when (and min-match?
-                     max-match?
-                     (not (.deleted? node))
-                     (in-range? min-range location max-range))
-            (.accept c location))
-          (recur)))))
+           (when (and min-match?
+                      max-match?
+                      (not (.deleted? node))
+                      (in-range? min-range location max-range))
+             (.accept c location))
+
+           (cond
+             (and min-match? left (nil? right))
+             (recur left axis)
+
+             (and max-match? right (nil? left))
+             (recur right axis)
+
+             :else
+             (do (when (and min-match? left)
+                   (step left axis))
+
+                 (when (and max-match? right)
+                   (recur right axis))))))
+
+       (.node entry) (.axis entry))))
 
   (tryAdvance [_ c]
     (loop []
@@ -153,20 +162,30 @@
 (deftype NodeDepthFirstSpliterator [^int k ^Deque stack]
   Spliterator
   (forEachRemaining [_ c]
-    (loop []
-      (when-let [^NodeStackEntry entry (.poll stack)]
-        (let [^Node node (.node entry)
-              axis (.axis entry)
-              axis (next-axis axis k)]
-          (when-let [right (.right node)]
-            (.push stack (NodeStackEntry. right axis)))
-          (when-let [left (.left node)]
-            (.push stack (NodeStackEntry. left axis)))
+    (when-let [^NodeStackEntry entry (.poll stack)]
+      ((fn step [^Node node ^long axis]
+         (let [axis (next-axis axis k)
+               left (.left node)
+               right (.right node)]
 
-          (when-not (.deleted? node)
-            (.accept c (.location node)))
-          (recur)))))
+           (when-not (.deleted? node)
+             (.accept c (.location node)))
 
+           (cond
+             (and left (nil? right))
+             (recur left axis)
+
+             (and right (nil? left))
+             (recur right axis)
+
+             :else
+             (do (when left
+                   (step left axis))
+
+                 (when right
+                   (recur right axis))))))
+
+       (.node entry) (.axis entry))))
 
   (tryAdvance [_ c]
     (loop []
