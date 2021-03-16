@@ -44,19 +44,41 @@
    (doto x
      (.and y))))
 
+(defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
+  (if (.isEmpty row-id-bitmap)
+    temporal-min-range
+    (let [temporal-min-range (or (temporal/->copy-range temporal-min-range) (temporal/->min-range))
+          min-row-id (.select row-id-bitmap 0)]
+      (doto temporal-min-range
+        (aset temporal/row-id-idx
+              (max min-row-id (aget temporal-min-range temporal/row-id-idx)))))))
+
+(defn- adjust-temporal-max-range-to-row-id-range ^longs [^longs temporal-max-range ^Roaring64Bitmap row-id-bitmap]
+  (if (.isEmpty row-id-bitmap)
+    temporal-max-range
+    (let [temporal-max-range (or (temporal/->copy-range temporal-max-range) (temporal/->max-range))
+          max-row-id (.select row-id-bitmap (dec (.getLongCardinality row-id-bitmap)))]
+      (doto temporal-max-range
+        (aset temporal/row-id-idx
+              (min max-row-id (aget temporal-max-range temporal/row-id-idx)))))))
+
 (defn- align-roots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots ^VectorSchemaRoot out-root]
   (let [row-id-bitmaps (for [col-name col-names
                              :when (not (temporal/temporal-column? col-name))]
                          (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
         row-id-bitmap (reduce roaring64-and row-id-bitmaps)
         row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
+        temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range row-id-bitmap)
+        temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range row-id-bitmap)
         temporal-roots (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
-                                             temporal-min-range temporal-max-range row-id-bitmap)
-        row-id-bitmap (if temporal-roots
-                        (.row-id-bitmap temporal-roots)
-                        row-id-bitmap)]
+                                             temporal-min-range
+                                             temporal-max-range
+                                             row-id-bitmap)]
     (try
-      (let [roots (for [col-name col-names]
+      (let [row-id-bitmap (if temporal-roots
+                            (.row-id-bitmap temporal-roots)
+                            row-id-bitmap)
+            roots (for [col-name col-names]
                     (if (temporal/temporal-column? col-name)
                       (.get ^Map (.roots temporal-roots) col-name)
                       (.get in-roots col-name)))
@@ -66,14 +88,9 @@
             row-id-bitmap (reduce roaring64-and
                                   row-id-bitmap
                                   temporal-row-id-bitmaps)]
-        ;; We can augment this (and project-vec) to take a row-id/idx
-        ;; -> repetition count map, to make this aligned with the
-        ;; temporal roots with potentially duplicated row-ids.
         (align/align-vectors roots row-id-bitmap out-root))
       (finally
-        (when temporal-roots
-          (doseq [temporal-root (vals (.roots temporal-roots))]
-            (util/try-close temporal-root)))))
+        (util/try-close temporal-roots)))
     out-root))
 
 (deftype ScanCursor [^BufferAllocator allocator

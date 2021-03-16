@@ -1,6 +1,7 @@
 (ns core2.temporal
   (:require [core2.metadata :as meta]
             [core2.types :as t]
+            [core2.temporal.kd-tree :as kd]
             core2.tx
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
@@ -14,8 +15,8 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.longlong.Roaring64Bitmap
            java.nio.ByteBuffer
-           [java.util Date List Map HashMap SortedMap SortedSet TreeMap]
-           [java.util.function Consumer Function LongConsumer]
+           [java.util Arrays Date List Map HashMap SortedMap SortedSet Spliterator Spliterators TreeMap]
+           [java.util.function Consumer Function LongConsumer ToLongFunction]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.locks.StampedLock
            java.io.Closeable))
@@ -77,7 +78,23 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defrecord TemporalRoots [^Roaring64Bitmap row-id-bitmap ^Map roots])
+(def ^java.util.Date end-of-time #inst "9999-12-31T23:59:59.999Z")
+
+(defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id ^long row-id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?]}]
+  (let [coords (TemporalCoordinates. row-id)]
+    (set! (.id coords) id)
+    (set! (.validTime coords) (.getTime (or vt-start tt-start)))
+    (set! (.validTimeEnd coords) (.getTime (or vt-end end-of-time)))
+    (set! (.txTime coords) (.getTime tt-start))
+    (set! (.txTimeEnd coords) (.getTime end-of-time))
+    (set! (.tombstone coords) (boolean tombstone?))
+    coords))
+
+(defrecord TemporalRoots [^Roaring64Bitmap row-id-bitmap ^Map roots]
+  Closeable
+  (close [_]
+    (doseq [root (vals roots)]
+      (util/try-close root))))
 
 (definterface ITemporalManager
   (^Object getTemporalWatermark [])
@@ -249,3 +266,70 @@
                                                            ^IMetadataManager metadata-manager]
   (-> (TemporalManager. allocator buffer-pool metadata-manager (ConcurrentHashMap.) (HashMap.) (Roaring64Bitmap.) (StampedLock.))
       (populate-known-chunks)))
+
+;; Bitemporal Spike, this will turn into the temporal manager.
+
+(def ^:const ^int k 6)
+
+(def ^:const ^int id-idx 0)
+(def ^:const ^int row-id-idx 1)
+(def ^:const ^int vt-start-idx 2)
+(def ^:const ^int vt-end-idx 3)
+(def ^:const ^int tt-start-idx 4)
+(def ^:const ^int tt-end-idx 5)
+
+(defn ->min-range ^longs []
+  (long-array k Long/MIN_VALUE))
+
+(defn ->max-range ^longs []
+  (long-array k Long/MAX_VALUE))
+
+(defn ->copy-range ^longs [^longs range]
+  (some-> range (Arrays/copyOf (alength range))))
+
+(defn insert-coordinates [kd-tree ^ToLongFunction id->long-id ^TemporalCoordinates coordinates]
+  (let [id (.applyAsLong id->long-id (.id coordinates))
+        row-id (.rowId coordinates)
+        min-range (doto (->min-range)
+                    (aset id-idx id)
+                    (aset vt-end-idx (.validTime coordinates))
+                    (aset tt-end-idx (.txTimeEnd coordinates)))
+        max-range (doto (->max-range)
+                    (aset id-idx id)
+                    (aset vt-start-idx (dec (.validTimeEnd coordinates)))
+                    (aset tt-end-idx (.txTimeEnd coordinates)))
+        overlap (-> ^Spliterator (kd/kd-tree-range-search
+                                  kd-tree
+                                  min-range
+                                  max-range)
+                    (Spliterators/iterator)
+                    (iterator-seq))
+        tt-start-ms (.txTime coordinates)
+        vt-start-ms (.validTime coordinates)
+        vt-end-ms (.validTimeEnd coordinates)
+        end-of-time-ms (.getTime end-of-time)
+        kd-tree (reduce kd/kd-tree-delete kd-tree overlap)
+        kd-tree (cond-> kd-tree
+                  (not (.tombstone coordinates))
+                  (kd/kd-tree-insert (doto (long-array k)
+                                       (aset id-idx id)
+                                       (aset row-id-idx row-id)
+                                       (aset vt-start-idx vt-start-ms)
+                                       (aset vt-end-idx vt-end-ms)
+                                       (aset tt-start-idx tt-start-ms)
+                                       (aset tt-end-idx end-of-time-ms))))]
+    (reduce
+     (fn [kd-tree ^longs coord]
+       (cond-> (kd/kd-tree-insert kd-tree (doto (->copy-range coord)
+                                            (aset tt-end-idx tt-start-ms)))
+         (< (aget coord vt-start-idx) vt-start-ms)
+         (kd/kd-tree-insert (doto (->copy-range coord)
+                              (aset tt-start-idx tt-start-ms)
+                              (aset vt-end-idx vt-start-ms)))
+
+         (> (aget coord vt-end-idx) vt-end-ms)
+         (kd/kd-tree-insert (doto (->copy-range coord)
+                              (aset tt-start-idx tt-start-ms)
+                              (aset vt-start-idx vt-end-ms)))))
+     kd-tree
+     overlap)))

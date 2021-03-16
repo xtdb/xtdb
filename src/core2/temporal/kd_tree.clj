@@ -1,7 +1,7 @@
 (ns core2.temporal.kd-tree
   (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             List Map Spliterator Spliterator$OfInt Spliterators]
-           [java.util.function Consumer IntConsumer Function Predicate ToLongFunction]
+           [java.util.function Consumer IntConsumer Function Predicate]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
@@ -10,7 +10,6 @@
 ;; TODO:
 ;; update the uni-temporal manager to be backed by the kd-tree.
 ;; rebuild and balance the tree when finishing a chunk for now, store this tree as an Arrow chunk later.
-;; augment range query with active row-id min/max range from scan.
 ;; use opaque structure from watermark - the persistent tree itself - for range query.
 ;; ability to turn result coordinates of a range query into a root for scanned temporal columns.
 ;; remove tombstones from temporal manager, the above will filter them out as they aren't in the tree.
@@ -278,74 +277,3 @@
   (column-kd-tree-depth-first [kd-tree]
     (let [k (.size (.getFields (.getSchema kd-tree)))]
       (kd-tree-range-search kd-tree (repeat k Long/MIN_VALUE) (repeat k Long/MAX_VALUE)))))
-
-
-;; Bitemporal Spike, this will turn into the temporal manager.
-
-(def ^java.util.Date end-of-time #inst "9999-12-31T23:59:59.999Z")
-
-(defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id ^long row-id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?]}]
-  (let [coords (TemporalCoordinates. row-id)]
-    (set! (.id coords) id)
-    (set! (.validTime coords) (.getTime (or vt-start tt-start)))
-    (set! (.validTimeEnd coords) (.getTime (or vt-end end-of-time)))
-    (set! (.txTime coords) (.getTime tt-start))
-    (set! (.txTimeEnd coords) (.getTime end-of-time))
-    (set! (.tombstone coords) (boolean tombstone?))
-    coords))
-
-(defn insert-coordinates [kd-tree ^ToLongFunction id->long-id ^TemporalCoordinates coordinates]
-  (let [k (int 6)
-        id-idx (int 0)
-        row-id-idx (int 1)
-        vt-start-idx (int 2)
-        vt-end-idx (int 3)
-        tt-start-idx (int 4)
-        tt-end-idx (int 5)
-        id (.applyAsLong id->long-id (.id coordinates))
-        row-id (.rowId coordinates)
-        min-range (doto (long-array k)
-                    (Arrays/fill Long/MIN_VALUE)
-                    (aset id-idx id)
-                    (aset vt-end-idx (.validTime coordinates))
-                    (aset tt-end-idx (.txTimeEnd coordinates)))
-        max-range (doto (long-array k)
-                    (Arrays/fill Long/MAX_VALUE)
-                    (aset id-idx id)
-                    (aset vt-start-idx (dec (.validTimeEnd coordinates)))
-                    (aset tt-end-idx (.txTimeEnd coordinates)))
-        overlap (-> ^Spliterator (kd-tree-range-search
-                                  kd-tree
-                                  min-range
-                                  max-range)
-                    (Spliterators/iterator)
-                    (iterator-seq))
-        tt-start-ms (.txTime coordinates)
-        vt-start-ms (.validTime coordinates)
-        vt-end-ms (.validTimeEnd coordinates)
-        end-of-time-ms (.getTime end-of-time)
-        kd-tree (reduce kd-tree-delete kd-tree overlap)
-        kd-tree (cond-> kd-tree
-                  (not (.tombstone coordinates))
-                  (kd-tree-insert (doto (long-array k)
-                                    (aset id-idx id)
-                                    (aset row-id-idx row-id)
-                                    (aset vt-start-idx vt-start-ms)
-                                    (aset vt-end-idx vt-end-ms)
-                                    (aset tt-start-idx tt-start-ms)
-                                    (aset tt-end-idx end-of-time-ms))))]
-    (reduce
-     (fn [kd-tree ^longs coord]
-       (cond-> (kd-tree-insert kd-tree (doto (Arrays/copyOf coord k)
-                                         (aset tt-end-idx tt-start-ms)))
-         (< (aget coord vt-start-idx) vt-start-ms)
-         (kd-tree-insert (doto (Arrays/copyOf coord k)
-                           (aset tt-start-idx tt-start-ms)
-                           (aset vt-end-idx vt-start-ms)))
-
-         (> (aget coord vt-end-idx) vt-end-ms)
-         (kd-tree-insert (doto (Arrays/copyOf coord k)
-                           (aset tt-start-idx tt-start-ms)
-                           (aset vt-start-idx vt-end-ms)))))
-     kd-tree
-     overlap)))
