@@ -313,24 +313,24 @@
 (defn insert-coordinates [kd-tree ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
   (let [id (.applyAsLong id->internal-id (.id coordinates))
         row-id (.rowId coordinates)
+        tt-start-ms (.txTime coordinates)
+        vt-start-ms (.validTime coordinates)
+        vt-end-ms (.validTimeEnd coordinates)
+        end-of-time-ms (.getTime end-of-time)
         min-range (doto (->min-range)
                     (aset id-idx id)
-                    (aset valid-time-end-idx (.validTime coordinates))
-                    (aset tx-time-end-idx (.txTimeEnd coordinates)))
+                    (aset valid-time-end-idx vt-start-ms)
+                    (aset tx-time-end-idx end-of-time-ms))
         max-range (doto (->max-range)
                     (aset id-idx id)
-                    (aset valid-time-idx (dec (.validTimeEnd coordinates)))
-                    (aset tx-time-end-idx (.txTimeEnd coordinates)))
+                    (aset valid-time-idx (dec vt-end-ms))
+                    (aset tx-time-end-idx end-of-time-ms))
         overlap (-> ^Spliterator (kd/kd-tree-range-search
                                   kd-tree
                                   min-range
                                   max-range)
                     (StreamSupport/stream false)
                     (.toArray))
-        tt-start-ms (.txTime coordinates)
-        vt-start-ms (.validTime coordinates)
-        vt-end-ms (.validTimeEnd coordinates)
-        end-of-time-ms (.getTime end-of-time)
         kd-tree (reduce kd/kd-tree-delete kd-tree overlap)
         kd-tree (cond-> kd-tree
                   (not (.tombstone coordinates))
