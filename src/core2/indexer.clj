@@ -153,8 +153,8 @@
 (defn- chunk-object-key [^long chunk-idx col-name]
   (format "chunk-%08x-%s.arrow" chunk-idx col-name))
 
-(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant ^long max-rows-per-block]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant (AtomicInteger. 1) max-rows-per-block))
+(defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant temporal-watermark ^long max-rows-per-block]
+  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant temporal-watermark (AtomicInteger. 1) max-rows-per-block))
 
 (defn- snapshot-roots [^Map live-roots]
   (Collections/unmodifiableSortedMap
@@ -203,6 +203,7 @@
                               new-chunk-row-count
                               (snapshot-roots live-roots)
                               tx-instant
+                              (.getTemporalWatermark temporal-mgr)
                               (AtomicInteger. 1)
                               max-rows-per-block)))
       (when (>= new-chunk-row-count max-rows-per-chunk)
@@ -317,10 +318,12 @@
           @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                (util/then-apply
                  (fn [_]
-                   (.registerNewChunk metadata-mgr live-roots chunk-idx))))
+                   (.registerNewChunk metadata-mgr live-roots chunk-idx)
+                   (.registerNewChunk temporal-mgr chunk-idx))))
 
           (with-open [old-watermark watermark]
-            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark) max-rows-per-block))))
+            (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)
+                                                       (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
         (finally
           (.closeCols this)))))
 
@@ -356,4 +359,4 @@
                max-rows-per-chunk
                max-rows-per-block
                (ConcurrentSkipListMap.)
-               (->empty-watermark chunk-idx latest-tx max-rows-per-block)))))
+               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)))))

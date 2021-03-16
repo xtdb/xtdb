@@ -37,35 +37,43 @@
         (sel/select (.getVector root 1) vec-pred))
       (align/->row-id-bitmap (.getVector root t/row-id-field))))
 
-(defn- tx-time-end-col? [^String col-name]
-  (= (.getName temporal/tx-time-end-field) col-name))
+(defn- roaring64-and
+  (^org.roaringbitmap.longlong.Roaring64Bitmap [] (Roaring64Bitmap.))
+  (^org.roaringbitmap.longlong.Roaring64Bitmap [^Roaring64Bitmap x] x)
+  (^org.roaringbitmap.longlong.Roaring64Bitmap [^Roaring64Bitmap x ^Roaring64Bitmap y]
+   (doto x
+     (.and y))))
 
-(defn- align-roots [^ITemporalManager temporal-manager ^TransactionInstant tx-instant ^List col-names ^Map col-preds ^Map in-roots ^VectorSchemaRoot out-root]
+(defn- align-roots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots ^VectorSchemaRoot out-root]
   (let [row-id-bitmaps (for [col-name col-names
-                             :when (not (tx-time-end-col? col-name))]
+                             :when (not (temporal/temporal-column? col-name))]
                          (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
-        row-id-bitmap (reduce #(doto ^Roaring64Bitmap %1
-                                 (.and %2))
-                              (first row-id-bitmaps)
-                              (rest row-id-bitmaps))
+        row-id-bitmap (reduce roaring64-and row-id-bitmaps)
         row-id-bitmap (.removeTombstonesFrom temporal-manager row-id-bitmap)
-        tx-time-end-root (when (some tx-time-end-col? col-names)
-                           (first (.createTemporalRoots temporal-manager tx-instant [(.getName temporal/tx-time-end-field)] row-id-bitmap)))]
+        temporal-roots (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
+                                             temporal-min-range temporal-max-range row-id-bitmap)
+        row-id-bitmap (if temporal-roots
+                        (.row-id-bitmap temporal-roots)
+                        row-id-bitmap)]
     (try
       (let [roots (for [col-name col-names]
-                    (if (tx-time-end-col? col-name)
-                      tx-time-end-root
+                    (if (temporal/temporal-column? col-name)
+                      (.get ^Map (.roots temporal-roots) col-name)
                       (.get in-roots col-name)))
-            row-id-bitmap (if-let [tx-time-end-pred (.get col-preds (.getName temporal/tx-time-end-field))]
-                            (doto (->row-id-bitmap tx-time-end-root tx-time-end-pred)
-                              (.and row-id-bitmap))
-                            row-id-bitmap)]
+            temporal-row-id-bitmaps (for [col-name col-names
+                                          :when (temporal/temporal-column? col-name)]
+                                      (->row-id-bitmap (.get ^Map (.roots temporal-roots) col-name) (.get col-preds col-name)))
+            row-id-bitmap (reduce roaring64-and
+                                  row-id-bitmap
+                                  temporal-row-id-bitmaps)]
         ;; We can augment this (and project-vec) to take a row-id/idx
         ;; -> repetition count map, to make this aligned with the
         ;; temporal roots with potentially duplicated row-ids.
         (align/align-vectors roots row-id-bitmap out-root))
       (finally
-        (util/try-close tx-time-end-root)))
+        (when temporal-roots
+          (doseq [temporal-root (vals (.roots temporal-roots))]
+            (util/try-close temporal-root)))))
     out-root))
 
 (deftype ScanCursor [^BufferAllocator allocator
@@ -75,18 +83,20 @@
                      ^Queue #_<Long> chunk-idxs
                      ^List col-names
                      ^Map col-preds
+                     ^longs temporal-min-range
+                     ^longs temporal-max-range
                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
 
   ICursor
   (tryAdvance [this c]
-    (let [real-col-names (remove tx-time-end-col? col-names)]
+    (let [real-col-names (remove temporal/temporal-column? col-names)]
       (letfn [(create-out-root [^Map chunks]
                 (when (= (count chunks) (count real-col-names))
                   (VectorSchemaRoot/create (align/align-schemas (for [col-name col-names]
-                                                                  (if (tx-time-end-col? col-name)
-                                                                    temporal/tx-time-end-schema
+                                                                  (if (temporal/temporal-column? col-name)
+                                                                    (temporal/->temporal-root-schema col-name)
                                                                     (.getSchema ^IChunkCursor (.get chunks col-name)))))
                                            allocator)))
 
@@ -94,7 +104,7 @@
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
                     (do
-                      (align-roots temporal-manager (.tx-instant watermark) col-names col-preds in-roots out-root)
+                      (align-roots temporal-manager watermark col-names col-preds temporal-min-range temporal-max-range in-roots out-root)
                       (if (pos? (.getRowCount out-root))
                         (do
                           (.accept c out-root)
@@ -160,8 +170,10 @@
                      ^Watermark watermark
                      ^List col-names
                      metadata-pred ;; TODO derive this from col-preds
-                     ^Map col-preds]
+                     ^Map col-preds
+                     ^longs temporal-min-range
+                     ^longs temporal-max-range]
   (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
     (ScanCursor. allocator buffer-pool temporal-manager watermark
-                 chunk-idxs col-names col-preds
+                 chunk-idxs col-names col-preds temporal-min-range temporal-max-range
                  nil nil false)))

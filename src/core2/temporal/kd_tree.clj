@@ -8,14 +8,11 @@
            core2.temporal.TemporalCoordinates))
 
 ;; TODO:
-;; participate in watermark via an opaque structure, persistent tree for now, mutable tree with time-stamps later.
 ;; update the uni-temporal manager to be backed by the kd-tree.
 ;; rebuild and balance the tree when finishing a chunk for now, store this tree as an Arrow chunk later.
-;; add min/max temporal predicate support to scan, used independently of if temporal columns are scanned.
 ;; augment range query with active row-id min/max range from scan.
 ;; use opaque structure from watermark - the persistent tree itself - for range query.
 ;; ability to turn result coordinates of a range query into a root for scanned temporal columns.
-;; take the row-ids from the root, and it in scan.
 ;; remove tombstones from temporal manager, the above will filter them out as they aren't in the tree.
 ;; take temporal roots row-id->repeat-count into account when aligning the other roots.
 

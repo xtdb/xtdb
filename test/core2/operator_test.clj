@@ -42,7 +42,9 @@
                     (let [!results (atom [])]
                       (with-open [chunk-scanner (.scan op-factory watermark
                                                        ["name"] metadata-pred
-                                                       {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))})]
+                                                       {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))}
+                                                       nil
+                                                       nil)]
                         (while (.tryAdvance chunk-scanner
                                             (reify Consumer
                                               (accept [_ root]

@@ -6,7 +6,7 @@
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            core2.temporal.TemporalCoordinates
-           core2.tx.TransactionInstant
+           [core2.tx TransactionInstant Watermark]
            org.apache.arrow.memory.util.ArrowBufPointer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector.types.pojo Field Schema]
@@ -77,21 +77,33 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defrecord TemporalRoots [^Roaring64Bitmap row-id-bitmap ^Map roots])
+
 (definterface ITemporalManager
+  (^Object getTemporalWatermark [])
+  (^void registerNewChunk [^long chunk-idx])
   (^void updateTemporalCoordinates [^java.util.SortedMap row-id->temporal-coordinates])
   (^org.roaringbitmap.longlong.Roaring64Bitmap removeTombstonesFrom [^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap])
-  (^java.util.List createTemporalRoots [^core2.tx.TransactionInstant tx-instant
-                                        ^java.util.List columns
-                                        ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
+  (^core2.temporal.TemporalRoots createTemporalRoots [^core2.tx.Watermark watermark
+                                                      ^java.util.List columns
+                                                      ^longs temporal-min-range
+                                                      ^longs temporal-max-range
+                                                      ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
-(def ^org.apache.arrow.vector.types.pojo.Field tx-time-end-field
-  (t/->primitive-dense-union-field "_tx-time-end" #{:timestampmilli}))
+(def ^:private temporal-columns
+  (->> (for [col-name ["_tx-time" "_tx-time-end" "_valid-time" "_valie-time-end"]]
+         [col-name (t/->primitive-dense-union-field col-name #{:timestampmilli})])
+       (into {})))
+
+(defn temporal-column? [col-name]
+  (contains? temporal-columns col-name))
 
 (def ^:private timestampmilli-type-id
   (-> (t/primitive-type->arrow-type :timestampmilli)
       (t/arrow-type->type-id)))
 
-(def ^org.apache.arrow.vector.types.pojo.Schema tx-time-end-schema (Schema. [t/row-id-field tx-time-end-field]))
+(defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
+  (Schema. [t/row-id-field (get temporal-columns col-name)]))
 
 (deftype TemporalManager [^BufferAllocator allocator
                           ^BufferPool buffer-pool
@@ -101,6 +113,11 @@
                           ^Roaring64Bitmap tombstone-row-ids
                           ^StampedLock tombstone-row-ids-lock]
   ITemporalManager
+  (getTemporalWatermark [_]
+    nil)
+
+  (registerNewChunk [_ chunk-idx])
+
   (updateTemporalCoordinates [_ row-id->temporal-coordinates]
     (doseq [^TemporalCoordinates coordinates (vals row-id->temporal-coordinates)
             :let [row-id (.rowId coordinates)
@@ -129,31 +146,32 @@
         (finally
           (.unlock tombstone-row-ids-lock stamp)))))
 
-  (createTemporalRoots [_ tx-instant columns row-id-bitmap]
-    (assert (= ["_tx-time-end"] columns))
-    (let [out-root (VectorSchemaRoot/create allocator tx-time-end-schema)
-          ^BigIntVector row-id-vec (.getVector out-root 0)
-          ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
-          ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
-          tx-time-ms (.getTime ^Date (.tx-time tx-instant))
-          value-count (.getLongCardinality row-id-bitmap)]
-      (util/set-value-count row-id-vec value-count)
-      (util/set-value-count tx-time-end-duv-vec value-count)
-      (util/set-value-count tx-time-end-vec value-count)
-      (.forEach (.stream row-id-bitmap)
-                (reify LongConsumer
-                  (accept [_ row-id]
-                    (let [row-count (.getRowCount out-root)
-                          offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
-                          tx-time-end (.get row-id->tx-time-end row-id)
-                          tx-time-end (if (or (nil? tx-time-end)
-                                              (> ^long tx-time-end tx-time-ms))
-                                        Long/MAX_VALUE
-                                        ^long tx-time-end)]
-                      (.set row-id-vec row-count row-id)
-                      (.set tx-time-end-vec row-count tx-time-end)
-                      (util/set-vector-schema-root-row-count out-root row-count)))))
-      [out-root]))
+  (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
+    (when (not-empty columns)
+      (assert (= ["_tx-time-end"] columns))
+      (let [out-root (VectorSchemaRoot/create allocator (->temporal-root-schema "_tx-time-end"))
+            ^BigIntVector row-id-vec (.getVector out-root 0)
+            ^DenseUnionVector tx-time-end-duv-vec (.getVector out-root 1)
+            ^TimeStampMilliVector tx-time-end-vec (.getVectorByType tx-time-end-duv-vec timestampmilli-type-id)
+            tx-time-ms (.getTime ^Date (.tx-time ^TransactionInstant (.tx-instant watermark)))
+            value-count (.getLongCardinality row-id-bitmap)]
+        (util/set-value-count row-id-vec value-count)
+        (util/set-value-count tx-time-end-duv-vec value-count)
+        (util/set-value-count tx-time-end-vec value-count)
+        (.forEach (.stream row-id-bitmap)
+                  (reify LongConsumer
+                    (accept [_ row-id]
+                      (let [row-count (.getRowCount out-root)
+                            offset (util/write-type-id tx-time-end-duv-vec row-count timestampmilli-type-id)
+                            tx-time-end (.get row-id->tx-time-end row-id)
+                            tx-time-end (if (or (nil? tx-time-end)
+                                                (> ^long tx-time-end tx-time-ms))
+                                          Long/MAX_VALUE
+                                          ^long tx-time-end)]
+                        (.set row-id-vec row-count row-id)
+                        (.set tx-time-end-vec row-count tx-time-end)
+                        (util/set-vector-schema-root-row-count out-root row-count)))))
+        (->TemporalRoots row-id-bitmap {"_tx-time-end" out-root}))))
 
   Closeable
   (close [_]

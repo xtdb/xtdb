@@ -18,7 +18,9 @@
   (^core2.ICursor scan [^core2.tx.Watermark watermark
                         ^java.util.List #_<String> colNames,
                         metadataPred
-                        ^java.util.Map #_#_<String, IVectorPredicate> colPreds])
+                        ^java.util.Map #_#_<String, IVectorPredicate> colPreds
+                        ^longs temporalMinRange
+                        ^longs temporalMaxRange])
 
   (^core2.ICursor select [^core2.ICursor inCursor
                           ^core2.select.IVectorSchemaRootPredicate pred])
@@ -53,9 +55,9 @@
    ^BufferPool buffer-pool]
 
   (reify IOperatorFactory
-    (scan [_ watermark col-names metadata-pred col-preds]
+    (scan [_ watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range]
       (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
-                          watermark col-names metadata-pred col-preds))
+                          watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range))
 
     (select [_ in-cursor pred]
       (select/->select-cursor allocator in-cursor pred))
