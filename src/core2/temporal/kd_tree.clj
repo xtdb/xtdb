@@ -13,7 +13,6 @@
 ;; use opaque structure from watermark - the persistent tree itself - for range query.
 ;; ability to turn result coordinates of a range query into a root for scanned temporal columns.
 ;; remove tombstones from temporal manager, the above will filter them out as they aren't in the tree.
-;; take temporal roots row-id->repeat-count into account when aligning the other roots.
 
 (set! *unchecked-math* :warn-on-boxed)
 

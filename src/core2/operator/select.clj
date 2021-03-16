@@ -33,7 +33,8 @@
 
                                        (doseq [^Field field (.getFields schema)]
                                          (util/project-vec (.getVector in-root field)
-                                                           idx-bitmap
+                                                           (.stream idx-bitmap)
+                                                           (.getCardinality idx-bitmap)
                                                            (.getVector out-root field)))
 
                                        (util/set-vector-schema-root-row-count out-root selected-count)))))))))

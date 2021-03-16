@@ -82,7 +82,7 @@
           roots [name-root age-root]]
       (with-open [out-root (VectorSchemaRoot/create (align/align-schemas [(.getSchema name-root) (.getSchema age-root)])
                                                     tu/*allocator*)]
-        (align/align-vectors roots row-ids out-root)
+        (align/align-vectors roots row-ids nil out-root)
         (t/is (= [[(Text. "Dave") 12]
                   [(Text. "Bob") 15]]
                  (tu/root->rows out-root)))))))

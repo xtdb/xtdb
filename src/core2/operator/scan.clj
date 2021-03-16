@@ -11,14 +11,16 @@
            core2.buffer_pool.BufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
-           core2.temporal.ITemporalManager
+           [core2.temporal ITemporalManager TemporalRoots]
            [core2.tx TransactionInstant Watermark]
            core2.util.IChunkCursor
            [java.util HashMap LinkedList List Map Queue]
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.VectorSchemaRoot
+           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.roaringbitmap.longlong.Roaring64Bitmap))
+
+(set! *unchecked-math* :warn-on-boxed)
 
 (defn- next-roots [col-names chunks]
   (when (= (count col-names) (count chunks))
@@ -62,6 +64,16 @@
         (aset temporal/row-id-idx
               (min max-row-id (aget temporal-max-range temporal/row-id-idx)))))))
 
+(defn- ->row-id->repeat-count ^java.util.Map [^TemporalRoots temporal-roots ^Roaring64Bitmap row-id-bitmap]
+  (when temporal-roots
+    (when-let [^VectorSchemaRoot root (first (.values ^Map (.roots temporal-roots)))]
+      (let [res (HashMap.)
+            ^BigIntVector row-id-vec (.getVector root 0)]
+        (dotimes [idx (.getValueCount row-id-vec)]
+          (when (.contains row-id-bitmap (.get row-id-vec idx))
+            (.put res idx (inc ^long (.getOrDefault res idx 0)))))
+        res))))
+
 (defn- align-roots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots ^VectorSchemaRoot out-root]
   (let [row-id-bitmaps (for [col-name col-names
                              :when (not (temporal/temporal-column? col-name))]
@@ -87,8 +99,9 @@
                                       (->row-id-bitmap (.get ^Map (.roots temporal-roots) col-name) (.get col-preds col-name)))
             row-id-bitmap (reduce roaring64-and
                                   row-id-bitmap
-                                  temporal-row-id-bitmaps)]
-        (align/align-vectors roots row-id-bitmap out-root))
+                                  temporal-row-id-bitmaps)
+            row-id->repeat-count (->row-id->repeat-count temporal-roots row-id-bitmap)]
+        (align/align-vectors roots row-id-bitmap row-id->repeat-count out-root))
       (finally
         (util/try-close temporal-roots)))
     out-root))
