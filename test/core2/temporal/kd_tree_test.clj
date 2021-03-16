@@ -277,7 +277,14 @@
                            :vt-end #inst "1998-01-15T00:00:00.000-00:00",
                            :tt-start #inst "1998-01-28T00:00:00.000-00:00",
                            :tt-end #inst "9999-12-31T23:59:59.999-00:00"}]
-                         (temporal-rows kd-tree row-id->row)))))))))))
+                         (temporal-rows kd-tree row-id->row))
+
+                      (t/testing "rebuilding tree results in tree with same points"
+                        (let [points (mapv vec (kd/node-kd-tree->seq kd-tree))]
+                          (t/is (= (sort points)
+                                   (sort (mapv vec (kd/node-kd-tree->seq (kd/->node-kd-tree (shuffle points)))))))
+                          (t/is (= (sort points)
+                                   (sort (mapv vec (kd/node-kd-tree->seq (reduce kd/kd-tree-insert nil (shuffle points))))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
   (t/is (= (-> (kd/->node-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])

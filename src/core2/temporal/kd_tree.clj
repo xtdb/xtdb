@@ -8,7 +8,6 @@
            core2.temporal.TemporalCoordinates))
 
 ;; TODO:
-;; ensure rebuilt tree give same answer to queries.
 ;; participate in watermark via an opaque structure, persistent tree for now, mutable tree with time-stamps later.
 ;; update the uni-temporal manager to be backed by the kd-tree.
 ;; rebuild and balance the tree when finishing a chunk for now, store this tree as an Arrow chunk later.
