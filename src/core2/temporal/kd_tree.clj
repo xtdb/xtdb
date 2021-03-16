@@ -1,7 +1,7 @@
 (ns core2.temporal.kd-tree
   (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             List Map Spliterator Spliterator$OfInt Spliterators]
-           [java.util.function Consumer IntConsumer Function Predicate]
+           [java.util.function Consumer IntConsumer Function Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
@@ -40,22 +40,39 @@
   (kd-tree-depth-first [_]
     (Spliterators/emptySpliterator)))
 
-(defn ->node-kd-tree
-  (^core2.temporal.kd_tree.Node [points]
-   (->node-kd-tree (mapv ->longs points) 0))
-  (^core2.temporal.kd_tree.Node [points ^long axis]
-   (when-let [points (not-empty points)]
-     (let [k (alength ^longs (first points))
-           points (vec (sort-by #(aget ^longs % axis) points))
-           median (quot (count points) 2)
-           axis (next-axis axis k)]
-       (->Node (nth points median)
-               (->node-kd-tree (subvec points 0 median) axis)
-               (->node-kd-tree (subvec points (inc median)) axis)
-               false)))))
+(def ^:private ^Class objects-class
+  (Class/forName "[Ljava.lang.Object;"))
+
+(defn ->node-kd-tree ^core2.temporal.kd_tree.Node [points]
+  (let [^objects points (if (instance? objects-class points)
+                          points
+                          (object-array points))
+        n (alength points)
+        k (count (aget points 0))]
+    (dotimes [idx n]
+      (let [point (aget points idx)]
+        (when-not (instance? longs-class point)
+          (aset points idx (->longs point)))))
+    ((fn step [^long start ^long end ^long axis]
+       (Arrays/sort points start end (Comparator/comparingLong
+                                      (reify ToLongFunction
+                                        (applyAsLong [_ x]
+                                          (aget ^longs x axis)))))
+       (let [median (quot (+ start end) 2)
+             axis (next-axis axis k)]
+         (Node. (aget points median)
+                (when (< start median)
+                  (step start median axis))
+                (when (< (inc median) end)
+                  (step (inc median) end axis))
+                false)))
+     0 (alength points) 0)))
 
 (defn node-kd-tree->seq [^Node kd-tree]
   (iterator-seq (Spliterators/iterator ^Spliterator (kd-tree-depth-first kd-tree))))
+
+(defn rebuild-node-kd-tree [^Node kd-tree]
+  (->node-kd-tree (.toArray (StreamSupport/stream ^Spliterator (kd-tree-depth-first kd-tree) false))))
 
 (deftype NodeStackEntry [^Node node ^int axis])
 
@@ -75,6 +92,30 @@
 
 (deftype NodeRangeSearchSpliterator [^longs min-range ^longs max-range ^int k ^Deque stack]
   Spliterator
+  (forEachRemaining [_ c]
+    (loop []
+      (when-let [^NodeStackEntry entry (.poll stack)]
+        (let [^Node node (.node entry)
+              axis (.axis entry)
+              ^longs location (.location node)
+              location-axis (aget location axis)
+              min-match? (<= (aget min-range axis) location-axis)
+              max-match? (<= location-axis (aget max-range axis))
+              axis (next-axis axis k)]
+          (when-let [right (when max-match?
+                             (.right node))]
+            (.push stack (NodeStackEntry. right axis)))
+          (when-let [left (when min-match?
+                            (.left node))]
+            (.push stack (NodeStackEntry. left axis)))
+
+          (when (and min-match?
+                     max-match?
+                     (not (.deleted? node))
+                     (in-range? min-range location max-range))
+            (.accept c location))
+          (recur)))))
+
   (tryAdvance [_ c]
     (loop []
       (if-let [^NodeStackEntry entry (.poll stack)]
@@ -97,6 +138,49 @@
                    (not (.deleted? node))
                    (in-range? min-range location max-range))
             (do (.accept c location)
+                true)
+            (recur)))
+        false)))
+
+  (characteristics [_]
+    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL))
+
+  (estimateSize [_]
+    Long/MAX_VALUE)
+
+  (trySplit [_]))
+
+(deftype NodeDepthFirstSpliterator [^int k ^Deque stack]
+  Spliterator
+  (forEachRemaining [_ c]
+    (loop []
+      (when-let [^NodeStackEntry entry (.poll stack)]
+        (let [^Node node (.node entry)
+              axis (.axis entry)
+              axis (next-axis axis k)]
+          (when-let [right (.right node)]
+            (.push stack (NodeStackEntry. right axis)))
+          (when-let [left (.left node)]
+            (.push stack (NodeStackEntry. left axis)))
+
+          (when-not (.deleted? node)
+            (.accept c (.location node)))
+          (recur)))))
+
+
+  (tryAdvance [_ c]
+    (loop []
+      (if-let [^NodeStackEntry entry (.poll stack)]
+        (let [^Node node (.node entry)
+              axis (.axis entry)
+              axis (next-axis axis k)]
+          (when-let [right (.right node)]
+            (.push stack (NodeStackEntry. right axis)))
+          (when-let [left (.left node)]
+            (.push stack (NodeStackEntry. left axis)))
+
+          (if-not (.deleted? node)
+            (do (.accept c (.location node))
                 true)
             (recur)))
         false)))
@@ -160,8 +244,10 @@
       (->NodeRangeSearchSpliterator min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
-    (let [k (count (some-> kd-tree (.location)))]
-      (kd-tree-range-search kd-tree (repeat k Long/MIN_VALUE) (repeat k Long/MAX_VALUE)))))
+    (let [k (count (some-> kd-tree (.location)))
+          stack (doto (ArrayDeque.)
+                  (.push (NodeStackEntry. kd-tree 0)))]
+      (->NodeDepthFirstSpliterator k stack))))
 
 (deftype ColumnStackEntry [^int start ^int end ^int axis])
 
@@ -179,10 +265,10 @@
         (let [start (.start entry)
               end (.end entry)
               axis (.axis entry)]
-          (Arrays/sort points start end (reify Comparator
-                                          (compare [_ x y]
-                                            (Long/compare (aget ^longs x axis)
-                                                          (aget ^longs y axis)))))
+          (Arrays/sort points start end (Comparator/comparingLong
+                                         (reify ToLongFunction
+                                           (applyAsLong [_ x]
+                                             (aget ^longs x axis)))))
           (let [median (quot (+ start end) 2)
                 axis (next-axis axis k)]
             (when (< (inc median) end)

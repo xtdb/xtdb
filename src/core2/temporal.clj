@@ -151,10 +151,10 @@
                           ^IMetadataManager metadata-manager
                           ^AtomicLong id-counter
                           ^Map id->internal-id
-                          !kd-tree]
+                          ^:volatile-mutable kd-tree]
   ITemporalManager
   (getTemporalWatermark [_]
-    @!kd-tree)
+    kd-tree)
 
   (getInternalId [_ id]
     (.computeIfAbsent id->internal-id
@@ -165,22 +165,21 @@
                         (apply [_ x]
                           (.incrementAndGet id-counter)))))
 
-  (registerNewChunk [_ chunk-idx]
+  (registerNewChunk [this chunk-idx]
     ;; TODO: currently too slow to rebuild the tree like this during
     ;; core2.ts-devices-small-test
-    #_(swap! !kd-tree (comp kd/->node-kd-tree kd/node-kd-tree->seq)))
+    #_(set! (.kd-tree this) (kd/rebuild-node-kd-tree kd-tree)))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
                            (applyAsLong [_ id]
                              (.getInternalId this id)))]
-      (swap! !kd-tree
-             (fn [kd-tree]
-               (reduce
-                (fn [kd-tree coordinates]
-                  (insert-coordinates kd-tree id->long-id-fn coordinates))
-                kd-tree
-                (vals row-id->temporal-coordinates))))))
+      (set! (.kd-tree this)
+            (reduce
+             (fn [kd-tree coordinates]
+               (insert-coordinates kd-tree id->long-id-fn coordinates))
+             kd-tree
+             (vals row-id->temporal-coordinates)))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
@@ -224,8 +223,8 @@
                        roots)))
 
   Closeable
-  (close [_]
-    (reset! !kd-tree nil)
+  (close [this]
+    (set! (.kd-tree this) nil)
     (.clear id->internal-id)))
 
 (defn- populate-known-chunks ^core2.temporal.ITemporalManager [^TemporalManager temporal-manager]
@@ -297,7 +296,7 @@
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
                                                            ^BufferPool buffer-pool
                                                            ^IMetadataManager metadata-manager]
-  (-> (TemporalManager. allocator buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) (atom nil))
+  (-> (TemporalManager. allocator buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil)
       (populate-known-chunks)))
 
 ;; Bitemporal Spike, this will turn into the temporal manager.
@@ -326,8 +325,8 @@
                                   kd-tree
                                   min-range
                                   max-range)
-                    (Spliterators/iterator)
-                    (iterator-seq))
+                    (StreamSupport/stream false)
+                    (.toArray))
         tt-start-ms (.txTime coordinates)
         vt-start-ms (.validTime coordinates)
         vt-end-ms (.validTimeEnd coordinates)
