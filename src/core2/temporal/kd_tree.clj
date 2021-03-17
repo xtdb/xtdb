@@ -48,29 +48,41 @@
   (Class/forName "[Ljava.lang.Object;"))
 
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [points]
-  (let [^objects points (if (instance? objects-class points)
-                          points
-                          (object-array points))
-        n (alength points)
-        k (count (aget points 0))]
-    (dotimes [idx n]
-      (let [point (aget points idx)]
-        (when-not (instance? longs-class point)
-          (aset points idx (->longs point)))))
-    ((fn step [^long start ^long end ^long axis]
-       (Arrays/sort points start end (Comparator/comparingLong
-                                      (reify ToLongFunction
-                                        (applyAsLong [_ x]
-                                          (aget ^longs x axis)))))
-       (let [median (quot (+ start end) 2)
-             axis (next-axis axis k)]
-         (Node. (aget points median)
-                (when (< start median)
-                  (step start median axis))
-                (when (< (inc median) end)
-                  (step (inc median) end axis))
-                false)))
-     0 (alength points) 0)))
+  (when (not-empty points)
+    (let [^objects points (if (instance? objects-class points)
+                            points
+                            (object-array points))
+          n (alength points)
+          k (count (aget points 0))]
+      (dotimes [idx n]
+        (let [point (aget points idx)]
+          (when-not (instance? longs-class point)
+            (aset points idx (->longs point)))))
+      ((fn step [^long start ^long end ^long axis]
+         (if (= (inc start) end)
+           (Node. (aget points start) nil nil false)
+           (do (Arrays/sort points start end (Comparator/comparingLong
+                                              (reify ToLongFunction
+                                                (applyAsLong [_ x]
+                                                  (aget ^longs x axis)))))
+               (let [median (quot (+ start end) 2)
+                     ^longs median-point (aget points median)
+                     median-value (aget median-point axis)
+                     ^long median (loop [idx median]
+                                    (if (= start idx)
+                                      idx
+                                      (let [prev-idx (dec idx)]
+                                        (if (= median-value (aget ^longs (aget points prev-idx) axis))
+                                          (recur prev-idx)
+                                          idx))))
+                     axis (next-axis axis k)]
+                 (Node. (aget points median)
+                        (when (< start median)
+                          (step start median axis))
+                        (when (< (inc median) end)
+                          (step (inc median) end axis))
+                        false)))))
+       0 (alength points) 0))))
 
 (defn node-kd-tree->seq [^Node kd-tree]
   (iterator-seq (Spliterators/iterator ^Spliterator (kd-tree-depth-first kd-tree))))
@@ -273,6 +285,10 @@
           stack (doto (ArrayDeque.)
                   (.push (NodeStackEntry. kd-tree 0)))]
       (->NodeDepthFirstSpliterator k stack))))
+
+;; TODO: these don't try to balance their median points like the Node
+;; tree. Are not used yet, will be revisited as and when we start
+;; storing temporal Arrow chunks.
 
 (deftype ColumnStackEntry [^int start ^int end ^int axis])
 

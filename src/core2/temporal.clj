@@ -166,9 +166,7 @@
                           (.incrementAndGet id-counter)))))
 
   (registerNewChunk [this chunk-idx]
-    ;; TODO: currently too slow to rebuild the tree like this during
-    ;; core2.ts-devices-small-test
-    #_(set! (.kd-tree this) (kd/rebuild-node-kd-tree kd-tree)))
+    (set! (.kd-tree this) (kd/rebuild-node-kd-tree kd-tree)))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
