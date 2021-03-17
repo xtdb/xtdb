@@ -186,8 +186,10 @@
              (recur right axis)
 
              :else
-             (do (.push stack (NodeStackEntry. right axis))
-                 (recur left axis)))))
+             (do (when right
+                   (.push stack (NodeStackEntry. right axis)))
+                 (when left
+                   (recur left axis))))))
         (recur))))
 
   (tryAdvance [_ c]
