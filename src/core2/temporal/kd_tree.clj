@@ -113,33 +113,36 @@
       (when-let [^NodeStackEntry entry (.poll stack)]
         (loop [^Node node (.node entry)
                axis (.axis entry)]
-         (let [^longs location (.location node)
-               location-axis (aget location axis)
-               min-match? (<= (aget min-range axis) location-axis)
-               max-match? (<= location-axis (aget max-range axis))
-               axis (next-axis axis k)
-               left (.left node)
-               right (.right node)]
+          (let [^longs location (.location node)
+                left (.left node)
+                right (.right node)
+                location-axis (aget location axis)
+                min-axis (aget min-range axis)
+                max-axis (aget max-range axis)
+                min-match? (< min-axis location-axis)
+                max-match? (<= location-axis max-axis)
+                visit-left? (and left min-match?)
+                visit-right? (and right max-match?)
+                axis (next-axis axis k)]
 
-           (when (and min-match?
-                      max-match?
-                      (not (.deleted? node))
-                      (in-range? min-range location max-range))
-             (.accept c location))
+            (when (and (or min-match? max-match?)
+                       (not (.deleted? node))
+                       (in-range? min-range location max-range))
+              (.accept c location))
 
-           (cond
-             (and min-match? left (or (nil? right) (not max-match?)))
-             (recur left axis)
+            (cond
+              (and visit-left? (not visit-right?))
+              (recur left axis)
 
-             (and max-match? right (or (nil? left) (not min-match?)))
-             (recur right axis)
+              (and visit-right? (not visit-left?))
+              (recur right axis)
 
-             :else
-             (do (when (and max-match? right)
-                   (.push stack (NodeStackEntry. right axis)))
+              :else
+              (do (when visit-right?
+                    (.push stack (NodeStackEntry. right axis)))
 
-                 (when (and min-match? left)
-                   (recur left axis))))))
+                  (when visit-left?
+                    (recur left axis))))))
         (recur))))
 
   (tryAdvance [_ c]
@@ -148,19 +151,24 @@
         (let [^Node node (.node entry)
               axis (.axis entry)
               ^longs location (.location node)
+              left (.left node)
+              right (.right node)
               location-axis (aget location axis)
-              min-match? (<= (aget min-range axis) location-axis)
-              max-match? (<= location-axis (aget max-range axis))
+              min-axis (aget min-range axis)
+              max-axis (aget max-range axis)
+              min-match? (< min-axis location-axis)
+              max-match? (<= location-axis max-axis)
+              visit-left? (and left min-match?)
+              visit-right? (and right max-match?)
               axis (next-axis axis k)]
-          (when-let [right (when max-match?
-                             (.right node))]
+
+          (when visit-right?
             (.push stack (NodeStackEntry. right axis)))
-          (when-let [left (when min-match?
-                            (.left node))]
+
+          (when visit-left?
             (.push stack (NodeStackEntry. left axis)))
 
-          (if (and min-match?
-                   max-match?
+          (if (and (or min-match? max-match?)
                    (not (.deleted? node))
                    (in-range? min-range location max-range))
             (do (.accept c location)
