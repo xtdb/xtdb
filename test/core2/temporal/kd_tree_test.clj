@@ -15,9 +15,13 @@
 ;; areas covered are the same. Could or maybe should coalesce.
 
 (defn- ->row-map [^longs location]
-  (let [[id row-id vt-start vt-end tt-start tt-end] location]
-    (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
-            [id row-id  (Date. ^long vt-start) (Date. ^long vt-end) (Date. ^long tt-start) (Date. ^long tt-end)])))
+  (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
+          [(aget location temporal/id-idx)
+           (aget location temporal/row-id-idx)
+           (Date. (aget location temporal/valid-time-idx))
+           (Date. (aget location temporal/valid-time-end-idx))
+           (Date. (aget location temporal/tx-time-idx))
+           (Date. (aget location temporal/tx-time-end-idx))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/node-kd-tree->seq kd-tree))
