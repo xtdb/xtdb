@@ -4,15 +4,15 @@
            java.nio.ByteOrder))
 
 ;; http://dimacs.rutgers.edu/~graham/pubs/papers/cacm-sketch.pdf
-
 ;; http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
+
 (defn ->hyper-log-log
   (^org.agrona.MutableDirectBuffer []
    (->hyper-log-log 1024))
   (^org.agrona.MutableDirectBuffer [^long m]
    (mem/allocate-unpooled-buffer (* Integer/BYTES m))))
 
-(defn hyper-log-log-update ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer hll v]
+(defn add ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer hll v]
   (let [m (/ (.capacity hll) Integer/BYTES)
         b (Integer/numberOfTrailingZeros m)
         x (mix-collection-hash (hash v) 0)
@@ -24,7 +24,7 @@
                     (- (inc (Integer/numberOfLeadingZeros w)) b))
                ByteOrder/BIG_ENDIAN))))
 
-(defn hyper-log-log-estimate ^double [^DirectBuffer hll]
+(defn estimate ^double [^DirectBuffer hll]
   (let [m (/ (.capacity hll) Integer/BYTES)
         z (/ 1.0 (double (loop [n 0
                                 acc 0.0]
@@ -53,7 +53,7 @@
       :else
       e)))
 
-(defn hyper-log-log-merge ^DirectBuffer [^DirectBuffer hll-a ^DirectBuffer hll-b]
+(defn combine ^DirectBuffer [^DirectBuffer hll-a ^DirectBuffer hll-b]
   (assert (= (.capacity hll-a) (.capacity hll-b)))
   (loop [n 0
          result ^MutableDirectBuffer (mem/allocate-unpooled-buffer (.capacity hll-a))]
@@ -64,14 +64,14 @@
                (.putInt n (max (.getInt hll-a n ByteOrder/BIG_ENDIAN)
                                (.getInt hll-b n ByteOrder/BIG_ENDIAN)) ByteOrder/BIG_ENDIAN))))))
 
-(defn hyper-log-log-estimate-union ^double [^DirectBuffer hll-a ^DirectBuffer hll-b]
-  (hyper-log-log-estimate (hyper-log-log-merge hll-a hll-b)))
+(defn estimate-union ^double [^DirectBuffer hll-a ^DirectBuffer hll-b]
+  (estimate (combine hll-a hll-b)))
 
-(defn hyper-log-log-estimate-intersection ^double [^DirectBuffer hll-a ^DirectBuffer hll-b]
-  (- (+ (hyper-log-log-estimate hll-a)
-        (hyper-log-log-estimate hll-b))
-     (hyper-log-log-estimate-union hll-a hll-b)))
+(defn estimate-intersection ^double [^DirectBuffer hll-a ^DirectBuffer hll-b]
+  (- (+ (estimate hll-a)
+        (estimate hll-b))
+     (estimate-union hll-a hll-b)))
 
-(defn hyper-log-log-estimate-difference ^double [^DirectBuffer hll-a ^DirectBuffer hll-b]
-  (- (hyper-log-log-estimate hll-a)
-     (hyper-log-log-estimate-intersection hll-a hll-b)))
+(defn estimate-difference ^double [^DirectBuffer hll-a ^DirectBuffer hll-b]
+  (- (estimate hll-a)
+     (estimate-intersection hll-a hll-b)))
