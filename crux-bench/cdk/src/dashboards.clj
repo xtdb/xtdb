@@ -57,28 +57,28 @@
 
 (def queries-grid
   [[{:bench-type "queries-warm"
-     :bench-ns "tpch-test"
+     :bench-ns "tpch"
      :crux-node-type "embedded-kafka-rocksdb"
      :threshold 0.007}
     {:bench-type "queries-warm"
-     :bench-ns "tpch-test"
+     :bench-ns "tpch"
      :crux-node-type "kafka-lmdb"
      :threshold 0.007}
     {:bench-type "queries-warm"
-     :bench-ns "tpch-test"
+     :bench-ns "tpch"
      :crux-node-type "kafka-rocksdb"
      :threshold 0.023}]
 
    [{:bench-type "queries-warm"
-     :bench-ns "tpch-test"
+     :bench-ns "tpch"
      :crux-node-type "standalone-lmdb"
      :threshold 0.0025}
     {:bench-type "queries-warm"
-     :bench-ns "tpch-test"
+     :bench-ns "tpch"
      :crux-node-type "standalone-rocksdb"
      :threshold 0.003}
     {:bench-type "queries-warm"
-     :bench-ns "tpch-test"
+     :bench-ns "tpch"
      :crux-node-type "standalone-rocksdb-with-metrics"
      :threshold 0.007}]])
 

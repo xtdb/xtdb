@@ -4,7 +4,7 @@
             [crux.bench :as bench]
             [crux.bench.sorted-maps-microbench :as sorted-maps]
             [crux.bench.tpch-stress-test :as tpch-stress]
-            [crux.bench.tpch-test :as tpch]
+            [crux.bench.tpch :as tpch]
             [crux.bench.ts-devices :as devices]
             [crux.bench.ts-weather :as weather]
             [crux.bench.watdiv-crux :as watdiv-crux]))
@@ -51,13 +51,13 @@
    :tpch (fn [nodes {:keys [tpch-scale-factor] :as opts}]
            (bench/with-nodes [node nodes]
              (-> (bench/with-comparison-times
-                   (tpch/run-tpch-test node {:scale-factor tpch-scale-factor}))
+                   (tpch/run-tpch node {:scale-factor tpch-scale-factor}))
                  (doto post-to-slack))))
-   :lmdb-tpch-test (fn [_ _]
-                     (bench/with-nodes [node (select-keys bench/nodes ["standalone-lmdb" "kafka-lmdb"])]
-                       (-> (bench/with-comparison-times
-                             (tpch/run-tpch-test node {:scale-factor 0.01}))
-                           (doto post-to-slack))))})
+   :lmdb-tpch (fn [_ _]
+                (bench/with-nodes [node (select-keys bench/nodes ["standalone-lmdb" "kafka-lmdb"])]
+                  (-> (bench/with-comparison-times
+                        (tpch/run-tpch node {:scale-factor 0.01}))
+                      (doto post-to-slack))))})
 
 (defn parse-args [args]
   (let [{:keys [options summary errors]}
