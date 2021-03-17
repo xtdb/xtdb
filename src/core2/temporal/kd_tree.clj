@@ -17,6 +17,10 @@
 
 (defrecord Node [^longs location left right deleted?])
 
+(defn- leaf? [^Node node]
+  (and (nil? (.left node))
+       (nil? (.right node))))
+
 (defmacro ^:private next-axis [axis k]
   `(let [next-axis# (unchecked-inc-int ~axis)]
      (if (= ~k next-axis#)
@@ -95,36 +99,35 @@
   (forEachRemaining [_ c]
     (loop []
       (when-let [^NodeStackEntry entry (.poll stack)]
-        ((fn step [^Node node ^long axis]
-           (let [^longs location (.location node)
-                 location-axis (aget location axis)
-                 min-match? (<= (aget min-range axis) location-axis)
-                 max-match? (<= location-axis (aget max-range axis))
-                 axis (next-axis axis k)
-                 left (.left node)
-                 right (.right node)]
+        (loop [^Node node (.node entry)
+               axis (.axis entry)]
+         (let [^longs location (.location node)
+               location-axis (aget location axis)
+               min-match? (<= (aget min-range axis) location-axis)
+               max-match? (<= location-axis (aget max-range axis))
+               axis (next-axis axis k)
+               left (.left node)
+               right (.right node)]
 
-             (when (and min-match?
-                        max-match?
-                        (not (.deleted? node))
-                        (in-range? min-range location max-range))
-               (.accept c location))
+           (when (and min-match?
+                      max-match?
+                      (not (.deleted? node))
+                      (in-range? min-range location max-range))
+             (.accept c location))
 
-             (cond
-               (and min-match? left (or (nil? right) (not max-match?)))
-               (recur left axis)
+           (cond
+             (and min-match? left (or (nil? right) (not max-match?)))
+             (recur left axis)
 
-               (and max-match? right (or (nil? left) (not min-match?)))
-               (recur right axis)
+             (and max-match? right (or (nil? left) (not min-match?)))
+             (recur right axis)
 
-               :else
-               (do (when (and max-match? right)
-                     (.push stack (NodeStackEntry. right axis)))
+             :else
+             (do (when (and max-match? right)
+                   (.push stack (NodeStackEntry. right axis)))
 
-                   (when (and min-match? left)
-                     (recur left axis))))))
-
-         (.node entry) (.axis entry))
+                 (when (and min-match? left)
+                   (recur left axis))))))
         (recur))))
 
   (tryAdvance [_ c]
@@ -166,26 +169,25 @@
   (forEachRemaining [_ c]
     (loop []
       (when-let [^NodeStackEntry entry (.poll stack)]
-        ((fn step [^Node node ^long axis]
-           (let [axis (next-axis axis k)
-                 left (.left node)
-                 right (.right node)]
+        (loop [^Node node (.node entry)
+               axis (.axis entry)]
+         (let [axis (next-axis axis k)
+               left (.left node)
+               right (.right node)]
 
-             (when-not (.deleted? node)
-               (.accept c (.location node)))
+           (when-not (.deleted? node)
+             (.accept c (.location node)))
 
-             (cond
-               (and left (nil? right))
-               (recur left axis)
+           (cond
+             (and left (nil? right))
+             (recur left axis)
 
-               (and right (nil? left))
-               (recur right axis)
+             (and right (nil? left))
+             (recur right axis)
 
-               :else
-               (do (.push stack (NodeStackEntry. right axis))
-                   (recur left axis)))))
-
-         (.node entry) (.axis entry))
+             :else
+             (do (.push stack (NodeStackEntry. right axis))
+                 (recur left axis)))))
         (recur))))
 
   (tryAdvance [_ c]
@@ -247,7 +249,8 @@
                 location-axis (aget location-node axis)]
             (cond
               (Arrays/equals location location-node)
-              (build-fn (assoc node :deleted? true))
+              (build-fn (when-not (leaf? node)
+                          (assoc node :deleted? true)))
 
               (< (aget location axis) location-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
