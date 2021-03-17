@@ -177,12 +177,18 @@
         false)))
 
   (characteristics [_]
-    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL))
+    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
 
   (estimateSize [_]
     Long/MAX_VALUE)
 
-  (trySplit [_]))
+  (trySplit [_]
+    (let [split-size (quot (.size stack) 2)]
+      (when (pos? split-size)
+        (let [split-stack (ArrayDeque.)]
+          (while (not= split-size (.size split-stack))
+            (.push split-stack (.poll stack)))
+          (NodeRangeSearchSpliterator. min-range max-range k split-stack))))))
 
 (deftype NodeDepthFirstSpliterator [^int k ^Deque stack]
   Spliterator
@@ -230,12 +236,18 @@
         false)))
 
   (characteristics [_]
-    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL))
+    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
 
   (estimateSize [_]
     Long/MAX_VALUE)
 
-  (trySplit [_]))
+  (trySplit [_]
+    (let [split-size (quot (.size stack) 2)]
+      (when (pos? split-size)
+        (let [split-stack (ArrayDeque.)]
+          (while (not= split-size (.size split-stack))
+            (.push split-stack (.poll stack)))
+          (NodeDepthFirstSpliterator. k split-stack))))))
 
 (extend-protocol KdTree
   Node
@@ -378,7 +390,7 @@
         false)))
 
   (characteristics [_]
-    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL))
+    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
 
   (estimateSize [_]
     Long/MAX_VALUE)
