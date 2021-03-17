@@ -310,6 +310,12 @@
 ;; tree. Are not used yet, will be revisited as and when we start
 ;; storing temporal Arrow chunks.
 
+;; TODO: make this use skip pointer traversal, maybe also push data to
+;; leaves. This would require only storing the axis value (long value)
+;; and the skip pointer (int index) per inner node. See Figure 6:
+;; http://www.cse.chalmers.se/edu/year/2009/course/TDA361/EfficiencyIssuesForRayTracing.pdf
+
+
 (deftype ColumnStackEntry [^int start ^int end ^int axis])
 
 (defn ->column-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator points]
