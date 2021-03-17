@@ -278,7 +278,7 @@
              node kd-tree
              build-fn identity]
         (if-not node
-          (build-fn nil)
+          kd-tree
           (let [^longs location-node (.location node)
                 location-axis (aget location-node axis)]
             (cond
