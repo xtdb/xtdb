@@ -1,5 +1,6 @@
 (ns core2.metadata
-  (:require [core2.select :as sel]
+  (:require [core2.buffer-pool]
+            [core2.select :as sel]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
