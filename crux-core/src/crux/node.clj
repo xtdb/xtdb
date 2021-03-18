@@ -193,12 +193,7 @@
 
   api/PCruxIngestClient
   (submit-tx [this tx-ops]
-    (let [tx-ops (api/conform-tx-ops tx-ops)]
-      (cio/with-read-lock lock
-        (ensure-node-open this)
-        (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-          (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-          @(db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
+    @(api/submit-tx-async this tx-ops))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)]
@@ -229,9 +224,10 @@
                           tx-log))))))
   api/PCruxAsyncIngestClient
   (submit-tx-async [this tx-ops]
-    (cio/with-read-lock lock
-      (ensure-node-open this)
-      (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+    (let [tx-ops (api/conform-tx-ops tx-ops)
+          conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+      (cio/with-read-lock lock
+        (ensure-node-open this)
         (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
