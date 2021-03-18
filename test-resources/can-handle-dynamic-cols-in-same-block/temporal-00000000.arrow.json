@@ -106,7 +106,7 @@
       "name" : "skip_pointer",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
-      "DATA" : [1,2,3,4,5,6]
+      "DATA" : [1,2,3,4,5,-1]
     },{
       "name" : "points",
       "count" : 6,
