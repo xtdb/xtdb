@@ -263,7 +263,7 @@
                 location-axis (aget location-node axis)]
             (cond
               (Arrays/equals location location-node)
-              (build-fn node)
+              kd-tree
 
               (< (aget location axis) location-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
@@ -278,7 +278,7 @@
              node kd-tree
              build-fn identity]
         (if-not node
-          kd-tree
+          (build-fn (Node. location nil nil true))
           (let [^longs location-node (.location node)
                 location-axis (aget location-node axis)]
             (cond
