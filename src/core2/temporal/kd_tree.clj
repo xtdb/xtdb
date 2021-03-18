@@ -36,8 +36,8 @@
 ;; multiple nodes into account. Different strategies, or a combination
 ;; can be envisioned:
 
-;; 1. merging two neighbouring chunks into one larger chunk, reduce.
-;; 2. merging towards larger chunks, old to newest, combine.
+;; 1. merging two neighbouring chunks into one larger chunk, combine.
+;; 2. merging towards larger chunks, old to newest, reduce.
 
 ;; Merging chunks works like follows - assumes the intermediate chunk
 ;; fits into memory:
