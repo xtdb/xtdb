@@ -458,9 +458,13 @@
                   axis-value (.get split-value-vec idx)
                   min-match? (< (aget min-range axis) axis-value)
                   max-match? (<= axis-value (aget max-range axis))
+                  left-idx (inc idx)
                   right-idx (.get skip-pointer-vec idx)
-                  visit-left? (and (not= (inc idx) right-idx) min-match?)
-                  visit-right? (and (not (neg? right-idx)) max-match?)]
+                  right-idx (int (if (neg? right-idx)
+                                   end-idx
+                                   right-idx))
+                  visit-left? (and (not= left-idx right-idx) min-match?)
+                  visit-right? (and (not= right-idx end-idx) max-match?)]
 
               (when-let [point (and (or min-match? max-match?)
                                     (not deleted?)
@@ -469,9 +473,7 @@
 
               (cond
                 (and visit-left? (not visit-right?))
-                (recur (inc idx) (long (if-not (neg? right-idx)
-                                         right-idx
-                                         end-idx)))
+                (recur left-idx right-idx)
 
                 (and visit-right? (not visit-left?))
                 (recur right-idx end-idx)
@@ -480,9 +482,7 @@
                 (do (when visit-right?
                       (.push stack (ColumnStackEntry. right-idx end-idx)))
                     (when visit-left?
-                      (recur (inc idx) (long (if-not (neg? right-idx)
-                                               right-idx
-                                               end-idx)))))))))
+                      (recur left-idx right-idx)))))))
         (recur))))
 
   (tryAdvance [this c]
@@ -497,15 +497,17 @@
                   axis-value (.get split-value-vec idx)
                   min-match? (< (aget min-range axis) axis-value)
                   max-match? (<= axis-value (aget max-range axis))
+                  left-idx (inc idx)
                   right-idx (.get skip-pointer-vec idx)
-                  visit-left? (and (not= (inc idx) right-idx) min-match?)
-                  visit-right? (and (not (neg? right-idx)) max-match?)]
+                  right-idx (if (neg? right-idx)
+                              end-idx
+                              right-idx)
+                  visit-left? (and (not= left-idx right-idx) min-match?)
+                  visit-right? (and (not= right-idx end-idx) max-match?)]
 
               (cond
                 (and visit-left? (not visit-right?))
-                (.push stack (ColumnStackEntry. (inc idx) (if-not (neg? right-idx)
-                                                            right-idx
-                                                            end-idx)))
+                (.push stack (ColumnStackEntry. left-idx right-idx))
 
                 (and visit-right? (not visit-left?))
                 (.push stack (ColumnStackEntry. right-idx end-idx))
@@ -514,9 +516,7 @@
                 (do (when visit-right?
                       (.push stack (ColumnStackEntry. right-idx end-idx)))
                     (when visit-left?
-                      (.push stack (ColumnStackEntry. (inc idx) (if-not (neg? right-idx)
-                                                                  right-idx
-                                                                  end-idx))))))
+                      (.push stack (ColumnStackEntry. left-idx right-idx)))))
 
               (if-let [point (and (or min-match? max-match?)
                                   (not deleted?)
