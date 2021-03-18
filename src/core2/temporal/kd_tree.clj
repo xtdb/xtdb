@@ -389,7 +389,7 @@
         ^IntVector skip-pointer-vec (.getVector out-root "skip_pointer")
         ^StructVector points-struct-vec (.getVector out-root "points")
         point-vecs (.getChildrenFromFields points-struct-vec)
-        stack (doto (ArrayDeque.))
+        stack (ArrayDeque.)
         node->skip-idx-update (IdentityHashMap.)]
     (when kd-tree
       (.push stack (NodeStackEntry. kd-tree 0)))
@@ -460,9 +460,9 @@
                   max-match? (<= axis-value (aget max-range axis))
                   left-idx (inc idx)
                   right-idx (.get skip-pointer-vec idx)
-                  right-idx (int (if (neg? right-idx)
-                                   end-idx
-                                   right-idx))
+                  right-idx (if (neg? right-idx)
+                              (int end-idx)
+                              right-idx)
                   visit-left? (and (not= left-idx right-idx) min-match?)
                   visit-right? (and (not= right-idx end-idx) max-match?)]
 
