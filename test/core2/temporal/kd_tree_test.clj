@@ -6,7 +6,7 @@
            [java.util.function Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory RootAllocator]
-           [org.apache.arrow.vector BigIntVector]))
+           [org.apache.arrow.vector VectorSchemaRoot]))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
 ;; chapter 10 "Bitemporal Tables".
@@ -24,7 +24,7 @@
            (Date. (aget point temporal/tx-time-end-idx))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
-  (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/node-kd-tree->seq kd-tree))
+  (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/kd-tree->seq kd-tree))
                                            (sort-by (juxt :tt-start :row-id)))]
          (merge row (get row-id->row row-id)))))
 
@@ -291,33 +291,37 @@
                          (temporal-rows kd-tree row-id->row))
 
                       (t/testing "rebuilding tree results in tree with same points"
-                        (let [points (mapv vec (kd/node-kd-tree->seq kd-tree))]
+                        (let [points (mapv vec (kd/kd-tree->seq kd-tree))]
                           (t/is (= (sort points)
-                                   (sort (mapv vec (kd/node-kd-tree->seq (kd/->node-kd-tree (shuffle points)))))))
+                                   (sort (mapv vec (kd/kd-tree->seq (kd/->node-kd-tree (shuffle points)))))))
                           (t/is (= (sort points)
-                                   (sort (mapv vec (kd/node-kd-tree->seq (reduce kd/kd-tree-insert nil (shuffle points))))))))))))))))))
+                                   (sort (mapv vec (kd/kd-tree->seq (reduce kd/kd-tree-insert nil (shuffle points))))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
-  (t/is (= (-> (kd/->node-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
-               (kd/kd-tree-range-search [0 0] [8 4])
-               (StreamSupport/stream false)
-               (.toArray)
-               (->> (mapv vec)))
+  (let [kd-tree (kd/->node-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
+    (with-open [allocator (RootAllocator.)
+                ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
+      (t/is (= (-> kd-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/stream false)
+                   (.toArray)
+                   (->> (mapv vec)))
 
-           (-> (reduce
-                kd/kd-tree-insert
-                nil
-                [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
-               (kd/kd-tree-range-search [0 0] [8 4])
-               (StreamSupport/stream false)
-               (.toArray)
-               (->> (mapv vec)))
+               (-> (reduce
+                    kd/kd-tree-insert
+                    nil
+                    [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/stream false)
+                   (.toArray)
+                   (->> (mapv vec)))
 
-           (with-open [allocator (RootAllocator.)
-                       column-kd-tree (kd/->column-kd-tree allocator [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
-             (-> column-kd-tree
-                 (kd/kd-tree-range-search [0 0] [8 4])
-                 (StreamSupport/stream false)
-                 (.toArray)
-                 (->> (mapv vec)))))
-        "wikipedia-test"))
+               (-> column-kd-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/stream false)
+                   (.toArray)
+                   (->> (mapv vec))))
+            "wikipedia-test")
+
+      (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
+               (mapv vec (kd/kd-tree->seq column-kd-tree)))))))

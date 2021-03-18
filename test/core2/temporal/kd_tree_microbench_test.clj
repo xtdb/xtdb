@@ -4,7 +4,8 @@
   (:import [java.util Collection HashMap Random]
            [java.util.function Predicate]
            [java.util.stream StreamSupport]
-           [org.apache.arrow.memory RootAllocator]))
+           [org.apache.arrow.memory RootAllocator]
+           [org.apache.arrow.vector VectorSchemaRoot]))
 
 ;; TODO: move to JMH.
 (t/deftest ^:integration kd-tree-micro-bench
@@ -12,8 +13,8 @@
     (doseq [k (range 2 4)]
       (let [rng (Random. 0)
             _ (prn :k k)
-            ns 100000
-            qs 10000
+            ns 10000
+            qs 1000
             ts 3
             _ (prn :gen-points ns)
             points (time
@@ -67,16 +68,19 @@
                (t/is (= (.get query->count query-id)
                         (-> (kd/kd-tree-range-search kd-tree min-range max-range)
                             (StreamSupport/stream false)
-                            (.count))))))))
+                            (.count)))))))
 
-        (prn :build-column-kd-tree ns)
-        (with-open [kd-tree (time
-                             (kd/->column-kd-tree allocator points))]
-          (prn :range-queries-column-kd-tree qs)
-          (dotimes [_ ts]
-            (time
-             (doseq [[query-id min-range max-range] queries]
-               (t/is (= (.get query->count query-id)
-                        (-> (kd/kd-tree-range-search kd-tree min-range max-range)
-                            (StreamSupport/intStream false)
-                            (.count))))))))))))
+          (prn :build-column-kd-tree ns)
+          (with-open [^VectorSchemaRoot column-kd-tree (time
+                                                        (kd/->column-kd-tree allocator kd-tree k))]
+            (prn :range-queries-column-kd-tree qs)
+            (dotimes [_ ts]
+              (time
+               (doseq [[query-id min-range max-range] queries]
+                 (t/is (= (.get query->count query-id)
+                          (-> (kd/kd-tree-range-search column-kd-tree min-range max-range)
+                              (StreamSupport/stream false)
+                              (.count)))))))
+
+            (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
+                     (mapv vec (kd/kd-tree->seq column-kd-tree))))))))))
