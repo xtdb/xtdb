@@ -307,19 +307,6 @@
                                vals
                                (remove c/evicted-doc?))))))))))
 
-(t/deftest test-statistics
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
-                        [:crux.tx/put {:crux.db/id :ivan :name "Petr"}]])
-
-  (let [stats (api/attribute-stats *api*)]
-    (t/is (= 2 (:name stats))))
-
-  (t/testing "updated"
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan2"}]])
-
-    (let [stats (api/attribute-stats *api*)]
-      (t/is (= 3 (:name stats))))))
-
 (t/deftest test-multiple-txs-in-same-ms-441
   (let [ivan {:crux.db/id :ivan}
         ivan1 (assoc ivan :value 1)

@@ -753,6 +753,12 @@
 
           :else latest-tx))))
 
+  (attribute-cardinalities [this]
+    (db/read-index-meta this :crux/attribute-stats))
+
+  (attribute-cardinality [this attr]
+    (get (db/attribute-cardinalities this) attr 0))
+
   (open-nested-index-snapshot [_]
     (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
       (swap! nested-index-snapshot-state conj nested-index-snapshot)
@@ -802,13 +808,20 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
+(defn- update-stats [attribute-stats docs]
+  (merge-with +
+              attribute-stats
+              (for [doc docs
+                    [k v] doc]
+                (MapEntry/create k (count (c/vectorize-value v))))))
+
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
-    (let [crux-db-id (c/->id-buffer :crux.db/id)
-          docs (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
-                           transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
-                 (->> docs
+    (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
+                transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
+      (let [crux-db-id (c/->id-buffer :crux.db/id)
+            docs (->> docs
                       (into {} (remove (fn [[content-hash doc]]
                                          (let [eid-value (c/->value-buffer (:crux.db/id doc))
                                                k (encode-ecav-key-to (.get seek-buffer-tl)
@@ -818,11 +831,20 @@
                                                                      eid-value)]
                                            (or (kv/get-value persistent-kv-snapshot k)
                                                (kv/get-value transient-kv-snapshot k))))))
-                      not-empty))
-          content-idx-kvs (->content-idx-kvs docs)]
-      (some->> (seq content-idx-kvs) (kv/store transient-kv-store))
-      {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
-       :indexed-docs docs}))
+                      not-empty)
+            content-idx-kvs (->content-idx-kvs docs)
+            stats-kvs (when (seq docs)
+                        [(meta-kv :crux/attribute-stats
+                                  (update-stats (or (read-meta-snapshot transient-kv-snapshot :crux/attribute-stats)
+                                                    (read-meta-snapshot persistent-kv-snapshot :crux/attribute-stats))
+                                                (vals docs)))])]
+
+        ;; we can write to the transient-kv-store here within an open read snapshot
+        ;; on the assumption that the transient-kv-store is always in-memory
+        (some->> (seq (concat content-idx-kvs stats-kvs)) (kv/store transient-kv-store))
+
+        {:bytes-indexed (->> content-idx-kvs (transduce (comp (mapcat seq) (map mem/capacity)) +))
+         :indexed-docs docs})))
 
   (unindex-eids [_ eids]
     (when (seq eids)

@@ -77,6 +77,12 @@
                            capped-valid-time
                            capped-tx-id))
 
+  (attribute-cardinalities [_]
+    (db/attribute-cardinalities index-snapshot))
+
+  (attribute-cardinality [_ attr]
+    (db/attribute-cardinality index-snapshot attr))
+
   db/IndexMeta
   (-read-index-meta [_ k not-found]
     (db/-read-index-meta index-snapshot k not-found))
@@ -149,6 +155,14 @@
     (->MergedIndexSnapshot (db/open-nested-index-snapshot persistent-index-snapshot)
                            (db/open-nested-index-snapshot transient-index-snapshot)
                            evicted-eids))
+
+  (attribute-cardinalities [_]
+    (merge (db/attribute-cardinalities persistent-index-snapshot)
+           (db/attribute-cardinalities transient-index-snapshot)))
+
+  (attribute-cardinality [_ attr]
+    (or (db/attribute-cardinality persistent-index-snapshot attr)
+        (db/attribute-cardinality transient-index-snapshot attr)))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]

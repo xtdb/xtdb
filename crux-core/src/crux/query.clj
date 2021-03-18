@@ -574,9 +574,9 @@
         (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
 
-(defn- sort-triple-clauses [stats triple-clauses]
+(defn- sort-triple-clauses [triple-clauses {:keys [index-snapshot]}]
   (sort-by (fn [{:keys [a]}]
-             (get stats a 0)) triple-clauses))
+             (db/attribute-cardinality index-snapshot a)) triple-clauses))
 
 (defn- new-literal-index [index-snapshot v]
   (let [encode-value-fn (partial db/encode-value index-snapshot)]
@@ -590,7 +590,7 @@
                       pred-clauses :pred
                       :as type->clauses}
                      in-vars
-                     stats]
+                     {:keys [index-snapshot]}]
   (let [collected-vars (collect-vars type->clauses)
         pred-var-frequencies (frequencies
                               (for [{:keys [pred return]} pred-clauses
@@ -625,7 +625,7 @@
                                 (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join? ignore-v?]} (meta clause)
-                                   cardinality (double (get stats a 0.0))
+                                   cardinality (double (db/attribute-cardinality index-snapshot a))
                                    es (double (cardinality-for-var e (cond->> cardinality
                                                                        (literal? v) (/ 1.0))))
                                    vs (cond
@@ -1087,7 +1087,7 @@
 ;; cases to pass. One alternative is maybe to try to cache the
 ;; sequence and reuse it, somehow detecting if it loops.
 (defn- build-or-constraints
-  [rule-name->rules or-clause+idx-id+or-branches var->bindings vars-in-join-order stats]
+  [rule-name->rules or-clause+idx-id+or-branches var->bindings vars-in-join-order]
   (for [[clause idx-id [{:keys [free-vars bound-vars]} :as or-branches]] or-clause+idx-id+or-branches
         :let [or-join-depth (calculate-constraint-join-depth var->bindings bound-vars)
               free-vars-in-join-order (filter (set free-vars) vars-in-join-order)
@@ -1128,7 +1128,7 @@
                                                                       (assoc *recursion-table* cache-key [])
                                                                       *recursion-table*)]
                                           (let [{:keys [n-ary-join
-                                                        var->bindings]} (build-sub-query index-snapshot db where or-in-bindings in-args rule-name->rules stats)
+                                                        var->bindings]} (build-sub-query index-snapshot db where or-in-bindings in-args rule-name->rules)
                                                 free-vars-in-join-order-bindings (map var->bindings free-vars-in-join-order)]
                                             (when-let [idx-seq (seq (idx/layered-idx->seq n-ary-join))]
                                               (if has-free-vars?
@@ -1145,7 +1145,7 @@
                    (idx/update-relation-virtual-index! (get idx-id->idx idx-id) free-results)))
                true)))})))
 
-(defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings stats]
+(defn- build-not-constraints [rule-name->rules not-type not-clauses var->bindings]
   (for [not-clause not-clauses
         :let [[not-vars not-clause] (case not-type
                                       :not [(:not-vars (collect-vars (normalize-clauses [[:not not-clause]])))
@@ -1165,7 +1165,7 @@
                    in-args (when (seq not-vars)
                              [(vec (for [var-binding not-var-bindings]
                                      (bound-result-for-var index-snapshot var-binding join-keys)))])
-                   {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules stats)]
+                   {:keys [n-ary-join]} (build-sub-query index-snapshot db not-clause not-in-bindings in-args rule-name->rules)]
                (empty? (idx/layered-idx->seq n-ary-join)))))})))
 
 (defn- calculate-join-order [pred-clauses or-clause+idx-id+or-branches var->joins triple-join-deps project-only-leaf-vars]
@@ -1316,7 +1316,7 @@
                            pred-clauses :pred
                            :as type->clauses}
                           in-vars
-                          stats]
+                          db]
   (let [collected-vars (collect-vars type->clauses)
         pred-vars (set (for [{:keys [pred return]} pred-clauses
                              :when (not return)
@@ -1330,7 +1330,7 @@
         potential-leaf-v-vars (set/difference (:v-vars collected-vars) invalid-leaf-vars non-leaf-v-vars)
         leaf-groups (->> (for [[e-var leaf-group] (group-by :e (filter (comp potential-leaf-v-vars :v) triple-clauses))
                                :when (logic-var? e-var)]
-                           [e-var (sort-triple-clauses stats leaf-group)])
+                           [e-var (sort-triple-clauses leaf-group db)])
                          (into {}))
         leaf-triple-clauses (->> (for [[e-var leaf-group] leaf-groups]
                                    leaf-group)
@@ -1368,12 +1368,12 @@
 
 (def ^:private ^:dynamic *broken-cycles* #{})
 
-(defn- compile-sub-query [encode-value-fn {:keys [fn-allow-list pred-ctx] :as db} where in rule-name->rules stats]
+(defn- compile-sub-query [encode-value-fn {:keys [fn-allow-list pred-ctx] :as db} where in rule-name->rules]
   (try
     (let [where (-> (expand-rules where rule-name->rules {})
                     (build-pred-fns fn-allow-list))
           in-vars (set (find-binding-vars (:bindings in)))
-          [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars stats)
+          [type->clauses project-only-leaf-vars] (expand-leaf-preds (normalize-clauses where) in-vars db)
           {triple-clauses :triple
            range-clauses :range
            pred-clauses :pred
@@ -1388,7 +1388,7 @@
                                                                        var->joins
                                                                        type->clauses
                                                                        in-vars
-                                                                       stats)
+                                                                       db)
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
           known-vars (set/union e-vars v-vars in-vars)
@@ -1428,8 +1428,8 @@
                                                    (keys var->attr)))
           var->range-constraints (build-var-range-constraints encode-value-fn range-clauses var->bindings)
           var->logic-var-range-constraint-fns (build-logic-var-range-constraint-fns encode-value-fn range-clauses var->bindings)
-          not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings stats)
-          not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings stats)
+          not-constraints (build-not-constraints rule-name->rules :not not-clauses var->bindings)
+          not-join-constraints (build-not-constraints rule-name->rules :not-join not-join-clauses var->bindings)
           pred-constraints (build-pred-constraints (assoc pred-ctx
                                                           :rule-name->rules rule-name->rules
                                                           :encode-value-fn encode-value-fn
@@ -1437,7 +1437,7 @@
                                                           :var->bindings var->bindings
                                                           :vars-in-join-order vars-in-join-order))
           or-constraints (build-or-constraints rule-name->rules or-clause+idx-id+or-branches
-                                               var->bindings vars-in-join-order stats)
+                                               var->bindings vars-in-join-order)
           depth->constraints (->> (concat pred-constraints
                                           not-constraints
                                           not-join-constraints
@@ -1455,14 +1455,13 @@
        :var->joins var->joins
        :var->bindings var->bindings
        :var->cardinality var->cardinality
-       :in-bindings in-bindings
-       :attr-stats (select-keys stats (vals var->attr))})
+       :in-bindings in-bindings})
     (catch ExceptionInfo e
       (let [{:keys [reason node dependency] :as cycle} (ex-data e)]
         (if (and (= ::dep/circular-dependency reason)
                  (not (contains? *broken-cycles* cycle)))
           (binding [*broken-cycles* (conj *broken-cycles* cycle)]
-            (compile-sub-query encode-value-fn db (break-cycle where cycle) in rule-name->rules stats))
+            (compile-sub-query encode-value-fn db (break-cycle where cycle) in rule-name->rules))
           (throw e))))))
 
 (defn- build-idx-id->idx [db index-snapshot {:keys [var->joins] :as compiled-query}]
@@ -1494,24 +1493,22 @@
                                                     logic-var+range-constraint)))))
     compiled-query))
 
-(defn- build-sub-query [index-snapshot {:keys [query-cache] :as db} where in in-args rule-name->rules stats]
+(defn- build-sub-query [index-snapshot {:keys [query-cache] :as db} where in in-args rule-name->rules]
   ;; NOTE: this implies argument sets with different vars get compiled
   ;; differently.
   (let [encode-value-fn (partial db/encode-value index-snapshot)
         {:keys [depth->constraints
                 vars-in-join-order
                 var->range-constraints
-                var->logic-var-range-constraint-fns
                 var->joins
                 var->bindings
-                in-bindings
-                attr-stats]
+                in-bindings]
          :as compiled-query} (-> (cache/compute-if-absent
                                   query-cache
                                   [where in rule-name->rules]
                                   identity
                                   (fn [_]
-                                    (compile-sub-query encode-value-fn db where in rule-name->rules stats)))
+                                    (compile-sub-query encode-value-fn db where in rule-name->rules)))
                                  (add-logic-var-constraints))
         idx-id->idx (build-idx-id->idx db index-snapshot compiled-query)
         unary-join-indexes (for [v vars-in-join-order]
@@ -1532,7 +1529,6 @@
                       in-arg)))
     (log/debug :where (cio/pr-edn-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
-    (log/debug :attr-stats (cio/pr-edn-str attr-stats))
     (log/debug :var->bindings (cio/pr-edn-str var->bindings))
     {:n-ary-join (when (constrain-result-fn [] 0)
                    (idx/new-n-ary-join-layered-virtual-index unary-join-indexes constrain-result-fn))
@@ -1661,11 +1657,13 @@
                   in-args))])
     [in in-args]))
 
-(defn query-plan-for [q encode-value-fn stats]
+(defn query-plan-for [db q]
   (s/assert ::query q)
-  (let [{:keys [where rules]} (s/conform ::query q)
-        [in _in-args] (add-legacy-args q [])]
-    (compile-sub-query encode-value-fn nil where in (rule-name->rules rules) stats)))
+  (with-open [index-snapshot (open-index-snapshot db)]
+    (let [db (assoc db :index-snapshot index-snapshot)
+          {:keys [where rules] :as conformed-q} (s/conform ::query q)
+          [in _in-args] (add-legacy-args conformed-q [])]
+      (compile-sub-query (partial db/encode-value index-snapshot) db where in (rule-name->rules rules)))))
 
 (defn- ->return-maps [{:keys [keys syms strs]}]
   (let [ks (or (some->> keys (mapv keyword))
@@ -1677,8 +1675,7 @@
 (defn query [{:keys [index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
-        {:keys [find where  rules offset limit order-by]} q-conformed
-        stats (or (db/read-index-meta index-snapshot :crux/attribute-stats) {})
+        {:keys [find where rules offset limit order-by]} q-conformed
         [in in-args] (add-legacy-args q-conformed in-args)]
 
     (when (:full-results? q-conformed)
@@ -1695,7 +1692,7 @@
           entity-resolver-fn (or (:entity-resolver-fn db)
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
-          {:keys [n-ary-join] :as built-query} (build-sub-query index-snapshot db where in in-args rule-name->rules stats)
+          {:keys [n-ary-join] :as built-query} (build-sub-query index-snapshot db where in in-args rule-name->rules)
           compiled-find (compile-find find built-query db)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)

@@ -53,7 +53,9 @@
   (decode-value [this value-buffer])
   (encode-value [this value])
   (resolve-tx [this tx])
-  (open-nested-index-snapshot ^java.io.Closeable [this]))
+  (open-nested-index-snapshot ^java.io.Closeable [this])
+  (attribute-cardinalities [this])
+  (attribute-cardinality [this attr]))
 ;; end::IndexSnapshot[]
 
 ;; tag::TxLog[]

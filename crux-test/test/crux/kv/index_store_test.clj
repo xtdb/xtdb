@@ -218,3 +218,30 @@
 
         (t/is (thrown? NodeOutOfSyncException
                        (db/resolve-tx index-snapshot #::tx{:tx-time #inst "2023", :tx-id 1})))))))
+
+(t/deftest test-statistics
+  (letfn [(->stats [index-snapshot-factory]
+            (with-open [index-snapshot (db/open-index-snapshot index-snapshot-factory)]
+              (db/attribute-cardinalities index-snapshot)))]
+    (with-fresh-index-store
+      (let [ivan {:crux.db/id :ivan :name "Ivan"}
+            ivan2 {:crux.db/id :ivan :name "Ivan2"}
+            petr {:crux.db/id :petr :name "Petr"}]
+        (let [index-store-tx (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)]
+
+          (db/index-docs index-store-tx {(c/new-id ivan) ivan})
+          (t/is (= 1 (:name (->stats index-store-tx))))
+
+          (db/index-docs index-store-tx {(c/new-id petr) petr})
+          (t/is (= 2 (:name (->stats index-store-tx))))
+
+          (db/commit-index-tx index-store-tx))
+
+        (t/is (= 2 (:name (->stats *index-store*))))
+
+        (t/testing "updated"
+          (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2022", :tx-id 1} nil)
+            (db/index-docs {(c/new-id ivan2) ivan2})
+            (db/commit-index-tx))
+
+          (t/is (= 3 (:name (->stats *index-store*)))))))))
