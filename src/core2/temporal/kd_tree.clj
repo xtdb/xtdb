@@ -1,7 +1,7 @@
 (ns core2.temporal.kd-tree
   (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
-            List Map Spliterator Spliterator$OfInt Spliterators]
-           [java.util.function Consumer IntConsumer Function Predicate ToLongFunction]
+            List Map Spliterator Spliterators]
+           [java.util.function Consumer Function Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
@@ -417,8 +417,8 @@
                false)))))))
 
 (deftype ColumnRangeSearchSpliterator [^VectorSchemaRoot kd-tree ^longs min-range ^longs max-range ^int k ^Deque stack]
-  Spliterator$OfInt
-  (^boolean tryAdvance [_ ^IntConsumer c]
+  Spliterator
+  (tryAdvance [_ c]
     (loop []
       (if-let [^ColumnStackEntry entry (.poll stack)]
         (let [start (.start entry)
@@ -439,8 +439,11 @@
           (if (and min-match?
                    max-match?
                    (in-range-column? min-range kd-tree k median max-range))
-            (do (.accept c median)
-                true)
+            (let [point (long-array k)]
+              (dotimes [n k]
+                (aset point n (.get ^BigIntVector (.getVector kd-tree n) median)))
+              (.accept c point)
+              true)
             (recur)))
         false)))
 

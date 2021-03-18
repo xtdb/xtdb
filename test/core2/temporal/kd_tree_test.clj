@@ -317,9 +317,7 @@
                        column-kd-tree (kd/->column-kd-tree allocator [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
              (-> column-kd-tree
                  (kd/kd-tree-range-search [0 0] [8 4])
-                 (StreamSupport/intStream false)
+                 (StreamSupport/stream false)
                  (.toArray)
-                 (->> (mapv #(mapv (fn [^BigIntVector col]
-                                     (.get col %))
-                                   (.getFieldVectors column-kd-tree)))))))
+                 (->> (mapv vec)))))
         "wikipedia-test"))
