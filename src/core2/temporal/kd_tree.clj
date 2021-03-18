@@ -7,6 +7,62 @@
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            core2.temporal.TemporalCoordinates))
 
+;; TODO:
+
+;; Step 1:
+
+;; Make Arrow trees use stack-less skip pointer traversal and balance
+;; their median points like the node tree. This would require three
+;; meta columns: the axis split value (long), the skip pointer index
+;; (int) and a flag with axis + deletion bit (byte). Storing the axis
+;; is necessary to resume traversal after following a skip
+;; pointer. The points themselves can be stored as either a struct of
+;; k columns, or as a fixed list vector with k elements per list.
+
+;; For stack-less skip pointer traversal, see Figure 6 here:
+;; http://www.cse.chalmers.se/edu/year/2009/course/TDA361/EfficiencyIssuesForRayTracing.pdf
+
+;; Store the active tree as temporal-<chunk-idx>.arrow in the object
+;; store when registering chunks.
+
+;; We then read these chunks instead of scanning the columns to build
+;; the new in-memory tree on start-up. Needs to take deletions into
+;; account. Queries are always performed against this in-memory tree.
+
+;; Step 2:
+
+;; Later, we can merge older chunks, either when registering new ones,
+;; or in the background. Needs to take the fact that there are
+;; multiple nodes into account. Different strategies, or a combination
+;; can be envisioned:
+
+;; 1. merging two neighbouring chunks into one larger chunk, reduce.
+;; 2. merging towards larger chunks, old to newest, combine.
+
+;; Merging chunks works like follows - assumes the intermediate chunk
+;; fits into memory:
+
+;; 1. find all deletions from newest chunk and add them to the deletion set.
+;; 2. scan older chunk, skip deletions in the deletion set, and remove them from the deletion set.
+;; 3. scan newer chunk, only keep deletions still in the deletion set.
+;; 4. store merged tree.
+
+;; Unless merging strictly in oldest-to-newest order, the combined
+;; chunk will still have deletions, referring to even older chunks.
+
+;; When building the current state on start-up, the combined chunks
+;; supersede the chunks they were combined from in the object store.
+
+;; Step 3:
+
+;; Add an implementation of KdTree that can delegate to both a set of
+;; existing Arrow chunks and the in-memory tree, avoiding having to
+;; keep the entire tree in memory. Modifications goes to the dynamic
+;; in-memory tree.
+
+;; Merge the chunks in a streaming fashion on disk instead of reading
+;; them into memory. Deletion set can still be stored in-memory.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol KdTree
@@ -305,16 +361,6 @@
           stack (doto (ArrayDeque.)
                   (.push (NodeStackEntry. kd-tree 0)))]
       (->NodeDepthFirstSpliterator k stack))))
-
-;; TODO: these don't try to balance their median points like the Node
-;; tree. Are not used yet, will be revisited as and when we start
-;; storing temporal Arrow chunks.
-
-;; TODO: make this use skip pointer traversal, maybe also push data to
-;; leaves. This would require only storing the axis value (long value)
-;; and the skip pointer (int index) per inner node. See Figure 6:
-;; http://www.cse.chalmers.se/edu/year/2009/course/TDA361/EfficiencyIssuesForRayTracing.pdf
-
 
 (deftype ColumnStackEntry [^int start ^int end ^int axis])
 
