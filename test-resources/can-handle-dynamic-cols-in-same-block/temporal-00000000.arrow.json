@@ -1,0 +1,147 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "axis_delete_flag",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 8,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "split_value",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "skip_pointer",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 32,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "points",
+      "nullable" : false,
+      "type" : {
+        "name" : "struct"
+      },
+      "children" : [{
+        "name" : "0",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "1",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "2",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "3",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "4",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "5",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      }]
+    }]
+  },
+  "batches" : [{
+    "count" : 6,
+    "columns" : [{
+      "name" : "axis_delete_flag",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1,2,3,4,5,6]
+    },{
+      "name" : "split_value",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : ["1","1","0","253402300799999","1577836800000","253402300799999"]
+    },{
+      "name" : "skip_pointer",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "DATA" : [1,2,3,4,5,6]
+    },{
+      "name" : "points",
+      "count" : 6,
+      "VALIDITY" : [1,1,1,1,1,1],
+      "children" : [{
+        "name" : "0",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["1","2","3","4","5","6"]
+      },{
+        "name" : "1",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["0","1","2","3","4","5"]
+      },{
+        "name" : "2",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["0","0","0","0","0","0"]
+      },{
+        "name" : "3",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["253402300799999","253402300799999","253402300799999","253402300799999","253402300799999","253402300799999"]
+      },{
+        "name" : "4",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["1577836800000","1577836800000","1577836800000","1577836800000","1577836800000","1577836800000"]
+      },{
+        "name" : "5",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : ["253402300799999","253402300799999","253402300799999","253402300799999","253402300799999","253402300799999"]
+      }]
+    }]
+  }]
+}

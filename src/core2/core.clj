@@ -52,7 +52,7 @@
          object-store (os/->file-system-object-store object-dir opts)
          buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
          metadata-manager (meta/->metadata-manager allocator object-store buffer-pool)
-         temporal-manager (temporal/->temporal-manager allocator buffer-pool metadata-manager)
+         temporal-manager (temporal/->temporal-manager allocator object-store buffer-pool metadata-manager)
          indexer (indexer/->indexer allocator object-store metadata-manager temporal-manager opts)
          ingest-loop (ingest-loop/->ingest-loop log-reader indexer opts)]
      (Node. allocator log-reader object-store metadata-manager temporal-manager indexer ingest-loop buffer-pool))))

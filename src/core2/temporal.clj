@@ -1,10 +1,12 @@
 (ns core2.temporal
   (:require [core2.metadata :as meta]
+            core2.object-store
             [core2.types :as t]
             [core2.temporal.kd-tree :as kd]
             core2.tx
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
+           core2.object_store.ObjectStore
            core2.metadata.IMetadataManager
            core2.temporal.TemporalCoordinates
            [core2.tx TransactionInstant Watermark]
@@ -115,6 +117,9 @@
                                                       ^longs temporal-max-range
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
+(definterface TemporalManangerPrivate
+  (^void populateKnownChunks []))
+
 (def ^:private temporal-columns
   (->> (for [col-name ["_tx-time" "_tx-time-end" "_valid-time" "_valid-time-end"]]
          [col-name (t/->primitive-dense-union-field col-name #{:timestampmilli})])
@@ -146,12 +151,46 @@
 
 (declare insert-coordinates)
 
+(defn- ->temporal-obj-key [chunk-idx]
+  (format "temporal-%08x.arrow" chunk-idx))
+
 (deftype TemporalManager [^BufferAllocator allocator
+                          ^ObjectStore object-store
                           ^BufferPool buffer-pool
                           ^IMetadataManager metadata-manager
                           ^AtomicLong id-counter
                           ^Map id->internal-id
+                          ^:unsynchronized-mutable chunk-kd-tree
                           ^:volatile-mutable kd-tree]
+  TemporalManangerPrivate
+  (populateKnownChunks [this]
+    (let [acc (atom nil)
+          known-chunks (.knownChunks metadata-manager)
+          futs (->> (for [chunk-idx known-chunks]
+                      [(-> (.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
+                           (util/then-apply util/try-close))
+                       (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+                           (util/then-apply util/try-close))])
+                    (reduce into []))]
+      @(CompletableFuture/allOf (into-array CompletableFuture futs))
+      (doseq [chunk-idx known-chunks]
+        (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
+                    temporal-chunks (util/->chunks temporal-buffer allocator)]
+          (.forEachRemaining temporal-chunks
+                             (reify Consumer
+                               (accept [_ temporal-root]
+                                 (swap! acc kd/merge-kd-trees temporal-root)))))
+        (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+                    id-chunks (util/->chunks id-buffer allocator)]
+          (.forEachRemaining id-chunks
+                             (reify Consumer
+                               (accept [_ id-root]
+                                 (let [^VectorSchemaRoot id-root id-root
+                                       id-vec (.getVector id-root 1)]
+                                   (dotimes [n (.getValueCount id-vec)]
+                                     (.getInternalId this (.getObject id-vec n)))))))))
+      (set! (.kd-tree this) @acc)))
+
   ITemporalManager
   (getTemporalWatermark [_]
     kd-tree)
@@ -166,18 +205,24 @@
                           (.incrementAndGet id-counter)))))
 
   (registerNewChunk [this chunk-idx]
-    (set! (.kd-tree this) (kd/rebuild-node-kd-tree kd-tree)))
+    (let [temporal-buf (with-open [^VectorSchemaRoot temporal-root (kd/->column-kd-tree allocator chunk-kd-tree k)]
+                         (util/root->arrow-ipc-byte-buffer temporal-root :file))]
+      @(.putObject object-store (->temporal-obj-key chunk-idx) temporal-buf)
+      (set! (.chunk-kd-tree this) nil)
+      (set! (.kd-tree this) (kd/rebuild-node-kd-tree kd-tree))))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
                            (applyAsLong [_ id]
-                             (.getInternalId this id)))]
-      (set! (.kd-tree this)
-            (reduce
-             (fn [kd-tree coordinates]
-               (insert-coordinates kd-tree id->long-id-fn coordinates))
-             kd-tree
-             (vals row-id->temporal-coordinates)))))
+                             (.getInternalId this id)))
+          update-kd-tree-fn (fn [kd-tree]
+                              (reduce
+                               (fn [kd-tree coordinates]
+                                 (insert-coordinates kd-tree id->long-id-fn coordinates))
+                               kd-tree
+                               (vals row-id->temporal-coordinates)))]
+      (set! (.chunk-kd-tree this) (update-kd-tree-fn chunk-kd-tree))
+      (set! (.kd-tree this) (update-kd-tree-fn kd-tree))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
@@ -225,77 +270,12 @@
     (set! (.kd-tree this) nil)
     (.clear id->internal-id)))
 
-(defn- populate-known-chunks ^core2.temporal.ITemporalManager [^TemporalManager temporal-manager]
-  (let [^BufferPool buffer-pool (.buffer-pool temporal-manager)
-        ^IMetadataManager metadata-manager (.metadata-manager temporal-manager)
-        known-chunks (.knownChunks metadata-manager)
-        futs (reduce (fn [acc chunk-idx]
-                       (into acc (for [col-name ["_id" "_tx-time" "_valid-time" "_valid-time-end" "_tombstone"]]
-                                   (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
-                                       (util/then-apply util/try-close)))))
-                     []
-                     known-chunks)]
-    @(CompletableFuture/allOf (into-array CompletableFuture futs))
-    (doseq [chunk-idx known-chunks
-            :let [row-id->temporal-coordinates (TreeMap.)]]
-      (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                  id-chunks (util/->chunks id-buffer (.allocator temporal-manager))]
-        (.forEachRemaining id-chunks
-                           (reify Consumer
-                             (accept [_ id-root]
-                               (let [^VectorSchemaRoot id-root id-root
-                                     ^BigIntVector row-id-vec (.getVector id-root 0)
-                                     id-vec (.getVector id-root 1)]
-                                 (dotimes [n (.getRowCount id-root)]
-                                   (let [row-id (.get row-id-vec n)
-                                         ^TemporalCoordinates coordinates (row-id->coordinates row-id)]
-                                     (set! (.id coordinates) (.getObject id-vec n))
-                                     (.put row-id->temporal-coordinates row-id coordinates))))))))
-
-
-      (doseq [col-name ["_tx-time" "_valid-time" "_valid-time-end"]]
-        (when-let [temporal-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))]
-          (with-open [^ArrowBuf temporal-buffer temporal-buffer
-                      temporal-chunks (util/->chunks temporal-buffer (.allocator temporal-manager))]
-            (.forEachRemaining temporal-chunks
-                               (reify Consumer
-                                 (accept [_ temporal-root]
-                                   (let [^VectorSchemaRoot temporal-root temporal-root
-                                         ^BigIntVector row-id-vec (.getVector temporal-root 0)
-                                         ^DenseUnionVector temporal-duv-vec (.getVector temporal-root 1)
-                                         ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec timestampmilli-type-id)]
-                                     (dotimes [n (.getRowCount temporal-root)]
-                                       (let [^TemporalCoordinates coordinates (.get row-id->temporal-coordinates (.get row-id-vec n))
-                                             time-ms (.get temporal-vec n)]
-                                         (case col-name
-                                           "_tx-time" (set! (.txTime coordinates) time-ms)
-                                           "_valid-time" (set! (.validTime coordinates) time-ms)
-                                           "_valid-time-end" (set! (.validTimeEnd coordinates) time-ms)))))))))))
-
-      (when-let [tombstone-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_tombstone"))]
-        (with-open [^ArrowBuf tombstone-buffer tombstone-buffer
-                    tombstone-chunks (util/->chunks tombstone-buffer (.allocator temporal-manager))]
-          (.forEachRemaining tombstone-chunks
-                             (reify Consumer
-                               (accept [_ tombstone-root]
-                                 (let [^VectorSchemaRoot tombstone-root tombstone-root
-                                       ^BigIntVector row-id-vec (.getVector tombstone-root 0)
-                                       ^DenseUnionVector tombstone-duv-vec (.getVector tombstone-root 1)]
-                                   (dotimes [n (.getRowCount tombstone-root)]
-                                     (when (.getObject tombstone-duv-vec n)
-                                       (let [coordinates ^TemporalCoordinates (.get row-id->temporal-coordinates (.get row-id-vec n))]
-                                         (set! (.tombstone coordinates) true))))))))))
-
-      (.updateTemporalCoordinates temporal-manager row-id->temporal-coordinates)
-      (.registerNewChunk temporal-manager chunk-idx))
-
-    temporal-manager))
-
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
+                                                           ^ObjectStore object-store
                                                            ^BufferPool buffer-pool
                                                            ^IMetadataManager metadata-manager]
-  (-> (TemporalManager. allocator buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil)
-      (populate-known-chunks)))
+  (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil nil)
+    (.populateKnownChunks)))
 
 ;; Bitemporal Spike, this will turn into the temporal manager.
 
