@@ -14,14 +14,14 @@
 ;; Uses transaction time splitting, so some rectangles differ, but
 ;; areas covered are the same. Could or maybe should coalesce.
 
-(defn- ->row-map [^longs location]
+(defn- ->row-map [^longs point]
   (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
-          [(aget location temporal/id-idx)
-           (aget location temporal/row-id-idx)
-           (Date. (aget location temporal/valid-time-idx))
-           (Date. (aget location temporal/valid-time-end-idx))
-           (Date. (aget location temporal/tx-time-idx))
-           (Date. (aget location temporal/tx-time-end-idx))]))
+          [(aget point temporal/id-idx)
+           (aget point temporal/row-id-idx)
+           (Date. (aget point temporal/valid-time-idx))
+           (Date. (aget point temporal/valid-time-end-idx))
+           (Date. (aget point temporal/tx-time-idx))
+           (Date. (aget point temporal/tx-time-end-idx))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/node-kd-tree->seq kd-tree))

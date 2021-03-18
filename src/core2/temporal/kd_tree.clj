@@ -66,12 +66,12 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol KdTree
-  (kd-tree-insert [_ location])
-  (kd-tree-delete [_ location])
+  (kd-tree-insert [_ point])
+  (kd-tree-delete [_ point])
   (kd-tree-range-search [_ min-range max-range])
   (kd-tree-depth-first [_]))
 
-(defrecord Node [^longs location left right deleted?])
+(defrecord Node [^longs point left right deleted?])
 
 (defn- leaf? [^Node node]
   (and (nil? (.left node))
@@ -92,8 +92,8 @@
 
 (extend-protocol KdTree
   nil
-  (kd-tree-insert [_ location]
-    (Node. (->longs location) nil nil false))
+  (kd-tree-insert [_ point]
+    (Node. (->longs point) nil nil false))
   (kd-tree-delete [_ _])
   (kd-tree-range-search [_ _ _]
     (Spliterators/emptySpliterator))
@@ -102,6 +102,18 @@
 
 (def ^:private ^Class objects-class
   (Class/forName "[Ljava.lang.Object;"))
+
+(defn- find-median-index ^long [^objects points ^long start ^long end ^long axis]
+  (let [median (quot (+ start end) 2)
+        ^longs median-point (aget points median)
+        median-value (aget median-point axis)]
+    (loop [idx median]
+      (if (= start idx)
+        idx
+        (let [prev-idx (dec idx)]
+          (if (= median-value (aget ^longs (aget points prev-idx) axis))
+            (recur prev-idx)
+            idx))))))
 
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [points]
   (when (not-empty points)
@@ -121,16 +133,7 @@
                                               (reify ToLongFunction
                                                 (applyAsLong [_ x]
                                                   (aget ^longs x axis)))))
-               (let [median (quot (+ start end) 2)
-                     ^longs median-point (aget points median)
-                     median-value (aget median-point axis)
-                     ^long median (loop [idx median]
-                                    (if (= start idx)
-                                      idx
-                                      (let [prev-idx (dec idx)]
-                                        (if (= median-value (aget ^longs (aget points prev-idx) axis))
-                                          (recur prev-idx)
-                                          idx))))
+               (let [median (find-median-index points start end axis)
                      axis (next-axis axis k)]
                  (Node. (aget points median)
                         (when (< start median)
@@ -169,22 +172,22 @@
       (when-let [^NodeStackEntry entry (.poll stack)]
         (loop [^Node node (.node entry)
                axis (.axis entry)]
-          (let [^longs location (.location node)
+          (let [^longs point (.point node)
                 left (.left node)
                 right (.right node)
-                location-axis (aget location axis)
+                point-axis (aget point axis)
                 min-axis (aget min-range axis)
                 max-axis (aget max-range axis)
-                min-match? (< min-axis location-axis)
-                max-match? (<= location-axis max-axis)
+                min-match? (< min-axis point-axis)
+                max-match? (<= point-axis max-axis)
                 visit-left? (and left min-match?)
                 visit-right? (and right max-match?)
                 axis (next-axis axis k)]
 
             (when (and (or min-match? max-match?)
                        (not (.deleted? node))
-                       (in-range? min-range location max-range))
-              (.accept c location))
+                       (in-range? min-range point max-range))
+              (.accept c point))
 
             (cond
               (and visit-left? (not visit-right?))
@@ -206,14 +209,14 @@
       (if-let [^NodeStackEntry entry (.poll stack)]
         (let [^Node node (.node entry)
               axis (.axis entry)
-              ^longs location (.location node)
+              ^longs point (.point node)
               left (.left node)
               right (.right node)
-              location-axis (aget location axis)
+              point-axis (aget point axis)
               min-axis (aget min-range axis)
               max-axis (aget max-range axis)
-              min-match? (< min-axis location-axis)
-              max-match? (<= location-axis max-axis)
+              min-match? (< min-axis point-axis)
+              max-match? (<= point-axis max-axis)
               visit-left? (and left min-match?)
               visit-right? (and right max-match?)
               axis (next-axis axis k)]
@@ -226,8 +229,8 @@
 
           (if (and (or min-match? max-match?)
                    (not (.deleted? node))
-                   (in-range? min-range location max-range))
-            (do (.accept c location)
+                   (in-range? min-range point max-range))
+            (do (.accept c point)
                 true)
             (recur)))
         false)))
@@ -258,7 +261,7 @@
                right (.right node)]
 
            (when-not (.deleted? node)
-             (.accept c (.location node)))
+             (.accept c (.point node)))
 
            (cond
              (and left (nil? right))
@@ -286,7 +289,7 @@
             (.push stack (NodeStackEntry. left axis)))
 
           (if-not (.deleted? node)
-            (do (.accept c (.location node))
+            (do (.accept c (.point node))
                 true)
             (recur)))
         false)))
@@ -307,42 +310,42 @@
 
 (extend-protocol KdTree
   Node
-  (kd-tree-insert [kd-tree location]
-    (let [location (->longs location)
-          k (alength location)]
+  (kd-tree-insert [kd-tree point]
+    (let [point (->longs point)
+          k (alength point)]
       (loop [axis 0
              node kd-tree
              build-fn identity]
         (if-not node
-          (build-fn (Node. location nil nil false))
-          (let [^longs location-node (.location node)
-                location-axis (aget location-node axis)]
+          (build-fn (Node. point nil nil false))
+          (let [^longs node-point (.point node)
+                point-axis (aget node-point axis)]
             (cond
-              (Arrays/equals location location-node)
+              (Arrays/equals point node-point)
               kd-tree
 
-              (< (aget location axis) location-axis)
+              (< (aget point axis) point-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
 
               :else
               (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
 
-  (kd-tree-delete [kd-tree location]
-    (let [location (->longs location)
-          k (alength location)]
+  (kd-tree-delete [kd-tree point]
+    (let [point (->longs point)
+          k (alength point)]
       (loop [axis 0
              node kd-tree
              build-fn identity]
         (if-not node
-          (build-fn (Node. location nil nil true))
-          (let [^longs location-node (.location node)
-                location-axis (aget location-node axis)]
+          (build-fn (Node. point nil nil true))
+          (let [^longs node-point (.point node)
+                point-axis (aget node-point axis)]
             (cond
-              (Arrays/equals location location-node)
+              (Arrays/equals point node-point)
               (build-fn (when-not (leaf? node)
                           (assoc node :deleted? true)))
 
-              (< (aget location axis) location-axis)
+              (< (aget point axis) point-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
 
               :else
@@ -351,13 +354,13 @@
   (kd-tree-range-search [kd-tree min-range max-range]
     (let [min-range (->longs min-range)
           max-range (->longs max-range)
-          k (count (some-> kd-tree (.location)))
+          k (count (some-> kd-tree (.point)))
           stack (doto (ArrayDeque.)
                   (.push (NodeStackEntry. kd-tree 0)))]
       (->NodeRangeSearchSpliterator min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
-    (let [k (count (some-> kd-tree (.location)))
+    (let [k (count (some-> kd-tree (.point)))
           stack (doto (ArrayDeque.)
                   (.push (NodeStackEntry. kd-tree 0)))]
       (->NodeDepthFirstSpliterator k stack))))
@@ -451,10 +454,10 @@
 
 (extend-protocol KdTree
   VectorSchemaRoot
-  (kd-tree-insert [_ location]
+  (kd-tree-insert [_ point]
     (throw (UnsupportedOperationException.)))
 
-  (kd-tree-delete [_ location]
+  (kd-tree-delete [_ point]
     (throw (UnsupportedOperationException.)))
 
   (kd-tree-range-search [kd-tree min-range max-range]
