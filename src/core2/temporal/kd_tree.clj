@@ -458,7 +458,9 @@
                   axis-value (.get split-value-vec idx)
                   min-match? (< (aget min-range axis) axis-value)
                   max-match? (<= axis-value (aget max-range axis))
-                  right-idx (.get skip-pointer-vec idx)]
+                  right-idx (.get skip-pointer-vec idx)
+                  visit-left? (and (not= (inc idx) right-idx) min-match?)
+                  visit-right? (and (not (neg? right-idx)) max-match?)]
 
               (when-let [point (and (or min-match? max-match?)
                                     (not deleted?)
@@ -466,18 +468,18 @@
                 (.accept c point))
 
               (cond
-                (and min-match? (not max-match?))
+                (and visit-left? (not visit-right?))
                 (recur (inc idx) (long (if-not (neg? right-idx)
                                          right-idx
                                          end-idx)))
 
-                (and max-match? (not (neg? right-idx)) (not min-match?))
+                (and visit-right? (not visit-left?))
                 (recur right-idx end-idx)
 
                 :else
-                (do (when (and max-match? (not (neg? right-idx)))
+                (do (when visit-right?
                       (.push stack (ColumnStackEntry. right-idx end-idx)))
-                    (when min-match?
+                    (when visit-left?
                       (recur (inc idx) (long (if-not (neg? right-idx)
                                                right-idx
                                                end-idx)))))))))
@@ -495,21 +497,23 @@
                   axis-value (.get split-value-vec idx)
                   min-match? (< (aget min-range axis) axis-value)
                   max-match? (<= axis-value (aget max-range axis))
-                  right-idx (.get skip-pointer-vec idx)]
+                  right-idx (.get skip-pointer-vec idx)
+                  visit-left? (and (not= (inc idx) right-idx) min-match?)
+                  visit-right? (and (not (neg? right-idx)) max-match?)]
 
               (cond
-                (and min-match? (not max-match?))
+                (and visit-left? (not visit-right?))
                 (.push stack (ColumnStackEntry. (inc idx) (if-not (neg? right-idx)
                                                             right-idx
                                                             end-idx)))
 
-                (and max-match? (not (neg? right-idx)) (not min-match?))
+                (and visit-right? (not visit-left?))
                 (.push stack (ColumnStackEntry. right-idx end-idx))
 
                 :else
-                (do (when (and max-match? (not (neg? right-idx)))
+                (do (when visit-right?
                       (.push stack (ColumnStackEntry. right-idx end-idx)))
-                    (when min-match?
+                    (when visit-left?
                       (.push stack (ColumnStackEntry. (inc idx) (if-not (neg? right-idx)
                                                                   right-idx
                                                                   end-idx))))))
