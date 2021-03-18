@@ -28,58 +28,14 @@
       },
       "children" : [ ]
     },{
-      "name" : "points",
+      "name" : "point",
       "nullable" : false,
       "type" : {
-        "name" : "struct"
+        "name" : "fixedsizelist",
+        "listSize" : 6
       },
       "children" : [{
-        "name" : "0",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "1",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "2",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "3",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "4",
-        "nullable" : false,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 64,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "5",
+        "name" : "coordinates",
         "nullable" : false,
         "type" : {
           "name" : "int",
@@ -108,39 +64,14 @@
       "VALIDITY" : [1,1,1,1],
       "DATA" : [1,2,3,-1]
     },{
-      "name" : "points",
+      "name" : "point",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
       "children" : [{
-        "name" : "0",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "DATA" : ["1","2","3","4"]
-      },{
-        "name" : "1",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "DATA" : ["0","1","2","3"]
-      },{
-        "name" : "2",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "DATA" : ["0","0","0","0"]
-      },{
-        "name" : "3",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "DATA" : ["253402300799999","253402300799999","253402300799999","253402300799999"]
-      },{
-        "name" : "4",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "DATA" : ["1577836800000","1577836800000","1577923200000","1577923200000"]
-      },{
-        "name" : "5",
-        "count" : 4,
-        "VALIDITY" : [1,1,1,1],
-        "DATA" : ["253402300799999","253402300799999","253402300799999","253402300799999"]
+        "name" : "coordinates",
+        "count" : 24,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : ["1","0","0","253402300799999","1577836800000","253402300799999","2","1","0","253402300799999","1577836800000","253402300799999","3","2","0","253402300799999","1577923200000","253402300799999","4","3","0","253402300799999","1577923200000","253402300799999"]
       }]
     }]
   }]

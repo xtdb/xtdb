@@ -6,8 +6,8 @@
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex StructVector]
-           [org.apache.arrow.vector.types.pojo Field Schema]
+           [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
+           [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
            [org.apache.arrow.vector.types Types$MinorType]
            core2.temporal.TemporalCoordinates))
 
@@ -378,17 +378,16 @@
   (Schema. [(t/->field "axis_delete_flag" (.getType Types$MinorType/TINYINT) false)
             (t/->field "split_value" (.getType Types$MinorType/BIGINT) false)
             (t/->field "skip_pointer" (.getType Types$MinorType/INT) false)
-            (apply t/->field "points" (.getType Types$MinorType/STRUCT) false
-                    (for [idx (range k)]
-                      (t/->field (str idx) (.getType Types$MinorType/BIGINT) false)))]))
+            (t/->field "point" (ArrowType$FixedSizeList. k) false
+                       (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false))]))
 
 (defn ->column-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Node kd-tree ^long k]
   (let [out-root (VectorSchemaRoot/create (->column-kd-tree-schema k) allocator)
         ^TinyIntVector axis-delete-flag-vec (.getVector out-root "axis_delete_flag")
         ^BigIntVector split-value-vec (.getVector out-root "split_value")
         ^IntVector skip-pointer-vec (.getVector out-root "skip_pointer")
-        ^StructVector points-struct-vec (.getVector out-root "points")
-        point-vecs (.getChildrenFromFields points-struct-vec)
+        ^FixedSizeListVector point-list-vec (.getVector out-root "point")
+        ^BigIntVector coordinates-vec (.getDataVector point-list-vec)
         stack (ArrayDeque.)
         node->skip-idx-update (IdentityHashMap.)]
     (when kd-tree
@@ -402,15 +401,15 @@
               axis-delete-flag (if deleted?
                                  (- (inc axis))
                                  (inc axis))]
-          (.setIndexDefined points-struct-vec idx)
           (.setSafe axis-delete-flag-vec idx axis-delete-flag)
           (.setSafe split-value-vec idx (aget point axis))
           (.setSafe skip-pointer-vec idx -1)
           (when-let [skip-idx (.remove node->skip-idx-update node)]
             (.setSafe skip-pointer-vec ^long skip-idx idx))
-          (dotimes [n k]
-            (let [^BigIntVector v (.get point-vecs n)]
-              (.setSafe v idx (aget point n))))
+          (let [list-idx (.startNewValue point-list-vec idx)]
+            (dotimes [n k]
+              (.setSafe coordinates-vec (+ list-idx n) (aget point n)))
+            (.setValueCount point-list-vec idx))
 
           (let [axis (next-axis axis k)]
             (when-let [right (.right node)]
@@ -422,25 +421,25 @@
         (doto out-root
           (.setRowCount idx))))))
 
-(defmacro ^:private in-range-column? [mins xs k idx maxs]
-  (let [col-sym (with-meta (gensym "col") {:tag `BigIntVector})]
-    `(let [point# (long-array ~k)]
-       (loop [n# (int 0)]
-         (if (= n# ~k)
-           point#
-           (let [~col-sym (.get ~xs n#)
-                 x# (.get ~col-sym ~idx)]
-             (when (and (<= (aget ~mins n#) x#)
-                        (<= x# (aget ~maxs n#)))
-               (aset point# n# x#)
-               (recur (inc n#)))))))))
+(defmacro ^:private in-range-column? [mins xs coords k idx maxs]
+  `(let [point# (long-array ~k)
+         element-start-idx# (.getElementStartIndex ~xs ~idx)]
+     (loop [n# (int 0)]
+       (if (= n# ~k)
+         point#
+         (let [x# (.get ~coords (+ element-start-idx# n#))]
+           (when (and (<= (aget ~mins n#) x#)
+                      (<= x# (aget ~maxs n#)))
+             (aset point# n# x#)
+             (recur (inc n#))))))))
 
 (deftype ColumnStackEntry [^int start ^int end])
 
 (deftype ColumnRangeSearchSpliterator [^TinyIntVector axis-delete-flag-vec
                                        ^BigIntVector split-value-vec
                                        ^IntVector skip-pointer-vec
-                                       ^List point-vecs
+                                       ^FixedSizeListVector point-vec
+                                       ^BigIntVector coordinates-vec
                                        ^longs min-range
                                        ^longs max-range
                                        ^int k
@@ -468,7 +467,7 @@
 
               (when-let [point (and (or min-match? max-match?)
                                     (not deleted?)
-                                    (in-range-column? min-range point-vecs k idx max-range))]
+                                    (in-range-column? min-range point-vec coordinates-vec k idx max-range))]
                 (.accept c point))
 
               (cond
@@ -520,7 +519,7 @@
 
               (if-let [point (and (or min-match? max-match?)
                                   (not deleted?)
-                                  (in-range-column? min-range point-vecs k idx max-range))]
+                                  (in-range-column? min-range point-vec coordinates-vec k idx max-range))]
                 (do (.accept c point)
                     true)
                 (recur)))
@@ -537,7 +536,8 @@
 
 
 (deftype ColumnDepthFirstSpliterator [^TinyIntVector axis-delete-flag-vec
-                                      ^List point-vecs
+                                      ^FixedSizeListVector point-vec
+                                      ^BigIntVector coordinates-vec
                                       ^int k
                                       ^:unsynchronized-mutable ^int idx]
   Spliterator
@@ -549,9 +549,10 @@
               deleted? (neg? axis-delete-flag)]
 
           (when-not deleted?
-            (let [point (long-array k)]
+            (let [point (long-array k)
+                  element-start-idx (.getElementStartIndex point-vec idx)]
               (dotimes [n k]
-                (aset point n (.get ^BigIntVector (.get point-vecs n) idx)))
+                (aset point n (.get coordinates-vec (+ element-start-idx n))))
               (.accept c point)))
 
           (recur (inc idx))))))
@@ -568,9 +569,10 @@
 
           (if deleted?
             (recur)
-            (let [point (long-array k)]
+            (let [point (long-array k)
+                  element-start-idx (.getElementStartIndex point-vec current-idx)]
               (dotimes [n k]
-                (aset point n (.get ^BigIntVector (.get point-vecs n) current-idx)))
+                (aset point n (.get coordinates-vec (+ element-start-idx n))))
               (.accept c point)
               true))))))
 
@@ -584,8 +586,9 @@
 
 (defn merge-kd-trees ^core2.temporal.kd_tree.Node [^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree-from "axis_delete_flag")
-        point-vecs (.getChildrenFromFields ^StructVector (.getVector kd-tree-from "points"))
-        k (.size point-vecs)
+        ^FixedSizeListVector point-vec (.getVector kd-tree-from "point")
+        ^BigIntVector coordinates-vec (.getDataVector point-vec)
+        k (.getListSize point-vec)
         n (.getRowCount kd-tree-from)]
     (loop [idx 0
            acc kd-tree-to]
@@ -593,10 +596,11 @@
         acc
         (let [axis-delete-flag (.get axis-delete-flag-vec idx)
               deleted? (neg? axis-delete-flag)
-              point (long-array k)]
+              point (long-array k)
+              element-start-idx (.getElementStartIndex point-vec idx)]
 
           (dotimes [n k]
-            (aset point n (.get ^BigIntVector (.get point-vecs n) idx)))
+            (aset point n (.get coordinates-vec (+ element-start-idx n))))
 
           (recur (inc idx)
                  (if deleted?
@@ -617,14 +621,16 @@
           ^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis_delete_flag")
           ^BigIntVector split-value-vec (.getVector kd-tree "split_value")
           ^IntVector skip-pointer-vec (.getVector kd-tree "skip_pointer")
-          point-vecs (.getChildrenFromFields ^StructVector (.getVector kd-tree "points"))
-          k (.size point-vecs)
+          ^FixedSizeListVector point-vec (.getVector kd-tree "point")
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)
           stack (doto (ArrayDeque.)
                   (.push (ColumnStackEntry. 0 (.getValueCount axis-delete-flag-vec))))]
-      (->ColumnRangeSearchSpliterator axis-delete-flag-vec split-value-vec skip-pointer-vec point-vecs min-range max-range k stack)))
+      (->ColumnRangeSearchSpliterator axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
     (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis_delete_flag")
-          point-vecs (.getChildrenFromFields ^StructVector (.getVector kd-tree "points"))
-          k (.size point-vecs)]
-      (->ColumnDepthFirstSpliterator axis-delete-flag-vec point-vecs k 0))))
+          ^FixedSizeListVector point-vec (.getVector kd-tree "point")
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)]
+      (->ColumnDepthFirstSpliterator axis-delete-flag-vec point-vec coordinates-vec k 0))))
