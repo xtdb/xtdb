@@ -7,6 +7,7 @@
             [crux.db :as db]
             [crux.error :as err]
             [crux.fork :as fork]
+            [crux.hyper-log-log :as hll]
             [crux.io :as cio]
             [crux.kv :as kv]
             [crux.kv.mutable-kv :as mut-kv]
@@ -402,6 +403,57 @@
   {:crux.tx/tx-time (c/reverse-time-ms->date (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN))
    :crux.tx/tx-id (c/descending-long (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
+;;;; stats
+
+(defn- encode-stats-key-to
+  (^org.agrona.MutableDirectBuffer [b]
+   (encode-stats-key-to b mem/empty-buffer))
+  (^org.agrona.MutableDirectBuffer [b ^DirectBuffer attr]
+   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity attr))))]
+     (-> (doto b
+           (.putByte 0 c/stats-index-id)
+           (.putBytes c/index-id-size attr 0 (.capacity attr)))
+         (mem/limit-buffer (+ c/index-id-size (.capacity attr)))))))
+
+(defn- decode-stats-key->attr-from ^org.agrona.DirectBuffer [^DirectBuffer k]
+  (assert (= c/stats-index-id (.getByte k 0)))
+  (mem/slice-buffer k c/index-id-size))
+
+(defn- new-stats-value ^org.agrona.MutableDirectBuffer []
+  (doto ^MutableDirectBuffer (mem/allocate-buffer (+ Long/BYTES hll/default-buffer-size))
+    (.putByte 0 c/stats-index-id)
+    (.putLong c/index-id-size 0)))
+
+(defn- decode-stats-value->doc-count-from ^long [^DirectBuffer b]
+  (.getLong b c/index-id-size))
+
+(defn- inc-stats-value-doc-count ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+  (doto b
+    (.putLong c/index-id-size (inc (decode-stats-value->doc-count-from b)))))
+
+(defn decode-stats-value->hll-buffer-from ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b]
+  (mem/slice-buffer b Long/BYTES))
+
+(defn stats-kvs [transient-kv-snapshot persistent-kv-snapshot docs]
+  (let [attr-key-bufs (->> docs
+                           (into {} (comp (mapcat keys)
+                                          (distinct)
+                                          (map (juxt identity #(encode-stats-key-to nil (c/->value-buffer %)))))))]
+    (->> (for [doc docs
+               [k v] doc
+               v (c/vectorize-value v)]
+           (MapEntry/create k v))
+         (reduce (fn [acc [k v]]
+                   (let [k-buf (get attr-key-bufs k)]
+                     (assoc! acc k-buf (doto (or (get acc k-buf)
+                                                 (kv/get-value transient-kv-snapshot k-buf)
+                                                 (some-> (kv/get-value persistent-kv-snapshot k-buf) mem/copy-buffer)
+                                                 (new-stats-value))
+                                         (inc-stats-value-doc-count)
+                                         (-> decode-stats-value->hll-buffer-from (hll/add v))))))
+                 (transient {}))
+         persistent!)))
+
 ;;;; Entity as-of
 
 (defn- find-first-entity-tx-within-range [i min max eid]
@@ -753,11 +805,25 @@
 
           :else latest-tx))))
 
-  (attribute-cardinalities [this]
-    (db/read-index-meta this :crux/attribute-stats))
+  (attribute-stats [_]
+    (with-open [i (kv/new-iterator snapshot)]
+      (let [prefix (encode-stats-key-to nil)]
+        (->> (for [[stats-k stats-v] (all-keys-in-prefix i prefix (.capacity prefix) {:entries? true})]
+               (MapEntry/create (c/decode-value-buffer (decode-stats-key->attr-from stats-k))
+                                {:doc-count (decode-stats-value->doc-count-from stats-v)
+                                 :cardinality (hll/estimate (decode-stats-value->hll-buffer-from stats-v))}))
+             (into {})))))
 
-  (attribute-cardinality [this attr]
-    (get (db/attribute-cardinalities this) attr 0))
+  (attribute-doc-count [_ attr]
+    (or (some-> (kv/get-value snapshot (encode-stats-key-to nil (c/->value-buffer attr)))
+                decode-stats-value->doc-count-from)
+        0))
+
+  (attribute-cardinality [_ attr]
+    (or (some-> (kv/get-value snapshot (encode-stats-key-to nil (c/->value-buffer attr)))
+                decode-stats-value->hll-buffer-from
+                hll/estimate)
+        0.0))
 
   (open-nested-index-snapshot [_]
     (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
@@ -808,13 +874,6 @@
              (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
          (apply concat))))
 
-(defn- update-stats [attribute-stats docs]
-  (merge-with +
-              attribute-stats
-              (for [doc docs
-                    [k v] doc]
-                (MapEntry/create k (count (c/vectorize-value v))))))
-
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
   db/IndexStoreTx
   (index-docs [_ docs]
@@ -834,10 +893,7 @@
                       not-empty)
             content-idx-kvs (->content-idx-kvs docs)
             stats-kvs (when (seq docs)
-                        [(meta-kv :crux/attribute-stats
-                                  (update-stats (or (read-meta-snapshot transient-kv-snapshot :crux/attribute-stats)
-                                                    (read-meta-snapshot persistent-kv-snapshot :crux/attribute-stats))
-                                                (vals docs)))])]
+                        (stats-kvs transient-kv-snapshot persistent-kv-snapshot (vals docs)))]
 
         ;; we can write to the transient-kv-store here within an open read snapshot
         ;; on the assumption that the transient-kv-store is always in-memory

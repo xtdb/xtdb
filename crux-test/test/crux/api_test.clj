@@ -62,7 +62,7 @@
       (t/is (empty? (api/entity-history empty-db :foo :asc))))))
 
 (t/deftest test-status
-  (t/is (= (merge {:crux.index/index-version 17}
+  (t/is (= (merge {:crux.index/index-version 18}
                   (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
                     {:crux.zk/zk-active? true}))
            (select-keys (api/status *api*) [:crux.index/index-version :crux.zk/zk-active?])))

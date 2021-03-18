@@ -10,9 +10,10 @@
             [crux.fixtures.kv :as fkv]
             [crux.kv.index-store :as kvi]
             [crux.tx :as tx])
-  (:import crux.codec.EntityTx
+  (:import clojure.lang.MapEntry
+           crux.codec.EntityTx
            crux.api.NodeOutOfSyncException
-           java.util.Date))
+           [java.util Date UUID]))
 
 (def ^:dynamic *index-store*)
 
@@ -222,7 +223,10 @@
 (t/deftest test-statistics
   (letfn [(->stats [index-snapshot-factory]
             (with-open [index-snapshot (db/open-index-snapshot index-snapshot-factory)]
-              (db/attribute-cardinalities index-snapshot)))]
+              (->> (db/attribute-stats index-snapshot)
+                   (into {} (map (juxt key (comp #(update % :cardinality (fn [^double c]
+                                                                           (Math/round c)))
+                                                 val)))))))]
     (with-fresh-index-store
       (let [ivan {:crux.db/id :ivan :name "Ivan"}
             ivan2 {:crux.db/id :ivan :name "Ivan2"}
@@ -230,18 +234,41 @@
         (let [index-store-tx (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)]
 
           (db/index-docs index-store-tx {(c/new-id ivan) ivan})
-          (t/is (= 1 (:name (->stats index-store-tx))))
+          (t/is (= {:doc-count 1, :cardinality 1} (:name (->stats index-store-tx))))
 
           (db/index-docs index-store-tx {(c/new-id petr) petr})
-          (t/is (= 2 (:name (->stats index-store-tx))))
+          (t/is (= {:doc-count 2, :cardinality 2} (:name (->stats index-store-tx))))
 
           (db/commit-index-tx index-store-tx))
 
-        (t/is (= 2 (:name (->stats *index-store*))))
+        (t/is (= {:doc-count 2, :cardinality 2} (:name (->stats *index-store*))))
 
         (t/testing "updated"
           (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2022", :tx-id 1} nil)
             (db/index-docs {(c/new-id ivan2) ivan2})
             (db/commit-index-tx))
 
-          (t/is (= 3 (:name (->stats *index-store*)))))))))
+          (t/is (= {:doc-count 3, :cardinality 3} (:name (->stats *index-store*)))))))
+
+    (with-fresh-index-store
+      (let [id-iterator (.iterator ^Iterable (range))]
+        (letfn [(mk-docs [n]
+                  (for [idx (range n)
+                        sub-idx (range idx)]
+                    (let [doc {:crux.db/id (.next id-iterator)
+                               :sub-idx sub-idx}]
+                      (MapEntry/create (c/new-id doc) doc))))]
+          (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)
+
+            (db/index-docs (mk-docs 50))
+            (db/index-docs (mk-docs 50))
+
+            (db/commit-index-tx))
+
+          (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2022", :tx-id 1} nil)
+            (db/index-docs (mk-docs 50))
+            (db/commit-index-tx))))
+
+      (t/is (= {:crux.db/id {:doc-count 3675, :cardinality 3554}
+                :sub-idx {:doc-count 3675, :cardinality 50}}
+               (->stats *index-store*))))))

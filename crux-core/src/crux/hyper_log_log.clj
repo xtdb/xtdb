@@ -6,11 +6,7 @@
 ;; http://dimacs.rutgers.edu/~graham/pubs/papers/cacm-sketch.pdf
 ;; http://algo.inria.fr/flajolet/Publications/FlFuGaMe07.pdf
 
-(defn ->hyper-log-log
-  (^org.agrona.MutableDirectBuffer []
-   (->hyper-log-log 1024))
-  (^org.agrona.MutableDirectBuffer [^long m]
-   (mem/allocate-unpooled-buffer (* Integer/BYTES m))))
+(def ^{:tag 'int} default-buffer-size (* Integer/BYTES 1024))
 
 (defn add ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer hll v]
   (let [m (/ (.capacity hll) Integer/BYTES)

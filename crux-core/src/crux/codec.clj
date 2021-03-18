@@ -25,7 +25,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def index-version 17)
+(def index-version 18)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -55,6 +55,8 @@
 (def ^:const ae-index-id 11)
 
 (def ^:const tx-time-mapping-id 12)
+
+(def ^:const stats-index-id 13)
 
 (def ^:const value-type-id-size Byte/BYTES)
 

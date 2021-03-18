@@ -54,7 +54,8 @@
   (encode-value [this value])
   (resolve-tx [this tx])
   (open-nested-index-snapshot ^java.io.Closeable [this])
-  (attribute-cardinalities [this])
+  (attribute-stats [this])
+  (attribute-doc-count [this attr])
   (attribute-cardinality [this attr]))
 ;; end::IndexSnapshot[]
 
