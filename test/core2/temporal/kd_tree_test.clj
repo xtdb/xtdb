@@ -323,5 +323,21 @@
                    (->> (mapv vec))))
             "wikipedia-test")
 
-      (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
-               (mapv vec (kd/kd-tree->seq column-kd-tree)))))))
+      (t/testing "seq"
+        (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
+                 (mapv vec (kd/kd-tree->seq column-kd-tree)))))
+
+      (t/testing "merge"
+        (let [node-to-delete [2 1]
+              new-tree-with-tombstone (kd/kd-tree-delete
+                                       (kd/->node-kd-tree [[4 7] [8 1] [2 3]])
+                                       node-to-delete)
+              old-tree-with-node-to-be-deleted (kd/->node-kd-tree [[7 2] [5 4] [9 6] node-to-delete])]
+          (with-open [^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
+                                                                            new-tree-with-tombstone
+                                                                            2)]
+            (let [merged-tree (kd/merge-kd-trees old-tree-with-node-to-be-deleted column-kd-tree)
+                  rebuilt-tree (kd/rebuild-node-kd-tree merged-tree)]
+              (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
+                       (mapv vec (kd/kd-tree->seq merged-tree))
+                       (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))

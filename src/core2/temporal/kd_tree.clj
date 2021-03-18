@@ -98,7 +98,8 @@
   nil
   (kd-tree-insert [_ point]
     (Node. (->longs point) nil nil false))
-  (kd-tree-delete [_ _])
+  (kd-tree-delete [_ point]
+    (Node. (->longs point) nil nil true))
   (kd-tree-range-search [_ _ _]
     (Spliterators/emptySpliterator))
   (kd-tree-depth-first [_]
@@ -330,7 +331,7 @@
                 point-axis (aget node-point axis)]
             (cond
               (Arrays/equals point node-point)
-              kd-tree
+              (build-fn (assoc node :deleted? false))
 
               (< (aget point axis) point-axis)
               (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
@@ -386,7 +387,8 @@
         ^TinyIntVector axis-delete-flag-vec (.getVector out-root "axis_delete_flag")
         ^BigIntVector split-value-vec (.getVector out-root "split_value")
         ^IntVector skip-pointer-vec (.getVector out-root "skip_pointer")
-        point-vecs (.getChildrenFromFields ^StructVector (.getVector out-root "points"))
+        ^StructVector points-struct-vec (.getVector out-root "points")
+        point-vecs (.getChildrenFromFields points-struct-vec)
         stack (doto (ArrayDeque.))
         node->skip-idx-update (HashMap.)]
     (when kd-tree
@@ -398,9 +400,10 @@
               ^longs point (.point node)
               axis (.axis stack-entry)
               axis-delete-flag (if deleted?
-                                 (- axis)
-                                 axis)]
-          (.setSafe axis-delete-flag-vec idx ^int axis-delete-flag)
+                                 (- (inc axis))
+                                 (inc axis))]
+          (.setIndexDefined points-struct-vec idx)
+          (.setSafe axis-delete-flag-vec idx axis-delete-flag)
           (.setSafe split-value-vec idx (aget point axis))
           (.setSafe skip-pointer-vec idx (inc idx))
           (when-let [skip-idx (.remove node->skip-idx-update node)]
@@ -449,8 +452,8 @@
     (while (< idx (.getValueCount axis-delete-flag-vec))
       (let [current-idx idx
             axis-delete-flag (int (.get axis-delete-flag-vec current-idx))
-            axis (Math/abs axis-delete-flag)
             deleted? (neg? axis-delete-flag)
+            axis (dec (Math/abs axis-delete-flag))
             axis-value (.get split-value-vec current-idx)
             min-match? (< (aget min-range axis) axis-value)
             max-match? (<= axis-value (aget max-range axis))]
@@ -473,8 +476,8 @@
         false
         (let [current-idx idx
               axis-delete-flag (int (.get axis-delete-flag-vec current-idx))
-              axis (Math/abs axis-delete-flag)
               deleted? (neg? axis-delete-flag)
+              axis (dec (Math/abs axis-delete-flag))
               axis-value (.get split-value-vec current-idx)
               min-match? (< (aget min-range axis) axis-value)
               max-match? (<= axis-value (aget max-range axis))]
@@ -546,6 +549,27 @@
     Long/MAX_VALUE)
 
   (trySplit [_]))
+
+(defn merge-kd-trees ^core2.temporal.kd_tree.Node [^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
+  (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree-from "axis_delete_flag")
+        point-vecs (.getChildrenFromFields ^StructVector (.getVector kd-tree-from "points"))
+        k (.size point-vecs)
+        n (.getRowCount kd-tree-from)]
+    (loop [idx 0
+           acc kd-tree-to]
+      (if (= idx n)
+        acc
+        (let [axis-delete-flag (.get axis-delete-flag-vec idx)
+              deleted? (neg? axis-delete-flag)
+              point (long-array k)]
+
+          (dotimes [n k]
+            (aset point n (.get ^BigIntVector (.get point-vecs n) idx)))
+
+          (recur (inc idx)
+                 (if deleted?
+                   (kd-tree-delete acc point)
+                   (kd-tree-insert acc point))))))))
 
 (extend-protocol KdTree
   VectorSchemaRoot
