@@ -40,14 +40,14 @@
                                                         (kd/in-range? min-range ^longs location max-range))))
                                            (.count)))))
 
-        (prn :build-kd-tree-insert ns)
+        (prn :build-node-kd-tree-insert ns)
         (let [kd-tree (time
                        (reduce
                         kd/kd-tree-insert
                         nil
                         points))]
 
-          (prn :range-queries-kd-tree-insert qs)
+          (prn :range-queries-node-kd-tree-insert qs)
           (dotimes [_ ts]
             (time
              (doseq [[query-id min-range max-range] queries]
@@ -57,11 +57,11 @@
                             (.count))))))))
 
 
-        (prn :build-kd-tree-bulk ns)
+        (prn :build-node-kd-tree-bulk ns)
         (let [kd-tree (time
                        (kd/->node-kd-tree points))]
 
-          (prn :range-queries-kd-tree-bulk qs)
+          (prn :range-queries-node-kd-tree-bulk qs)
           (dotimes [_ ts]
             (time
              (doseq [[query-id min-range max-range] queries]
@@ -82,5 +82,9 @@
                               (StreamSupport/stream false)
                               (.count)))))))
 
-            (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
-                     (mapv vec (kd/kd-tree->seq column-kd-tree))))))))))
+            (let [_ (prn :node-kd-tree->seq)
+                  kd-tree-seq (time (mapv vec (kd/kd-tree->seq kd-tree)))
+                  _ (prn :column-tree->seq)
+                  col-tree-seq (time (mapv vec (kd/kd-tree->seq column-kd-tree)))]
+
+              (t/is (= kd-tree-seq col-tree-seq)))))))))
