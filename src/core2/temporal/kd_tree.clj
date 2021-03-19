@@ -467,6 +467,8 @@
   (->node-kd-tree allocator (map (partial kd-tree-array-point kd-tree)
                                  (.toArray (StreamSupport/intStream ^Spliterator$OfInt (kd-tree-depth-first kd-tree) false)))))
 
+(def ^:private ^:const point-vec-idx 3)
+
 (defn- ->column-kd-tree-schema ^org.apache.arrow.vector.types.pojo.Schema [^long k]
   (Schema. [(t/->field "axis_delete_flag" (.getType Types$MinorType/TINYINT) false)
             (t/->field "split_value" (.getType Types$MinorType/BIGINT) false)
@@ -702,4 +704,4 @@
       (->ColumnDepthFirstSpliterator axis-delete-flag-vec point-vec coordinates-vec k 0)))
 
   (kd-tree-point-vec [kd-tree]
-    (.getVector kd-tree "point")))
+    (.getVector kd-tree point-vec-idx)))
