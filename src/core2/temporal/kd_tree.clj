@@ -75,6 +75,29 @@
        (int 0)
        next-axis#)))
 
+(defmacro in-range? [min-range points max-range]
+  `(let [len# (alength ~points)]
+     (loop [n# (int 0)]
+       (if (= n# len#)
+         true
+         (let [x# (aget ~points n#)]
+           (if (and (<= (aget ~min-range n#) x#)
+                    (<= x# (aget ~max-range n#)))
+             (recur (inc n#))
+             false))))))
+
+(defmacro ^:private in-range-column? [min-range point-vec coordinates-vec k idx max-range]
+  `(let [point# (long-array ~k)
+         element-start-idx# (.getElementStartIndex ~point-vec ~idx)]
+     (loop [n# (int 0)]
+       (if (= n# ~k)
+         point#
+         (let [x# (.get ~coordinates-vec (+ element-start-idx# n#))]
+           (when (and (<= (aget ~min-range n#) x#)
+                      (<= x# (aget ~max-range n#)))
+             (aset point# n# x#)
+             (recur (inc n#))))))))
+
 (def ^:private ^Class longs-class (Class/forName "[J"))
 
 (defn- ->longs ^longs [xs]
@@ -147,20 +170,6 @@
   (->node-kd-tree (.toArray (StreamSupport/stream ^Spliterator (kd-tree-depth-first kd-tree) false))))
 
 (deftype NodeStackEntry [^Node node ^int axis])
-
-(defmacro in-range? [mins xs maxs]
-  `(let [mins# ~mins
-         xs# ~xs
-         maxs# ~maxs
-         len# (alength xs#)]
-     (loop [n# (int 0)]
-       (if (= n# len#)
-         true
-         (let [x# (aget xs# n#)]
-           (if (and (<= (aget mins# n#) x#)
-                    (<= x# (aget maxs# n#)))
-             (recur (inc n#))
-             false))))))
 
 (deftype NodeRangeSearchSpliterator [^longs min-range ^longs max-range ^int k ^Deque stack]
   Spliterator
@@ -408,18 +417,6 @@
             (recur (inc idx))))
         (doto out-root
           (.setRowCount idx))))))
-
-(defmacro ^:private in-range-column? [mins xs coords k idx maxs]
-  `(let [point# (long-array ~k)
-         element-start-idx# (.getElementStartIndex ~xs ~idx)]
-     (loop [n# (int 0)]
-       (if (= n# ~k)
-         point#
-         (let [x# (.get ~coords (+ element-start-idx# n#))]
-           (when (and (<= (aget ~mins n#) x#)
-                      (<= x# (aget ~maxs n#)))
-             (aset point# n# x#)
-             (recur (inc n#))))))))
 
 (deftype ColumnStackEntry [^int start ^int end])
 
