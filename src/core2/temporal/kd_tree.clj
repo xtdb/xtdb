@@ -65,7 +65,7 @@
   (kd-tree-depth-first [_])
   (kd-tree-point-vec [_]))
 
-(deftype Node [^FixedSizeListVector point-vec ^int point-idx left right ^boolean deleted?]
+(deftype Node [^FixedSizeListVector point-vec ^int point-idx ^int axis left right ^boolean deleted?]
   Closeable
   (close [_]
     (util/try-close point-vec)))
@@ -185,21 +185,22 @@
            (if (= (inc start) end)
              (let [point (aget points start)
                    idx (write-point point-vec point)]
-               (Node. point-vec idx nil nil false))
+               (Node. point-vec idx axis nil nil false))
              (do (Arrays/sort points start end (Comparator/comparingLong
                                                 (reify ToLongFunction
                                                   (applyAsLong [_ x]
                                                     (aget ^longs x axis)))))
                  (let [median (find-median-index points start end axis)
-                       axis (next-axis axis k)
+                       next-axis (next-axis axis k)
                        point (aget points median)
                        idx (write-point point-vec point)]
                    (Node. point-vec
                           idx
+                          axis
                           (when (< start median)
-                            (step start median axis))
+                            (step start median next-axis))
                           (when (< (inc median) end)
-                            (step (inc median) end axis))
+                            (step (inc median) end next-axis))
                           false)))))
          0 (alength points) 0)
         (catch Throwable t
@@ -214,8 +215,6 @@
          (recur (inc n#))
          false))))
 
-(deftype NodeStackEntry [^Node node ^int axis])
-
 (deftype NodeRangeSearchSpliterator [^FixedSizeListVector point-vec
                                      ^BigIntVector coordinates-vec
                                      ^longs min-range
@@ -225,11 +224,11 @@
   Spliterator$OfInt
   (^void forEachRemaining [_ ^IntConsumer c]
     (loop []
-      (when-let [^NodeStackEntry entry (.poll stack)]
-        (loop [^Node node (.node entry)
-               axis (.axis entry)]
+      (when-let [^Node node (.poll stack)]
+        (loop [node node]
           (let [left (.left node)
                 right (.right node)
+                axis (.axis node)
                 point-idx (.point-idx node)
                 point-axis (.get coordinates-vec (+ (.getElementStartIndex point-vec point-idx) axis))
                 min-axis (aget min-range axis)
@@ -237,8 +236,7 @@
                 min-match? (< min-axis point-axis)
                 max-match? (<= point-axis max-axis)
                 visit-left? (and left min-match?)
-                visit-right? (and right max-match?)
-                axis (next-axis axis k)]
+                visit-right? (and right max-match?)]
 
             (when (and (or min-match? max-match?)
                        (not (.deleted? node))
@@ -247,24 +245,23 @@
 
             (cond
               (and visit-left? (not visit-right?))
-              (recur left axis)
+              (recur left)
 
               (and visit-right? (not visit-left?))
-              (recur right axis)
+              (recur right)
 
               :else
               (do (when visit-right?
-                    (.push stack (NodeStackEntry. right axis)))
+                    (.push stack right))
 
                   (when visit-left?
-                    (recur left axis))))))
+                    (recur left))))))
         (recur))))
 
   (^boolean tryAdvance [_ ^IntConsumer c]
     (loop []
-      (if-let [^NodeStackEntry entry (.poll stack)]
-        (let [^Node node (.node entry)
-              axis (.axis entry)
+      (if-let [^Node node (.poll stack)]
+        (let [axis (.axis node)
               point-idx (.point-idx node)
               point-axis (.get coordinates-vec (+ (.getElementStartIndex point-vec point-idx) axis))
               left (.left node)
@@ -274,14 +271,13 @@
               min-match? (< min-axis point-axis)
               max-match? (<= point-axis max-axis)
               visit-left? (and left min-match?)
-              visit-right? (and right max-match?)
-              axis (next-axis axis k)]
+              visit-right? (and right max-match?)]
 
           (when visit-right?
-            (.push stack (NodeStackEntry. right axis)))
+            (.push stack right))
 
           (when visit-left?
-            (.push stack (NodeStackEntry. left axis)))
+            (.push stack left))
 
           (if (and (or min-match? max-match?)
                    (not (.deleted? node))
@@ -308,12 +304,10 @@
 (deftype NodeDepthFirstSpliterator [^int k ^Deque stack]
   Spliterator$OfInt
   (^void forEachRemaining [_ ^IntConsumer c]
-    (loop []
-      (when-let [^NodeStackEntry entry (.poll stack)]
-        (loop [^Node node (.node entry)
-               axis (.axis entry)]
-         (let [axis (next-axis axis k)
-               left (.left node)
+   (loop []
+     (when-let [^Node node (.poll stack)]
+       (loop [node node]
+         (let [left (.left node)
                right (.right node)]
 
            (when-not (.deleted? node)
@@ -321,34 +315,31 @@
 
            (cond
              (and left (nil? right))
-             (recur left axis)
+             (recur left)
 
              (and right (nil? left))
-             (recur right axis)
+             (recur right)
 
              :else
              (do (when right
-                   (.push stack (NodeStackEntry. right axis)))
+                   (.push stack right))
                  (when left
-                   (recur left axis))))))
-        (recur))))
+                   (recur left))))))
+       (recur))))
 
   (^boolean tryAdvance [_ ^IntConsumer c]
-    (loop []
-      (if-let [^NodeStackEntry entry (.poll stack)]
-        (let [^Node node (.node entry)
-              axis (.axis entry)
-              axis (next-axis axis k)]
-          (when-let [right (.right node)]
-            (.push stack (NodeStackEntry. right axis)))
-          (when-let [left (.left node)]
-            (.push stack (NodeStackEntry. left axis)))
+   (loop []
+     (if-let [^Node node (.poll stack)]
+       (do (when-let [right (.right node)]
+             (.push stack right))
+           (when-let [left (.left node)]
+             (.push stack left))
 
-          (if-not (.deleted? node)
-            (do (.accept c (.point-idx node))
-                true)
-            (recur)))
-        false)))
+           (if-not (.deleted? node)
+             (do (.accept c (.point-idx node))
+                 true)
+             (recur)))
+       false)))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
@@ -371,58 +362,60 @@
           ^FixedSizeListVector point-vec (.point-vec kd-tree)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           k (.getListSize point-vec)]
-      (loop [axis 0
+      (loop [parent-axis (.axis kd-tree)
              node kd-tree
              build-fn identity]
         (if-not node
           (let [point-idx (write-point point-vec point)]
-            (build-fn (Node. point-vec point-idx nil nil false)))
-          (let [element-start-idx (.getElementStartIndex point-vec (.point-idx node))
+            (build-fn (Node. point-vec point-idx (next-axis parent-axis k) nil nil false)))
+          (let [axis (.axis node)
+                element-start-idx (.getElementStartIndex point-vec (.point-idx node))
                 point-axis (.get coordinates-vec (+ element-start-idx axis))]
             (cond
               (point-equals-list-element point coordinates-vec element-start-idx k)
-              (build-fn (Node. point-vec (.point-idx node) (.left node) (.right node) false))
+              (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) false))
 
               (< (aget point axis) point-axis)
-              (recur (next-axis axis k)
+              (recur (.axis node)
                      (.left node)
                      (fn [left]
-                       (build-fn (Node. point-vec (.point-idx node) left (.right node) (.deleted? node)))))
+                       (build-fn (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))))
 
               :else
-              (recur (next-axis axis k)
+              (recur (.axis node)
                      (.right node)
                      (fn [right]
-                       (build-fn (Node. point-vec (.point-idx node) (.left node) right (.deleted? node)))))))))))
+                       (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))))))))))
 
   (kd-tree-delete [kd-tree allocator point]
     (let [point (->longs point)
           ^FixedSizeListVector point-vec (.point-vec kd-tree)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           k (.getListSize point-vec)]
-      (loop [axis 0
+      (loop [parent-axis (.axis kd-tree)
              node kd-tree
              build-fn identity]
         (if-not node
           (let [point-idx (write-point point-vec point)]
-            (build-fn (Node. point-vec point-idx nil nil true)))
-          (let [element-start-idx (.getElementStartIndex point-vec (.point-idx node))
+            (build-fn (Node. point-vec point-idx (next-axis parent-axis k) nil nil true)))
+          (let [axis (.axis node)
+                element-start-idx (.getElementStartIndex point-vec (.point-idx node))
                 point-axis (.get coordinates-vec (+ element-start-idx axis))]
             (cond
               (point-equals-list-element point coordinates-vec element-start-idx k)
-              (build-fn (Node. point-vec (.point-idx node) (.left node) (.right node) true))
+              (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) true))
 
               (< (aget point axis) point-axis)
-              (recur (next-axis axis k)
+              (recur (.axis node)
                      (.left node)
                      (fn [left]
-                       (build-fn (Node. point-vec (.point-idx node) left (.right node) (.deleted? node)))))
+                       (build-fn (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))))
 
               :else
-              (recur (next-axis axis k)
+              (recur (.axis node)
                      (.right node)
                      (fn [right]
-                       (build-fn (Node. point-vec (.point-idx node) (.left node) right (.deleted? node)))))))))))
+                       (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))))))))))
 
   (kd-tree-range-search [kd-tree min-range max-range]
     (let [min-range (->longs min-range)
@@ -431,13 +424,13 @@
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           k (.getListSize point-vec)
           stack (doto (ArrayDeque.)
-                  (.push (NodeStackEntry. kd-tree 0)))]
+                  (.push kd-tree))]
       (->NodeRangeSearchSpliterator point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
     (let [k (.getListSize ^FixedSizeListVector (.point-vec kd-tree))
           stack (doto (ArrayDeque.)
-                  (.push (NodeStackEntry. kd-tree 0)))]
+                  (.push kd-tree))]
       (->NodeDepthFirstSpliterator k stack)))
 
   (kd-tree-point-vec [this]
@@ -465,6 +458,7 @@
     (Node. (.getTo (doto (.getTransferPair point-vec allocator)
                      (.splitAndTransfer 0 (.getValueCount point-vec))))
            (.point-idx kd-tree)
+           (.axis kd-tree)
            (.left kd-tree)
            (.right kd-tree)
            (.deleted? kd-tree))))
@@ -493,14 +487,13 @@
         stack (ArrayDeque.)
         node->skip-idx-update (IdentityHashMap.)]
     (when kd-tree
-      (.push stack (NodeStackEntry. kd-tree 0)))
+      (.push stack kd-tree))
     (loop [idx (int 0)]
-      (if-let [^NodeStackEntry stack-entry (.poll stack)]
-        (let [^Node node (.node stack-entry)
-              deleted? (.deleted? node)
+      (if-let [^Node node (.poll stack)]
+        (let [deleted? (.deleted? node)
               in-point-idx (.point-idx node)
               in-element-start-idx (.getElementStartIndex in-point-vec in-point-idx)
-              axis (.axis stack-entry)
+              axis (.axis node)
               axis-delete-flag (if deleted?
                                  (- (inc axis))
                                  (inc axis))]
@@ -512,13 +505,12 @@
             (.setSafe skip-pointer-vec ^long skip-idx idx))
           (.copyFromSafe point-vec in-point-idx idx in-point-vec)
 
-          (let [axis (next-axis axis k)]
-            (when-let [right (.right node)]
-              (.put node->skip-idx-update right idx)
-              (.push stack (NodeStackEntry. right axis)))
-            (when-let [left (.left node)]
-              (.push stack (NodeStackEntry. left axis)))
-            (recur (inc idx))))
+          (when-let [right (.right node)]
+            (.put node->skip-idx-update right idx)
+            (.push stack right))
+          (when-let [left (.left node)]
+            (.push stack left))
+          (recur (inc idx)))
         (doto out-root
           (.setRowCount idx))))))
 
