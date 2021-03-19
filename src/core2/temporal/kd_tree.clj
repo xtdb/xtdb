@@ -619,9 +619,6 @@
 
 
 (deftype ColumnDepthFirstSpliterator [^TinyIntVector axis-delete-flag-vec
-                                      ^FixedSizeListVector point-vec
-                                      ^BigIntVector coordinates-vec
-                                      ^int k
                                       ^:unsynchronized-mutable ^int idx]
   Spliterator$OfInt
   (^void forEachRemaining [this ^IntConsumer c]
@@ -697,11 +694,8 @@
       (->ColumnRangeSearchSpliterator axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
-    (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis_delete_flag")
-          ^FixedSizeListVector point-vec (.getVector kd-tree "point")
-          ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)]
-      (->ColumnDepthFirstSpliterator axis-delete-flag-vec point-vec coordinates-vec k 0)))
+    (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis_delete_flag")]
+      (->ColumnDepthFirstSpliterator axis-delete-flag-vec 0)))
 
   (kd-tree-point-vec [kd-tree]
     (.getVector kd-tree point-vec-idx)))
