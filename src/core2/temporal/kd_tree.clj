@@ -1,5 +1,6 @@
 (ns core2.temporal.kd-tree
-  (:require [core2.types :as t])
+  (:require [core2.types :as t]
+            [clojure.tools.logging :as log])
   (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             IdentityHashMap List Map Spliterator Spliterators]
            [java.util.function Consumer Function Predicate ToLongFunction]
@@ -75,28 +76,40 @@
        (int 0)
        next-axis#)))
 
-(defmacro in-range? [min-range points max-range]
-  `(let [len# (alength ~points)]
+(defmacro in-range? [min-range point max-range]
+  `(let [len# (alength ~point)]
      (loop [n# (int 0)]
        (if (= n# len#)
          true
-         (let [x# (aget ~points n#)]
+         (let [x# (aget ~point n#)]
            (if (and (<= (aget ~min-range n#) x#)
                     (<= x# (aget ~max-range n#)))
              (recur (inc n#))
              false))))))
 
-(defmacro ^:private in-range-column? [min-range point-vec coordinates-vec k idx max-range]
-  `(let [point# (long-array ~k)
+(defmacro ^:private in-range-column? [min-range point-vec coordinates-vec idx max-range]
+  `(let [k# (alength ~min-range)
+         point# (long-array k#)
          element-start-idx# (.getElementStartIndex ~point-vec ~idx)]
      (loop [n# (int 0)]
-       (if (= n# ~k)
+       (if (= n# k#)
          point#
          (let [x# (.get ~coordinates-vec (+ element-start-idx# n#))]
            (when (and (<= (aget ~min-range n#) x#)
                       (<= x# (aget ~max-range n#)))
              (aset point# n# x#)
              (recur (inc n#))))))))
+
+(defn- try-enable-simd []
+  (try
+    (require 'core2.temporal.simd :reload)
+    true
+    (catch clojure.lang.Compiler$CompilerException e
+      (if (instance? ClassNotFoundException (.getCause e))
+        (throw e))
+      false)))
+
+(defonce simd-enabled? (try-enable-simd))
 
 (def ^:private ^Class longs-class (Class/forName "[J"))
 
@@ -452,7 +465,7 @@
 
               (when-let [point (and (or min-match? max-match?)
                                     (not deleted?)
-                                    (in-range-column? min-range point-vec coordinates-vec k idx max-range))]
+                                    (in-range-column? min-range point-vec coordinates-vec idx max-range))]
                 (.accept c point))
 
               (cond
@@ -504,7 +517,7 @@
 
               (if-let [point (and (or min-match? max-match?)
                                   (not deleted?)
-                                  (in-range-column? min-range point-vec coordinates-vec k idx max-range))]
+                                  (in-range-column? min-range point-vec coordinates-vec idx max-range))]
                 (do (.accept c point)
                     true)
                 (recur)))

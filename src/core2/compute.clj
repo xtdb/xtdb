@@ -855,12 +855,10 @@
 
 (defn- try-enable-simd []
   (try
-    (require 'core2.compute.simd)
-    (log/info "SIMD enabled")
+    (require 'core2.compute.simd :reload)
     true
     (catch clojure.lang.Compiler$CompilerException e
       (if (instance? ClassNotFoundException (.getCause e))
-        (log/info "SIMD not enabled")
         (throw e))
       false)))
 
