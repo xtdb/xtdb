@@ -64,11 +64,11 @@
   (close [_]
     (util/try-close point-vec)))
 
-(defmacro ^:private next-axis [axis k]
-  `(let [next-axis# (unchecked-inc-int ~axis)]
-     (if (= ~k next-axis#)
-       (int 0)
-       next-axis#)))
+(defn next-axis ^long [^long axis ^long k]
+  (let [next-axis (unchecked-inc-int axis)]
+    (if (= k next-axis)
+      (int 0)
+      next-axis)))
 
 (defmacro in-range? [min-range point max-range]
   `(let [len# (alength ~point)]
