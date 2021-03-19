@@ -27,7 +27,7 @@
             [reitit.ring.middleware.exception :as re]
             [reitit.ring.middleware.muuntaja :as rm]
             [reitit.swagger :as swagger]
-            [ring.adapter.jetty :as j]
+            [ring.adapter.jetty9 :as j]
             [ring.middleware.params :as p]
             [ring.util.response :as resp]
             [ring.util.time :as rt])
@@ -461,14 +461,18 @@
                                          :default false}
                             :jwks {:spec ::sys/string
                                    :doc "JWKS string to validate against"}
-                            :server-label {:spec ::sys/string}}}
-  [{:keys [crux-node port] :as options}]
+                            :server-label {:spec ::sys/string}
+                            :jetty-opts {:doc "Extra options to pass to Jetty, see https://ring-clojure.github.io/ring/ring.adapter.jetty.html"}}}
+  [{:keys [crux-node port jetty-opts] :as options}]
   (let [server (j/run-jetty (rr/ring-handler (->crux-router {:crux-node crux-node
-                                                             :http-options (dissoc options :crux-node)})
+                                                             :http-options (dissoc options :crux-node :port :jetty-opts)})
                                              (rr/routes
                                               (rr/create-resource-handler {:path "/"})
                                               (rr/create-default-handler)))
-                            {:port port
-                             :join? false})]
+                            (merge {:port port
+                                    :h2c? true
+                                    :h2? true
+                                    :join? false}
+                                   jetty-opts))]
     (log/info "HTTP server started on port: " port)
     (->HTTPServer server options)))

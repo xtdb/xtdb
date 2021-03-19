@@ -11,8 +11,10 @@
 
                  ;; dependency conflict resolution:
                  [commons-logging "1.2"]
-                 [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
-                 [org.eclipse.jetty/jetty-http "9.4.30.v20200611"]]
+                 [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
+                 [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
+                 [org.eclipse.jetty/jetty-security "9.4.36.v20210114"]
+                 [org.eclipse.jetty/jetty-http "9.4.36.v20210114"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :test {:dependencies [[juxt/crux-test "crux-git-version"]

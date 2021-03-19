@@ -24,7 +24,7 @@ Only a small subset of SPARQL is supported and no other RDF features are availab
 juxt/crux-http-server {:mvn/version "{crux_version}-alpha"}
 ----
 
-You can start up a *HTTP server* on a node by including `crux.http-server/server` in your node configuration, optionally passing the server port:
+You can start up a Jetty HTTP/HTTP2 server on a node by including `crux.http-server/server` in your node configuration, optionally passing the server port:
 
 [tabs]
 ====
@@ -64,6 +64,7 @@ EDN::
 * `port` (int, default 3000)
 * `read-only?` (boolean, default false): start the HTTP server in read-only mode
 * `jwks` (string): https://jwt.io/[JSON Web Token] (JWT) key set to authorise requests against - `{"keys": [...]}`
+* `jetty-opts` (map): further options to pass to the https://ring-clojure.github.io/ring/ring.adapter.jetty.html[Ring Jetty adapter]
 
 === Ring Handler
 

@@ -11,7 +11,7 @@
                  [hiccup "2.0.0-alpha2"]
                  [cheshire "5.10.0"]
                  [clj-http "3.10.1"]
-                 [ring "1.8.0"]
+                 [ring "1.8.1"]
 
                  [software.amazon.awssdk/secretsmanager "2.10.91"]
                  [jarohen/nomad "0.9.0"]
@@ -22,7 +22,7 @@
                  [org.slf4j/slf4j-simple "1.7.26"]
 
                  ;; deps res
-                 [org.eclipse.jetty/jetty-util "9.4.30.v20200611"]
+                 [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
                  [org.apache.httpcomponents/httpclient "4.5.12"]]
 
   :middleware [leiningen.project-version/middleware]
