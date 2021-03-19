@@ -16,12 +16,13 @@
            [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc TermQuery TopDocs]
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
            [org.apache.lucene.store Directory FSDirectory]))
 
-(defrecord LuceneNode [directory analyzer indexer]
+(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer]
   Closeable
   (close [this]
+    (.close ^IndexWriter index-writer)
     (cio/try-close directory)))
 
 (defn- ^String ->hash-str [eid]
@@ -36,9 +37,8 @@
 (def ^:const ^:private field-crux-val "_crux_val")
 (def ^:const ^:private field-crux-attr "_crux_attr")
 
-(defn- ^IndexWriter index-writer [lucene-store]
-  (let [{:keys [^Directory directory ^Analyzer analyzer]} lucene-store]
-    (IndexWriter. directory, (IndexWriterConfig. analyzer))))
+(defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
+  (IndexWriter. directory, (IndexWriterConfig. analyzer)))
 
 (defn- index-tx! [^IndexWriter index-writer tx]
   (let [t (Term. "meta" "latest-completed-tx")
@@ -47,21 +47,25 @@
             (.add (StoredField. "latest-completed-tx" ^long (:crux.tx/tx-id tx))))]
     (.updateDocument index-writer t d)))
 
-(defn latest-submitted-tx [lucene-store]
-  (let [{:keys [^Directory directory]} lucene-store]
-    (when (DirectoryReader/indexExists directory)
-      (with-open [directory-reader (DirectoryReader/open directory)]
-        (let [index-searcher (IndexSearcher. directory-reader)
-              q (TermQuery. (Term. "meta" "latest-completed-tx"))
-              d ^ScoreDoc (first (.-scoreDocs (.search index-searcher q 1)))]
-          (when d
-            (some-> (.doc index-searcher (.-doc d))
-                    (.get "latest-completed-tx")
-                    (Long/parseLong))))))))
+(defn- ->index-searcher [lucene-store]
+  (let [^SearcherManager searcher-manager (:searcher-manager lucene-store)
+        s (.acquire searcher-manager)]
+    [s (fn [] (.release searcher-manager s))]))
+
+(defn latest-completed-tx [lucene-store]
+  (let [[^IndexSearcher index-searcher index-searcher-release-fn] (->index-searcher lucene-store)]
+    (try
+      (let [q (TermQuery. (Term. "meta" "latest-completed-tx"))]
+        (when-let [^ScoreDoc d (first (.-scoreDocs (.search index-searcher q 1)))]
+          (some-> (.doc index-searcher (.-doc d))
+                  (.get "latest-completed-tx")
+                  (Long/parseLong))))
+      (finally
+        (index-searcher-release-fn)))))
 
 (defn validate-lucene-store-up-to-date [index-store lucene-store]
   (let [{:crux.tx/keys [tx-id] :as latest-tx} (db/latest-completed-tx index-store)
-        latest-lucene-tx-id (latest-submitted-tx lucene-store)]
+        latest-lucene-tx-id (latest-completed-tx lucene-store)]
     (when (and tx-id
                (or (nil? latest-lucene-tx-id)
                    (> tx-id latest-lucene-tx-id)))
@@ -69,31 +73,33 @@
 
 (defn search [lucene-store, ^Query q]
   (assert lucene-store)
-  (let [{:keys [^Directory directory]} lucene-store
-        directory-reader (DirectoryReader/open directory)
-        index-searcher (IndexSearcher. directory-reader)
-        q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
-        score-docs (letfn [(docs-page [after]
-                             (lazy-seq
-                              (let [^TopDocs
-                                    top-docs (if after
-                                               (.searchAfter index-searcher after q 100)
-                                               (.search index-searcher q 100))
-                                    score-docs (.-scoreDocs top-docs)]
-                                (concat score-docs
-                                        (when (= 100 (count score-docs))
-                                          (docs-page (last score-docs)))))))]
-                     (docs-page nil))]
+  (let [[^IndexSearcher index-searcher index-searcher-release-fn] (->index-searcher lucene-store)]
+    (try
+      (let [q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
+            score-docs (letfn [(docs-page [after]
+                                 (lazy-seq
+                                  (let [^TopDocs
+                                        top-docs (if after
+                                                   (.searchAfter index-searcher after q 100)
+                                                   (.search index-searcher q 100))
+                                        score-docs (.-scoreDocs top-docs)]
+                                    (concat score-docs
+                                            (when (= 100 (count score-docs))
+                                              (docs-page (last score-docs)))))))]
+                         (docs-page nil))]
 
-    (when (seq score-docs)
-      (log/debug (.explain index-searcher q (.-doc ^ScoreDoc (first score-docs)))))
+        (when (seq score-docs)
+          (log/debug (.explain index-searcher q (.-doc ^ScoreDoc (first score-docs)))))
 
-    (cio/->cursor (fn []
-                    (.close directory-reader))
-                  (->> score-docs
-                       (map (fn [^ScoreDoc d]
-                              (vector (.doc index-searcher (.-doc d))
-                                      (.-score d))))))))
+        (cio/->cursor (fn []
+                        (index-searcher-release-fn))
+                      (->> score-docs
+                           (map (fn [^ScoreDoc d]
+                                  (vector (.doc index-searcher (.-doc d))
+                                          (.-score d)))))))
+      (catch Throwable t
+        (index-searcher-release-fn)
+        (throw t)))))
 
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
   (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
@@ -225,10 +231,11 @@
    ::sys/before #{[:crux/tx-ingester]}}
   [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine] :as opts}]
   (let [directory (FSDirectory/open db-dir)
-        lucene-store (LuceneNode. directory analyzer indexer)]
+        index-writer (->index-writer directory analyzer)
+        searcher-manager (SearcherManager. index-writer false false nil)
+        lucene-store (LuceneNode. directory analyzer index-writer searcher-manager indexer)]
     ;; Ensure lucene index exists for immediate queries:
-    (with-open [index-writer (index-writer lucene-store)]
-      (.commit index-writer))
+    (.commit index-writer)
     (validate-lucene-store-up-to-date index-store lucene-store)
     (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
     (bus/listen bus {:crux/event-types #{:crux.tx/committing-tx :crux.tx/aborting-tx}
@@ -236,10 +243,11 @@
                                           (execute [_ f]
                                             (.run f)))}
                 (fn [ev]
-                  (with-open [index-writer (index-writer lucene-store)]
-                    (when (= :crux.tx/committing-tx (:crux/event-type ev))
-                      (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
-                      (when-let [evicting-eids (not-empty (:evicting-eids ev))]
-                        (evict! indexer index-writer evicting-eids)))
-                    (index-tx! index-writer (:submitted-tx ev)))))
+                  (when (= :crux.tx/committing-tx (:crux/event-type ev))
+                    (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
+                    (when-let [evicting-eids (not-empty (:evicting-eids ev))]
+                      (evict! indexer index-writer evicting-eids)))
+                  (index-tx! index-writer (:submitted-tx ev))
+                  (.commit index-writer)
+                  (.maybeRefreshBlocking searcher-manager)))
     lucene-store))

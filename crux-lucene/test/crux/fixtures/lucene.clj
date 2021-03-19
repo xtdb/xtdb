@@ -1,8 +1,7 @@
 (ns crux.fixtures.lucene
   (:require [crux.fixtures :as fix :refer [*api*]]
             [crux.lucene :as l])
-  (:import [org.apache.lucene.index DirectoryReader]
-           [org.apache.lucene.store Directory]))
+  (:import [org.apache.lucene.index DirectoryReader IndexReader IndexWriter]))
 
 (defn with-lucene-module [f]
   (fix/with-tmp-dirs #{db-dir}
@@ -25,6 +24,6 @@
     (l/search lucene-store q)))
 
 (defn doc-count []
-  (let [{:keys [^Directory directory]} (lucene-store)
-        directory-reader (DirectoryReader/open directory)]
-    (.numDocs directory-reader)))
+  (let [{:keys [^IndexWriter index-writer]} (lucene-store)
+        index-reader (DirectoryReader/open index-writer)]
+    (.numDocs index-reader)))
