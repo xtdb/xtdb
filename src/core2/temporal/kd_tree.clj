@@ -104,8 +104,8 @@
     true
     (catch clojure.lang.Compiler$CompilerException e
       (if (instance? ClassNotFoundException (.getCause e))
-        (throw e))
-      false)))
+        false
+        (throw e)))))
 
 (defonce simd-enabled? (try-enable-simd))
 
