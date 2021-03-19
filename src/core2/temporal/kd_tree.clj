@@ -291,7 +291,7 @@
             (.push split-stack (.poll stack)))
           (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k split-stack))))))
 
-(deftype NodeDepthFirstSpliterator [^int k ^Deque stack]
+(deftype NodeDepthFirstSpliterator [^Deque stack]
   Spliterator$OfInt
   (^void forEachRemaining [_ ^IntConsumer c]
    (loop []
@@ -343,7 +343,7 @@
         (let [split-stack (ArrayDeque.)]
           (while (not= split-size (.size split-stack))
             (.push split-stack (.poll stack)))
-          (NodeDepthFirstSpliterator. k split-stack))))))
+          (NodeDepthFirstSpliterator. split-stack))))))
 
 (extend-protocol KdTree
   Node
@@ -418,10 +418,9 @@
       (->NodeRangeSearchSpliterator point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
-    (let [k (.getListSize ^FixedSizeListVector (.point-vec kd-tree))
-          stack (doto (ArrayDeque.)
+    (let [stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (->NodeDepthFirstSpliterator k stack)))
+      (->NodeDepthFirstSpliterator stack)))
 
   (kd-tree-point-vec [this]
     (.point-vec this)))
