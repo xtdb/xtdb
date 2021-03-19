@@ -58,3 +58,21 @@
 
      (time (count (c/q (c/db *api*) {:find '[?e]
                                      :where '[[(text-search :c_comment "ironic") [[?e]]]]}))))))
+
+(comment
+  ;; looking here at removing the IndexWriter and .commit overheads for tiny transactions (note: in general large 1000+ batch transactions will perform significantly better)
+
+  ;; @9537073 (IndexWriter per tx) = very slow
+  ;; IndexWriter + SearcherManager + .commit (per tx) = much faster
+  ;; IndexWriter + SearcherManager = faster still, but we'll leave the .commit per tx where it is for now due to an inability for crux-lucene to recover from mismatched index scenarios, see the PR comments
+
+  ((t/join-fixtures [lf/with-lucene-module fix/with-node])
+   (fn []
+     (time
+      (let [last-tx (->> (customers 1500)
+                         (partition-all 1)
+                         (reduce (fn [last-tx chunk]
+                                   (c/submit-tx *api* (vec (for [doc chunk]
+                                                             [:crux.tx/put doc]))))
+                                 nil))]
+        (c/await-tx *api* last-tx))))))

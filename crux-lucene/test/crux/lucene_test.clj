@@ -252,7 +252,7 @@
       (t/is (empty? (c/q before-db q))))))
 
 (t/deftest test-ensure-lucene-store-keeps-last-tx
-  (let [latest-tx (fn [] (l/latest-submitted-tx (:crux.lucene/lucene-store @(:!system *api*))))]
+  (let [latest-tx (fn [] (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))]
     (t/is (not (latest-tx)))
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivank"}]])
 
@@ -384,7 +384,7 @@
                     [:crux.tx/put {:crux.db/id :test-id :name "2345"}]])
 
   (t/is (= (:crux.tx/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
-           (l/latest-submitted-tx (:crux.lucene/lucene-store @(:!system *api*))))))
+           (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))))
 
 (comment
   (do
