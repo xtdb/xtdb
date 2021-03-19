@@ -19,8 +19,6 @@
 ;; the list instead of arrays.  Adapt column version to do the same -
 ;; most things are there.
 
-;; Try JDK 16 vector incubator to do compares when walking the tree.
-
 
 ;; Step 2:
 
