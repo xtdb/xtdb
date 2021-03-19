@@ -13,26 +13,6 @@
 
 ;; TODO:
 
-;; Step 1:
-
-;; Make Arrow trees use stack-less skip pointer traversal and balance
-;; their median points like the node tree. This would require three
-;; meta columns: the axis split value (long), the skip pointer index
-;; (int) and a flag with axis + deletion bit (byte). Storing the axis
-;; is necessary to resume traversal after following a skip
-;; pointer. The points themselves can be stored as either a struct of
-;; k columns, or as a fixed list vector with k elements per list.
-
-;; For stack-less skip pointer traversal, see Figure 6 here:
-;; http://www.cse.chalmers.se/edu/year/2009/course/TDA361/EfficiencyIssuesForRayTracing.pdf
-
-;; Store the active tree as temporal-<chunk-idx>.arrow in the object
-;; store when registering chunks.
-
-;; We then read these chunks instead of scanning the columns to build
-;; the new in-memory tree on start-up. Needs to take deletions into
-;; account. Queries are always performed against this in-memory tree.
-
 ;; Step 2:
 
 ;; Later, we can merge older chunks, either when registering new ones,
