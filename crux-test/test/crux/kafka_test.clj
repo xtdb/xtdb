@@ -65,7 +65,7 @@
       (with-fixtures
         (fn []
           (t/testing "new node can pick-up"
-            (db/submit-docs (:document-store *api*) compacted-docs)
+            @(db/submit-docs-async (:document-store *api*) compacted-docs)
             (api/await-tx *api* submitted-tx)
             (f)))))))
 
@@ -114,9 +114,8 @@
       (fn []
         (t/testing "submitting an oversized document returns proper exception"
           (t/is
-           (thrown-with-msg?
-            java.util.concurrent.ExecutionException
-            #"org.apache.kafka.common.errors.RecordTooLargeException"
+           (thrown?
+            org.apache.kafka.common.errors.RecordTooLargeException
             (api/submit-tx
              *api*
              [[:crux.tx/put

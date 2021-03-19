@@ -1,19 +1,28 @@
 (ns crux.ingest-client
-  (:require [crux.db :as db]
+  (:require [clojure.pprint :as pp]
+            [crux.api :as api]
+            [crux.db :as db]
             [crux.error :as err]
             [crux.system :as sys]
-            [crux.tx.conform :as txc]
-            [clojure.pprint :as pp]
-            [crux.api :as api])
+            [crux.tx.conform :as txc])
   (:import [java.io Closeable Writer]
-           java.lang.AutoCloseable))
+           java.lang.AutoCloseable
+           java.util.concurrent.CompletableFuture
+           [java.util.function Function Supplier]))
 
 (defrecord CruxIngestClient [tx-log document-store close-fn]
   api/PCruxAsyncIngestClient
-  (submit-tx-async [this tx-ops]
-    (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (db/submit-docs (:document-store this) (into {} (mapcat :docs) conformed-tx-ops))
-      (db/submit-tx (:tx-log this) (mapv txc/->tx-event conformed-tx-ops))))
+  (submit-tx-async [_ tx-ops]
+    (-> (CompletableFuture/supplyAsync
+         (reify Supplier
+           (get [_]
+             (mapv txc/conform-tx-op (api/conform-tx-ops tx-ops)))))
+        (.thenCompose (reify Function
+                        (apply [_ conformed-tx-ops]
+                          (-> (db/submit-docs-async document-store (into {} (mapcat :docs) conformed-tx-ops))
+                              (.thenCompose (reify Function
+                                              (apply [_ _]
+                                                (db/submit-tx-async tx-log (mapv txc/->tx-event conformed-tx-ops)))))))))))
 
   api/PCruxIngestClient
   (submit-tx [this tx-ops]

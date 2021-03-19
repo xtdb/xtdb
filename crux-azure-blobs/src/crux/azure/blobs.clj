@@ -1,10 +1,13 @@
 (ns crux.azure.blobs
   (:require [clj-http.client :as http]
-            [taoensso.nippy :as nippy]
             [crux.db :as db]
+            [crux.document-store :as ds]
             [crux.io :as cio]
             [crux.system :as sys]
-            [crux.document-store :as ds]))
+            [taoensso.nippy :as nippy])
+  (:import clojure.lang.MapEntry
+           java.util.concurrent.CompletableFuture
+           [java.util.function Function Supplier]))
 
 (defn- get-blob [sas-token storage-account container blob-name]
   ;; TODO : ETag
@@ -24,23 +27,32 @@
 
 (defrecord AzureBlobsDocumentStore [sas-token storage-account container]
   db/DocumentStore
-  (submit-docs [_ docs]
-    (->> (for [[id doc] docs]
-           (future
-             (put-blob sas-token storage-account container
-                       (str id)
-                       (nippy/freeze doc))))
-         vec
-         (run! deref)))
+  (submit-docs-async [_ docs]
+    (CompletableFuture/allOf
+     (into-array CompletableFuture
+                 (for [[id doc] docs]
+                   (CompletableFuture/supplyAsync
+                    (reify Supplier
+                      (get [_]
+                        (put-blob sas-token storage-account container
+                                  (str id)
+                                  (nippy/freeze doc)))))))))
 
-  (fetch-docs [_ docs]
-    (cio/with-nippy-thaw-all
-      (reduce
-       #(if-let [doc (get-blob sas-token storage-account container (str %2))]
-          (assoc %1 %2 (nippy/thaw doc))
-          %1)
-       {}
-       docs))))
+  (fetch-docs-async [_ ids]
+    (let [futs (for [id ids]
+                 (-> (CompletableFuture/supplyAsync
+                      (reify Supplier
+                        (get [_]
+                          (get-blob sas-token storage-account container (str id)))))
+                     (.thenApply
+                      (reify Function
+                        (apply [_ doc]
+                          (cio/with-nippy-thaw-all
+                            (MapEntry/create id (nippy/thaw doc))))))))]
+      (-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+          (.thenApply (reify Function
+                        (apply [_ _]
+                          (into {} (map deref) futs))))))))
 
 (defn ->document-store {::sys/deps {:document-cache 'crux.cache/->cache}
                         ::sys/args {:sas-token {:required? true

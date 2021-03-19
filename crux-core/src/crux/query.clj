@@ -1734,7 +1734,7 @@
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
   (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
                                   :crux.db/content-hash)]
-    (-> (db/fetch-docs document-store #{content-hash})
+    (-> @(db/fetch-docs-async document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc))))
 
@@ -1873,11 +1873,11 @@
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))
                                  :let [docs (when with-docs?
-                                              (db/fetch-docs document-store
-                                                             (->> history-batch
-                                                                  (into #{}
-                                                                        (comp (keep #(.content-hash ^EntityTx %))
-                                                                              (remove #{(c/new-id c/nil-id-buffer)}))))))]]
+                                              @(db/fetch-docs-async document-store
+                                                                    (->> history-batch
+                                                                         (into #{}
+                                                                               (comp (keep #(.content-hash ^EntityTx %))
+                                                                                     (remove #{(c/new-id c/nil-id-buffer)}))))))]]
                              (->> history-batch
                                   (map (fn [^EntityTx etx]
                                          (cond-> {:crux.tx/tx-time (.tt etx)
@@ -1908,7 +1908,7 @@
                                                     ::tx/tx-time tx-time
                                                     ::tx/tx-id tx-id})]
 
-      (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
+      @(db/submit-docs-async in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
         (api/db in-flight-tx valid-time))))

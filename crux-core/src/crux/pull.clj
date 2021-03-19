@@ -17,7 +17,7 @@
 
 (defn- lookup-docs [v {:keys [document-store]}]
   (when-let [hashes (not-empty (::hashes (meta v)))]
-    (db/fetch-docs document-store hashes)))
+    @(db/fetch-docs-async document-store hashes)))
 
 (defmacro let-docs {:style/indent 1} [[binding hashes] & body]
   `(-> (fn ~'let-docs [~binding]

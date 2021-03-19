@@ -238,7 +238,7 @@
                 (fn [ev]
                   (with-open [index-writer (index-writer lucene-store)]
                     (when (= :crux.tx/committing-tx (:crux/event-type ev))
-                      (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
+                      (index! indexer index-writer @(db/fetch-docs-async document-store (:doc-ids ev)))
                       (when-let [evicting-eids (not-empty (:evicting-eids ev))]
                         (evict! indexer index-writer evicting-eids)))
                     (index-tx! index-writer (:submitted-tx ev)))))

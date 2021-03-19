@@ -34,28 +34,28 @@
 
         _ (fix/submit+await-tx [[:crux.tx/put doc]])
 
-        docs (db/fetch-docs doc-store #{doc-hash})]
+        docs @(db/fetch-docs-async doc-store #{doc-hash})]
 
     (t/is (= 1 (count docs)))
     (t/is (= doc (get docs doc-hash)))
 
     (t/testing "Compaction"
-      (db/submit-docs doc-store [[doc-hash :some-val]])
+      @(db/submit-docs-async doc-store [[doc-hash :some-val]])
       (t/is (= :some-val
-               (-> (db/fetch-docs doc-store #{doc-hash})
+               (-> @(db/fetch-docs-async doc-store #{doc-hash})
                    (get doc-hash)))))
 
     (t/testing "Eviction"
-      (db/submit-docs doc-store [[doc-hash {:crux.db/id :some-id, :crux.db/evicted? true}]])
+      @(db/submit-docs-async doc-store [[doc-hash {:crux.db/id :some-id, :crux.db/evicted? true}]])
       (t/is (= {:crux.db/id :some-id, :crux.db/evicted? true}
-               (-> (db/fetch-docs doc-store #{doc-hash})
+               (-> @(db/fetch-docs-async doc-store #{doc-hash})
                    (get doc-hash)))))
 
     (t/testing "Resurrect Document"
       (fix/submit+await-tx [[:crux.tx/put doc]])
 
       (t/is (= doc
-               (-> (db/fetch-docs doc-store #{doc-hash})
+               (-> @(db/fetch-docs-async doc-store #{doc-hash})
                    (get doc-hash)))))))
 
 (t/deftest test-micro-bench

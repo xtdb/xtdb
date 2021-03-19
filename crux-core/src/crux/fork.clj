@@ -6,7 +6,9 @@
             [crux.memory :as mem])
   (:import crux.codec.EntityTx
            org.agrona.DirectBuffer
-           java.util.Date))
+           java.util.Date
+           java.util.concurrent.CompletableFuture
+           java.util.function.Function))
 
 (defn merge-seqs
   ([persistent transient] (merge-seqs persistent transient #(.compare mem/buffer-comparator %1 %2)))
@@ -168,21 +170,25 @@
 
 (defrecord ForkedDocumentStore [doc-store !docs]
   db/DocumentStore
-  (submit-docs [_ docs]
-    (swap! !docs into docs))
+  (submit-docs-async [_ docs]
+    (CompletableFuture/completedFuture
+     (swap! !docs into docs)))
 
-  (fetch-docs [_ ids]
+  (fetch-docs-async [_ ids]
     (let [overridden-docs (select-keys @!docs ids)]
-      (into overridden-docs (db/fetch-docs doc-store (set/difference (set ids) (set (keys overridden-docs)))))))
+      (-> (db/fetch-docs-async doc-store (set/difference (set ids) (set (keys overridden-docs))))
+          (.thenApply (reify Function
+                        (apply [_ docs]
+                          (into overridden-docs docs)))))))
 
   DocumentStoreTx
   (abort-doc-store-tx [_]
     (when-let [docs (not-empty (->> @!docs (into {} (filter (comp :crux.db.fn/failed? val)))))]
-      (db/submit-docs doc-store docs)))
+      @(db/submit-docs-async doc-store docs)))
 
   (commit-doc-store-tx [_]
     (when-let [docs (not-empty @!docs)]
-      (db/submit-docs doc-store docs))))
+      @(db/submit-docs-async doc-store docs))))
 
 (defn begin-document-store-tx [doc-store]
   (->ForkedDocumentStore doc-store (atom {})))

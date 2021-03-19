@@ -4,16 +4,14 @@
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.fixtures.every-api :as every-api :refer [*node-type* *http-server-api*]]
+            [crux.fixtures.every-api :as every-api :refer [*http-server-api* *node-type*]]
             [crux.fixtures.http-server :as fh]
-            [crux.fixtures.kafka :as fk]
             [crux.rdf :as rdf]
             [crux.tx :as tx]
             [crux.tx.event :as txe])
-  (:import [crux.api NodeOutOfSyncException ICruxAPI]
+  (:import crux.api.NodeOutOfSyncException
            java.time.Duration
            java.util.Date
-           java.util.concurrent.ExecutorService
            org.eclipse.rdf4j.query.Binding
            org.eclipse.rdf4j.repository.RepositoryConnection
            org.eclipse.rdf4j.repository.sparql.SPARQLRepository))
@@ -411,7 +409,7 @@
                            (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
           (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
-                   (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
+                   (-> @(db/fetch-docs-async (:document-store *server-api*) #{arg-doc-id})
                        (get arg-doc-id)
                        (dissoc :crux.db/id)))))))))
 
@@ -428,7 +426,7 @@
 (t/deftest missing-doc-halts-tx-ingestion
   ;; TODO hangs for Kafka, see KafkaDocumentStore
   (when-not (contains? #{:remote :local-kafka :local-kafka-transit} *node-type*)
-    (let [tx (db/submit-tx (:tx-log *api*) [[:crux.tx/put (c/new-id :foo) (c/new-id {:crux.db/id :foo})]])]
+    (let [tx @(db/submit-tx-async (:tx-log *api*) [[:crux.tx/put (c/new-id :foo) (c/new-id {:crux.db/id :foo})]])]
       (t/is (thrown-with-msg?
              IllegalStateException
              #"missing docs"

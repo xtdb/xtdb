@@ -121,7 +121,7 @@
     (if (or (= current-id expected-id)
             ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
             ;; can't rely on the old content-hashing returning the same hash for the same document
-            (let [docs (db/fetch-docs document-store #{current-id expected-id})]
+            (let [docs @(db/fetch-docs-async document-store #{current-id expected-id})]
               (= (get docs current-id)
                  (get docs expected-id))))
       {:etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx tx-ingester)}
@@ -182,11 +182,11 @@
         {args-doc-id :crux.db/id,
          :crux.db.fn/keys [args tx-events failed?]
          :as args-doc} (when args-content-hash
-                         (-> (db/fetch-docs document-store #{args-content-hash})
+                         (-> @(db/fetch-docs-async document-store #{args-content-hash})
                              (get args-content-hash)))]
     (cond
       tx-events {:tx-events tx-events
-                 :docs (db/fetch-docs document-store (txc/tx-events->doc-hashes tx-events))}
+                 :docs @(db/fetch-docs-async document-store (txc/tx-events->doc-hashes tx-events))}
 
       failed? (do
                 (log/warn "Transaction function failed when originally evaluated:"
@@ -271,11 +271,11 @@
                        index-store index-store-tx document-store-tx
                        query-engine bus]
   db/DocumentStore
-  (submit-docs [_ docs]
-    (db/submit-docs document-store-tx docs))
+  (submit-docs-async [_ docs]
+    (db/submit-docs-async document-store-tx docs))
 
-  (fetch-docs [_ ids]
-    (db/fetch-docs document-store-tx ids))
+  (fetch-docs-async [_ ids]
+    (db/fetch-docs-async document-store-tx ids))
 
   api/DBProvider
   (db [_] (api/db query-engine tx))
@@ -295,7 +295,7 @@
       (swap! !tx update :tx-events into tx-events)
 
       (let [doc-hashes (set (txc/tx-events->doc-hashes tx-events))
-            docs (db/fetch-docs document-store-tx doc-hashes)
+            docs @(db/fetch-docs-async document-store-tx doc-hashes)
             fetched-doc-hashes (set (keys docs))]
         (when-not (= fetched-doc-hashes doc-hashes)
           (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
@@ -313,7 +313,7 @@
                            (if abort?
                              (do
                                (when (seq docs)
-                                 (db/submit-docs document-store-tx docs))
+                                 @(db/submit-docs-async document-store-tx docs))
                                true)
 
                              (do
@@ -323,7 +323,7 @@
                                                             (swap! !tx update :evicted-eids into evict-eids)
                                                             (db/unindex-eids index-store-tx evict-eids))]
                                  (when-let [docs (seq (concat docs tombstones))]
-                                   (db/submit-docs document-store-tx docs)))
+                                   @(db/submit-docs-async document-store-tx docs)))
 
                                (if (Thread/interrupted)
                                  (throw (InterruptedException.))

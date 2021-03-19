@@ -11,7 +11,8 @@
             [crux.tx.event :as txe])
   (:import java.io.Closeable
            java.nio.ByteOrder
-           [java.util.concurrent ExecutorService LinkedBlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
+           [java.util.concurrent CompletableFuture ExecutorService LinkedBlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
+           [java.util.function Function Supplier]
            java.util.Date
            [org.agrona DirectBuffer MutableDirectBuffer]))
 
@@ -67,23 +68,25 @@
                     ^ExecutorService tx-ingest-executor
                     kv-store tx-ingester fsync?]
   db/TxLog
-  (submit-tx [this tx-events]
+  (submit-tx-async [this tx-events]
     (when (.isShutdown tx-submit-executor)
       (throw (IllegalStateException. "TxLog is closed.")))
 
-    (let [!submitted-tx (.submit tx-submit-executor ^Callable #(submit-tx tx-events this))]
-      (delay
-        (let [submitted-tx @!submitted-tx]
-          (when (= ::closed submitted-tx)
-            (throw (IllegalStateException. "TxLog is closed.")))
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [submitted-tx (submit-tx tx-events this)]
+           (when (= ::closed submitted-tx)
+             (throw (IllegalStateException. "TxLog is closed.")))
 
-          submitted-tx))))
+           submitted-tx)))
+     tx-submit-executor))
 
-  (latest-submitted-tx [this]
+  (latest-submitted-tx [_]
     (when-let [tx-id (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id)]
       {::tx/tx-id tx-id}))
 
-  (open-tx-log [this after-tx-id]
+  (open-tx-log [_ after-tx-id]
     (let [batch-size 100]
       (letfn [(tx-log [after-tx-id]
                 (lazy-seq

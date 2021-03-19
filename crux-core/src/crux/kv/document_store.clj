@@ -1,18 +1,17 @@
 (ns ^:no-doc crux.kv.document-store
   (:require [crux.codec :as c]
-            [crux.io :as cio]
             [crux.db :as db]
             [crux.document-store :as ds]
-            [crux.memory :as mem]
+            [crux.io :as cio]
             [crux.kv :as kv]
-            [crux.cache :as cache]
+            [crux.memory :as mem]
             [crux.system :as sys])
-  (:import java.util.function.Supplier
-           org.agrona.ExpandableDirectByteBuffer
+  (:import clojure.lang.MapEntry
            crux.codec.Id
-           clojure.lang.MapEntry
-           (java.io Closeable)
-           (org.agrona DirectBuffer MutableDirectBuffer)))
+           java.io.Closeable
+           java.util.concurrent.CompletableFuture
+           java.util.function.Supplier
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]))
 
 (def ^:private ^ThreadLocal seek-buffer-tl
   (ThreadLocal/withInitial
@@ -37,24 +36,29 @@
 
 (defrecord KvDocumentStore [kv-store fsync?]
   db/DocumentStore
-  (fetch-docs [_ ids]
-    (cio/with-nippy-thaw-all
-      (with-open [snapshot (kv/new-snapshot kv-store)]
-        (persistent!
-         (reduce
-          (fn [acc id]
-            (let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))]
-              (if-let [doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
-                (assoc! acc id doc)
-                acc)))
-          (transient {}) ids)))))
+  (fetch-docs-async [_ ids]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (cio/with-nippy-thaw-all
+           (with-open [snapshot (kv/new-snapshot kv-store)]
+             (persistent!
+              (reduce (fn [acc id]
+                        (let [seek-k (encode-doc-key-to (.get seek-buffer-tl) (c/->id-buffer id))]
+                          (if-let [doc (some-> (kv/get-value snapshot seek-k) (mem/<-nippy-buffer))]
+                            (assoc! acc id doc)
+                            acc)))
+                      (transient {})
+                      ids))))))))
 
-  (submit-docs [_ id-and-docs]
-    (kv/store kv-store (for [[id doc] id-and-docs]
-                         (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
-                                          (mem/->nippy-buffer doc))))
-    (when fsync?
-      (kv/fsync kv-store)))
+  (submit-docs-async [_ id-and-docs]
+    (CompletableFuture/runAsync
+     ^Runnable (fn []
+                 (kv/store kv-store (for [[id doc] id-and-docs]
+                                      (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
+                                                       (mem/->nippy-buffer doc))))
+                 (when fsync?
+                   (kv/fsync kv-store)))))
 
   Closeable
   (close [_]))

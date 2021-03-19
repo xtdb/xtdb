@@ -18,6 +18,7 @@
             [crux.tx.conform :as txc]
             [crux.api :as crux])
   (:import [java.util Date]
+           java.util.concurrent.CompletableFuture
            [java.time Duration]
            [crux.codec EntityTx]))
 
@@ -250,7 +251,7 @@
         (t/testing "eviction removes tx history"
           (t/is (empty? history)))
         (t/testing "eviction removes docs"
-          (t/is (empty? (->> (db/fetch-docs (:document-store *api*) (keep :content-hash history))
+          (t/is (empty? (->> @(db/fetch-docs-async (:document-store *api*) (keep :content-hash history))
                              vals
                              (remove c/evicted-doc?))))))))
 
@@ -289,21 +290,21 @@
 
     (t/testing "no docs evicted yet"
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-        (t/is (seq (->> (db/fetch-docs (:document-store *api*)
-                                       (->> (db/entity-history index-snapshot picasso-id :desc {})
-                                            (keep :content-hash)))
+        (t/is (seq (->> @(db/fetch-docs-async (:document-store *api*)
+                                              (->> (db/entity-history index-snapshot picasso-id :desc {})
+                                                   (keep :content-hash)))
                         vals
                         (remove c/evicted-doc?))))))
 
     (binding [tx/*evict-all-on-legacy-time-ranges?* true]
       (let [{:keys [docs]} (index-evict!)]
-        (db/submit-docs (:document-store *api*) docs)
+        @(db/submit-docs-async (:document-store *api*) docs)
 
         (t/testing "eviction removes docs"
           (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-            (t/is (empty? (->> (db/fetch-docs (:document-store *api*)
-                                              (->> (db/entity-history index-snapshot picasso-id :desc {})
-                                                   (keep :content-hash)))
+            (t/is (empty? (->> @(db/fetch-docs-async (:document-store *api*)
+                                                     (->> (db/entity-history index-snapshot picasso-id :desc {})
+                                                          (keep :content-hash)))
                                vals
                                (remove c/evicted-doc?))))))))))
 
@@ -325,8 +326,8 @@
         ivan1 (assoc ivan :value 1)
         ivan2 (assoc ivan :value 2)
         t #inst "2019-11-29"]
-    (db/submit-docs (:document-store *api*) {(c/new-id ivan1) ivan1
-                                             (c/new-id ivan2) ivan2})
+    @(db/submit-docs-async (:document-store *api*) {(c/new-id ivan1) ivan1
+                                                    (c/new-id ivan2) ivan2})
 
     (index-tx {:crux.tx/tx-time t, :crux.tx/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1))]])
@@ -355,8 +356,8 @@
         ivan2 (assoc ivan :value 2)
         t1 #inst "2020-05-01"
         t2 #inst "2020-05-02"]
-    (db/submit-docs (:document-store *api*) {(c/new-id ivan1) ivan1
-                                             (c/new-id ivan2) ivan2})
+    @(db/submit-docs-async (:document-store *api*) {(c/new-id ivan1) ivan1
+                                                    (c/new-id ivan2) ivan2})
 
     (index-tx {:crux.tx/tx-time t1, :crux.tx/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/new-id ivan1)) t1]])
@@ -570,9 +571,10 @@
 (t/deftest migrates-unhashed-tx-log-eids
   (let [doc {:crux.db/id :foo}
         doc-id (c/new-id doc)]
-    (db/submit-docs (:document-store *api*) {doc-id doc})
-    (doto @(db/submit-tx (:tx-log *api*) [[:crux.tx/match :foo (c/new-id c/nil-id-buffer)]
-                                          [:crux.tx/put :foo doc-id]])
+    @(db/submit-docs-async (:document-store *api*) {doc-id doc})
+    (doto @(db/submit-tx-async (:tx-log *api*)
+                               [[:crux.tx/match :foo (c/new-id c/nil-id-buffer)]
+                                [:crux.tx/put :foo doc-id]])
       (->> (api/await-tx *api*)))
 
     (t/is (= {:crux.db/id :foo}
@@ -864,7 +866,7 @@
                            (let [history (db/entity-history index-snapshot
                                                             (c/new-id eid) :asc
                                                             {:start {::db/valid-time #inst "2020-01-01"}})
-                                 docs (db/fetch-docs (:document-store *api*) (map :content-hash history))]
+                                 docs @(db/fetch-docs-async (:document-store *api*) (map :content-hash history))]
                              (->> history
                                   (mapv (fn [{:keys [content-hash vt]}]
                                           [vt (:v (get docs content-hash))])))))]
@@ -894,15 +896,15 @@
   (fix/submit+await-tx [[:crux.tx/evict :foo]])
 
   (t/is (every? (comp c/evicted-doc? val)
-                (db/fetch-docs (:document-store *api*) #{(c/new-id {:crux.db/id :foo, :foo :bar})
-                                                         (c/new-id {:crux.db/id :foo, :foo :baz})
-                                                         (c/new-id {:crux.db/id :foo, :foo :quux})})))
+                @(db/fetch-docs-async (:document-store *api*) #{(c/new-id {:crux.db/id :foo, :foo :bar})
+                                                                (c/new-id {:crux.db/id :foo, :foo :baz})
+                                                                (c/new-id {:crux.db/id :foo, :foo :quux})})))
 
   (t/testing "even though the CaS was unrelated, the whole transaction fails - we should still evict those docs"
     (fix/submit+await-tx [[:crux.tx/evict :frob]])
     (t/is (every? (comp c/evicted-doc? val)
-                  (db/fetch-docs (:document-store *api*) #{(c/new-id {:crux.db/id :frob, :foo :bar})
-                                                           (c/new-id {:crux.db/id :frob, :foo :baz})})))))
+                  @(db/fetch-docs-async (:document-store *api*) #{(c/new-id {:crux.db/id :frob, :foo :bar})
+                                                                  (c/new-id {:crux.db/id :frob, :foo :baz})})))))
 
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
@@ -980,7 +982,7 @@
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
       (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
-               (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+               (-> @(db/fetch-docs-async (:document-store *api*) #{arg-doc-id})
                    (get arg-doc-id)
                    (dissoc :crux.db/id))))))
 
@@ -997,7 +999,7 @@
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
       (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :no-fn-args-doc) (c/new-id {:crux.db/id :no-fn-args-doc})]]}
-               (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+               (-> @(db/fetch-docs-async (:document-store *api*) #{arg-doc-id})
                    (get arg-doc-id)
                    (dissoc :crux.db/id))))))
 
@@ -1017,11 +1019,11 @@
 
     (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) 1)]
                        (-> (iterator-seq tx-log) last ::txe/tx-events first last))
-          arg-doc (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+          arg-doc (-> @(db/fetch-docs-async (:document-store *api*) #{arg-doc-id})
                       (get arg-doc-id))
 
           sub-arg-doc-id (-> arg-doc :crux.db.fn/tx-events second last)
-          sub-arg-doc (-> (db/fetch-docs (:document-store *api*) #{sub-arg-doc-id})
+          sub-arg-doc (-> @(db/fetch-docs-async (:document-store *api*) #{sub-arg-doc-id})
                           (get sub-arg-doc-id))]
 
       (t/is (= {:crux.db/id (:crux.db/id arg-doc)
@@ -1038,10 +1040,11 @@
                   :name "Sergei"}
           arg-doc {:crux.db/id :args
                    :crux.db.fn/tx-events [[:crux.tx/put :sergei (c/new-id sergei)]]}]
-      (db/submit-docs (:document-store *api*)
-                      {(c/new-id arg-doc) arg-doc
-                       (c/new-id sergei) sergei})
-      (let [tx @(db/submit-tx (:tx-log *api*) [[:crux.tx/fn :put-sergei (c/new-id arg-doc)]])]
+      @(db/submit-docs-async (:document-store *api*)
+                             {(c/new-id arg-doc) arg-doc
+                              (c/new-id sergei) sergei})
+      (let [tx @(db/submit-tx-async (:tx-log *api*)
+                                    [[:crux.tx/fn :put-sergei (c/new-id arg-doc)]])]
         (api/await-tx *api* tx)
 
         (t/is (= sergei (api/entity (api/db *api*) :sergei))))))
@@ -1058,7 +1061,7 @@
                 :crux.db.fn/exception 'java.lang.NullPointerException
                 :crux.db.fn/message nil
                 :crux.db.fn/ex-data nil}
-               (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+               (-> @(db/fetch-docs-async (:document-store *api*) #{arg-doc-id})
                    (get arg-doc-id)
                    (dissoc :crux.db/id)))))))
 
@@ -1068,7 +1071,7 @@
   (let [tx-fn {:crux.db/id :tx-fn,
                :crux.db/fn '(fn [ctx]
                               [[:crux.tx/put {:crux.db/id :ivan}]])}]
-    (db/submit-docs (:document-store *api*) {(c/new-id tx-fn) tx-fn})
+    @(db/submit-docs-async (:document-store *api*) {(c/new-id tx-fn) tx-fn})
 
     (index-tx {:crux.tx/tx-time (Date.), :crux.tx/tx-id 0}
               [[:crux.tx/put (c/new-id :tx-fn) tx-fn]])
@@ -1088,15 +1091,19 @@
                               {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :foo) (c/new-id foo-doc)]]}])
         ->mocked-doc-store (fn [_opts]
                              (reify db/DocumentStore
-                               (submit-docs [_ docs])
-                               (fetch-docs [_ ids]
-                                 (->> ids
-                                      (into {} (map (juxt identity
-                                                          (some-fn {(c/new-id put-fn) put-fn
-                                                                    (c/new-id foo-doc) foo-doc}
-                                                                   (fn [id]
-                                                                     (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
-                                                                       (merge doc {:crux.db/id id})))))))))))]
+                               (submit-docs-async [_ docs]
+                                 (CompletableFuture/completedFuture nil))
+
+                               (fetch-docs-async [_ ids]
+                                 (CompletableFuture/completedFuture
+
+                                  (->> ids
+                                       (into {} (map (juxt identity
+                                                           (some-fn {(c/new-id put-fn) put-fn
+                                                                     (c/new-id foo-doc) foo-doc}
+                                                                    (fn [id]
+                                                                      (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
+                                                                        (merge doc {:crux.db/id id}))))))))))))]
     (with-open [node (api/start-node {:crux/document-store ->mocked-doc-store})]
       (api/submit-tx node [[:crux.tx/put put-fn]])
       (api/submit-tx node [[:crux.tx/fn :put-fn foo-doc]])

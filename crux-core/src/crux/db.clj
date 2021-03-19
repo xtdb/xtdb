@@ -58,7 +58,7 @@
 
 ;; tag::TxLog[]
 (defprotocol TxLog
-  (submit-tx [this tx-events])
+  (^java.util.concurrent.CompletableFuture submit-tx-async [this tx-events])
   (open-tx-log ^crux.api.ICursor [this after-tx-id])
   (latest-submitted-tx [this]))
 ;; end::TxLog[]
@@ -73,6 +73,6 @@
   (abort [in-flight-tx]))
 
 (defprotocol DocumentStore
-  "Once `submit-docs` function returns successfully, any call to `fetch-docs` across the cluster must return the submitted docs."
-  (submit-docs [this id-and-docs])
-  (fetch-docs [this ids]))
+  "Once the future returned from `submit-docs-async` completes successfully, any call to `fetch-docs-async` across the cluster must return the submitted docs."
+  (^java.util.concurrent.CompletableFuture submit-docs-async [this id-and-docs])
+  (^java.util.concurrent.CompletableFuture fetch-docs-async [this ids]))

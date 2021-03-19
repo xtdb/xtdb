@@ -13,7 +13,8 @@
            java.nio.file.Path
            java.time.Duration
            [java.util Collection Date Map UUID]
-           java.util.concurrent.ExecutionException
+           [java.util.concurrent CompletableFuture ExecutionException]
+           [java.util.function Function Supplier]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
@@ -136,13 +137,13 @@
                        tx-topic, kafka-config,
                        ^Closeable consumer]
   db/TxLog
-  (submit-tx [this tx-events]
-    (try
-      (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
-        (delay
-         (let [record-meta ^RecordMetadata @tx-send-future]
-           {::tx/tx-id (.offset record-meta)
-            ::tx/tx-time (Date. (.timestamp record-meta))})))))
+  (submit-tx-async [_ tx-events]
+    (-> (cio/future->completable-future (.send producer (ProducerRecord. tx-topic nil tx-events)))
+        (.thenApply (reify Function
+                      (apply [_ record-meta]
+                        (let [record-meta ^RecordMetadata record-meta]
+                          {::tx/tx-id (.offset record-meta)
+                           ::tx/tx-time (Date. (.timestamp record-meta))}))))))
 
   (open-tx-log [this after-tx-id]
     (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
@@ -224,14 +225,13 @@
                              (cio/try-close consumer)))))))
 
 ;;;; DocumentStore
-(defn- submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
-  ;; TODO this no longer preserves submit-tx-async semantics, see #1266
+(defn- submit-docs-async [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
   (let [fs (doall (for [[content-hash doc] id-and-docs]
                     (->> (ProducerRecord. doc-topic content-hash doc)
-                         (.send producer))))]
+                         (.send producer)
+                         cio/future->completable-future)))]
     (.flush producer)
-    (doseq [f fs]
-      @f)))
+    (CompletableFuture/allOf (into-array CompletableFuture fs))))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
                                ^AdminClient admin-client
@@ -245,26 +245,27 @@
     (.join indexing-thread))
 
   db/DocumentStore
-  (submit-docs [this id-and-docs]
-    (submit-docs id-and-docs this))
+  (submit-docs-async [this id-and-docs]
+    (submit-docs-async id-and-docs this))
 
-  (fetch-docs [_ ids]
+  (fetch-docs-async [this ids]
     ;; TODO will hang forever if the requested ids aren't ever submitted - #1479
     ;; we could take a note of the endOffset at the start and then fail once we've indexed to that point
-    (let [ids (set ids)]
-      (loop [docs {}]
-        (when-let [indexing-error @!indexing-error]
-          (throw (IllegalStateException. "document indexing error" indexing-error)))
-
-        (let [missing-ids (set/difference ids (set (keys docs)))
-              docs (into docs
-                         (when (seq missing-ids)
-                           (db/fetch-docs local-document-store missing-ids)))]
-          (if (= (count docs) (count ids))
-            docs
-            (do
-              (Thread/sleep 100)
-              (recur docs))))))))
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [ids (->> ids
+                        (into #{} (remove (some-fn nil? #{(c/new-id c/nil-id-buffer)}))))]
+           (loop [docs {}]
+             (let [missing-ids (set/difference ids (set (keys docs)))
+                   docs (into docs
+                              (when (seq missing-ids)
+                                @(db/fetch-docs-async local-document-store missing-ids)))]
+               (if (= (count docs) (count ids))
+                 docs
+                 (do
+                   (Thread/sleep 100)
+                   (recur docs)))))))))))
 
 (defn- read-doc-offsets [index-store]
   (->> (db/read-index-meta index-store :crux.tx-log/consumer-state)
@@ -298,7 +299,7 @@
         (loop [tp-offsets tp-offsets]
           (let [tp-offsets (->> (consumer-seqs consumer poll-wait-duration)
                                 (reduce (fn [tp-offsets doc-records]
-                                          (db/submit-docs local-document-store (->> doc-records (into {} (map doc-record->id+doc))))
+                                          @(db/submit-docs-async local-document-store (->> doc-records (into {} (map doc-record->id+doc))))
                                           (doto (update-doc-offsets tp-offsets doc-records)
                                             (->> (store-doc-offsets index-store))))
                                         tp-offsets))]
@@ -349,10 +350,10 @@
 
 (defrecord IngestOnlyDocumentStore [^KafkaProducer producer doc-topic]
   db/DocumentStore
-  (submit-docs [this id-and-docs]
-    (submit-docs id-and-docs this))
+  (submit-docs-async [this id-and-docs]
+    (submit-docs-async id-and-docs this))
 
-  (fetch-docs [this ids]
+  (fetch-docs-async [_ _]
     (throw (UnsupportedOperationException. "Can't fetch docs from ingest-only Kafka document store"))))
 
 (defn ->ingest-only-document-store {::sys/deps {:kafka-config `->kafka-config

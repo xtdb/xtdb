@@ -1,20 +1,19 @@
 (ns crux.s3.checkpoint
-  (:require [crux.s3 :as s3]
-            [crux.checkpoint :as cp]
-            [clojure.string :as string]
+  (:require [clojure.edn :as edn]
             [clojure.java.io :as io]
-            [crux.tx :as tx]
+            [clojure.string :as string]
+            [crux.checkpoint :as cp]
             [crux.io :as cio]
-            [clojure.edn :as edn]
-            [clojure.set :as set]
-            [crux.system :as sys])
-  (:import (crux.s3 S3Configurator)
-           (clojure.lang MapEntry)
-           (java.io Closeable File)
-           (java.nio.file Path Paths)
-           (software.amazon.awssdk.core ResponseBytes)
-           (software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer)
-           (software.amazon.awssdk.services.s3 S3AsyncClient)))
+            [crux.s3 :as s3]
+            [crux.system :as sys]
+            [crux.tx :as tx])
+  (:import clojure.lang.MapEntry
+           crux.s3.S3Configurator
+           [java.io Closeable File]
+           java.nio.file.Paths
+           [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
+           software.amazon.awssdk.core.ResponseBytes
+           software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (defrecord CheckpointStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
   cp/CheckpointStore
@@ -28,7 +27,7 @@
                       [(Long/parseLong tx-id) checkpoint-at]))
                   #(compare %2 %1))
          (keep (fn [cp-metadata-path]
-                 (let [resp (some-> (s3/get-objects this {cp-metadata-path (AsyncResponseTransformer/toBytes)})
+                 (let [resp (some-> @(s3/get-objects-async this {cp-metadata-path (AsyncResponseTransformer/toBytes)})
                                     ^ResponseBytes (get cp-metadata-path)
                                     (.asUtf8String)
                                     (edn/read-string))]
@@ -41,12 +40,12 @@
 
     (let [s3-paths (->> (s3/list-objects this {:path s3-dir, :recursive? true})
                         (map second))
-          get-objs-resp (s3/get-objects this
-                                        (for [s3-path s3-paths]
-                                          (let [file (io/file dir (str (.relativize (Paths/get s3-dir (make-array String 0))
-                                                                                    (Paths/get s3-path (make-array String 0)))))]
-                                            (MapEntry/create s3-path
-                                                             (AsyncResponseTransformer/toFile (doto file (io/make-parents)))))))]
+          get-objs-resp @(s3/get-objects-async this
+                                               (for [s3-path s3-paths]
+                                                 (let [file (io/file dir (str (.relativize (Paths/get s3-dir (make-array String 0))
+                                                                                           (Paths/get s3-path (make-array String 0)))))]
+                                                   (MapEntry/create s3-path
+                                                                    (AsyncResponseTransformer/toFile (doto file (io/make-parents)))))))]
 
       (when-not (= (set (keys get-objs-resp)) (set s3-paths))
         (throw (ex-info "incomplete checkpoint restore" {:expected s3-paths
@@ -58,23 +57,23 @@
     (let [dir-path (.toPath ^File dir)
           cp-at (java.util.Date.)
           s3-dir (format "checkpoint-%s-%s" (::tx/tx-id tx) (cio/format-rfc3339-date cp-at))]
-      (->> (file-seq dir)
-           (into {} (keep (fn [^File file]
-                            (when (.isFile file)
-                              (MapEntry/create (str s3-dir "/" (.relativize dir-path (.toPath file)))
-                                               (AsyncRequestBody/fromFile file))))))
-           (s3/put-objects this))
+      @(->> (file-seq dir)
+            (into {} (keep (fn [^File file]
+                             (when (.isFile file)
+                               (MapEntry/create (str s3-dir "/" (.relativize dir-path (.toPath file)))
+                                                (AsyncRequestBody/fromFile file))))))
+            (s3/put-objects-async this))
 
       (let [cp {::cp/cp-format cp-format,
                 :tx tx
                 ::s3-dir (str s3-dir "/")
                 ::cp/checkpoint-at cp-at}]
-        (s3/put-objects this
-                        {(str s3-dir ".edn")
-                         (AsyncRequestBody/fromString (pr-str {::cp/cp-format cp-format,
-                                                               :tx tx
-                                                               ::s3-dir (str s3-dir "/")
-                                                               ::cp/checkpoint-at cp-at}))})
+        @(s3/put-objects-async this
+                               {(str s3-dir ".edn")
+                                (AsyncRequestBody/fromString (pr-str {::cp/cp-format cp-format,
+                                                                      :tx tx
+                                                                      ::s3-dir (str s3-dir "/")
+                                                                      ::cp/checkpoint-at cp-at}))})
         cp)))
 
   Closeable

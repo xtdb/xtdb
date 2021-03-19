@@ -11,16 +11,16 @@
         max-key (c/new-id {:crux.db/id :max, :name "Max"})
         people {alice-key alice, bob-key bob}]
 
-    (db/submit-docs doc-store people)
+    @(db/submit-docs-async doc-store people)
 
     (t/is (= {alice-key alice}
-             (db/fetch-docs doc-store #{alice-key})))
+             @(db/fetch-docs-async doc-store #{alice-key})))
 
     (t/is (= people
-             (db/fetch-docs doc-store (conj (keys people) max-key))))
+             @(db/fetch-docs-async doc-store (conj (keys people) max-key))))
 
     (let [evicted-alice {:crux.db/id :alice, :crux.db/evicted? true}]
-      (db/submit-docs doc-store {alice-key evicted-alice})
+      @(db/submit-docs-async doc-store {alice-key evicted-alice})
 
       (t/is (= {alice-key evicted-alice, bob-key bob}
-               (db/fetch-docs doc-store (keys people)))))))
+               @(db/fetch-docs-async doc-store (keys people)))))))

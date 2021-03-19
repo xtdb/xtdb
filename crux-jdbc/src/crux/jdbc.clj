@@ -1,5 +1,6 @@
 (ns crux.jdbc
   (:require [clojure.java.data :as jd]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [crux.codec :as c]
             [crux.db :as db]
@@ -10,12 +11,13 @@
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
-            [taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s])
-  (:import (com.zaxxer.hikari HikariDataSource HikariConfig)
-           java.util.Date
+            [taoensso.nippy :as nippy])
+  (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
-           java.sql.Timestamp))
+           java.sql.Timestamp
+           java.util.concurrent.CompletableFuture
+           java.util.Date
+           java.util.function.Supplier))
 
 (defprotocol Dialect
   (setup-schema! [_ pool])
@@ -88,28 +90,34 @@
 
 (defrecord JdbcDocumentStore [pool dialect]
   db/DocumentStore
-  (submit-docs [this id-and-docs]
-    (jdbc/with-transaction [tx pool]
-      (doseq [[id doc] id-and-docs
-              :let [id (str id)]]
-        (if (c/evicted-doc? doc)
-          (do
-            (insert-event! tx id doc "docs")
-            (evict-doc! tx id doc))
-          (if-not (doc-exists? tx id)
-            (insert-event! tx id doc "docs")
-            (update-doc! tx id doc))))))
+  (submit-docs-async [_ id-and-docs]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (jdbc/with-transaction [tx pool]
+           (doseq [[id doc] id-and-docs
+                   :let [id (str id)]]
+             (if (c/evicted-doc? doc)
+               (do
+                 (insert-event! tx id doc "docs")
+                 (evict-doc! tx id doc))
+               (if-not (doc-exists? tx id)
+                 (insert-event! tx id doc "docs")
+                 (update-doc! tx id doc)))))))))
 
-  (fetch-docs [this ids]
-    (cio/with-nippy-thaw-all
-      (->> (for [id-batch (partition-all 100 ids)
-                 row (jdbc/execute! pool (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s)"
-                                                        (->> (repeat (count id-batch) "?") (str/join ", ")))]
-                                               (map (comp str c/new-id) id-batch))
-                                    {:builder-fn jdbcr/as-unqualified-lower-maps})]
-             row)
-           (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(-> (:v %) (<-blob dialect))))
-           (into {})))))
+  (fetch-docs-async [_ ids]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (cio/with-nippy-thaw-all
+           (->> (for [id-batch (partition-all 100 ids)
+                      row (jdbc/execute! pool (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s)"
+                                                             (->> (repeat (count id-batch) "?") (str/join ", ")))]
+                                                    (map (comp str c/new-id) id-batch))
+                                         {:builder-fn jdbcr/as-unqualified-lower-maps})]
+                  row)
+                (map (juxt (comp c/new-id c/hex->id-buffer :event_key) #(-> (:v %) (<-blob dialect))))
+                (into {}))))))))
 
 (defn ->document-store {::sys/deps {:connection-pool `->connection-pool
                                     :document-cache 'crux.cache/->cache}}
@@ -121,10 +129,12 @@
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog
-  (submit-tx [this tx-events]
-    (let [tx (-> (insert-event! pool nil tx-events "txs")
-                 (tx-result->tx-data pool dialect))]
-      (delay tx)))
+  (submit-tx-async [_ tx-events]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (-> (insert-event! pool nil tx-events "txs")
+             (tx-result->tx-data pool dialect))))))
 
   (open-tx-log [this after-tx-id]
     (let [conn (jdbc/get-connection pool)

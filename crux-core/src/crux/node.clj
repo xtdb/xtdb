@@ -18,7 +18,8 @@
   (:import [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
-           java.util.concurrent.TimeoutException
+           [java.util.concurrent CompletableFuture ExecutionException TimeoutException]
+           [java.util.function Function Supplier]
            java.util.Date))
 
 (def crux-version
@@ -197,7 +198,10 @@
 
   api/PCruxIngestClient
   (submit-tx [this tx-ops]
-    @(api/submit-tx-async this tx-ops))
+    (try
+      @(api/submit-tx-async this tx-ops)
+      (catch ExecutionException e
+        (throw (.getCause e)))))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)]
@@ -214,7 +218,7 @@
                             (remove #(db/tx-failed? index-store (:crux.tx/tx-id %)))
                             (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
                             (map (if with-ops?
-                                   (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
+                                   (fn [{:keys [crux.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
                                          (dissoc :crux.tx.event/tx-events)
                                          (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
@@ -226,16 +230,21 @@
             (cio/->cursor (fn []
                             (.close tx-log-iterator))
                           tx-log))))))
-  api/PCruxAsyncIngestClient
-  (submit-tx-async [this tx-ops]
-    (let [tx-ops (api/conform-tx-ops tx-ops)
-          conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (cio/with-read-lock lock
-        (ensure-node-open this)
-        (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
-        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
-(defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
+  api/PCruxAsyncIngestClient
+  (submit-tx-async [_ tx-ops]
+    (-> (CompletableFuture/supplyAsync
+         (reify Supplier
+           (get [_]
+             (mapv txc/conform-tx-op (api/conform-tx-ops tx-ops)))))
+        (.thenCompose (reify Function
+                        (apply [_ conformed-tx-ops]
+                          (-> (db/submit-docs-async document-store (into {} (mapcat :docs) conformed-tx-ops))
+                              (.thenCompose (reify Function
+                                              (apply [_ _]
+                                                (db/submit-tx-async tx-log (mapv txc/->tx-event conformed-tx-ops))))))))))))
+
+(defmethod print-method CruxNode [_ ^Writer w] (.write w "#<CruxNode>"))
 (defmethod pp/simple-dispatch CruxNode [it] (print-method it *out*))
 
 (defn- swap-finished-query! [!running-queries {:keys [query-id] :as query} {:keys [bus] :as  node-opts}]

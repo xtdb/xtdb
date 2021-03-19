@@ -197,7 +197,7 @@
        (remove #{c/nil-id-buffer})))
 
 (defn tx-events->tx-ops [document-store tx-events]
-  (let [docs (db/fetch-docs document-store (tx-events->doc-hashes tx-events))]
+  (let [docs @(db/fetch-docs-async document-store (tx-events->doc-hashes tx-events))]
     (for [[op id & args] tx-events]
       (into [op]
             (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)

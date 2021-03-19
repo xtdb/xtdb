@@ -10,7 +10,8 @@
 
 (def test-s3-bucket
   (or (System/getProperty "crux.s3.test-bucket")
-      (System/getenv "CRUX_S3_TEST_BUCKET")))
+      (System/getenv "CRUX_S3_TEST_BUCKET")
+      "jms-crux-test"))
 
 (def test-s3-region
   (or (System/getProperty "crux.s3.test-region")

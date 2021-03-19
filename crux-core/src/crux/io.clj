@@ -17,7 +17,8 @@
            java.text.SimpleDateFormat
            java.time.Duration
            [java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties]
-           [java.util.concurrent ThreadFactory]
+           java.util.function.Supplier
+           [java.util.concurrent CompletableFuture CompletionException ExecutionException ThreadFactory]
            java.util.concurrent.locks.StampedLock))
 
 (s/def ::port (s/int-in 1 65536))
@@ -329,3 +330,14 @@
         result)
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc mallopt")))))
+
+(defn future->completable-future ^java.util.concurrent.CompletableFuture [fut]
+  (CompletableFuture/supplyAsync
+   (reify Supplier
+     (get [_]
+       (try
+         @fut
+         (catch ExecutionException e
+           (throw (CompletionException. (.getCause e))))
+         (catch InterruptedException _
+           (throw (CompletionException. "interrupted"))))))))
