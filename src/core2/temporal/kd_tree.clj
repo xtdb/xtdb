@@ -5,7 +5,7 @@
   (:import [java.io Closeable]
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             IdentityHashMap List Map Spliterator Spliterator$OfInt Spliterators]
-           [java.util.function Consumer Function IntConsumer Predicate ToLongFunction]
+           [java.util.function Consumer Function IntConsumer IntFunction Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot]
@@ -15,12 +15,6 @@
            core2.temporal.TemporalCoordinates))
 
 ;; TODO:
-
-;; Try having a FixedSizeList shared between nodes, using indexes.
-;; Rebuild and resort based on indexes in the list. Return indexes to
-;; the list instead of arrays. Adapt column version to do the same -
-;; most things are there.
-
 
 ;; Step 2:
 
@@ -69,10 +63,6 @@
   Closeable
   (close [_]
     (util/try-close point-vec)))
-
-(defn- leaf? [^Node node]
-  (and (nil? (.left node))
-       (nil? (.right node))))
 
 (defmacro ^:private next-axis [axis k]
   `(let [next-axis# (unchecked-inc-int ~axis)]
@@ -463,9 +453,12 @@
            (.right kd-tree)
            (.deleted? kd-tree))))
 
-(defn rebuild-node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree]
-  (->node-kd-tree allocator (map (partial kd-tree-array-point kd-tree)
-                                 (.toArray (StreamSupport/intStream ^Spliterator$OfInt (kd-tree-depth-first kd-tree) false)))))
+(defn rebuild-node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator kd-tree]
+  (->node-kd-tree allocator (-> (StreamSupport/intStream ^Spliterator$OfInt (kd-tree-depth-first kd-tree) false)
+                                (.mapToObj (reify IntFunction
+                                             (apply [_ x]
+                                               (kd-tree-array-point kd-tree x))))
+                                (.toArray))))
 
 (def ^:private ^:const point-vec-idx 3)
 
