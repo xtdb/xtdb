@@ -44,7 +44,6 @@
              :test {:dependencies [[clj-http "3.10.1"]
                                    [juxt/crux-test "crux-git-version"]
                                    [org.clojure/test.check "0.10.0"]
-                                   [com.bhauman/certifiable "0.0.7"]
 
                                    ;; dependency resolution
                                    [tigris "0.1.2"]
