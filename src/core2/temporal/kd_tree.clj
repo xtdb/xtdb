@@ -13,6 +13,14 @@
 
 ;; TODO:
 
+;; Try having a FixedSizeList shared between nodes, using indexes.
+;; Rebuild and resort based on indexes in the list. Return indexes to
+;; the list instead of arrays.  Adapt column version to do the same -
+;; most things are there.
+
+;; Try JDK 16 vector incubator to do compares when walking the tree.
+
+
 ;; Step 2:
 
 ;; Later, we can merge older chunks, either when registering new ones,
