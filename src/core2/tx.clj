@@ -10,5 +10,6 @@
   Closeable
   (close [_]
     (when (zero? (util/dec-ref-count ref-count))
+      (util/try-close temporal-watermark)
       (doseq [root (vals column->root)]
         (util/try-close root)))))

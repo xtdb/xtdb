@@ -5,7 +5,8 @@
            [java.util.function Predicate]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory RootAllocator]
-           [org.apache.arrow.vector VectorSchemaRoot]))
+           [org.apache.arrow.vector VectorSchemaRoot]
+           core2.temporal.kd_tree.Node))
 
 ;; TODO: move to JMH.
 (t/deftest ^:integration kd-tree-micro-bench
@@ -41,11 +42,12 @@
                                            (.count)))))
 
         (prn :build-node-kd-tree-insert ns)
-        (let [kd-tree (time
-                       (reduce
-                        kd/kd-tree-insert
-                        nil
-                        points))]
+        (with-open [^Node kd-tree (time
+                                   (reduce
+                                    (fn [acc point]
+                                      (kd/kd-tree-insert acc allocator point))
+                                    nil
+                                    points))]
 
           (prn :range-queries-node-kd-tree-insert qs)
           (dotimes [_ ts]
@@ -53,13 +55,13 @@
              (doseq [[query-id min-range max-range] queries]
                (t/is (= (.get query->count query-id)
                         (-> (kd/kd-tree-range-search kd-tree min-range max-range)
-                            (StreamSupport/stream false)
+                            (StreamSupport/intStream false)
                             (.count))))))))
 
 
         (prn :build-node-kd-tree-bulk ns)
-        (let [kd-tree (time
-                       (kd/->node-kd-tree points))]
+        (with-open [^Node kd-tree (time
+                                   (kd/->node-kd-tree allocator points))]
 
           (prn :range-queries-node-kd-tree-bulk qs)
           (dotimes [_ ts]
@@ -67,7 +69,7 @@
              (doseq [[query-id min-range max-range] queries]
                (t/is (= (.get query->count query-id)
                         (-> (kd/kd-tree-range-search kd-tree min-range max-range)
-                            (StreamSupport/stream false)
+                            (StreamSupport/intStream false)
                             (.count)))))))
 
           (prn :build-column-kd-tree ns)
@@ -79,7 +81,7 @@
                (doseq [[query-id min-range max-range] queries]
                  (t/is (= (.get query->count query-id)
                           (-> (kd/kd-tree-range-search column-kd-tree min-range max-range)
-                              (StreamSupport/stream false)
+                              (StreamSupport/intStream false)
                               (.count)))))))
 
             (let [_ (prn :node-kd-tree->seq)

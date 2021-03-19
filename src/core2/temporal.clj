@@ -18,7 +18,7 @@
            org.roaringbitmap.longlong.Roaring64Bitmap
            java.nio.ByteBuffer
            [java.util Arrays Comparator Date List Map HashMap SortedMap SortedSet Spliterator Spliterators TreeMap]
-           [java.util.function Consumer Function LongConsumer Predicate ToLongFunction]
+           [java.util.function Consumer Function IntFunction LongConsumer Predicate ToLongFunction]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.locks.StampedLock
            java.util.concurrent.atomic.AtomicLong
@@ -179,7 +179,7 @@
           (.forEachRemaining temporal-chunks
                              (reify Consumer
                                (accept [_ temporal-root]
-                                 (swap! acc kd/merge-kd-trees temporal-root)))))
+                                 (swap! acc #(kd/merge-kd-trees allocator % temporal-root))))))
         (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
                     id-chunks (util/->chunks id-buffer allocator)]
           (.forEachRemaining id-chunks
@@ -193,7 +193,7 @@
 
   ITemporalManager
   (getTemporalWatermark [_]
-    kd-tree)
+    (some->> kd-tree (kd/retain-node-kd-tree allocator)))
 
   (getInternalId [_ id]
     (.computeIfAbsent id->internal-id
@@ -208,8 +208,11 @@
     (let [temporal-buf (with-open [^VectorSchemaRoot temporal-root (kd/->column-kd-tree allocator chunk-kd-tree k)]
                          (util/root->arrow-ipc-byte-buffer temporal-root :file))]
       @(.putObject object-store (->temporal-obj-key chunk-idx) temporal-buf)
-      (set! (.chunk-kd-tree this) nil)
-      (set! (.kd-tree this) (kd/rebuild-node-kd-tree kd-tree))))
+      (util/try-close chunk-kd-tree)
+      (set! (.chunk-kd-tree this) nil))
+    (when kd-tree
+      (with-open [^Closeable old-kd-tree kd-tree]
+        (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator old-kd-tree)))))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
@@ -218,7 +221,7 @@
           update-kd-tree-fn (fn [kd-tree]
                               (reduce
                                (fn [kd-tree coordinates]
-                                 (insert-coordinates kd-tree id->long-id-fn coordinates))
+                                 (insert-coordinates kd-tree allocator id->long-id-fn coordinates))
                                kd-tree
                                (vals row-id->temporal-coordinates)))]
       (set! (.chunk-kd-tree this) (update-kd-tree-fn chunk-kd-tree))
@@ -228,7 +231,10 @@
     (let [kd-tree (.temporal-watermark watermark)
           row-id-bitmap-out (Roaring64Bitmap.)
           roots (HashMap.)
-          coordinates (StreamSupport/stream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)]
+          coordinates (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
+                          (.mapToObj (reify IntFunction
+                                       (apply [_ x]
+                                         (kd/kd-tree-array-point kd-tree x)))))]
       (if (empty? columns)
         (.forEach coordinates
                   (reify Consumer
@@ -267,7 +273,10 @@
 
   Closeable
   (close [this]
+    (util/try-close kd-tree)
     (set! (.kd-tree this) nil)
+    (util/try-close chunk-kd-tree)
+    (set! (.chunk-kd-tree this) nil)
     (.clear id->internal-id)))
 
 (defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
@@ -276,8 +285,6 @@
                                                            ^IMetadataManager metadata-manager]
   (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil nil)
     (.populateKnownChunks)))
-
-;; Bitemporal Spike, this will turn into the temporal manager.
 
 (defn ->min-range ^longs []
   (long-array k Long/MIN_VALUE))
@@ -288,7 +295,7 @@
 (defn ->copy-range ^longs [^longs range]
   (some-> range (Arrays/copyOf (alength range))))
 
-(defn insert-coordinates [kd-tree ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
+(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
   (let [id (.applyAsLong id->internal-id (.id coordinates))
         row-id (.rowId coordinates)
         tt-start-ms (.txTime coordinates)
@@ -303,16 +310,24 @@
                     (aset id-idx id)
                     (aset valid-time-idx (dec vt-end-ms))
                     (aset tx-time-end-idx end-of-time-ms))
-        overlap (-> ^Spliterator (kd/kd-tree-range-search
-                                  kd-tree
-                                  min-range
-                                  max-range)
-                    (StreamSupport/stream false)
+        overlap (-> ^Spliterator$OfInt (kd/kd-tree-range-search
+                                        kd-tree
+                                        min-range
+                                        max-range)
+                    (StreamSupport/intStream false)
+                    (.mapToObj (reify IntFunction
+                                 (apply [_ x]
+                                   (kd/kd-tree-array-point kd-tree x))))
                     (.toArray))
-        kd-tree (reduce kd/kd-tree-delete kd-tree overlap)
+        kd-tree (reduce
+                 (fn [kd-tree ^longs point]
+                   (kd/kd-tree-delete kd-tree allocator (->copy-range point)))
+                 kd-tree
+                 overlap)
         kd-tree (cond-> kd-tree
                   (not (.tombstone coordinates))
-                  (kd/kd-tree-insert (doto (long-array k)
+                  (kd/kd-tree-insert allocator
+                                     (doto (long-array k)
                                        (aset id-idx id)
                                        (aset row-id-idx row-id)
                                        (aset valid-time-idx vt-start-ms)
@@ -321,16 +336,16 @@
                                        (aset tx-time-end-idx end-of-time-ms))))]
     (reduce
      (fn [kd-tree ^longs coord]
-       (cond-> (kd/kd-tree-insert kd-tree (doto (->copy-range coord)
-                                            (aset tx-time-end-idx tt-start-ms)))
+       (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
+                                                      (aset tx-time-end-idx tt-start-ms)))
          (< (aget coord valid-time-idx) vt-start-ms)
-         (kd/kd-tree-insert (doto (->copy-range coord)
-                              (aset tx-time-idx tt-start-ms)
-                              (aset valid-time-end-idx vt-start-ms)))
+         (kd/kd-tree-insert allocator (doto (->copy-range coord)
+                                        (aset tx-time-idx tt-start-ms)
+                                        (aset valid-time-end-idx vt-start-ms)))
 
          (> (aget coord valid-time-end-idx) vt-end-ms)
-         (kd/kd-tree-insert (doto (->copy-range coord)
-                              (aset tx-time-idx tt-start-ms)
-                              (aset valid-time-idx vt-end-ms)))))
+         (kd/kd-tree-insert allocator (doto (->copy-range coord)
+                                        (aset tx-time-idx tt-start-ms)
+                                        (aset valid-time-idx vt-end-ms)))))
      kd-tree
      overlap)))

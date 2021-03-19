@@ -128,7 +128,8 @@
                     (Text. "device-info-demo000001") 3
                     (Text. "reading-demo000001") 4}
                    (.id->internal-id tm)))
-          (t/is (= 4 (count (kd/kd-tree->seq (.getTemporalWatermark tm))))))
+          (with-open [watermark (c2/open-watermark node)]
+            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
         (tu/finish-chunk node)
 
@@ -415,8 +416,9 @@
                               (.tx-id (c2/latest-completed-tx node))
                               (.tx-id second-half-tx-instant)))
 
-                    (t/is (>= (count (kd/kd-tree->seq (.getTemporalWatermark tm))) 3500))
-                    (t/is (>= (count (.id->internal-id tm)) 2000)))
+                    (with-open [watermark (c2/open-watermark node)]
+                      (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark watermark))) 3500))
+                      (t/is (>= (count (.id->internal-id tm)) 2000))))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-instant (c2/await-tx node second-half-tx-instant (Duration/ofSeconds 5))))

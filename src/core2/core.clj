@@ -36,6 +36,7 @@
     (util/try-close ingest-loop)
     (util/try-close indexer)
     (util/try-close metadata-manager)
+    (util/try-close temporal-manager)
     (util/try-close buffer-pool)
     (util/try-close object-store)
     (util/try-close log-reader)

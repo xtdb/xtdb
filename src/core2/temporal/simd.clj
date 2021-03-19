@@ -26,8 +26,7 @@
          element-start-idx# (.getElementStartIndex ~point-vec ~idx)]
      (dotimes [n# k#]
        (aset point# n# (.get ~coordinates-vec (+ element-start-idx# n#))))
-     (when (in-range? ~min-range point# ~max-range)
-       point#)))
+     (in-range? ~min-range point# ~max-range)))
 
 ;; Disabled for now, see above
 

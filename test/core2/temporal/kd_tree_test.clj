@@ -2,11 +2,13 @@
   (:require [clojure.test :as t]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
-  (:import [java.util Collection Date HashMap]
+  (:import [java.util Collection Date HashMap List]
            [java.util.function Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory RootAllocator]
-           [org.apache.arrow.vector VectorSchemaRoot]))
+           [org.apache.arrow.vector VectorSchemaRoot]
+           [org.apache.arrow.vector.complex FixedSizeListVector]
+           core2.temporal.kd_tree.Node))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
 ;; chapter 10 "Bitemporal Tables".
@@ -14,14 +16,14 @@
 ;; Uses transaction time splitting, so some rectangles differ, but
 ;; areas covered are the same. Could or maybe should coalesce.
 
-(defn- ->row-map [^longs point]
+(defn- ->row-map [^List point]
   (zipmap [:id :row-id :vt-start :vt-end :tt-start :tt-end]
-          [(aget point temporal/id-idx)
-           (aget point temporal/row-id-idx)
-           (Date. (aget point temporal/valid-time-idx))
-           (Date. (aget point temporal/valid-time-end-idx))
-           (Date. (aget point temporal/tx-time-idx))
-           (Date. (aget point temporal/tx-time-end-idx))]))
+          [(.get point temporal/id-idx)
+           (.get point temporal/row-id-idx)
+           (Date. ^long (.get point temporal/valid-time-idx))
+           (Date. ^long (.get point temporal/valid-time-end-idx))
+           (Date. ^long (.get point temporal/tx-time-idx))
+           (Date. ^long (.get point temporal/tx-time-end-idx))]))
 
 (defn- temporal-rows [kd-tree row-id->row]
   (vec (for [{:keys [row-id] :as row} (->> (map ->row-map (kd/kd-tree->seq kd-tree))
@@ -39,10 +41,13 @@
     ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
     ;; 1998.
-    (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
-                                               (temporal/->coordinates {:id 7797
-                                                                        :row-id 1
-                                                                        :tt-start #inst "1998-01-10"}))]
+    (with-open [allocator (RootAllocator.)
+                ^Node kd-tree (temporal/insert-coordinates kd-tree
+                                                           allocator
+                                                           id->internal-id
+                                                           (temporal/->coordinates {:id 7797
+                                                                                    :row-id 1
+                                                                                    :tt-start #inst "1998-01-10"}))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
@@ -55,7 +60,9 @@
 
       ;; Current Update
       ;; Peter Olsen buys the flat on January 15, 1998.
-      (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+      (let [kd-tree (temporal/insert-coordinates kd-tree
+                                                 allocator
+                                                 id->internal-id
                                                  (temporal/->coordinates {:id 7797
                                                                           :row-id 2
                                                                           :tt-start #inst "1998-01-15"}))]
@@ -85,7 +92,9 @@
 
         ;; Current Delete
         ;; Peter Olsen sells the flat on January 20, 1998.
-        (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+        (let [kd-tree (temporal/insert-coordinates kd-tree
+                                                   allocator
+                                                   id->internal-id
                                                    (temporal/->coordinates {:id 7797
                                                                             :row-id 3
                                                                             :tt-start #inst "1998-01-20"
@@ -123,7 +132,9 @@
 
           ;; Sequenced Insert
           ;; Eva actually purchased the flat on January 3, performed on January 23.
-          (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+          (let [kd-tree (temporal/insert-coordinates kd-tree
+                                                     allocator
+                                                     id->internal-id
                                                      (temporal/->coordinates {:id 7797
                                                                               :row-id 4
                                                                               :tt-start #inst "1998-01-23"
@@ -170,7 +181,9 @@
             ;; NOTE: rows differs from book, but covered area is the same.
             ;; Sequenced Delete
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
-            (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+            (let [kd-tree (temporal/insert-coordinates kd-tree
+                                                       allocator
+                                                       id->internal-id
                                                        (temporal/->coordinates {:id 7797
                                                                                 :row-id 5
                                                                                 :tt-start #inst "1998-01-26"
@@ -225,7 +238,9 @@
               ;; NOTE: rows differs from book, but covered area is the same.
               ;; Sequenced Update
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
-              (let [kd-tree (temporal/insert-coordinates kd-tree id->internal-id
+              (let [kd-tree (temporal/insert-coordinates kd-tree
+                                                         allocator
+                                                         id->internal-id
                                                          (temporal/->coordinates {:id 7797
                                                                                   :row-id 6
                                                                                   :tt-start #inst "1998-01-28"
@@ -292,52 +307,68 @@
 
                       (t/testing "rebuilding tree results in tree with same points"
                         (let [points (mapv vec (kd/kd-tree->seq kd-tree))]
-                          (t/is (= (sort points)
-                                   (sort (mapv vec (kd/kd-tree->seq (kd/->node-kd-tree (shuffle points)))))))
-                          (t/is (= (sort points)
-                                   (sort (mapv vec (kd/kd-tree->seq (reduce kd/kd-tree-insert nil (shuffle points))))))))))))))))))
+                          (with-open [new-tree (kd/->node-kd-tree allocator (shuffle points))
+                                      ^Node rebuilt-tree (reduce (fn [acc point]
+                                                                   (kd/kd-tree-insert acc allocator point)) nil (shuffle points))]
+                            (t/is (= (sort points)
+                                     (sort (mapv vec (kd/kd-tree->seq new-tree)))))
+                            (t/is (= (sort points)
+                                     (sort (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
-  (let [kd-tree (kd/->node-kd-tree [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])]
-    (with-open [allocator (RootAllocator.)
-                ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
-      (t/is (= (-> kd-tree
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/stream false)
-                   (.toArray)
-                   (->> (mapv vec)))
+  (with-open [allocator (RootAllocator.)
+              kd-tree (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
+              ^Node bulk-kd-tree (reduce
+                                  (fn [acc point]
+                                    (kd/kd-tree-insert acc allocator point))
+                                  nil
+                                  [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
+              ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
+    (t/is (= (-> kd-tree
+                 (kd/kd-tree-range-search [0 0] [8 4])
+                 (StreamSupport/intStream false)
+                 (.toArray)
+                 (->> (mapv (partial kd/kd-tree-point kd-tree))))
 
-               (-> (reduce
-                    kd/kd-tree-insert
-                    nil
-                    [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/stream false)
-                   (.toArray)
-                   (->> (mapv vec)))
+             (-> bulk-kd-tree
+                 (kd/kd-tree-range-search [0 0] [8 4])
+                 (StreamSupport/intStream false)
+                 (.toArray)
+                 (->> (mapv (partial kd/kd-tree-point bulk-kd-tree))))
 
-               (-> column-kd-tree
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/stream false)
-                   (.toArray)
-                   (->> (mapv vec))))
-            "wikipedia-test")
+             (-> column-kd-tree
+                 (kd/kd-tree-range-search [0 0] [8 4])
+                 (StreamSupport/intStream false)
+                 (.toArray)
+                 (->> (mapv (partial kd/kd-tree-point column-kd-tree)))))
+          "wikipedia-test")
 
-      (t/testing "seq"
-        (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
-                 (mapv vec (kd/kd-tree->seq column-kd-tree)))))
+    (t/testing "seq"
+      (t/is (= (kd/kd-tree->seq kd-tree)
+               (kd/kd-tree->seq column-kd-tree))))
 
-      (t/testing "merge"
+    (t/testing "empty tree"
+      (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
+        (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
+
+      (t/is (nil? (kd/->node-kd-tree allocator [])))
+
+      (with-open [^Node kd-tree (kd/kd-tree-insert nil allocator [1 2])]
+        (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
+
+      (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
+        (t/is (empty? (kd/kd-tree->seq kd-tree)))))
+
+    (t/testing "merge"
+      (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]
         (let [node-to-delete [2 1]
-              new-tree-with-tombstone (kd/kd-tree-delete
-                                       (kd/->node-kd-tree [[4 7] [8 1] [2 3]])
-                                       node-to-delete)
-              old-tree-with-node-to-be-deleted (kd/->node-kd-tree [[7 2] [5 4] [9 6] node-to-delete])]
-          (with-open [^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
+              ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
+          (with-open [old-tree-with-node-to-be-deleted (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
+                      ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
                                                                             new-tree-with-tombstone
-                                                                            2)]
-            (let [merged-tree (kd/merge-kd-trees old-tree-with-node-to-be-deleted column-kd-tree)
-                  rebuilt-tree (kd/rebuild-node-kd-tree merged-tree)]
-              (t/is (= (mapv vec (kd/kd-tree->seq kd-tree))
-                       (mapv vec (kd/kd-tree->seq merged-tree))
-                       (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))
+                                                                            2)
+                      merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
+                      rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
+            (t/is (= (kd/kd-tree->seq kd-tree)
+                     (kd/kd-tree->seq merged-tree)
+                     (kd/kd-tree->seq rebuilt-tree)))))))))

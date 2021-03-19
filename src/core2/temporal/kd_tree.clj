@@ -1,9 +1,11 @@
 (ns core2.temporal.kd-tree
   (:require [core2.types :as t]
+            [core2.util :as util]
             [clojure.tools.logging :as log])
-  (:import [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
-            IdentityHashMap List Map Spliterator Spliterators]
-           [java.util.function Consumer Function Predicate ToLongFunction]
+  (:import [java.io Closeable]
+           [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
+            IdentityHashMap List Map Spliterator Spliterator$OfInt Spliterators]
+           [java.util.function Consumer Function IntConsumer Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot]
@@ -16,7 +18,7 @@
 
 ;; Try having a FixedSizeList shared between nodes, using indexes.
 ;; Rebuild and resort based on indexes in the list. Return indexes to
-;; the list instead of arrays.  Adapt column version to do the same -
+;; the list instead of arrays. Adapt column version to do the same -
 ;; most things are there.
 
 
@@ -57,12 +59,16 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol KdTree
-  (kd-tree-insert [_ point])
-  (kd-tree-delete [_ point])
+  (kd-tree-insert [_ allocator point])
+  (kd-tree-delete [_ allocator point])
   (kd-tree-range-search [_ min-range max-range])
-  (kd-tree-depth-first [_]))
+  (kd-tree-depth-first [_])
+  (kd-tree-point-vec [_]))
 
-(defrecord Node [^longs point left right deleted?])
+(deftype Node [^FixedSizeListVector point-vec ^int point-idx left right ^boolean deleted?]
+  Closeable
+  (close [_]
+    (util/try-close point-vec)))
 
 (defn- leaf? [^Node node]
   (and (nil? (.left node))
@@ -87,16 +93,15 @@
 
 (defmacro ^:private in-range-column? [min-range point-vec coordinates-vec idx max-range]
   `(let [k# (alength ~min-range)
-         point# (long-array k#)
          element-start-idx# (.getElementStartIndex ~point-vec ~idx)]
      (loop [n# (int 0)]
        (if (= n# k#)
-         point#
+         true
          (let [x# (.get ~coordinates-vec (+ element-start-idx# n#))]
-           (when (and (<= (aget ~min-range n#) x#)
-                      (<= x# (aget ~max-range n#)))
-             (aset point# n# x#)
-             (recur (inc n#))))))))
+           (if (and (<= (aget ~min-range n#) x#)
+                    (<= x# (aget ~max-range n#)))
+             (recur (inc n#))
+             false))))))
 
 (defn- try-enable-simd []
   (try
@@ -116,19 +121,20 @@
     xs
     (long-array xs)))
 
+(declare ->node-kd-tree)
+
 (extend-protocol KdTree
   nil
-  (kd-tree-insert [_ point]
-    (Node. (->longs point) nil nil false))
-  (kd-tree-delete [_ point]
-    (Node. (->longs point) nil nil true))
+  (kd-tree-insert [_ allocator point]
+    (->node-kd-tree allocator [point]))
+  (kd-tree-delete [_ allocator point]
+    (-> (kd-tree-insert nil allocator point)
+        (kd-tree-delete allocator point)))
   (kd-tree-range-search [_ _ _]
-    (Spliterators/emptySpliterator))
+    (Spliterators/emptyIntSpliterator))
   (kd-tree-depth-first [_]
-    (Spliterators/emptySpliterator)))
-
-(def ^:private ^Class objects-class
-  (Class/forName "[Ljava.lang.Object;"))
+    (Spliterators/emptyIntSpliterator))
+  (kd-tree-point-vec [_]))
 
 (defn- find-median-index ^long [^objects points ^long start ^long end ^long axis]
   (let [median (quot (+ start end) 2)
@@ -142,6 +148,9 @@
             (recur prev-idx)
             idx))))))
 
+(def ^:private ^Class objects-class
+  (Class/forName "[Ljava.lang.Object;"))
+
 (defn- ensure-points-array ^objects [points]
   (let [^objects points (if (instance? objects-class points)
                           points
@@ -152,47 +161,77 @@
           (aset points idx (->longs point)))))
     points))
 
-(defn ->node-kd-tree ^core2.temporal.kd_tree.Node [points]
+(defn- write-point ^long [^FixedSizeListVector point-vec ^longs point]
+  (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+        idx (.getValueCount point-vec)
+        list-idx (.startNewValue point-vec idx)]
+    (dotimes [n (alength point)]
+      (.setSafe coordinates-vec (+ list-idx n) (aget point n)))
+    (.setValueCount point-vec (inc idx))
+    idx))
+
+(defn- ->point-field ^org.apache.arrow.vector.types.pojo.Field [^long k]
+  (t/->field "point" (ArrowType$FixedSizeList. k) false
+             (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
+
+(defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
   (when (not-empty points)
     (let [^objects points (ensure-points-array points)
           n (alength points)
-          k (count (aget points 0))]
-      ((fn step [^long start ^long end ^long axis]
-         (if (= (inc start) end)
-           (Node. (aget points start) nil nil false)
-           (do (Arrays/sort points start end (Comparator/comparingLong
-                                              (reify ToLongFunction
-                                                (applyAsLong [_ x]
-                                                  (aget ^longs x axis)))))
-               (let [median (find-median-index points start end axis)
-                     axis (next-axis axis k)]
-                 (Node. (aget points median)
-                        (when (< start median)
-                          (step start median axis))
-                        (when (< (inc median) end)
-                          (step (inc median) end axis))
-                        false)))))
-       0 (alength points) 0))))
+          k (count (aget points 0))
+          point-vec (.createVector ^Field (->point-field k) allocator)]
+      (try
+        ((fn step [^long start ^long end ^long axis]
+           (if (= (inc start) end)
+             (let [point (aget points start)
+                   idx (write-point point-vec point)]
+               (Node. point-vec idx nil nil false))
+             (do (Arrays/sort points start end (Comparator/comparingLong
+                                                (reify ToLongFunction
+                                                  (applyAsLong [_ x]
+                                                    (aget ^longs x axis)))))
+                 (let [median (find-median-index points start end axis)
+                       axis (next-axis axis k)
+                       point (aget points median)
+                       idx (write-point point-vec point)]
+                   (Node. point-vec
+                          idx
+                          (when (< start median)
+                            (step start median axis))
+                          (when (< (inc median) end)
+                            (step (inc median) end axis))
+                          false)))))
+         0 (alength points) 0)
+        (catch Throwable t
+          (util/try-close point-vec)
+          (throw t))))))
 
-(defn kd-tree->seq [kd-tree]
-  (iterator-seq (Spliterators/iterator ^Spliterator (kd-tree-depth-first kd-tree))))
-
-(defn rebuild-node-kd-tree [^Node kd-tree]
-  (->node-kd-tree (.toArray (StreamSupport/stream ^Spliterator (kd-tree-depth-first kd-tree) false))))
+(defmacro ^:private point-equals-list-element [point coordinates-vec element-start-idx k]
+  `(loop [n# 0]
+     (if (= n# ~k)
+       true
+       (if (= (.get ~coordinates-vec (+ ~element-start-idx n#)) (aget ~point n#))
+         (recur (inc n#))
+         false))))
 
 (deftype NodeStackEntry [^Node node ^int axis])
 
-(deftype NodeRangeSearchSpliterator [^longs min-range ^longs max-range ^int k ^Deque stack]
-  Spliterator
-  (forEachRemaining [_ c]
+(deftype NodeRangeSearchSpliterator [^FixedSizeListVector point-vec
+                                     ^BigIntVector coordinates-vec
+                                     ^longs min-range
+                                     ^longs max-range
+                                     ^int k
+                                     ^Deque stack]
+  Spliterator$OfInt
+  (^void forEachRemaining [_ ^IntConsumer c]
     (loop []
       (when-let [^NodeStackEntry entry (.poll stack)]
         (loop [^Node node (.node entry)
                axis (.axis entry)]
-          (let [^longs point (.point node)
-                left (.left node)
+          (let [left (.left node)
                 right (.right node)
-                point-axis (aget point axis)
+                point-idx (.point-idx node)
+                point-axis (.get coordinates-vec (+ (.getElementStartIndex point-vec point-idx) axis))
                 min-axis (aget min-range axis)
                 max-axis (aget max-range axis)
                 min-match? (< min-axis point-axis)
@@ -203,8 +242,8 @@
 
             (when (and (or min-match? max-match?)
                        (not (.deleted? node))
-                       (in-range? min-range point max-range))
-              (.accept c point))
+                       (in-range-column? min-range point-vec coordinates-vec point-idx max-range))
+              (.accept c point-idx))
 
             (cond
               (and visit-left? (not visit-right?))
@@ -221,15 +260,15 @@
                     (recur left axis))))))
         (recur))))
 
-  (tryAdvance [_ c]
+  (^boolean tryAdvance [_ ^IntConsumer c]
     (loop []
       (if-let [^NodeStackEntry entry (.poll stack)]
         (let [^Node node (.node entry)
               axis (.axis entry)
-              ^longs point (.point node)
+              point-idx (.point-idx node)
+              point-axis (.get coordinates-vec (+ (.getElementStartIndex point-vec point-idx) axis))
               left (.left node)
               right (.right node)
-              point-axis (aget point axis)
               min-axis (aget min-range axis)
               max-axis (aget max-range axis)
               min-match? (< min-axis point-axis)
@@ -246,8 +285,8 @@
 
           (if (and (or min-match? max-match?)
                    (not (.deleted? node))
-                   (in-range? min-range point max-range))
-            (do (.accept c point)
+                   (in-range-column? min-range point-vec coordinates-vec point-idx max-range))
+            (do (.accept c point-idx)
                 true)
             (recur)))
         false)))
@@ -264,11 +303,11 @@
         (let [split-stack (ArrayDeque.)]
           (while (not= split-size (.size split-stack))
             (.push split-stack (.poll stack)))
-          (NodeRangeSearchSpliterator. min-range max-range k split-stack))))))
+          (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k split-stack))))))
 
 (deftype NodeDepthFirstSpliterator [^int k ^Deque stack]
-  Spliterator
-  (forEachRemaining [_ c]
+  Spliterator$OfInt
+  (^void forEachRemaining [_ ^IntConsumer c]
     (loop []
       (when-let [^NodeStackEntry entry (.poll stack)]
         (loop [^Node node (.node entry)
@@ -278,7 +317,7 @@
                right (.right node)]
 
            (when-not (.deleted? node)
-             (.accept c (.point node)))
+             (.accept c (.point-idx node)))
 
            (cond
              (and left (nil? right))
@@ -294,7 +333,7 @@
                    (recur left axis))))))
         (recur))))
 
-  (tryAdvance [_ c]
+  (^boolean tryAdvance [_ ^IntConsumer c]
     (loop []
       (if-let [^NodeStackEntry entry (.poll stack)]
         (let [^Node node (.node entry)
@@ -306,7 +345,7 @@
             (.push stack (NodeStackEntry. left axis)))
 
           (if-not (.deleted? node)
-            (do (.accept c (.point node))
+            (do (.accept c (.point-idx node))
                 true)
             (recur)))
         false)))
@@ -327,97 +366,151 @@
 
 (extend-protocol KdTree
   Node
-  (kd-tree-insert [kd-tree point]
+  (kd-tree-insert [kd-tree allocator point]
     (let [point (->longs point)
-          k (alength point)]
+          ^FixedSizeListVector point-vec (.point-vec kd-tree)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)]
       (loop [axis 0
              node kd-tree
              build-fn identity]
         (if-not node
-          (build-fn (Node. point nil nil false))
-          (let [^longs node-point (.point node)
-                point-axis (aget node-point axis)]
+          (let [point-idx (write-point point-vec point)]
+            (build-fn (Node. point-vec point-idx nil nil false)))
+          (let [element-start-idx (.getElementStartIndex point-vec (.point-idx node))
+                point-axis (.get coordinates-vec (+ element-start-idx axis))]
             (cond
-              (Arrays/equals point node-point)
-              (build-fn (assoc node :deleted? false))
+              (point-equals-list-element point coordinates-vec element-start-idx k)
+              (build-fn (Node. point-vec (.point-idx node) (.left node) (.right node) false))
 
               (< (aget point axis) point-axis)
-              (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
+              (recur (next-axis axis k)
+                     (.left node)
+                     (fn [left]
+                       (build-fn (Node. point-vec (.point-idx node) left (.right node) (.deleted? node)))))
 
               :else
-              (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
+              (recur (next-axis axis k)
+                     (.right node)
+                     (fn [right]
+                       (build-fn (Node. point-vec (.point-idx node) (.left node) right (.deleted? node)))))))))))
 
-  (kd-tree-delete [kd-tree point]
+  (kd-tree-delete [kd-tree allocator point]
     (let [point (->longs point)
-          k (alength point)]
+          ^FixedSizeListVector point-vec (.point-vec kd-tree)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)]
       (loop [axis 0
              node kd-tree
              build-fn identity]
         (if-not node
-          (build-fn (Node. point nil nil true))
-          (let [^longs node-point (.point node)
-                point-axis (aget node-point axis)]
+          (let [point-idx (write-point point-vec point)]
+            (build-fn (Node. point-vec point-idx nil nil true)))
+          (let [element-start-idx (.getElementStartIndex point-vec (.point-idx node))
+                point-axis (.get coordinates-vec (+ element-start-idx axis))]
             (cond
-              (Arrays/equals point node-point)
-              (build-fn (when-not (leaf? node)
-                          (assoc node :deleted? true)))
+              (point-equals-list-element point coordinates-vec element-start-idx k)
+              (build-fn (Node. point-vec (.point-idx node) (.left node) (.right node) true))
 
               (< (aget point axis) point-axis)
-              (recur (next-axis axis k) (.left node) (comp build-fn (partial assoc node :left)))
+              (recur (next-axis axis k)
+                     (.left node)
+                     (fn [left]
+                       (build-fn (Node. point-vec (.point-idx node) left (.right node) (.deleted? node)))))
 
               :else
-              (recur (next-axis axis k) (.right node) (comp build-fn (partial assoc node :right)))))))))
+              (recur (next-axis axis k)
+                     (.right node)
+                     (fn [right]
+                       (build-fn (Node. point-vec (.point-idx node) (.left node) right (.deleted? node)))))))))))
 
   (kd-tree-range-search [kd-tree min-range max-range]
     (let [min-range (->longs min-range)
           max-range (->longs max-range)
-          k (count (some-> kd-tree (.point)))
+          ^FixedSizeListVector point-vec (.point-vec kd-tree)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)
           stack (doto (ArrayDeque.)
                   (.push (NodeStackEntry. kd-tree 0)))]
-      (->NodeRangeSearchSpliterator min-range max-range k stack)))
+      (->NodeRangeSearchSpliterator point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
-    (let [k (count (some-> kd-tree (.point)))
+    (let [k (.getListSize ^FixedSizeListVector (.point-vec kd-tree))
           stack (doto (ArrayDeque.)
                   (.push (NodeStackEntry. kd-tree 0)))]
-      (->NodeDepthFirstSpliterator k stack))))
+      (->NodeDepthFirstSpliterator k stack)))
+
+  (kd-tree-point-vec [this]
+    (.point-vec this)))
+
+(defn kd-tree-point ^java.util.List [kd-tree ^long idx]
+  (.getObject ^FixedSizeListVector (kd-tree-point-vec kd-tree) idx))
+
+(defn kd-tree-array-point ^longs [kd-tree ^long idx]
+  (let [^FixedSizeListVector point-vec (kd-tree-point-vec kd-tree)
+        ^BigIntVector coordinates-vec (.getDataVector point-vec)
+        k (.getListSize point-vec)
+        point (long-array k)
+        element-start-idx (.getElementStartIndex point-vec idx)]
+    (dotimes [n k]
+      (aset point n (.get coordinates-vec (+ element-start-idx n))))
+    point))
+
+(defn kd-tree->seq [kd-tree]
+  (->> (iterator-seq (Spliterators/iterator ^Spliterator$OfInt (kd-tree-depth-first kd-tree)))
+       (map (comp vec (partial kd-tree-point kd-tree)))))
+
+(defn retain-node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree]
+  (let [^FixedSizeListVector point-vec (.point-vec kd-tree)]
+    (Node. (.getTo (doto (.getTransferPair point-vec allocator)
+                     (.splitAndTransfer 0 (.getValueCount point-vec))))
+           (.point-idx kd-tree)
+           (.left kd-tree)
+           (.right kd-tree)
+           (.deleted? kd-tree))))
+
+(defn rebuild-node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree]
+  (->node-kd-tree allocator (map (partial kd-tree-array-point kd-tree)
+                                 (.toArray (StreamSupport/intStream ^Spliterator$OfInt (kd-tree-depth-first kd-tree) false)))))
 
 (defn- ->column-kd-tree-schema ^org.apache.arrow.vector.types.pojo.Schema [^long k]
   (Schema. [(t/->field "axis_delete_flag" (.getType Types$MinorType/TINYINT) false)
             (t/->field "split_value" (.getType Types$MinorType/BIGINT) false)
             (t/->field "skip_pointer" (.getType Types$MinorType/INT) false)
-            (t/->field "point" (ArrowType$FixedSizeList. k) false
-                       (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false))]))
+            (->point-field k)]))
 
 (defn ->column-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Node kd-tree ^long k]
   (let [out-root (VectorSchemaRoot/create (->column-kd-tree-schema k) allocator)
         ^TinyIntVector axis-delete-flag-vec (.getVector out-root "axis_delete_flag")
         ^BigIntVector split-value-vec (.getVector out-root "split_value")
         ^IntVector skip-pointer-vec (.getVector out-root "skip_pointer")
-        ^FixedSizeListVector point-list-vec (.getVector out-root "point")
-        ^BigIntVector coordinates-vec (.getDataVector point-list-vec)
+        ^FixedSizeListVector point-vec (.getVector out-root "point")
+        ^BigIntVector coordinates-vec (.getDataVector point-vec)
+
+        ^FixedSizeListVector in-point-vec (some-> kd-tree (.point-vec))
+        ^BigIntVector in-coordinates-vec (some-> in-point-vec (.getDataVector))
+
         stack (ArrayDeque.)
         node->skip-idx-update (IdentityHashMap.)]
     (when kd-tree
       (.push stack (NodeStackEntry. kd-tree 0)))
-    (loop [idx 0]
+    (loop [idx (int 0)]
       (if-let [^NodeStackEntry stack-entry (.poll stack)]
         (let [^Node node (.node stack-entry)
               deleted? (.deleted? node)
-              ^longs point (.point node)
+              in-point-idx (.point-idx node)
+              in-element-start-idx (.getElementStartIndex in-point-vec in-point-idx)
               axis (.axis stack-entry)
               axis-delete-flag (if deleted?
                                  (- (inc axis))
                                  (inc axis))]
           (.setSafe axis-delete-flag-vec idx axis-delete-flag)
-          (.setSafe split-value-vec idx (aget point axis))
+
+          (.copyFromSafe split-value-vec (+ in-element-start-idx axis) idx in-coordinates-vec)
           (.setSafe skip-pointer-vec idx -1)
           (when-let [skip-idx (.remove node->skip-idx-update node)]
             (.setSafe skip-pointer-vec ^long skip-idx idx))
-          (let [list-idx (.startNewValue point-list-vec idx)]
-            (dotimes [n k]
-              (.setSafe coordinates-vec (+ list-idx n) (aget point n)))
-            (.setValueCount point-list-vec idx))
+          (.copyFromSafe point-vec in-point-idx idx in-point-vec)
 
           (let [axis (next-axis axis k)]
             (when-let [right (.right node)]
@@ -440,8 +533,8 @@
                                        ^longs max-range
                                        ^int k
                                        ^Deque stack]
-  Spliterator
-  (forEachRemaining [this c]
+  Spliterator$OfInt
+  (^void forEachRemaining [this ^IntConsumer c]
     (loop []
       (when-let [^ColumnStackEntry stack-entry (.poll stack)]
         (loop [idx (.start stack-entry)
@@ -461,10 +554,10 @@
                   visit-left? (and (not= left-idx right-idx) min-match?)
                   visit-right? (and (not= right-idx end-idx) max-match?)]
 
-              (when-let [point (and (or min-match? max-match?)
-                                    (not deleted?)
-                                    (in-range-column? min-range point-vec coordinates-vec idx max-range))]
-                (.accept c point))
+              (when (and (or min-match? max-match?)
+                         (not deleted?)
+                         (in-range-column? min-range point-vec coordinates-vec idx max-range))
+                (.accept c idx))
 
               (cond
                 (and visit-left? (not visit-right?))
@@ -480,7 +573,7 @@
                       (recur left-idx right-idx)))))))
         (recur))))
 
-  (tryAdvance [this c]
+  (^boolean tryAdvance [this ^IntConsumer c]
     (loop []
       (if-let [^ColumnStackEntry stack-entry (.poll stack)]
         (let [idx (.start stack-entry)
@@ -513,10 +606,10 @@
                     (when visit-left?
                       (.push stack (ColumnStackEntry. left-idx right-idx)))))
 
-              (if-let [point (and (or min-match? max-match?)
-                                  (not deleted?)
-                                  (in-range-column? min-range point-vec coordinates-vec idx max-range))]
-                (do (.accept c point)
+              (if (and (or min-match? max-match?)
+                       (not deleted?)
+                       (in-range-column? min-range point-vec coordinates-vec idx max-range))
+                (do (.accept c idx)
                     true)
                 (recur)))
             (recur)))
@@ -536,8 +629,8 @@
                                       ^BigIntVector coordinates-vec
                                       ^int k
                                       ^:unsynchronized-mutable ^int idx]
-  Spliterator
-  (forEachRemaining [this c]
+  Spliterator$OfInt
+  (^void forEachRemaining [this ^IntConsumer c]
     (loop [idx idx]
       (if (= idx (.getValueCount axis-delete-flag-vec))
         (set! (.idx this) (.getValueCount axis-delete-flag-vec))
@@ -545,15 +638,11 @@
               deleted? (neg? axis-delete-flag)]
 
           (when-not deleted?
-            (let [point (long-array k)
-                  element-start-idx (.getElementStartIndex point-vec idx)]
-              (dotimes [n k]
-                (aset point n (.get coordinates-vec (+ element-start-idx n))))
-              (.accept c point)))
+            (.accept c idx))
 
           (recur (inc idx))))))
 
-  (tryAdvance [this c]
+  (^boolean tryAdvance [this ^IntConsumer c]
     (loop []
       (if (= idx (.getValueCount axis-delete-flag-vec))
         false
@@ -565,12 +654,8 @@
 
           (if deleted?
             (recur)
-            (let [point (long-array k)
-                  element-start-idx (.getElementStartIndex point-vec current-idx)]
-              (dotimes [n k]
-                (aset point n (.get coordinates-vec (+ element-start-idx n))))
-              (.accept c point)
-              true))))))
+            (do (.accept c current-idx)
+                true))))))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
@@ -580,11 +665,8 @@
 
   (trySplit [_]))
 
-(defn merge-kd-trees ^core2.temporal.kd_tree.Node [^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
+(defn merge-kd-trees ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree-from "axis_delete_flag")
-        ^FixedSizeListVector point-vec (.getVector kd-tree-from "point")
-        ^BigIntVector coordinates-vec (.getDataVector point-vec)
-        k (.getListSize point-vec)
         n (.getRowCount kd-tree-from)]
     (loop [idx 0
            acc kd-tree-to]
@@ -592,23 +674,19 @@
         acc
         (let [axis-delete-flag (.get axis-delete-flag-vec idx)
               deleted? (neg? axis-delete-flag)
-              point (long-array k)
-              element-start-idx (.getElementStartIndex point-vec idx)]
-
-          (dotimes [n k]
-            (aset point n (.get coordinates-vec (+ element-start-idx n))))
+              point (kd-tree-array-point kd-tree-from idx)]
 
           (recur (inc idx)
                  (if deleted?
-                   (kd-tree-delete acc point)
-                   (kd-tree-insert acc point))))))))
+                   (kd-tree-delete acc allocator point)
+                   (kd-tree-insert acc allocator point))))))))
 
 (extend-protocol KdTree
   VectorSchemaRoot
-  (kd-tree-insert [_ point]
+  (kd-tree-insert [_ allocator point]
     (throw (UnsupportedOperationException.)))
 
-  (kd-tree-delete [_ point]
+  (kd-tree-delete [_ allocator point]
     (throw (UnsupportedOperationException.)))
 
   (kd-tree-range-search [kd-tree min-range max-range]
@@ -629,4 +707,7 @@
           ^FixedSizeListVector point-vec (.getVector kd-tree "point")
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           k (.getListSize point-vec)]
-      (->ColumnDepthFirstSpliterator axis-delete-flag-vec point-vec coordinates-vec k 0))))
+      (->ColumnDepthFirstSpliterator axis-delete-flag-vec point-vec coordinates-vec k 0)))
+
+  (kd-tree-point-vec [kd-tree]
+    (.getVector kd-tree "point")))
