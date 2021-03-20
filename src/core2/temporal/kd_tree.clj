@@ -11,8 +11,7 @@
            [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
-           [org.apache.arrow.vector.types Types$MinorType]
-           core2.temporal.TemporalCoordinates))
+           [org.apache.arrow.vector.types Types$MinorType]))
 
 ;; TODO:
 
