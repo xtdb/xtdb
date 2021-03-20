@@ -85,8 +85,8 @@
                               (.count)))))))
 
             (let [_ (prn :node-kd-tree->seq)
-                  kd-tree-seq (time (mapv vec (kd/kd-tree->seq kd-tree)))
+                  kd-tree-seq (time (vec (kd/kd-tree->seq kd-tree)))
                   _ (prn :column-tree->seq)
-                  col-tree-seq (time (mapv vec (kd/kd-tree->seq column-kd-tree)))]
+                  col-tree-seq (time (vec (kd/kd-tree->seq column-kd-tree)))]
 
               (t/is (= kd-tree-seq col-tree-seq)))))))))

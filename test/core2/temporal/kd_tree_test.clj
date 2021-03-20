@@ -316,59 +316,62 @@
                                      (sort (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
-  (with-open [allocator (RootAllocator.)
-              kd-tree (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
-              ^Node bulk-kd-tree (reduce
-                                  (fn [acc point]
-                                    (kd/kd-tree-insert acc allocator point))
-                                  nil
-                                  [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]])
-              ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
-    (t/is (= (-> kd-tree
-                 (kd/kd-tree-range-search [0 0] [8 4])
-                 (StreamSupport/intStream false)
-                 (.toArray)
-                 (->> (mapv (partial kd/kd-tree-point kd-tree))))
+  (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]]
+    (with-open [allocator (RootAllocator.)
+                kd-tree (kd/->node-kd-tree allocator points)
+                ^Node bulk-kd-tree (reduce
+                                    (fn [acc point]
+                                      (kd/kd-tree-insert acc allocator point))
+                                    nil
+                                    points)
+                ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
+      (t/is (= [[7 2] [5 4] [2 3] [8 1]]
 
-             (-> bulk-kd-tree
-                 (kd/kd-tree-range-search [0 0] [8 4])
-                 (StreamSupport/intStream false)
-                 (.toArray)
-                 (->> (mapv (partial kd/kd-tree-point bulk-kd-tree))))
+               (-> kd-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/intStream false)
+                   (.toArray)
+                   (->> (mapv (partial kd/kd-tree-point kd-tree))))
 
-             (-> column-kd-tree
-                 (kd/kd-tree-range-search [0 0] [8 4])
-                 (StreamSupport/intStream false)
-                 (.toArray)
-                 (->> (mapv (partial kd/kd-tree-point column-kd-tree)))))
-          "wikipedia-test")
+               (-> bulk-kd-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/intStream false)
+                   (.toArray)
+                   (->> (mapv (partial kd/kd-tree-point bulk-kd-tree))))
 
-    (t/testing "seq"
-      (t/is (= (kd/kd-tree->seq kd-tree)
-               (kd/kd-tree->seq column-kd-tree))))
+               (-> column-kd-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/intStream false)
+                   (.toArray)
+                   (->> (mapv (partial kd/kd-tree-point column-kd-tree)))))
+            "wikipedia-test")
 
-    (t/testing "empty tree"
-      (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
-        (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
+      (t/testing "seq"
+        (t/is (= (kd/kd-tree->seq kd-tree)
+                 (kd/kd-tree->seq column-kd-tree))))
 
-      (t/is (nil? (kd/->node-kd-tree allocator [])))
+      (t/testing "empty tree"
+        (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
+          (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
 
-      (with-open [^Node kd-tree (kd/kd-tree-insert nil allocator [1 2])]
-        (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
+        (t/is (nil? (kd/->node-kd-tree allocator [])))
 
-      (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
-        (t/is (empty? (kd/kd-tree->seq kd-tree)))))
+        (with-open [^Node kd-tree (kd/kd-tree-insert nil allocator [1 2])]
+          (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
 
-    (t/testing "merge"
-      (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]
-        (let [node-to-delete [2 1]
-              ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
-          (with-open [old-tree-with-node-to-be-deleted (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
-                      ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
-                                                                            new-tree-with-tombstone
-                                                                            2)
-                      merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
-                      rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
-            (t/is (= (kd/kd-tree->seq kd-tree)
-                     (kd/kd-tree->seq merged-tree)
-                     (kd/kd-tree->seq rebuilt-tree)))))))))
+        (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
+          (t/is (empty? (kd/kd-tree->seq kd-tree)))))
+
+      (t/testing "merge"
+        (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]
+          (let [node-to-delete [2 1]
+                ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
+            (with-open [old-tree-with-node-to-be-deleted (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
+                        ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
+                                                                              new-tree-with-tombstone
+                                                                              2)
+                        merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
+                        rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
+              (t/is (= (kd/kd-tree->seq kd-tree)
+                       (kd/kd-tree->seq merged-tree)
+                       (kd/kd-tree->seq rebuilt-tree))))))))))

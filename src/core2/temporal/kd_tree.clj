@@ -413,8 +413,12 @@
     point))
 
 (defn kd-tree->seq [kd-tree]
-  (->> (iterator-seq (Spliterators/iterator ^Spliterator$OfInt (kd-tree-depth-first kd-tree)))
-       (map (comp vec (partial kd-tree-point kd-tree)))))
+  (-> (StreamSupport/intStream ^Spliterator$OfInt (kd-tree-depth-first kd-tree) false)
+      (.mapToObj (reify IntFunction
+                   (apply [_ x]
+                     (kd-tree-point kd-tree x))))
+      (.iterator)
+      (iterator-seq)))
 
 (defn retain-node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree]
   (let [^FixedSizeListVector point-vec (.point-vec kd-tree)]
