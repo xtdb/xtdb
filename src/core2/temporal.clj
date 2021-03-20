@@ -205,11 +205,13 @@
                           (.incrementAndGet id-counter)))))
 
   (registerNewChunk [this chunk-idx]
-    (let [temporal-buf (with-open [^VectorSchemaRoot temporal-root (kd/->column-kd-tree allocator chunk-kd-tree k)]
-                         (util/root->arrow-ipc-byte-buffer temporal-root :file))]
-      @(.putObject object-store (->temporal-obj-key chunk-idx) temporal-buf)
-      (util/try-close chunk-kd-tree)
-      (set! (.chunk-kd-tree this) nil))
+    (when chunk-kd-tree
+      (with-open [^Closeable old-chunk-kd-tree chunk-kd-tree
+                  rebuilt-chunk-kd-tree (kd/rebuild-node-kd-tree allocator old-chunk-kd-tree)]
+        (let [temporal-buf (with-open [^VectorSchemaRoot temporal-root (kd/->column-kd-tree allocator rebuilt-chunk-kd-tree k)]
+                             (util/root->arrow-ipc-byte-buffer temporal-root :file))]
+          @(.putObject object-store (->temporal-obj-key chunk-idx) temporal-buf)
+          (set! (.chunk-kd-tree this) nil))))
     (when kd-tree
       (with-open [^Closeable old-kd-tree kd-tree]
         (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator old-kd-tree)))))
