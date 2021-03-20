@@ -217,7 +217,6 @@
                                      ^BigIntVector coordinates-vec
                                      ^longs min-range
                                      ^longs max-range
-                                     ^int k
                                      ^Deque stack]
   Spliterator$OfInt
   (^void forEachRemaining [_ ^IntConsumer c]
@@ -293,7 +292,7 @@
 
   (trySplit [_]
     (when-let [split-stack (maybe-split-stack stack)]
-      (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k split-stack))))
+      (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range split-stack))))
 
 (deftype NodeDepthFirstSpliterator [^Deque stack]
   Spliterator$OfInt
@@ -388,10 +387,9 @@
           max-range (->longs max-range)
           ^FixedSizeListVector point-vec (.point-vec kd-tree)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)
           stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k stack)))
+      (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range stack)))
 
   (kd-tree-depth-first [kd-tree]
     (let [stack (doto (ArrayDeque.)
