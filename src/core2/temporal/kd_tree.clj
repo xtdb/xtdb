@@ -205,6 +205,14 @@
          (recur (inc n#))
          false))))
 
+(defn- maybe-split-stack ^java.util.Deque [^Deque stack]
+  (let [split-size (quot (.size stack) 2)]
+    (when (pos? split-size)
+      (let [split-stack (ArrayDeque.)]
+        (while (not= split-size (.size split-stack))
+          (.add split-stack (.poll stack)))
+        split-stack))))
+
 (deftype NodeRangeSearchSpliterator [^FixedSizeListVector point-vec
                                      ^BigIntVector coordinates-vec
                                      ^longs min-range
@@ -284,12 +292,8 @@
     Long/MAX_VALUE)
 
   (trySplit [_]
-    (let [split-size (quot (.size stack) 2)]
-      (when (pos? split-size)
-        (let [split-stack (ArrayDeque.)]
-          (while (not= split-size (.size split-stack))
-            (.push split-stack (.poll stack)))
-          (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k split-stack))))))
+    (when-let [split-stack (maybe-split-stack stack)]
+      (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k split-stack))))
 
 (deftype NodeDepthFirstSpliterator [^Deque stack]
   Spliterator$OfInt
@@ -338,12 +342,8 @@
     Long/MAX_VALUE)
 
   (trySplit [_]
-    (let [split-size (quot (.size stack) 2)]
-      (when (pos? split-size)
-        (let [split-stack (ArrayDeque.)]
-          (while (not= split-size (.size split-stack))
-            (.push split-stack (.poll stack)))
-          (NodeDepthFirstSpliterator. split-stack))))))
+    (when-let [split-stack (maybe-split-stack stack)]
+      (NodeDepthFirstSpliterator. split-stack))))
 
 (extend-protocol KdTree
   Node
@@ -415,12 +415,12 @@
           k (.getListSize point-vec)
           stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (->NodeRangeSearchSpliterator point-vec coordinates-vec min-range max-range k stack)))
+      (NodeRangeSearchSpliterator. point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
     (let [stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (->NodeDepthFirstSpliterator stack)))
+      (NodeDepthFirstSpliterator. stack)))
 
   (kd-tree-point-vec [this]
     (.point-vec this)))
@@ -607,16 +607,19 @@
   (estimateSize [_]
     Long/MAX_VALUE)
 
-  (trySplit [_]))
+  (trySplit [_]
+    (when-let [split-stack (maybe-split-stack stack)]
+      (ColumnRangeSearchSpliterator. axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k split-stack))))
 
 
 (deftype ColumnDepthFirstSpliterator [^TinyIntVector axis-delete-flag-vec
-                                      ^:unsynchronized-mutable ^int idx]
+                                      ^:unsynchronized-mutable ^int idx
+                                      ^int end]
   Spliterator$OfInt
   (^void forEachRemaining [this ^IntConsumer c]
     (loop [idx idx]
-      (if (= idx (.getValueCount axis-delete-flag-vec))
-        (set! (.idx this) (.getValueCount axis-delete-flag-vec))
+      (if (= idx end)
+        (set! (.idx this) end)
         (let [axis-delete-flag (.get axis-delete-flag-vec idx)
               deleted? (neg? axis-delete-flag)]
 
@@ -627,7 +630,7 @@
 
   (^boolean tryAdvance [this ^IntConsumer c]
     (loop []
-      (if (= idx (.getValueCount axis-delete-flag-vec))
+      (if (= idx end)
         false
         (let [current-idx idx
               axis-delete-flag (.get axis-delete-flag-vec current-idx)
@@ -646,7 +649,12 @@
   (estimateSize [_]
     Long/MAX_VALUE)
 
-  (trySplit [_]))
+  (trySplit [this]
+    (let [split-point (quot (+ idx end) 2)]
+      (when (and (> split-point idx)
+                 (< split-point end))
+        (set! (.idx this) split-point)
+        (ColumnDepthFirstSpliterator. axis-delete-flag-vec idx split-point)))))
 
 (defn merge-kd-trees ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree-from "axis_delete_flag")
@@ -683,11 +691,11 @@
           k (.getListSize point-vec)
           stack (doto (ArrayDeque.)
                   (.push (ColumnStackEntry. 0 (.getValueCount axis-delete-flag-vec))))]
-      (->ColumnRangeSearchSpliterator axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k stack)))
+      (ColumnRangeSearchSpliterator. axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k stack)))
 
   (kd-tree-depth-first [kd-tree]
     (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis_delete_flag")]
-      (->ColumnDepthFirstSpliterator axis-delete-flag-vec 0)))
+      (ColumnDepthFirstSpliterator. axis-delete-flag-vec 0 (.getValueCount axis-delete-flag-vec))))
 
   (kd-tree-point-vec [kd-tree]
     (.getVector kd-tree point-vec-idx)))
