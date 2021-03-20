@@ -158,6 +158,8 @@
        (aset ~n (aget xs# ~m))
        (aset ~m tmp#))))
 
+;; TODO: adapt three-way-partitioning.
+
 (defn- quick-select ^long [^objects xs ^long start ^long end ^Comparator comp]
   (let [k (quot (+ start end) 2)
         k (long (loop [start start
