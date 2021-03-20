@@ -345,67 +345,43 @@
     (when-let [split-stack (maybe-split-stack stack)]
       (NodeDepthFirstSpliterator. split-stack))))
 
+(defn- node-kd-tree-edit [^Node kd-tree point deleted?]
+  (let [point (->longs point)
+        ^FixedSizeListVector point-vec (.point-vec kd-tree)
+        ^BigIntVector coordinates-vec (.getDataVector point-vec)
+        k (.getListSize point-vec)]
+    (loop [parent-axis (.axis kd-tree)
+           node kd-tree
+           build-fn identity]
+      (if-not node
+        (let [point-idx (write-point point-vec point)]
+          (build-fn (Node. point-vec point-idx (next-axis parent-axis k) nil nil deleted?)))
+        (let [axis (.axis node)
+              element-start-idx (.getElementStartIndex point-vec (.point-idx node))
+              point-axis (.get coordinates-vec (+ element-start-idx axis))]
+          (cond
+            (point-equals-list-element point coordinates-vec element-start-idx k)
+            (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) deleted?))
+
+            (< (aget point axis) point-axis)
+            (recur (.axis node)
+                   (.left node)
+                   (fn [left]
+                     (build-fn (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))))
+
+            :else
+            (recur (.axis node)
+                   (.right node)
+                   (fn [right]
+                     (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))))))))))
+
 (extend-protocol KdTree
   Node
   (kd-tree-insert [kd-tree allocator point]
-    (let [point (->longs point)
-          ^FixedSizeListVector point-vec (.point-vec kd-tree)
-          ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)]
-      (loop [parent-axis (.axis kd-tree)
-             node kd-tree
-             build-fn identity]
-        (if-not node
-          (let [point-idx (write-point point-vec point)]
-            (build-fn (Node. point-vec point-idx (next-axis parent-axis k) nil nil false)))
-          (let [axis (.axis node)
-                element-start-idx (.getElementStartIndex point-vec (.point-idx node))
-                point-axis (.get coordinates-vec (+ element-start-idx axis))]
-            (cond
-              (point-equals-list-element point coordinates-vec element-start-idx k)
-              (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) false))
-
-              (< (aget point axis) point-axis)
-              (recur (.axis node)
-                     (.left node)
-                     (fn [left]
-                       (build-fn (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))))
-
-              :else
-              (recur (.axis node)
-                     (.right node)
-                     (fn [right]
-                       (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))))))))))
+    (node-kd-tree-edit kd-tree point false))
 
   (kd-tree-delete [kd-tree allocator point]
-    (let [point (->longs point)
-          ^FixedSizeListVector point-vec (.point-vec kd-tree)
-          ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)]
-      (loop [parent-axis (.axis kd-tree)
-             node kd-tree
-             build-fn identity]
-        (if-not node
-          (let [point-idx (write-point point-vec point)]
-            (build-fn (Node. point-vec point-idx (next-axis parent-axis k) nil nil true)))
-          (let [axis (.axis node)
-                element-start-idx (.getElementStartIndex point-vec (.point-idx node))
-                point-axis (.get coordinates-vec (+ element-start-idx axis))]
-            (cond
-              (point-equals-list-element point coordinates-vec element-start-idx k)
-              (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) true))
-
-              (< (aget point axis) point-axis)
-              (recur (.axis node)
-                     (.left node)
-                     (fn [left]
-                       (build-fn (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))))
-
-              :else
-              (recur (.axis node)
-                     (.right node)
-                     (fn [right]
-                       (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))))))))))
+    (node-kd-tree-edit kd-tree point true))
 
   (kd-tree-range-search [kd-tree min-range max-range]
     (let [min-range (->longs min-range)
