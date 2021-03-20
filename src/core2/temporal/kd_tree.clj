@@ -125,18 +125,6 @@
     (Spliterators/emptyIntSpliterator))
   (kd-tree-point-vec [_]))
 
-(defn- find-median-index ^long [^objects points ^long start ^long end ^long axis]
-  (let [median (quot (+ start end) 2)
-        ^longs median-point (aget points median)
-        median-value (aget median-point axis)]
-    (loop [idx median]
-      (if (= start idx)
-        idx
-        (let [prev-idx (dec idx)]
-          (if (= median-value (aget ^longs (aget points prev-idx) axis))
-            (recur prev-idx)
-            idx))))))
-
 (def ^:private ^Class objects-class
   (Class/forName "[Ljava.lang.Object;"))
 
@@ -163,6 +151,46 @@
   (t/->field "point" (ArrowType$FixedSizeList. k) false
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 
+(defmacro ^:private swap-array [xs n m]
+  `(let [xs# ~xs
+         tmp# (aget xs# ~n)]
+     (doto xs#
+       (aset ~n (aget xs# ~m))
+       (aset ~m tmp#))))
+
+(defn- quick-select ^long [^objects xs ^long start ^long end ^Comparator comp]
+  (let [k (quot (+ start end) 2)
+        k (long (loop [start start
+                       end (dec end)]
+                  (if (<= start end)
+                    (let [pivot-idx (quot (+ start end) 2)
+                          pivot-value (aget xs pivot-idx)
+                          _ (swap-array xs pivot-idx end)
+                          pivot-idx (long (loop [n start
+                                                 store-idx start]
+                                            (if (= n end)
+                                              (do (swap-array xs store-idx end)
+                                                  store-idx)
+                                              (recur (inc n)
+                                                     (if (neg? (.compare comp (aget xs n) pivot-value))
+                                                       (do (swap-array xs store-idx n)
+                                                           (inc store-idx))
+                                                       store-idx)))))]
+                      (cond
+                        (= k pivot-idx)
+                        k
+                        (< k pivot-idx)
+                        (recur start (dec pivot-idx))
+                        :else
+                        (recur (inc pivot-idx) end)))
+                    start)))]
+    (let [k-value (aget xs k)]
+      (loop [k k]
+        (if (and (> k start)
+                 (zero? (.compare comp (aget xs (dec k)) k-value)))
+          (recur (dec k))
+          k)))))
+
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
   (when (not-empty points)
     (let [^objects points (ensure-points-array points)
@@ -175,22 +203,21 @@
              (let [point (aget points start)
                    idx (write-point point-vec point)]
                (Node. point-vec idx axis nil nil false))
-             (do (Arrays/sort points start end (Comparator/comparingLong
-                                                (reify ToLongFunction
-                                                  (applyAsLong [_ x]
-                                                    (aget ^longs x axis)))))
-                 (let [median (find-median-index points start end axis)
-                       next-axis (next-axis axis k)
-                       point (aget points median)
-                       idx (write-point point-vec point)]
-                   (Node. point-vec
-                          idx
-                          axis
-                          (when (< start median)
-                            (step start median next-axis))
-                          (when (< (inc median) end)
-                            (step (inc median) end next-axis))
-                          false)))))
+             (let [median (quick-select points start end (Comparator/comparingLong
+                                                          (reify ToLongFunction
+                                                            (applyAsLong [_ x]
+                                                              (aget ^longs x axis)))))
+                   next-axis (next-axis axis k)
+                   point (aget points median)
+                   idx (write-point point-vec point)]
+               (Node. point-vec
+                      idx
+                      axis
+                      (when (< start median)
+                        (step start median next-axis))
+                      (when (< (inc median) end)
+                        (step (inc median) end next-axis))
+                      false))))
          0 (alength points) 0)
         (catch Throwable t
           (util/try-close point-vec)
