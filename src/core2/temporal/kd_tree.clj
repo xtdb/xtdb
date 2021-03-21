@@ -158,40 +158,54 @@
        (aset ~n (aget xs# ~m))
        (aset ~m tmp#))))
 
-;; TODO: adapt three-way-partitioning.
+(defn- upper-int ^long [^long x]
+  (unsigned-bit-shift-right x Integer/SIZE))
 
-(defn- quick-select ^long [^objects xs ^long start ^long end ^Comparator comp]
-  (let [k (quot (+ start end) 2)
-        k (long (loop [start start
-                       end (dec end)]
-                  (if (<= start end)
-                    (let [pivot-idx (quot (+ start end) 2)
-                          pivot-value (aget xs pivot-idx)
-                          _ (swap-array xs pivot-idx end)
-                          pivot-idx (long (loop [n start
-                                                 store-idx start]
-                                            (if (= n end)
-                                              (do (swap-array xs store-idx end)
-                                                  store-idx)
-                                              (recur (inc n)
-                                                     (if (neg? (.compare comp (aget xs n) pivot-value))
-                                                       (do (swap-array xs store-idx n)
-                                                           (inc store-idx))
-                                                       store-idx)))))]
-                      (cond
-                        (= k pivot-idx)
-                        k
-                        (< k pivot-idx)
-                        (recur start (dec pivot-idx))
-                        :else
-                        (recur (inc pivot-idx) end)))
-                    start)))]
-    (let [k-value (aget xs k)]
-      (loop [k k]
-        (if (and (> k start)
-                 (zero? (.compare comp (aget xs (dec k)) k-value)))
-          (recur (dec k))
-          k)))))
+(defn- lower-int ^long [^long x]
+  (bit-and x (Integer/toUnsignedLong -1)))
+
+(defn- two-ints-as-long ^long [^long x ^long y]
+  (bit-or (bit-shift-left x Integer/SIZE) y))
+
+(defn- three-way-partition ^long [^objects xs ^long low ^long hi ^Comparator pivot-comparator]
+  (let [pivot (aget xs (quot (+ low hi) 2))]
+    (loop [i (int low)
+           j (int low)
+           k (inc (int hi))]
+      (if (< j k)
+        (let [diff (.compare pivot-comparator (aget xs j) pivot)]
+          (cond
+            (neg? diff)
+            (do (swap-array xs i j)
+                (recur (inc i) (inc j) k))
+
+            (pos? diff)
+            (let [k (dec k)]
+              (swap-array xs j k)
+              (recur i j k))
+
+            :else
+            (recur i (inc j) k)))
+        (two-ints-as-long i (dec k))))))
+
+(defn- quick-select ^long [^objects xs ^long low ^long hi ^Comparator pivot-comparator]
+  (let [k (quot (+ low hi) 2)]
+    (loop [low low
+           hi (dec hi)]
+      (if (< low hi)
+        (let [left-right (three-way-partition xs low hi pivot-comparator)
+              left (upper-int left-right)
+              right (lower-int left-right)]
+          (cond
+            (< k left)
+            (recur low (dec left))
+
+            (> k right)
+            (recur (inc right) hi)
+
+            :else
+            left))
+        low))))
 
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
   (when (not-empty points)
