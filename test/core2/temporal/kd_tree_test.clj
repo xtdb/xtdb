@@ -319,11 +319,11 @@
   (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]]
     (with-open [allocator (RootAllocator.)
                 kd-tree (kd/->node-kd-tree allocator points)
-                ^Node bulk-kd-tree (reduce
-                                    (fn [acc point]
-                                      (kd/kd-tree-insert acc allocator point))
-                                    nil
-                                    points)
+                ^Node insert-kd-tree (reduce
+                                      (fn [acc point]
+                                        (kd/kd-tree-insert acc allocator point))
+                                      nil
+                                      points)
                 ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
       (t/is (= [[7 2] [5 4] [2 3] [8 1]]
 
@@ -333,11 +333,11 @@
                    (.toArray)
                    (->> (mapv (partial kd/kd-tree-point kd-tree))))
 
-               (-> bulk-kd-tree
+               (-> insert-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/intStream false)
                    (.toArray)
-                   (->> (mapv (partial kd/kd-tree-point bulk-kd-tree))))
+                   (->> (mapv (partial kd/kd-tree-point insert-kd-tree))))
 
                (-> column-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
