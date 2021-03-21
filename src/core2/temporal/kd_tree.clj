@@ -212,6 +212,12 @@
     (let [^objects points (ensure-points-array points)
           n (alength points)
           k (count (aget points 0))
+          axis->comparator (object-array
+                            (for [axis (range k)]
+                              (Comparator/comparingLong
+                               (reify ToLongFunction
+                                 (applyAsLong [_ x]
+                                   (aget ^longs x axis))))))
           point-vec (.createVector ^Field (->point-field k) allocator)]
       (try
         ((fn step [^long start ^long end ^long axis]
@@ -219,10 +225,7 @@
              (let [point (aget points start)
                    idx (write-point point-vec point)]
                (Node. point-vec idx axis nil nil false))
-             (let [median (quick-select points start end (Comparator/comparingLong
-                                                          (reify ToLongFunction
-                                                            (applyAsLong [_ x]
-                                                              (aget ^longs x axis)))))
+             (let [median (quick-select points start end (aget axis->comparator axis))
                    next-axis (next-axis axis k)
                    point (aget points median)
                    idx (write-point point-vec point)]
