@@ -237,12 +237,12 @@
                 per-op-offset (.getOffset tx-ops-vec tx-op-idx)
                 op-vec (.getStruct tx-ops-vec op-type-id)
 
-                ^TimeStampVector valid-time-vec (.getChild op-vec "_valid-time")
+                ^TimeStampVector valid-time-start-vec (.getChild op-vec "_valid-time-start")
                 ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
                 row-id (+ next-row-id per-op-offset)
                 op (aget op-type-ids op-type-id)
                 ^TemporalCoordinates temporal-coordinates (temporal/row-id->coordinates row-id)]
-            (set! (.txTime temporal-coordinates) tx-time-ms)
+            (set! (.txTimeStart temporal-coordinates) tx-time-ms)
             (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
@@ -271,14 +271,14 @@
             (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
                         tx-id-vec 0 row-id)
 
-            (when (not (.isNull valid-time-vec per-op-offset))
-              (set! (.validTime temporal-coordinates) (.get valid-time-vec per-op-offset))
-              (copy-safe! (.getLiveRoot this (.getName valid-time-vec))
-                          valid-time-vec per-op-offset row-id))
+            (when (not (.isNull valid-time-start-vec per-op-offset))
+              (set! (.validTimeStart temporal-coordinates) (.get valid-time-start-vec per-op-offset))
+              (copy-safe! (.getLiveRoot this (.getName valid-time-start-vec))
+                          valid-time-start-vec per-op-offset row-id))
 
             (when (not (.isNull valid-time-end-vec per-op-offset))
               (set! (.validTimeEnd temporal-coordinates) (.get valid-time-end-vec per-op-offset))
-              (copy-safe! (.getLiveRoot this (.getName valid-time-vec))
+              (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
                           valid-time-end-vec per-op-offset row-id))))
 
         (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)

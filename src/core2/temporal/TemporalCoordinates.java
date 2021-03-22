@@ -3,9 +3,9 @@ package core2.temporal;
 public final class TemporalCoordinates {
     public final long rowId;
     public Object id;
-    public long txTime;
+    public long txTimeStart;
     public long txTimeEnd;
-    public long validTime;
+    public long validTimeStart;
     public long validTimeEnd;
     public boolean tombstone;
 

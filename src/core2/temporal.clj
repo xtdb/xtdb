@@ -90,13 +90,19 @@
     (set! (.txTimeEnd coords) (.getTime end-of-time))
     coords))
 
-(defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id ^long row-id ^Date tt-start ^Date vt-start ^Date vt-end tombstone?]}]
+(defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id
+                                                                 ^long row-id
+                                                                 ^Date tx-time-start
+                                                                 ^Date tx-time-end
+                                                                 ^Date valid-time-start
+                                                                 ^Date valid-time-end
+                                                                 tombstone?]}]
   (let [coords (TemporalCoordinates. row-id)]
     (set! (.id coords) id)
-    (set! (.validTime coords) (.getTime (or vt-start tt-start)))
-    (set! (.validTimeEnd coords) (.getTime (or vt-end end-of-time)))
-    (set! (.txTime coords) (.getTime tt-start))
-    (set! (.txTimeEnd coords) (.getTime end-of-time))
+    (set! (.validTimeStart coords) (.getTime (or valid-time-start tx-time-start)))
+    (set! (.validTimeEnd coords) (.getTime (or valid-time-end end-of-time)))
+    (set! (.txTimeStart coords) (.getTime tx-time-start))
+    (set! (.txTimeEnd coords) (.getTime (or tx-time-end end-of-time)))
     (set! (.tombstone coords) (boolean tombstone?))
     coords))
 
@@ -121,7 +127,7 @@
   (^void populateKnownChunks []))
 
 (def ^:private temporal-columns
-  (->> (for [col-name ["_tx-time" "_tx-time-end" "_valid-time" "_valid-time-end"]]
+  (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
          [col-name (t/->primitive-dense-union-field col-name #{:timestampmilli})])
        (into {})))
 
@@ -139,14 +145,14 @@
 
 (def ^:const ^int id-idx 0)
 (def ^:const ^int row-id-idx 1)
-(def ^:const ^int valid-time-idx 2)
+(def ^:const ^int valid-time-start-idx 2)
 (def ^:const ^int valid-time-end-idx 3)
-(def ^:const ^int tx-time-idx 4)
+(def ^:const ^int tx-time-start-idx 4)
 (def ^:const ^int tx-time-end-idx 5)
 
-(def ^:private column->idx {"_valid-time" valid-time-idx
+(def ^:private column->idx {"_valid-time-start" valid-time-start-idx
                             "_valid-time-end" valid-time-end-idx
-                            "_tx-time" tx-time-idx
+                            "_tx-time-start" tx-time-start-idx
                             "_tx-time-end" tx-time-end-idx})
 
 (declare insert-coordinates)
@@ -300,17 +306,17 @@
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
   (let [id (.applyAsLong id->internal-id (.id coordinates))
         row-id (.rowId coordinates)
-        tt-start-ms (.txTime coordinates)
-        vt-start-ms (.validTime coordinates)
-        vt-end-ms (.validTimeEnd coordinates)
+        tx-time-start-ms (.txTimeStart coordinates)
+        valid-time-start-ms (.validTimeStart coordinates)
+        valid-time-end-ms (.validTimeEnd coordinates)
         end-of-time-ms (.getTime end-of-time)
         min-range (doto (->min-range)
                     (aset id-idx id)
-                    (aset valid-time-end-idx vt-start-ms)
+                    (aset valid-time-end-idx valid-time-start-ms)
                     (aset tx-time-end-idx end-of-time-ms))
         max-range (doto (->max-range)
                     (aset id-idx id)
-                    (aset valid-time-idx (dec vt-end-ms))
+                    (aset valid-time-start-idx (dec valid-time-end-ms))
                     (aset tx-time-end-idx end-of-time-ms))
         overlap (-> ^Spliterator$OfInt (kd/kd-tree-range-search
                                         kd-tree
@@ -332,22 +338,22 @@
                                      (doto (long-array k)
                                        (aset id-idx id)
                                        (aset row-id-idx row-id)
-                                       (aset valid-time-idx vt-start-ms)
-                                       (aset valid-time-end-idx vt-end-ms)
-                                       (aset tx-time-idx tt-start-ms)
+                                       (aset valid-time-start-idx valid-time-start-ms)
+                                       (aset valid-time-end-idx valid-time-end-ms)
+                                       (aset tx-time-start-idx tx-time-start-ms)
                                        (aset tx-time-end-idx end-of-time-ms))))]
     (reduce
      (fn [kd-tree ^longs coord]
        (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
-                                                      (aset tx-time-end-idx tt-start-ms)))
-         (< (aget coord valid-time-idx) vt-start-ms)
+                                                      (aset tx-time-end-idx tx-time-start-ms)))
+         (< (aget coord valid-time-start-idx) valid-time-start-ms)
          (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset tx-time-idx tt-start-ms)
-                                        (aset valid-time-end-idx vt-start-ms)))
+                                        (aset tx-time-start-idx tx-time-start-ms)
+                                        (aset valid-time-end-idx valid-time-start-ms)))
 
-         (> (aget coord valid-time-end-idx) vt-end-ms)
+         (> (aget coord valid-time-end-idx) valid-time-end-ms)
          (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset tx-time-idx tt-start-ms)
-                                        (aset valid-time-idx vt-end-ms)))))
+                                        (aset tx-time-start-idx tx-time-start-ms)
+                                        (aset valid-time-start-idx valid-time-end-ms)))))
      kd-tree
      overlap)))

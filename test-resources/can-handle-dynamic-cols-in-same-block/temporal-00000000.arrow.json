@@ -1,7 +1,7 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "axis_delete_flag",
+      "name" : "axis-delete-flag",
       "nullable" : false,
       "type" : {
         "name" : "int",
@@ -10,7 +10,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "split_value",
+      "name" : "split-value",
       "nullable" : false,
       "type" : {
         "name" : "int",
@@ -19,7 +19,7 @@
       },
       "children" : [ ]
     },{
-      "name" : "skip_pointer",
+      "name" : "skip-pointer",
       "nullable" : false,
       "type" : {
         "name" : "int",
@@ -49,17 +49,17 @@
   "batches" : [{
     "count" : 6,
     "columns" : [{
-      "name" : "axis_delete_flag",
+      "name" : "axis-delete-flag",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [1,2,3,3,2,3]
     },{
-      "name" : "split_value",
+      "name" : "split-value",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : ["4","1","0","0","5","0"]
     },{
-      "name" : "skip_pointer",
+      "name" : "skip-pointer",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
       "DATA" : [4,3,-1,-1,-1,-1]

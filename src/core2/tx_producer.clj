@@ -28,14 +28,14 @@
     doc-k-types))
 
 (defn- validate-tx-ops [tx-ops]
-  (doseq [{:keys [op _valid-time _valid-time-end] :as tx-op} tx-ops]
+  (doseq [{:keys [op _valid-time-start _valid-time-end] :as tx-op} tx-ops]
     (case op
       :put (assert (contains? (:doc tx-op) :_id))
       :delete (assert (and (contains? tx-op :_id)
-                           (set/subset? (set (keys tx-op)) #{:_id :_valid-time :_valid-time-end}))))
+                           (set/subset? (set (keys tx-op)) #{:_id :_valid-time-start :_valid-time-end}))))
 
-    (when _valid-time
-      (assert (inst? _valid-time)))
+    (when _valid-time-start
+      (assert (inst? _valid-time-start)))
     (when _valid-time-end
       (assert (inst? _valid-time-end)))))
 
@@ -51,7 +51,7 @@
              (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type false)))))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-field
-  (t/->field "_valid-time" (t/primitive-type->arrow-type :timestampmilli) true))
+  (t/->field "_valid-time-start" (t/primitive-type->arrow-type :timestampmilli) true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
   (t/->field "_valid-time-end" (t/primitive-type->arrow-type :timestampmilli) true))
@@ -76,11 +76,11 @@
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
 
         (dotimes [tx-op-n (count tx-ops)]
-          (let [{:keys [op _valid-time _valid-time-end] :as tx-op} (nth tx-ops tx-op-n)
+          (let [{:keys [op _valid-time-start _valid-time-end] :as tx-op} (nth tx-ops tx-op-n)
                 op-type-id (case op :put 0, :delete 1)
                 ^StructVector op-vec (.getStruct tx-ops-duv op-type-id)
                 tx-op-offset (util/write-type-id tx-ops-duv tx-op-n op-type-id)
-                valid-time-vec (.getChild op-vec "_valid-time" TimeStampVector)
+                valid-time-start-vec (.getChild op-vec "_valid-time-start" TimeStampVector)
                 valid-time-end-vec (.getChild op-vec "_valid-time-end" TimeStampVector)]
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
@@ -108,14 +108,14 @@
 
                           (util/set-value-count id-duv (inc (.getValueCount id-duv))))))
 
-            (if _valid-time
-              (t/set-safe! valid-time-vec tx-op-n _valid-time)
-              (doto valid-time-vec
+            (if _valid-time-start
+              (t/set-safe! valid-time-start-vec tx-op-n _valid-time-start)
+              (doto valid-time-start-vec
                 (util/set-value-count tx-op-n)
                 (t/set-null! tx-op-n)))
 
             (if _valid-time-end
-              (t/set-safe! valid-time-end-vec tx-op-n _valid-time)
+              (t/set-safe! valid-time-end-vec tx-op-n _valid-time-end)
               (doto valid-time-end-vec
                 (util/set-value-count tx-op-n)
                 (t/set-null! tx-op-n)))))
