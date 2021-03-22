@@ -319,8 +319,8 @@
           @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
                (util/then-apply
                  (fn [_]
-                   (.registerNewChunk metadata-mgr live-roots chunk-idx)
-                   (.registerNewChunk temporal-mgr chunk-idx))))
+                   (.registerNewChunk temporal-mgr chunk-idx)
+                   (.registerNewChunk metadata-mgr live-roots chunk-idx))))
 
           (with-open [old-watermark watermark]
             (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)
