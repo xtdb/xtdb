@@ -183,7 +183,8 @@
     (cio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (db/open-index-snapshot index-store)]
-        (db/attribute-stats snapshot))))
+        (->> (db/all-attrs snapshot)
+             (into {} (map (juxt identity #(db/doc-count snapshot %))))))))
 
   (active-queries [_]
     (map qs/->QueryState (vals (:in-progress @!running-queries))))

@@ -77,9 +77,10 @@
                            capped-valid-time
                            capped-tx-id))
 
-  (attribute-stats [_] (db/attribute-stats index-snapshot))
-  (attribute-doc-count [_ attr] (db/attribute-doc-count index-snapshot attr))
-  (attribute-cardinality [_ attr] (db/attribute-cardinality index-snapshot attr))
+  (all-attrs [_] (db/all-attrs index-snapshot))
+  (doc-count [_ attr] (db/doc-count index-snapshot attr))
+  (value-cardinality [_ attr] (db/value-cardinality index-snapshot attr))
+  (eid-cardinality [_ attr] (db/eid-cardinality index-snapshot attr))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]
@@ -154,17 +155,21 @@
                            (db/open-nested-index-snapshot transient-index-snapshot)
                            evicted-eids))
 
-  (attribute-stats [_]
-    (merge (db/attribute-stats persistent-index-snapshot)
-           (db/attribute-stats transient-index-snapshot)))
+  (all-attrs [_]
+    (set/union (db/all-attrs persistent-index-snapshot)
+               (db/all-attrs transient-index-snapshot)))
 
-  (attribute-doc-count [_ attr]
-    (or (db/attribute-doc-count transient-index-snapshot attr)
-        (db/attribute-doc-count persistent-index-snapshot attr)))
+  (doc-count [_ attr]
+    (or (db/doc-count transient-index-snapshot attr)
+        (db/doc-count persistent-index-snapshot attr)))
 
-  (attribute-cardinality [_ attr]
-    (or (db/attribute-cardinality transient-index-snapshot attr)
-        (db/attribute-cardinality persistent-index-snapshot attr)))
+  (value-cardinality [_ attr]
+    (or (db/value-cardinality transient-index-snapshot attr)
+        (db/value-cardinality persistent-index-snapshot attr)))
+
+  (eid-cardinality [_ attr]
+    (or (db/eid-cardinality transient-index-snapshot attr)
+        (db/eid-cardinality persistent-index-snapshot attr)))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]

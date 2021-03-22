@@ -198,8 +198,7 @@
 
   (evict! [_ index-writer eids]
     (with-open [index-snapshot (db/open-index-snapshot index-store)]
-      (let [attrs-id->attr (->> (db/attribute-stats index-snapshot)
-                                keys
+      (let [attrs-id->attr (->> (db/all-attrs index-snapshot)
                                 (map #(vector (->hash-str %) %))
                                 (into {}))
             qs (for [[a v] (db/exclusive-avs index-store eids)

@@ -54,9 +54,10 @@
   (encode-value [this value])
   (resolve-tx [this tx])
   (open-nested-index-snapshot ^java.io.Closeable [this])
-  (attribute-stats [this])
-  (attribute-doc-count [this attr])
-  (attribute-cardinality [this attr]))
+  (all-attrs [this])
+  (doc-count [this attr])
+  (^double value-cardinality [this attr])
+  (^double eid-cardinality [this attr]))
 ;; end::IndexSnapshot[]
 
 ;; tag::TxLog[]

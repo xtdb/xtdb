@@ -576,7 +576,7 @@
 
 (defn- sort-triple-clauses [triple-clauses {:keys [index-snapshot]}]
   (sort-by (fn [{:keys [a]}]
-             (db/attribute-doc-count index-snapshot a)) triple-clauses))
+             (db/doc-count index-snapshot a)) triple-clauses))
 
 (defn- new-literal-index [index-snapshot v]
   (let [encode-value-fn (partial db/encode-value index-snapshot)]
@@ -625,8 +625,7 @@
                                 (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join? ignore-v?]} (meta clause)
-                                   cardinality (double (db/attribute-doc-count index-snapshot a))
-                                   es (double (cardinality-for-var e (cond->> cardinality
+                                   es (double (cardinality-for-var e (cond->> (double (db/eid-cardinality index-snapshot a))
                                                                        (literal? v) (/ 1.0))))
                                    vs (cond
                                         ignore-v?
@@ -634,7 +633,7 @@
                                         self-join?
                                         (Math/nextUp es)
                                         :else
-                                        (cardinality-for-var v (cond->> cardinality
+                                        (cardinality-for-var v (cond->> (double (db/value-cardinality index-snapshot a))
                                                                  (literal? e) (/ 1.0))))]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
