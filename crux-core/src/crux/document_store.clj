@@ -35,7 +35,7 @@
                                 (assoc! acc id doc)
                                 acc))
                             (transient {}) ids))
-          missing-ids (set/difference ids (keys cached-id->docs))
+          missing-ids (set/difference ids (set (keys cached-id->docs)))
           missing-id->docs (db/-fetch-docs document-store missing-ids)]
       (persistent!
        (reduce-kv
