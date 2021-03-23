@@ -58,7 +58,7 @@
   (kd-tree-depth-first [_])
   (kd-tree-point-vec [_]))
 
-(deftype Node [^FixedSizeListVector point-vec ^int point-idx ^int axis left right ^boolean deleted?]
+(deftype Node [^FixedSizeListVector point-vec ^int point-idx ^byte axis left right ^boolean deleted?]
   Closeable
   (close [_]
     (util/try-close point-vec)))
