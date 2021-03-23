@@ -253,6 +253,9 @@
     ;; we could take a note of the endOffset at the start and then fail once we've indexed to that point
     (let [ids (set ids)]
       (loop [docs {}]
+        (when-let [indexing-error @!indexing-error]
+          (throw (IllegalStateException. "document indexing error" indexing-error)))
+
         (let [missing-ids (set/difference ids (set (keys docs)))
               docs (into docs
                          (when (seq missing-ids)
@@ -285,7 +288,7 @@
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
 
-(defn- index-doc-log [{:keys [local-document-store index-store !error doc-topic-opts kafka-config group-id poll-wait-duration]}]
+(defn- index-doc-log [{:keys [local-document-store index-store !indexing-error doc-topic-opts kafka-config group-id poll-wait-duration]}]
   (let [doc-topic (:topic-name doc-topic-opts)
         tp-offsets (read-doc-offsets index-store)]
     (try
@@ -306,7 +309,7 @@
         (Thread/interrupted))
       (catch InterruptedException _)
       (catch Exception e
-        (reset! !error e)
+        (reset! !indexing-error e)
         (log/error e "Error while consuming documents")))))
 
 (defn- ensure-doc-topic-exists [{:keys [kafka-config doc-topic-opts]}]
@@ -334,14 +337,15 @@
   [{:keys [index-store local-document-store kafka-config doc-topic-opts] :as opts}]
   (ensure-doc-topic-exists opts)
 
-  (map->KafkaDocumentStore {:producer (->producer {:kafka-config kafka-config})
-                            :doc-topic (:topic-name doc-topic-opts)
-                            :index-store index-store
-                            :local-document-store local-document-store
-                            :!indexing-error (atom nil)
-                            :indexing-thread (doto (Thread. #(index-doc-log opts))
-                                               (.setName "crux-doc-consumer")
-                                               (.start))}))
+  (let [!indexing-error (atom nil)]
+    (map->KafkaDocumentStore {:producer (->producer {:kafka-config kafka-config})
+                              :doc-topic (:topic-name doc-topic-opts)
+                              :index-store index-store
+                              :local-document-store local-document-store
+                              :!indexing-error !indexing-error
+                              :indexing-thread (doto (Thread. #(index-doc-log (assoc opts :!indexing-error !indexing-error)))
+                                                 (.setName "crux-doc-consumer")
+                                                 (.start))})))
 
 (defrecord IngestOnlyDocumentStore [^KafkaProducer producer doc-topic]
   db/DocumentStore
