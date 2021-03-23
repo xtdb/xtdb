@@ -8,7 +8,7 @@
             [crux.index :as idx]
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import java.util.Arrays
+  (:import [java.util Arrays UUID]
            java.util.concurrent.TimeoutException))
 
 (t/use-fixtures :each fix/with-node)
@@ -3769,3 +3769,28 @@
            (api/q (api/db *api*)
                   '{:find [?e]
                     :where [[?e :foo #{}]]}))))
+
+(t/deftest picks-more-selective-join-order
+  (let [query '{:find [?e ?name]
+                :in [?name ?type]
+                :where [[?e :name ?name]
+                        [?e :type ?type]]}]
+    (fix/submit+await-tx (conj (for [idx (range 1000)]
+                                 [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                                :type :person
+                                                :name (str "person-" idx)}])
+                               [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                              :type "extra type"}]))
+
+    (t/is (= '[?name ?e ?type]
+             (-> (q/query-plan-for (api/db *api*) query)
+                 :vars-in-join-order)))
+
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                         :name "extra name"}]
+                          [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                         :name "another extra name"}]])
+
+    (t/is (= '[?name ?e ?type]
+             (-> (q/query-plan-for (api/db *api*) query)
+                 :vars-in-join-order)))))
