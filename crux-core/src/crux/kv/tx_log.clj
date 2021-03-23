@@ -42,7 +42,7 @@
 (defn- submit-tx [tx-events
                   {:keys [^ExecutorService tx-submit-executor
                           ^ExecutorService tx-ingest-executor
-                          kv-store tx-ingester]}]
+                          kv-store tx-ingester fsync?]}]
   (if (.isShutdown tx-submit-executor)
     ::closed
 
@@ -58,11 +58,14 @@
         (.submit tx-ingest-executor
                  ^Runnable #(ingest-tx tx-ingester next-tx tx-events)))
 
+      (when fsync?
+        (kv/fsync kv-store))
+
       next-tx)))
 
 (defrecord KvTxLog [^ExecutorService tx-submit-executor
                     ^ExecutorService tx-ingest-executor
-                    kv-store tx-ingester]
+                    kv-store tx-ingester fsync?]
   db/TxLog
   (submit-tx [this tx-events]
     (when (.isShutdown tx-submit-executor)
@@ -138,13 +141,17 @@
 
 (defn ->tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
                             :tx-ingester :crux/tx-ingester
-                            :index-store :crux/index-store}}
-  [{:keys [tx-ingester index-store kv-store]}]
+                            :index-store :crux/index-store}
+                ::sys/args {:fsync? {:spec ::sys/boolean
+                                     :required? true
+                                     :default true}}}
+  [{:keys [tx-ingester index-store kv-store fsync?]}]
   (let [^ExecutorService ingest-executor (bounded-solo-thread-pool 1024 (cio/thread-factory "crux-standalone-tx-ingest"))
         tx-log (->KvTxLog (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
                           ingest-executor
                           kv-store
-                          tx-ingester)
+                          tx-ingester
+                          fsync?)
         latest-submitted-tx-id (::tx/tx-id (db/latest-submitted-tx tx-log))
         latest-completed-tx-id (::tx/tx-id (db/latest-completed-tx index-store))]
     (when (not= latest-submitted-tx-id latest-completed-tx-id)

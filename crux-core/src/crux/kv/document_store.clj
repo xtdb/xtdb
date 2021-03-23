@@ -35,9 +35,9 @@
     (assert (= c/content-hash->doc-index-id index-id))
     (Id. (mem/slice-buffer k c/index-id-size c/id-size) 0)))
 
-(defrecord KvDocumentStore [kv-store]
+(defrecord KvDocumentStore [kv-store fsync?]
   db/DocumentStore
-  (-fetch-docs [this ids]
+  (-fetch-docs [_ ids]
     (cio/with-nippy-thaw-all
       (with-open [snapshot (kv/new-snapshot kv-store)]
         (persistent!
@@ -49,18 +49,23 @@
                 acc)))
           (transient {}) ids)))))
 
-  (submit-docs [this id-and-docs]
+  (submit-docs [_ id-and-docs]
     (kv/store kv-store (for [[id doc] id-and-docs]
                          (MapEntry/create (encode-doc-key-to nil (c/->id-buffer id))
-                                          (mem/->nippy-buffer doc)))))
+                                          (mem/->nippy-buffer doc))))
+    (when fsync?
+      (kv/fsync kv-store)))
 
   Closeable
   (close [_]))
 
 (defn ->document-store {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
-                                    :document-cache 'crux.cache/->cache}}
-  [{:keys [kv-store document-cache] :as opts}]
+                                    :document-cache 'crux.cache/->cache}
+                        ::sys/args {:fsync? {:spec ::sys/boolean
+                                             :required? true
+                                             :default true}}}
+  [{:keys [kv-store document-cache fsync?] :as opts}]
   (ds/->cached-document-store
    (assoc opts
           :document-cache document-cache
-          :document-store (->KvDocumentStore kv-store))))
+          :document-store (->KvDocumentStore kv-store fsync?))))
