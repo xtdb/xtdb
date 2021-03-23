@@ -424,3 +424,15 @@
           java.util.concurrent.TimeoutException
           #"Timed out waiting for: #:crux.tx"
           (api/await-tx *api* tx (Duration/ofNanos 1))))))))
+
+(t/deftest missing-doc-halts-tx-ingestion
+  ;; TODO hangs for Kafka, see KafkaDocumentStore
+  (when-not (contains? #{:remote :local-kafka :local-kafka-transit} *node-type*)
+    (let [tx (db/submit-tx (:tx-log *api*) [[:crux.tx/put (c/new-id :foo) (c/new-id {:crux.db/id :foo})]])]
+      (t/is (thrown-with-msg?
+             IllegalStateException
+             #"missing docs"
+             (try
+               (api/await-tx *api* tx (Duration/ofMillis 5000))
+               (catch Exception e
+                 (throw (.getCause e)))))))))

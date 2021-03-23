@@ -37,7 +37,7 @@
 
 (defrecord KvDocumentStore [kv-store fsync?]
   db/DocumentStore
-  (-fetch-docs [_ ids]
+  (fetch-docs [_ ids]
     (cio/with-nippy-thaw-all
       (with-open [snapshot (kv/new-snapshot kv-store)]
         (persistent!

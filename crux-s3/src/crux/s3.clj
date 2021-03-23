@@ -91,7 +91,7 @@
     (put-objects this (for [[id doc] docs]
                         (MapEntry/create id (AsyncRequestBody/fromBytes (.freeze configurator doc))))))
 
-  (-fetch-docs [this ids]
+  (fetch-docs [this ids]
     (cio/with-nippy-thaw-all
       (->> (get-objects this (for [id ids]
                                (MapEntry/create id (AsyncResponseTransformer/toBytes))))

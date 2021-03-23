@@ -6,7 +6,8 @@
             [crux.io :as cio]
             [crux.status :as status]
             [crux.system :as sys]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [clojure.set :as set])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
@@ -233,10 +234,12 @@
       @f)))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
+                               ^AdminClient admin-client
                                local-document-store
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
+    (cio/try-close admin-client)
     (cio/try-close producer)
     (.interrupt indexing-thread)
     (.join indexing-thread))
@@ -245,8 +248,20 @@
   (submit-docs [this id-and-docs]
     (submit-docs id-and-docs this))
 
-  (-fetch-docs [this ids]
-    (db/-fetch-docs local-document-store ids)))
+  (fetch-docs [_ ids]
+    ;; TODO will hang forever if the requested ids aren't ever submitted - #1479
+    ;; we could take a note of the endOffset at the start and then fail once we've indexed to that point
+    (let [ids (set ids)]
+      (loop [docs {}]
+        (let [missing-ids (set/difference ids (set (keys docs)))
+              docs (into docs
+                         (when (seq missing-ids)
+                           (db/fetch-docs local-document-store missing-ids)))]
+          (if (= (count docs) (count ids))
+            docs
+            (do
+              (Thread/sleep 100)
+              (recur docs))))))))
 
 (defn- read-doc-offsets [index-store]
   (->> (db/read-index-meta index-store :crux.tx-log/consumer-state)
@@ -257,8 +272,8 @@
 
 (defn- store-doc-offsets [index-store tp-offsets]
   (db/store-index-meta index-store :crux.tx-log/consumer-state (->> tp-offsets
-                                                                (into {} (map (fn [[k v]]
-                                                                                [(str k) {:next-offset v}]))))))
+                                                                    (into {} (map (fn [[k v]]
+                                                                                    [(str k) {:next-offset v}]))))))
 
 (defn- update-doc-offsets [tp-offsets doc-records]
   (reduce (fn [tp-offsets ^ConsumerRecord record]
@@ -287,9 +302,9 @@
             (when (Thread/interrupted)
               (throw (InterruptedException.)))
             (recur tp-offsets))))
-      (catch InterruptException e
+      (catch InterruptException _
         (Thread/interrupted))
-      (catch InterruptedException e)
+      (catch InterruptedException _)
       (catch Exception e
         (reset! !error e)
         (log/error e "Error while consuming documents")))))
@@ -333,7 +348,7 @@
   (submit-docs [this id-and-docs]
     (submit-docs id-and-docs this))
 
-  (-fetch-docs [this ids]
+  (fetch-docs [this ids]
     (throw (UnsupportedOperationException. "Can't fetch docs from ingest-only Kafka document store"))))
 
 (defn ->ingest-only-document-store {::sys/deps {:kafka-config `->kafka-config
