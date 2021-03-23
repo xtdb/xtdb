@@ -13,27 +13,44 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
-  (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
-    (let [len (alength table)
-          start (.nextInt (ThreadLocalRandom/current) len)]
-      (loop [i start]
-        (if-let [^Map$Entry e (aget table i)]
-          e
-          (let [next (inc i)
-                next (if (= next len)
-                       0
-                       next)]
-            (when-not (= next start)
-              (recur next))))))))
+  (when-not (.isEmpty m)
+    (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
+      (let [len (alength table)
+            start (.nextInt (ThreadLocalRandom/current) len)]
+        (loop [i start]
+          (if-let [^Map$Entry e (aget table i)]
+            e
+            (let [next (inc i)
+                  next (if (= next len)
+                         0
+                         next)]
+              (when-not (= next start)
+                (recur next)))))))))
 
 (declare resize-cache)
 
-(deftype SecondChanceCache [^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
+(definterface SecondChanceCachePrivate
+  (^java.util.Map getHot [])
+  (^void maybeResizeCache []))
+
+(def ^:private ^:const ^{:tag 'double} resize-load-factor 0.01)
+
+(deftype SecondChanceCache [^:unsynchronized-mutable ^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
                             ^long size adaptive-sizing? ^double adaptive-break-even-level
                             ^Semaphore resize-semaphore]
   Object
   (toString [_]
     (str hot))
+
+  SecondChanceCachePrivate
+  (getHot [this]
+    hot)
+
+  (maybeResizeCache [this]
+    (when-not (.isEmpty hot)
+      (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable hot)]
+        (when (< (double (/ (.size hot) (alength table))) resize-load-factor)
+          (set! (.hot this) (ConcurrentHashMap. hot))))))
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
@@ -72,7 +89,7 @@
     (.clear cooling)))
 
 (defn move-to-cooling-state [^SecondChanceCache cache]
-  (let [hot ^ConcurrentHashMap (.hot cache)
+  (let [hot ^ConcurrentHashMap (.getHot cache)
         cooling ^Queue (.cooling cache)]
     (while (< (.size cooling)
               (long (Math/ceil (* (.cooling-factor cache) (.size hot)))))
@@ -103,7 +120,7 @@
         (.setDaemon true))))
 
 (defn- move-to-cold-state [^SecondChanceCache cache]
-  (let [hot ^ConcurrentHashMap (.hot cache)
+  (let [hot ^ConcurrentHashMap (.getHot cache)
         cooling ^Queue (.cooling cache)
         cold ^ICache (.cold cache)
         hot-target-size (if (.adaptive-sizing? cache)
@@ -122,6 +139,7 @@
   (let [resize-semaphore ^Semaphore (.resize-semaphore cache)]
     (when (.tryAcquire resize-semaphore)
       (try
+        (.maybeResizeCache cache)
         (move-to-cooling-state cache)
         (move-to-cold-state cache)
         (finally
