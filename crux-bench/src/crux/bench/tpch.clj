@@ -11,7 +11,7 @@
   (every? true? (for [n (range 1 23)]
                   (let [actual (run-tpch-query node n)]
                     (if (= 0.01 scale-factor)
-                      (every? true? (tpch/validate-tpch-query actual (tpch/parse-tpch-result n)))
+                      (tpch/validate-tpch-query actual (tpch/parse-tpch-result n))
                       (boolean actual))))))
 
 (defn run-tpch [node {:keys [scale-factor] :as opts}]
