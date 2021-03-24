@@ -89,9 +89,9 @@
     (.clear cooling)))
 
 (defn move-to-cooling-state [^SecondChanceCache cache]
+  (.maybeResizeCache cache)
   (let [hot ^ConcurrentHashMap (.getHot cache)
         cooling ^Queue (.cooling cache)]
-    (.maybeResizeCache cache)
     (while (< (.size cooling)
               (long (Math/ceil (* (.cooling-factor cache) (.size hot)))))
       (when-let [e (random-entry hot)]
