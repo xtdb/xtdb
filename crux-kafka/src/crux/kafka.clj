@@ -17,7 +17,7 @@
            [java.util.function Function Supplier]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
-           [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
+           [org.apache.kafka.clients.producer Callback KafkaProducer ProducerRecord RecordMetadata]
            [org.apache.kafka.common.errors InterruptException TopicExistsException]
            org.apache.kafka.common.TopicPartition))
 
@@ -138,12 +138,21 @@
                        ^Closeable consumer]
   db/TxLog
   (submit-tx-async [_ tx-events]
-    (-> (cio/future->completable-future (.send producer (ProducerRecord. tx-topic nil tx-events)))
-        (.thenApply (reify Function
-                      (apply [_ record-meta]
-                        (let [record-meta ^RecordMetadata record-meta]
-                          {::tx/tx-id (.offset record-meta)
-                           ::tx/tx-time (Date. (.timestamp record-meta))}))))))
+    (let [fut (CompletableFuture.)]
+      (.send producer
+             (ProducerRecord. tx-topic nil tx-events)
+             (reify Callback
+               (onCompletion [_ record-meta e]
+                 (if e
+                   (.completeExceptionally fut e)
+                   (.complete fut record-meta)))))
+
+      (-> fut
+          (.thenApply (reify Function
+                        (apply [_ record-meta]
+                          (let [record-meta ^RecordMetadata record-meta]
+                            {::tx/tx-id (.offset record-meta)
+                             ::tx/tx-time (Date. (.timestamp record-meta))})))))))
 
   (open-tx-log [this after-tx-id]
     (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
@@ -226,12 +235,18 @@
 
 ;;;; DocumentStore
 (defn- submit-docs-async [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
-  (let [fs (doall (for [[content-hash doc] id-and-docs]
-                    (->> (ProducerRecord. doc-topic content-hash doc)
-                         (.send producer)
-                         cio/future->completable-future)))]
-    (.flush producer)
-    (CompletableFuture/allOf (into-array CompletableFuture fs))))
+  (->> (for [[content-hash doc] id-and-docs]
+         (let [fut (CompletableFuture.)]
+           (.send producer
+                  (ProducerRecord. doc-topic content-hash doc)
+                  (reify Callback
+                    (onCompletion [_ record-metadata e]
+                      (if e
+                        (.completeExceptionally fut e)
+                        (.complete fut record-metadata)))))
+           fut))
+       (into-array CompletableFuture)
+       CompletableFuture/allOf))
 
 (defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
                                ^AdminClient admin-client

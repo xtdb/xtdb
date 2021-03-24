@@ -330,14 +330,3 @@
         result)
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc mallopt")))))
-
-(defn future->completable-future ^java.util.concurrent.CompletableFuture [fut]
-  (CompletableFuture/supplyAsync
-   (reify Supplier
-     (get [_]
-       (try
-         @fut
-         (catch ExecutionException e
-           (throw (CompletionException. (.getCause e))))
-         (catch InterruptedException _
-           (throw (CompletionException. "interrupted"))))))))
