@@ -121,18 +121,17 @@
         (.setDaemon true))))
 
 (defn- move-to-cold-state [^SecondChanceCache cache]
-  (let [hot ^ConcurrentHashMap (.getHot cache)
-        cooling ^Queue (.cooling cache)
+  (let [cooling ^Queue (.cooling cache)
         cold ^ICache (.cold cache)
         hot-target-size (if (.adaptive-sizing? cache)
                           (long (Math/pow (.size cache)
                                           (+ (.adaptive-break-even-level cache)
                                              (double (.get free-memory-ratio)))))
                           (.size cache))]
-    (while (> (.size hot) hot-target-size)
+    (while (> (.size (.getHot cache)) hot-target-size)
       (when-let [vp ^ValuePointer (.poll cooling)]
         (when-some [k (.getKey vp)]
-          (.remove hot k)
+          (.remove (.getHot cache) k)
           (.computeIfAbsent cold k identity (constantly (.getValue vp)))))
       (move-to-cooling-state cache))))
 
