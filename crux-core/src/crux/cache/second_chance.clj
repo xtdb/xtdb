@@ -50,7 +50,8 @@
     (when-not (.isEmpty hot)
       (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable hot)]
         (when (< (double (/ (.size hot) (alength table))) resize-load-factor)
-          (set! (.hot this) (ConcurrentHashMap. hot))))))
+          (set! (.hot this) (doto (ConcurrentHashMap. 0)
+                              (.putAll hot)))))))
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
@@ -165,7 +166,7 @@
                             cooling-factor 0.1
                             adaptive-break-even-level 0.8}
                        :as opts}]
-  (let [hot (ConcurrentHashMap.)
+  (let [hot (ConcurrentHashMap. 0)
         cooling (LinkedBlockingQueue.)
         cold (or cold-cache (crux.cache.nop/->nop-cache opts))]
     (when adaptive-sizing?
