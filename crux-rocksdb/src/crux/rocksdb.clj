@@ -83,9 +83,11 @@
     (.compactRange db))
 
   (fsync [_]
-    (with-open [flush-options (doto (FlushOptions.)
-                                (.setWaitForFlush true))]
-      (.flush db flush-options)))
+    (when (and (not (.sync write-options))
+               (.disableWAL write-options))
+      (with-open [flush-options (doto (FlushOptions.)
+                                  (.setWaitForFlush true))]
+        (.flush db flush-options))))
 
   (count-keys [_]
     (-> (.getProperty db "rocksdb.estimate-num-keys")

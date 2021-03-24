@@ -212,7 +212,7 @@
 
 (def ^:private rocksdb_lz4_compression 4)
 
-(defrecord RocksJNRKv [^Pointer db, ^Pointer options, ^Pointer write-options, ^Pointer block-based-options, db-dir, cp-job]
+(defrecord RocksJNRKv [^Pointer db, ^Pointer options, ^Pointer write-options, ^Pointer block-based-options, db-dir, cp-job, disable-wal? sync?]
   kv/KvStore
   (new-snapshot [_]
     (let [snapshot (.rocksdb_create_snapshot rocksdb db)
@@ -242,14 +242,15 @@
           (check-error errptr-out)))))
 
   (fsync [_]
-    (let [errptr-out (make-array String 1)
-          flush-options (.rocksdb_flushoptions_create rocksdb)]
-      (try
-        (.rocksdb_flushoptions_set_wait rocksdb flush-options 1)
-        (.rocksdb_flush rocksdb db flush-options errptr-out)
-        (finally
-          (.rocksdb_flushoptions_destroy rocksdb flush-options)
-          (check-error errptr-out)))))
+    (when (and (not sync?) disable-wal?)
+      (let [errptr-out (make-array String 1)
+            flush-options (.rocksdb_flushoptions_create rocksdb)]
+        (try
+          (.rocksdb_flushoptions_set_wait rocksdb flush-options 1)
+          (.rocksdb_flush rocksdb db flush-options errptr-out)
+          (finally
+            (.rocksdb_flushoptions_destroy rocksdb flush-options)
+            (check-error errptr-out))))))
 
   (compact [_])
 
@@ -347,6 +348,8 @@
                                    :db db
                                    :options opts
                                    :write-options write-options
-                                   :block-based-options block-based-options})]
+                                   :block-based-options block-based-options
+                                   :sync? sync?
+                                   :disable-wal? disable-wal?})]
     (cond-> kv-store
       checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format})))))
