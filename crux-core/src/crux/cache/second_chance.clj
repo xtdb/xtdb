@@ -33,10 +33,8 @@
   (^java.util.Map getHot [])
   (^void maybeResizeCache []))
 
-(def ^:private ^:const ^{:tag 'double} resize-load-factor 0.01)
-
 (deftype SecondChanceCache [^:unsynchronized-mutable ^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
-                            ^long size adaptive-sizing? ^double adaptive-break-even-level
+                            ^long size adaptive-sizing? ^double adaptive-break-even-level ^double downsize-load-factor
                             ^Semaphore resize-semaphore]
   Object
   (toString [_]
@@ -49,7 +47,7 @@
   (maybeResizeCache [this]
     (when-not (.isEmpty hot)
       (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable hot)]
-        (when (< (double (/ (.size hot) (alength table))) resize-load-factor)
+        (when (< (double (/ (.size hot) (alength table))) downsize-load-factor)
           (set! (.hot this) (doto (ConcurrentHashMap. 0)
                               (.putAll hot)))))))
 
@@ -158,13 +156,17 @@
                                   :spec ::sys/boolean}
                :adaptive-break-even-level {:doc "Adaptive break even memory usage level"
                                            :default 0.8
-                                           :spec ::sys/pos-double}}}
+                                           :spec ::sys/pos-double}
+               :downsize-load-factor {:doc "Downsize load factor"
+                                      :default 0.01
+                                      :spec ::sys/pos-double}}}
   ^crux.cache.ICache [{:keys [^long cache-size ^double cooling-factor cold-cache
-                              adaptive-sizing? adaptive-break-even-level]
+                              adaptive-sizing? adaptive-break-even-level downsize-load-factor]
                        :or {cache-size  (* 128 1024)
                             adaptive-sizing? true
                             cooling-factor 0.1
-                            adaptive-break-even-level 0.8}
+                            adaptive-break-even-level 0.8
+                            downsize-load-factor 0.01}
                        :as opts}]
   (let [hot (ConcurrentHashMap. 0)
         cooling (LinkedBlockingQueue.)
@@ -173,4 +175,4 @@
       (locking free-memory-thread
         (when-not (.isAlive free-memory-thread)
           (.start free-memory-thread))))
-    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level (Semaphore. 1))))
+    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level downsize-load-factor (Semaphore. 1))))
