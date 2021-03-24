@@ -52,15 +52,15 @@
       (let [location-tx-ops (vec (for [location-doc @location-docs]
                                    [:crux.tx/put location-doc]))
             _ (api/submit-tx node location-tx-ops)
-            last-tx (with-condition-docs
-                      (fn [condition-docs]
-                        (->> condition-docs
-                             (partition-all conditions-chunk-size)
-                             (reduce (fn [last-tx chunk]
-                                       (api/submit-tx node
-                                                      (vec (for [{:keys [condition/time] :as condition-doc} chunk]
-                                                             [:crux.tx/put condition-doc time]))))
-                                     nil))))]
+            last-tx @(with-condition-docs
+                       (fn [condition-docs]
+                         (->> condition-docs
+                              (partition-all conditions-chunk-size)
+                              (reduce (fn [_last-tx chunk]
+                                        (api/submit-tx-async node
+                                                             (vec (for [{:keys [condition/time] :as condition-doc} chunk]
+                                                                    [:crux.tx/put condition-doc time]))))
+                                      nil))))]
         (api/await-tx node last-tx (Duration/ofMinutes 20))
         {:success? true}))))
 

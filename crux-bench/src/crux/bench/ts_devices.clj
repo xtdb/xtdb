@@ -66,14 +66,14 @@
       (let [info-tx-ops (vec (for [info-doc @info-docs]
                                [:crux.tx/put info-doc]))
             _ (crux/submit-tx node info-tx-ops)
-            last-tx (with-readings-docs
-                      (fn [readings-docs]
-                        (->> readings-docs
-                             (partition-all readings-chunk-size)
-                             (reduce (fn [last-tx chunk]
-                                       (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
-                                                                   [:crux.tx/put reading-doc time]))))
-                                     nil))))]
+            last-tx @(with-readings-docs
+                       (fn [readings-docs]
+                         (->> readings-docs
+                              (partition-all readings-chunk-size)
+                              (reduce (fn [last-tx chunk]
+                                        (crux/submit-tx-async node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
+                                                                          [:crux.tx/put reading-doc time]))))
+                                      nil))))]
         (crux/await-tx node last-tx (Duration/ofMinutes 20))
         {:success? true}))))
 
