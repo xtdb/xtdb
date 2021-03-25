@@ -3403,6 +3403,26 @@
                                       [e :ticker/market m2]
                                       [m2 :se/currency :currency/usd]]}))))
 
+(t/deftest test-open-q-transducers
+  (fix/transact! *api* [{:crux.db/id :one, :val 1}
+                        {:crux.db/id :two, :val 2}
+                        {:crux.db/id :three, :val 3}])
+  (t/is (= #{:one :three}
+           (->> (api/open-q (api/db *api*) '{:find [id val],
+                                             :keys [id val]
+                                             :where [[id :val val]]})
+                (into #{} (comp (filter (comp odd? :val))
+                                (map :id))))))
+
+  (t/is (= #{:one}
+           (->> (api/open-q (api/db *api*) '{:find [id val],
+                                             :keys [id val]
+                                             :where [[id :val val]]
+                                             :order-by [[val :asc]]})
+                (into #{} (comp (filter (comp odd? :val))
+                                (map :id)
+                                (take 1)))))))
+
 (t/deftest test-order-by-when-not-specified-in-return-418
   (fix/transact! *api* [{:crux.db/id :one
                          :val 1}
