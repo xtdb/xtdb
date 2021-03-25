@@ -167,8 +167,7 @@
       (build)))
 
 (defn -main []
-  (let [app (App.)
-        ingest-grid (-> ingest-grid
+  (let [ingest-grid (-> ingest-grid
                         (update-in-grid :minute-metric (fn [m]
                                                          (-> (->metric m)
                                                              (->math "time/6000" "time-taken(mins)"))))
