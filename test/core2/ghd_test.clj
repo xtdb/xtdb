@@ -51,7 +51,7 @@
 
 (defn ->hgraph [h]
   (let [edge->vertices (->> (for [[relation & vars] h]
-                              [relation (into (sorted-set) vars)])
+                              [relation (vec vars)])
                             (into (sorted-map)))]
     {:edge->vertices edge->vertices
      :vertice->edges (->vertice->edges edge->vertices)}))
