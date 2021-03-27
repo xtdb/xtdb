@@ -7,6 +7,7 @@
 
 ;; Does not implement the backtracking part.
 
+;; Lambda are the edges (relations) and chi the vertices (variables).
 (defn- ->htree [lambda chi sub-trees]
   {:lambda lambda
    :chi chi
@@ -49,8 +50,9 @@
                        (into (sorted-set)))))))
 
 (defn ->hgraph [h]
-  (let [edge->vertices (zipmap (map first h)
-                               (map (comp (partial into (sorted-set)) rest) h))]
+  (let [edge->vertices (->> (for [[relation & vars] h]
+                              [relation (into (sorted-set) vars)])
+                            (into (sorted-map)))]
     {:edge->vertices edge->vertices
      :vertice->edges (->vertice->edges edge->vertices)}))
 
