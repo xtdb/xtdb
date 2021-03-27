@@ -73,21 +73,21 @@
          edges (into (sorted-set) (keys (:edge->vertices h)))]
      (k-decomposable h k edges (sorted-set))))
   ([{:keys [edge->vertices] :as h} k edges old-sep]
-   (first (for [separator (guess-separator h k)
-                :when (and (set/subset? (set/intersection edges old-sep) separator)
-                           (not-empty (set/intersection separator edges)))
-                :let [sub-trees (reduce
-                                 (fn [sub-trees comp]
-                                   (if-let [h-tree (k-decomposable h k comp separator)]
-                                     (conj sub-trees h-tree)
-                                     (reduced nil)))
-                                 #{}
-                                 (separate h edges separator))
-                      chi (->> (set/union (set/intersection edges old-sep)
-                                          (set/intersection separator edges))
-                               (map edge->vertices)
-                               (reduce into (sorted-set)))]]
-            (with-meta (->htree separator chi sub-trees) h)))))
+   (for [separator (guess-separator h k)
+         :when (and (set/subset? (set/intersection edges old-sep) separator)
+                    (not-empty (set/intersection separator edges)))
+         :let [sub-trees (reduce
+                          (fn [sub-trees comp]
+                            (if-let [h-tree (first (k-decomposable h k comp separator))]
+                              (conj sub-trees h-tree)
+                              (reduced nil)))
+                          #{}
+                          (separate h edges separator))
+               chi (->> (set/union (set/intersection edges old-sep)
+                                   (set/intersection separator edges))
+                        (map edge->vertices)
+                        (reduce into (sorted-set)))]]
+     (with-meta (->htree separator chi sub-trees) h))))
 
 
 ;; NOTE: this is not necessarily correct, but need some test as its a
