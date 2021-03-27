@@ -74,7 +74,7 @@
                                           (set/intersection separator edges))
                                (map edge->vertices)
                                (reduce into (sorted-set)))]]
-            (->htree separator chi sub-trees)))))
+            (with-meta (->htree separator chi sub-trees) h)))))
 
 
 ;; NOTE: this is not necessarily correct, but need some test as its a
