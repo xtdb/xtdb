@@ -43,7 +43,10 @@
 (defn- guess-separator [{:keys [vertice->edges edge->vertices]} k]
   (let [edges (vec (keys edge->vertices))]
     (repeatedly (fn []
-                  (into (sorted-set) (repeatedly k #(rand-nth edges)))))))
+                  (->> (repeatedly #(rand-nth edges))
+                       (distinct)
+                       (take (inc (rand-int k)))
+                       (into (sorted-set)))))))
 
 (defn ->hgraph [h]
   (let [edge->vertices (zipmap (map first h)
