@@ -49,6 +49,17 @@
                        (take (inc (rand-int k)))
                        (into (sorted-set)))))))
 
+(defn htree->tree-seq [ht]
+  (tree-seq map? :sub-trees ht))
+
+(defn htree-decomp-width [ht]
+  (->> (htree->tree-seq ht)
+       (map (comp count :lambda))
+       (reduce max 0)))
+
+(defn htree-width [hts]
+  (reduce min (map htree-decomp-width hts)))
+
 (defn ->hgraph [h]
   (let [edge->vertices (->> (for [[relation & vars] h]
                               [relation (vec vars)])
