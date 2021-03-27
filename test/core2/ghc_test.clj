@@ -67,9 +67,7 @@
                                      (reduced nil)))
                                  #{}
                                  (separate h edges separator))
-                      chi (->> (set/union (set/intersection edges old-sep)
-                                          (set/intersection separator edges))
-                               (map edge->vertices)
+                      chi (->> (map edge->vertices separator)
                                (reduce into (sorted-set)))]]
             (->htree separator chi sub-trees)))))
 
