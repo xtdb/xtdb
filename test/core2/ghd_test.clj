@@ -101,7 +101,7 @@
                       [:F b e h]
                       [:G e j]
                       [:H a h j]])]
-    (t/is (= [#{ :B :C :D :E :F :G :H}]
+    (t/is (= [#{:B :C :D :E :F :G :H}]
              (separate h #{:A :B :C :D :E :F :G :H} #{:A})))
 
     (t/is (= [#{:C :D :E} #{:F :G :H}]
