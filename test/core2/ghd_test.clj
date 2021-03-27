@@ -1,4 +1,4 @@
-(ns core2.ghc-test
+(ns core2.ghd-test
   (:require [clojure.test :as t]
             [clojure.set :as set]))
 
