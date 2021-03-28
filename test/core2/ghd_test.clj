@@ -128,7 +128,7 @@
 (t/deftest can-compute-join-order
   (let [h (->hgraph backtracking-paper-graph)]
     (t/is (= '[d e f j b c g h a i]
-             (htree-vertice-order
+             (htree-join-order
               (first (k-decomposable h 2)))))))
 
 (def adder-15 '[[:and15 TempHa15 I29 I30]
@@ -209,4 +209,4 @@
                 [:and2 I4 I3 TempHa2]])
 
 (t/deftest can-decompose-adder-15
-  (t/is (= 106 (count (htree-join-order (first (k-decomposable (->hgraph adder15) 2)))))))
+  (t/is (= 106 (count (htree-join-order (first (k-decomposable (->hgraph adder-15) 2)))))))
