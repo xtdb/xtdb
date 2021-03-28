@@ -31,29 +31,30 @@
                               (mapcat edge->vertices separator))
         edges (set/difference edges separator)]
     (if-let [vertice->edges (not-empty vertice->edges)]
-      (let [comp (loop [acc nil]
-                   (let [new-acc (reduce
-                                  (fn [acc new-edges]
-                                    (if acc
-                                      (if (not-empty (set/intersection acc new-edges))
-                                        (set/union acc new-edges)
-                                        acc)
-                                      new-edges))
-                                  acc
-                                  (vals vertice->edges))]
-                     (if (= new-acc acc)
-                       acc
-                       (recur new-acc))))]
-        (cons comp (separate h edges comp)))
+      (let [component (loop [acc nil]
+                        (let [new-acc (reduce
+                                       (fn [acc new-edges]
+                                         (if acc
+                                           (if (not-empty (set/intersection acc new-edges))
+                                             (set/union acc new-edges)
+                                             acc)
+                                           new-edges))
+                                       acc
+                                       (vals vertice->edges))]
+                          (if (= new-acc acc)
+                            acc
+                            (recur new-acc))))]
+        (cons component (separate h edges component)))
       (when (not-empty edges)
         (list edges)))))
 
 (defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
-  (let [edges (vec (keys edge->vertices))]
+  (let [edges (vec (keys edge->vertices))
+        limit (inc (.nextInt rng k))]
     (repeatedly (fn []
                   (->> (repeatedly #(nth edges (.nextInt rng (count edges))))
                        (distinct)
-                       (take (inc (.nextInt rng k)))
+                       (take limit)
                        (into (sorted-set)))))))
 
 (defn htree->tree-seq [^HTree ht]
