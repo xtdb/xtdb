@@ -9,7 +9,7 @@
 ;; Does not implement the backtracking part.
 
 ;; Lambda are the edges (relations) and chi the vertices (variables).
-(defrecord HTree [lambda chi sub-trees])
+(defrecord HTree [lambda chi subtrees])
 
 (defrecord HGraph [edge->vertices vertice->edges])
 
@@ -58,7 +58,7 @@
                        (into (sorted-set)))))))
 
 (defn htree->tree-seq [^HTree ht]
-  (tree-seq map? :sub-trees ht))
+  (tree-seq map? :subtrees ht))
 
 (defn htree-decomp-width [^HTree ht]
   (->> (htree->tree-seq ht)
@@ -91,18 +91,18 @@
    (for [separator (guess-separator h k rng)
          :when (and (set/subset? (set/intersection edges old-sep) separator)
                     (not-empty (set/intersection separator edges)))
-         :let [sub-trees (reduce
-                          (fn [sub-trees comp]
-                            (if-let [h-tree (first (k-decomposable h k rng comp separator))]
-                              (conj sub-trees h-tree)
-                              (reduced nil)))
-                          []
-                          (separate h edges separator))
+         :let [subtrees (reduce
+                         (fn [subtrees comp]
+                           (if-let [h-tree (first (k-decomposable h k rng comp separator))]
+                             (conj subtrees h-tree)
+                             (reduced nil)))
+                         []
+                         (separate h edges separator))
                chi (->> (set/union (set/intersection edges old-sep)
                                    (set/intersection separator edges))
                         (mapcat edge->vertices)
                         (into (sorted-set)))]]
-     (with-meta (->HTree separator chi sub-trees) h))))
+     (with-meta (->HTree separator chi subtrees) h))))
 
 
 ;; NOTE: this is not necessarily correct, but need some test as its a
