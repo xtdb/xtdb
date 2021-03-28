@@ -29,7 +29,9 @@
   (let [h (ghd/->hgraph backtracking-paper-graph)]
     (t/is (= '[d e f j b c g h a i]
              (ghd/htree-join-order
-              (first (ghd/k-decomposable h 2)))))))
+              (first (ghd/k-decomposable h 2)))))
+
+    (t/is (ghd/htree-complete? (first (ghd/k-decomposable h 2))))))
 
 (def adder-15 '[[:and15 TempHa15 I29 I30]
                 [:xorA13 TempG13 S13 C12]
@@ -110,4 +112,5 @@
 
 (t/deftest can-decompose-adder-15
   (t/is (= (count (distinct (filter symbol? (flatten adder-15))))
-           (count (ghd/htree-join-order (first (ghd/k-decomposable (ghd/->hgraph adder-15) 2)))))))
+           (count (ghd/htree-join-order (first (ghd/k-decomposable (ghd/->hgraph adder-15) 2))))))
+  (t/is (ghd/htree-complete? (first (ghd/k-decomposable (ghd/->hgraph adder-15) 2)))))

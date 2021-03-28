@@ -68,6 +68,10 @@
 (defn htree-join-order [^HTree ht]
   (vec (distinct (mapcat :chi (htree->tree-seq ht)))))
 
+(defn htree-complete? [^HTree ht]
+  (= (set (keys (:edge->vertices (meta ht))))
+     (set (mapcat :lambda (htree->tree-seq ht)))))
+
 (defn- constraints->edge-vertices [constraints]
   (->> (for [[relation & vars] constraints]
          [relation (vec vars)])
