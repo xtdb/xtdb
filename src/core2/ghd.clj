@@ -103,21 +103,20 @@
   ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
    (let [edges (into (sorted-set) (keys edge->vertices))]
      (k-decomposable h k rng edges (sorted-set))))
-  ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-sep]
+  ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-separator]
    (assert (and (pos? k) (<= k (inc (count edge->vertices)))))
-   (for [separator (guess-separator h k rng)
-         :when (and (set/subset? (set/intersection (all-vertices h edges)
-                                                   (all-vertices h old-sep))
-                                 (all-vertices h separator))
-                    (not-empty (set/intersection separator edges)))
-         :let [subtrees (reduce
-                         (fn [subtrees component]
-                           (if-let [h-tree (first (k-decomposable h k rng component separator))]
-                             (conj subtrees h-tree)
-                             (reduced nil)))
-                         []
-                         (separate h edges separator))
-               chi (set/union (set/intersection (all-vertices h edges)
-                                                (all-vertices h old-sep))
-                              (all-vertices h (set/intersection separator edges)))]]
-     (with-meta (->HTree separator chi subtrees) h))))
+   (let [edges-old-separator-intersection (set/intersection (all-vertices h edges)
+                                                            (all-vertices h old-separator))]
+     (for [separator (guess-separator h k rng)
+           :let [separator-edges-intersection (set/intersection separator edges)]
+           :when (and (set/subset? edges-old-separator-intersection (all-vertices h separator))
+                      (not-empty separator-edges-intersection))
+           :let [subtrees (reduce
+                           (fn [subtrees component]
+                             (if-let [h-tree (first (k-decomposable h k rng component separator))]
+                               (conj subtrees h-tree)
+                               (reduced nil)))
+                           []
+                           (separate h edges separator))
+                 chi (set/union edges-old-separator-intersection (all-vertices h separator-edges-intersection))]]
+       (with-meta (->HTree separator chi subtrees) h)))))
