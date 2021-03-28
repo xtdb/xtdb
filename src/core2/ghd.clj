@@ -94,6 +94,9 @@
   (let [edge->vertices (constraints->edge-vertices constraints)]
     (->HGraph edge->vertices (invert-edges->vertices edge->vertices))))
 
+(defn- all-vertices [{:keys [edge->vertices] :as ^HGraph h} edges]
+  (into (sorted-set) (mapcat edge->vertices edges)))
+
 (defn k-decomposable
   ([^HGraph h k]
    (k-decomposable h k (Random. 0)))
@@ -103,7 +106,9 @@
   ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-sep]
    (assert (and (pos? k) (<= k (count edge->vertices))))
    (for [separator (guess-separator h k rng)
-         :when (and (set/subset? (set/intersection edges old-sep) separator)
+         :when (and (set/subset? (set/intersection (all-vertices h edges)
+                                                   (all-vertices h old-sep))
+                                 (all-vertices h separator))
                     (not-empty (set/intersection separator edges)))
          :let [subtrees (reduce
                          (fn [subtrees component]
@@ -112,8 +117,7 @@
                              (reduced nil)))
                          []
                          (separate h edges separator))
-               chi (->> (set/union (set/intersection edges old-sep)
-                                   (set/intersection separator edges))
-                        (mapcat edge->vertices)
-                        (into (sorted-set)))]]
+               chi (set/union (set/intersection (all-vertices h edges)
+                                                (all-vertices h old-sep))
+                              (all-vertices h (set/intersection separator edges)))]]
      (with-meta (->HTree separator chi subtrees) h))))
