@@ -92,8 +92,8 @@
          :when (and (set/subset? (set/intersection edges old-sep) separator)
                     (not-empty (set/intersection separator edges)))
          :let [subtrees (reduce
-                         (fn [subtrees comp]
-                           (if-let [h-tree (first (k-decomposable h k rng comp separator))]
+                         (fn [subtrees component]
+                           (if-let [h-tree (first (k-decomposable h k rng component separator))]
                              (conj subtrees h-tree)
                              (reduced nil)))
                          []
@@ -126,4 +126,8 @@
              (separate h #{:C :D :E} #{:C :D})))
 
     (t/is (= [#{:F :H}]
-             (separate h #{:F :G :H} #{:G})))))
+             (separate h #{:F :G :H} #{:G})))
+
+    (t/is (= '[d e f j b c g h a i]
+             (htree-vertice-order
+              (first (k-decomposable h 2)))))))
