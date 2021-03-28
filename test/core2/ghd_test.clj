@@ -58,7 +58,7 @@
                        (into (sorted-set)))))))
 
 (defn htree->tree-seq [^HTree ht]
-  (tree-seq map? :subtrees ht))
+  (tree-seq (partial instance? HTree) :subtrees ht))
 
 (defn htree-decomp-width [^HTree ht]
   (->> (htree->tree-seq ht)
