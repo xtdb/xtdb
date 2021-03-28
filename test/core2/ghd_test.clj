@@ -209,4 +209,5 @@
                 [:and2 I4 I3 TempHa2]])
 
 (t/deftest can-decompose-adder-15
-  (t/is (= 106 (count (htree-join-order (first (k-decomposable (->hgraph adder-15) 2)))))))
+  (t/is (= (count (distinct (filter symbol? (flatten adder-15))))
+           (count (htree-join-order (first (k-decomposable (->hgraph adder-15) 2)))))))
