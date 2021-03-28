@@ -31,12 +31,19 @@
                               (mapcat edge->vertices separator))
         edges (set/difference edges separator)]
     (if-let [vertice->edges (not-empty vertice->edges)]
-      (let [comp (reduce
-                  (fn [acc new-edges]
-                    (if (not-empty (set/intersection acc new-edges))
-                      (set/union acc new-edges)
-                      acc))
-                  (vals vertice->edges))]
+      (let [comp (loop [acc nil]
+                   (let [new-acc (reduce
+                                  (fn [acc new-edges]
+                                    (if acc
+                                      (if (not-empty (set/intersection acc new-edges))
+                                        (set/union acc new-edges)
+                                        acc)
+                                      new-edges))
+                                  acc
+                                  (vals vertice->edges))]
+                     (if (= new-acc acc)
+                       acc
+                       (recur new-acc))))]
         (cons comp (separate h edges comp)))
       (when (not-empty edges)
         (list edges)))))
@@ -60,17 +67,16 @@
 (defn htree-width [hts]
   (reduce min (map htree-decomp-width hts)))
 
-(defn ->hgraph [h]
-  (let [edge->vertices (->> (for [[relation & vars] h]
+(defn ->hgraph [constraints]
+  (let [edge->vertices (->> (for [[relation & vars] constraints]
                               [relation (vec vars)])
                             (into (sorted-map)))]
     {:edge->vertices edge->vertices
      :vertice->edges (->vertice->edges edge->vertices)}))
 
 (defn k-decomposable
-  ([h k]
-   (let [h (->hgraph h)
-         edges (into (sorted-set) (keys (:edge->vertices h)))]
+  ([{:keys [edge->vertices] :as h} k]
+   (let [edges (into (sorted-set) (keys edge->vertices))]
      (k-decomposable h k edges (sorted-set))))
   ([{:keys [edge->vertices] :as h} k edges old-sep]
    (for [separator (guess-separator h k)
