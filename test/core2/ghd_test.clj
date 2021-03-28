@@ -1,6 +1,7 @@
 (ns core2.ghd-test
   (:require [clojure.test :as t]
-            [clojure.set :as set]))
+            [clojure.set :as set])
+  (:import [java.util Random]))
 
 ;; "A Backtracking-Based Algorithm for Computing Hypertree-Decompositions"
 ;; https://arxiv.org/abs/cs/0701083
@@ -47,12 +48,12 @@
       (when (not-empty edges)
         (list edges)))))
 
-(defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k]
+(defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
   (let [edges (vec (keys edge->vertices))]
     (repeatedly (fn []
-                  (->> (repeatedly #(rand-nth edges))
+                  (->> (repeatedly #(nth edges (.nextInt rng (count edges))))
                        (distinct)
-                       (take (inc (rand-int k)))
+                       (take (inc (.nextInt rng k)))
                        (into (sorted-set)))))))
 
 (defn htree->tree-seq [^HTree ht]
@@ -76,16 +77,18 @@
     (->HGraph edge->vertices (invert-edges->vertices edge->vertices))))
 
 (defn k-decomposable
-  ([{:keys [edge->vertices] :as ^HGraph h} k]
+  ([^HGraph h k]
+   (k-decomposable h k (Random. 0)))
+  ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
    (let [edges (into (sorted-set) (keys edge->vertices))]
-     (k-decomposable h k edges (sorted-set))))
-  ([{:keys [edge->vertices] :as ^HGraph h} k edges old-sep]
-   (for [separator (guess-separator h k)
+     (k-decomposable h k rng edges (sorted-set))))
+  ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-sep]
+   (for [separator (guess-separator h k rng)
          :when (and (set/subset? (set/intersection edges old-sep) separator)
                     (not-empty (set/intersection separator edges)))
          :let [sub-trees (reduce
                           (fn [sub-trees comp]
-                            (if-let [h-tree (first (k-decomposable h k comp separator))]
+                            (if-let [h-tree (first (k-decomposable h k rng comp separator))]
                               (conj sub-trees h-tree)
                               (reduced nil)))
                           #{}
