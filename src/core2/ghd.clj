@@ -72,6 +72,19 @@
   (= (set (keys (:edge->vertices (meta ht))))
      (set (mapcat :lambda (htree->tree-seq ht)))))
 
+(defn htree-normalize [^HTree ht]
+  (let [removed-edges (atom #{})]
+    (-> ht
+        (update :subtrees (fn [subtrees]
+                            (->> (for [subtree subtrees
+                                       :let [subtree (htree-normalize subtree)]]
+                                   (if (set/subset? (:chi subtree) (:chi ht))
+                                     (do (swap! removed-edges set/union (:lambda subtree))
+                                         (:subtrees subtree))
+                                     [subtree]))
+                                 (reduce into []))))
+        (update :lambda set/union @removed-edges))))
+
 (defn- constraints->edge-vertices [constraints]
   (->> (for [[relation & vars] constraints]
          [relation (vec vars)])
