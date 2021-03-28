@@ -8,12 +8,9 @@
 ;; Does not implement the backtracking part.
 
 ;; Lambda are the edges (relations) and chi the vertices (variables).
-(defn- ->htree [lambda chi sub-trees]
-  {:lambda lambda
-   :chi chi
-   :sub-trees sub-trees})
+(defrecord HTree [lambda chi sub-trees])
 
-(defn- ->vertice->edges [edge->vertices]
+(defn- invert-edges->vertices [edge->vertices]
   (reduce
    (fn [acc [k vs]]
      (reduce
@@ -27,7 +24,7 @@
 (defn- separate [{:keys [edge->vertices] :as h} edges separator]
   (let [edge->vertices (select-keys edge->vertices edges)
         vertice->edges (apply dissoc
-                              (->vertice->edges edge->vertices)
+                              (invert-edges->vertices edge->vertices)
                               (mapcat edge->vertices separator))
         edges (set/difference edges separator)]
     (if-let [vertice->edges (not-empty vertice->edges)]
@@ -67,12 +64,16 @@
 (defn htree-width [hts]
   (reduce min (map htree-decomp-width hts)))
 
+(defrecord HGraph [edge->vertices vertice->edges])
+
+(defn- constraints->edge-vertices [constraints]
+  (->> (for [[relation & vars] constraints]
+         [relation (vec vars)])
+       (into (sorted-map))))
+
 (defn ->hgraph [constraints]
-  (let [edge->vertices (->> (for [[relation & vars] constraints]
-                              [relation (vec vars)])
-                            (into (sorted-map)))]
-    {:edge->vertices edge->vertices
-     :vertice->edges (->vertice->edges edge->vertices)}))
+  (let [edge->vertices (constraints->edge-vertices constraints)]
+    (->HGraph edge->vertices (invert-edges->vertices edge->vertices))))
 
 (defn k-decomposable
   ([{:keys [edge->vertices] :as h} k]
@@ -93,7 +94,7 @@
                                    (set/intersection separator edges))
                         (map edge->vertices)
                         (reduce into (sorted-set)))]]
-     (with-meta (->htree separator chi sub-trees) h))))
+     (with-meta (->HTree separator chi sub-trees) h))))
 
 
 ;; NOTE: this is not necessarily correct, but need some test as its a
