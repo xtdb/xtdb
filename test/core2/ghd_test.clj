@@ -83,6 +83,7 @@
    (let [edges (into (sorted-set) (keys edge->vertices))]
      (k-decomposable h k rng edges (sorted-set))))
   ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-sep]
+   (assert (and (pos? k) (<= k (count edge->vertices))))
    (for [separator (guess-separator h k rng)
          :when (and (set/subset? (set/intersection edges old-sep) separator)
                     (not-empty (set/intersection separator edges)))
