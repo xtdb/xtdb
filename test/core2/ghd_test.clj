@@ -68,6 +68,9 @@
 (defn htree-width [hts]
   (reduce min (map htree-decomp-width hts)))
 
+(defn htree-join-order [^HTree ht]
+  (vec (distinct (mapcat :chi (htree->tree-seq ht)))))
+
 (defn- constraints->edge-vertices [constraints]
   (->> (for [[relation & vars] constraints]
          [relation (vec vars)])
@@ -93,12 +96,12 @@
                             (if-let [h-tree (first (k-decomposable h k rng comp separator))]
                               (conj sub-trees h-tree)
                               (reduced nil)))
-                          #{}
+                          []
                           (separate h edges separator))
                chi (->> (set/union (set/intersection edges old-sep)
                                    (set/intersection separator edges))
-                        (map edge->vertices)
-                        (reduce into (sorted-set)))]]
+                        (mapcat edge->vertices)
+                        (into (sorted-set)))]]
      (with-meta (->HTree separator chi sub-trees) h))))
 
 
