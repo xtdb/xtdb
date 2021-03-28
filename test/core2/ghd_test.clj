@@ -49,12 +49,10 @@
         (list edges)))))
 
 (defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
-  (let [edges (vec (keys edge->vertices))
-        limit (inc (.nextInt rng k))]
+  (let [edges (vec (keys edge->vertices))]
     (repeatedly (fn []
-                  (->> (repeatedly #(nth edges (.nextInt rng (count edges))))
-                       (distinct)
-                       (take limit)
+                  (->> (repeatedly (inc (.nextInt rng k))
+                                   #(nth edges (.nextInt rng (count edges))))
                        (into (sorted-set)))))))
 
 (defn htree->tree-seq [^HTree ht]
