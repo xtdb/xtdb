@@ -10,6 +10,8 @@
 ;; Lambda are the edges (relations) and chi the vertices (variables).
 (defrecord HTree [lambda chi sub-trees])
 
+(defrecord HGraph [edge->vertices vertice->edges])
+
 (defn- invert-edges->vertices [edge->vertices]
   (reduce
    (fn [acc [k vs]]
@@ -21,7 +23,7 @@
    (sorted-map)
    edge->vertices))
 
-(defn- separate [{:keys [edge->vertices] :as h} edges separator]
+(defn- separate [{:keys [edge->vertices] :as ^HGraph h} edges separator]
   (let [edge->vertices (select-keys edge->vertices edges)
         vertice->edges (apply dissoc
                               (invert-edges->vertices edge->vertices)
@@ -45,7 +47,7 @@
       (when (not-empty edges)
         (list edges)))))
 
-(defn- guess-separator [{:keys [vertice->edges edge->vertices]} k]
+(defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k]
   (let [edges (vec (keys edge->vertices))]
     (repeatedly (fn []
                   (->> (repeatedly #(rand-nth edges))
@@ -53,18 +55,16 @@
                        (take (inc (rand-int k)))
                        (into (sorted-set)))))))
 
-(defn htree->tree-seq [ht]
+(defn htree->tree-seq [^HTree ht]
   (tree-seq map? :sub-trees ht))
 
-(defn htree-decomp-width [ht]
+(defn htree-decomp-width [^HTree ht]
   (->> (htree->tree-seq ht)
        (map (comp count :lambda))
        (reduce max 0)))
 
 (defn htree-width [hts]
   (reduce min (map htree-decomp-width hts)))
-
-(defrecord HGraph [edge->vertices vertice->edges])
 
 (defn- constraints->edge-vertices [constraints]
   (->> (for [[relation & vars] constraints]
@@ -76,10 +76,10 @@
     (->HGraph edge->vertices (invert-edges->vertices edge->vertices))))
 
 (defn k-decomposable
-  ([{:keys [edge->vertices] :as h} k]
+  ([{:keys [edge->vertices] :as ^HGraph h} k]
    (let [edges (into (sorted-set) (keys edge->vertices))]
      (k-decomposable h k edges (sorted-set))))
-  ([{:keys [edge->vertices] :as h} k edges old-sep]
+  ([{:keys [edge->vertices] :as ^HGraph h} k edges old-sep]
    (for [separator (guess-separator h k)
          :when (and (set/subset? (set/intersection edges old-sep) separator)
                     (not-empty (set/intersection separator edges)))
