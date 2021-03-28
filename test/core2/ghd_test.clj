@@ -33,6 +33,11 @@
 
     (t/is (ghd/htree-complete? (first (ghd/k-decomposable h 4))))))
 
+(t/deftest can-compute-cover
+  (let [h (ghd/->hgraph backtracking-paper-graph)]
+    (t/is (= [#{:A :F} #{:A :B} #{:A :G} #{:F :D} #{:F :H}]
+             (ghd/cover h '#{a b e})))))
+
 (def adder-15 '[[:and15 TempHa15 I29 I30]
                 [:xorA13 TempG13 S13 C12]
                 [:or14 C14 TempHb14 TempHa14]

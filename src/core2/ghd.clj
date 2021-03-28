@@ -47,6 +47,28 @@
       (when (not-empty edges)
         (list edges)))))
 
+(defn cover [{:keys [vertice->edges edge->vertices] :as ^HGraph h} vertices]
+  (let [bound-edges (mapcat val (select-keys vertice->edges vertices))
+        edge-weights (frequencies bound-edges)
+        edge-order (mapv first (sort-by second > (sort-by first edge-weights)))]
+    (for [n (range (count edge-order))
+          :let [initial-edge (nth edge-order n)
+                initial-cover (set/intersection vertices (set (get edge->vertices initial-edge)))]
+          separator (last (reduce
+                           (fn [[current-cover current-edges acc] m]
+                             (let [edge (nth edge-order m)
+                                   new-vertices (set (get edge->vertices edge))
+                                   new-cover (set/union current-cover (set/intersection vertices new-vertices))
+                                   new-edges (cond-> current-edges
+                                               (not= new-cover current-cover)
+                                               (conj edge))]
+                               (if (= new-cover vertices)
+                                 [initial-cover #{initial-edge} (conj acc new-edges)]
+                                 [new-cover new-edges acc])))
+                           [initial-cover #{initial-edge} []]
+                           (range (inc n) (count edge-order))))]
+      separator)))
+
 (defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
   (let [edges (vec (keys edge->vertices))]
     (repeatedly (fn []
@@ -105,11 +127,11 @@
      (k-decomposable h k rng edges (sorted-set))))
   ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-separator]
    (assert (and (pos? k) (<= k (inc (count edge->vertices)))))
-   (let [edges-old-separator-intersection (set/intersection (all-vertices h edges)
-                                                            (all-vertices h old-separator))]
+   (let [connecting-vertices (set/intersection (all-vertices h edges)
+                                               (all-vertices h old-separator))]
      (for [separator (guess-separator h k rng)
            :let [separator-edges-intersection (set/intersection separator edges)]
-           :when (and (set/subset? edges-old-separator-intersection (all-vertices h separator))
+           :when (and (set/subset? connecting-vertices (all-vertices h separator))
                       (not-empty separator-edges-intersection))
            :let [subtrees (reduce
                            (fn [subtrees component]
@@ -118,5 +140,5 @@
                                (reduced nil)))
                            []
                            (separate h edges separator))
-                 chi (set/union edges-old-separator-intersection (all-vertices h separator-edges-intersection))]]
+                 chi (set/union connecting-vertices (all-vertices h separator-edges-intersection))]]
        (with-meta (->HTree separator chi subtrees) h)))))
