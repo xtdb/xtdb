@@ -33,6 +33,16 @@
 
     (t/is (ghd/htree-complete? (first (ghd/k-decomposable h 4))))))
 
+(t/deftest can-decompose-using-backtracking
+  (let [h (ghd/->hgraph backtracking-paper-graph)]
+    (t/is (= 10 (count (ghd/det-k-decomp h 2))))
+
+    (t/is (= (ghd/det-k-decomp h 2)
+             (ghd/det-k-decomp h 2)))
+
+    (t/is (not= (ghd/det-k-decomp h 2)
+                (ghd/det-k-decomp h 3)))))
+
 (t/deftest can-compute-cover
   (let [h (ghd/->hgraph backtracking-paper-graph)]
     (t/is (= [#{:A :F} #{:A :B} #{:A :G} #{:F :D} #{:F :H}]
