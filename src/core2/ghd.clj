@@ -1,5 +1,6 @@
 (ns core2.ghd
-  (:require [clojure.set :as set])
+  (:require [clojure.set :as set]
+            [clojure.tools.logging :as log])
   (:import [java.util Random]))
 
 ;; "A Backtracking-Based Algorithm for Computing Hypertree-Decompositions"
@@ -24,10 +25,11 @@
    edge->vertices))
 
 (defn separate [{:keys [edge->vertices] :as ^HGraph h} edges separator]
-  (let [edge->vertices (select-keys edge->vertices edges)
+  (let [separator-vertices (mapcat edge->vertices separator)
+        edge->vertices (select-keys edge->vertices edges)
         vertice->edges (apply dissoc
                               (invert-edges->vertices edge->vertices)
-                              (mapcat edge->vertices separator))
+                              separator-vertices)
         edges (set/difference edges separator)]
     (if-let [vertice->edges (not-empty vertice->edges)]
       (let [component (loop [acc nil]
@@ -50,23 +52,27 @@
 (defn cover [{:keys [vertice->edges edge->vertices] :as ^HGraph h} vertices]
   (let [bound-edges (mapcat val (select-keys vertice->edges vertices))
         edge-weights (frequencies bound-edges)
-        edge-order (mapv first (sort-by second > (sort-by first edge-weights)))]
-    (for [n (range (count edge-order))
-          :let [initial-edge (nth edge-order n)
-                initial-cover (set/intersection vertices (set (get edge->vertices initial-edge)))]
-          separator (last (reduce
-                           (fn [[current-cover current-edges acc] m]
-                             (let [edge (nth edge-order m)
-                                   new-vertices (set (get edge->vertices edge))
-                                   new-cover (set/union current-cover (set/intersection vertices new-vertices))
-                                   new-edges (cond-> current-edges
-                                               (not= new-cover current-cover)
-                                               (conj edge))]
-                               (if (= new-cover vertices)
-                                 [initial-cover #{initial-edge} (conj acc new-edges)]
-                                 [new-cover new-edges acc])))
-                           [initial-cover #{initial-edge} []]
-                           (range (inc n) (count edge-order))))]
+        edge-order (mapv first (sort-by second > (sort-by first edge-weights)))
+        separators (distinct (for [n (range (count edge-order))
+                                   :let [initial-edge (nth edge-order n)
+                                         initial-cover (set/intersection vertices (set (get edge->vertices initial-edge)))]
+                                   :when (not-empty initial-cover)
+                                   separator (last (reduce
+                                                    (fn [[current-cover current-edges acc] m]
+                                                      (let [edge (nth edge-order m)
+                                                            new-vertices (set (get edge->vertices edge))
+                                                            new-cover (set/union current-cover (set/intersection vertices new-vertices))
+                                                            new-edges (cond-> current-edges
+                                                                        (not= new-cover current-cover)
+                                                                        (conj edge))]
+                                                        (if (= new-cover vertices)
+                                                          [initial-cover (sorted-set initial-edge) (conj acc new-edges)]
+                                                          [new-cover new-edges acc])))
+                                                    [initial-cover (sorted-set initial-edge) []]
+                                                    (range (inc n) (count edge-order))))]
+                               separator))]
+    (for [separator separators
+          :when (not (some #(set/superset? separator %) (remove #{separator} separators)))]
       separator)))
 
 (defn- expand [^HTree ht]
@@ -153,6 +159,7 @@
 (declare decomp-cov)
 
 (defn- decomp-sub [{:keys [edge->vertices] :as ^HGraph h} k components separator]
+  (log/debug :decomp-sub components separator)
   (reduce
    (fn [acc component]
      (let [child-conn (set/intersection (all-vertices h component) (all-vertices h separator))]
@@ -169,6 +176,7 @@
 (defn- decomp-add [{:keys [edge->vertices] :as ^HGraph h} k edges conn cov-sep]
   (let [in-cov-sep (set/intersection cov-sep edges)]
     (when (or (not-empty in-cov-sep) (< (count cov-sep) k))
+      (log/debug :decomp-add edges conn cov-sep)
       (reduce
        (fn [acc add-sep]
          (let [separator (set/union cov-sep add-sep)
@@ -186,6 +194,7 @@
          [#{}])))))
 
 (defn- decomp-cov [{:keys [edge->vertices] :as ^HGraph h} k edges conn]
+  (log/debug :decomp-cov edges conn)
   (if (<= (count edges) k)
     (with-meta (->HTree edges (all-vertices h edges) []) h)
     (reduce
@@ -193,18 +202,12 @@
        (when-let [ht (decomp-add h k edges conn cov-sep)]
          (reduced ht)))
      nil
-     (cover h conn))))
+     (or (not-empty (cover h conn))
+         [#{}]))))
 
 (defn det-k-decomp [{:keys [edge->vertices
                             vertice->edges] :as ^HGraph h} k]
   (let [edges (into (sorted-set) (keys edge->vertices))]
-    (reduce
-     (fn [acc initial-conn]
-       (binding [*backtrack-context* (atom {:fail-seps #{}
-                                            :succ-seps #{}})]
-         (let [ht (decomp-cov h k edges initial-conn)]
-           (cond-> acc
-             ht (conj (expand ht))))))
-     nil
-     (for [edges (vals vertice->edges)]
-       (set (mapcat edge->vertices edges))))))
+    (binding [*backtrack-context* (atom {:fail-seps #{}
+                                         :succ-seps #{}})]
+      (decomp-cov h k edges (sorted-set)))))

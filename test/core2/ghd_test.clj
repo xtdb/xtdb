@@ -27,21 +27,58 @@
 
 (t/deftest can-compute-join-order
   (let [h (ghd/->hgraph backtracking-paper-graph)]
-    (t/is (= '[d e f g i j a h b c]
+    (t/is (= '[e j a f i b c d g h]
              (ghd/htree-join-order
-              (first (ghd/k-decomposable h 4)))))
+              (first (ghd/k-decomposable h 3)))))
 
-    (t/is (ghd/htree-complete? (first (ghd/k-decomposable h 4))))))
+    (t/is (ghd/htree-complete? (first (ghd/k-decomposable h 3))))))
 
 (t/deftest can-decompose-using-backtracking
-  (let [h (ghd/->hgraph backtracking-paper-graph)]
-    (t/is (= 10 (count (ghd/det-k-decomp h 2))))
+  (let [h (ghd/->hgraph backtracking-paper-graph)
+        ht (ghd/det-k-decomp h 2)]
 
-    (t/is (= (ghd/det-k-decomp h 2)
-             (ghd/det-k-decomp h 2)))
+    ;; Fig. 6. A procedure call sequence and the corresponding
+    ;; hypertree decomposition
 
-    (t/is (not= (ghd/det-k-decomp h 2)
-                (ghd/det-k-decomp h 3)))))
+    ;; :decomp-cov #{:A :B :C :D :E :F :G :H} #{}
+    ;; :decomp-add #{:A :B :C :D :E :F :G :H} #{} #{}
+    ;; :decomp-sub (#{:B :C :D :E :F :G :H}) #{:A}
+    ;; :decomp-cov #{:B :C :D :E :F :G :H} #{a b c}
+    ;; :decomp-add #{:B :C :D :E :F :G :H} #{a b c} #{:A}
+    ;; :decomp-sub (#{:C :D :E} #{:F :G :H}) #{:A :B}
+    ;; :decomp-cov #{:C :D :E} #{a c d f}
+    ;; :decomp-add #{:C :D :E} #{a c d f} #{:C :D}
+    ;; :decomp-sub (#{:E}) #{:C :D}
+    ;; :decomp-cov #{:E} #{g i}
+    ;; :decomp-cov #{:F :G :H} #{a b e}
+    ;; :decomp-add #{:F :G :H} #{a b e} #{:A :F}
+    ;; :decomp-sub (#{:G :H}) #{:A :F}
+    ;; :decomp-cov #{:G :H} #{a e h}
+
+    (t/is (= (ghd/->HTree
+              #{:A} '#{a b c}
+              [(ghd/->HTree
+                #{:A :B} '#{a b c d e f},
+                [(ghd/->HTree
+                  #{:C :D} '#{a c d f g i}
+                  [(ghd/->HTree #{:E} '#{g i} [])])
+                 (ghd/->HTree
+                  #{:A :F} '#{a b e h}
+                  [(ghd/->HTree #{:G :H} '#{a e h j} [])])])])
+             ht))
+
+    (t/is (= '[a b c d e f
+               g i h
+               j]
+             (ghd/htree-join-order ht)))
+    (t/is (ghd/htree-complete? ht))
+    (t/is (not= (ghd/htree-normalize ht) ht))
+    (t/is (= 4 (ghd/htree-decomp-depth ht)))
+    (t/is (= 2 (ghd/htree-decomp-width ht)))
+
+    (t/is (= 3 (ghd/htree-decomp-depth (ghd/det-k-decomp h 3))))
+    (t/is (not= (ghd/det-k-decomp h 2) (ghd/det-k-decomp h 3)))
+    (t/is (= 3 (ghd/htree-decomp-width (ghd/det-k-decomp h 3))))))
 
 (t/deftest can-compute-cover
   (let [h (ghd/->hgraph backtracking-paper-graph)]
@@ -126,6 +163,10 @@
                 [:and2 I4 I3 TempHa2]])
 
 (t/deftest can-decompose-adder-15
-  (t/is (= (count (distinct (filter symbol? (flatten adder-15))))
-           (count (ghd/htree-join-order (first (ghd/k-decomposable (ghd/->hgraph adder-15) 21))))))
-  (t/is (ghd/htree-complete? (first (ghd/k-decomposable (ghd/->hgraph adder-15) 21)))))
+  (let [ht (first (ghd/k-decomposable (ghd/->hgraph adder-15) 5))]
+    (t/is (= (count (distinct (filter symbol? (flatten adder-15))))
+             (count (ghd/htree-join-order ht))))
+    (t/is (ghd/htree-complete? ht)))
+
+  (t/is (= 3 (ghd/htree-decomp-width (ghd/det-k-decomp (ghd/->hgraph adder-15) 2))))
+  (t/is (ghd/htree-complete? (ghd/det-k-decomp (ghd/->hgraph adder-15) 2))))
