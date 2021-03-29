@@ -69,6 +69,9 @@
                            (range (inc n) (count edge-order))))]
       separator)))
 
+(defn- expand [^HTree ht]
+  ht)
+
 (defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
   (let [edges (vec (keys edge->vertices))]
     (repeatedly (fn []
@@ -196,12 +199,12 @@
                             vertice->edges] :as ^HGraph h} k]
   (let [edges (into (sorted-set) (keys edge->vertices))]
     (reduce
-     (fn [acc initial-edges]
+     (fn [acc initial-conn]
        (binding [*backtrack-context* (atom {:fail-seps #{}
                                             :succ-seps #{}})]
-         (let [initial-conn (set (mapcat edge->vertices initial-edges))
-               ht (decomp-cov h k edges initial-conn)]
+         (let [ht (decomp-cov h k edges initial-conn)]
            (cond-> acc
-             ht (conj ht)))))
+             ht (conj (expand ht))))))
      nil
-     (vals vertice->edges))))
+     (for [edges (vals vertice->edges)]
+       (set (mapcat edge->vertices edges))))))
