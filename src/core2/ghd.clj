@@ -142,3 +142,60 @@
                            (separate h edges separator))
                  chi (set/union connecting-vertices (all-vertices h separator-edges-intersection))]]
        (with-meta (->HTree separator chi subtrees) h)))))
+
+(def ^:private ^:dynamic *backtrack-context*)
+
+(declare decomp-cov)
+
+(defn- decomp-sub [{:keys [edge->vertices] :as ^HGraph h} k components separator]
+  (let [subtrees []]
+    (reduce
+     (fn [acc component]
+       (let [child-conn (set/intersection (all-vertices h component) (all-vertices h separator))]
+         (if (contains? (:succ-seps @*backtrack-context*) [separator child-conn])
+           (conj acc (with-meta (->HTree component child-conn []) h))
+           (if-let [ht (decomp-cov h k component child-conn)]
+             (do (swap! *backtrack-context* update :succ-seps conj [separator child-conn])
+                 (conj acc ht))
+             (do (swap! *backtrack-context* update :fail-seps conj [separator child-conn])
+                 (reduced nil))))))
+     subtrees
+     components)))
+
+(defn- decomp-add [{:keys [edge->vertices] :as ^HGraph h} k edges conn cov-sep]
+  (let [in-cov-sep (set/intersection cov-sep edges)]
+    (when (or (not-empty in-cov-sep) (< (count cov-sep) k))
+      (let [add-size (if (empty? in-cov-sep)
+                       1
+                       0)]
+        (reduce
+         (fn [acc add-sep]
+           (let [separator (set/union cov-sep add-sep)
+                 components (separate h edges separator)]
+             (when (not-empty (set/intersection
+                               (:fail-seps @*backtrack-context*)
+                               (set (for [component components]
+                                      [separator component]))))
+               (when-let [subtrees (not-empty (decomp-sub h k components))]
+                 (let [chi (set/union conn (all-vertices h (set/union in-cov-sep add-sep)))]
+                   (reduced (with-meta (->HTree separator chi subtrees) h)))))))
+         nil
+         (if (= add-size 1)
+           (map set edges)
+           [#{}]))))))
+
+(defn- decomp-cov [{:keys [edge->vertices] :as ^HGraph h} k edges conn]
+  (if (<= (count edges) k)
+    (with-meta (->HTree edges (all-vertices h edges) []) h)
+    (reduce
+     (fn [acc cov-sep]
+       (when-let [ht (decomp-add h k edges conn cov-sep)]
+         (reduced ht)))
+     nil
+     (cover h conn))))
+
+(defn det-k-decomp [{:keys [edge->vertices] :as ^HGraph h} k]
+  (let [edges (into (sorted-set) (keys edge->vertices))]
+    (binding [*backtrack-context* (atom {:fail-seps #{}
+                                         :succ-seps #{}})]
+      (decomp-cov h k edges (sorted-set)))))
