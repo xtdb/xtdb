@@ -210,4 +210,4 @@
   (let [edges (into (sorted-set) (keys edge->vertices))]
     (binding [*backtrack-context* (atom {:fail-seps #{}
                                          :succ-seps #{}})]
-      (decomp-cov h k edges (sorted-set)))))
+      (expand (decomp-cov h k edges (sorted-set))))))
