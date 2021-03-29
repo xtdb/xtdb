@@ -1,3 +1,5 @@
 .Articles
 * xref:what-is-crux.adoc[What is Crux?]
 * xref:bitemporality.adoc[Bitemporality]
+* xref:crux-strength-of-the-record.adoc[Strength of the Record]
+
