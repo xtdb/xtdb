@@ -66,9 +66,9 @@
   (.submitTx tx-producer tx-ops))
 
 (defn await-tx
-  (^java.util.concurrent.CompletableFuture [^Node node, tx]
+  (^core2.tx.TransactionInstant [^Node node, tx]
    (.awaitTx ^IIngestLoop (.ingest-loop node) tx))
-  (^java.util.concurrent.CompletableFuture [^Node node, tx, ^Duration timeout]
+  (^core2.tx.TransactionInstant [^Node node, tx, ^Duration timeout]
    (.awaitTx ^IIngestLoop (.ingest-loop node) tx timeout)))
 
 (defn latest-completed-tx ^core2.tx.TransactionInstant [^Node node]
