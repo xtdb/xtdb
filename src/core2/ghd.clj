@@ -133,12 +133,12 @@
   (reduce
    (fn [acc component]
      (let [child-conn (set/intersection (all-vertices h component) (all-vertices h separator))]
-       (if-let [ht (get (:succ-seps @*backtrack-context*) [separator child-conn])]
+       (if-let [ht (get (:succ-seps @*backtrack-context*) [separator component])]
          (conj acc ht)
          (if-let [ht (decomp-cov h k component child-conn)]
-           (do (swap! *backtrack-context* update :succ-seps assoc [separator child-conn] ht)
+           (do (swap! *backtrack-context* update :succ-seps assoc [separator component] ht)
                (conj acc ht))
-           (do (swap! *backtrack-context* update :fail-seps conj [separator child-conn])
+           (do (swap! *backtrack-context* update :fail-seps conj [separator component])
                (reduced nil))))))
    []
    components))
