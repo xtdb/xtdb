@@ -81,7 +81,7 @@
   ([^TpchTable t]
    (tpch-table->docs t default-scale-factor))
   ([^TpchTable t sf]
-   (tpch-table->docs t default-scale-factor tpch-entity->doc))
+   (tpch-table->docs t sf tpch-entity->doc))
   ([^TpchTable t sf doc-fn]
    ;; first happens to be customers (;; 150000 for sf 0.05)
    (map (partial doc-fn t) (seq (.createGenerator ^TpchTable t sf 1 1)))))
