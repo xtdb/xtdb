@@ -14,29 +14,14 @@
   (:import [core2.buffer_pool BufferPool MemoryMappedBufferPool]
            core2.core.Node
            core2.metadata.IMetadataManager
-           [core2.object_store FileSystemObjectStore ObjectStore]
+           core2.object_store.ObjectStore
            core2.temporal.TemporalManager
            core2.tx.TransactionInstant
-           [java.nio.file Files Path]
+           java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.util.Text))
-
-(defn check-json [^Path expected-path, ^FileSystemObjectStore os]
-  (let [^Path os-path (.root-path os)]
-
-    (let [expected-file-count (.count (Files/list expected-path))]
-      (t/is (= expected-file-count (.count (Files/list os-path))))
-      (t/is (= expected-file-count (count @(.listObjects os)))))
-
-    (c2-json/write-arrow-json-files (.toFile os-path))
-
-    (doseq [^Path path (iterator-seq (.iterator (Files/list os-path)))
-            :when (.endsWith (str path) ".json")]
-      (t/is (= (json/parse-string (Files/readString (.resolve expected-path (.getFileName path))))
-               (json/parse-string (Files/readString path)))
-            (str path)))))
 
 (def txs
   [[{:op :put
@@ -146,7 +131,7 @@
           (t/is (= 1 (count objects-list)))
           (t/is (= "metadata-00000000.arrow" (first objects-list))))
 
-        (check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)
+        (tu/check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)
 
         (t/testing "buffer pool"
           (let [buffer-name "metadata-00000000.arrow"
@@ -213,7 +198,7 @@
 
         (tu/finish-chunk node)
 
-        (check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
+        (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")

@@ -1,10 +1,14 @@
 (ns core2.test-util
-  (:require [clojure.test :as t]
+  (:require [cheshire.core :as json]
+            [clojure.test :as t]
             [core2.core :as c2]
+            [core2.json :as c2-json]
             [core2.types :as ty]
             [core2.util :as util])
   (:import core2.core.Node
            core2.ICursor
+           core2.object_store.FileSystemObjectStore
+           [java.nio.file Files Path]
            [java.time Clock Duration ZoneId]
            [java.util ArrayList Date LinkedList]
            java.util.concurrent.CompletableFuture
@@ -102,3 +106,18 @@
                                      blocks)]
 
           (t/is (= (<-cursor cursor) blocks)))))))
+
+(defn check-json [^Path expected-path, ^FileSystemObjectStore os]
+  (let [^Path os-path (.root-path os)]
+
+    (let [expected-file-count (.count (Files/list expected-path))]
+      (t/is (= expected-file-count (.count (Files/list os-path))))
+      (t/is (= expected-file-count (count @(.listObjects os)))))
+
+    (c2-json/write-arrow-json-files (.toFile os-path))
+
+    (doseq [^Path path (iterator-seq (.iterator (Files/list os-path)))
+            :when (.endsWith (str path) ".json")]
+      (t/is (= (json/parse-string (Files/readString (.resolve expected-path (.getFileName path))))
+               (json/parse-string (Files/readString path)))
+            (str path)))))
