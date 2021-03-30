@@ -73,6 +73,9 @@
           :when (not (some #(set/superset? separator %) (remove #{separator} separators)))]
       separator)))
 
+;; NOTE: this is supposed to expand pruned sub-trees, see paper, idea
+;; is that we avoid this by making succ-seps a cache and not just a
+;; marker.
 (defn- expand [^HTree ht]
   ht)
 
