@@ -38,6 +38,9 @@
 (defmethod bus/event-spec ::committing-tx [_]
   (s/keys :req-un [::submitted-tx ::evicting-eids ::doc-ids]))
 
+(defmethod bus/event-spec ::aborting-tx [_]
+  (s/keys :req-un [::submitted-tx]))
+
 (defmethod bus/event-spec ::indexed-tx [_]
   (s/keys :req [::txe/tx-events],
           :req-un [::submitted-tx ::committed?]
@@ -367,6 +370,9 @@
 
       (when (:fork-at tx)
         (throw (IllegalStateException. "Can't abort from fork.")))
+
+      (bus/send bus {:crux/event-type ::aborting-tx,
+                     :submitted-tx tx})
 
       (log/debug "Transaction aborted:" (pr-str tx))
 
