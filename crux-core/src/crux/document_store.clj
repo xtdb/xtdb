@@ -26,7 +26,7 @@
 
 (defrecord CachedDocumentStore [cache document-store]
   db/DocumentStore
-  (-fetch-docs [this ids]
+  (fetch-docs [this ids]
     (let [ids (set ids)
           cached-id->docs (persistent!
                            (reduce
@@ -36,7 +36,7 @@
                                 acc))
                             (transient {}) ids))
           missing-ids (set/difference ids (set (keys cached-id->docs)))
-          missing-id->docs (db/-fetch-docs document-store missing-ids)]
+          missing-id->docs (db/fetch-docs document-store missing-ids)]
       (persistent!
        (reduce-kv
         (fn [acc id doc]
@@ -69,7 +69,7 @@
 
 (defrecord NIODocumentStore [^Path root-path, ^ExecutorService pool]
   db/DocumentStore
-  (-fetch-docs [_this ids]
+  (fetch-docs [_this ids]
     (let [futs (vec (for [id ids]
                       (let [doc-path (.resolve root-path (str (c/new-id id)))]
                         (completable-future pool

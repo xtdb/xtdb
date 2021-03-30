@@ -10,7 +10,8 @@
             [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [clojure.set :as set])
   (:import clojure.lang.MapEntry
            crux.codec.EntityTx
            java.io.Closeable
@@ -273,8 +274,8 @@
   (submit-docs [_ docs]
     (db/submit-docs document-store-tx docs))
 
-  (-fetch-docs [_ ids]
-    (db/-fetch-docs document-store-tx ids))
+  (fetch-docs [_ ids]
+    (db/fetch-docs document-store-tx ids))
 
   api/DBProvider
   (db [_] (api/db query-engine tx))
@@ -293,8 +294,13 @@
 
       (swap! !tx update :tx-events into tx-events)
 
-      (index-docs this (-> (db/fetch-docs document-store-tx (txc/tx-events->doc-hashes tx-events))
-                           without-tx-fn-docs))
+      (let [doc-hashes (set (txc/tx-events->doc-hashes tx-events))
+            docs (db/fetch-docs document-store-tx doc-hashes)
+            fetched-doc-hashes (set (keys docs))]
+        (when-not (= fetched-doc-hashes doc-hashes)
+          (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
+
+        (index-docs this (-> docs without-tx-fn-docs)))
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [forked-deps {:index-store index-store-tx

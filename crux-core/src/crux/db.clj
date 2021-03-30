@@ -73,19 +73,6 @@
   (abort [in-flight-tx]))
 
 (defprotocol DocumentStore
+  "Once `submit-docs` function returns successfully, any call to `fetch-docs` across the cluster must return the submitted docs."
   (submit-docs [this id-and-docs])
-  (-fetch-docs [this ids]))
-
-(defn fetch-docs [document-store ids]
-  (let [ids (->> ids
-                 (into #{} (remove (some-fn nil? #{(c/new-id c/nil-id-buffer)}))))]
-    (loop [docs {}]
-      (let [missing-ids (set/difference ids (set (keys docs)))
-            docs (into docs
-                       (when (seq missing-ids)
-                         (-fetch-docs document-store missing-ids)))]
-        (if (= (count docs) (count ids))
-          docs
-          (do
-            (Thread/sleep 100)
-            (recur docs)))))))
+  (fetch-docs [this ids]))

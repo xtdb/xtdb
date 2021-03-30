@@ -33,7 +33,7 @@
          vec
          (run! deref)))
 
-  (-fetch-docs [_ docs]
+  (fetch-docs [_ docs]
     (cio/with-nippy-thaw-all
       (reduce
        #(if-let [doc (get-blob sas-token storage-account container (str %2))]
