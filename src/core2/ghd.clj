@@ -6,8 +6,6 @@
 ;; "A Backtracking-Based Algorithm for Computing Hypertree-Decompositions"
 ;; https://arxiv.org/abs/cs/0701083
 
-;; Does not implement the backtracking part.
-
 ;; Lambda are the edges (relations) and chi the vertices (variables).
 (defrecord HTree [lambda chi subtrees])
 
@@ -150,8 +148,9 @@
                                (conj subtrees h-tree)
                                (reduced nil)))
                            []
-                           (separate h edges separator))
-                 chi (set/union connecting-vertices (all-vertices h separator-edges-intersection))]]
+                           (separate h edges separator))]
+           :when (some? subtrees)
+           :let [chi (set/union connecting-vertices (all-vertices h separator-edges-intersection))]]
        (with-meta (->HTree separator chi subtrees) h)))))
 
 (def ^:private ^:dynamic *backtrack-context*)
@@ -163,10 +162,10 @@
   (reduce
    (fn [acc component]
      (let [child-conn (set/intersection (all-vertices h component) (all-vertices h separator))]
-       (if (contains? (:succ-seps @*backtrack-context*) [separator child-conn])
-         (conj acc (with-meta (->HTree component child-conn []) h))
+       (if-let [ht (get (:succ-seps @*backtrack-context*) [separator child-conn])]
+         (conj acc ht)
          (if-let [ht (decomp-cov h k component child-conn)]
-           (do (swap! *backtrack-context* update :succ-seps conj [separator child-conn])
+           (do (swap! *backtrack-context* update :succ-seps assoc [separator child-conn] ht)
                (conj acc ht))
            (do (swap! *backtrack-context* update :fail-seps conj [separator child-conn])
                (reduced nil))))))
@@ -207,7 +206,7 @@
 
 (defn det-k-decomp [{:keys [edge->vertices
                             vertice->edges] :as ^HGraph h} k]
-  (let [edges (into (sorted-set) (keys edge->vertices))]
-    (binding [*backtrack-context* (atom {:fail-seps #{}
-                                         :succ-seps #{}})]
+  (binding [*backtrack-context* (atom {:fail-seps #{}
+                                       :succ-seps {}})]
+    (let [edges (into (sorted-set) (keys edge->vertices))]
       (expand (decomp-cov h k edges (sorted-set))))))

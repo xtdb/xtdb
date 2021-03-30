@@ -13,6 +13,9 @@
 
 (t/deftest can-separate-components
   (let [h (ghd/->hgraph backtracking-paper-graph)]
+    (t/is (= [#{:A :B :C :D :E :F :G :H}]
+             (ghd/separate h #{:A :B :C :D :E :F :G :H} #{})))
+
     (t/is (= [#{:B :C :D :E :F :G :H}]
              (ghd/separate h #{:A :B :C :D :E :F :G :H} #{:A})))
 
