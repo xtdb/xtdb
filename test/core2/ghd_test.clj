@@ -168,6 +168,9 @@
                 [:and2 I4 I3 TempHa2]])
 
 (t/deftest can-decompose-adder-15
-  (t/is (nil? (ghd/det-k-decomp (ghd/->hgraph adder-15) 2)))
-  (t/is (= 21 (ghd/htree-decomp-width (ghd/det-k-decomp (ghd/->hgraph adder-15) 21))))
-  (t/is (ghd/htree-complete? (ghd/det-k-decomp (ghd/->hgraph adder-15) 21))))
+  (let [ht (first (for [n (range)
+                        :let [ht (ghd/det-k-decomp (ghd/->hgraph adder-15) (inc n))]
+                        :when ht]
+                    ht))]
+    (t/is (= 16 (ghd/htree-decomp-width ht)))
+    (t/is (ghd/htree-complete? ht))))
