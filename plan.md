@@ -31,14 +31,19 @@ Shared object store for persistence.
 
 Milestone 1: Ingest and Data Access
 Ingest and chunk dependency system. We want the query engine to avoid generating its dependent data.
-Multiple local nodes sharing local file storage.
-Code-level queries, basic relation operators.
-Transaction timeslice index. We want to capture the context that some rows might not be valid at T.
+- Decided against doing this for the time being
+DONE Multiple local nodes sharing local file storage.
+DONE Code-level queries, basic relation operators.
 MVCC based on above.
+- DONE - watermarks
+Temporal indexing.
+- Round 1 DONE, needs more testing
+- Currently completely in-memory, need to remove this constraint
+- Includes transaction timeslice support. We want to capture the context that some rows might not be valid at T.
+- Includes basic support for bitemporal queries, ranges, etc.
 
 --- As yet unsorted
 
-Temporal indexing.
 Expressions
 JMH
 TPC-H.
@@ -50,6 +55,7 @@ Bitemporal, subset of TPC-BiH.
 
 Milestone 3: Cloud and Benchmarks (maybe Dan? Matt?)
 Kafka/Kinesis and S3.
+Redis as an intermediate object store
 AWS benchmarks.
 Watdiv.
 Subset of EDN Datalog, WCOJ.
