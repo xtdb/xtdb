@@ -211,5 +211,7 @@
                             vertice->edges] :as ^HGraph h} k]
   (binding [*backtrack-context* (atom {:fail-seps #{}
                                        :succ-seps {}})]
-    (let [edges (into (sorted-set) (keys edge->vertices))]
-      (expand (decomp-cov h k edges (sorted-set))))))
+    (let [edges (into (sorted-set) (keys edge->vertices))
+          ht (expand (decomp-cov h k edges (sorted-set)))]
+      (when (<= (htree-decomp-width ht) k)
+        ht))))

@@ -81,7 +81,9 @@
 
     (t/is (= 3 (ghd/htree-decomp-depth (ghd/det-k-decomp h 3))))
     (t/is (not= (ghd/det-k-decomp h 2) (ghd/det-k-decomp h 3)))
-    (t/is (= 3 (ghd/htree-decomp-width (ghd/det-k-decomp h 3))))))
+    (t/is (= 3 (ghd/htree-decomp-width (ghd/det-k-decomp h 3))))
+
+    (t/is (nil? (ghd/det-k-decomp h 1)))))
 
 (t/deftest can-compute-cover
   (let [h (ghd/->hgraph backtracking-paper-graph)]
@@ -166,10 +168,6 @@
                 [:and2 I4 I3 TempHa2]])
 
 (t/deftest can-decompose-adder-15
-  (let [ht (first (ghd/k-decomposable (ghd/->hgraph adder-15) 5))]
-    (t/is (= (count (distinct (filter symbol? (flatten adder-15))))
-             (count (ghd/htree-join-order ht))))
-    (t/is (ghd/htree-complete? ht)))
-
-  (t/is (= 3 (ghd/htree-decomp-width (ghd/det-k-decomp (ghd/->hgraph adder-15) 2))))
-  (t/is (ghd/htree-complete? (ghd/det-k-decomp (ghd/->hgraph adder-15) 2))))
+  (t/is (nil? (ghd/det-k-decomp (ghd/->hgraph adder-15) 2)))
+  (t/is (= 21 (ghd/htree-decomp-width (ghd/det-k-decomp (ghd/->hgraph adder-15) 21))))
+  (t/is (ghd/htree-complete? (ghd/det-k-decomp (ghd/->hgraph adder-15) 21))))
