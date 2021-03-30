@@ -73,13 +73,8 @@
                     last-tx))
                 nil))))
 
-(def test-sf 0.001)
-(assert (contains? #{0.001 0.01} test-sf))
-;; 0.001 : "Elapsed time: 2421.146644 msecs"
-;; 0.01  : "Elapsed time: 27356.329358 msecs"
-
-(t/deftest ^:integration can-submit-tpch-docs
-  (let [node-dir (util/->path "target/can-submit-tpch-docs")
+(defn- test-tpch [scale-factor expected-docs]
+  (let [node-dir (util/->path (format "target/can-submit-tpch-docs-%s" scale-factor))
         objects-dir (.resolve node-dir "objects")
         mock-clock (Clock/fixed (.toInstant #inst "2021-04-01") (ZoneId/of "UTC"))]
     (util/delete-dir node-dir)
@@ -87,17 +82,23 @@
     (time
      (with-open [node (c2/->local-node node-dir)
                  tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-       (let [last-tx (submit-docs! tx-producer test-sf)]
+       (let [last-tx (submit-docs! tx-producer scale-factor)]
          (c2/await-tx node last-tx (Duration/ofMinutes 1))
 
          (tu/finish-chunk node)
-         (t/is (= (case test-sf 0.001 67, 0.01 225)
+         (t/is (= expected-docs
                   (count (iterator-seq (.iterator (Files/list objects-dir)))))))))
 
     (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
 
-    (let [expected-dir (.toPath (io/as-file (io/resource (format "can-submit-tpch-docs-%s/" test-sf))))]
+    (let [expected-dir (.toPath (io/as-file (io/resource (format "can-submit-tpch-docs-%s/" scale-factor))))]
       (doseq [expected-path (iterator-seq (.iterator (Files/list expected-dir)))
               :let [actual-path (.resolve objects-dir (.relativize expected-dir expected-path))]]
         (t/is (Files/exists actual-path (make-array LinkOption 0)))
         (tu/check-json-file expected-path actual-path)))))
+
+(t/deftest ^:integration can-submit-tpch-docs-0.01
+  (test-tpch 0.01 225))
+
+(t/deftest can-submit-tpch-docs-0.001
+  (test-tpch 0.001 67))
