@@ -5,7 +5,8 @@
 ;; "A Backtracking-Based Algorithm for Computing Hypertree-Decompositions"
 ;; https://arxiv.org/abs/cs/0701083
 
-;; Lambda are the edges (relations) and chi the vertices (variables).
+;; Lambda: edges, "edge cover" (relations)
+;; Chi: vertices, "bag" (variables).
 (defrecord HTree [lambda chi subtrees])
 
 (defrecord HGraph [edge->vertices vertice->edges])
