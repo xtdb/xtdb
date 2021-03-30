@@ -165,6 +165,11 @@
                 [:xor13 TempG13 I26 I25]
                 [:and2 I4 I3 TempHa2]])
 
+;; NOTE: it should be possible to calculate a width of 2 here. A tree
+;; with this width is returned at 3 (without internal width check),
+;; but not sure if this tree is correct and how it should really
+;; behave? Likely a bug somewhere, the internal width check shouldn't
+;; be necessary.
 (t/deftest can-decompose-adder-15
   (let [ht (first (for [n (range)
                         :let [ht (ghd/det-k-decomp (ghd/->hgraph adder-15) (inc n))]
