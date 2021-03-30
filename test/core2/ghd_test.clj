@@ -30,11 +30,9 @@
 
 (t/deftest can-compute-join-order
   (let [h (ghd/->hgraph backtracking-paper-graph)]
-    (t/is (= '[e j a f i b c d g h]
+    (t/is (= '[a b c d e f g i h j]
              (ghd/htree-join-order
-              (first (ghd/k-decomposable h 3)))))
-
-    (t/is (ghd/htree-complete? (first (ghd/k-decomposable h 3))))))
+              (ghd/det-k-decomp h 2))))))
 
 (t/deftest can-decompose-using-backtracking
   (let [h (ghd/->hgraph backtracking-paper-graph)

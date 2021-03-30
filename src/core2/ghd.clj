@@ -1,7 +1,6 @@
 (ns core2.ghd
   (:require [clojure.set :as set]
-            [clojure.tools.logging :as log])
-  (:import [java.util Random]))
+            [clojure.tools.logging :as log]))
 
 ;; "A Backtracking-Based Algorithm for Computing Hypertree-Decompositions"
 ;; https://arxiv.org/abs/cs/0701083
@@ -79,13 +78,6 @@
 (defn- expand [^HTree ht]
   ht)
 
-(defn- guess-separator [{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
-  (let [edges (vec (keys edge->vertices))]
-    (repeatedly (fn []
-                  (->> (repeatedly (inc (.nextInt rng k))
-                                   #(nth edges (.nextInt rng (count edges))))
-                       (into (sorted-set)))))))
-
 (defn htree->tree-seq [^HTree ht]
   (tree-seq (partial instance? HTree) :subtrees ht))
 
@@ -130,31 +122,6 @@
 
 (defn- all-vertices [{:keys [edge->vertices] :as ^HGraph h} edges]
   (into (sorted-set) (mapcat edge->vertices edges)))
-
-(defn k-decomposable
-  ([^HGraph h k]
-   (k-decomposable h k (Random. 0)))
-  ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng]
-   (let [edges (into (sorted-set) (keys edge->vertices))]
-     (k-decomposable h k rng edges (sorted-set))))
-  ([{:keys [edge->vertices] :as ^HGraph h} k ^Random rng edges old-separator]
-   (assert (and (pos? k) (<= k (inc (count edge->vertices)))))
-   (let [connecting-vertices (set/intersection (all-vertices h edges)
-                                               (all-vertices h old-separator))]
-     (for [separator (guess-separator h k rng)
-           :let [separator-edges-intersection (set/intersection separator edges)]
-           :when (and (set/subset? connecting-vertices (all-vertices h separator))
-                      (not-empty separator-edges-intersection))
-           :let [subtrees (reduce
-                           (fn [subtrees component]
-                             (if-let [h-tree (first (k-decomposable h k rng component separator))]
-                               (conj subtrees h-tree)
-                               (reduced nil)))
-                           []
-                           (separate h edges separator))]
-           :when (some? subtrees)
-           :let [chi (set/union connecting-vertices (all-vertices h separator-edges-intersection))]]
-       (with-meta (->HTree separator chi subtrees) h)))))
 
 (def ^:private ^:dynamic *backtrack-context*)
 
