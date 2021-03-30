@@ -1,0 +1,271 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "column",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "field",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "type-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 8,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "min",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : false,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : false,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "max",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : false,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : false,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "count",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 68,
+    "columns" : [{
+      "name" : "column",
+      "count" : 68,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,3,6,12,18,24,30,38,46,55,64,76,88,98,108,123,138,150,162,174,186,196,206,215,224,234,244,257,270,282,294,304,314,328,342,352,362,371,380,385,390,397,404,413,422,433,444,450,456,462,468,477,486,499,512,518,524,530,536,547,558,568,578,588,598,608,618,631,644],
+      "DATA" : ["_id","_id","_table","_table","_tx-id","_tx-id","_tx-time","_tx-time","l_comment","l_comment","l_commitdate","l_commitdate","l_discount","l_discount","l_extendedprice","l_extendedprice","l_linenumber","l_linenumber","l_linestatus","l_linestatus","l_orderkey","l_orderkey","l_partkey","l_partkey","l_quantity","l_quantity","l_receiptdate","l_receiptdate","l_returnflag","l_returnflag","l_shipdate","l_shipdate","l_shipinstruct","l_shipinstruct","l_shipmode","l_shipmode","l_suppkey","l_suppkey","l_tax","l_tax","p_brand","p_brand","p_comment","p_comment","p_container","p_container","p_mfgr","p_mfgr","p_name","p_name","p_partkey","p_partkey","p_retailprice","p_retailprice","p_size","p_size","p_type","p_type","ps_availqty","ps_availqty","ps_comment","ps_comment","ps_partkey","ps_partkey","ps_suppkey","ps_suppkey","ps_supplycost","ps_supplycost"]
+    },{
+      "name" : "field",
+      "count" : 68,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,7,10,17,23,30,36,43,51,58,67,74,86,93,103,110,125,132,144,151,163,170,180,187,196,203,213,220,233,240,252,259,269,276,290,297,307,314,323,330,335,342,349,356,365,372,383,390,396,403,409,416,425,432,445,452,458,465,471,478,489,496,506,513,523,530,540,547,560],
+      "DATA" : ["_row-id","_id","_row-id","_table","_row-id","_tx-id","_row-id","_tx-time","_row-id","l_comment","_row-id","l_commitdate","_row-id","l_discount","_row-id","l_extendedprice","_row-id","l_linenumber","_row-id","l_linestatus","_row-id","l_orderkey","_row-id","l_partkey","_row-id","l_quantity","_row-id","l_receiptdate","_row-id","l_returnflag","_row-id","l_shipdate","_row-id","l_shipinstruct","_row-id","l_shipmode","_row-id","l_suppkey","_row-id","l_tax","_row-id","p_brand","_row-id","p_comment","_row-id","p_container","_row-id","p_mfgr","_row-id","p_name","_row-id","p_partkey","_row-id","p_retailprice","_row-id","p_size","_row-id","p_type","_row-id","ps_availqty","_row-id","ps_comment","_row-id","ps_partkey","_row-id","ps_suppkey","_row-id","ps_supplycost"]
+    },{
+      "name" : "type-id",
+      "count" : 68,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "DATA" : [2,5,2,5,2,2,2,10,2,5,2,10,2,3,2,3,2,2,2,5,2,5,2,5,2,3,2,10,2,5,2,10,2,5,2,5,2,5,2,3,2,5,2,5,2,5,2,5,2,5,2,5,2,3,2,2,2,5,2,2,2,5,2,5,2,5,2,3]
+    },{
+      "name" : "min",
+      "count" : 68,
+      "TYPE_ID" : [2,5,2,5,2,2,2,10,2,5,2,10,2,3,2,3,2,2,2,5,2,5,2,5,2,3,2,10,2,5,2,10,2,5,2,5,2,5,2,3,2,5,2,5,2,5,2,5,2,5,2,5,2,3,2,2,2,5,2,2,2,5,2,5,2,5,2,3],
+      "OFFSET" : [0,0,1,1,2,3,4,0,5,2,6,1,7,0,8,1,9,10,11,3,12,4,13,5,14,2,15,2,16,6,17,3,18,7,19,8,20,9,21,3,22,10,23,11,24,12,25,13,26,14,27,15,28,4,29,30,31,16,32,33,34,17,35,18,36,19,37,5],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 38,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : ["70500","70500","70500","22067280","70500","70500","70500","70500","70500","70500","1","70500","70500","70500","70500","70500","70500","70500","70500","70500","70500","70500","76675","76675","76675","76675","76675","76675","76675","76675","1","76675","78675","11","78675","78675","78675","78675"]
+      },{
+        "name" : "float8",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : [0.0,904.0,1.0,0.0,901.0,1.43]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 20,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "OFFSET" : [0,18,26,65,66,80,89,90,101,104,113,121,137,146,160,192,201,223,304,313,322],
+        "DATA" : ["orderkey_53829___4","lineitem"," about the accounts. furiously thin pin","F","orderkey_53829","partkey_1","A","COLLECT COD","AIR","suppkey_1","Brand#11"," about the furio","JUMBO BAG","Manufacturer#1","almond aquamarine mint misty red","partkey_1","ECONOMY ANODIZED BRASS"," about the permanent, even theodolites. even, ironic ideas wake. quickly special ","partkey_1","suppkey_1"]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : [1617235200000,697420800000,696038400000,694915200000]
+      }]
+    },{
+      "name" : "max",
+      "count" : 68,
+      "TYPE_ID" : [2,5,2,5,2,2,2,10,2,5,2,10,2,3,2,3,2,2,2,5,2,5,2,5,2,3,2,10,2,5,2,10,2,5,2,5,2,5,2,3,2,5,2,5,2,5,2,5,2,5,2,5,2,3,2,2,2,5,2,2,2,5,2,5,2,5,2,3],
+      "OFFSET" : [0,0,1,1,2,3,4,0,5,2,6,1,7,0,8,1,9,10,11,3,12,4,13,5,14,2,15,2,16,6,17,3,18,7,19,8,20,9,21,3,22,10,23,11,24,12,25,13,26,14,27,15,28,4,29,30,31,16,32,33,34,17,35,18,36,19,37,5],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 38,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : ["80674","80674","80674","24892488","80674","76674","76674","76674","76674","76674","7","76674","76674","76674","76674","76674","76674","76674","76674","76674","76674","76674","78674","78674","78674","78674","78674","78674","78674","78674","50","78674","80674","9998","80674","80674","80674","80674"]
+      },{
+        "name" : "float8",
+        "count" : 6,
+        "VALIDITY" : [1,1,1,1,1,1],
+        "DATA" : [0.1,94149.0,50.0,0.08,1900.99,999.93]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 20,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "OFFSET" : [0,22,30,49,50,64,75,76,92,97,107,115,127,135,149,178,189,210,406,416,426],
+        "DATA" : ["partkey_9___suppkey_85","partsupp","ze. accounts doubt ","O","orderkey_60000","partkey_999","R","TAKE BACK RETURN","TRUCK","suppkey_99","Brand#55","zzle among t","WRAP PKG","Manufacturer#5","yellow white puff orange rosy","partkey_999","STANDARD POLISHED TIN","ymptotes! blithely idle requests nag slyly-- ideas do wake after the doggedly final braids. requests use blithely ironic deposits. fluffily express foxes sleep ironically special accounts. slyly s","partkey_99","suppkey_99"]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : [1617235200000,909187200000,914198400000,911606400000]
+      }]
+    },{
+      "name" : "count",
+      "count" : 68,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "DATA" : ["10175","10175","10175","10175","10175","10175","10175","10175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","6175","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000","2000"]
+    }]
+  }]
+}

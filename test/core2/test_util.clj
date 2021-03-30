@@ -107,6 +107,11 @@
 
           (t/is (= (<-cursor cursor) blocks)))))))
 
+(defn check-json-file [^Path expected, ^Path actual]
+  (t/is (= (json/parse-string (Files/readString expected))
+           (json/parse-string (Files/readString actual)))
+        actual))
+
 (defn check-json [^Path expected-path, ^FileSystemObjectStore os]
   (let [^Path os-path (.root-path os)]
 
@@ -118,6 +123,4 @@
 
     (doseq [^Path path (iterator-seq (.iterator (Files/list os-path)))
             :when (.endsWith (str path) ".json")]
-      (t/is (= (json/parse-string (Files/readString (.resolve expected-path (.getFileName path))))
-               (json/parse-string (Files/readString path)))
-            (str path)))))
+      (check-json-file (.resolve expected-path (.getFileName path)) path))))

@@ -1,0 +1,271 @@
+{
+  "schema" : {
+    "fields" : [{
+      "name" : "column",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "field",
+      "nullable" : false,
+      "type" : {
+        "name" : "utf8"
+      },
+      "children" : [ ]
+    },{
+      "name" : "type-id",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 8,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    },{
+      "name" : "min",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : false,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : false,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "max",
+      "nullable" : false,
+      "type" : {
+        "name" : "union",
+        "mode" : "Dense",
+        "typeIds" : [1,2,3,4,5,6,10]
+      },
+      "children" : [{
+        "name" : "$data$",
+        "nullable" : true,
+        "type" : {
+          "name" : "null"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bigint",
+        "nullable" : false,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 64,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
+        "name" : "float8",
+        "nullable" : false,
+        "type" : {
+          "name" : "floatingpoint",
+          "precision" : "DOUBLE"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varbinary",
+        "nullable" : false,
+        "type" : {
+          "name" : "binary"
+        },
+        "children" : [ ]
+      },{
+        "name" : "varchar",
+        "nullable" : false,
+        "type" : {
+          "name" : "utf8"
+        },
+        "children" : [ ]
+      },{
+        "name" : "bit",
+        "nullable" : false,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "nullable" : false,
+        "type" : {
+          "name" : "timestamp",
+          "unit" : "MILLISECOND",
+          "timezone" : null
+        },
+        "children" : [ ]
+      }]
+    },{
+      "name" : "count",
+      "nullable" : false,
+      "type" : {
+        "name" : "int",
+        "bitWidth" : 64,
+        "isSigned" : true
+      },
+      "children" : [ ]
+    }]
+  },
+  "batches" : [{
+    "count" : 40,
+    "columns" : [{
+      "name" : "column",
+      "count" : 40,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,3,6,12,18,24,30,38,46,55,64,76,88,98,108,123,138,150,162,174,186,196,206,215,224,234,244,257,270,282,294,304,314,328,342,352,362,371,380,385,390],
+      "DATA" : ["_id","_id","_table","_table","_tx-id","_tx-id","_tx-time","_tx-time","l_comment","l_comment","l_commitdate","l_commitdate","l_discount","l_discount","l_extendedprice","l_extendedprice","l_linenumber","l_linenumber","l_linestatus","l_linestatus","l_orderkey","l_orderkey","l_partkey","l_partkey","l_quantity","l_quantity","l_receiptdate","l_receiptdate","l_returnflag","l_returnflag","l_shipdate","l_shipdate","l_shipinstruct","l_shipinstruct","l_shipmode","l_shipmode","l_suppkey","l_suppkey","l_tax","l_tax"]
+    },{
+      "name" : "field",
+      "count" : 40,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "OFFSET" : [0,7,10,17,23,30,36,43,51,58,67,74,86,93,103,110,125,132,144,151,163,170,180,187,196,203,213,220,233,240,252,259,269,276,290,297,307,314,323,330,335],
+      "DATA" : ["_row-id","_id","_row-id","_table","_row-id","_tx-id","_row-id","_tx-time","_row-id","l_comment","_row-id","l_commitdate","_row-id","l_discount","_row-id","l_extendedprice","_row-id","l_linenumber","_row-id","l_linestatus","_row-id","l_orderkey","_row-id","l_partkey","_row-id","l_quantity","_row-id","l_receiptdate","_row-id","l_returnflag","_row-id","l_shipdate","_row-id","l_shipinstruct","_row-id","l_shipmode","_row-id","l_suppkey","_row-id","l_tax"]
+    },{
+      "name" : "type-id",
+      "count" : 40,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "DATA" : [2,5,2,5,2,2,2,10,2,5,2,10,2,3,2,3,2,2,2,5,2,5,2,5,2,3,2,10,2,5,2,10,2,5,2,5,2,5,2,3]
+    },{
+      "name" : "min",
+      "count" : 40,
+      "TYPE_ID" : [2,5,2,5,2,2,2,10,2,5,2,10,2,3,2,3,2,2,2,5,2,5,2,5,2,3,2,10,2,5,2,10,2,5,2,5,2,5,2,3],
+      "OFFSET" : [0,0,1,1,2,3,4,0,5,2,6,1,7,0,8,1,9,10,11,3,12,4,13,5,14,2,15,2,16,6,17,3,18,7,19,8,20,9,21,3],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 22,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : ["20500","20500","20500","5599080","20500","20500","20500","20500","20500","20500","1","20500","20500","20500","20500","20500","20500","20500","20500","20500","20500","20500"]
+      },{
+        "name" : "float8",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : [0.0,904.0,1.0,0.0]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 10,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+        "OFFSET" : [0,18,26,36,37,51,60,61,72,75,84],
+        "DATA" : ["orderkey_10016___1","lineitem"," Tiresias ","F","orderkey_10016","partkey_1","A","COLLECT COD","AIR","suppkey_1"]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : [1617235200000,697334400000,694915200000,694828800000]
+      }]
+    },{
+      "name" : "max",
+      "count" : 40,
+      "TYPE_ID" : [2,5,2,5,2,2,2,10,2,5,2,10,2,3,2,3,2,2,2,5,2,5,2,5,2,3,2,10,2,5,2,10,2,5,2,5,2,5,2,3],
+      "OFFSET" : [0,0,1,1,2,3,4,0,5,2,6,1,7,0,8,1,9,10,11,3,12,4,13,5,14,2,15,2,16,6,17,3,18,7,19,8,20,9,21,3],
+      "children" : [{
+        "name" : "$data$",
+        "count" : 0
+      },{
+        "name" : "bigint",
+        "count" : 22,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+        "DATA" : ["30499","30499","30499","8552696","30499","30499","30499","30499","30499","30499","7","30499","30499","30499","30499","30499","30499","30499","30499","30499","30499","30499"]
+      },{
+        "name" : "float8",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : [0.1,94949.5,50.0,0.08]
+      },{
+        "name" : "varbinary",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "OFFSET" : [0],
+        "DATA" : [ ]
+      },{
+        "name" : "varchar",
+        "count" : 10,
+        "VALIDITY" : [1,1,1,1,1,1,1,1,1,1],
+        "OFFSET" : [0,17,25,57,58,71,82,83,99,104,114],
+        "DATA" : ["orderkey_9991___2","lineitem","zle carefully sauternes. quickly","O","orderkey_9991","partkey_999","R","TAKE BACK RETURN","TRUCK","suppkey_99"]
+      },{
+        "name" : "bit",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
+      },{
+        "name" : "timestampmilli",
+        "count" : 4,
+        "VALIDITY" : [1,1,1,1],
+        "DATA" : [1617235200000,909446400000,913939200000,912124800000]
+      }]
+    },{
+      "name" : "count",
+      "count" : 40,
+      "VALIDITY" : [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      "DATA" : ["10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000","10000"]
+    }]
+  }]
+}
