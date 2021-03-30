@@ -50,25 +50,26 @@
   (let [bound-edges (mapcat val (select-keys vertice->edges vertices))
         edge-weights (frequencies bound-edges)
         edge-order (mapv first (sort-by second > (sort-by first edge-weights)))
-        separators (distinct (for [n (range (count edge-order))
-                                   :let [initial-edge (nth edge-order n)
-                                         initial-cover (set/intersection vertices (set (get edge->vertices initial-edge)))]
-                                   :when (not-empty initial-cover)
-                                   separator (last (reduce
-                                                    (fn [[current-cover current-edges acc] m]
-                                                      (let [edge (nth edge-order m)
-                                                            new-vertices (set (get edge->vertices edge))
-                                                            new-cover (set/union current-cover (set/intersection vertices new-vertices))
-                                                            new-edges (cond-> current-edges
-                                                                        (not= new-cover current-cover)
-                                                                        (conj edge))]
-                                                        (if (= new-cover vertices)
-                                                          [initial-cover (sorted-set initial-edge) (conj acc new-edges)]
-                                                          [new-cover new-edges acc])))
-                                                    [initial-cover (sorted-set initial-edge) []]
-                                                    (range (inc n) (count edge-order))))]
-                               separator))]
-    (for [separator separators
+        separators (for [n (range (count edge-order))
+                         :let [initial-edge (nth edge-order n)
+                               initial-cover (set/intersection vertices (set (get edge->vertices initial-edge)))]
+                         :when (not-empty initial-cover)
+                         separator (last
+                                    (reduce
+                                     (fn [[current-cover current-edges acc] m]
+                                       (let [edge (nth edge-order m)
+                                             new-vertices (set (get edge->vertices edge))
+                                             new-cover (set/union current-cover (set/intersection vertices new-vertices))
+                                             new-edges (cond-> current-edges
+                                                         (not= new-cover current-cover)
+                                                         (conj edge))]
+                                         (if (= new-cover vertices)
+                                           [initial-cover (sorted-set initial-edge) (conj acc new-edges)]
+                                           [new-cover new-edges acc])))
+                                     [initial-cover (sorted-set initial-edge) []]
+                                     (range (inc n) (count edge-order))))]
+                     separator)]
+    (for [separator (distinct separators)
           :when (not (some #(set/superset? separator %) (remove #{separator} separators)))]
       separator)))
 
