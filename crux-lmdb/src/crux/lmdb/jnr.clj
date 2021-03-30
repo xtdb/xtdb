@@ -65,7 +65,7 @@
       (log/debug "Increasing mapsize to:" new-mapsize)
       (.setMapSize env new-mapsize))))
 
-(defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi ^StampedLock mapsize-lock, cp-job]
+(defrecord LMDBJNRKv [db-dir ^Env env ^Dbi dbi ^StampedLock mapsize-lock, cp-job, sync?]
   kv/KvStore
   (new-snapshot [_]
     (let [txn-stamp (.readLock mapsize-lock)]
@@ -94,7 +94,8 @@
           (kv/store this kvs)))))
 
   (fsync [this]
-    (.sync env true))
+    (when-not sync?
+      (.sync env true)))
 
   (compact [_])
 
@@ -154,7 +155,8 @@
       (let [kv-store (map->LMDBJNRKv {:db-dir db-dir
                                       :env env
                                       :dbi (.openDbi env db-name ^"[Lorg.lmdbjava.DbiFlags;" (make-array DbiFlags 0))
-                                      :mapsize-lock (StampedLock.)})]
+                                      :mapsize-lock (StampedLock.)
+                                      :sync? sync?})]
         (cond-> kv-store
           checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
       (catch Throwable t

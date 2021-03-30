@@ -214,7 +214,7 @@
 (def ^:dynamic ^{:tag 'long} *mapsize-increase-factor* 1)
 (def ^:const max-mapsize-increase-factor 32)
 
-(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock]
+(defrecord LMDBKv [db-dir env env-flags dbi ^StampedLock mapsize-lock sync?]
   kv/KvStore
   (new-snapshot [_]
     (let [tx (new-transaction mapsize-lock env LMDB/MDB_RDONLY)]
@@ -235,7 +235,8 @@
   (compact [_])
 
   (fsync [this]
-    (success? (LMDB/mdb_env_sync env true)))
+    (when-not sync?
+      (success? (LMDB/mdb_env_sync env true))))
 
   (count-keys [_]
     (with-open [stack (MemoryStack/stackPush)
@@ -303,7 +304,8 @@
                                    :env env
                                    :env-flags env-flags
                                    :dbi (dbi-open mapsize-lock env)
-                                   :mapsize-lock mapsize-lock})]
+                                   :mapsize-lock mapsize-lock
+                                   :sync? sync?})]
         (cond-> kv-store
           checkpointer (assoc :cp-job (cp/start checkpointer kv-store {::cp/cp-format cp-format}))))
       (catch Throwable t
