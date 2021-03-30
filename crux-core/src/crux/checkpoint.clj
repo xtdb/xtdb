@@ -127,16 +127,17 @@
 (defrecord FileSystemCheckpointStore [^Path root-path]
   CheckpointStore
   (available-checkpoints [_ {::keys [cp-format]}]
-    (for [metadata-path (->> (Files/newDirectoryStream root-path "checkpoint-*.edn")
-                             .iterator iterator-seq
-                             (sort #(compare %2 %1)))
-          ;; Files/readString only added in JDK 11
-          :let [cp (-> (Files/readAllBytes metadata-path)
-                       (String. StandardCharsets/UTF_8)
-                       read-string
-                       (update ::cp-path #(Paths/get (URI. %))))]
-          :when (= cp-format (::cp-format cp))]
-      cp))
+    (when (Files/exists root-path (make-array LinkOption 0))
+      (for [metadata-path (->> (Files/newDirectoryStream root-path "checkpoint-*.edn")
+                               .iterator iterator-seq
+                               (sort #(compare %2 %1)))
+            ;; Files/readString only added in JDK 11
+            :let [cp (-> (Files/readAllBytes metadata-path)
+                         (String. StandardCharsets/UTF_8)
+                         read-string
+                         (update ::cp-path #(Paths/get (URI. %))))]
+            :when (= cp-format (::cp-format cp))]
+        cp)))
 
   (download-checkpoint [_ {::keys [cp-path]} dir]
     (let [to-path (.toPath ^File dir)]
