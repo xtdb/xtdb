@@ -1,6 +1,6 @@
 = Lucene
 
-Lucene module for Crux making use of https://lucene.apache.org/[Apache
+Full-text search module for Crux making use of https://lucene.apache.org/[Apache
 Lucene].
 
 `crux-lucene` runs in-process as part of the Crux node as a Crux
@@ -185,7 +185,7 @@ It's possible to supply var bindings also, that are wired in using
 
 [source,clojure]
 ----
-{:find '[?e]
- :where '[[(lucene-text-search "firstname:%s" ?surname) [[?e]]]
-          [?e :firstname ?firstname]]}
+{:find [?e]
+ :in [?surname ?firstname]
+ :where [[(lucene-text-search "surname: %s AND firstname: %s" ?surname ?firstname) [[?e]]]]}
 ----

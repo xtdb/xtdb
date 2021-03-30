@@ -26,12 +26,17 @@
 (t/deftest test-bindings
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
                                    :firstname "Fred"
-                                   :surname "Fred"}]])
+                                   :surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
-    (t/is (seq (c/q db {:find '[?e]
-                        :where '[[?e :firstname ?firstname]
-                                 [(lucene-text-search "surname: %s" ?firstname) [[?e]]]]})))))
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?surname]
+                         :where [[(lucene-text-search "surname: %s" ?surname) [[?e]]]]}
+                    "Smith")))
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?surname ?firstname]
+                         :where [[(lucene-text-search "surname: %s AND firstname: %s" ?surname ?firstname) [[?e]]]]}
+                    "Smith" "Fred")))))
 
 (t/deftest test-namespaced-keywords
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :person/surname "Smith"}]])
