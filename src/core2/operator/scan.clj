@@ -47,22 +47,22 @@
      (.and y))))
 
 (defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
-  (if (.isEmpty row-id-bitmap)
-    temporal-min-range
-    (let [temporal-min-range (or (temporal/->copy-range temporal-min-range) (temporal/->min-range))
-          min-row-id (.select row-id-bitmap 0)]
-      (doto temporal-min-range
-        (aset temporal/row-id-idx
-              (max min-row-id (aget temporal-min-range temporal/row-id-idx)))))))
+  (let [temporal-min-range (or (temporal/->copy-range temporal-min-range) (temporal/->min-range))]
+    (if (.isEmpty row-id-bitmap)
+      temporal-min-range
+      (let [min-row-id (.select row-id-bitmap 0)]
+        (doto temporal-min-range
+          (aset temporal/row-id-idx
+                (max min-row-id (aget temporal-min-range temporal/row-id-idx))))))))
 
 (defn- adjust-temporal-max-range-to-row-id-range ^longs [^longs temporal-max-range ^Roaring64Bitmap row-id-bitmap]
-  (if (.isEmpty row-id-bitmap)
-    temporal-max-range
-    (let [temporal-max-range (or (temporal/->copy-range temporal-max-range) (temporal/->max-range))
-          max-row-id (.select row-id-bitmap (dec (.getLongCardinality row-id-bitmap)))]
-      (doto temporal-max-range
-        (aset temporal/row-id-idx
-              (min max-row-id (aget temporal-max-range temporal/row-id-idx)))))))
+  (let [temporal-max-range (or (temporal/->copy-range temporal-max-range) (temporal/->max-range))]
+    (if (.isEmpty row-id-bitmap)
+      temporal-max-range
+      (let [max-row-id (.select row-id-bitmap (dec (.getLongCardinality row-id-bitmap)))]
+        (doto temporal-max-range
+          (aset temporal/row-id-idx
+                (min max-row-id (aget temporal-max-range temporal/row-id-idx))))))))
 
 (defn- ->row-id->repeat-count ^java.util.Map [^TemporalRoots temporal-roots ^Roaring64Bitmap row-id-bitmap]
   (when temporal-roots

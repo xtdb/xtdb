@@ -248,8 +248,6 @@
     (let [kd-tree (.temporal-watermark watermark)
           row-id-bitmap-out (Roaring64Bitmap.)
           roots (HashMap.)
-          temporal-min-range (or temporal-min-range (->min-range))
-          temporal-max-range (or temporal-max-range (->max-range))
           coordinates (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
                           (.mapToObj (reify IntFunction
                                        (apply [_ x]
