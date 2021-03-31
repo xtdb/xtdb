@@ -22,7 +22,7 @@
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.locks.StampedLock
            java.util.concurrent.atomic.AtomicLong
-           java.util.stream.StreamSupport
+           [java.util.stream Stream StreamSupport]
            java.io.Closeable))
 
 ;; Temporal proof-of-concept plan:
@@ -248,10 +248,12 @@
     (let [kd-tree (.temporal-watermark watermark)
           row-id-bitmap-out (Roaring64Bitmap.)
           roots (HashMap.)
-          coordinates (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
-                          (.mapToObj (reify IntFunction
-                                       (apply [_ x]
-                                         (kd/kd-tree-array-point kd-tree x)))))]
+          coordinates (if (.isEmpty row-id-bitmap)
+                        (Stream/empty)
+                        (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
+                            (.mapToObj (reify IntFunction
+                                         (apply [_ x]
+                                           (kd/kd-tree-array-point kd-tree x))))))]
       (if (empty? columns)
         (.forEach coordinates
                   (reify Consumer
