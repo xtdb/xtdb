@@ -7,7 +7,16 @@
 
 ;; C++ version: https://github.com/daajoe/detkdecomp
 
-;; TODO:
+;; The usage of this can eventually be either to augment or replace
+;; the current planner in Crux classic, and/or to be the base for a
+;; new core2 planner.
+
+;; In Crux classic, one additional motivation for this work is to be
+;; able to implement sub-tree caching in our current engine, which
+;; doesn't strictly require replacing its current planner.
+
+
+;;;; TODO:
 
 ;; Sanity check, adder-15 doesn't return correct width (should be 2).
 
