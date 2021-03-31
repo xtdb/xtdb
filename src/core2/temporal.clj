@@ -106,6 +106,8 @@
     (set! (.tombstone coords) (boolean tombstone?))
     coords))
 
+(def ^:const ^int k 6)
+
 (defn ->min-range ^longs []
   (long-array k Long/MIN_VALUE))
 
@@ -149,8 +151,6 @@
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
   (Schema. [t/row-id-field (get temporal-columns col-name)]))
-
-(def ^:const ^int k 6)
 
 (def ^:const ^int id-idx 0)
 (def ^:const ^int row-id-idx 1)
