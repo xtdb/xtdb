@@ -3,7 +3,7 @@
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [org.apache.kafka/kafka-clients "2.6.0" :exclusions [org.lz4/lz4-java]]

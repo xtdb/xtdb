@@ -25,7 +25,7 @@
   :sub ~modules
 
   :dependencies
-  [[org.clojure/clojure "1.10.1"]
+  [[org.clojure/clojure "1.10.3"]
    [juxt/crux-core "crux-git-version-beta"]
    [juxt/crux-rocksdb "crux-git-version-beta"]
    [juxt/crux-lmdb "crux-git-version-alpha"]
@@ -46,33 +46,9 @@
    [org.apache.kafka/connect-api "2.6.0" :scope "provided"]
 
    [com.oracle.ojdbc/ojdbc8 "19.3.0.0" :scope "provided"]
-   [com.h2database/h2 "1.4.200"]
-   [com.opentable.components/otj-pg-embedded "0.13.1"]
-   [org.xerial/sqlite-jdbc "3.28.0"]
-   [mysql/mysql-connector-java "8.0.17"]
-   [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8"]
 
    [integrant "0.8.0"]
    [integrant/repl "0.3.1"]
-
-   ;; dependency conflict resolution
-   [com.fasterxml.jackson.core/jackson-core "2.10.2"]
-   [com.fasterxml.jackson.core/jackson-annotations "2.10.2"]
-   [com.fasterxml.jackson.core/jackson-databind "2.10.2"]
-   [io.netty/netty-transport "4.1.51.Final"]
-   [io.netty/netty-transport "4.1.51.Final"]
-   [io.netty/netty-codec-http "4.1.51.Final"]
-   [com.google.code.findbugs/jsr305 "3.0.2"]
-   [org.apache.commons/commons-lang3 "3.9"]
-   [org.apache.commons/commons-text "1.7"]
-   [org.apache.commons/commons-compress "1.19"]
-   [org.javassist/javassist "3.22.0-GA"]
-   [org.lz4/lz4-java "1.7.1"]
-   [commons-codec "1.12"]
-   [joda-time "2.9.9"]
-   [org.tukaani/xz "1.8"]
-   [com.github.spotbugs/spotbugs-annotations "3.1.9"]
-   [org.apache.lucene/lucene-codecs "8.6.1"]
 
    ;; crux metrics dependencies
    ;; JMX Deps
@@ -80,7 +56,7 @@
 
    ;; Cloudwatch Deps
    [io.github.azagniotov/dropwizard-metrics-cloudwatch "2.0.3"]
-   [software.amazon.awssdk/cloudwatch "2.10.61"]
+   [software.amazon.awssdk/cloudwatch "2.16.32"]
 
    ;; Prometheus Deps
    [org.dhatim/dropwizard-prometheus "2.2.0"]
@@ -90,7 +66,12 @@
    [clj-commons/iapetos "0.1.9"]
 
    ;; crux-test test dep
-   [criterium "0.4.5"]]
+   [criterium "0.4.5"]
+
+   ;; dependency conflict resolution
+   [org.apache.commons/commons-lang3 "3.9"]
+   [com.google.protobuf/protobuf-java "3.13.0"]
+   [joda-time "2.9.9"]]
 
   :source-paths ["dev"]
 

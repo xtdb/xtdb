@@ -101,7 +101,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-{:deps {org.clojure/clojure {:mvn/version "1.10.1"}
+{:deps {org.clojure/clojure {:mvn/version "1.10.3"}
 
         juxt/crux-core {:mvn/version "{crux_version}-beta"}
         juxt/crux-http-server {:mvn/version "{crux_version}-alpha"}}}

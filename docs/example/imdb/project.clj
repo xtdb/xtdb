@@ -2,7 +2,7 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies
-  [[org.clojure/clojure "1.10.1"]
+  [[org.clojure/clojure "1.10.3"]
    [juxt/crux-core "19.09-1.4.0-alpha"]
    [juxt/crux-rocksdb "19.09-1.4.0-alpha"]
    [juxt/crux-kafka "19.09-1.4.0-alpha"]

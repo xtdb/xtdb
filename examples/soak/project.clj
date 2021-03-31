@@ -1,5 +1,5 @@
 (defproject juxt/soak "crux-git-version"
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "1.0.0"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-kafka "crux-git-version-beta"]
@@ -23,7 +23,7 @@
 
                  ;; deps res
                  [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
-                 [org.apache.httpcomponents/httpclient "4.5.12"]]
+                 [org.apache.httpcomponents/httpclient "4.5.13"]]
 
   :middleware [leiningen.project-version/middleware]
   :jvm-opts ["-Xms3g" "-Xmx3g"]

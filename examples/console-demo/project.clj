@@ -1,5 +1,5 @@
 (defproject juxt/console-demo "crux-git-version"
-  :dependencies [[org.clojure/clojure "1.10.1"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-rocksdb "crux-git-version-beta"]
                  [juxt/crux-http-server "crux-git-version-alpha"]
