@@ -503,7 +503,7 @@
   (^java.nio.ByteBuffer [^java.nio.ByteBuffer b ^long new-capacity]
    (.put ^ByteBuffer (allocate-buffer new-capacity) (.flip ^ByteBuffer b))))
 
-(defn realloc-array ^core2.mini_arrow_test.ArrowArray [^ArrowArray a]
+(defn realloc-array ^core2.mini_arrow.ArrowArray [^ArrowArray a]
   (let [^objects buffers (.buffers a)]
     (dotimes [n (alength buffers)]
       (aset buffers n (realloc (aget buffers n))))
