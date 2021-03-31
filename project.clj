@@ -21,7 +21,8 @@
                                   [org.openjdk.jmh/jmh-core "1.27"]
                                   [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
                                   [org.clojure/data.csv "1.0.0"]
-                                  [cheshire "5.10.0"]]
+                                  [cheshire "5.10.0"]
+                                  [org.clojure/tools.namespace "1.1.0"]]
                    :java-source-paths ["src" "jmh"]
                    :resource-paths ["test-resources" "data"]
                    :test-selectors {:default (complement :integration)
