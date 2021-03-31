@@ -5,6 +5,29 @@
 ;; "A Backtracking-Based Algorithm for Computing Hypertree-Decompositions"
 ;; https://arxiv.org/abs/cs/0701083
 
+;; C++ version: https://github.com/daajoe/detkdecomp
+
+;; TODO:
+
+;; Sanity check, adder-15 doesn't return correct width (should be 2).
+
+;; Calculating, but then not returning some widths is likely hiding a
+;; bug.
+
+;; Expand is assumed to be possible to replace with a cache, is this
+;; really the case?
+
+;; We probably want Fractional Hypertree Decompositions, see
+;; EmptyHeaded for example (decomposition is based on the AJAR paper):
+;; https://github.com/HazyResearch/EmptyHeaded
+;; http://arxiv.org/abs/1503.02368
+
+;; Investigate https://github.com/cem-okulmus/BalancedGo which a later
+;; heuristic from the same group, and is based on CSP, we could use
+;; core.async. Also contains a Go implementation of det-k-decomp,
+;; which is what's implemented here.
+
+
 ;; Lambda: edges, "edge cover" (relations)
 ;; Chi: vertices, "bag" (variables).
 (defrecord HTree [lambda chi subtrees])
@@ -182,5 +205,6 @@
                                        :succ-seps {}})]
     (let [edges (into (sorted-set) (keys edge->vertices))
           ht (expand (decomp-cov h k edges (sorted-set)))]
+      ;; TODO: should not be necessary, likely hides a bug?
       (when (<= (htree-decomp-width ht) k)
         ht))))
