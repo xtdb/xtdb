@@ -1,7 +1,4 @@
-(ns ^{:clojure.tools.namespace.repl/load false,
-      :clojure.tools.namespace.repl/unload false}
-    ;; TODO excluded from c.t.n because it calls SIMD at the bottom of the ns
-    core2.compute
+(ns core2.compute
   (:require [clojure.tools.logging :as log])
   (:import [org.apache.arrow.memory BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers]
