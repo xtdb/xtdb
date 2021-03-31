@@ -106,6 +106,15 @@
     (set! (.tombstone coords) (boolean tombstone?))
     coords))
 
+(defn ->min-range ^longs []
+  (long-array k Long/MIN_VALUE))
+
+(defn ->max-range ^longs []
+  (long-array k Long/MAX_VALUE))
+
+(defn ->copy-range ^longs [^longs range]
+  (some-> range (Arrays/copyOf (alength range))))
+
 (defrecord TemporalRoots [^Roaring64Bitmap row-id-bitmap ^Map roots]
   Closeable
   (close [_]
@@ -239,6 +248,8 @@
     (let [kd-tree (.temporal-watermark watermark)
           row-id-bitmap-out (Roaring64Bitmap.)
           roots (HashMap.)
+          temporal-min-range (or temporal-min-range (->min-range))
+          temporal-max-range (or temporal-max-range (->max-range))
           coordinates (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
                           (.mapToObj (reify IntFunction
                                        (apply [_ x]
@@ -293,15 +304,6 @@
                                                            ^IMetadataManager metadata-manager]
   (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil nil)
     (.populateKnownChunks)))
-
-(defn ->min-range ^longs []
-  (long-array k Long/MIN_VALUE))
-
-(defn ->max-range ^longs []
-  (long-array k Long/MAX_VALUE))
-
-(defn ->copy-range ^longs [^longs range]
-  (some-> range (Arrays/copyOf (alength range))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
   (let [id (.applyAsLong id->internal-id (.id coordinates))
