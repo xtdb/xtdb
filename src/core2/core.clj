@@ -6,6 +6,7 @@
             [core2.metadata :as meta]
             [core2.object-store :as os]
             [core2.temporal :as temporal]
+            core2.tx
             [core2.tx-producer :as txp]
             [core2.util :as util])
   (:import core2.buffer_pool.BufferPool
