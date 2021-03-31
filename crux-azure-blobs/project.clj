@@ -6,7 +6,11 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [clj-http "3.10.1"]]
+                 [clj-http "3.12.1"]
+
+                 ;; dependency resolution
+                 [commons-codec "1.15"]
+                 ]
 
   :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
 
