@@ -1,4 +1,6 @@
-(ns core2.temporal.simd
+(ns ^{:clojure.tools.namespace.repl/load false,
+      :clojure.tools.namespace.repl/unload false}
+    core2.temporal.simd
   (:import jdk.incubator.vector.VectorOperators
            jdk.incubator.vector.LongVector))
 

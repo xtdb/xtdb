@@ -1,4 +1,8 @@
-(ns core2.mini-arrow
+(ns ^{:clojure.tools.namespace.repl/load false,
+      :clojure.tools.namespace.repl/unload false}
+    ;; TODO doesn't currently compile
+
+    core2.mini-arrow
   "Minimal implementation of Arrow based on the C data interface
   specification using plain java.nio.ByteBuffer for memory
   management."
