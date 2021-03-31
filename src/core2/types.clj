@@ -19,6 +19,7 @@
    Double (.getType Types$MinorType/FLOAT8)
    (Class/forName "[B") (.getType Types$MinorType/VARBINARY)
    String (.getType Types$MinorType/VARCHAR)
+   Text (.getType Types$MinorType/VARCHAR)
    Boolean (.getType Types$MinorType/BIT)
    Date (.getType Types$MinorType/TIMESTAMPMILLI)})
 
