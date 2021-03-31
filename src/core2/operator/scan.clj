@@ -202,7 +202,7 @@
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range]
-  (let [chunk-idxs (LinkedList. (meta/matching-chunks metadata-mgr watermark metadata-pred))]
+  (let [chunk-idxs (LinkedList. (or (meta/matching-chunks metadata-mgr watermark metadata-pred) []))]
     (ScanCursor. allocator buffer-pool temporal-manager watermark
                  chunk-idxs col-names col-preds temporal-min-range temporal-max-range
                  nil nil false)))
