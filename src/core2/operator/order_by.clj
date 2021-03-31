@@ -2,12 +2,13 @@
   (:require [core2.util :as util])
   (:import clojure.lang.Keyword
            core2.ICursor
-           java.util.function.Consumer
            [java.util ArrayList Collections Comparator List]
+           java.util.function.Consumer
            org.apache.arrow.algorithm.sort.DefaultVectorComparators
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector IntVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Field))
+           org.apache.arrow.vector.complex.DenseUnionVector
+           org.apache.arrow.vector.types.pojo.Field
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (deftype OrderSpec [^String col-name, ^Keyword direction])
 
@@ -35,7 +36,10 @@
                                (let [acc-vec (.getVector acc-root field)
                                      in-vec (.getVector in-root field)]
                                  (dotimes [idx in-row-count]
-                                   (.copyFromSafe acc-vec idx (+ acc-row-count idx) in-vec))))
+                                   (if (and (instance? DenseUnionVector acc-vec)
+                                            (instance? DenseUnionVector in-vec))
+                                     (util/du-copy in-vec idx acc-vec (+ acc-row-count idx))
+                                     (.copyFromSafe acc-vec idx (+ acc-row-count idx) in-vec)))))
 
                              (util/set-vector-schema-root-row-count acc-root (+ acc-row-count in-row-count))))))
     @!acc-root))
@@ -81,8 +85,11 @@
                   (let [in-vec (.getVector acc-root n)
                         out-vec (.getVector out-root n)]
                     (util/set-value-count out-vec (.getValueCount in-vec))
-                    (dotimes [m (.size sorted-idxs)]
-                      (.copyFrom out-vec (.get sorted-idxs m) m in-vec))))
+                    (dotimes [idx (.size sorted-idxs)]
+                      (if (and (instance? DenseUnionVector in-vec)
+                               (instance? DenseUnionVector out-vec))
+                        (util/du-copy in-vec (.get sorted-idxs idx) out-vec idx)
+                        (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
                 (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
                 (.accept c out-root)
                 true)
