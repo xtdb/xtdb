@@ -25,6 +25,12 @@
    (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
    (.getType Types$MinorType/BIT) BitVector})
 
+(def ^:private arrow-type->cast
+  {(.getType Types$MinorType/BIGINT) 'long
+   (.getType Types$MinorType/FLOAT8) 'double
+   (.getType Types$MinorType/VARBINARY) 'bytes
+   (.getType Types$MinorType/BIT) 'boolean})
+
 (def ^:private compare-op? '#{< <= > >= = !=})
 
 (def ^:private logic-op? '#{and or not})
@@ -53,6 +59,13 @@
         = `(zero? (compare ~@args))
         != `(not (zero? (~comp ~@args)))))))
 
+(defn- widen-numeric-types [types]
+  (cond
+    (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
+    (= #{(.getType Types$MinorType/BIGINT)
+         (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
+    (= #{(.getType Types$MinorType/BIGINT)} types) (.getType Types$MinorType/BIGINT)))
+
 (defn- infer-return-type [var->type expression]
   (cond
     (symbol? expression)
@@ -75,25 +88,28 @@
          (.getType Types$MinorType/BIT)]
 
         (or (arithmetic-op? op) (math-op? op))
-        (let [longs? (= #{(.getType Types$MinorType/BIGINT)} types)]
+        (let [return-type (widen-numeric-types types)]
           [(case op
              % `(mod ~@args)
-             / (if longs?
+             / (if (= return-type (.getType Types$MinorType/BIGINT))
                  `(quot ~@args)
                  `(/ ~@args))
              (cons (if (math-op? op)
                      (symbol "Math" (name op))
                      op) args))
-           (cond
-             (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-             (= #{(.getType Types$MinorType/BIGINT)
-                  (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-             longs? (.getType Types$MinorType/BIGINT))])
+           return-type])
 
         (= 'if op)
-        (do (assert (= 3 (count args))
-                    (= 1 (count types)))
-            [(cons op args) (second types)])
+        (do (assert (= 3 (count args)))
+            (let [types (set (map second (rest arg+types)))
+                  return-type (or (widen-numeric-types types)
+                                  (if (= 1 (count types))
+                                    (first types)
+                                    (throw (IllegalArgumentException. (str "if then-else needs same type: " types)))))
+                  cast (arrow-type->cast return-type)]
+              [(cond->> (cons op args)
+                 cast (list cast))
+               return-type]))
 
         :else
         (throw (UnsupportedOperationException. (str "unknown op: " op)))))))

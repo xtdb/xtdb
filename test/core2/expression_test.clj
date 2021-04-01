@@ -90,7 +90,7 @@
               (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs))))))
 
       (t/testing "if"
-        (let [expr '(if false a 0.0)
+        (let [expr '(if false a 0)
               expr-projection-spec (expr/->expression-projection-spec "c" expr)]
           (t/is (= '(a) (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
