@@ -3779,3 +3779,17 @@
            fut)
          (finally
            (.close node))))))
+
+(t/deftest nil-in-entity-position-shouldnt-yield-results-1486
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id 1 :foo nil}]
+                        [:crux.tx/put {:crux.db/id 2 :foo nil}]])
+
+  (t/is (= #{}
+           (api/q (api/db *api*)
+                  '{:find [?v]
+                    :where [[nil :foo ?v]]})))
+
+  (t/is (= #{}
+           (api/q (api/db *api*)
+                  '{:find [?v]
+                    :where [[#{nil} :foo ?v]]}))))
