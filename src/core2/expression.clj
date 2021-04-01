@@ -91,8 +91,9 @@
              longs? (.getType Types$MinorType/BIGINT))])
 
         (= 'if op)
-        (do (assert (= 3 (count args)) (= (nth types 1) (nth types 2)))
-            [(cons op args) (nth types 1)])
+        (do (assert (= 3 (count args))
+                    (= 1 (count types)))
+            [(cons op args) (second types)])
 
         :else
         (throw (UnsupportedOperationException. (str "unknown op: " op)))))))

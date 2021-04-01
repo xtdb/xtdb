@@ -89,6 +89,16 @@
               (t/is (instance? Float8Vector v))
               (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs))))))
 
+      (t/testing "if"
+        (let [expr '(if false a 0.0)
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '(a) (expr/variables expr)))
+          (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
+            (let [v (util/maybe-single-child-dense-union acc)
+                  xs (test-util/->list v)]
+              (t/is (instance? Float8Vector v))
+              (t/is (= (repeat 1000 0.0) xs))))))
+
       (t/testing "cannot call arbitrary functions"
         (let [expr '(vec a)
               expr-projection-spec (expr/->expression-projection-spec "c" expr)]
