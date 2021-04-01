@@ -551,7 +551,7 @@
                            or-join-vars)}))
 
 (defn- new-binary-index [{:keys [e a v] :as clause} {:keys [entity-resolver-fn]} index-snapshot {:keys [vars-in-join-order]}]
-  (let [order (keep #{e v} vars-in-join-order)
+  (let [order (filter #(contains? #{e v} %) vars-in-join-order)
         nested-index-snapshot (db/open-nested-index-snapshot index-snapshot)
         attr-buffer (mem/copy-to-unpooled-buffer (c/->id-buffer a))]
     (if (= v (first order))
