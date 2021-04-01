@@ -28,14 +28,14 @@
              :count_order 38}
             {:l_returnflag (Text. "N")
              :l_linestatus (Text. "O")
-             :sum_qty 75163
-             :sum_base_price 75378782
-             :sum_disc_price 7.16486117214E7
-             :sum_charge 7.4494106913613E7
-             :avg_qty 25.565646258503403,
-             :avg_price 25639.04149659864,
-             :avg_disc 0.04969387755102041,
-             :count_order 2940}
+             :sum_qty 75168,
+             :sum_base_price 75383627,
+             :sum_disc_price 7.16531663034E7,
+             :sum_charge 7.4498798133073E7,
+             :avg_qty 25.558653519211152,
+             :avg_price 25631.971098265894
+             :avg_disc 0.049697381842910573,
+             :count_order 2941}
             {:l_returnflag (Text. "R")
              :l_linestatus (Text. "F")
              :sum_qty 36511
