@@ -227,7 +227,7 @@
 (def ^:private memo-generate-code (memoize generate-code))
 (def ^:private memo-eval (memoize eval))
 
-(defn- expression-vectors [^VectorSchemaRoot in expression]
+(defn- expression-in-vectors [^VectorSchemaRoot in expression]
   (vec (for [var (variables expression)]
          (util/maybe-single-child-dense-union (.getVector in (name var))))))
 
@@ -237,19 +237,19 @@
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name expression]
   (reify ProjectionSpec
     (project [_ in allocator]
-      (let [in-vecs (expression-vectors in expression)
+      (let [in-vecs (expression-in-vectors in expression)
             types (mapv vector->arrow-type in-vecs)
-            inner-expr-code (memo-generate-code types expression ::project)
-            inner-expr-fn (memo-eval inner-expr-code)
+            expr-code (memo-generate-code types expression ::project)
+            expr-fn (memo-eval expr-code)
             ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
-        (inner-expr-fn in-vecs acc (.getRowCount in))))))
+        (expr-fn in-vecs acc (.getRowCount in))))))
 
 (defn ->expression-selector ^core2.select.IVectorSchemaRootSelector [expression]
   (reify IVectorSchemaRootSelector
     (select [_ in]
-      (let [in-vecs (expression-vectors in expression)
+      (let [in-vecs (expression-in-vectors in expression)
             types (mapv vector->arrow-type in-vecs)
-            inner-expr-code (memo-generate-code types expression ::select)
-            inner-expr-fn (memo-eval inner-expr-code)
+            expr-code (memo-generate-code types expression ::select)
+            expr-fn (memo-eval expr-code)
             acc (RoaringBitmap.)]
-        (inner-expr-fn in-vecs acc (.getRowCount in))))))
+        (expr-fn in-vecs acc (.getRowCount in))))))
