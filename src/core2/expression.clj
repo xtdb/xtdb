@@ -29,93 +29,159 @@
   {(.getType Types$MinorType/BIGINT) 'long
    (.getType Types$MinorType/FLOAT8) 'double
    (.getType Types$MinorType/VARBINARY) 'bytes
+   (.getType Types$MinorType/VARCHAR) 'str
    (.getType Types$MinorType/BIT) 'boolean})
-
-(def ^:private compare-op? '#{< <= > >= = !=})
-
-(def ^:private logic-op? '#{and or not})
-
-(def ^:private arithmetic-op? '#{+ - * / %})
-
-(def ^:private math-op? (set (for [^Method m (.getDeclaredMethods Math)]
-                               (symbol (.getName m)))))
-
-(defn- adjust-compare-op [op args types]
-  (if (set/subset? types #{(.getType Types$MinorType/BIGINT)
-                           (.getType Types$MinorType/FLOAT8)
-                           (.getType Types$MinorType/TIMESTAMPMILLI)})
-    (case op
-      = `(== ~@args)
-      != `(not (== ~@args))
-      `(~op ~@args))
-    (let [comp (if (= types #{(.getType Types$MinorType/VARBINARY)})
-                 `java.util.Arrays/equals
-                 `compare)]
-      (case op
-        < `(neg? (~comp ~@args))
-        <= `(not (pos? (~comp ~@args)))
-        >  `(pos? (~comp ~@args))
-        >= `(not (neg? (~comp ~@args)))
-        = `(zero? (compare ~@args))
-        != `(not (zero? (~comp ~@args)))))))
-
-(defn- widen-numeric-types [types]
-  (cond
-    (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-    (= #{(.getType Types$MinorType/BIGINT)
-         (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-    (= #{(.getType Types$MinorType/BIGINT)} types) (.getType Types$MinorType/BIGINT)))
-
-(defn- infer-return-type [var->type expression]
-  (cond
-    (symbol? expression)
-    [expression (get var->type expression)]
-    (not (sequential? expression))
-    [expression (types/->arrow-type (class expression))]
-    :else
-    (let [[op & args] expression
-          arg+types (for [expression args]
-                      (infer-return-type var->type expression))
-          types (set (map second arg+types))
-          args (map first arg+types)]
-      (cond
-        (compare-op? op)
-        [(adjust-compare-op op args types)
-         (.getType Types$MinorType/BIT)]
-
-        (logic-op? op)
-        [`(boolean ~(cons op args))
-         (.getType Types$MinorType/BIT)]
-
-        (or (arithmetic-op? op) (math-op? op))
-        (let [return-type (widen-numeric-types types)]
-          [(case op
-             % `(mod ~@args)
-             / (if (= return-type (.getType Types$MinorType/BIGINT))
-                 `(quot ~@args)
-                 `(/ ~@args))
-             (cons (if (math-op? op)
-                     (symbol "Math" (name op))
-                     op) args))
-           return-type])
-
-        (= 'if op)
-        (do (assert (= 3 (count args)))
-            (let [types (set (map second (rest arg+types)))
-                  return-type (or (widen-numeric-types types)
-                                  (if (= 1 (count types))
-                                    (first types)
-                                    (throw (IllegalArgumentException. (str "if then-else needs same type: " types)))))
-                  cast (arrow-type->cast return-type)]
-              [(cond->> (cons op args)
-                 cast (list cast))
-               return-type]))
-
-        :else
-        (throw (UnsupportedOperationException. (str "unknown op: " op)))))))
 
 (defn- primitive-vector-type? [^Class type]
   (= "org.apache.arrow.vector" (.getPackageName type)))
+
+(def ^:private idx-sym (gensym "idx"))
+
+(defmulti compile-expression (fn [var->type expression]
+                               (cond
+                                 (symbol? expression)
+                                 ::variable
+                                 (sequential? expression)
+                                 (keyword (name (first expression)))
+                                 :else
+                                 ::literal)))
+
+(defmethod compile-expression ::variable [var->type expression]
+  (let [type (get var->type expression)]
+    [(cond
+       (= BitVector type)
+       `(= 1 (.get ~expression ~idx-sym))
+       (primitive-vector-type? (get arrow-type->vector-type type))
+       `(.get ~expression ~idx-sym)
+       :else
+       `(.getObject ~expression ~idx-sym))
+     type]))
+
+(defmethod compile-expression ::literal [var->type expression]
+  [expression (types/->arrow-type (class expression))])
+
+(defmethod compile-expression :default [_ [op & args :as expression]]
+  (throw (UnsupportedOperationException. (str "unknown op: " op))))
+
+(defn- compile-sub-expressions [var->type args]
+  (let [arg+types (for [expression args]
+                    (compile-expression var->type expression))]
+    [(map first arg+types) (map second arg+types)]))
+
+(defn- widen-numeric-types [types]
+  (let [types (set types)]
+    (cond
+      (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
+      (= #{(.getType Types$MinorType/BIGINT)
+           (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
+      (= #{(.getType Types$MinorType/BIGINT)} types) (.getType Types$MinorType/BIGINT))))
+
+(defn- numeric-compare? [types]
+  (set/subset? (set types) #{(.getType Types$MinorType/BIGINT)
+                             (.getType Types$MinorType/FLOAT8)
+                             (.getType Types$MinorType/TIMESTAMPMILLI)}))
+
+(defn- compare-fn [types]
+  (if (= types #{(.getType Types$MinorType/VARBINARY)})
+    `java.util.Arrays/equals
+    `compare))
+
+(defmethod compile-expression := [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [(if (numeric-compare? types)
+       `(== ~@args)
+       `(= ~@args))
+     (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :!= [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(not= ~@args)
+     (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :< [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [(if (numeric-compare? types)
+       `(~op ~@args)
+       `(neg? (~(compare-fn types) ~@args)))
+     (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :<= [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [(if (numeric-compare? types)
+       `(~op ~@args)
+       `(not (pos? (~(compare-fn types) ~@args))))
+     (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :> [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [(if (numeric-compare? types)
+       `(~op ~@args)
+       `(pos? (~(compare-fn types) ~@args)))
+     (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :>= [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [(if (numeric-compare? types)
+       `(~op ~@args)
+       `(not (neg? (~(compare-fn types) ~@args))))
+     (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :and [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(boolean (~op args)) (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :or [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(boolean (~op args)) (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :not [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(boolean (~op ~@args)) (.getType Types$MinorType/BIT)]))
+
+(defmethod compile-expression :+ [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(~op ~@args) (widen-numeric-types types)]))
+
+(defmethod compile-expression :- [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(~op ~@args) (widen-numeric-types types)]))
+
+(defmethod compile-expression :* [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(~op ~@args) (widen-numeric-types types)]))
+
+(defmethod compile-expression :% [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)]
+    [`(mod ~@args) (widen-numeric-types types)]))
+
+(defmethod compile-expression :/ [var->type [op & args :as expression]]
+  (let [[args types] (compile-sub-expressions var->type args)
+        return-type (widen-numeric-types types)]
+    [(if (= return-type (.getType Types$MinorType/BIGINT))
+       `(quot ~@args)
+       `(~op ~@args))
+     return-type]))
+
+(doseq [math-op (distinct (for [^Method m (.getDeclaredMethods Math)]
+                            (.getName m)))]
+  (defmethod compile-expression (keyword math-op) [var->type [_ & args]]
+    (let [[args types] (compile-sub-expressions var->type args)
+          return-type (widen-numeric-types types)]
+      [`(~(symbol "Math" math-op) ~@args)
+       return-type])))
+
+(defmethod compile-expression :if [var->type [op & args :as expression]]
+  (assert (= 3 (count args)))
+  (let [[args types] (compile-sub-expressions var->type args)
+        types (rest types)
+        return-type (or (widen-numeric-types types)
+                        (if (= 1 (count types))
+                          (first types)
+                          (throw (IllegalArgumentException. (str "if then-else needs same type: " types)))))
+        cast (arrow-type->cast return-type)]
+    [(cond->> (cons op args)
+       cast (list cast))
+     return-type]))
 
 (defn- normalize-expression [expression]
   (w/postwalk #(cond
@@ -131,25 +197,13 @@
   (let [vars (variables expression)
         var->type (zipmap vars types)
         expression (normalize-expression expression)
-        [expression arrow-return-type] (infer-return-type var->type expression)
+        [expression arrow-return-type] (compile-expression var->type expression)
         ^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
-        inner-acc-sym (with-meta (gensym 'inner-acc) {:tag (symbol (.getName vector-return-type))})
+        inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})
         return-type-id (types/arrow-type->type-id arrow-return-type)
-        idx-sym (gensym 'idx)
-        expanded-expression (w/postwalk
-                             #(if-let [type (get var->type %)]
-                                (cond
-                                  (= BitVector type)
-                                  `(= 1 (.get ~% ~idx-sym))
-                                  (primitive-vector-type? (get arrow-type->vector-type type))
-                                  `(.get ~% ~idx-sym)
-                                  :else
-                                  `(.getObject ~% ~idx-sym))
-                                %)
-                             expression)
-        expanded-expression (if (= BitVector vector-return-type)
-                              `(if ~expanded-expression 1 0)
-                              expanded-expression)]
+        expression (if (= BitVector vector-return-type)
+                     `(if ~expression 1 0)
+                     expression)]
     `(fn [[~@(for [[k v] (map vector vars types)]
                (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
           ^DenseUnionVector acc#
@@ -157,7 +211,7 @@
        (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
          (dotimes [~idx-sym row-count#]
            (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
-             (.set ~inner-acc-sym offset# ~expanded-expression))))
+             (.set ~inner-acc-sym offset# ~expression))))
        acc#)))
 
 (def ^:private memo-generate-code (memoize generate-code))
