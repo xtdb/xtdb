@@ -87,4 +87,9 @@
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list v)]
               (t/is (instance? Float8Vector v))
-              (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs)))))))))
+              (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs))))))
+
+      (t/testing "cannot call arbitrary functions"
+        (let [expr '(vec a)
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (thrown? UnsupportedOperationException (.project expr-projection-spec in allocator))))))))
