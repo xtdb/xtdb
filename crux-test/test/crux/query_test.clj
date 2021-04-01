@@ -3805,13 +3805,10 @@
            (api/q (api/db *api*)
                   '{:find [?e]
                     :where [[?e :foo _]]})))
-
-  #_ ; yields #{[1] [2]}
   (t/is (= #{[1]}
            (api/q (api/db *api*)
                   '{:find [?e]
                     :where [[?e :foo nil]]})))
-
   (t/is (= #{[1]}
            (api/q (api/db *api*)
                   '{:find [?e]
