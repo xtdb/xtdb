@@ -200,15 +200,14 @@
         var->type (zipmap vars types)
         expression (normalize-expression expression)
         [expression arrow-return-type] (compile-expression var->type expression)
-        return-type-id (types/arrow-type->type-id arrow-return-type)]
+        return-type-id (types/arrow-type->type-id arrow-return-type)
+        args (for [[k v] (map vector vars types)]
+               (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
     (case expression-type
       ::project
       (let [^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
             inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})]
-        `(fn [[~@(for [[k v] (map vector vars types)]
-                   (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
-              ^DenseUnionVector acc#
-              ^long row-count#]
+        `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
            (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
              (dotimes [~idx-sym row-count#]
                (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
@@ -218,10 +217,7 @@
              acc#)))
 
       ::select
-      `(fn [[~@(for [[k v] (map vector vars types)]
-                 (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
-            ^RoaringBitmap acc#
-            ^long row-count#]
+      `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
          (assert (= ~return-type-id (types/arrow-type->type-id (.getType Types$MinorType/BIT))))
          (dotimes [~idx-sym row-count#]
            (when ~expression
