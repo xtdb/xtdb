@@ -34,7 +34,7 @@
   (let [vars (variables expression)
         arrow-return-type (infer-return-type (set types) expression)
         ^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
-        inner-acc-sym (with-meta (gensym 'acc) {:tag (symbol (.getName vector-return-type))})
+        inner-acc-sym (with-meta (gensym 'inner-acc) {:tag (symbol (.getName vector-return-type))})
         return-type-id (types/arrow-type->type-id arrow-return-type)
         idx-sym (gensym 'idx)
         var->type (zipmap vars types)
