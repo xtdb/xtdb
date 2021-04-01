@@ -11,7 +11,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn variables [expr]
-  (filter symbol? (tree-seq seq? rest expr)))
+  (filter symbol? (tree-seq sequential? rest expr)))
 
 (defn- infer-return-type ^java.lang.Class [types expression]
   (if-let [tag (:tag expression)]
@@ -32,11 +32,17 @@
         inner-acc-sym (with-meta (gensym 'acc) {:tag (symbol (.getName vector-return-type))})
         return-type-id (types/arrow-type->type-id arrow-return-type)
         idx-sym (gensym 'idx)
-        expanded-expression (w/postwalk-replace
-                             (->> (for [var vars]
-                                    [var `(.get ~var ~idx-sym)])
-                                  (into {}))
-                             expression)]
+        var? (set vars)
+        expanded-expression (w/postwalk #(cond
+                                           (vector? %)
+                                           (seq %)
+                                           (keyword? %)
+                                           (symbol (name %))
+                                           (var? %)
+                                           `(.get ~% ~idx-sym)
+                                           :else
+                                           %)
+                                        expression)]
     `(fn [[~@(for [[k ^Class v] (map vector vars types)]
                (with-meta k {:tag (symbol (.getName v))}))]
           ^DenseUnionVector acc#

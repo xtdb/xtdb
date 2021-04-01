@@ -32,4 +32,13 @@
         (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
           (let [xs (test-util/->list (util/maybe-single-child-dense-union acc))]
             (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
-                     xs))))))))
+                     xs)))))
+
+      (t/testing "support keyword and vectors"
+        (let [expr '[:+ a [:+ b 2]]
+            expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+        (t/is (= '(a b) (expr/variables expr)))
+        (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
+          (let [xs (test-util/->list (util/maybe-single-child-dense-union acc))]
+            (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
+                     xs)))))))))
