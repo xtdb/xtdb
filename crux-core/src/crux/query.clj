@@ -417,7 +417,7 @@
 (defn- normalize-triple-clause [{:keys [e a v] :as clause}]
   (cond-> clause
     (or (blank-var? v)
-        (nil? v))
+        (not (contains? clause :v)))
     (-> (assoc :v (gensym "_")) (with-meta {:ignore-v? true}))
     (blank-var? e)
     (assoc :e (gensym "_"))

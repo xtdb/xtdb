@@ -3793,3 +3793,31 @@
            (api/q (api/db *api*)
                   '{:find [?v]
                     :where [[#{nil} :foo ?v]]}))))
+
+(t/deftest literal-nil-value-in-triple-clause-should-only-match-nil-1487
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id 1 :foo nil}]
+                        [:crux.tx/put {:crux.db/id 2 :foo 2}]])
+  (t/is (= #{[1] [2]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :foo]]})))
+  (t/is (= #{[1] [2]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :foo _]]})))
+  (t/is (= #{[1]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :foo nil]]})))
+  (t/is (= #{[1]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :foo #{nil}]]})))
+  (t/is (= #{[1] [2]}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :foo #{nil 2}]]})))
+  (t/is (= #{}
+           (api/q (api/db *api*)
+                  '{:find [?e]
+                    :where [[?e :foo #{}]]}))))
