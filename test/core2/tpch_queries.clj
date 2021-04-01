@@ -134,10 +134,10 @@
                                                                             long-summary-supplier
                                                                             long-summary-accumulator
                                                                             long-sum-finisher)
-                                             (group-by/->long-function-spec "l_extendedprice" "sum_base_price"
-                                                                            long-summary-supplier
-                                                                            long-summary-accumulator
-                                                                            long-sum-finisher)
+                                             (group-by/->double-function-spec "l_extendedprice" "sum_base_price"
+                                                                              double-summary-supplier
+                                                                              double-summary-accumulator
+                                                                              double-sum-finisher)
                                              (group-by/->double-function-spec "disc_price" "sum_disc_price"
                                                                               double-summary-supplier
                                                                               double-summary-accumulator
@@ -150,10 +150,10 @@
                                                                             long-summary-supplier
                                                                             long-summary-accumulator
                                                                             long-avg-finisher)
-                                             (group-by/->long-function-spec "l_extendedprice" "avg_price"
-                                                                            long-summary-supplier
-                                                                            long-summary-accumulator
-                                                                            long-avg-finisher)
+                                             (group-by/->double-function-spec "l_extendedprice" "avg_price"
+                                                                              double-summary-supplier
+                                                                              double-summary-accumulator
+                                                                              double-avg-finisher)
                                              (group-by/->double-function-spec "l_discount" "avg_disc"
                                                                               double-summary-supplier
                                                                               double-summary-accumulator
