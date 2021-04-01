@@ -13,8 +13,6 @@
 (defn variables [expr]
   (filter symbol? (tree-seq seq? rest expr)))
 
-(def memo-eval (memoize eval))
-
 (defn- infer-return-type ^java.lang.Class [types expression]
   (if-let [tag (:tag expression)]
     (types/->arrow-type tag)
@@ -33,23 +31,24 @@
         ^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
         inner-acc-sym (with-meta (gensym 'acc) {:tag (symbol (.getName vector-return-type))})
         return-type-id (types/arrow-type->type-id arrow-return-type)
-        n-sym (gensym 'n)
+        idx-sym (gensym 'idx)
         expanded-expression (w/postwalk-replace
                              (->> (for [var vars]
-                                    [var `(.get ~var ~n-sym)])
+                                    [var `(.get ~var ~idx-sym)])
                                   (into {}))
                              expression)]
-    `(fn [[~@(for [[k ^Class v] (zipmap vars types)]
+    `(fn [[~@(for [[k ^Class v] (map vector vars types)]
                (with-meta k {:tag (symbol (.getName v))}))]
           ^DenseUnionVector acc#
           ^long row-count#]
        (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
-         (dotimes [~n-sym row-count#]
-           (let [offset# (util/write-type-id acc# ~n-sym ~return-type-id)]
+         (dotimes [~idx-sym row-count#]
+           (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
              (.set ~inner-acc-sym offset# ~expanded-expression))))
        acc#)))
 
-(def memo-generate-code (memoize generate-code))
+(def ^:private memo-generate-code (memoize generate-code))
+(def ^:private memo-eval (memoize eval))
 
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name expression]
   (reify ProjectionSpec
