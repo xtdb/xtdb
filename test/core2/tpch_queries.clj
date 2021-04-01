@@ -7,7 +7,7 @@
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
             [core2.select :as sel]
-            [core2.tpch-queries :as tpch-queries]
+            [core2.tpch :as tpch]
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.util :as util])
