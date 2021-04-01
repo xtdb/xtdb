@@ -4,6 +4,7 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
+           java.lang.reflect.Method
            org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.Types$MinorType
            [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector NullVector
@@ -29,6 +30,9 @@
 (def ^:private logic-op? '#{and or not})
 
 (def ^:private arithmetic-op? '#{+ - * / %})
+
+(def ^:private math-op? (set (for [^Method m (.getDeclaredMethods Math)]
+                               (symbol (.getName m)))))
 
 (defn- adjust-compare-op [op args types]
   (if (set/subset? types #{(.getType Types$MinorType/BIGINT)
@@ -70,19 +74,26 @@
         [`(boolean ~(cons op args))
          (.getType Types$MinorType/BIT)]
 
-        (arithmetic-op? op)
+        (or (arithmetic-op? op) (math-op? op))
         (let [longs? (= #{(.getType Types$MinorType/BIGINT)} types)]
           [(case op
              % `(mod ~@args)
              / (if longs?
                  `(quot ~@args)
                  `(/ ~@args))
-             (cons op args))
+             (cons (if (math-op? op)
+                     (symbol "Math" (name op))
+                     op) args))
            (cond
              (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
              (= #{(.getType Types$MinorType/BIGINT)
                   (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
              longs? (.getType Types$MinorType/BIGINT))])
+
+        (= 'if op)
+        (do (assert (= 3 (count args)) (= (nth types 1) (nth types 2)))
+            [(cons op args) (nth types 1)])
+
         :else
         (throw (UnsupportedOperationException. (str "unknown op: " op)))))))
 

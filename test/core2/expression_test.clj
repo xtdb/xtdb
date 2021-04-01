@@ -77,4 +77,14 @@
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list v)]
               (t/is (instance? BitVector v))
-              (t/is (= (repeat 1000 true) xs)))))))))
+              (t/is (= (repeat 1000 true) xs))))))
+
+      (t/testing "math"
+        (let [expr '(sin a)
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '(a) (expr/variables expr)))
+          (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
+            (let [v (util/maybe-single-child-dense-union acc)
+                  xs (test-util/->list v)]
+              (t/is (instance? Float8Vector v))
+              (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs)))))))))
