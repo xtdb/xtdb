@@ -24,10 +24,10 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-(defn with-tpch-data [scale-factor]
+(defn with-tpch-data [scale-factor test-name]
   (fn [f]
     (try
-      (let [node-dir (util/->path "target/tpch-queries")]
+      (let [node-dir (util/->path (str "target/" test-name))]
         (util/delete-dir node-dir)
 
 
@@ -52,7 +52,7 @@
 (defn tpch-q1-pricing-summary-report []
   (let [shipdate-pred (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
                                                    (-> .isSet (set! 1))
-                                                   (-> .value (set! (.getTime #inst "1998-09-01")))))
+                                                   (-> .value (set! (.getTime #inst "1998-09-02")))))
         metadata-pred (meta/matching-chunk-pred "l_shipdate" shipdate-pred
                                                 (types/->minor-type :timestampmilli))]
     (with-open [scan-cursor (.scan *op-factory* *watermark*

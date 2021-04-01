@@ -3,7 +3,7 @@
             [core2.tpch-queries :as tpch-queries])
   (:import org.apache.arrow.vector.util.Text))
 
-(t/use-fixtures :once (tpch-queries/with-tpch-data 0.01))
+(t/use-fixtures :once (tpch-queries/with-tpch-data 0.01 "tpch-queries-sf-001"))
 
 ;; TODO: some of these values are wrong, see (slurp (io/resource "io/airlift/tpch/queries/q1.result"))
 

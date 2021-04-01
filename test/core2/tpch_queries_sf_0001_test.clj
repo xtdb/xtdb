@@ -3,7 +3,7 @@
             [core2.tpch-queries :as tpch-queries])
   (:import org.apache.arrow.vector.util.Text))
 
-(t/use-fixtures :once (tpch-queries/with-tpch-data 0.001))
+(t/use-fixtures :once (tpch-queries/with-tpch-data 0.001 "tpch-queries-sf-0001"))
 
 (t/deftest test-q1-pricing-summary-report
   (t/is (= [{:l_returnflag (Text. "A")
