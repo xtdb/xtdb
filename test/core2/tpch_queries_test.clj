@@ -1,4 +1,4 @@
-(ns core2.tpch-queries
+(ns core2.tpch-queries-test
   (:require [clojure.test :as t]
             [core2.core :as c2]
             [core2.metadata :as meta]

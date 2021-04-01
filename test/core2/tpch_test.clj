@@ -1,4 +1,4 @@
-(ns core2.tpch
+(ns core2.tpch-test
   (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -73,7 +73,7 @@
                     last-tx))
                 nil))))
 
-(defn- test-tpch [scale-factor expected-docs]
+(defn- test-tpch [scale-factor expected-objects]
   (let [node-dir (util/->path (format "target/can-submit-tpch-docs-%s" scale-factor))
         objects-dir (.resolve node-dir "objects")
         mock-clock (Clock/fixed (.toInstant #inst "2021-04-01") (ZoneId/of "UTC"))]
@@ -86,7 +86,7 @@
          (c2/await-tx node last-tx (Duration/ofMinutes 1))
 
          (tu/finish-chunk node)
-         (t/is (= expected-docs
+         (t/is (= expected-objects
                   (count (iterator-seq (.iterator (Files/list objects-dir)))))))))
 
     (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
