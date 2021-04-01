@@ -3,12 +3,12 @@
             [core2.types :as t])
   (:import core2.ICursor
            [java.util ArrayList HashMap List Map Optional Spliterator]
-           [java.util.function Consumer Function Supplier ObjIntConsumer]
+           [java.util.function BiConsumer Consumer Function IntConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
            [java.util.stream Collector IntStream]
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BaseIntVector BitVector ElementAddressableVector FloatingPointVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.roaringbitmap.RoaringBitmap))
 
@@ -35,6 +35,12 @@
 (defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String name]
   (GroupSpec. name))
 
+(defn- finish-maybe-optional [^Function finisher container]
+  (let [result (.apply finisher container)]
+    (if (instance? Optional result)
+      (.orElse ^Optional result nil)
+      result)))
+
 (deftype FunctionSpec [^String from-name ^Field field ^Collector collector]
   AggregateSpec
   (getToField [_ in-root]
@@ -47,7 +53,7 @@
     (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
           accumulator (.accumulator collector)]
       (.collect ^IntStream (.stream idx-bitmap)
-                (if container
+                (if (some? container)
                   (reify Supplier
                     (get [_] container))
                   (.supplier collector))
@@ -57,13 +63,96 @@
                 accumulator)))
 
   (finish [_ container]
-    (let [result (.apply (.finisher collector) container)]
-      (if (instance? Optional result)
-        (.orElse ^Optional result nil)
-        result))))
+    (finish-maybe-optional (.finisher collector) container)))
 
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
   (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
+
+(deftype DoubleFunctionSpec [^String from-name ^Field field ^Supplier supplier ^ObjDoubleConsumer accumulator ^Function finisher]
+  AggregateSpec
+  (getToField [_ in-root]
+    field)
+
+  (getFromVector [_ in-root]
+    (.getVector in-root from-name))
+
+  (aggregate [this in-root container idx-bitmap]
+    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
+          acc (if (some? container)
+                container
+                (.get supplier))
+          consumer (cond
+                     (instance? BaseIntVector from-vec)
+                     (let [^BaseIntVector from-vec from-vec]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept accumulator acc (.getValueAsLong from-vec idx)))))
+
+                     (instance? FloatingPointVector from-vec)
+                     (let [^FloatingPointVector from-vec from-vec]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept accumulator acc (.getValueAsDouble from-vec idx)))))
+
+                     :else
+                     (reify IntConsumer
+                       (accept [_ idx]
+                         (.accept accumulator acc (.getObject from-vec idx)))))]
+      (.forEach ^IntStream (.stream idx-bitmap) consumer)
+      acc))
+
+  (finish [_ container]
+    (finish-maybe-optional finisher container)))
+
+(defn ->double-function-spec ^core2.operator.group_by.AggregateSpec [^String from-name
+                                                                     ^String to-name
+                                                                     ^Supplier supplier
+                                                                     ^ObjDoubleConsumer accumulator
+                                                                     ^Function finisher]
+  (DoubleFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
+
+(deftype LongFunctionSpec [^String from-name ^Field field ^Supplier supplier ^ObjLongConsumer accumulator ^Function finisher]
+  AggregateSpec
+  (getToField [_ in-root]
+    field)
+
+  (getFromVector [_ in-root]
+    (.getVector in-root from-name))
+
+  (aggregate [this in-root container idx-bitmap]
+    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
+          acc (if (some? container)
+                container
+                (.get supplier))
+          consumer (cond
+                     (instance? BaseIntVector from-vec)
+                     (let [^BaseIntVector from-vec from-vec]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept accumulator acc (.getValueAsLong from-vec idx)))))
+
+                     (instance? FloatingPointVector from-vec)
+                     (let [^FloatingPointVector from-vec from-vec]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept accumulator acc (.getValueAsDouble from-vec idx)))))
+
+                     :else
+                     (reify IntConsumer
+                       (accept [_ idx]
+                         (.accept accumulator acc (.getObject from-vec idx)))))]
+      (.forEach ^IntStream (.stream idx-bitmap) consumer)
+      acc))
+
+  (finish [_ container]
+    (finish-maybe-optional finisher container)))
+
+(defn ->long-function-spec ^core2.operator.group_by.AggregateSpec [^String from-name
+                                                                   ^String to-name
+                                                                   ^Supplier supplier
+                                                                   ^ObjLongConsumer accumulator
+                                                                   ^Function finisher]
+  (LongFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
 
 (defn- copy-group-key [^BufferAllocator allocator ^List k]
   (dotimes [n (.size k)]

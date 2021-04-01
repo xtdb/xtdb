@@ -13,8 +13,9 @@
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
            java.time.Duration
-           java.util.stream.Collectors
-           [java.util.function ToDoubleFunction ToLongFunction]
+           [java.util.stream Collectors]
+           [java.util DoubleSummaryStatistics LongSummaryStatistics]
+           [java.util.function Function Supplier ObjDoubleConsumer ObjLongConsumer]
            org.apache.arrow.vector.Float8Vector
            org.apache.arrow.vector.holders.NullableTimeStampMilliHolder
            org.apache.arrow.vector.util.Text))
@@ -103,34 +104,60 @@
 
                 group-by-cursor (.groupBy *op-factory*
                                           project-cursor
-                                          (let [sum-long-collector (Collectors/summingLong
-                                                                    (reify ToLongFunction
-                                                                      (applyAsLong [_ x] x)))
-                                                sum-double-collector (Collectors/summingDouble
-                                                                      (reify ToDoubleFunction
-                                                                        (applyAsDouble [_ x] x)))
-                                                avg-long-collector (Collectors/averagingLong
-                                                                    (reify ToLongFunction
-                                                                      (applyAsLong [_ x] x)))
-                                                avg-double-collector (Collectors/averagingDouble
-                                                                      (reify ToDoubleFunction
-                                                                        (applyAsDouble [_ x] x)))]
+                                          (let [long-summary-supplier (reify Supplier
+                                                                        (get [_]
+                                                                          (LongSummaryStatistics.)))
+                                                long-summary-accumulator (reify ObjLongConsumer
+                                                                           (accept [_ acc x]
+                                                                             (.accept ^LongSummaryStatistics acc x)))
+                                                long-sum-finisher (reify Function
+                                                                    (apply [_ acc]
+                                                                      (.getSum ^LongSummaryStatistics acc)))
+                                                long-avg-finisher (reify Function
+                                                                    (apply [_ acc]
+                                                                      (.getAverage ^LongSummaryStatistics acc)))
+                                                double-summary-supplier (reify Supplier
+                                                                          (get [_]
+                                                                            (DoubleSummaryStatistics.)))
+                                                double-summary-accumulator (reify ObjDoubleConsumer
+                                                                             (accept [_ acc x]
+                                                                               (.accept ^DoubleSummaryStatistics acc x)))
+                                                double-sum-finisher (reify Function
+                                                                      (apply [_ acc]
+                                                                        (.getSum ^DoubleSummaryStatistics acc)))
+                                                double-avg-finisher (reify Function
+                                                                      (apply [_ acc]
+                                                                        (.getAverage ^DoubleSummaryStatistics acc)))]
                                             [(group-by/->group-spec "l_returnflag")
                                              (group-by/->group-spec "l_linestatus")
-                                             (group-by/->function-spec "l_quantity" "sum_qty"
-                                                                       sum-long-collector)
-                                             (group-by/->function-spec "l_extendedprice" "sum_base_price"
-                                                                       sum-long-collector)
-                                             (group-by/->function-spec "disc_price" "sum_disc_price"
-                                                                       sum-double-collector)
-                                             (group-by/->function-spec "charge" "sum_charge"
-                                                                       sum-double-collector)
-                                             (group-by/->function-spec "l_quantity" "avg_qty"
-                                                                       avg-long-collector)
-                                             (group-by/->function-spec "l_extendedprice" "avg_price"
-                                                                       avg-long-collector)
-                                             (group-by/->function-spec "l_discount" "avg_disc"
-                                                                       avg-double-collector)
+                                             (group-by/->long-function-spec "l_quantity" "sum_qty"
+                                                                            long-summary-supplier
+                                                                            long-summary-accumulator
+                                                                            long-sum-finisher)
+                                             (group-by/->long-function-spec "l_extendedprice" "sum_base_price"
+                                                                            long-summary-supplier
+                                                                            long-summary-accumulator
+                                                                            long-sum-finisher)
+                                             (group-by/->double-function-spec "disc_price" "sum_disc_price"
+                                                                              double-summary-supplier
+                                                                              double-summary-accumulator
+                                                                              double-sum-finisher)
+                                             (group-by/->double-function-spec "charge" "sum_charge"
+                                                                              double-summary-supplier
+                                                                              double-summary-accumulator
+                                                                              double-sum-finisher)
+                                             (group-by/->long-function-spec "l_quantity" "avg_qty"
+                                                                            long-summary-supplier
+                                                                            long-summary-accumulator
+                                                                            long-avg-finisher)
+                                             (group-by/->long-function-spec "l_extendedprice" "avg_price"
+                                                                            long-summary-supplier
+                                                                            long-summary-accumulator
+                                                                            long-avg-finisher)
+                                             (group-by/->double-function-spec "l_discount" "avg_disc"
+                                                                              double-summary-supplier
+                                                                              double-summary-accumulator
+                                                                              double-avg-finisher)
                                              (group-by/->function-spec "l_returnflag" "count_order"
                                                                        (Collectors/counting))]))
                 order-by-cursor (.orderBy *op-factory*
