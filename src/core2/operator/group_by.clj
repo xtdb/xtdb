@@ -2,9 +2,9 @@
   (:require [core2.util :as util]
             [core2.types :as t])
   (:import core2.ICursor
-           [java.util ArrayList HashMap List Map Optional Spliterator]
+           [java.util ArrayList DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
-           [java.util.stream Collector IntStream]
+           [java.util.stream Collector Collectors IntStream]
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -153,6 +153,58 @@
                                                                    ^ObjLongConsumer accumulator
                                                                    ^Function finisher]
   (LongFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
+
+(def long-summary-supplier (reify Supplier
+                             (get [_]
+                               (LongSummaryStatistics.))))
+(def long-summary-accumulator (reify ObjLongConsumer
+                                (accept [_ acc x]
+                                  (.accept ^LongSummaryStatistics acc x))))
+(def long-sum-finisher (reify Function
+                         (apply [_ acc]
+                           (.getSum ^LongSummaryStatistics acc))))
+(def long-avg-finisher (reify Function
+                         (apply [_ acc]
+                           (.getAverage ^LongSummaryStatistics acc))))
+(def double-summary-supplier (reify Supplier
+                               (get [_]
+                                 (DoubleSummaryStatistics.))))
+(def double-summary-accumulator (reify ObjDoubleConsumer
+                                  (accept [_ acc x]
+                                    (.accept ^DoubleSummaryStatistics acc x))))
+(def double-sum-finisher (reify Function
+                           (apply [_ acc]
+                             (.getSum ^DoubleSummaryStatistics acc))))
+(def double-avg-finisher (reify Function
+                           (apply [_ acc]
+                             (.getAverage ^DoubleSummaryStatistics acc))))
+
+(defn ->avg-long-spec [^String from-name ^String to-name]
+  (->long-function-spec from-name to-name
+                        long-summary-supplier
+                        long-summary-accumulator
+                        long-avg-finisher))
+
+(defn ->sum-long-spec [^String from-name ^String to-name]
+  (->long-function-spec from-name to-name
+                        long-summary-supplier
+                        long-summary-accumulator
+                        long-sum-finisher))
+
+(defn ->avg-double-spec [^String from-name ^String to-name]
+  (->double-function-spec from-name to-name
+                          double-summary-supplier
+                          double-summary-accumulator
+                          double-avg-finisher))
+
+(defn ->sum-double-spec [^String from-name ^String to-name]
+  (->double-function-spec from-name to-name
+                          double-summary-supplier
+                          double-summary-accumulator
+                          double-sum-finisher))
+
+(defn ->count-spec [^String from-name ^String to-name]
+  (->function-spec from-name to-name (Collectors/counting)))
 
 (defn- copy-group-key [^BufferAllocator allocator ^List k]
   (dotimes [n (.size k)]
