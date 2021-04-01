@@ -4,7 +4,7 @@
             [core2.test-util :as test-util]
             [core2.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector BigIntVector FieldVector Float8Vector ValueVector VectorSchemaRoot]))
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector ValueVector VectorSchemaRoot]))
 
 (t/deftest can-compile-simple-expression
   (with-open [allocator (RootAllocator.)
@@ -67,4 +67,14 @@
                   xs (test-util/->list (util/maybe-single-child-dense-union acc))]
               (t/is (instance? Float8Vector v))
               (t/is (= (mapv (comp double +) (repeat 2) (range 1000))
-                       xs)))))))))
+                       xs))))))
+
+      (t/testing "predicate"
+        (let [expr '(= a d)
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '(a d) (expr/variables expr)))
+          (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
+            (let [v (util/maybe-single-child-dense-union acc)
+                  xs (test-util/->list v)]
+              (t/is (instance? BitVector v))
+              (t/is (= (repeat 1000 true) xs)))))))))

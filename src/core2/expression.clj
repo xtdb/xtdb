@@ -28,11 +28,16 @@
 
 (def ^:private logic-op? '#{and or not})
 
+(def ^:private arithmetic-op? '#{+ - * / %})
+
 (defn- adjust-compare-op [op args types]
   (if (set/subset? types #{(.getType Types$MinorType/BIGINT)
                            (.getType Types$MinorType/FLOAT8)
                            (.getType Types$MinorType/TIMESTAMPMILLI)})
-    (cons op args)
+    (case op
+      = `(== ~@args)
+      != `(not (== ~@args))
+      `(~op ~@args))
     (let [comp (if (= types #{(.getType Types$MinorType/VARBINARY)})
                  `java.util.Arrays/equals
                  `compare)]
@@ -65,16 +70,21 @@
         [`(boolean ~(cons op args))
          (.getType Types$MinorType/BIT)]
 
+        (arithmetic-op? op)
+        (let [longs? (= #{(.getType Types$MinorType/BIGINT)} types)]
+          [(case op
+             % `(mod ~@args)
+             / (if longs?
+                 `(quot ~@args)
+                 `(/ ~@args))
+             (cons op args))
+           (cond
+             (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
+             (= #{(.getType Types$MinorType/BIGINT)
+                  (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
+             longs? (.getType Types$MinorType/BIGINT))])
         :else
-        [(cons op args)
-         (cond
-           (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-           (= #{(.getType Types$MinorType/BIGINT)
-                (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-           (= #{(.getType Types$MinorType/BIGINT)} types) (.getType Types$MinorType/BIGINT)
-           (= #{(.getType Types$MinorType/BIT)} types) (.getType Types$MinorType/BIT)
-           :else
-           (first types))]))))
+        (throw (UnsupportedOperationException. (str "unknown op: " op)))))))
 
 (defn- primitive-vector-type? [^Class type]
   (= "org.apache.arrow.vector" (.getPackageName type)))
