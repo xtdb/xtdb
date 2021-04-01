@@ -102,4 +102,10 @@
       (t/testing "cannot call arbitrary functions"
         (let [expr '(vec a)
               expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-          (t/is (thrown? UnsupportedOperationException (.project expr-projection-spec in allocator))))))))
+          (t/is (thrown? UnsupportedOperationException (.project expr-projection-spec in allocator)))))
+
+      (t/testing "selector"
+        (let [expr '(>= a 500)
+              selector (expr/->expression-selector expr)]
+          (t/is (= '(a) (expr/variables expr)))
+          (t/is (= 500 (.getCardinality (.select selector in)))))))))

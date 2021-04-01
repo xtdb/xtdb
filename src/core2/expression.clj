@@ -4,12 +4,14 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
+           core2.select.IVectorSchemaRootSelector
            java.lang.reflect.Method
            org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.Types$MinorType
            [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector NullVector
             TimeStampMilliVector VarBinaryVector VarCharVector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector))
+           org.apache.arrow.vector.complex.DenseUnionVector
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -193,37 +195,65 @@
                  %)
               expression))
 
-(defn- generate-code [types expression]
+(defn- generate-code [types expression expression-type]
   (let [vars (variables expression)
         var->type (zipmap vars types)
         expression (normalize-expression expression)
         [expression arrow-return-type] (compile-expression var->type expression)
-        ^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
-        inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})
-        return-type-id (types/arrow-type->type-id arrow-return-type)
-        expression (if (= BitVector vector-return-type)
-                     `(if ~expression 1 0)
-                     expression)]
-    `(fn [[~@(for [[k v] (map vector vars types)]
-               (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
-          ^DenseUnionVector acc#
-          ^long row-count#]
-       (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
+        return-type-id (types/arrow-type->type-id arrow-return-type)]
+    (case expression-type
+      ::project
+      (let [^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
+            inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})]
+        `(fn [[~@(for [[k v] (map vector vars types)]
+                   (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
+              ^DenseUnionVector acc#
+              ^long row-count#]
+           (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
+             (dotimes [~idx-sym row-count#]
+               (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
+                 (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
+                                                 `(if ~expression 1 0)
+                                                 expression))))
+             acc#)))
+
+      ::select
+      `(fn [[~@(for [[k v] (map vector vars types)]
+                 (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
+            ^RoaringBitmap acc#
+            ^long row-count#]
+         (assert (= ~return-type-id (types/arrow-type->type-id (.getType Types$MinorType/BIT))))
          (dotimes [~idx-sym row-count#]
-           (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
-             (.set ~inner-acc-sym offset# ~expression))))
-       acc#)))
+           (when ~expression
+             (.add acc# ~idx-sym)))
+         acc#))))
 
 (def ^:private memo-generate-code (memoize generate-code))
 (def ^:private memo-eval (memoize eval))
 
+(defn- expression-vectors [^VectorSchemaRoot in expression]
+  (vec (for [var (variables expression)]
+         (util/maybe-single-child-dense-union (.getVector in (name var))))))
+
+(defn- vector->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [^ValueVector v]
+  (.getType (.getFieldType (.getField v))))
+
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name expression]
   (reify ProjectionSpec
     (project [_ in allocator]
-      (let [in-vecs (vec (for [var (variables expression)]
-                           (util/maybe-single-child-dense-union (.getVector in (name var)))))
-            types (mapv #(.getType (.getFieldType (.getField ^ValueVector %))) in-vecs)
-            inner-expr-code (memo-generate-code types expression)
+      (let [in-vecs (expression-vectors in expression)
+            types (mapv vector->arrow-type in-vecs)
+            inner-expr-code (memo-generate-code types expression ::project)
             inner-expr-fn (memo-eval inner-expr-code)
             ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
+        (inner-expr-fn in-vecs acc (.getRowCount in))))))
+
+(defn ->expression-selector ^core2.select.IVectorSchemaRootSelector [expression]
+  (reify IVectorSchemaRootSelector
+    (select [_ in]
+      (let [in-vecs (expression-vectors in expression)
+            types (mapv vector->arrow-type in-vecs)
+            inner-expr-code (memo-generate-code types expression ::select)
+            inner-expr-fn (memo-eval inner-expr-code)
+            acc (RoaringBitmap.)]
         (inner-expr-fn in-vecs acc (.getRowCount in))))))
