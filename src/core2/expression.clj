@@ -19,7 +19,8 @@
 ;; Text/bytes/Dates/Intervals. Support ArrowBufPointers?
 
 ;; Add support for IVectorPredicate, currently used by scan, but these
-;; should be replaced by per-vector versions.
+;; should be replaced by per-vector versions: add and use
+;; IVectorSelector instead.
 
 (set! *unchecked-math* :warn-on-boxed)
 
