@@ -18,9 +18,20 @@
 ;; Normalise constants and get methods for
 ;; Text/bytes/Dates/Intervals. Support ArrowBufPointers?
 
+;; Add tests for things beyond numbers.
+
 ;; Add support for IVectorPredicate, currently used by scan, but these
 ;; should be replaced by per-vector versions: add and use
 ;; IVectorSelector instead.
+
+;; Figure out how to use this for metadata.
+
+;; Pick proper math methods and use their actual return types in
+;; inference. This way of calling real typed Java methods will be used
+;; for other built in ops later.
+
+;; Example of other built-in ops needed are things related to strings,
+;; dates, casts and temporal intervals.
 
 (set! *unchecked-math* :warn-on-boxed)
 
