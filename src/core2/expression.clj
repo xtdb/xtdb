@@ -13,6 +13,14 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.RoaringBitmap))
 
+;; TODO:
+
+;; Normalise constants and get methods for
+;; Text/bytes/Dates/Intervals. Support ArrowBufPointers?
+
+;; Add support for IVectorPredicate, currently used by scan, but these
+;; should be replaced by per-vector versions.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn variables [expr]
