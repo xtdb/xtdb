@@ -1,6 +1,7 @@
 (ns core2.expression
   (:require [clojure.set :as set]
             [clojure.walk :as w]
+            [core2.operator.project]
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
