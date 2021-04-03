@@ -53,6 +53,7 @@
    (.getType Types$MinorType/FLOAT8) 'double
    (.getType Types$MinorType/VARBINARY) 'bytes
    (.getType Types$MinorType/VARCHAR) 'str
+   (.getType Types$MinorType/TIMESTAMPMILLI) 'long
    (.getType Types$MinorType/BIT) 'boolean})
 
 (defn- primitive-vector-type? [^Class type]
@@ -94,10 +95,12 @@
 (defn- widen-numeric-types [types]
   (let [types (set types)]
     (cond
-      (= #{(.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-      (= #{(.getType Types$MinorType/BIGINT)
-           (.getType Types$MinorType/FLOAT8)} types) (.getType Types$MinorType/FLOAT8)
-      (= #{(.getType Types$MinorType/BIGINT)} types) (.getType Types$MinorType/BIGINT))))
+      (contains? types (.getType Types$MinorType/TIMESTAMPMILLI))
+      (.getType Types$MinorType/TIMESTAMPMILLI)
+      (contains? types (.getType Types$MinorType/FLOAT8))
+      (.getType Types$MinorType/FLOAT8)
+      :else
+      (.getType Types$MinorType/BIGINT))))
 
 (defn- numeric-compare? [types]
   (set/subset? (set types) #{(.getType Types$MinorType/BIGINT)
