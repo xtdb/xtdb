@@ -43,9 +43,11 @@
   (set-null! [this idx] (.setNull this ^int idx))
 
   TimeStampMilliVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (.getTime (if (instance? LocalDateTime v)
-                                                              (util/local-date-time->date v)
-                                                              ^Date v))))
+  (set-safe! [this idx v] (.setSafe this ^int idx (if (int? Long v)
+                                                    ^long v
+                                                    (.getTime (if (instance? LocalDateTime v)
+                                                                (util/local-date-time->date v)
+                                                                ^Date v)))))
   (set-null! [this idx] (.setNull this ^int idx))
 
   Float8Vector

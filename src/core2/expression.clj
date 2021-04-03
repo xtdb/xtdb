@@ -240,7 +240,7 @@
              (let [value# ~expression
                    type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
                    offset# (util/write-type-id acc# ~idx-sym type-id#)]
-               (types/set-safe! (.getVectorByType ~idx-sym acc) offset# value#)))
+               (types/set-safe! (.getVectorByType acc# type-id#) offset# value#)))
            acc#)
         (let [^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
               return-type-id (types/arrow-type->type-id arrow-return-type)
