@@ -7,9 +7,10 @@
   (:import core2.operator.project.ProjectionSpec
            core2.select.IVectorSchemaRootSelector
            java.lang.reflect.Method
+           java.util.Date
            org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.Types$MinorType
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector NullVector
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector FixedWidthVector Float8Vector NullVector
             TimeStampMilliVector VarBinaryVector VarCharVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.RoaringBitmap))
@@ -46,7 +47,8 @@
    (.getType Types$MinorType/VARBINARY) VarBinaryVector
    (.getType Types$MinorType/VARCHAR) VarCharVector
    (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
-   (.getType Types$MinorType/BIT) BitVector})
+   (.getType Types$MinorType/BIT) BitVector
+   (.getType Types$MinorType/UNION) DenseUnionVector})
 
 (def ^:private arrow-type->cast
   {(.getType Types$MinorType/BIGINT) 'long
@@ -55,9 +57,6 @@
    (.getType Types$MinorType/VARCHAR) 'str
    (.getType Types$MinorType/TIMESTAMPMILLI) 'long
    (.getType Types$MinorType/BIT) 'boolean})
-
-(defn- primitive-vector-type? [^Class type]
-  (= "org.apache.arrow.vector" (.getPackageName type)))
 
 (def ^:private idx-sym (gensym "idx"))
 
@@ -73,16 +72,21 @@
 (defmethod compile-expression ::variable [var->type expression]
   (let [type (get var->type expression)]
     [(cond
-       (= BitVector type)
-       `(= 1 (.get ~expression ~idx-sym))
-       (primitive-vector-type? (get arrow-type->vector-type type))
+       (= (.getType Types$MinorType/BIT) type)
+       `(== 1 (.get ~expression ~idx-sym))
+       (.isAssignableFrom FixedWidthVector (get arrow-type->vector-type type))
        `(.get ~expression ~idx-sym)
+       (= (.getType Types$MinorType/VARCHAR) type)
+       `(str (.getObject ~expression ~idx-sym))
        :else
        `(.getObject ~expression ~idx-sym))
      type]))
 
 (defmethod compile-expression ::literal [var->type expression]
-  [expression (types/->arrow-type (class expression))])
+  [(if (instance? Date expression)
+     (.getTime ^Date expression)
+     expression)
+   (types/->arrow-type (class expression))])
 
 (defmethod compile-expression :default [_ [op & args :as expression]]
   (throw (UnsupportedOperationException. (str "unknown op: " op))))
@@ -99,7 +103,9 @@
       (.getType Types$MinorType/TIMESTAMPMILLI)
       (contains? types (.getType Types$MinorType/FLOAT8))
       (.getType Types$MinorType/FLOAT8)
-      :else
+      (contains? types (.getType Types$MinorType/UNION))
+      (.getType Types$MinorType/UNION)
+      (= types #{(.getType Types$MinorType/BIGINT)})
       (.getType Types$MinorType/BIGINT))))
 
 (defn- numeric-compare? [types]
@@ -200,11 +206,11 @@
   (assert (= 3 (count args)))
   (let [[args types] (compile-sub-expressions var->type args)
         types (rest types)
-        return-type (or (widen-numeric-types types)
-                        (if (= 1 (count types))
-                          (first types)
-                          (throw (IllegalArgumentException. (str "if then-else needs same type: " types)))))
-        cast (arrow-type->cast return-type)]
+        return-type (if (= 1 (count types))
+                      (first types)
+                      (or (widen-numeric-types types)
+                          (.getType Types$MinorType/UNION)))
+        cast (get arrow-type->cast return-type)]
     [(cond->> (cons op args)
        cast (list cast))
      return-type]))
@@ -224,29 +230,37 @@
         var->type (zipmap vars types)
         expression (normalize-expression expression)
         [expression arrow-return-type] (compile-expression var->type expression)
-        return-type-id (types/arrow-type->type-id arrow-return-type)
         args (for [[k v] (map vector vars types)]
                (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
     (case expression-type
       ::project
-      (let [^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
-            inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})]
+      (if (= (.getType Types$MinorType/UNION) arrow-return-type)
         `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-           (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
-             (dotimes [~idx-sym row-count#]
-               (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
-                 (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
-                                                 `(if ~expression 1 0)
-                                                 expression))))
-             acc#)))
+           (dotimes [~idx-sym row-count#]
+             (let [value# ~expression
+                   type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
+                   offset# (util/write-type-id acc# ~idx-sym type-id#)]
+               (types/set-safe! (.getVectorByType ~idx-sym acc) offset# value#)))
+           acc#)
+        (let [^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
+              return-type-id (types/arrow-type->type-id arrow-return-type)
+              inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})]
+          `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
+             (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
+               (dotimes [~idx-sym row-count#]
+                 (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
+                   (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
+                                                   `(if ~expression 1 0)
+                                                   expression))))
+               acc#))))
 
       ::select
-      `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
-         (assert (= ~return-type-id (types/arrow-type->type-id (.getType Types$MinorType/BIT))))
-         (dotimes [~idx-sym row-count#]
-           (when ~expression
-             (.add acc# ~idx-sym)))
-         acc#))))
+      (do (assert (= (.getType Types$MinorType/BIT) arrow-return-type))
+          `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
+             (dotimes [~idx-sym row-count#]
+               (when ~expression
+                 (.add acc# ~idx-sym)))
+             acc#)))))
 
 (def ^:private memo-generate-code (memoize generate-code))
 (def ^:private memo-eval (memoize eval))
