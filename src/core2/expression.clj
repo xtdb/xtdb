@@ -17,6 +17,9 @@
 
 ;; TODO:
 
+;; Try to change to postwalk enriching literals and variables first
+;; and calls typed op multimethod like core2.compute to compile ops.
+
 ;; Normalise constants and get methods for
 ;; Text/bytes/Dates/Intervals. Support ArrowBufPointers?
 
