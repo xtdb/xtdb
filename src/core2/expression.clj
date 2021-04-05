@@ -263,8 +263,12 @@
              (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
                  (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
-                   (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
+                   (.set ~inner-acc-sym offset# ~(cond
+                                                   (= BitVector vector-return-type)
                                                    `(if ~expression 1 0)
+                                                   (= VarCharVector vector-return-type)
+                                                   `(Text. ~expression)
+                                                   :else
                                                    expression))))
                acc#))))
 
