@@ -276,8 +276,10 @@
       (do (assert (= (.getType Types$MinorType/BIT) arrow-return-type))
           `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
              (dotimes [~idx-sym row-count#]
-               (when ~expression
-                 (.add acc# ~idx-sym)))
+               (try
+                 (when ~expression
+                   (.add acc# ~idx-sym))
+                 (catch ClassCastException e#)))
              acc#)))))
 
 (def ^:private memo-generate-code (memoize generate-code))
