@@ -8,11 +8,13 @@
            core2.select.IVectorSchemaRootSelector
            java.lang.reflect.Method
            java.util.Date
+           java.time.LocalDateTime
            org.apache.arrow.memory.RootAllocator
            org.apache.arrow.vector.types.Types$MinorType
            [org.apache.arrow.vector BigIntVector BitVector FieldVector FixedWidthVector Float8Vector NullVector
             TimeStampMilliVector VarBinaryVector VarCharVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
+           org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
 ;; TODO:
@@ -63,6 +65,15 @@
 
 (def ^:private idx-sym (gensym "idx"))
 
+(defn normalize-union-value [v]
+  (cond
+    (instance? LocalDateTime v)
+    (.getTime (util/local-date-time->date v))
+    (instance? Text v)
+    (str v)
+    :else
+    v))
+
 (defmulti compile-expression (fn [var->type expression]
                                (cond
                                  (symbol? expression)
@@ -82,7 +93,7 @@
        (= (.getType Types$MinorType/VARCHAR) type)
        `(str (.getObject ~expression ~idx-sym))
        :else
-       `(.getObject ~expression ~idx-sym))
+       `(normalize-union-value (.getObject ~expression ~idx-sym)))
      type]))
 
 (defmethod compile-expression ::literal [var->type expression]
