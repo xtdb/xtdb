@@ -143,7 +143,6 @@
 
 (s/def ::offset nat-int?)
 (s/def ::limit nat-int?)
-(s/def ::full-results? boolean?)
 
 (s/def ::order-element (s/and vector?
                               (s/cat :find-arg (s/or :logic-var logic-var?
@@ -223,7 +222,7 @@
                               :opt-un [::keys ::syms ::strs
                                        ::in ::where ::args ::rules
                                        ::offset ::limit ::order-by
-                                       ::timeout ::full-results? ::batch-size])
+                                       ::timeout ::batch-size])
 
                       (fn [{:keys [find] :as q}]
                         (->> (keep q [:keys :syms :strs])
@@ -1587,21 +1586,13 @@
                              (= :desc direction) -))
                      order-by))))))))
 
-(defn- compile-find [conformed-find {:keys [var->bindings full-results?]} {:keys [pull-cache]}]
+(defn- compile-find [conformed-find {:keys [var->bindings]} {:keys [pull-cache]}]
   (for [[var-type arg] conformed-find]
     (case var-type
       :logic-var {:logic-var arg
                   :var-type :logic-var
                   :var-binding (var->bindings arg)
-                  :->result (if full-results?
-                              (fn [value {:keys [entity-resolver-fn]}]
-                                (or (when (c/valid-id? value)
-                                      (when-let [hash (some-> (entity-resolver-fn (c/->id-buffer value)) (c/new-id))]
-                                        (pull/let-docs [docs #{hash}]
-                                                       (get docs (c/new-id hash)))))
-                                    value))
-                              (fn [value _]
-                                value))}
+                  :->result (fn [value _] value)}
       :pull {:logic-var (:logic-var arg)
              :var-type :pull
              :var-binding (var->bindings (:logic-var arg))
@@ -1671,8 +1662,8 @@
 
 (defn query-plan-for [q encode-value-fn stats]
   (s/assert ::query q)
-  (let [{:keys [where in rules]} (s/conform ::query q)
-        [in in-args] (add-legacy-args q [])]
+  (let [{:keys [where rules]} (s/conform ::query q)
+        [in _in-args] (add-legacy-args q [])]
     (compile-sub-query encode-value-fn nil where in (rule-name->rules rules) stats)))
 
 (defn- ->return-maps [{:keys [keys syms strs]}]
@@ -1685,13 +1676,14 @@
 (defn query [{:keys [index-snapshot] :as db} ^ConformedQuery conformed-q in-args]
   (let [q (.q-normalized conformed-q)
         q-conformed (.q-conformed conformed-q)
-        {:keys [find where in rules offset limit order-by full-results?]} q-conformed
+        {:keys [find where  rules offset limit order-by]} q-conformed
         stats (or (db/read-index-meta index-snapshot :crux/attribute-stats) {})
         [in in-args] (add-legacy-args q-conformed in-args)]
-    (when full-results?
-      (defonce -full-results-deprecation-log
-        (log/warn "`full-results?` is deprecated and will be removed in a future Crux release. "
-                  "Use `(pull ?e [*])` instead - see https://opencrux.com/reference/queries.html#pull")))
+
+    (when (:full-results? q-conformed)
+      (throw (err/illegal-arg :full-results-removed
+                              {::err/message (str "`full-results?` was removed - use 'pull' instead: "
+                                                  "https://opencrux.com/reference/queries.html#pull")})))
 
     (log/debug :query (cio/pr-edn-str (-> q
                                           (assoc :in in)
@@ -1703,10 +1695,10 @@
                                  (new-entity-resolver-fn db))
           db (assoc db :entity-resolver-fn entity-resolver-fn)
           {:keys [n-ary-join] :as built-query} (build-sub-query index-snapshot db where in in-args rule-name->rules stats)
-          compiled-find (compile-find find (assoc built-query :full-results? full-results?) db)
+          compiled-find (compile-find find built-query db)
           var-types (set (map :var-type compiled-find))
           aggregate? (contains? var-types :aggregate)
-          pull? (or (contains? var-types :pull) full-results?)
+          pull? (contains? var-types :pull)
           return-maps? (some q [:keys :syms :strs])
           var-bindings (mapv :var-binding compiled-find)]
       (doseq [{:keys [logic-var var-binding]} compiled-find

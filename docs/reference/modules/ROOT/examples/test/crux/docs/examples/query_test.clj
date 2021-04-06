@@ -935,38 +935,3 @@
            ))
 
     ))
-
-(t/deftest test-full-results
-  (fix/submit+await-tx
-   (fix/maps->tx-ops
-    ;; tag::full-results-data[]
-    [{:crux.db/id :foo :bar :baz}]
-    ;; end::full-results-data[]
-    ))
-
-  (let [node *api*]
-    (t/is (=
-           ;; tag::full-results-1-r[]
-           #{[:foo]}
-           ;; end::full-results-1-r[]
-           ;; tag::full-results-1[]
-           (crux/q
-            (crux/db node)
-            '{:find [p]
-              :where [[p :bar :baz]]})
-           ;; end::full-results-1[]
-           ))
-
-    (t/is (=
-           ;; tag::full-results-2-r[]
-           #{[{:crux.db/id :foo :bar :baz}]}
-           ;; end::full-results-2-r[]
-
-           ;; tag::full-results-2[]
-           (crux/q
-            (crux/db node)
-            '{:find [p]
-              :where [[p :bar :baz]]
-              :full-results? true})
-           ;; end::full-results-2[]
-           ))))

@@ -87,9 +87,8 @@
     (t/is (= [[{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]]
              (json-get
               {:url "/_crux/query"
-               :qps {"queryEdn" (pr-str '{:find [e]
-                                          :where [[e :firstName "Sally"]]
-                                          :full-results? true})}})))
+               :qps {"queryEdn" (pr-str '{:find [(pull e [*])]
+                                          :where [[e :firstName "Sally"]]})}})))
 
     (t/testing "pull"
       (let [{:strs [txId] :as tx} (submit-tx [["put" {"crux.db/id" "link", "linking" "jed"}]])]

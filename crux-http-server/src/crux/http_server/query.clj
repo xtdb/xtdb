@@ -123,17 +123,14 @@
     (get-in req [:muuntaja/response :format])))
 
 (defmethod transform-req "text/html" [query req]
-  {:query (-> query
-              (dissoc :full-results))
+  {:query query
    :link-entities? true})
 
 (defmethod transform-req "text/csv" [query req]
-  {:query (-> query
-              (dissoc :full-results))})
+  {:query query})
 
 (defmethod transform-req "text/tsv" [query req]
-  {:query (-> query
-              (dissoc :full-results))})
+  {:query query})
 
 (defmethod transform-req :default [query req]
   {:query query

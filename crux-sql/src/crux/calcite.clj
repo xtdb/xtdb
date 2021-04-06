@@ -464,9 +464,8 @@
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
-    (map first (crux/q db '{:find [e]
-                            :where [[e :crux.sql.table/name]]
-                            :full-results? true}))))
+    (map first (crux/q db '{:find [(pull e [*])]
+                            :where [[e :crux.sql.table/name]]}))))
 
 (defn create-schema [parent-schema name operands]
   (let [node (get !crux-nodes (get operands "CRUX_NODE"))
