@@ -104,6 +104,9 @@
 (defn local-date-time->date ^java.util.Date [^LocalDateTime ldt]
   (Date/from (.toInstant (.atZone ldt utc))))
 
+(defn date->local-date-time ^java.time.LocalDateTime [^Date d]
+  (LocalDateTime/ofInstant (.toInstant d) utc))
+
 (defn ->supplier {:style/indent :defn} ^java.util.function.Supplier [f]
   (reify Supplier
     (get [_]

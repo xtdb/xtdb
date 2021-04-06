@@ -4,11 +4,11 @@
            core2.ICursor
            [java.util ArrayList Collections Comparator List]
            java.util.function.Consumer
-           org.apache.arrow.algorithm.sort.DefaultVectorComparators
+           [org.apache.arrow.algorithm.sort DefaultVectorComparators VectorValueComparator]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.types.pojo.Field
-           org.apache.arrow.vector.VectorSchemaRoot))
+           [org.apache.arrow.vector TimeStampMilliVector ValueVector VectorSchemaRoot]))
 
 (deftype OrderSpec [^String col-name, ^Keyword direction])
 
@@ -44,14 +44,22 @@
                              (util/set-vector-schema-root-row-count acc-root (+ acc-row-count in-row-count))))))
     @!acc-root))
 
+(defn- ->arrow-comparator ^org.apache.arrow.algorithm.sort.VectorValueComparator [^ValueVector v]
+  (if (instance? TimeStampMilliVector v)
+    (proxy [VectorValueComparator] []
+      (compareNotNull [idx]
+        (Long/compare (.get ^TimeStampMilliVector v idx)
+                      (.get ^TimeStampMilliVector v idx))))
+    (doto (DefaultVectorComparators/createDefaultComparator v)
+      (.attachVector v))))
+
 (defn order-root ^java.util.List [^VectorSchemaRoot root, ^List #_<OrderSpec> order-specs]
   (let [idxs (ArrayList. ^List (range (.getRowCount root)))
         comparator (reduce (fn [^Comparator acc ^OrderSpec order-spec]
                              (let [^String column-name (.col-name order-spec)
                                    direction (.direction order-spec)
                                    in-vec (util/maybe-single-child-dense-union (.getVector root column-name))
-                                   arrow-comparator (doto (DefaultVectorComparators/createDefaultComparator in-vec)
-                                                      (.attachVector in-vec))
+                                   arrow-comparator (->arrow-comparator in-vec)
                                    ^Comparator comparator (cond-> (reify Comparator
                                                                     (compare [_ left-idx right-idx]
                                                                       (.compare arrow-comparator left-idx right-idx)))

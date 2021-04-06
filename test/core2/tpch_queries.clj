@@ -92,3 +92,57 @@
                                            (order-by/->order-spec "l_linestatus" :asc)])]
       (->> (tu/<-cursor order-by-cursor)
            (into [] (mapcat seq))))))
+
+(defn tpch-q3-shipping-priority []
+  (let [shipdate-pred (sel/->vec-pred sel/pred> (doto (NullableTimeStampMilliHolder.)
+                                                  (-> .isSet (set! 1))
+                                                  (-> .value (set! (.getTime #inst "1995-03-15")))))
+        orderdate-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
+                                                   (-> .isSet (set! 1))
+                                                   (-> .value (set! (.getTime #inst "1995-03-15")))))
+        mktsegment-pred (sel/->str-pred sel/pred= "BUILDING")]
+    (with-open [customer (.scan *op-factory* *watermark*
+                                ["c_custkey" "c_mktsegment"]
+                                (meta/matching-chunk-pred "c_mktsegment" mktsegment-pred
+                                                          (types/->minor-type :varchar))
+                                {"c_mktsegment"
+                                 (expr/->expression-vector-selector '(= c_mktsegment "BUILDING"))}
+                                nil nil)
+                orders (.scan *op-factory* *watermark*
+                              ["o_orderkey" "o_orderdate" "o_custkey" "o_shippriority"]
+                              (meta/matching-chunk-pred "o_orderdate" orderdate-pred
+                                                        (types/->minor-type :timestampmilli))
+                              {"o_orderdate"
+                               (expr/->expression-vector-selector '(< o_orderdate #inst "1995-03-15"))}
+                              nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_orderkey" "l_shipdate" "l_extendedprice" "l_discount"]
+                                (meta/matching-chunk-pred "l_shipdate" shipdate-pred
+                                                          (types/->minor-type :timestampmilli))
+                                {"l_shipdate"
+                                 (expr/->expression-vector-selector '(> l_shipdate #inst "1995-03-15"))}
+                                nil nil)
+
+                customers+orders (.equiJoin *op-factory* customer "c_custkey" orders "o_custkey")
+                lineitem+customers+orders (.equiJoin *op-factory* customers+orders "o_orderkey" lineitem "l_orderkey")
+
+                project-cursor (.project *op-factory* lineitem+customers+orders
+                                         [(project/->identity-projection-spec "l_orderkey")
+                                          (project/->identity-projection-spec "o_orderdate")
+                                          (project/->identity-projection-spec "o_shippriority")
+                                          (expr/->expression-projection-spec "disc_price"
+                                                                             '(* l_extendedprice (- 1 l_discount)))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->group-spec "l_orderkey")
+                                           (group-by/->sum-double-spec "disc_price" "revenue")
+                                           (group-by/->group-spec "o_orderdate")
+                                           (group-by/->group-spec "o_shippriority")])
+                order-by-cursor (.orderBy *op-factory*
+                                          group-by-cursor
+                                          [(order-by/->order-spec "revenue" :desc)
+                                           (order-by/->order-spec "o_orderdate" :asc)])
+                limit-cursor (.slice *op-factory* order-by-cursor nil 10)]
+      (->> (tu/<-cursor limit-cursor)
+           (into [] (mapcat seq))))))

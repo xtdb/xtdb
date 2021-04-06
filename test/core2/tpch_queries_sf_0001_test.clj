@@ -1,6 +1,7 @@
 (ns core2.tpch-queries-sf-0001-test
   (:require [clojure.test :as t]
-            [core2.tpch-queries :as tpch-queries])
+            [core2.tpch-queries :as tpch-queries]
+            [core2.util :as util])
   (:import org.apache.arrow.vector.util.Text))
 
 (t/use-fixtures :once (tpch-queries/with-tpch-data 0.001 "tpch-queries-sf-0001"))
@@ -47,3 +48,38 @@
              :avg_disc 0.05002745367192862
              :count_order 1457}]
            (tpch-queries/tpch-q1-pricing-summary-report))))
+
+(t/deftest test-q3-shipping-priority
+  (t/is (= [{:l_orderkey (Text. "orderkey_1637")
+             :revenue 164224.9253
+             :o_orderdate (util/date->local-date-time #inst "1995-02-08")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_5191")
+             :revenue 49378.309400000006
+             :o_orderdate (util/date->local-date-time #inst "1994-12-11")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_742")
+             :revenue 43728.048
+             :o_orderdate (util/date->local-date-time #inst "1994-12-23")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_3492")
+             :revenue 43716.072400000005,
+             :o_orderdate (util/date->local-date-time #inst "1994-11-24")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_2883")
+             :revenue 36666.9612,
+             :o_orderdate (util/date->local-date-time #inst "1995-01-23")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_998")
+             :revenue 11785.548600000002,
+             :o_orderdate (util/date->local-date-time #inst "1994-11-26")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_3430")
+             :revenue 4726.6775,
+             :o_orderdate (util/date->local-date-time #inst "1994-12-12")
+             :o_shippriority 0}
+            {:l_orderkey (Text. "orderkey_4423")
+             :revenue 3055.9365,
+             :o_orderdate (util/date->local-date-time #inst "1995-02-17")
+             :o_shippriority 0}]
+           (tpch-queries/tpch-q3-shipping-priority))))

@@ -6,6 +6,7 @@
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.util.VectorBatchAppender))
 
@@ -19,7 +20,10 @@
     (dotimes [n (util/root-field-count in-root)]
       (let [in-vec (.getVector in-root n)
             out-vec (.getVector out-root (.getField in-vec))]
-        (.copyFromSafe out-vec idx out-idx in-vec)))))
+        (if (and (instance? DenseUnionVector in-vec)
+                 (instance? DenseUnionVector out-vec))
+          (util/du-copy in-vec idx out-vec out-idx)
+          (.copyFromSafe out-vec idx out-idx in-vec))))))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
@@ -32,8 +36,12 @@
       (let [^ValueVector left-vec (.getVector left-root n)
             out-vec (.getVector out-root (.getField left-vec))]
         (util/set-value-count out-vec (+ out-idx row-count))
-        (dotimes [m row-count]
-          (.copyFrom out-vec left-idx (+ out-idx m) left-vec))))
+        (if (and (instance? DenseUnionVector left-vec)
+                 (instance? DenseUnionVector out-vec))
+          (dotimes [m row-count]
+            (util/du-copy left-vec left-idx out-vec (+ out-idx m)))
+          (dotimes [m row-count]
+            (.copyFrom out-vec left-idx (+ out-idx m) left-vec)))))
     (util/set-vector-schema-root-row-count out-root (+ out-idx row-count))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator

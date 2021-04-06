@@ -21,7 +21,8 @@
    String (.getType Types$MinorType/VARCHAR)
    Text (.getType Types$MinorType/VARCHAR)
    Boolean (.getType Types$MinorType/BIT)
-   Date (.getType Types$MinorType/TIMESTAMPMILLI)})
+   Date (.getType Types$MinorType/TIMESTAMPMILLI)
+   LocalDateTime (.getType Types$MinorType/TIMESTAMPMILLI)})
 
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
