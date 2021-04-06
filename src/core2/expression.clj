@@ -24,10 +24,6 @@
 
 ;; Add tests for things beyond numbers.
 
-;; Add support for IVectorPredicate, currently used by scan, but these
-;; should be replaced by per-vector versions: add and use
-;; IVectorSelector instead.
-
 ;; Figure out how to use this for metadata.
 
 ;; Example of other built-in ops needed are things related to strings,
