@@ -93,122 +93,104 @@
                  %)
               expression))
 
-(defn- widen-numeric-types [types]
-  (let [types (set types)]
-    (cond
-      (contains? types Date)
-      Date
-      (contains? types Double)
-      Double
-      (contains? types Object)
-      Number
-      (= types #{Long})
-      Long)))
+(defn- widen-numeric-types [type-x type-y]
+  (when (and (.isAssignableFrom Number type-x)
+             (.isAssignableFrom Number type-y))
+    (if (and (= type-x Long) (= type-y Long))
+      Long
+      Double)))
 
 (defmulti codegen (fn [[op & arg+types]]
                     (vec (cons (keyword (name op)) (map second arg+types)))))
 
-(defmethod codegen [:= Number Number] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(== ~@args) Boolean]))
+(defmethod codegen [:= Number Number] [[_ [x] [y]]]
+  [`(== ~x ~y) Boolean])
 
-(defmethod codegen [:= Object Object] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(= ~@args) Boolean]))
+(defmethod codegen [:= Object Object] [[_ [x] [y]]]
+  [`(= ~x ~y) Boolean])
 
-(defmethod codegen [:= byte-array-class byte-array-class] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(Arrays/equals ~@args) Boolean]))
+(defmethod codegen [:= byte-array-class byte-array-class] [[_ [x] [y]]]
+  [`(Arrays/equals ~x ~y) Boolean])
 
-(defmethod codegen [:!= Object Object] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(not= ~@args) Boolean]))
+(defmethod codegen [:!= Object Object] [[_ [x] [y]]]
+  [`(not= ~x ~y) Boolean])
 
-(defmethod codegen [:!= byte-array-class byte-array-class] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(not (Arrays/equals ~@args)) Boolean]))
+(defmethod codegen [:!= byte-array-class byte-array-class] [[_ [x] [y]]]
+  [`(not (Arrays/equals ~x ~y)) Boolean])
 
-(defmethod codegen [:< Number Number] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(< ~@args) Boolean]))
+(defmethod codegen [:< Number Number] [[_ [x] [y]]]
+  [`(< ~x ~y) Boolean])
 
-(defmethod codegen [:< Comparable Comparable] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(neg? (compare ~@args)) Boolean]))
+(defmethod codegen [:< Comparable Comparable] [[_ [x] [y]]]
+  [`(neg? (compare ~x ~y)) Boolean])
 
 (prefer-method codegen [:< Number Number] [:< Comparable Comparable])
 
-(defmethod codegen [:< byte-array-class byte-array-class] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(neg? (Arrays/compareUnsigned ~@args)) Boolean]))
+(defmethod codegen [:< byte-array-class byte-array-class] [[_ [x] [y]]]
+  [`(neg? (Arrays/compareUnsigned ~x y)) Boolean])
 
-(defmethod codegen [:<= Number Number] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(<= ~@args) Boolean]))
+(defmethod codegen [:<= Number Number] [[op [x] [y]]]
+  [`(<= ~x ~y) Boolean])
 
-(defmethod codegen [:<= Comparable Comparable] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(not (pos? (compare ~@args))) Boolean]))
+(defmethod codegen [:<= Comparable Comparable] [[_ [x] [y]]]
+  [`(not (pos? (compare ~x ~y))) Boolean])
 
 (prefer-method codegen [:<= Number Number] [:<= Comparable Comparable])
 
-(defmethod codegen [:<= byte-array-class byte-array-class] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(not (pos? (Arrays/compareUnsigned ~@args))) Boolean]))
+(defmethod codegen [:<= byte-array-class byte-array-class] [[_ [x] [y]]]
+  [`(not (pos? (Arrays/compareUnsigned ~x ~y))) Boolean])
 
-(defmethod codegen [:> Number Number] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(> ~@args) Boolean]))
+(defmethod codegen [:> Number Number] [[_ [x] [y]]]
+  [`(> ~x ~y) Boolean])
 
-(defmethod codegen [:> Comparable Comparable] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(pos? (compare ~@args)) Boolean]))
+(defmethod codegen [:> Comparable Comparable] [[_ [x] [y]]]
+  [`(pos? (compare ~x ~y)) Boolean])
 
 (prefer-method codegen [:> Number Number] [:> Comparable Comparable])
 
-(defmethod codegen [:> byte-array-class byte-array-class] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(pos? (Arrays/compareUnsigned ~@args)) Boolean]))
+(defmethod codegen [:> byte-array-class byte-array-class] [[_ [x] [y]]]
+  [`(pos? (Arrays/compareUnsigned ~x ~y)) Boolean])
 
-(defmethod codegen [:>= Number Number] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(>= ~@args) Boolean]))
+(defmethod codegen [:>= Number Number] [[_ [x] [y]]]
+  [`(>= ~x ~y) Boolean])
 
-(defmethod codegen [:>= Comparable Comparable] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(not (neg? (compare ~@args))) Boolean]))
+(defmethod codegen [:>= Comparable Comparable] [[_ [x] [y]]]
+  [`(not (neg? (compare ~x ~y))) Boolean])
 
 (prefer-method codegen [:>= Number Number] [:>= Comparable Comparable])
 
-(defmethod codegen [:>= byte-array-class byte-array-class] [[op & arg+types :as expression]]
-  (let [args (map first arg+types)]
-    [`(not (neg? (Arrays/compareUnsigned ~@args))) Boolean]))
+(defmethod codegen [:>= byte-array-class byte-array-class] [[_ [x] [y]]]
+  [`(not (neg? (Arrays/compareUnsigned ~x ~y))) Boolean])
 
-(doseq [op [:and :or :not]]
-  (defmethod codegen [op Boolean Boolean] [[op & arg+types :as expression]]
-    (let [args (map first arg+types)]
-      [`(~op ~@args) Boolean])))
+(defmethod codegen [:and Boolean Boolean] [[_ [x] [y]]]
+  [`(and ~x ~y) Boolean])
 
-(doseq [op [:+ :- :*]]
-  (defmethod codegen [op Number Number] [[op & arg+types :as expression]]
-    (let [[args types] [(map first arg+types) (map second arg+types)]]
-      [`(~op ~@args) (widen-numeric-types types)])))
+(defmethod codegen [:or Boolean Boolean] [[_ [x] [y]]]
+  [`(or ~x ~y) Boolean])
 
-(defmethod codegen [:- Number] [[op & arg+types :as expression]]
-  (let [[args types] [(map first arg+types) (map second arg+types)]]
-    [`(- ~@args) (widen-numeric-types types)]))
+(defmethod codegen [:not Boolean] [[_ [x]]]
+  [`(not ~x) Boolean])
 
-(defmethod codegen [:% Number Number] [[op & arg+types :as expression]]
-  (let [[args types] [(map first arg+types) (map second arg+types)]]
-    [`(mod ~@args) (widen-numeric-types types)]))
+(defmethod codegen [:+ Number Number] [[_ [x x-type] [y y-type]]]
+  [`(+ ~x ~y) (widen-numeric-types x-type y-type)])
 
-(defmethod codegen [:/ Number Number] [[op & arg+types :as expression]]
-  (let [[args types] [(map first arg+types) (map second arg+types)]]
-    [`(/ ~@args) (widen-numeric-types types)]))
+(defmethod codegen [:- Number Number] [[_ [x x-type] [y y-type]]]
+  [`(- ~x ~y) (widen-numeric-types x-type y-type)])
 
-(defmethod codegen [:/ Long Long] [[op & arg+types :as expression]]
-  (let [[args types] [(map first arg+types) (map second arg+types)]]
-    [`(quot ~@args) (widen-numeric-types types)]))
+(defmethod codegen [:- Number] [[_ [x x-type]]]
+  [`(- ~x) x-type])
+
+(defmethod codegen [:* Number Number] [[_ [x x-type] [y y-type]]]
+  [`(* ~x ~y) (widen-numeric-types x-type y-type)])
+
+(defmethod codegen [:% Number Number] [[_ [x x-type] [y y-type]]]
+  [`(mod ~x ~y) (widen-numeric-types x-type y-type)])
+
+(defmethod codegen [:/ Number Number] [[_ [x x-type] [y y-type]]]
+  [`(/ ~x ~y) (widen-numeric-types x-type y-type)])
+
+(defmethod codegen [:/ Long Long] [[_ [x] [y]]]
+  [`(quot ~x ~y) Long])
 
 (doseq [^Method method (.getDeclaredMethods Math)
         :let [math-op (.getName method)
@@ -220,15 +202,13 @@
       [`(~(symbol "Math" math-op) ~@args)
        boxed-return-type])))
 
-(defmethod codegen [:if Boolean Object Object] [[op & arg+types :as expression]]
-  (let [[args types] [(map first arg+types) (map second arg+types)]
-        types (rest types)
-        return-type (if (= 1 (count types))
-                      (first types)
-                      (or (widen-numeric-types types)
+(defmethod codegen [:if Boolean Object Object] [[_ [condition] [then then-type] [else else-type]]]
+  (let [return-type (if (= then-type else-type)
+                      then-type
+                      (or (widen-numeric-types then-type else-type)
                           Object))
         cast (get type->cast return-type)]
-    [(cond->> (cons 'if args)
+    [(cond->> `(~'if ~condition ~then ~else)
        cast (list cast))
      return-type]))
 
