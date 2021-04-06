@@ -74,25 +74,6 @@
 
 (def ^:private idx-sym (gensym "idx"))
 
-(defn normalize-union-value [v]
-  (cond
-    (instance? LocalDateTime v)
-    (.getTime (util/local-date-time->date v))
-    (instance? Text v)
-    (str v)
-    :else
-    v))
-
-(defn- normalize-expression [expression]
-  (w/postwalk #(cond
-                 (vector? %)
-                 (seq %)
-                 (keyword? %)
-                 (symbol (name %))
-                 :else
-                 %)
-              expression))
-
 (defn- widen-numeric-types [type-x type-y]
   (when (and (.isAssignableFrom Number type-x)
              (.isAssignableFrom Number type-y))
@@ -234,6 +215,15 @@
      expression)
    (class expression)])
 
+(defn normalize-union-value [v]
+  (cond
+    (instance? LocalDateTime v)
+    (.getTime (util/local-date-time->date v))
+    (instance? Text v)
+    (str v)
+    :else
+    v))
+
 (defn- codegen-variable [var->type expression]
   (if-let [type (get var->type expression)]
     [(cond
@@ -259,13 +249,12 @@
     :else
     (codegen-literal expression)))
 
-(defn- generate-code [types expression expression-type]
+(defn- generate-code [arrow-types expression expression-type]
   (let [vars (variables expression)
-        expression (normalize-expression expression)
-        var->type (zipmap vars (map arrow-type->java-type types))
+        var->type (zipmap vars (map arrow-type->java-type arrow-types))
         [expression return-type] (codegen-expression var->type expression)
         arrow-return-type (types/->arrow-type return-type)
-        args (for [[k v] (map vector vars types)]
+        args (for [[k v] (map vector vars arrow-types)]
                (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
     (case expression-type
       ::project
@@ -317,8 +306,8 @@
   (reify ProjectionSpec
     (project [_ in allocator]
       (let [in-vecs (expression-in-vectors in expression)
-            types (mapv vector->arrow-type in-vecs)
-            expr-code (memo-generate-code types expression ::project)
+            arrow-types (mapv vector->arrow-type in-vecs)
+            expr-code (memo-generate-code arrow-types expression ::project)
             expr-fn (memo-eval expr-code)
             ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
         (expr-fn in-vecs acc (.getRowCount in))))))
@@ -327,8 +316,8 @@
   (reify IVectorSchemaRootSelector
     (select [_ in]
       (let [in-vecs (expression-in-vectors in expression)
-            types (mapv vector->arrow-type in-vecs)
-            expr-code (memo-generate-code types expression ::select)
+            arrow-types (mapv vector->arrow-type in-vecs)
+            expr-code (memo-generate-code arrow-types expression ::select)
             expr-fn (memo-eval expr-code)
             acc (RoaringBitmap.)]
         (expr-fn in-vecs acc (.getRowCount in))))))
