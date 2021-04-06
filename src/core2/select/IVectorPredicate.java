@@ -1,7 +1,7 @@
 package core2.select;
 
-import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.ValueVector;
 
 public interface IVectorPredicate {
-    boolean test(FieldVector fieldVector, int idx);
+    boolean test(ValueVector vector, int idx);
 }

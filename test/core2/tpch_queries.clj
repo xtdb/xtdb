@@ -55,10 +55,8 @@
                                    ["l_returnflag" "l_linestatus" "l_shipdate"
                                     "l_quantity" "l_extendedprice" "l_discount" "l_tax"]
                                    metadata-pred
-                                   {"l_shipdate" (sel/->dense-union-pred
-                                                  shipdate-pred
-                                                  (-> (types/primitive-type->arrow-type :timestampmilli)
-                                                      types/arrow-type->type-id))}
+                                   {"l_shipdate"
+                                    (expr/->expression-vector-selector '(<= l_shipdate #inst "1998-09-02"))}
                                    nil nil)
 
                 project-cursor (.project *op-factory* scan-cursor

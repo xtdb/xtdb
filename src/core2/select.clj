@@ -1,6 +1,6 @@
 (ns core2.select
   (:require [core2.types :as t])
-  (:import [core2.select IVectorCompare IVectorPredicate]
+  (:import [core2.select IVectorCompare IVectorPredicate IVectorSelector]
            core2.types.ReadWrite
            java.nio.charset.StandardCharsets
            java.util.Comparator
@@ -112,14 +112,20 @@
   (^org.roaringbitmap.RoaringBitmap [^FieldVector field-vec, ^IVectorPredicate vec-predicate]
    (select nil field-vec vec-predicate))
 
-  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap idx-bitmap, ^FieldVector field-vec, ^IVectorPredicate vec-predicate]
-   (if (dense-union-with-single-child? field-vec vec-predicate)
-     (recur idx-bitmap
-            (.getVectorByType ^DenseUnionVector field-vec (.type-id ^DenseUnionPredicate vec-predicate))
-            (.vec-pred ^DenseUnionPredicate vec-predicate))
+  (^org.roaringbitmap.RoaringBitmap [^RoaringBitmap idx-bitmap, ^FieldVector field-vec, vec-predicate-or-selector]
+   (cond
+     (instance? IVectorSelector vec-predicate-or-selector)
+     (.select ^IVectorSelector vec-predicate-or-selector field-vec)
 
+     (dense-union-with-single-child? field-vec vec-predicate-or-selector)
+     (recur idx-bitmap
+            (.getVectorByType ^DenseUnionVector field-vec (.type-id ^DenseUnionPredicate vec-predicate-or-selector))
+            (.vec-pred ^DenseUnionPredicate vec-predicate-or-selector))
+
+     :else
      (do (assert (or (nil? idx-bitmap) (.isEmpty idx-bitmap) (< (.last idx-bitmap) (.getValueCount field-vec))))
-         (let [res (RoaringBitmap.)]
+         (let [res (RoaringBitmap.)
+               ^IVectorPredicate vec-predicate vec-predicate-or-selector]
 
            (-> ^IntStream (if idx-bitmap
                             (.stream idx-bitmap)

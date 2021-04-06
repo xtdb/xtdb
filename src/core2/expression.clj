@@ -5,7 +5,7 @@
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
-           core2.select.IVectorSchemaRootSelector
+           [core2.select IVectorSelector IVectorSchemaRootSelector]
            java.lang.reflect.Method
            java.util.Date
            java.time.LocalDateTime
@@ -45,8 +45,7 @@
    (.getType Types$MinorType/VARBINARY) VarBinaryVector
    (.getType Types$MinorType/VARCHAR) VarCharVector
    (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
-   (.getType Types$MinorType/BIT) BitVector
-   (.getType Types$MinorType/UNION) DenseUnionVector})
+   (.getType Types$MinorType/BIT) BitVector})
 
 (def ^:private byte-array-class (Class/forName "[B"))
 
@@ -57,8 +56,7 @@
    (.getType Types$MinorType/VARBINARY) byte-array-class
    (.getType Types$MinorType/VARCHAR) String
    (.getType Types$MinorType/TIMESTAMPMILLI) Date
-   (.getType Types$MinorType/BIT) Boolean
-   (.getType Types$MinorType/UNION) Object})
+   (.getType Types$MinorType/BIT) Boolean})
 
 (def ^:private type->cast
   {Long 'long
@@ -251,14 +249,13 @@
 
 (defn- generate-code [arrow-types expression expression-type]
   (let [vars (variables expression)
-        var->type (zipmap vars (map arrow-type->java-type arrow-types))
+        var->type (zipmap vars (map #(get arrow-type->java-type % Comparable) arrow-types))
         [expression return-type] (codegen-expression var->type expression)
-        arrow-return-type (types/->arrow-type return-type)
         args (for [[k v] (map vector vars arrow-types)]
-               (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v)))}))]
+               (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v DenseUnionVector)))}))]
     (case expression-type
       ::project
-      (if (= (.getType Types$MinorType/UNION) arrow-return-type)
+      (if (= Object return-type)
         `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
            (dotimes [~idx-sym row-count#]
              (let [value# ~expression
@@ -266,7 +263,8 @@
                    offset# (util/write-type-id acc# ~idx-sym type-id#)]
                (types/set-safe! (.getVectorByType acc# type-id#) offset# value#)))
            acc#)
-        (let [^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
+        (let [arrow-return-type (types/->arrow-type return-type)
+              ^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
               return-type-id (types/arrow-type->type-id arrow-return-type)
               inner-acc-sym (with-meta (gensym "inner-acc") {:tag (symbol (.getName vector-return-type))})]
           `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
@@ -283,7 +281,7 @@
                acc#))))
 
       ::select
-      (do (assert (= (.getType Types$MinorType/BIT) arrow-return-type))
+      (do (assert (= Boolean return-type))
           `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
              (dotimes [~idx-sym row-count#]
                (try
@@ -312,7 +310,7 @@
             ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
         (expr-fn in-vecs acc (.getRowCount in))))))
 
-(defn ->expression-selector ^core2.select.IVectorSchemaRootSelector [expression]
+(defn ->expression-root-selector ^core2.select.IVectorSchemaRootSelector [expression]
   (reify IVectorSchemaRootSelector
     (select [_ in]
       (let [in-vecs (expression-in-vectors in expression)
@@ -321,3 +319,14 @@
             expr-fn (memo-eval expr-code)
             acc (RoaringBitmap.)]
         (expr-fn in-vecs acc (.getRowCount in))))))
+
+(defn ->expression-vector-selector ^core2.select.IVectorSelector [expression]
+  (assert (= 1 (count (variables expression))))
+  (reify IVectorSelector
+    (select [_ v]
+      (let [in-vecs [(util/maybe-single-child-dense-union v)]
+            arrow-types (mapv vector->arrow-type in-vecs)
+            expr-code (memo-generate-code arrow-types expression ::select)
+            expr-fn (memo-eval expr-code)
+            acc (RoaringBitmap.)]
+        (expr-fn in-vecs acc (.getValueCount v))))))

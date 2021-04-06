@@ -106,6 +106,11 @@
 
       (t/testing "selector"
         (let [expr '(>= a 500)
-              selector (expr/->expression-selector expr)]
+              selector (expr/->expression-root-selector expr)]
           (t/is (= '(a) (expr/variables expr)))
-          (t/is (= 500 (.getCardinality (.select selector in)))))))))
+          (t/is (= 500 (.getCardinality (.select selector in)))))
+
+        (let [expr '(>= a 500)
+              selector (expr/->expression-vector-selector expr)]
+          (t/is (= '(a) (expr/variables expr)))
+          (t/is (= 500 (.getCardinality (.select selector a)))))))))

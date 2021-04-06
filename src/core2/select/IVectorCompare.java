@@ -1,7 +1,7 @@
 package core2.select;
 
-import org.apache.arrow.vector.FieldVector;
+import org.apache.arrow.vector.ValueVector;
 
 public interface IVectorCompare {
-    int compareIdx(FieldVector fieldVector, int idx);
+    int compareIdx(ValueVector vector, int idx);
 }
