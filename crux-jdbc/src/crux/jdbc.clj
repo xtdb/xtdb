@@ -46,10 +46,17 @@
   (let [jdbc-url (-> (jdbcc/jdbc-url (merge {:dbtype (name (db-type dialect))} db-spec))
                      ;; mssql doesn't like trailing '?'
                      (str/replace #"\?$" ""))
-        pool-opts (merge pool-opts {:jdbcUrl jdbc-url})]
-    (->HikariConnectionPool (doto (HikariDataSource. (jd/to-java HikariConfig pool-opts))
-                              (->> (setup-schema! dialect)))
-                            dialect)))
+        pool-opts (merge pool-opts {:jdbcUrl jdbc-url})
+        pool (HikariDataSource. (jd/to-java HikariConfig pool-opts))]
+
+    (try
+      (setup-schema! dialect pool)
+      (catch Throwable t
+        (cio/try-close pool)
+        (throw t)))
+
+    (->HikariConnectionPool pool dialect)))
+
 ;; TODO to multimethod?
 (defn- tx-result->tx-data [tx-result pool dialect]
   (let [tx-result (condp contains? (db-type dialect)
