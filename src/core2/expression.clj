@@ -201,7 +201,7 @@
   (let [return-type (if (= then-type else-type)
                       then-type
                       (or (widen-numeric-types then-type else-type)
-                          Object))
+                          Comparable))
         cast (get type->cast return-type)]
     [(cond->> `(~'if ~condition ~then ~else)
        cast (list cast))
@@ -229,7 +229,7 @@
        `(== 1 (.get ~expression ~idx-sym))
        (= String type)
        `(str (.getObject ~expression ~idx-sym))
-       (= Object type)
+       (= Comparable type)
        `(normalize-union-value (.getObject ~expression ~idx-sym))
        :else
        `(.get ~expression ~idx-sym))
@@ -255,7 +255,7 @@
                (with-meta k {:tag (symbol (.getName ^Class (get arrow-type->vector-type v DenseUnionVector)))}))]
     (case expression-type
       ::project
-      (if (= Object return-type)
+      (if (= Comparable return-type)
         `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
            (dotimes [~idx-sym row-count#]
              (let [value# ~expression
