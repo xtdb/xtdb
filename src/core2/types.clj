@@ -43,7 +43,7 @@
   (set-null! [this idx] (.setNull this ^int idx))
 
   TimeStampMilliVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (if (int? Long v)
+  (set-safe! [this idx v] (.setSafe this ^int idx (if (int? v)
                                                     ^long v
                                                     (.getTime (if (instance? LocalDateTime v)
                                                                 (util/local-date-time->date v)
