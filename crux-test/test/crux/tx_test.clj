@@ -1105,6 +1105,23 @@
                (api/q (api/db node) '{:find [?e]
                                       :where [[?e :crux.db/id]]}))))))
 
+(t/deftest ensure-tx-fn-arg-docs-replaced-even-when-tx-aborts-960
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo
+                                       :crux.db/fn '(fn [ctx arg] [])}]
+                        [:crux.tx/match :foo {:crux.db/id :foo}]
+                        [:crux.tx/fn :foo :foo-arg]])
+
+  (let [arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *api*) nil)]
+                     (-> (iterator-seq tx-log)
+                         first
+                         :crux.tx.event/tx-events
+                         last
+                         last))]
+    (t/is (= {:crux.db.fn/failed? true}
+             (-> (db/fetch-docs (:document-store *api*) #{arg-doc-id})
+                 (get arg-doc-id)
+                 (dissoc :crux.db/id))))))
+
 (t/deftest test-documents-with-int-short-byte-float-eids-1043
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id (int 10), :name "foo"}]
                         [:crux.tx/put {:crux.db/id (short 12), :name "bar"}]
