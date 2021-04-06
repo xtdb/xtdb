@@ -18,7 +18,7 @@
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
            [org.apache.kafka.common.errors InterruptException TopicExistsException]
-           org.apache.kafka.common.TopicPartition))
+           [org.apache.kafka.common PartitionInfo TopicPartition]))
 
 (defn ->kafka-config {::sys/args {:bootstrap-servers {:spec ::sys/string
                                                       :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
@@ -233,39 +233,6 @@
     (doseq [f fs]
       @f)))
 
-(defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
-                               ^AdminClient admin-client
-                               local-document-store
-                               ^Thread indexing-thread !indexing-error]
-  Closeable
-  (close [_]
-    (cio/try-close admin-client)
-    (cio/try-close producer)
-    (.interrupt indexing-thread)
-    (.join indexing-thread))
-
-  db/DocumentStore
-  (submit-docs [this id-and-docs]
-    (submit-docs id-and-docs this))
-
-  (fetch-docs [_ ids]
-    ;; TODO will hang forever if the requested ids aren't ever submitted - #1479
-    ;; we could take a note of the endOffset at the start and then fail once we've indexed to that point
-    (let [ids (set ids)]
-      (loop [docs {}]
-        (when-let [indexing-error @!indexing-error]
-          (throw (IllegalStateException. "document indexing error" indexing-error)))
-
-        (let [missing-ids (set/difference ids (set (keys docs)))
-              docs (into docs
-                         (when (seq missing-ids)
-                           (db/fetch-docs local-document-store missing-ids)))]
-          (if (= (count docs) (count ids))
-            docs
-            (do
-              (Thread/sleep 100)
-              (recur docs))))))))
-
 (defn- read-doc-offsets [index-store]
   (->> (db/read-index-meta index-store :crux.tx-log/consumer-state)
        (into {} (map (fn [[k {:keys [next-offset]}]]
@@ -281,9 +248,53 @@
 (defn- update-doc-offsets [tp-offsets doc-records]
   (reduce (fn [tp-offsets ^ConsumerRecord record]
             (assoc tp-offsets
-              (TopicPartition. (.topic record) (.partition record)) (inc (.offset record))))
+                   (TopicPartition. (.topic record) (.partition record)) (inc (.offset record))))
           tp-offsets
           doc-records))
+
+(defrecord KafkaDocumentStore [^KafkaProducer producer doc-topic
+                               ^KafkaConsumer end-offset-consumer
+                               local-document-store index-store
+                               ^Thread indexing-thread !indexing-error]
+  Closeable
+  (close [_]
+    (cio/try-close end-offset-consumer)
+    (cio/try-close producer)
+    (.interrupt indexing-thread)
+    (.join indexing-thread))
+
+  db/DocumentStore
+  (submit-docs [this id-and-docs]
+    (submit-docs id-and-docs this))
+
+  (fetch-docs [_ ids]
+    (let [ids (set ids)
+
+          ;; ideally we'd use AdminClient.listOffsets for this, but it was only introduced in 2.5.0
+          ;; which may be a bit recent (April 2020) for Crux folks
+          !end-offsets (delay
+                         (.endOffsets end-offset-consumer
+                                      (for [^PartitionInfo partition-info (.partitionsFor end-offset-consumer doc-topic)]
+                                        (TopicPartition. doc-topic (.partition partition-info)))))]
+
+      (loop [docs (db/fetch-docs local-document-store ids)]
+        (if (or (= (count docs) (count ids))
+                (let [doc-offsets (read-doc-offsets index-store)]
+                  (every? (fn [[tp end-offset]]
+                            (or (zero? end-offset)
+                                (when-let [consumed-offset (get doc-offsets tp)]
+                                  (>= consumed-offset end-offset))))
+                          @!end-offsets)))
+          docs
+
+          (do
+            (Thread/sleep 100)
+
+            (when-let [indexing-error @!indexing-error]
+              (throw (IllegalStateException. "document indexing error" indexing-error)))
+
+            (recur (into docs
+                         (db/fetch-docs local-document-store (set/difference ids (set (keys docs))))))))))))
 
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
   [(c/new-id (.key doc-record)) (.value doc-record)])
@@ -339,6 +350,7 @@
 
   (let [!indexing-error (atom nil)]
     (map->KafkaDocumentStore {:producer (->producer {:kafka-config kafka-config})
+                              :end-offset-consumer (->consumer {:kafka-config kafka-config})
                               :doc-topic (:topic-name doc-topic-opts)
                               :index-store index-store
                               :local-document-store local-document-store
