@@ -236,4 +236,4 @@ EDN::
 === Document store (`+crux.jdbc/->document-store+`)
 
 * `connection-pool`
-* `doc-cache-size` (int): size of in-memory document cache
+* `cache-size` (int): size of in-memory document cache
