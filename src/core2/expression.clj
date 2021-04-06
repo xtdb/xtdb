@@ -32,7 +32,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn variables [expr]
-  (filter symbol? (tree-seq sequential? rest expr)))
+  (distinct (filter symbol? (tree-seq sequential? rest expr))))
 
 (def ^:private arrow-type->vector-type
   {(.getType Types$MinorType/NULL) NullVector
