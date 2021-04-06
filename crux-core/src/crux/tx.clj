@@ -247,6 +247,17 @@
 (defn- without-tx-fn-docs [docs]
   (into {} (remove (comp tx-fn-doc? val) docs)))
 
+(defn- arg-docs-to-replace [document-store tx-events]
+  (->> (db/fetch-docs document-store (for [[op :as tx-event] tx-events
+                                           :when (= op :crux.tx/fn)
+                                           :let [[_op _fn-id arg-doc-id] tx-event]]
+                                       arg-doc-id))
+       (into {}
+             (map (fn [[arg-doc-id arg-doc]]
+                    (MapEntry/create arg-doc-id
+                                     {:crux.db/id (:crux.db/id arg-doc)
+                                      :crux.db.fn/failed? true}))))))
+
 (defn- index-docs [{:keys [index-store-tx !tx]} docs]
   (when (seq docs)
     (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
@@ -312,7 +323,7 @@
                                (index-tx-event tx-event tx (assoc forked-deps :index-snapshot index-snapshot))]
                            (if abort?
                              (do
-                               (when (seq docs)
+                               (when-let [docs (seq (concat docs (arg-docs-to-replace document-store-tx more-tx-events)))]
                                  (db/submit-docs document-store-tx docs))
                                true)
 
