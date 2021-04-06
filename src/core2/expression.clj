@@ -121,46 +121,62 @@
 (defmethod codegen [:< Number Number] [[_ [x] [y]]]
   [`(< ~x ~y) Boolean])
 
+(defmethod codegen [:< Date Date] [[_ [x] [y]]]
+  [`(< ~x ~y) Boolean])
+
 (defmethod codegen [:< Comparable Comparable] [[_ [x] [y]]]
   [`(neg? (compare ~x ~y)) Boolean])
-
-(prefer-method codegen [:< Number Number] [:< Comparable Comparable])
 
 (defmethod codegen [:< byte-array-class byte-array-class] [[_ [x] [y]]]
   [`(neg? (Arrays/compareUnsigned ~x y)) Boolean])
 
+(prefer-method codegen [:< Number Number] [:< Comparable Comparable])
+(prefer-method codegen [:< Date Date] [:< Comparable Comparable])
+
 (defmethod codegen [:<= Number Number] [[op [x] [y]]]
+  [`(<= ~x ~y) Boolean])
+
+(defmethod codegen [:<= Date Date] [[op [x] [y]]]
   [`(<= ~x ~y) Boolean])
 
 (defmethod codegen [:<= Comparable Comparable] [[_ [x] [y]]]
   [`(not (pos? (compare ~x ~y))) Boolean])
 
-(prefer-method codegen [:<= Number Number] [:<= Comparable Comparable])
-
 (defmethod codegen [:<= byte-array-class byte-array-class] [[_ [x] [y]]]
   [`(not (pos? (Arrays/compareUnsigned ~x ~y))) Boolean])
 
+(prefer-method codegen [:<= Number Number] [:<= Comparable Comparable])
+(prefer-method codegen [:<= Date Date] [:<= Comparable Comparable])
+
 (defmethod codegen [:> Number Number] [[_ [x] [y]]]
+  [`(> ~x ~y) Boolean])
+
+(defmethod codegen [:> Date Date] [[_ [x] [y]]]
   [`(> ~x ~y) Boolean])
 
 (defmethod codegen [:> Comparable Comparable] [[_ [x] [y]]]
   [`(pos? (compare ~x ~y)) Boolean])
 
-(prefer-method codegen [:> Number Number] [:> Comparable Comparable])
-
 (defmethod codegen [:> byte-array-class byte-array-class] [[_ [x] [y]]]
   [`(pos? (Arrays/compareUnsigned ~x ~y)) Boolean])
 
+(prefer-method codegen [:> Number Number] [:> Comparable Comparable])
+(prefer-method codegen [:> Date Date] [:> Comparable Comparable])
+
 (defmethod codegen [:>= Number Number] [[_ [x] [y]]]
+  [`(>= ~x ~y) Boolean])
+
+(defmethod codegen [:>= Date Date] [[_ [x] [y]]]
   [`(>= ~x ~y) Boolean])
 
 (defmethod codegen [:>= Comparable Comparable] [[_ [x] [y]]]
   [`(not (neg? (compare ~x ~y))) Boolean])
 
-(prefer-method codegen [:>= Number Number] [:>= Comparable Comparable])
-
 (defmethod codegen [:>= byte-array-class byte-array-class] [[_ [x] [y]]]
   [`(not (neg? (Arrays/compareUnsigned ~x ~y))) Boolean])
+
+(prefer-method codegen [:>= Number Number] [:>= Comparable Comparable])
+(prefer-method codegen [:>= Date Date] [:>= Comparable Comparable])
 
 (defmethod codegen [:and Boolean Boolean] [[_ [x] [y]]]
   [`(and ~x ~y) Boolean])
