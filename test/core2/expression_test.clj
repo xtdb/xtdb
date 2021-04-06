@@ -102,7 +102,7 @@
       (t/testing "cannot call arbitrary functions"
         (let [expr '(vec a)
               expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-          (t/is (thrown? UnsupportedOperationException (.project expr-projection-spec in allocator)))))
+          (t/is (thrown? IllegalArgumentException (.project expr-projection-spec in allocator)))))
 
       (t/testing "selector"
         (let [expr '(>= a 500)
