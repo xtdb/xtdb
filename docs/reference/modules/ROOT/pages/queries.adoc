@@ -64,7 +64,6 @@ The query map accepts the following Keywords
 |<<#ordering-and-pagination,`:offset`>>|Int|Specify how many results to discard
 |<<#rules,`:rules`>>|Vector|Define powerful statements for use in `:where` clauses
 |<<#timeout,`:timeout`>>|Int|Specify maximum query run time in ms
-|<<#full-results,`:full-results?`>>|Boolean|Specify whether to return full documents
 |===
 
 [#find]
@@ -659,22 +658,6 @@ include::example$test/crux/docs/examples/query_test.clj[tags=rules-4,indent=0]
 `:timeout` sets the maximum run time of the query (in milliseconds).
 
 If the query has not completed by this time, a `java.util.concurrent.TimeoutException` is thrown.
-
-[#full-results]
-== Full Results
-
-Setting the `:full-results?` flag to true will cause logic variables in the `:find` clause to return the full document
-
-[source,clojure]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=full-results-data,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=full-results-1,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=full-results-1-r,indent=0]
-
-include::example$test/crux/docs/examples/query_test.clj[tags=full-results-2,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=full-results-2-r,indent=0]
-----
 
 [#valid-time-travel]
 == Valid Time travel

@@ -62,10 +62,8 @@
 ;; query the node as-of now
 (crux/q
   (crux/db node)
-  '{:find [e]
-    :where [[e :name "Pablo"]]
-    :full-results? true}) ; using `:full-results?` is useful for manual queries
-
+  '{:find [(pull e [*])]
+    :where [[e :name "Pablo"]]})
 
 ;; `put` the new version of the document again
 (crux/submit-tx
@@ -82,14 +80,11 @@
 ;; again, query the node as-of now
 (crux/q
   (crux/db node)
-  '{:find [e]
-    :where [[e :name "Pablo"]]
-    :full-results? true})
-
+  '{:find [(pull e [*])]
+    :where [[e :name "Pablo"]]})
 
 ;; again, query the node as-of now, as-at #inst "1973-04-07T09:20:27.966-00:00"
 (crux/q
   (crux/db node #inst "1973-04-07T09:20:27.966-00:00")
-  '{:find [e]
-    :where [[e :name "Pablo"]]
-    :full-results? true})
+  '{:find [(pull e [*])]
+    :where [[e :name "Pablo"]]})

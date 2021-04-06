@@ -46,9 +46,8 @@
 
 (defn full-query [node]
   (crux/q (crux/db node)
-          '{:find [id]
-            :where [[e :crux.db/id id]]
-            :full-results? true}))
+          '{:find [(pull id [*])]
+            :where [[e :crux.db/id id]]}))
 
 (t/deftest space-tutorial-test
   (t/testing "earth-test"

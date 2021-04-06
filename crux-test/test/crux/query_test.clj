@@ -104,58 +104,6 @@
                                     [e :last-name "Ivanov"]]}))
           "throws on arity mismatch")))
 
-(t/deftest test-basic-query-returning-full-results
-  (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}])
-
-  (t/testing "Can retrieve full results"
-    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-              "Ivan"] (first (api/q (api/db *api*)
-                                    '{:find [e first-name]
-                                      :where [[e :name first-name]]
-                                      :full-results? true})))))
-
-  (t/testing "Can retrieve full for a vector-style query"
-    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-              "Ivan"] (first (api/q (api/db *api*)
-                                    '[:find e first-name
-                                      :where [e :name first-name]
-                                      :full-results? true])))))
-
-  (t/testing "Can retrieve full results in or-join"
-    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-              "Ivan"] (first (api/q (api/db *api*)
-                                    '{:find [e first-name]
-                                      :where [(or-join [e first-name]
-                                                       [e :name first-name])]
-                                      :full-results? true})))))
-
-  (t/testing "Can retrieve full results in or"
-    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-              "Ivan"] (first (api/q (api/db *api*)
-                                    '{:find [e first-name]
-                                      :where [(or [e :name first-name])]
-                                      :full-results? true})))))
-
-  (t/testing "Can retrieve full results in rule"
-    (t/is (= [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-              "Ivan"] (first (api/q (api/db *api*)
-                                    '{:find [e first-name]
-                                      :where [(my-rule e first-name)]
-                                      :rules [[(my-rule e first-name)
-                                               [e :name first-name]]]
-                                      :full-results? true}))))))
-
-(t/deftest test-full-results-with-non-id-element-1200
-  (with-redefs [nippy/*serializable-whitelist* (conj nippy/*serializable-whitelist* "java.time.Instant")]
-    (let [now (java.time.Instant/now)]
-      (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :instant now}]])
-
-      (t/is (= #{[{:crux.db/id :foo, :instant now} now]}
-               (api/q (api/db *api*)
-                      '{:find [?e ?ei]
-                        :where [[?e :instant ?ei]]
-                        :full-results? true}))))))
-
 (t/deftest test-query-with-arguments
   (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
                                                       {:name "Petr" :last-name "Petrov"}]))]

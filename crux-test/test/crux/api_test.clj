@@ -118,13 +118,6 @@
           (t/is (= '([:ivan])
                    (iterator-seq res)))))
 
-      (t/testing "query returning full results"
-        (with-open [res (api/open-q db '{:find [e]
-                                         :where [[e :name "Ivan"]]
-                                         :full-results? true})]
-          (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
-                   (iterator-seq res)))))
-
       (t/testing "concurrent streaming queries"
         (with-open [q1 (api/open-q db '{:find [e]
                                         :where [[e :crux.db/id]]})

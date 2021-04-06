@@ -96,16 +96,14 @@
   (t/is (= #{[{:crux.db/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
            (crux/q
             (crux/db *api* #inst "1973-04-07T09:20:27.966-00:00")
-            '{:find [e]
-              :where [[e :name "Pablo"]]
-              :full-results? true})))
+            '{:find [(pull e [*])]
+              :where [[e :name "Pablo"]]})))
 
   (fix/submit+await-tx [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
 
   (t/is (empty? (crux/q (crux/db *api*)
-                        '{:find [e]
-                          :where [[e :name "Pablo"]]
-                          :full-results? true})))
+                        '{:find [(pull e [*])]
+                          :where [[e :name "Pablo"]]})))
 
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :dbpedia.resource/Pablo-Picasso
                                        :name "Pablo"
@@ -120,6 +118,5 @@
                :height 1.63
                :location "France"}]}
            (crux/q (crux/db *api*)
-                   '{:find [e]
-                     :where [[e :name "Pablo"]]
-                     :full-results? true}))))
+                   '{:find [(pull e [*])]
+                     :where [[e :name "Pablo"]]}))))
