@@ -20,6 +20,9 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
+;; TPC-H queries without sub-queries: 3, 5, 6, 10, 12, 14
+;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 3)))
+
 (defn with-tpch-data [scale-factor test-name]
   (fn [f]
     (try
