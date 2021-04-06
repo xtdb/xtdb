@@ -20,8 +20,8 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-;; TPC-H queries without sub-queries: 3, 5, 6, 10, 12, 14
-;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 3)))
+;; TPC-H queries without sub-queries: 10, 12, 14
+;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 10)))
 
 (defn with-tpch-data [scale-factor test-name]
   (fn [f]
@@ -123,8 +123,8 @@
                                  (expr/->expression-vector-selector '(> l_shipdate #inst "1995-03-15"))}
                                 nil nil)
 
-                customers+orders (.equiJoin *op-factory* customer "c_custkey" orders "o_custkey")
-                lineitem+customers+orders (.equiJoin *op-factory* customers+orders "o_orderkey" lineitem "l_orderkey")
+                orders+customers (.equiJoin *op-factory* customer "c_custkey" orders "o_custkey")
+                lineitem+customers+orders (.equiJoin *op-factory* orders+customers "o_orderkey" lineitem "l_orderkey")
 
                 project-cursor (.project *op-factory* lineitem+customers+orders
                                          [(project/->identity-projection-spec "l_orderkey")
@@ -145,4 +145,92 @@
                                            (order-by/->order-spec "o_orderdate" :asc)])
                 limit-cursor (.slice *op-factory* order-by-cursor nil 10)]
       (->> (tu/<-cursor limit-cursor)
+           (into [] (mapcat seq))))))
+
+(defn tpch-q5-local-supplier-volume []
+  (let [orderdate-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
+                                                   (-> .isSet (set! 1))
+                                                   (-> .value (set! (.getTime #inst "1995-01-01")))))
+        region-name-pred (sel/->str-pred sel/pred= "ASIA")]
+    (with-open [customer (.scan *op-factory* *watermark*
+                                ["c_custkey" "c_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+                orders (.scan *op-factory* *watermark*
+                              ["o_orderkey" "o_custkey" "o_orderdate"]
+                              (meta/matching-chunk-pred "o_orderdate" orderdate-pred
+                                                        (types/->minor-type :timestampmilli))
+                              {"o_orderdate"
+                               (expr/->expression-vector-selector '(and (>= o_orderdate #inst "1994-01-01")
+                                                                        (< o_orderdate #inst "1995-01-01")))}
+                              nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_orderkey" "l_extendedprice" "l_discount" "l_suppkey"]
+                                (constantly true) {}
+                                nil nil)
+
+                supplier (.scan *op-factory* *watermark*
+                                ["s_suppkey" "s_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+                nation (.scan *op-factory* *watermark*
+                              ["n_name" "n_nationkey" "n_regionkey"]
+                              (constantly true) {}
+                              nil nil)
+                region (.scan *op-factory* *watermark*
+                              ["r_name" "r_regionkey"]
+                              (meta/matching-chunk-pred "r_name" region-name-pred
+                                                        (types/->minor-type :varchar))
+                              {"r_name" (expr/->expression-vector-selector '(= r_name "ASIA"))}
+                              nil nil)
+
+                nation+region (.equiJoin *op-factory* region "r_regionkey" nation "n_regionkey")
+                supplier+region+nation (.equiJoin *op-factory* nation+region "n_nationkey" supplier "s_nationkey")
+
+                customers+supplier+region+nation (.equiJoin *op-factory* supplier+region+nation "n_nationkey" customer "c_nationkey")
+                lineitem+customers+supplier+region+nation (.equiJoin *op-factory* customers+supplier+region+nation "s_suppkey" lineitem "l_suppkey")
+                orders+lineitem+customers+supplier+region+nation (.equiJoin *op-factory*
+                                                                            lineitem+customers+supplier+region+nation "l_orderkey"
+                                                                            orders "o_orderkey")
+                select-cursor (.select *op-factory* orders+lineitem+customers+supplier+region+nation
+                                       (expr/->expression-root-selector '(= o_custkey c_custkey)))
+
+                project-cursor (.project *op-factory* select-cursor
+                                         [(project/->identity-projection-spec "n_name")
+                                          (expr/->expression-projection-spec "disc_price"
+                                                                             '(* l_extendedprice (- 1 l_discount)))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->group-spec "n_name")
+                                           (group-by/->sum-double-spec "disc_price" "revenue")])
+                order-by-cursor (.orderBy *op-factory*
+                                          group-by-cursor
+                                          [(order-by/->order-spec "revenue" :desc)])]
+      (->> (tu/<-cursor order-by-cursor)
+           (into [] (mapcat seq))))))
+
+(defn tpch-q6-forecasting-revenue-change []
+  (let [shipdate-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
+                                                  (-> .isSet (set! 1))
+                                                  (-> .value (set! (.getTime #inst "1995-01-01")))))]
+    (with-open [lineitem (.scan *op-factory* *watermark*
+                                ["l_shipdate" "l_extendedprice" "l_discount" "l_quantity"]
+                                (meta/matching-chunk-pred "l_shipdate" shipdate-pred
+                                                          (types/->minor-type :timestampmilli))
+                                {"l_shipdate" (expr/->expression-vector-selector '(and (>= l_shipdate #inst "1994-01-01")
+                                                                                       (< l_shipdate #inst "1995-01-01")))
+                                 "l_discount" (expr/->expression-vector-selector '(and (>= l_discount 0.05)
+                                                                                       (<= l_discount 0.07)))
+                                 "l_quantity" (expr/->expression-vector-selector '(< l_quantity 24.0))}
+                                nil nil)
+
+                project-cursor (.project *op-factory* lineitem
+                                         [(expr/->expression-projection-spec "disc_price"
+                                                                             '(* l_extendedprice l_discount))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->sum-double-spec "disc_price" "revenue")])]
+      (->> (tu/<-cursor group-by-cursor)
            (into [] (mapcat seq))))))

@@ -82,26 +82,28 @@
       (.close out-root))
 
     (if-not out-root
-      (with-open [acc-root (accumulate-roots in-cursor allocator)]
-        (let [sorted-idxs (order-root acc-root order-specs)
-              out-root (VectorSchemaRoot/create (.getSchema acc-root) allocator)]
+      (if-let [acc-root (accumulate-roots in-cursor allocator)]
+        (with-open [acc-root acc-root]
+          (let [sorted-idxs (order-root acc-root order-specs)
+                out-root (VectorSchemaRoot/create (.getSchema acc-root) allocator)]
 
-          (set! (.out-root this) out-root)
+            (set! (.out-root this) out-root)
 
-          (if (pos? (.getRowCount acc-root))
-            (do (dotimes [n (util/root-field-count acc-root)]
-                  (let [in-vec (.getVector acc-root n)
-                        out-vec (.getVector out-root n)]
-                    (util/set-value-count out-vec (.getValueCount in-vec))
-                    (dotimes [idx (.size sorted-idxs)]
-                      (if (and (instance? DenseUnionVector in-vec)
-                               (instance? DenseUnionVector out-vec))
-                        (util/du-copy in-vec (.get sorted-idxs idx) out-vec idx)
-                        (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
-                (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
-                (.accept c out-root)
-                true)
-            false)))
+            (if (pos? (.getRowCount acc-root))
+              (do (dotimes [n (util/root-field-count acc-root)]
+                    (let [in-vec (.getVector acc-root n)
+                          out-vec (.getVector out-root n)]
+                      (util/set-value-count out-vec (.getValueCount in-vec))
+                      (dotimes [idx (.size sorted-idxs)]
+                        (if (and (instance? DenseUnionVector in-vec)
+                                 (instance? DenseUnionVector out-vec))
+                          (util/du-copy in-vec (.get sorted-idxs idx) out-vec idx)
+                          (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
+                  (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
+                  (.accept c out-root)
+                  true)
+              false)))
+        false)
       false))
 
   (close [_]

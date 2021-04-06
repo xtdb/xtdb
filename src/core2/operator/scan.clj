@@ -165,7 +165,9 @@
                                         (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                             (util/then-apply
                                               (fn [buf]
-                                                (MapEntry/create col-name (util/->chunks buf allocator))))))
+                                                (when buf
+                                                  (MapEntry/create col-name (util/->chunks buf allocator)))))))
+                                      (remove nil?)
                                       vec
                                       (into {} (map deref)))
                           out-root (create-out-root chunks)]

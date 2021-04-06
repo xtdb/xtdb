@@ -83,3 +83,11 @@
              :o_orderdate (util/date->local-date-time #inst "1995-02-17")
              :o_shippriority 0}]
            (tpch-queries/tpch-q3-shipping-priority))))
+
+(t/deftest test-q5-local-supplier-volume
+  (t/is (= []
+           (tpch-queries/tpch-q5-local-supplier-volume))))
+
+(t/deftest test-q6-forecasting-revenue-change
+  (t/is (= [{:revenue 77949.9186}]
+           (tpch-queries/tpch-q6-forecasting-revenue-change))))

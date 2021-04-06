@@ -91,3 +91,20 @@
              :o_orderdate (util/date->local-date-time #inst "1995-02-20")
              :o_shippriority 0}]
            (tpch-queries/tpch-q3-shipping-priority))))
+
+(t/deftest ^:integration test-q5-local-supplier-volume
+  (t/is (= [{:n_name (Text. "VIETNAM")
+             :revenue 1000926.6999}
+            {:n_name (Text. "CHINA")
+             :revenue 740210.757}
+            {:n_name (Text. "JAPAN")
+             :revenue 660651.2424999999}
+            {:n_name (Text. "INDONESIA")
+             :revenue 566379.5276}
+            {:n_name (Text. "INDIA")
+             :revenue 422874.68439999997}]
+           (tpch-queries/tpch-q5-local-supplier-volume))))
+
+(t/deftest ^:integration test-q6-forecasting-revenue-change
+  (t/is (= [{:revenue 1193053.2253}]
+           (tpch-queries/tpch-q6-forecasting-revenue-change))))

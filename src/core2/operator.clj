@@ -23,7 +23,7 @@
                         ^longs temporalMaxRange])
 
   (^core2.ICursor select [^core2.ICursor inCursor
-                          ^core2.select.IVectorSchemaRootPredicate pred])
+                          ^core2.select.IVectorSchemaRootSelector selector])
 
   (^core2.ICursor project [^core2.ICursor inCursor
                            ^java.util.List #_<ProjectionSpec> projectionSpecs])
@@ -59,8 +59,8 @@
       (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
                           watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range))
 
-    (select [_ in-cursor pred]
-      (select/->select-cursor allocator in-cursor pred))
+    (select [_ in-cursor selector]
+      (select/->select-cursor allocator in-cursor selector))
 
     (project [_ in-cursor projection-specs]
       (project/->project-cursor allocator in-cursor projection-specs))

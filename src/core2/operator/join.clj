@@ -15,15 +15,14 @@
     (assert (apply distinct? fields))
     (Schema. fields)))
 
-(defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root]
-  (let [out-idx (.getRowCount out-root)]
-    (dotimes [n (util/root-field-count in-root)]
-      (let [in-vec (.getVector in-root n)
-            out-vec (.getVector out-root (.getField in-vec))]
-        (if (and (instance? DenseUnionVector in-vec)
-                 (instance? DenseUnionVector out-vec))
-          (util/du-copy in-vec idx out-vec out-idx)
-          (.copyFromSafe out-vec idx out-idx in-vec))))))
+(defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long out-idx]
+  (dotimes [n (util/root-field-count in-root)]
+    (let [in-vec (.getVector in-root n)
+          out-vec (.getVector out-root (.getField in-vec))]
+      (if (and (instance? DenseUnionVector in-vec)
+               (instance? DenseUnionVector out-vec))
+        (util/du-copy in-vec idx out-vec out-idx)
+        (.copyFromSafe out-vec idx out-idx in-vec)))))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
@@ -133,9 +132,9 @@
         (when-let [^BigIntVector left-idxs-vec (.get join-key->left-idxs-vec (.hashCode right-vec right-idx))]
           (let [right-pointer-or-object (util/pointer-or-object right-vec right-idx right-pointer)]
             (loop [n 0
-                   matches 0]
+                   out-idx (.getRowCount out-root)]
               (if (= n (.getValueCount left-idxs-vec))
-                (util/set-vector-schema-root-row-count out-root (+ (.getRowCount out-root) matches))
+                (util/set-vector-schema-root-row-count out-root out-idx)
                 (let [total-left-idx (long (.get left-idxs-vec n))
                       left-idx-entry (.floorEntry left-idx->root total-left-idx)
                       ^long left-root-idx (.getKey left-idx-entry)
@@ -143,10 +142,10 @@
                       left-idx (- total-left-idx left-root-idx)
                       left-vec (.getVector left-root left-column-name)]
                   (if (= (util/pointer-or-object left-vec left-idx left-pointer) right-pointer-or-object)
-                    (do (copy-tuple left-root left-idx out-root)
-                        (copy-tuple right-root right-idx out-root)
-                        (recur (inc n) (inc matches)))
-                    (recur (inc n) matches))))))))
+                    (do (copy-tuple left-root left-idx out-root out-idx)
+                        (copy-tuple right-root right-idx out-root out-idx)
+                        (recur (inc n) (inc out-idx)))
+                    (recur (inc n) out-idx))))))))
       out-root)))
 
 (deftype EquiJoinCursor [^BufferAllocator allocator
