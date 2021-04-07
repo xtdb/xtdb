@@ -16,7 +16,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-juxt/crux-metrics {:mvn/version "{crux_version}-beta"}
+juxt/crux-metrics {:mvn/version "{crux_version}-alpha"}
 ----
 
 pom.xml::
@@ -26,7 +26,7 @@ pom.xml::
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-metrics</artifactId>
-    <version>{crux_version}-beta</version>
+    <version>{crux_version}-alpha</version>
 </dependency>
 ----
 ====
