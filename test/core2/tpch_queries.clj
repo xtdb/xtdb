@@ -295,3 +295,7 @@
                 limit-cursor (.slice *op-factory* order-by-cursor nil 20)]
       (->> (tu/<-cursor limit-cursor)
            (into [] (mapcat seq))))))
+
+(defn tpch-q12-shipping-modes-and-order-priority [])
+
+(defn tpch-q14-promotion-effect [])
