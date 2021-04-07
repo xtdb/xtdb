@@ -8,6 +8,7 @@
             [core2.metadata :as meta]
             [core2.types :as ty])
   (:import java.util.function.Consumer
+           core2.metadata.IMetadataManager
            org.apache.arrow.vector.types.Types$MinorType
            [org.apache.arrow.vector.util Text]))
 
@@ -18,7 +19,7 @@
                 tx-producer (c2/->local-tx-producer node-dir)]
       (let [allocator (.allocator node)
             buffer-pool (.buffer-pool node)
-            metadata-mgr (.metadata-manager node)
+            ^IMetadataManager metadata-mgr (.metadata-manager node)
             temporal-mgr (.temporal-manager node)]
 
         @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Håkan", :_id 0}}])
@@ -51,6 +52,7 @@
                                                 (swap! !results into (tu/root->rows root)))))))
                       (set @!results)))]
             (with-open [watermark (c2/open-watermark node)]
+              (t/is (= #{0 1} (.knownChunks metadata-mgr)))
               (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
                     "only needs to scan chunk 1")
 

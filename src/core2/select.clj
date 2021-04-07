@@ -49,10 +49,9 @@
   (compare->pred compare-pred (->vec-compare comparison-value)))
 
 (defn ->bytes-compare ^core2.select.IVectorCompare [^bytes comparison-value]
-  (let [buf-pointer (ArrowBufPointer.)]
-    (reify IVectorCompare
-      (compareIdx [_ field-vec idx]
-        (.getDataPointer ^ElementAddressableVector field-vec idx buf-pointer)
+  (reify IVectorCompare
+    (compareIdx [_ field-vec idx]
+      (let [buf-pointer (.getDataPointer ^ElementAddressableVector field-vec idx)]
         (ByteFunctionHelpers/compare (.getBuf buf-pointer) (.getOffset buf-pointer) (+ (.getOffset buf-pointer) (.getLength buf-pointer))
                                      comparison-value 0 (alength comparison-value))))))
 
