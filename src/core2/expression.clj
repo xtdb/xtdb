@@ -27,6 +27,32 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(defn expand-variadics [{:keys [op] :as expr}]
+  (letfn [(expand-l [{:keys [f args]}]
+            (reduce (fn [acc arg]
+                      {:op :call, :f f, :args [acc arg]})
+                    args))
+
+          (expand-r [{:keys [f args]}]
+            (reduce (fn [acc arg]
+                      {:op :call, :f f, :args [arg acc]})
+                    (reverse args)))]
+
+    (or (when (= :call op)
+          (let [{:keys [f args]} expr]
+            (when (> (count args) 2)
+              (cond
+                (contains? '#{+ - * /} f) (expand-l expr)
+                (contains? '#{and or} f) (expand-r expr)
+                (contains? '#{<= < = != > >=} f) (expand-r {:op :call
+                                                            :f 'and
+                                                            :args (for [[x y] (partition 2 1 args)]
+                                                                    {:op :call
+                                                                     :f f
+                                                                     :args [x y]})})))))
+
+        expr)))
+
 (defn form->expr [form]
   (cond
     (or (number? form)
@@ -49,7 +75,8 @@
                                     :then (form->expr then),
                                     :else (form->expr else)}))
 
-                           {:op :call, :f f, :args (mapv form->expr args)}))
+                           (-> {:op :call, :f f, :args (mapv form->expr args)}
+                               expand-variadics)))
 
     :else (throw (IllegalArgumentException. (str "unexpected form: " (pr-str form))))))
 
