@@ -50,19 +50,19 @@
       (catch Throwable e
         (.printStackTrace e)))))
 
-(defmethod expr/codegen [:like Comparable String] [[_ [x] [y]]]
-  [`(boolean (re-find ~(re-pattern (str/replace y #"%" ".*")) ~x))
-   Boolean])
+(defmethod expr/codegen-call [:like Comparable String] [{[{x :code} {y :code}] :args}]
+  {:code `(boolean (re-find ~(re-pattern (str/replace y #"%" ".*")) ~x))
+   :return-type Boolean})
 
-(defmethod expr/codegen [:extract String Date] [[_ [x] [y]]]
-  [`(.get (.atOffset (Instant/ofEpochMilli ~y) ZoneOffset/UTC)
-          ~(case x
-             "YEAR" `ChronoField/YEAR
-             "MONTH" `ChronoField/MONTH_OF_YEAR
-             "DAY" `ChronoField/DAY_OF_MONTH
-             "HOUR" `ChronoField/HOUR_OF_DAY
-             "MINUTE" `ChronoField/MINUTE_OF_HOUR))
-   Long])
+(defmethod expr/codegen-call [:extract String Date] [{[{x :code} {y :code}] :args}]
+  {:code `(.get (.atOffset (Instant/ofEpochMilli ~y) ZoneOffset/UTC)
+                ~(case x
+                   "YEAR" `ChronoField/YEAR
+                   "MONTH" `ChronoField/MONTH_OF_YEAR
+                   "DAY" `ChronoField/DAY_OF_MONTH
+                   "HOUR" `ChronoField/HOUR_OF_DAY
+                   "MINUTE" `ChronoField/MINUTE_OF_HOUR))
+   :return-type Long})
 
 (defn tpch-q1-pricing-summary-report []
   (with-open [scan-cursor (.scan *op-factory* *watermark*
