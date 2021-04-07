@@ -20,8 +20,8 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-;; TPC-H queries without sub-queries: 10, 12, 14
-;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 10)))
+;; TPC-H queries without sub-queries: 12, 14
+;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 12)))
 
 (defn with-tpch-data [scale-factor test-name]
   (fn [f]
@@ -233,4 +233,65 @@
                                           project-cursor
                                           [(group-by/->sum-double-spec "disc_price" "revenue")])]
       (->> (tu/<-cursor group-by-cursor)
+           (into [] (mapcat seq))))))
+
+(defn tpch-q10-returned-item-reporting []
+  (let [orderdate-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
+                                                   (-> .isSet (set! 1))
+                                                   (-> .value (set! (.getTime #inst "1994-01-01")))))
+        returnflag-pred (sel/->str-pred sel/pred= "R")]
+    (with-open [customer (.scan *op-factory* *watermark*
+                                ["c_custkey" "c_name" "c_acctbal" "c_address" "c_phone" "c_comment" "c_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+                orders (.scan *op-factory* *watermark*
+                              ["o_orderkey" "o_orderdate" "o_custkey"]
+                              (meta/matching-chunk-pred "o_orderdate" orderdate-pred
+                                                        (types/->minor-type :timestampmilli))
+                              {"o_orderdate"
+                               (expr/->expression-vector-selector '(and (>= o_orderdate #inst "1993-10-01")
+                                                                        (< o_orderdate #inst "1994-01-01")))}
+                              nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_orderkey" "l_returnflag" "l_extendedprice" "l_discount"]
+                                (meta/matching-chunk-pred "l_returnflag" returnflag-pred
+                                                          (types/->minor-type :varchar))
+                                {"l_returnflag"
+                                 (expr/->expression-vector-selector '(= l_returnflag "R"))}
+                                nil nil)
+                nation (.scan *op-factory* *watermark*
+                              ["n_nationkey" "n_name"]
+                              (constantly true) {}
+                              nil nil)
+
+                orders+customers (.equiJoin *op-factory* customer "c_custkey" orders "o_custkey")
+                lineitem+customers+orders (.equiJoin *op-factory* orders+customers "o_orderkey" lineitem "l_orderkey")
+                nation+lineitem+customers+orders (.equiJoin *op-factory* lineitem+customers+orders "c_nationkey" nation "n_nationkey")
+
+                project-cursor (.project *op-factory* nation+lineitem+customers+orders
+                                         [(project/->identity-projection-spec "c_custkey")
+                                          (project/->identity-projection-spec "c_name")
+                                          (expr/->expression-projection-spec "disc_price"
+                                                                             '(* l_extendedprice (- 1 l_discount)))
+                                          (project/->identity-projection-spec "c_acctbal")
+                                          (project/->identity-projection-spec "c_phone")
+                                          (project/->identity-projection-spec "n_name")
+                                          (project/->identity-projection-spec "c_address")
+                                          (project/->identity-projection-spec "c_comment")])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->group-spec "c_custkey")
+                                           (group-by/->group-spec "c_name")
+                                           (group-by/->sum-double-spec "disc_price" "revenue")
+                                           (group-by/->group-spec "c_acctbal")
+                                           (group-by/->group-spec "c_phone")
+                                           (group-by/->group-spec "n_name")
+                                           (group-by/->group-spec "c_address")
+                                           (group-by/->group-spec "c_comment")])
+                order-by-cursor (.orderBy *op-factory*
+                                          group-by-cursor
+                                          [(order-by/->order-spec "revenue" :desc)])
+                limit-cursor (.slice *op-factory* order-by-cursor nil 20)]
+      (->> (tu/<-cursor limit-cursor)
            (into [] (mapcat seq))))))

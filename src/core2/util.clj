@@ -466,21 +466,15 @@
                   (VectorLoader. root)
                   nil)))
 
+(declare du-copy)
+
 (defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^IntStream idxs ^long size ^ValueVector out-vec]
   (.setInitialCapacity out-vec size)
   (.allocateNew out-vec)
   (.forEach idxs (if (instance? DenseUnionVector in-vec)
                    (reify IntConsumer
                      (accept [_ idx]
-                       (let [in-vec ^DenseUnionVector in-vec
-                             out-idx (.getValueCount out-vec)
-                             type-id (.getTypeId in-vec idx)
-                             offset (write-type-id out-vec (.getValueCount out-vec) type-id)]
-                         (set-value-count out-vec (inc out-idx))
-                         (.copyFrom (.getVectorByType ^DenseUnionVector out-vec type-id)
-                                    (.getOffset in-vec idx)
-                                    offset
-                                    (.getVectorByType in-vec type-id)))))
+                       (du-copy in-vec idx out-vec (.getValueCount out-vec))))
                    (reify IntConsumer
                      (accept [_ idx]
                        (let [out-idx (.getValueCount out-vec)]
