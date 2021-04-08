@@ -109,6 +109,29 @@
   (t/is (= [{:revenue 1193053.2253}]
            (tpch-queries/tpch-q6-forecasting-revenue-change))))
 
+(t/deftest ^:integration test-q7-volume-shipping
+  (t/is (= [{:supp_nation (Text. "FRANCE")
+             :cust_nation (Text. "GERMANY")
+             :l_year 1995
+             :revenue 268068.5774}
+            {:supp_nation (Text. "FRANCE")
+            :cust_nation (Text. "GERMANY")
+            :l_year 1996,
+            :revenue 303862.298}
+            {:supp_nation (Text. "GERMANY")
+             :cust_nation (Text. "FRANCE")
+             :l_year 1995
+             :revenue 621159.4882}
+            {:supp_nation (Text. "GERMANY")
+             :cust_nation(Text. "FRANCE")
+             :l_year 1996,
+             :revenue 379095.88539999997}]
+           (tpch-queries/tpch-q7-volume-shipping))))
+
+#_(t/deftest ^:integration test-q8-national-market-share
+    (t/is (= []
+             (tpch-queries/tpch-q8-national-market-share))))
+
 (t/deftest ^:integration test-q9-product-type-profit-measure
   (t/is (= [{:nation (Text. "ALGERIA") :o_year 1998 :sum_profit 97864.56820000001}
             {:nation (Text. "ALGERIA") :o_year 1997 :sum_profit 368231.6695}

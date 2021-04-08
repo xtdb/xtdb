@@ -23,8 +23,8 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-;; Next queries, no proper sub queries, just nested aggregates: 7, 8
-;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 7)))
+;; Next queries, no proper sub queries, just nested aggregates: 8
+;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 8)))
 
 (defn with-tpch-data [scale-factor test-name]
   (fn [f]
@@ -251,6 +251,88 @@
                                           [(group-by/->sum-double-spec "disc_price" "revenue")])]
       (->> (tu/<-cursor group-by-cursor)
            (into [] (mapcat seq))))))
+
+(defn tpch-q7-volume-shipping []
+  (let [shipdate-pred (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
+                                                   (-> .isSet (set! 1))
+                                                   (-> .value (set! (.getTime #inst "1996-12-31")))))]
+    (with-open [supplier (.scan *op-factory* *watermark*
+                                ["s_suppkey" "s_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_orderkey" "l_extendedprice" "l_discount" "l_suppkey" "l_shipdate"]
+                                (meta/matching-chunk-pred "l_shipdate" shipdate-pred
+                                                          (types/->minor-type :timestampmilli))
+                                {"l_shipdate" (expr/->expression-vector-selector '(and (>= l_shipdate #inst "1995-01-01")
+                                                                                       (<= l_shipdate #inst "1996-12-31")))}
+                                nil nil)
+
+                orders (.scan *op-factory* *watermark*
+                              ["o_orderkey" "o_custkey"]
+                              (constantly true) {}
+                              nil nil)
+
+                customer (.scan *op-factory* *watermark*
+                                ["c_custkey" "c_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+
+                n1 (.scan *op-factory* *watermark*
+                          ["n_name" "n_nationkey"]
+                          (constantly true)
+                          {"n_name" (expr/->expression-vector-selector '(or (= n_name "GERMANY")
+                                                                            (= n_name "FRANCE")))}
+                          nil nil)
+                n1 (.rename *op-factory* n1 {"n_name" "n1_n_name"
+                                             "n_nationkey" "n1_n_nationkey"})
+                n2 (.scan *op-factory* *watermark*
+                          ["n_name" "n_nationkey"]
+                          (constantly true)
+                          {"n_name" (expr/->expression-vector-selector '(or (= n_name "GERMANY")
+                                                                            (= n_name "FRANCE")))}
+                          nil nil)
+                n2 (.rename *op-factory* n2 {"n_name" "n2_n_name"
+                                             "n_nationkey" "n2_n_nationkey"})
+
+                supplier+lineitem (.equiJoin *op-factory* supplier "s_suppkey" lineitem "l_suppkey")
+                orders+supplier+lineitem (.equiJoin *op-factory* supplier+lineitem "l_orderkey" orders "o_orderkey")
+                customer+orders+supplier+lineitem (.equiJoin *op-factory* orders+supplier+lineitem "o_custkey" customer "c_custkey")
+                n1+customer+orders+supplier+lineitem (.equiJoin *op-factory* customer+orders+supplier+lineitem "s_nationkey" n1 "n1_n_nationkey")
+                n2+n1+customer+orders+supplier+lineitem (.equiJoin *op-factory* n1+customer+orders+supplier+lineitem "c_nationkey" n2 "n2_n_nationkey")
+
+                n2+n1+customer+orders+supplier+lineitem (.select *op-factory* n2+n1+customer+orders+supplier+lineitem
+                                                                 (expr/->expression-root-selector '(or (and (= n1_n_name "FRANCE")
+                                                                                                            (= n2_n_name "GERMANY"))
+                                                                                                       (and (= n1_n_name "GERMANY")
+                                                                                                            (= n2_n_name "FRANCE")))))
+
+                rename-cursor (.rename *op-factory* n2+n1+customer+orders+supplier+lineitem
+                                       {"n1_n_name" "supp_nation"
+                                        "n2_n_name" "cust_nation"})
+                project-cursor (.project *op-factory* rename-cursor
+                                         [(project/->identity-projection-spec "supp_nation")
+                                          (project/->identity-projection-spec "cust_nation")
+                                          (expr/->expression-projection-spec "l_year"
+                                                                             '(extract "YEAR" l_shipdate))
+                                          (expr/->expression-projection-spec "volume"
+                                                                             '(* l_extendedprice (- 1 l_discount)))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->group-spec "supp_nation")
+                                           (group-by/->group-spec "cust_nation")
+                                           (group-by/->group-spec "l_year")
+                                           (group-by/->sum-double-spec "volume" "revenue")])
+                order-by-cursor (.orderBy *op-factory*
+                                          group-by-cursor
+                                          [(order-by/->order-spec "supp_nation" :asc)
+                                           (order-by/->order-spec "cust_nation" :asc)
+                                           (order-by/->order-spec "l_year" :asc)])]
+      (->> (tu/<-cursor order-by-cursor)
+           (into [] (mapcat seq))))))
+
+(defn tpch-q8-national-market-share [])
 
 (defn tpch-q9-product-type-profit-measure []
   (with-open [part (.scan *op-factory* *watermark*
