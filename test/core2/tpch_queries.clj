@@ -21,6 +21,7 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
+;; Next queries, no proper sub queries, just nested aggregates: 7, 8, 9, 19
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 2)))
 
 (defn with-tpch-data [scale-factor test-name]
