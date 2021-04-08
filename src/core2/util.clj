@@ -523,7 +523,7 @@
       (ArrowBufPointer. buffer-copy 0 length))
     x))
 
-(defn du-copy [^DenseUnionVector src-vec, src-idx, ^DenseUnionVector dest-vec, dest-idx]
+(defn du-copy [^DenseUnionVector src-vec, ^long src-idx, ^DenseUnionVector dest-vec, ^long dest-idx]
   (let [type-id (.getTypeId src-vec src-idx)
         offset (write-type-id dest-vec dest-idx type-id)]
     (.copyFromSafe (.getVectorByType dest-vec type-id)
