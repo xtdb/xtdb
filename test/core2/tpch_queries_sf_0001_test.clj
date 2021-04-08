@@ -254,3 +254,16 @@
              :c_address (Text. "zLOCP0wh92OtBihgspOGl4")
              :c_comment (Text. "ously final packages haggle blithely after the express deposits. furiou")}]
            (tpch-queries/tpch-q10-returned-item-reporting))))
+
+(t/deftest test-q12-shipping-modes-and-order-priority
+  (t/is (= [{:l_shipmode (Text. "MAIL")
+             :high_line_count 5
+             :low_line_count 5}
+            {:l_shipmode (Text. "SHIP")
+             :high_line_count 5
+             :low_line_count 10}]
+           (tpch-queries/tpch-q12-shipping-modes-and-order-priority))))
+
+#_(t/deftest test-q14-promotion-effect
+    (t/is (= []
+             (tpch-queries/tpch-q14-promotion-effect))))

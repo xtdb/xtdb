@@ -20,8 +20,8 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-;; TPC-H queries without sub-queries: 12, 14
-;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 12)))
+;; TPC-H queries without sub-queries: 14
+;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 14)))
 
 (defn with-tpch-data [scale-factor test-name]
   (fn [f]
@@ -296,6 +296,49 @@
       (->> (tu/<-cursor limit-cursor)
            (into [] (mapcat seq))))))
 
-(defn tpch-q12-shipping-modes-and-order-priority [])
+(defn tpch-q12-shipping-modes-and-order-priority []
+  (let [receiptday-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
+                                                    (-> .isSet (set! 1))
+                                                    (-> .value (set! (.getTime #inst "1995-01-01")))))]
+    (with-open [orders (.scan *op-factory* *watermark*
+                              ["o_orderkey" "o_orderpriority"]
+                              (constantly true) {}
+                              nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_orderkey" "l_shipmode" "l_commitdate" "l_shipdate" "l_receiptdate"]
+                                (meta/matching-chunk-pred "l_receiptdate" receiptday-pred
+                                                          (types/->minor-type :timestampmilli))
+                                {"l_receiptdate" (expr/->expression-vector-selector '(and (>= l_receiptdate #inst "1994-01-01")
+                                                                                          (< l_receiptdate #inst "1995-01-01")))
+                                 "l_shipmode" (expr/->expression-vector-selector '(or (= l_shipmode "MAIL")
+                                                                                      (= l_shipmode "SHIP")))}
+                                nil nil)
+                lineitem (.select *op-factory* lineitem (expr/->expression-root-selector '(and (< l_commitdate l_receiptdate)
+                                                                                               (< l_shipdate l_commitdate))))
+                lineitem+orders (.equiJoin *op-factory* orders "o_orderkey" lineitem "l_orderkey")
+
+                project-cursor (.project *op-factory* lineitem+orders
+                                         [(project/->identity-projection-spec "l_shipmode")
+                                          (expr/->expression-projection-spec "high_line"
+                                                                             '(if (or (= o_orderpriority "1-URGENT")
+                                                                                      (= o_orderpriority "2-HIGH"))
+                                                                                1
+                                                                                0))
+                                          (expr/->expression-projection-spec "low_line"
+                                                                             '(if (and (!= o_orderpriority "1-URGENT")
+                                                                                       (!= o_orderpriority "2-HIGH"))
+                                                                                1
+                                                                                0))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->group-spec "l_shipmode")
+                                           (group-by/->sum-long-spec "high_line" "high_line_count")
+                                           (group-by/->sum-long-spec "low_line" "low_line_count")])
+                order-by-cursor (.orderBy *op-factory*
+                                          group-by-cursor
+                                          [(order-by/->order-spec "l_shipmode" :asc)])]
+      (->> (tu/<-cursor order-by-cursor)
+           (into [] (mapcat seq))))))
 
 (defn tpch-q14-promotion-effect [])

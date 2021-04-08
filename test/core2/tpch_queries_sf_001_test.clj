@@ -271,3 +271,16 @@
              :c_address (Text. "OFz0eedTmPmXk2 3XM9v9Mcp13NVC0PK")
              :c_comment (Text. "tes serve blithely quickly pending foxes. express, quick accounts")}]
            (tpch-queries/tpch-q10-returned-item-reporting))))
+
+(t/deftest ^:integration test-q12-shipping-modes-and-order-priority
+  (t/is (= [{:l_shipmode (Text. "MAIL")
+             :high_line_count 64
+             :low_line_count 86}
+            {:l_shipmode (Text. "SHIP")
+             :high_line_count 61
+             :low_line_count 96}]
+           (tpch-queries/tpch-q12-shipping-modes-and-order-priority))))
+
+#_(t/deftest ^:integration test-q14-promotion-effect
+    (t/is (= []
+             (tpch-queries/tpch-q14-promotion-effect))))
