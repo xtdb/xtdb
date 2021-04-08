@@ -49,7 +49,7 @@
   (doseq [^VectorSchemaRoot root roots
           :let [row-id-vec (.getVector root 0)
                 in-vec (.getVector root 1)
-                out-vec (.getVector out-root (.getField in-vec))]]
+                out-vec (.getVector out-root (.getName in-vec))]]
     (if row-id->repeat-count
       (let [idxs (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec )]
         (util/project-vec in-vec (IntStream/of idxs) (alength idxs) out-vec))

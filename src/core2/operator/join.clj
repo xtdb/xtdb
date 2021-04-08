@@ -7,7 +7,7 @@
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.types.pojo.Schema
+           [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.VectorBatchAppender))
 
 (defn- ->join-schema ^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
@@ -18,7 +18,7 @@
 (defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long out-idx]
   (dotimes [n (util/root-field-count in-root)]
     (let [in-vec (.getVector in-root n)
-          out-vec (.getVector out-root (.getField in-vec))]
+          out-vec (.getVector out-root (.getName in-vec))]
       (if (and (instance? DenseUnionVector in-vec)
                (instance? DenseUnionVector out-vec))
         (util/du-copy in-vec idx out-vec out-idx)
@@ -29,11 +29,11 @@
         row-count (.getRowCount right-root)]
     (dotimes [n (util/root-field-count right-root)]
       (let [^ValueVector right-vec (.getVector right-root n)
-            out-vec (.getVector out-root (.getField right-vec))]
+            out-vec (.getVector out-root (.getName right-vec))]
         (VectorBatchAppender/batchAppend out-vec (into-array ValueVector [right-vec]))))
     (dotimes [n (util/root-field-count left-root)]
       (let [^ValueVector left-vec (.getVector left-root n)
-            out-vec (.getVector out-root (.getField left-vec))]
+            out-vec (.getVector out-root (.getName left-vec))]
         (util/set-value-count out-vec (+ out-idx row-count))
         (if (and (instance? DenseUnionVector left-vec)
                  (instance? DenseUnionVector out-vec))
