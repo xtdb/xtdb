@@ -467,17 +467,17 @@
 (declare du-copy)
 
 (defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^IntStream idxs ^long size ^ValueVector out-vec]
-  (.setInitialCapacity out-vec size)
-  (.allocateNew out-vec)
-  (.forEach idxs (if (instance? DenseUnionVector in-vec)
-                   (reify IntConsumer
+  (if (instance? DenseUnionVector in-vec)
+    (.forEach idxs (reify IntConsumer
                      (accept [_ idx]
-                       (du-copy in-vec idx out-vec (.getValueCount out-vec))))
-                   (reify IntConsumer
-                     (accept [_ idx]
-                       (let [out-idx (.getValueCount out-vec)]
-                         (set-value-count out-vec (inc out-idx))
-                         (.copyFrom out-vec idx out-idx in-vec))))))
+                       (du-copy in-vec idx out-vec (.getValueCount out-vec)))))
+    (do (.setInitialCapacity out-vec size)
+        (.allocateNew out-vec)
+        (.forEach idxs (reify IntConsumer
+                         (accept [_ idx]
+                           (let [out-idx (.getValueCount out-vec)]
+                             (set-value-count out-vec (inc out-idx))
+                             (.copyFrom out-vec idx out-idx in-vec)))))))
   out-vec)
 
 (defn maybe-single-child-dense-union ^org.apache.arrow.vector.ValueVector [^ValueVector v]
