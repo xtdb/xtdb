@@ -96,9 +96,9 @@
 (defn expr-seq [{:keys [op] :as expr}]
   (lazy-seq
    (case op
-     (:literal :variable) [expr]
      :if (cons expr (mapcat (comp expr-seq expr) [:pred :then :else]))
-     :call (cons expr (mapcat expr-seq (:args expr))))))
+     :call (cons expr (mapcat expr-seq (:args expr)))
+     [expr])))
 
 (defn with-tag [sym ^Class tag]
   (-> sym
@@ -432,3 +432,84 @@
               expr-fn (memo-eval expr-code)
               acc (RoaringBitmap.)]
           (expr-fn in-vecs acc (.getValueCount v)))))))
+
+(defn- simplify-and-or-expr [{:keys [f args] :as expr}]
+  (let [args (filterv some? args)]
+    (case (count args)
+      0 {:op :literal, :literal (case f and true, or false)}
+      1 (first args)
+      (-> expr (assoc :args args)))))
+
+(defn- meta-fallback-expr [{:keys [op] :as expr}]
+  (case op
+    :literal nil
+    :variable {:op :metadata-field-present, :field (:variable expr)}
+    :if (let [{:keys [pred then else]} expr]
+          {:op :if,
+           :pred (meta-fallback-expr pred)
+           :then (meta-fallback-expr then)
+           :else (meta-fallback-expr else)})
+    :call (let [{:keys [f args]} expr]
+            (-> {:op :call
+                 :f (if (= f 'or) 'or 'and)
+                 :args (map meta-fallback-expr args)}
+                simplify-and-or-expr))))
+
+(declare meta-expr)
+
+(defn call-meta-expr [{:keys [f args] :as expr}]
+  (letfn [(var-lit-expr [f meta-value field literal]
+            (simplify-and-or-expr
+             {:op :call
+              :f 'or
+              :args (vec (for [field-type (cond
+                                            (instance? Date literal) [Date]
+                                            (number? literal) [Long Double]
+                                            (string? literal) [String]
+                                            (boolean? literal) [Boolean])]
+                           {:op :metadata-var-lit-call,
+                            :f f
+                            :meta-value meta-value
+                            :field-type field-type
+                            :field field,
+                            :literal literal}))}))
+
+          (bool-expr [var-lit-f var-lit-meta-fn
+                      lit-var-f lit-var-meta-fn]
+            (let [[{x-op :op, :as x-arg} {y-op :op, :as y-arg}] args]
+              (case [x-op y-op]
+                [:literal :literal] expr
+                [:variable :literal] (var-lit-expr var-lit-f var-lit-meta-fn
+                                                   (:variable x-arg) (:literal y-arg))
+                [:literal :variable] (var-lit-expr lit-var-f lit-var-meta-fn
+                                                   (:variable y-arg) (:literal x-arg))
+                nil)))]
+
+    (or (case f
+          and (-> {:op :call, :f 'and, :args (map meta-expr args)} simplify-and-or-expr)
+          or (-> {:op :call, :f 'or, :args (map meta-expr args)} simplify-and-or-expr)
+          < (bool-expr '< :min '> :max)
+          <= (bool-expr '<= :min '>= :max)
+          > (bool-expr '> :max '< :min)
+          >= (bool-expr '>= :max '<= :min)
+          = (meta-expr {:op :call,
+                        :f 'and,
+                        :args [{:op :call, :f '<=, :args args}
+                               {:op :call, :f '>=, :args args}]})
+          nil)
+
+        (meta-fallback-expr expr))))
+
+(defn- meta-expr [{:keys [op] :as expr}]
+  (expand-variadics
+   (case op
+     (:literal :variable) nil
+     :if {:op :call
+          :f 'and
+          :args [(meta-fallback-expr (:pred expr))
+                 (-> {:op :call
+                      :f 'or
+                      :args [(meta-expr (:then expr))
+                             (meta-expr (:else expr))]}
+                     simplify-and-or-expr)]}
+     :call (call-meta-expr expr))))
