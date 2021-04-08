@@ -109,6 +109,182 @@
   (t/is (= [{:revenue 1193053.2253}]
            (tpch-queries/tpch-q6-forecasting-revenue-change))))
 
+(t/deftest ^:integration test-q9-product-type-profit-measure
+  (t/is (= [{:nation (Text. "ALGERIA") :o_year 1998 :sum_profit 97864.56820000001}
+            {:nation (Text. "ALGERIA") :o_year 1997 :sum_profit 368231.6695}
+            {:nation (Text. "ALGERIA") :o_year 1996 :sum_profit 196525.80459999997}
+            {:nation (Text. "ALGERIA") :o_year 1995 :sum_profit 341438.6885}
+            {:nation (Text. "ALGERIA") :o_year 1994 :sum_profit 677444.016}
+            {:nation (Text. "ALGERIA") :o_year 1993 :sum_profit 458756.91569999995}
+            {:nation (Text. "ALGERIA") :o_year 1992 :sum_profit 549243.9511}
+            {:nation (Text. "ARGENTINA") :o_year 1998 :sum_profit 80448.76800000001}
+            {:nation (Text. "ARGENTINA") :o_year 1997 :sum_profit 186279.16179999997}
+            {:nation (Text. "ARGENTINA") :o_year 1996 :sum_profit 154041.88220000002}
+            {:nation (Text. "ARGENTINA") :o_year 1995 :sum_profit 113143.3119}
+            {:nation (Text. "ARGENTINA") :o_year 1994 :sum_profit 169680.4239}
+            {:nation (Text. "ARGENTINA") :o_year 1993 :sum_profit 116513.81409999999}
+            {:nation (Text. "ARGENTINA") :o_year 1992 :sum_profit 202404.7608}
+            {:nation (Text. "BRAZIL") :o_year 1998 :sum_profit 75952.5946}
+            {:nation (Text. "BRAZIL") :o_year 1997 :sum_profit 190548.11039999998}
+            {:nation (Text. "BRAZIL") :o_year 1996 :sum_profit 219059.06919999997}
+            {:nation (Text. "BRAZIL") :o_year 1995 :sum_profit 186435.2023}
+            {:nation (Text. "BRAZIL") :o_year 1994 :sum_profit 96835.187}
+            {:nation (Text. "BRAZIL") :o_year 1993 :sum_profit 186365.4109}
+            {:nation (Text. "BRAZIL") :o_year 1992 :sum_profit 152546.44389999998}
+            {:nation (Text. "CANADA") :o_year 1998 :sum_profit 101030.3336}
+            {:nation (Text. "CANADA") :o_year 1997 :sum_profit 101197.34409999999}
+            {:nation (Text. "CANADA") :o_year 1996 :sum_profit 257697.1355}
+            {:nation (Text. "CANADA") :o_year 1995 :sum_profit 91474.88200000001}
+            {:nation (Text. "CANADA") :o_year 1994 :sum_profit 249182.7548}
+            {:nation (Text. "CANADA") :o_year 1993 :sum_profit 185737.83789999998}
+            {:nation (Text. "CANADA") :o_year 1992 :sum_profit 143371.7465}
+            {:nation (Text. "CHINA") :o_year 1998 :sum_profit 508364.5444}
+            {:nation (Text. "CHINA") :o_year 1997 :sum_profit 650235.1646}
+            {:nation (Text. "CHINA") :o_year 1996 :sum_profit 911366.0697999999}
+            {:nation (Text. "CHINA") :o_year 1995 :sum_profit 797268.4075999999}
+            {:nation (Text. "CHINA") :o_year 1994 :sum_profit 529989.3095}
+            {:nation (Text. "CHINA") :o_year 1993 :sum_profit 573864.3972}
+            {:nation (Text. "CHINA") :o_year 1992 :sum_profit 751688.7613}
+            {:nation (Text. "EGYPT") :o_year 1998 :sum_profit 306325.2842}
+            {:nation (Text. "EGYPT") :o_year 1997 :sum_profit 568461.6699}
+            {:nation (Text. "EGYPT") :o_year 1996 :sum_profit 465081.9232}
+            {:nation (Text. "EGYPT") :o_year 1995 :sum_profit 542886.5087}
+            {:nation (Text. "EGYPT") :o_year 1994 :sum_profit 745807.8123}
+            {:nation (Text. "EGYPT") :o_year 1993 :sum_profit 381503.2008}
+            {:nation (Text. "EGYPT") :o_year 1992 :sum_profit 641866.4367}
+            {:nation (Text. "ETHIOPIA") :o_year 1998 :sum_profit 226054.5716}
+            {:nation (Text. "ETHIOPIA") :o_year 1997 :sum_profit 585193.2802}
+            {:nation (Text. "ETHIOPIA") :o_year 1996 :sum_profit 405412.7741}
+            {:nation (Text. "ETHIOPIA") :o_year 1995 :sum_profit 270455.7637}
+            {:nation (Text. "ETHIOPIA") :o_year 1994 :sum_profit 567875.4279}
+            {:nation (Text. "ETHIOPIA") :o_year 1993 :sum_profit 412302.28709999996}
+            {:nation (Text. "ETHIOPIA") :o_year 1992 :sum_profit 551284.5821}
+            {:nation (Text. "FRANCE") :o_year 1998 :sum_profit 135723.405}
+            {:nation (Text. "FRANCE") :o_year 1997 :sum_profit 249664.7578}
+            {:nation (Text. "FRANCE") :o_year 1996 :sum_profit 175882.8934}
+            {:nation (Text. "FRANCE") :o_year 1995 :sum_profit 116394.78659999999}
+            {:nation (Text. "FRANCE") :o_year 1994 :sum_profit 197695.24379999997}
+            {:nation (Text. "FRANCE") :o_year 1993 :sum_profit 231878.6201}
+            {:nation (Text. "FRANCE") :o_year 1992 :sum_profit 199131.20369999998}
+            {:nation (Text. "GERMANY") :o_year 1998 :sum_profit 172741.1024}
+            {:nation (Text. "GERMANY") :o_year 1997 :sum_profit 393833.46599999996}
+            {:nation (Text. "GERMANY") :o_year 1996 :sum_profit 335634.59359999996}
+            {:nation (Text. "GERMANY") :o_year 1995 :sum_profit 378106.0763}
+            {:nation (Text. "GERMANY") :o_year 1994 :sum_profit 250107.6653}
+            {:nation (Text. "GERMANY") :o_year 1993 :sum_profit 327154.9365}
+            {:nation (Text. "GERMANY") :o_year 1992 :sum_profit 387240.08849999995}
+            {:nation (Text. "INDIA") :o_year 1998 :sum_profit 347548.76039999997}
+            {:nation (Text. "INDIA") :o_year 1997 :sum_profit 656797.967}
+            {:nation (Text. "INDIA") :o_year 1996 :sum_profit 522759.3529}
+            {:nation (Text. "INDIA") :o_year 1995 :sum_profit 574428.6693}
+            {:nation (Text. "INDIA") :o_year 1994 :sum_profit 741983.7846}
+            {:nation (Text. "INDIA") :o_year 1993 :sum_profit 729948.5340999999}
+            {:nation (Text. "INDIA") :o_year 1992 :sum_profit 661061.1415}
+            {:nation (Text. "INDONESIA") :o_year 1998 :sum_profit 91791.50959999999}
+            {:nation (Text. "INDONESIA") :o_year 1997 :sum_profit 183956.46130000002}
+            {:nation (Text. "INDONESIA") :o_year 1996 :sum_profit 415234.7848}
+            {:nation (Text. "INDONESIA") :o_year 1995 :sum_profit 427155.38039999997}
+            {:nation (Text. "INDONESIA") :o_year 1994 :sum_profit 286271.2875}
+            {:nation (Text. "INDONESIA") :o_year 1993 :sum_profit 551178.8822999999}
+            {:nation (Text. "INDONESIA") :o_year 1992 :sum_profit 274513.2685}
+            {:nation (Text. "IRAN") :o_year 1998 :sum_profit 47959.821899999995}
+            {:nation (Text. "IRAN") :o_year 1997 :sum_profit 184335.0615}
+            {:nation (Text. "IRAN") :o_year 1996 :sum_profit 223115.2464}
+            {:nation (Text. "IRAN") :o_year 1995 :sum_profit 125339.09270000001}
+            {:nation (Text. "IRAN") :o_year 1994 :sum_profit 117228.31219999999}
+            {:nation (Text. "IRAN") :o_year 1993 :sum_profit 208030.3229}
+            {:nation (Text. "IRAN") :o_year 1992 :sum_profit 161835.5475}
+            {:nation (Text. "IRAQ") :o_year 1998 :sum_profit 161797.4924}
+            {:nation (Text. "IRAQ") :o_year 1997 :sum_profit 224876.5436}
+            {:nation (Text. "IRAQ") :o_year 1996 :sum_profit 145277.89800000002}
+            {:nation (Text. "IRAQ") :o_year 1995 :sum_profit 467955.25049999997}
+            {:nation (Text. "IRAQ") :o_year 1994 :sum_profit 97455.299}
+            {:nation (Text. "IRAQ") :o_year 1993 :sum_profit 114821.644}
+            {:nation (Text. "IRAQ") :o_year 1992 :sum_profit 213307.1574}
+            {:nation (Text. "JAPAN") :o_year 1998 :sum_profit 307594.598}
+            {:nation (Text. "JAPAN") :o_year 1997 :sum_profit 339018.14879999997}
+            {:nation (Text. "JAPAN") :o_year 1996 :sum_profit 649578.3367999999}
+            {:nation (Text. "JAPAN") :o_year 1995 :sum_profit 671644.0911}
+            {:nation (Text. "JAPAN") :o_year 1994 :sum_profit 576266.2386}
+            {:nation (Text. "JAPAN") :o_year 1993 :sum_profit 514190.84369999997}
+            {:nation (Text. "JAPAN") :o_year 1992 :sum_profit 534914.9339}
+            {:nation (Text. "JORDAN") :o_year 1996 :sum_profit 33460.2447}
+            {:nation (Text. "JORDAN") :o_year 1995 :sum_profit 20364.162300000004}
+            {:nation (Text. "JORDAN") :o_year 1994 :sum_profit 15528.608800000002}
+            {:nation (Text. "JORDAN") :o_year 1993 :sum_profit 14640.988899999998}
+            {:nation (Text. "JORDAN") :o_year 1992 :sum_profit 10904.293099999999}
+            {:nation (Text. "KENYA") :o_year 1998 :sum_profit 521926.5198}
+            {:nation (Text. "KENYA") :o_year 1997 :sum_profit 559632.3408}
+            {:nation (Text. "KENYA") :o_year 1996 :sum_profit 772855.7939}
+            {:nation (Text. "KENYA") :o_year 1995 :sum_profit 516452.50669999997}
+            {:nation (Text. "KENYA") :o_year 1994 :sum_profit 543665.8154}
+            {:nation (Text. "KENYA") :o_year 1993 :sum_profit 866924.8754}
+            {:nation (Text. "KENYA") :o_year 1992 :sum_profit 567410.5501999999}
+            {:nation (Text. "MOROCCO") :o_year 1998 :sum_profit 217794.49730000002}
+            {:nation (Text. "MOROCCO") :o_year 1997 :sum_profit 439240.9287}
+            {:nation (Text. "MOROCCO") :o_year 1996 :sum_profit 399969.46799999994}
+            {:nation (Text. "MOROCCO") :o_year 1995 :sum_profit 258131.9398}
+            {:nation (Text. "MOROCCO") :o_year 1994 :sum_profit 386972.14239999995}
+            {:nation (Text. "MOROCCO") :o_year 1993 :sum_profit 145468.0381}
+            {:nation (Text. "MOROCCO") :o_year 1992 :sum_profit 284314.2813}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1998 :sum_profit 518693.2238}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1997 :sum_profit 613873.2960999999}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1996 :sum_profit 936793.5612}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1995 :sum_profit 727204.7718}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1994 :sum_profit 1104618.1807}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1993 :sum_profit 893266.053}
+            {:nation (Text. "MOZAMBIQUE") :o_year 1992 :sum_profit 1062432.0884}
+            {:nation (Text. "PERU") :o_year 1998 :sum_profit 287242.97969999997}
+            {:nation (Text. "PERU") :o_year 1997 :sum_profit 532358.366}
+            {:nation (Text. "PERU") :o_year 1996 :sum_profit 398435.7507}
+            {:nation (Text. "PERU") :o_year 1995 :sum_profit 462031.6251}
+            {:nation (Text. "PERU") :o_year 1994 :sum_profit 304235.4118}
+            {:nation (Text. "PERU") :o_year 1993 :sum_profit 505885.48899999994}
+            {:nation (Text. "PERU") :o_year 1992 :sum_profit 382290.09469999996}
+            {:nation (Text. "ROMANIA") :o_year 1998 :sum_profit 357824.55280000006}
+            {:nation (Text. "ROMANIA") :o_year 1997 :sum_profit 569806.5564}
+            {:nation (Text. "ROMANIA") :o_year 1996 :sum_profit 732001.5568}
+            {:nation (Text. "ROMANIA") :o_year 1995 :sum_profit 408657.1154}
+            {:nation (Text. "ROMANIA") :o_year 1994 :sum_profit 540702.5463}
+            {:nation (Text. "ROMANIA") :o_year 1993 :sum_profit 883158.5056}
+            {:nation (Text. "ROMANIA") :o_year 1992 :sum_profit 505488.9501}
+            {:nation (Text. "RUSSIA") :o_year 1998 :sum_profit 34448.63569999999}
+            {:nation (Text. "RUSSIA") :o_year 1997 :sum_profit 314972.04459999996}
+            {:nation (Text. "RUSSIA") :o_year 1996 :sum_profit 430049.5821}
+            {:nation (Text. "RUSSIA") :o_year 1995 :sum_profit 360538.0586}
+            {:nation (Text. "RUSSIA") :o_year 1994 :sum_profit 301791.0114}
+            {:nation (Text. "RUSSIA") :o_year 1993 :sum_profit 308993.9622}
+            {:nation (Text. "RUSSIA") :o_year 1992 :sum_profit 289868.6564}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1998 :sum_profit 16502.41}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1997 :sum_profit 61830.9556}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1996 :sum_profit 213650.28089999998}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1995 :sum_profit 62668.72499999999}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1994 :sum_profit 94629.15379999999}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1993 :sum_profit 57768.307100000005}
+            {:nation (Text. "SAUDI ARABIA") :o_year 1992 :sum_profit 66520.10930000001}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1998 :sum_profit 80437.6523}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1997 :sum_profit 252509.7351}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1996 :sum_profit 231152.85820000002}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1995 :sum_profit 181310.88079999998}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1994 :sum_profit 239161.20609999998}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1993 :sum_profit 122103.11420000001}
+            {:nation (Text. "UNITED KINGDOM") :o_year 1992 :sum_profit 60882.308000000005}
+            {:nation (Text. "UNITED STATES") :o_year 1998 :sum_profit 440347.66579999996}
+            {:nation (Text. "UNITED STATES") :o_year 1997 :sum_profit 652958.9371}
+            {:nation (Text. "UNITED STATES") :o_year 1996 :sum_profit 1004593.8282}
+            {:nation (Text. "UNITED STATES") :o_year 1995 :sum_profit 860144.1029}
+            {:nation (Text. "UNITED STATES") :o_year 1994 :sum_profit 807797.4876999999}
+            {:nation (Text. "UNITED STATES") :o_year 1993 :sum_profit 736669.4711}
+            {:nation (Text. "UNITED STATES") :o_year 1992 :sum_profit 877851.4103}
+            {:nation (Text. "VIETNAM") :o_year 1998 :sum_profit 358248.0159}
+            {:nation (Text. "VIETNAM") :o_year 1997 :sum_profit 394817.2842}
+            {:nation (Text. "VIETNAM") :o_year 1996 :sum_profit 439390.0836}
+            {:nation (Text. "VIETNAM") :o_year 1995 :sum_profit 418626.6325}
+            {:nation (Text. "VIETNAM") :o_year 1994 :sum_profit 422644.81680000003}
+            {:nation (Text. "VIETNAM") :o_year 1993 :sum_profit 309063.402}
+            {:nation (Text. "VIETNAM") :o_year 1992 :sum_profit 716126.5378}]
+           (tpch-queries/tpch-q9-product-type-profit-measure))))
+
 (t/deftest ^:integration test-q10-returned-item-reporting
   (t/is (= [{:c_custkey (Text. "custkey_679")
              :c_name (Text. "Customer#000000679")

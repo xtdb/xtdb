@@ -13,7 +13,9 @@
             [core2.test-util :as tu]
             [core2.types :as types]
             [core2.util :as util])
-  (:import java.time.Duration
+  (:import [java.time Duration Instant ZoneOffset]
+           java.time.temporal.ChronoField
+           java.util.Date
            org.apache.arrow.vector.holders.NullableTimeStampMilliHolder
            org.apache.arrow.vector.util.Text))
 
@@ -21,7 +23,7 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-;; Next queries, no proper sub queries, just nested aggregates: 7, 8, 9
+;; Next queries, no proper sub queries, just nested aggregates: 7, 8
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 7)))
 
 (defn with-tpch-data [scale-factor test-name]
@@ -49,9 +51,19 @@
       (catch Throwable e
         (.printStackTrace e)))))
 
-(defmethod expr/codegen [:like String String] [[_ [x] [y]]]
-  [`(boolean (re-find ~(re-pattern (str/replace y #"%" ".*")) ~y))
+(defmethod expr/codegen [:like Comparable String] [[_ [x] [y]]]
+  [`(boolean (re-find ~(re-pattern (str/replace y #"%" ".*")) ~x))
    Boolean])
+
+(defmethod expr/codegen [:extract String Date] [[_ [x] [y]]]
+  [`(.get (.atOffset (Instant/ofEpochMilli ~y) ZoneOffset/UTC)
+          ~(case x
+             "YEAR" `ChronoField/YEAR
+             "MONTH" `ChronoField/MONTH_OF_YEAR
+             "DAY" `ChronoField/DAY_OF_MONTH
+             "HOUR" `ChronoField/HOUR_OF_DAY
+             "MINUTE" `ChronoField/MINUTE_OF_HOUR))
+   Long])
 
 (defn tpch-q1-pricing-summary-report []
   (let [shipdate-pred (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
@@ -239,6 +251,64 @@
                                           [(group-by/->sum-double-spec "disc_price" "revenue")])]
       (->> (tu/<-cursor group-by-cursor)
            (into [] (mapcat seq))))))
+
+(defn tpch-q9-product-type-profit-measure []
+  (with-open [part (.scan *op-factory* *watermark*
+                          ["p_partkey" "p_name"]
+                          (constantly true) {"p_name" (expr/->expression-vector-selector '(like p_name "%green%"))}
+                          nil nil)
+
+              supplier (.scan *op-factory* *watermark*
+                              ["s_suppkey" "s_nationkey"]
+                              (constantly true) {}
+                              nil nil)
+              lineitem (.scan *op-factory* *watermark*
+                              ["l_orderkey" "l_extendedprice" "l_discount" "l_suppkey" "l_partkey" "l_quantity"]
+                              (constantly true) {}
+                              nil nil)
+
+              partsupp (.scan *op-factory* *watermark*
+                          ["ps_partkey" "ps_suppkey" "ps_supplycost"]
+                          (constantly true) {}
+                          nil nil)
+
+              orders (.scan *op-factory* *watermark*
+                            ["o_orderkey" "o_orderdate"]
+                            (constantly true) {}
+                            nil nil)
+
+              nation (.scan *op-factory* *watermark*
+                            ["n_name" "n_nationkey"]
+                            (constantly true) {}
+                            nil nil)
+
+              lineitem+part (.equiJoin *op-factory* part "p_partkey" lineitem "l_partkey")
+              supplier+lineitem+part (.equiJoin *op-factory* lineitem+part "l_suppkey" supplier "s_suppkey")
+              partsupp+supplier+lineitem+part (.equiJoin *op-factory* supplier+lineitem+part "l_suppkey" partsupp "ps_suppkey")
+              partsupp+supplier+lineitem+part (.select *op-factory* partsupp+supplier+lineitem+part (expr/->expression-root-selector '(= ps_partkey l_partkey)))
+              orders+partsupp+supplier+lineitem+part (.equiJoin *op-factory* partsupp+supplier+lineitem+part "l_orderkey" orders "o_orderkey")
+              nation+orders+partsupp+supplier+lineitem+part (.equiJoin *op-factory* orders+partsupp+supplier+lineitem+part "s_nationkey" nation "n_nationkey")
+
+              project-cursor (.project *op-factory* nation+orders+partsupp+supplier+lineitem+part
+                                       [(project/->identity-projection-spec "n_name")
+                                        (expr/->expression-projection-spec "o_year"
+                                                                           '(extract "YEAR" o_orderdate))
+                                        (expr/->expression-projection-spec "amount"
+                                                                           '(- (* l_extendedprice (- 1 l_discount))
+                                                                               (* ps_supplycost l_quantity)))])
+              rename-cursor (.rename *op-factory* project-cursor {"n_name" "nation"})
+
+              group-by-cursor (.groupBy *op-factory*
+                                        rename-cursor
+                                        [(group-by/->group-spec "nation")
+                                         (group-by/->group-spec "o_year")
+                                         (group-by/->sum-double-spec "amount" "sum_profit")])
+              order-by-cursor (.orderBy *op-factory*
+                                        group-by-cursor
+                                        [(order-by/->order-spec "nation" :asc)
+                                         (order-by/->order-spec "o_year" :desc)])]
+    (->> (tu/<-cursor order-by-cursor)
+         (into [] (mapcat seq)))))
 
 (defn tpch-q10-returned-item-reporting []
   (let [orderdate-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
