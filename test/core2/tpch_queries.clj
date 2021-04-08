@@ -311,17 +311,17 @@
 
               supplier+lineitem (.equiJoin *op-factory* supplier "s_suppkey" lineitem "l_suppkey")
               orders+supplier+lineitem (.equiJoin *op-factory* supplier+lineitem "l_orderkey" orders "o_orderkey")
-              customer+orders+supplier+lineitem (.equiJoin *op-factory* orders+supplier+lineitem "o_custkey" customer "c_custkey")
-              n1+customer+orders+supplier+lineitem (.equiJoin *op-factory* customer+orders+supplier+lineitem "s_nationkey" n1 "n1_n_nationkey")
-              n2+n1+customer+orders+supplier+lineitem (.equiJoin *op-factory* n1+customer+orders+supplier+lineitem "c_nationkey" n2 "n2_n_nationkey")
+              n1+orders+supplier+lineitem (.equiJoin *op-factory* orders+supplier+lineitem "s_nationkey" n1 "n1_n_nationkey")
+              customer+n1+orders+supplier+lineitem (.equiJoin *op-factory* n1+orders+supplier+lineitem "o_custkey" customer "c_custkey")
+              n2+customer+n1+orders+supplier+lineitem (.equiJoin *op-factory* customer+n1+orders+supplier+lineitem "c_nationkey" n2 "n2_n_nationkey")
 
-              n2+n1+customer+orders+supplier+lineitem (.select *op-factory* n2+n1+customer+orders+supplier+lineitem
+              n2+customer+n1+orders+supplier+lineitem (.select *op-factory* n2+customer+n1+orders+supplier+lineitem
                                                                (expr/->expression-root-selector '(or (and (= n1_n_name "FRANCE")
                                                                                                           (= n2_n_name "GERMANY"))
                                                                                                      (and (= n1_n_name "GERMANY")
                                                                                                           (= n2_n_name "FRANCE")))))
 
-              rename-cursor (.rename *op-factory* n2+n1+customer+orders+supplier+lineitem
+              rename-cursor (.rename *op-factory* n2+customer+n1+orders+supplier+lineitem
                                      {"n1_n_name" "supp_nation"
                                       "n2_n_name" "cust_nation"})
               project-cursor (.project *op-factory* rename-cursor
