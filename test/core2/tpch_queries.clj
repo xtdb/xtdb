@@ -21,8 +21,8 @@
 (def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
-;; Next queries, no proper sub queries, just nested aggregates: 7, 8, 9, 19
-;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 2)))
+;; Next queries, no proper sub queries, just nested aggregates: 7, 8, 9
+;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 7)))
 
 (defn with-tpch-data [scale-factor test-name]
   (fn [f]
@@ -378,4 +378,58 @@
                 project-cursor (.project *op-factory* group-by-cursor [(expr/->expression-projection-spec "promo_revenue"
                                                                                                           '(* 100 (/ promo_revenue revenue)))])]
       (->> (tu/<-cursor project-cursor)
+           (into [] (mapcat seq))))))
+
+(defn tpch-q19-discounted-revenue []
+  (let [shipinstruct-pred (sel/->str-pred sel/pred= "DELIVER IN PERSON")]
+    (with-open [part (.scan *op-factory* *watermark*
+                            ["p_partkey" "p_brand" "p_container" "p_size"]
+                            (constantly true) {}
+                            nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_partkey" "l_extendedprice" "l_discount" "l_quantity" "l_shipmode" "l_shipinstruct"]
+                                (meta/matching-chunk-pred "l_shipinstruct" shipinstruct-pred
+                                                          (types/->minor-type :varchar))
+                                {"l_shipmode" (expr/->expression-vector-selector '(or (= l_shipmode "AIR")
+                                                                                      (= l_shipmode "AIR REG")))
+                                 "l_shipinstruct" (expr/->expression-vector-selector '(= l_shipinstruct "DELIVER IN PERSON"))}
+                                nil nil)
+
+                lineitem+parts (.equiJoin *op-factory* part "p_partkey" lineitem "l_partkey")
+                select-cursor (.select *op-factory* lineitem+parts (expr/->expression-root-selector '(or (and (= p_brand "Brand#12")
+                                                                                                              (and (or (= p_container "SM CASE")
+                                                                                                                       (or (= p_container "SM BOX")
+                                                                                                                           (or (= p_container "SM PACK")
+                                                                                                                               (= p_container "SM PKG"))))
+                                                                                                                   (and (>= l_quantity 1)
+                                                                                                                        (and (<= l_quantity (+ 1 10))
+                                                                                                                             (and (>= p_size 1)
+                                                                                                                                  (<= p_size 5))))))
+                                                                                                         (or (and (= p_brand "Brand#23")
+                                                                                                                  (and (or (= p_container "MED CASE")
+                                                                                                                           (or (= p_container "MED BOX")
+                                                                                                                               (or (= p_container "MED PACK")
+                                                                                                                                   (= p_container "MED PKG"))))
+                                                                                                                       (and (>= l_quantity 10)
+                                                                                                                            (and (<= l_quantity (+ 10 10))
+                                                                                                                                 (and (>= p_size 1)
+                                                                                                                                      (<= p_size 10))))))
+                                                                                                             (and (= p_brand "Brand#34")
+                                                                                                                  (and (or (= p_container "LG CASE")
+                                                                                                                           (or (= p_container "LG BOX")
+                                                                                                                               (or (= p_container "LG PACK")
+                                                                                                                                   (= p_container "LG PKG"))))
+                                                                                                                       (and (>= l_quantity 20)
+                                                                                                                            (and (<= l_quantity (+ 20 10))
+                                                                                                                                 (and (>= p_size 1)
+                                                                                                                                      (<= p_size 15))))))))))
+
+                project-cursor (.project *op-factory* select-cursor
+                                         [(expr/->expression-projection-spec "disc_price"
+                                                                             '(* l_extendedprice (- 1 l_discount)))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->sum-double-spec "disc_price" "revenue")])]
+      (->> (tu/<-cursor group-by-cursor)
            (into [] (mapcat seq))))))

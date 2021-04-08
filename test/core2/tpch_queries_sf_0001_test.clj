@@ -267,3 +267,7 @@
 (t/deftest test-q14-promotion-effect
   (t/is (= [{:promo_revenue 15.23021261159725}]
            (tpch-queries/tpch-q14-promotion-effect))))
+
+(t/deftest test-q19-discounted-revenue
+  (t/is (= []
+           (tpch-queries/tpch-q19-discounted-revenue))))

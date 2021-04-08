@@ -284,3 +284,7 @@
 (t/deftest ^:integration test-q14-promotion-effect
   (t/is (= [{:promo_revenue 15.486545812284072}]
            (tpch-queries/tpch-q14-promotion-effect))))
+
+(t/deftest ^:integration test-q19-discounted-revenue
+  (t/is (= [{:revenue 22923.028}]
+           (tpch-queries/tpch-q19-discounted-revenue))))
