@@ -1,5 +1,6 @@
 (ns core2.tpch-queries
   (:require [clojure.test :as t]
+            [clojure.string :as str]
             [core2.core :as c2]
             [core2.expression :as expr]
             [core2.metadata :as meta]
@@ -47,6 +48,10 @@
               (f)))))
       (catch Throwable e
         (.printStackTrace e)))))
+
+(defmethod expr/codegen [:like String String] [[_ [x] [y]]]
+  [`(boolean (re-find ~(re-pattern (str/replace y #"%" ".*")) ~y))
+   Boolean])
 
 (defn tpch-q1-pricing-summary-report []
   (let [shipdate-pred (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
@@ -341,4 +346,36 @@
       (->> (tu/<-cursor order-by-cursor)
            (into [] (mapcat seq))))))
 
-(defn tpch-q14-promotion-effect [])
+(defn tpch-q14-promotion-effect []
+  (let [shipdate-pred (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
+                                                  (-> .isSet (set! 1))
+                                                  (-> .value (set! (.getTime #inst "1995-10-01")))))]
+    (with-open [part (.scan *op-factory* *watermark*
+                            ["p_partkey" "p_type"]
+                            (constantly true) {}
+                            nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_partkey" "l_extendedprice" "l_discount" "l_shipdate"]
+                                (meta/matching-chunk-pred "l_shipdate" shipdate-pred
+                                                          (types/->minor-type :timestampmilli))
+                                {"l_shipdate" (expr/->expression-vector-selector '(and (>= l_shipdate #inst "1995-09-01")
+                                                                                       (< l_shipdate #inst "1995-10-01")))}
+                                nil nil)
+                lineitem+parts (.equiJoin *op-factory* part "p_partkey" lineitem "l_partkey")
+
+                project-cursor (.project *op-factory* lineitem+parts
+                                         [(expr/->expression-projection-spec "promo_disc_price"
+                                                                             '(if (like p_type "PROMO%")
+                                                                                (* l_extendedprice (- 1 l_discount))
+                                                                                0.0))
+                                          (expr/->expression-projection-spec "disc_price"
+                                                                             '(* l_extendedprice (- 1 l_discount)))])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->sum-double-spec "promo_disc_price" "promo_revenue")
+                                           (group-by/->sum-double-spec "disc_price" "revenue")])
+                project-cursor (.project *op-factory* group-by-cursor [(expr/->expression-projection-spec "promo_revenue"
+                                                                                                          '(* 100 (/ promo_revenue revenue)))])]
+      (->> (tu/<-cursor project-cursor)
+           (into [] (mapcat seq))))))

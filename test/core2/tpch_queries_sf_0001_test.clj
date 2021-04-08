@@ -264,6 +264,6 @@
              :low_line_count 10}]
            (tpch-queries/tpch-q12-shipping-modes-and-order-priority))))
 
-#_(t/deftest test-q14-promotion-effect
-    (t/is (= []
-             (tpch-queries/tpch-q14-promotion-effect))))
+(t/deftest test-q14-promotion-effect
+  (t/is (= [{:promo_revenue 15.23021261159725}]
+           (tpch-queries/tpch-q14-promotion-effect))))
