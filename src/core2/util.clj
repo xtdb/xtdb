@@ -218,26 +218,24 @@
       :else
       (.setValueCount v value-count))))
 
-(defn- write-type-id-no-realloc ^long [^DenseUnionVector duv, ^long idx ^long type-id]
+;; NOTE: also updates value count of the vector.
+(defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
   ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
   (let [sub-vec (.getVectorByType duv type-id)
         offset (.getValueCount sub-vec)
-        offset-buffer (.getOffsetBuffer duv)]
+        offset-buffer (.getOffsetBuffer duv)
+        offset-idx (* DenseUnionVector/OFFSET_WIDTH idx)
+        offset-buffer (if (>= offset-idx (.capacity offset-buffer))
+                        (do (.reAlloc duv)
+                            (.getOffsetBuffer duv))
+                        offset-buffer)]
     (.setTypeId duv idx type-id)
-    (.setInt offset-buffer (* DenseUnionVector/OFFSET_WIDTH idx) offset)
+    (.setInt offset-buffer offset-idx offset)
     (set-value-count sub-vec (inc offset))
 
     (set-value-count duv (inc idx))
 
     offset))
-
-;; NOTE: also updates value count of the vector.
-(defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
-  (try
-    (write-type-id-no-realloc duv idx type-id)
-    (catch IndexOutOfBoundsException _retry
-      (.reAlloc duv)
-      (write-type-id-no-realloc duv idx type-id))))
 
 (def ^:private ^Field vector-schema-root-row-count-field
   (doto (.getDeclaredField VectorSchemaRoot "rowCount")
