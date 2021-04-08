@@ -96,9 +96,10 @@
   (t/is (= []
            (tpch-queries/tpch-q7-volume-shipping))))
 
-#_(t/deftest test-q8-national-market-share
-    (t/is (= []
-             (tpch-queries/tpch-q8-national-market-share))))
+(t/deftest test-q8-national-market-share
+  (t/is (= [{:o_year 1995, :mkt_share 0.0}
+            {:o_year 1996, :mkt_share 0.0}]
+           (tpch-queries/tpch-q8-national-market-share))))
 
 (t/deftest test-q9-product-type-profit-measure
   (t/is (= [{:nation (Text. "ARGENTINA") :o_year 1998 :sum_profit 17779.069700000007}

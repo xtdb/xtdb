@@ -332,7 +332,96 @@
       (->> (tu/<-cursor order-by-cursor)
            (into [] (mapcat seq))))))
 
-(defn tpch-q8-national-market-share [])
+(defn tpch-q8-national-market-share []
+  (let [orderdate-pred (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
+                                                    (-> .isSet (set! 1))
+                                                    (-> .value (set! (.getTime #inst "1996-12-31")))))
+        region-name-pred (sel/->str-pred sel/pred= "AMERICA")
+        part-type-pred (sel/->str-pred sel/pred= "ECONOMY ANODIZED STEEL")]
+    (with-open [part (.scan *op-factory* *watermark*
+                            ["p_partkey" "p_type"]
+                            (meta/matching-chunk-pred "p_type" part-type-pred
+                                                      (types/->minor-type :varchar))
+                            {"p_type" (expr/->expression-vector-selector '(= p_type "ECONOMY ANODIZED STEEL"))}
+                            nil nil)
+                supplier (.scan *op-factory* *watermark*
+                                ["s_suppkey" "s_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+                lineitem (.scan *op-factory* *watermark*
+                                ["l_orderkey" "l_extendedprice" "l_discount" "l_suppkey" "l_partkey"]
+                                (constantly true) {}
+                                nil nil)
+
+                orders (.scan *op-factory* *watermark*
+                              ["o_orderkey" "o_custkey" "o_orderdate"]
+                              (meta/matching-chunk-pred "o_orderdate" orderdate-pred
+                                                        (types/->minor-type :timestampmilli))
+                              {"o_orderdate" (expr/->expression-vector-selector '(and (>= o_orderdate #inst "1995-01-01")
+                                                                                      (<= o_orderdate #inst "1996-12-31")))}
+                              nil nil)
+
+                customer (.scan *op-factory* *watermark*
+                                ["c_custkey" "c_nationkey"]
+                                (constantly true) {}
+                                nil nil)
+
+                n1 (.scan *op-factory* *watermark*
+                          ["n_name" "n_nationkey" "n_regionkey"]
+                          (constantly true) {}
+                          nil nil)
+                n1 (.rename *op-factory* n1 {"n_name" "n1_n_name"
+                                             "n_nationkey" "n1_n_nationkey"
+                                             "n_regionkey" "n1_n_regionkey"})
+                n2 (.scan *op-factory* *watermark*
+                          ["n_name" "n_nationkey"]
+                          (constantly true) {}
+                          nil nil)
+                n2 (.rename *op-factory* n2 {"n_name" "n2_n_name"
+                                             "n_nationkey" "n2_n_nationkey"})
+
+                region (.scan *op-factory* *watermark*
+                              ["r_regionkey" "r_name"]
+                              (meta/matching-chunk-pred "r_name" region-name-pred
+                                                        (types/->minor-type :varchar))
+                              {"r_name" (expr/->expression-vector-selector '(= r_name "AMERICA"))}
+                              nil nil)
+
+                part+lineitem (.equiJoin *op-factory* part "p_partkey" lineitem "l_partkey")
+                supplier+part+lineitem (.equiJoin *op-factory* part+lineitem "l_suppkey" supplier "s_suppkey")
+                orders+supplier+part+lineitem (.equiJoin *op-factory* supplier+part+lineitem "l_orderkey" orders "o_orderkey")
+                customer+orders+supplier+part+lineitem (.equiJoin *op-factory* orders+supplier+part+lineitem "o_custkey" customer "c_custkey")
+                region+n1 (.equiJoin *op-factory* region "r_regionkey" n1 "n1_n_regionkey")
+                region+n1+customer+orders+supplier+part+lineitem (.equiJoin *op-factory* customer+orders+supplier+part+lineitem "c_nationkey" region+n1 "n1_n_nationkey")
+                n2+region+n1+customer+orders+supplier+part+lineitem (.equiJoin *op-factory* region+n1+customer+orders+supplier+part+lineitem "s_nationkey" n2 "n2_n_nationkey")
+
+                rename-cursor (.rename *op-factory* n2+region+n1+customer+orders+supplier+part+lineitem
+                                       {"n2_n_name" "nation"})
+                project-cursor (.project *op-factory* rename-cursor
+                                         [(expr/->expression-projection-spec "o_year"
+                                                                             '(extract "YEAR" o_orderdate))
+                                          (expr/->expression-projection-spec "brazil_volume"
+                                                                             '(if (= nation "BRAZIL")
+                                                                                (* l_extendedprice (- 1 l_discount))
+                                                                                0.0))
+                                          (expr/->expression-projection-spec "volume"
+                                                                             '(* l_extendedprice (- 1 l_discount)))
+                                          (project/->identity-projection-spec "nation")])
+
+                group-by-cursor (.groupBy *op-factory*
+                                          project-cursor
+                                          [(group-by/->group-spec "o_year")
+                                           (group-by/->sum-double-spec "brazil_volume" "brazil_revenue")
+                                           (group-by/->sum-double-spec "volume" "revenue")])
+                project-cursor (.project *op-factory* group-by-cursor
+                                         [(project/->identity-projection-spec "o_year")
+                                          (expr/->expression-projection-spec "mkt_share"
+                                                                             '(/ brazil_revenue revenue))])
+                order-by-cursor (.orderBy *op-factory*
+                                          project-cursor
+                                          [(order-by/->order-spec "o_year" :asc)])]
+      (->> (tu/<-cursor order-by-cursor)
+           (into [] (mapcat seq))))))
 
 (defn tpch-q9-product-type-profit-measure []
   (with-open [part (.scan *op-factory* *watermark*
