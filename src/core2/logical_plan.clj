@@ -85,6 +85,10 @@
                           :left ::ra-expression
                           :right ::ra-expression))
 
+(s/def ::fixpoint (s/cat :op #{:μ :mu :fixpoint}
+                         :mu-variable ::named
+                         :union-of-expressions ::ra-expression))
+
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
                              :project ::project
