@@ -3,15 +3,12 @@
             [clojure.string :as str]
             [core2.core :as c2]
             [core2.expression :as expr]
-            [core2.metadata :as meta]
             [core2.operator :as op]
             [core2.operator.group-by :as group-by]
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
-            [core2.select :as sel]
-            [core2.tpch :as tpch]
             [core2.test-util :as tu]
-            [core2.types :as types]
+            [core2.tpch :as tpch]
             [core2.util :as util])
   (:import [java.time Duration Instant ZoneOffset]
            java.time.temporal.ChronoField
@@ -30,7 +27,6 @@
     (try
       (let [node-dir (util/->path (str "target/" test-name))]
         (util/delete-dir node-dir)
-
 
         (with-open [node (c2/->local-node node-dir)
                     tx-producer (c2/->local-tx-producer node-dir)]
@@ -68,11 +64,7 @@
   (with-open [scan-cursor (.scan *op-factory* *watermark*
                                  ["l_returnflag" "l_linestatus" "l_shipdate"
                                   "l_quantity" "l_extendedprice" "l_discount" "l_tax"]
-                                 (meta/matching-chunk-pred "l_shipdate"
-                                                           (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
-                                                                                        (-> .isSet (set! 1))
-                                                                                        (-> .value (set! (.getTime #inst "1998-09-02")))))
-                                                           (types/->minor-type :timestampmilli))
+                                 (expr/->metadata-selector '(<= l_shipdate #inst "1998-09-02"))
                                  {"l_shipdate"
                                   (expr/->expression-vector-selector '(<= l_shipdate #inst "1998-09-02"))}
                                  nil nil)
@@ -111,28 +103,19 @@
 (defn tpch-q3-shipping-priority []
   (with-open [customer (.scan *op-factory* *watermark*
                               ["c_custkey" "c_mktsegment"]
-                              (meta/matching-chunk-pred "c_mktsegment" (sel/->str-pred sel/pred= "BUILDING")
-                                                        (types/->minor-type :varchar))
+                              (expr/->metadata-selector '(= c_mktsegment "BUILDING"))
                               {"c_mktsegment"
                                (expr/->expression-vector-selector '(= c_mktsegment "BUILDING"))}
                               nil nil)
               orders (.scan *op-factory* *watermark*
                             ["o_orderkey" "o_orderdate" "o_custkey" "o_shippriority"]
-                            (meta/matching-chunk-pred "o_orderdate"
-                                                      (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
-                                                                                  (-> .isSet (set! 1))
-                                                                                  (-> .value (set! (.getTime #inst "1995-03-15")))))
-                                                      (types/->minor-type :timestampmilli))
+                            (expr/->metadata-selector '(< o_orderdate #inst "1995-03-15"))
                             {"o_orderdate"
                              (expr/->expression-vector-selector '(< o_orderdate #inst "1995-03-15"))}
                             nil nil)
               lineitem (.scan *op-factory* *watermark*
                               ["l_orderkey" "l_shipdate" "l_extendedprice" "l_discount"]
-                              (meta/matching-chunk-pred "l_shipdate"
-                                                        (sel/->vec-pred sel/pred> (doto (NullableTimeStampMilliHolder.)
-                                                                                    (-> .isSet (set! 1))
-                                                                                    (-> .value (set! (.getTime #inst "1995-03-15")))))
-                                                        (types/->minor-type :timestampmilli))
+                              (expr/->metadata-selector '(> l_shipdate #inst "1995-03-15"))
                               {"l_shipdate"
                                (expr/->expression-vector-selector '(> l_shipdate #inst "1995-03-15"))}
                               nil nil)
@@ -168,17 +151,8 @@
                               nil nil)
               orders (.scan *op-factory* *watermark*
                             ["o_orderkey" "o_custkey" "o_orderdate"]
-                            (every-pred
-                             (meta/matching-chunk-pred "o_orderdate"
-                                                       (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                    (-> .isSet (set! 1))
-                                                                                    (-> .value (set! (.getTime #inst "1994-01-01")))))
-                                                       (types/->minor-type :timestampmilli))
-                             (meta/matching-chunk-pred "o_orderdate"
-                                                       (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
-                                                                                   (-> .isSet (set! 1))
-                                                                                   (-> .value (set! (.getTime #inst "1995-01-01")))))
-                                                       (types/->minor-type :timestampmilli)))
+                            (expr/->metadata-selector '(and (>= o_orderdate #inst "1994-01-01")
+                                                            (< o_orderdate #inst "1995-01-01")))
                             {"o_orderdate"
                              (expr/->expression-vector-selector '(and (>= o_orderdate #inst "1994-01-01")
                                                                       (< o_orderdate #inst "1995-01-01")))}
@@ -198,8 +172,7 @@
                             nil nil)
               region (.scan *op-factory* *watermark*
                             ["r_name" "r_regionkey"]
-                            (meta/matching-chunk-pred "r_name" (sel/->str-pred sel/pred= "ASIA")
-                                                      (types/->minor-type :varchar))
+                            (expr/->metadata-selector '(= r_name "ASIA"))
                             {"r_name" (expr/->expression-vector-selector '(= r_name "ASIA"))}
                             nil nil)
 
@@ -232,17 +205,11 @@
 (defn tpch-q6-forecasting-revenue-change []
   (with-open [lineitem (.scan *op-factory* *watermark*
                               ["l_shipdate" "l_extendedprice" "l_discount" "l_quantity"]
-                              (every-pred
-                               (meta/matching-chunk-pred "l_shipdate"
-                                                         (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                      (-> .isSet (set! 1))
-                                                                                      (-> .value (set! (.getTime #inst "1994-01-01")))))
-                                                         (types/->minor-type :timestampmilli))
-                               (meta/matching-chunk-pred "l_shipdate"
-                                                         (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
-                                                                                     (-> .isSet (set! 1))
-                                                                                     (-> .value (set! (.getTime #inst "1995-01-01")))))
-                                                         (types/->minor-type :timestampmilli)))
+                              (expr/->metadata-selector '(and (>= l_shipdate #inst "1994-01-01")
+                                                              (< l_shipdate #inst "1995-01-01")
+                                                              (>= l_discount 0.05)
+                                                              (<= l_discount 0.07)
+                                                              (< l_quantity 24.0)))
                               {"l_shipdate" (expr/->expression-vector-selector '(and (>= l_shipdate #inst "1994-01-01")
                                                                                      (< l_shipdate #inst "1995-01-01")))
                                "l_discount" (expr/->expression-vector-selector '(and (>= l_discount 0.05)
@@ -267,17 +234,8 @@
                               nil nil)
               lineitem (.scan *op-factory* *watermark*
                               ["l_orderkey" "l_extendedprice" "l_discount" "l_suppkey" "l_shipdate"]
-                              (every-pred
-                               (meta/matching-chunk-pred "l_shipdate"
-                                                         (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                      (-> .isSet (set! 1))
-                                                                                      (-> .value (set! (.getTime #inst "1995-01-01")))))
-                                                         (types/->minor-type :timestampmilli))
-                               (meta/matching-chunk-pred "l_shipdate"
-                                                         (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
-                                                                                      (-> .isSet (set! 1))
-                                                                                      (-> .value (set! (.getTime #inst "1996-12-31")))))
-                                                         (types/->minor-type :timestampmilli)))
+                              (expr/->metadata-selector '(and (>= l_shipdate #inst "1995-01-01")
+                                                              (<= l_shipdate #inst "1996-12-31")))
                               {"l_shipdate" (expr/->expression-vector-selector '(and (>= l_shipdate #inst "1995-01-01")
                                                                                      (<= l_shipdate #inst "1996-12-31")))}
                               nil nil)
@@ -349,9 +307,7 @@
 (defn tpch-q8-national-market-share []
   (with-open [part (.scan *op-factory* *watermark*
                           ["p_partkey" "p_type"]
-                          (meta/matching-chunk-pred "p_type"
-                                                    (sel/->str-pred sel/pred= "ECONOMY ANODIZED STEEL")
-                                                    (types/->minor-type :varchar))
+                          (expr/->metadata-selector '(= p_type "ECONOMY ANODIZED STEEL"))
                           {"p_type" (expr/->expression-vector-selector '(= p_type "ECONOMY ANODIZED STEEL"))}
                           nil nil)
               supplier (.scan *op-factory* *watermark*
@@ -365,15 +321,8 @@
 
               orders (.scan *op-factory* *watermark*
                             ["o_orderkey" "o_custkey" "o_orderdate"]
-                            (meta/matching-chunk-pred "o_orderdate"
-                                                      (every-pred
-                                                       (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                    (-> .isSet (set! 1))
-                                                                                    (-> .value (set! (.getTime #inst "1995-01-01")))))
-                                                       (sel/->vec-pred sel/pred<= (doto (NullableTimeStampMilliHolder.)
-                                                                                    (-> .isSet (set! 1))
-                                                                                    (-> .value (set! (.getTime #inst "1996-12-31"))))))
-                                                      (types/->minor-type :timestampmilli))
+                            (expr/->metadata-selector '(and (>= o_orderdate #inst "1995-01-01")
+                                                            (<= o_orderdate #inst "1996-12-31")))
                             {"o_orderdate" (expr/->expression-vector-selector '(and (>= o_orderdate #inst "1995-01-01")
                                                                                     (<= o_orderdate #inst "1996-12-31")))}
                             nil nil)
@@ -399,9 +348,7 @@
 
               region (.scan *op-factory* *watermark*
                             ["r_regionkey" "r_name"]
-                            (meta/matching-chunk-pred "r_name"
-                                                      (sel/->str-pred sel/pred= "AMERICA")
-                                                      (types/->minor-type :varchar))
+                            (expr/->metadata-selector '(= r_name "AMERICA"))
                             {"r_name" (expr/->expression-vector-selector '(= r_name "AMERICA"))}
                             nil nil)
 
@@ -506,26 +453,15 @@
                               nil nil)
               orders (.scan *op-factory* *watermark*
                             ["o_orderkey" "o_orderdate" "o_custkey"]
-                            (every-pred
-                             (meta/matching-chunk-pred "o_orderdate"
-                                                       (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                   (-> .isSet (set! 1))
-                                                                                   (-> .value (set! (.getTime #inst "1993-10-01")))))
-                                                       (types/->minor-type :timestampmilli))
-                             (meta/matching-chunk-pred "o_orderdate"
-                                                       (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
-                                                                                   (-> .isSet (set! 1))
-                                                                                   (-> .value (set! (.getTime #inst "1994-01-01")))))
-                                                       (types/->minor-type :timestampmilli)))
+                            (expr/->metadata-selector '(and (>= o_orderdate #inst "1993-10-01")
+                                                            (< o_orderdate #inst "1994-01-01")))
                             {"o_orderdate"
                              (expr/->expression-vector-selector '(and (>= o_orderdate #inst "1993-10-01")
                                                                       (< o_orderdate #inst "1994-01-01")))}
                             nil nil)
               lineitem (.scan *op-factory* *watermark*
                               ["l_orderkey" "l_returnflag" "l_extendedprice" "l_discount"]
-                              (meta/matching-chunk-pred "l_returnflag"
-                                                        (sel/->str-pred sel/pred= "R")
-                                                        (types/->minor-type :varchar))
+                              (expr/->metadata-selector '(= l_returnflag "R"))
                               {"l_returnflag"
                                (expr/->expression-vector-selector '(= l_returnflag "R"))}
                               nil nil)
@@ -573,17 +509,10 @@
                             nil nil)
               lineitem (.scan *op-factory* *watermark*
                               ["l_orderkey" "l_shipmode" "l_commitdate" "l_shipdate" "l_receiptdate"]
-                              (every-pred
-                               (meta/matching-chunk-pred "l_receiptdate"
-                                                         (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                      (-> .isSet (set! 1))
-                                                                                      (-> .value (set! (.getTime #inst "1994-01-01")))))
-                                                         (types/->minor-type :timestampmilli))
-                               (meta/matching-chunk-pred "l_receiptdate"
-                                                         (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
-                                                                                     (-> .isSet (set! 1))
-                                                                                     (-> .value (set! (.getTime #inst "1995-01-01")))))
-                                                         (types/->minor-type :timestampmilli)))
+                              (expr/->metadata-selector '(and (>= l_receiptdate #inst "1994-01-01")
+                                                              (< l_receiptdate #inst "1995-01-01")
+                                                              (or (= l_shipmode "MAIL")
+                                                                  (= l_shipmode "SHIP"))))
                               {"l_receiptdate" (expr/->expression-vector-selector '(and (>= l_receiptdate #inst "1994-01-01")
                                                                                         (< l_receiptdate #inst "1995-01-01")))
                                "l_shipmode" (expr/->expression-vector-selector '(or (= l_shipmode "MAIL")
@@ -654,17 +583,8 @@
                           nil nil)
               lineitem (.scan *op-factory* *watermark*
                               ["l_partkey" "l_extendedprice" "l_discount" "l_shipdate"]
-                              (every-pred
-                               (meta/matching-chunk-pred "l_shipdate"
-                                                         (sel/->vec-pred sel/pred>= (doto (NullableTimeStampMilliHolder.)
-                                                                                      (-> .isSet (set! 1))
-                                                                                      (-> .value (set! (.getTime #inst "1995-09-01")))))
-                                                         (types/->minor-type :timestampmilli))
-                               (meta/matching-chunk-pred "l_shipdate"
-                                                         (sel/->vec-pred sel/pred< (doto (NullableTimeStampMilliHolder.)
-                                                                                     (-> .isSet (set! 1))
-                                                                                     (-> .value (set! (.getTime #inst "1995-10-01")))))
-                                                         (types/->minor-type :timestampmilli)))
+                              (expr/->metadata-selector '(and (>= l_shipdate #inst "1995-09-01")
+                                                              (< l_shipdate #inst "1995-10-01")))
                               {"l_shipdate" (expr/->expression-vector-selector '(and (>= l_shipdate #inst "1995-09-01")
                                                                                      (< l_shipdate #inst "1995-10-01")))}
                               nil nil)
@@ -694,9 +614,9 @@
                           nil nil)
               lineitem (.scan *op-factory* *watermark*
                               ["l_partkey" "l_extendedprice" "l_discount" "l_quantity" "l_shipmode" "l_shipinstruct"]
-                              (meta/matching-chunk-pred "l_shipinstruct"
-                                                        (sel/->str-pred sel/pred= "DELIVER IN PERSON")
-                                                        (types/->minor-type :varchar))
+                              (expr/->metadata-selector '(and (or (= l_shipmode "AIR")
+                                                                  (= l_shipmode "AIR REG"))
+                                                              (= l_shipinstruct "DELIVER IN PERSON")))
                               {"l_shipmode" (expr/->expression-vector-selector '(or (= l_shipmode "AIR")
                                                                                     (= l_shipmode "AIR REG")))
                                "l_shipinstruct" (expr/->expression-vector-selector '(= l_shipinstruct "DELIVER IN PERSON"))}

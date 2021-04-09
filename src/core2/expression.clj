@@ -21,8 +21,6 @@
 
 ;; Add tests for things beyond numbers.
 
-;; Figure out how to use this for metadata.
-
 ;; Example of other built-in ops needed are things related to strings,
 ;; dates, casts and temporal intervals.
 
