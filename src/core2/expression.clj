@@ -1,5 +1,6 @@
 (ns core2.expression
-  (:require core2.operator.project
+  (:require [core2.metadata :as meta]
+            core2.operator.project
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
@@ -9,7 +10,7 @@
            java.util.Date
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.types.Types$MinorType
+           [org.apache.arrow.vector.types Types Types$MinorType]
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -82,7 +83,7 @@
 
 (defn postwalk-expr [f {:keys [op] :as expr}]
   (case op
-    (:literal :variable) (f expr)
+    (:literal :variable :metadata-field-present :metadata-var-lit-call) (f expr)
     :if (let [{:keys [pred then else]} expr]
           (f {:op :if
               :pred (postwalk-expr f pred)
@@ -143,6 +144,12 @@
                                  Boolean/TYPE Boolean})
 
 (def ^:private idx-sym (gensym "idx"))
+
+(def ^:private metadata-root-sym (gensym "metadata-root"))
+
+(def ^:private metadata-vec-syms
+  {:min (gensym "min-vec")
+   :max (gensym "max-vec")})
 
 (defn- widen-numeric-types [type-x type-y]
   (when (and (.isAssignableFrom Number type-x)
@@ -513,3 +520,51 @@
                              (meta-expr (:else expr))]}
                      simplify-and-or-expr)]}
      :call (call-meta-expr expr))))
+
+(defmethod codegen-expr :metadata-field-present [{:keys [field]} _]
+  {:code `(meta/field-present? ~metadata-root-sym ~(str field))
+   :return-type Boolean})
+
+(defmethod codegen-expr :metadata-var-lit-call [{:keys [f meta-value field literal field-type]} opts]
+  (let [vl-sym (gensym 'vl)
+        vec-sym (get metadata-vec-syms meta-value)
+        arrow-type (types/->arrow-type field-type)]
+    {:code `(boolean
+             (let [duv-idx# (meta/field-idx ~metadata-root-sym
+                                            ~(str field)
+                                            ~(str field)
+                                            ~(symbol (.getName Types$MinorType)
+                                                     (str (Types/getMinorTypeForArrowType arrow-type))))]
+
+               (when-not (neg? (long duv-idx#))
+                 (let [~idx-sym (.getOffset ~vec-sym duv-idx#)
+
+                       ~(-> vec-sym (with-tag (arrow-type->vector-type arrow-type)))
+                       (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
+                   (when-let [~vl-sym ~(:code (codegen-expr {:op :variable, :variable vec-sym}
+                                                            {:var->type {vec-sym field-type}}))]
+                     ~(:code (codegen-expr {:op :call
+                                            :f f
+                                            :args [{:code (list (type->cast field-type) vl-sym),
+                                                    :return-type field-type}
+                                                   (codegen-expr {:op :literal, :literal literal} nil)]}
+                                           opts)))))))
+     :return-type Boolean}))
+
+(defn meta-expr->code [expr]
+  `(fn [~(-> metadata-root-sym (with-tag VectorSchemaRoot))]
+     (let [~(-> (:min metadata-vec-syms) (with-tag DenseUnionVector))
+           (.getVector ~metadata-root-sym "min")
+
+           ~(-> (:max metadata-vec-syms) (with-tag DenseUnionVector))
+           (.getVector ~metadata-root-sym "max")]
+       ~(:code (postwalk-expr #(codegen-expr % {}) expr)))))
+
+(def memo-meta-expr->code
+  (memoize meta-expr->code))
+
+(defn ->metadata-selector [form]
+  (-> (form->expr form)
+      (meta-expr)
+      (memo-meta-expr->code)
+      (memo-eval)))

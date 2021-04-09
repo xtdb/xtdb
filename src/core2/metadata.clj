@@ -140,6 +140,10 @@
       -1
       (.first idx-bitmap))))
 
+(defn field-present? [^VectorSchemaRoot metadata-root field-name]
+  ;; TODO
+  true)
+
 (defn- read-max-value [^VectorSchemaRoot metadata-root, ^long idx, ^ValueHolder out-holder]
   (t/read-duv-value (.getVector metadata-root "max") idx out-holder))
 
