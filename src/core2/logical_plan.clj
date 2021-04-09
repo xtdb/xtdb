@@ -25,6 +25,10 @@
                         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
                         :relation ::ra-expression))
 
+(s/def ::map (s/cat :op #{:χ :chi :map}
+                    :columns (s/coll-of ::column-expression :min-count 1)
+                    :relation ::ra-expression))
+
 (s/def ::select (s/cat :op #{:σ :sigma :select}
                        :predicate ::expression
                        :relation ::ra-expression))
@@ -63,15 +67,28 @@
                            :left ::ra-expression
                            :right ::ra-expression))
 
+(s/def ::join-type (s/? (s/or :equi-join (s/and (s/tuple #{:=} ::column ::column) ::expression)
+                              :theta-join ::expression)))
+
 (s/def ::join (s/cat :op #{:⋈ :join}
-                     :join-type (s/? (s/or :equi-join (s/and (s/tuple #{:=} ::column ::column) ::expression)
-                                           :theta-join ::expression))
+                     :join-type ::join-type
                      :left ::ra-expression
                      :right ::ra-expression))
+
+(s/def ::semi-join (s/cat :op #{:⋉ :semi-join}
+                          :join-type ::join-type
+                          :left ::ra-expression
+                          :right ::ra-expression))
+
+(s/def ::anti-join (s/cat :op #{:▷ :anti-join}
+                          :join-type ::join-type
+                          :left ::ra-expression
+                          :right ::ra-expression))
 
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
                              :project ::project
+                             :map ::map
                              :select ::select
                              :rename ::rename
                              :order-by ::order-by
@@ -81,7 +98,9 @@
                              :union ::union
                              :difference ::difference
                              :cross-join ::cross-join
-                             :join ::join))
+                             :join ::join
+                             :semi-join ::semi-join
+                             :anti-join ::anti-join))
 
 (s/def ::logical-plan ::ra-expression)
 
