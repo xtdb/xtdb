@@ -104,7 +104,8 @@
                              :cross-join ::cross-join
                              :join ::join
                              :semi-join ::semi-join
-                             :anti-join ::anti-join))
+                             :anti-join ::anti-join
+                             :fixpoint ::fixpoint))
 
 (s/def ::logical-plan ::ra-expression)
 
