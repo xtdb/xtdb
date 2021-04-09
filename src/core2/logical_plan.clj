@@ -86,7 +86,7 @@
                           :right ::ra-expression))
 
 (s/def ::fixpoint (s/cat :op #{:μ :mu :fixpoint}
-                         :mu-variable ::named
+                         :mu-variable ::relation
                          :union-of-expressions ::ra-expression))
 
 (s/def ::ra-expression (s/or :relation ::relation
