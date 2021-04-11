@@ -84,7 +84,10 @@
 
 (t/deftest test-query
   (let [valid-time (Date.)
-        submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]])]
+        submitted-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"} valid-time]
+                                           [:crux.tx/put {:crux.db/id :a :foo 1}]
+                                           [:crux.tx/put {:crux.db/id :b :foo 1}]
+                                           [:crux.tx/put {:crux.db/id :c :bar 2}]])]
     (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
     (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
@@ -120,7 +123,22 @@
                                          :where [[e :name "Ivan"]]
                                          :full-results? true})]
           (t/is (= '([{:crux.db/id :ivan, :name "Ivan"}])
-                   (iterator-seq res))))))))
+                   (iterator-seq res)))))
+
+      (t/testing "concurrent streaming queries"
+        (with-open [q1 (api/open-q db '{:find [e]
+                                        :where [[e :crux.db/id]]})
+                    q2 (api/open-q db '{:find [e]
+                                        :where [[e :foo]]})]
+          (let [qq1 (iterator-seq q1)
+                qq2 (iterator-seq q2)]
+            (t/is (= '([[:a] [:a]] [[:b] [:b]] [[:c] :crux.test/nil] [[:ivan] :crux.test/nil])
+                     (doall (for [i (range 10)
+                                  :let [v1 (nth qq1 i :crux.test/nil)
+                                        v2 (nth qq2 i :crux.test/nil)]
+                                  :while (or (not= v1 :crux.test/nil)
+                                             (not= v2 :crux.test/nil))]
+                              [v1 v2]))))))))))
 
 (t/deftest test-history
   (t/testing "transaction"
