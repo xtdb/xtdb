@@ -1,14 +1,13 @@
 (ns core2.align-test
   (:require [clojure.test :as t]
             [core2.align :as align]
-            [core2.select :as sel]
             [core2.test-util :as tu]
             [core2.types :as ty]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.expression :as expr])
   (:import java.util.List
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.holders.NullableBigIntHolder
            org.apache.arrow.vector.util.Text))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -69,15 +68,9 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [row-ids (doto (align/->row-id-bitmap (sel/select age-vec (sel/->dense-union-pred
-                                                                    (sel/->vec-pred sel/pred<= (doto (NullableBigIntHolder.)
-                                                                                                 (-> .isSet (set! 1))
-                                                                                                 (-> .value (set! 30))))
-                                                                    bigint-type-id))
+    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-vector-selector '(<= age 30)) age-vec)
                                                age-row-id-vec)
-                    (.and (align/->row-id-bitmap (sel/select name-vec (sel/->dense-union-pred
-                                                                       (sel/->str-pred sel/pred<= "Frank")
-                                                                       varchar-type-id))
+                    (.and (align/->row-id-bitmap (.select (expr/->expression-vector-selector '(<= name "Frank")) name-vec)
                                                  name-row-id-vec)))
           roots [name-root age-root]]
       (with-open [out-root (VectorSchemaRoot/create (align/align-schemas [(.getSchema name-root) (.getSchema age-root)])

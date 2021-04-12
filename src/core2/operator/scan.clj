@@ -3,7 +3,6 @@
             [core2.indexer :as idx]
             [core2.metadata :as meta]
             [core2.temporal :as temporal]
-            [core2.select :as sel]
             core2.tx
             [core2.types :as t]
             [core2.util :as util])
@@ -11,8 +10,9 @@
            core2.buffer_pool.BufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
+           core2.select.IVectorSelector
            [core2.temporal ITemporalManager TemporalRoots]
-           [core2.tx TransactionInstant Watermark]
+           core2.tx.Watermark
            core2.util.IChunkCursor
            [java.util HashMap LinkedList List Map Queue]
            java.util.function.Consumer
@@ -33,11 +33,6 @@
                                            (accept [_ root]
                                              (.put in-roots col-name root))))))
         in-roots))))
-
-(defn- ->row-id-bitmap ^org.roaringbitmap.longlong.Roaring64Bitmap [^VectorSchemaRoot root vec-pred]
-  (-> (when vec-pred
-        (sel/select (.getVector root 1) vec-pred))
-      (align/->row-id-bitmap (.getVector root t/row-id-field))))
 
 (defn- roaring64-and
   (^org.roaringbitmap.longlong.Roaring64Bitmap [] (Roaring64Bitmap.))
@@ -75,9 +70,13 @@
         res))))
 
 (defn- align-roots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots ^VectorSchemaRoot out-root]
-  (let [row-id-bitmaps (for [col-name col-names
-                             :when (not (temporal/temporal-column? col-name))]
-                         (->row-id-bitmap (.get in-roots col-name) (.get col-preds col-name)))
+  (let [row-id-bitmaps (for [^String col-name col-names
+                             :when (not (temporal/temporal-column? col-name))
+                             :let [^IVectorSelector vec-pred (.get col-preds col-name)
+                                   ^VectorSchemaRoot in-root (.get in-roots col-name)]]
+                         (align/->row-id-bitmap (when vec-pred
+                                                  (.select vec-pred (.getVector in-root col-name)))
+                                                (.getVector in-root t/row-id-field)))
         row-id-bitmap (reduce roaring64-and row-id-bitmaps)
         temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range row-id-bitmap)
         temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range row-id-bitmap)
@@ -95,7 +94,8 @@
                       (.get in-roots col-name)))
             temporal-row-id-bitmaps (for [col-name col-names
                                           :when (temporal/temporal-column? col-name)]
-                                      (->row-id-bitmap (.get ^Map (.roots temporal-roots) col-name) (.get col-preds col-name)))
+                                      (.select ^IVectorSelector (.get col-preds col-name)
+                                               (.get ^Map (.roots temporal-roots) col-name)))
             row-id-bitmap (reduce roaring64-and
                                   row-id-bitmap
                                   temporal-row-id-bitmaps)

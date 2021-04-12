@@ -1,16 +1,14 @@
 (ns core2.operator-test
   (:require [clojure.test :as t]
             [core2.core :as c2]
-            [core2.operator :as op]
-            [core2.select :as sel]
-            [core2.util :as util]
-            [core2.test-util :as tu]
+            [core2.expression :as expr]
             [core2.metadata :as meta]
-            [core2.types :as ty])
-  (:import java.util.function.Consumer
-           core2.metadata.IMetadataManager
-           org.apache.arrow.vector.types.Types$MinorType
-           [org.apache.arrow.vector.util Text]))
+            [core2.operator :as op]
+            [core2.test-util :as tu]
+            [core2.util :as util])
+  (:import core2.metadata.IMetadataManager
+           java.util.function.Consumer
+           org.apache.arrow.vector.util.Text))
 
 (t/deftest test-find-gt-ivan
   (let [node-dir (doto (util/->path "target/test-find-gt-ivan")
@@ -35,15 +33,14 @@
 
         (tu/finish-chunk node)
 
-        (let [ivan-pred (sel/->str-pred sel/pred> "Ivan")
-              metadata-pred (meta/matching-chunk-pred "name" ivan-pred Types$MinorType/VARCHAR)
-              op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)]
-
+        (let [op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)
+              metadata-pred (expr/->metadata-selector '(> name "Ivan"))]
           (letfn [(query-ivan [watermark]
                     (let [!results (atom [])]
                       (with-open [chunk-scanner (.scan op-factory watermark
-                                                       ["name"] metadata-pred
-                                                       {"name" (sel/->dense-union-pred ivan-pred (ty/arrow-type->type-id (.getType Types$MinorType/VARCHAR)))}
+                                                       ["name"]
+                                                       metadata-pred
+                                                       {"name" (expr/->expression-vector-selector '(> name "Ivan"))}
                                                        nil
                                                        nil)]
                         (while (.tryAdvance chunk-scanner
