@@ -74,8 +74,8 @@
                                                match?)]
                                    (when match?
                                      (util/copy-tuple in-root n out-root (.getRowCount out-root))
-                                     (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root)))))))))
-                         (set! (.out-root this) in-root))))
+                                     (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root))))))
+                               (set! (.out-root this) out-root)))))))
       (do
         (.accept c out-root)
         true)
