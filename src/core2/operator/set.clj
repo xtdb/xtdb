@@ -1,9 +1,9 @@
 (ns core2.operator.set
   (:require [core2.util :as util])
   (:import core2.ICursor
-           java.nio.ByteBuffer
            [java.util ArrayList List Set HashSet]
            java.util.function.Consumer
+           org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot))
@@ -35,13 +35,22 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
+(defn- copy-set-key [^BufferAllocator allocator ^List k]
+  (dotimes [n (.size k)]
+    (let [x (.get k n)]
+      (.set k n (util/maybe-copy-pointer allocator x))))
+  k)
+
+(defn- release-set-key [k]
+  (doseq [x k
+          :when (instance? ArrowBufPointer x)]
+    (util/try-close (.getBuf ^ArrowBufPointer x)))
+  k)
+
 (defn- ->set-key [^VectorSchemaRoot root ^long idx]
   (let [acc (ArrayList. (util/root-field-count root))]
     (dotimes [m (util/root-field-count root)]
-      (let [v (.getObject (.getVector root m) idx)]
-        (.add acc (if (bytes? v)
-                    (ByteBuffer/wrap v)
-                    v))))
+      (.add acc (util/pointer-or-object (.getVector root m) idx)))
     acc))
 
 (deftype IntersectionCursor [^BufferAllocator allocator
@@ -64,7 +73,9 @@
                                (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
                                (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
                              (dotimes [n (.getRowCount in-root)]
-                               (.add intersection-set (->set-key in-root n)))))))
+                               (let [k (->set-key in-root n)]
+                                 (when-not (.contains intersection-set k)
+                                   (.add intersection-set (copy-set-key k)))))))))
 
     (if (.tryAdvance left-cursor
                      (reify Consumer
@@ -90,6 +101,8 @@
       false))
 
   (close [_]
+    (doseq [k intersection-set]
+      (release-set-key k))
     (.clear intersection-set)
     (util/try-close out-root)
     (util/try-close left-cursor)
