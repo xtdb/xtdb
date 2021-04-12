@@ -122,3 +122,37 @@
                   difference-cursor (set-op/->difference-cursor tu/*allocator* left-cursor right-cursor)]
 
         (t/is (= [#{{:a 10} {:a 15}}] (mapv set (tu/<-cursor difference-cursor))))))))
+
+(t/deftest test-distinct
+  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
+        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+
+    (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
+                                       [[{:a 12 :b 10}, {:a 0 :b 15}]
+                                        [{:a 100 :b 15} {:a 0 :b 15}]
+                                        [{:a 100 :b 15}]
+                                        [{:a 10 :b 15} {:a 10 :b 15}]])
+                distinct-cursor (set-op/->distinct-cursor tu/*allocator* in-cursor)]
+
+        (t/is (= [#{{:a 12, :b 10} {:a 0, :b 15}}
+                  #{{:a 100, :b 15}}
+                  #{{:a 10, :b 15}}]
+                 (mapv set (tu/<-cursor distinct-cursor)))))
+
+
+    (t/testing "already distinct"
+      (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
+                                         [[{:a 12 :b 10}, {:a 0 :b 15}]
+                                          [{:a 100 :b 15}]])
+                  distinct-cursor (set-op/->distinct-cursor tu/*allocator* in-cursor)]
+
+        (t/is (= [#{{:a 12, :b 10} {:a 0, :b 15}}
+                  #{{:a 100, :b 15}}]
+                 (mapv set (tu/<-cursor distinct-cursor))))))
+
+    (t/testing "empty input and output"
+      (with-open [in-cursor (tu/->cursor (Schema. [a-field])
+                                          [])
+                  distinct-cursor (set-op/->distinct-cursor tu/*allocator* in-cursor)]
+
+        (t/is (empty? (tu/<-cursor distinct-cursor)))))))

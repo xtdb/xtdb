@@ -113,6 +113,49 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
+(deftype DistinctCursor [^BufferAllocator allocator
+                         ^ICursor in-cursor
+                         ^Set seen-set
+                         ^:unsynchronized-mutable ^VectorSchemaRoot out-root
+                         ^:unsynchronized-mutable ^Schema schema]
+  ICursor
+  (tryAdvance [this c]
+    (when out-root
+      (.close out-root)
+      (set! (.out-root this) nil))
+
+    (while (and (nil? out-root)
+                (.tryAdvance in-cursor
+                             (reify Consumer
+                               (accept [_ in-root]
+                                 (let [^VectorSchemaRoot in-root in-root]
+                                   (when (pos? (.getRowCount in-root))
+                                     (if (nil? (.schema this))
+                                       (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                                       (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
+                                     (let [out-root (VectorSchemaRoot/create (.getSchema in-root) allocator)]
+                                       (dotimes [n (.getRowCount in-root)]
+                                         (let [k (->set-key in-root n)]
+                                           (when-not (.contains seen-set k)
+                                             (.add seen-set (copy-set-key allocator k))
+                                             (util/copy-tuple in-root n out-root (.getRowCount out-root))
+                                             (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root))))))
+                                       (when (pos? (.getRowCount out-root))
+                                         (set! (.out-root this) out-root))))))))))
+
+    (if out-root
+      (do
+        (.accept c out-root)
+        true)
+      false))
+
+  (close [_]
+    (doseq [k seen-set]
+      (release-set-key k))
+    (.clear seen-set)
+    (util/try-close out-root)
+    (util/try-close in-cursor)))
+
 (defn ->union-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (UnionCursor. allocator left-cursor right-cursor nil))
 
@@ -121,3 +164,6 @@
 
 (defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil nil false))
+
+(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
+  (DistinctCursor. allocator in-cursor (HashSet.) nil nil))

@@ -62,7 +62,9 @@
 
   (^core2.ICursor difference [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
 
-  (^core2.ICursor intersection [^core2.ICursor leftCursor ^core2.ICursor rightCursor]))
+  (^core2.ICursor intersection [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
+
+  (^core2.ICursor distinct [^core2.ICursor inCursor]))
 
 (defn ->operator-factory
   ^core2.operator.IOperatorFactory
@@ -113,4 +115,7 @@
       (set-op/->difference-cursor left-cursor right-cursor))
 
     (intersection [_ left-cursor right-cursor]
-      (set-op/->intersection-cursor left-cursor) right-cursor)))
+      (set-op/->intersection-cursor left-cursor right-cursor))
+
+    (distinct [_ in-cursor]
+      (set-op/->intersection-cursor in-cursor))))
