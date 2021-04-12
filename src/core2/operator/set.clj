@@ -171,7 +171,7 @@
   (^core2.ICursor createCursor []))
 
 (definterface IFixpointCursorFactory
-  (^core2.ICursor createCursor [^core2.operator.set.ICursorFactory fixpoint-cursor-factory]))
+  (^core2.ICursor createCursor [^core2.operator.set.ICursorFactory cursor-factory]))
 
 (deftype FixpointCursor [^BufferAllocator allocator
                          ^IFixpointCursorFactory fixpoint-cursor-factory

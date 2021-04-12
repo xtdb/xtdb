@@ -171,7 +171,7 @@
     (with-open [factorial-cursor (set-op/->fixpoint-cursor
                                   tu/*allocator*
                                   (reify core2.operator.set.IFixpointCursorFactory
-                                    (createCursor [_ fixpoint-cursor-factory]
+                                    (createCursor [_ cursor-factory]
                                       (set-op/->union-cursor
                                        tu/*allocator*
                                        (tu/->cursor (Schema. [a-field b-field])
@@ -180,7 +180,7 @@
                                         tu/*allocator*
                                         (project/->project-cursor
                                          tu/*allocator*
-                                         (.createCursor fixpoint-cursor-factory)
+                                         (.createCursor cursor-factory)
                                          [(reify ProjectionSpec
                                             (project [_ in-root allocator]
                                               (let [^BigIntVector a-vec (.getVector in-root a-field)
