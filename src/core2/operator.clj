@@ -36,6 +36,16 @@
                             ^core2.ICursor rightCursor
                             ^String rightColName])
 
+  (^core2.ICursor semiEquiJoin [^core2.ICursor leftCursor
+                                ^String leftColName
+                                ^core2.ICursor rightCursor
+                                ^String rightColName])
+
+  (^core2.ICursor antiEquiJoin [^core2.ICursor leftCursor
+                                ^String leftColName
+                                ^core2.ICursor rightCursor
+                                ^String rightColName])
+
   (^core2.ICursor crossJoin [^core2.ICursor leftCursor
                              ^core2.ICursor rightCursor])
 
@@ -70,6 +80,12 @@
 
     (equiJoin [_ left-cursor left-column-name right-cursor right-column-name]
       (join/->equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
+
+    (semiEquiJoin [_ left-cursor left-column-name right-cursor right-column-name]
+      (join/->semi-equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
+
+    (antiEquiJoin [_ left-cursor left-column-name right-cursor right-column-name]
+      (join/->anti-equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
 
     (crossJoin [_ left-cursor right-cursor]
       (join/->cross-join-cursor allocator left-cursor right-cursor))
