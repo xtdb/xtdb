@@ -531,3 +531,12 @@
                    offset
                    (.getVectorByType src-vec type-id))
     nil))
+
+(defn copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long out-idx]
+  (dotimes [n (root-field-count in-root)]
+    (let [in-vec (.getVector in-root n)
+          out-vec (.getVector out-root (.getName in-vec))]
+      (if (and (instance? DenseUnionVector in-vec)
+               (instance? DenseUnionVector out-vec))
+        (du-copy in-vec idx out-vec out-idx)
+        (.copyFromSafe out-vec idx out-idx in-vec)))))

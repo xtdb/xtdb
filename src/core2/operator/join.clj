@@ -15,15 +15,6 @@
     (assert (apply distinct? fields))
     (Schema. fields)))
 
-(defn- copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long out-idx]
-  (dotimes [n (util/root-field-count in-root)]
-    (let [in-vec (.getVector in-root n)
-          out-vec (.getVector out-root (.getName in-vec))]
-      (if (and (instance? DenseUnionVector in-vec)
-               (instance? DenseUnionVector out-vec))
-        (util/du-copy in-vec idx out-vec out-idx)
-        (.copyFromSafe out-vec idx out-idx in-vec)))))
-
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
         row-count (.getRowCount right-root)]
@@ -151,13 +142,13 @@
                                match?)]
                   (if match?
                     (do (when-not semi-join?
-                          (copy-tuple build-root build-idx out-root out-idx))
-                        (copy-tuple probe-root probe-idx out-root out-idx)
+                          (util/copy-tuple build-root build-idx out-root out-idx))
+                        (util/copy-tuple probe-root probe-idx out-root out-idx)
                         (recur (inc n) (inc out-idx)))
                     (recur (inc n) out-idx))))))
           (when anti-join?
             (let [out-idx (.getRowCount out-root)]
-              (copy-tuple probe-root probe-idx out-root out-idx)
+              (util/copy-tuple probe-root probe-idx out-root out-idx)
               (util/set-vector-schema-root-row-count out-root (inc out-idx))))))
       out-root)))
 

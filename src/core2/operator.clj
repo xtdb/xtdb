@@ -7,6 +7,7 @@
             [core2.operator.scan :as scan]
             [core2.operator.select :as select]
             [core2.operator.slice :as slice]
+            [core2.operator.set :as set-op]
             core2.metadata
             core2.temporal)
   (:import core2.buffer_pool.BufferPool
@@ -55,7 +56,13 @@
   (^core2.ICursor groupBy [^core2.ICursor inCursor
                            ^java.util.List #_<AggregateSpec> aggregateSpecs])
 
-  (^core2.ICursor slice [^core2.ICursor inCursor, ^Long offset, ^Long limit]))
+  (^core2.ICursor slice [^core2.ICursor inCursor, ^Long offset, ^Long limit])
+
+  (^core2.ICursor union [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
+
+  (^core2.ICursor difference [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
+
+  (^core2.ICursor intersection [^core2.ICursor leftCursor ^core2.ICursor rightCursor]))
 
 (defn ->operator-factory
   ^core2.operator.IOperatorFactory
@@ -97,4 +104,13 @@
       (order-by/->order-by-cursor allocator in-cursor order-specs))
 
     (slice [_ in-cursor offset limit]
-      (slice/->slice-cursor in-cursor offset limit))))
+      (slice/->slice-cursor in-cursor offset limit))
+
+    (union [_ left-cursor right-cursor]
+      (set-op/->union-cursor left-cursor right-cursor))
+
+    (difference [_ left-cursor right-cursor]
+      (set-op/->difference-cursor left-cursor right-cursor))
+
+    (intersection [_ left-cursor right-cursor]
+      (set-op/->intersection-cursor left-cursor) right-cursor)))
