@@ -189,11 +189,11 @@
             (with-open [in-cursor (.createCursor fixpoint-cursor-factory
                                                  (reify ICursorFactory
                                                    (createCursor [_]
-                                                     (let [!out (atom true)]
+                                                     (let [!cursor-done? (atom false)]
                                                        (reify ICursor
                                                          (tryAdvance [_ c]
-                                                           (if (and @!out (pos? fixpoint-size))
-                                                             (do (reset! !out false)
+                                                           (if (and (not @!cursor-done?) (pos? fixpoint-size))
+                                                             (do (reset! !cursor-done? true)
                                                                  (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this) 0 fixpoint-size)]
                                                                    (.accept c out-root))
                                                                  true)
