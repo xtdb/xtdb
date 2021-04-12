@@ -25,10 +25,6 @@
                         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
                         :relation ::ra-expression))
 
-(s/def ::map (s/cat :op #{:χ :chi :map}
-                    :columns (s/coll-of ::column-expression :min-count 1)
-                    :relation ::ra-expression))
-
 (s/def ::select (s/cat :op #{:σ :sigma :select}
                        :predicate ::expression
                        :relation ::ra-expression))
