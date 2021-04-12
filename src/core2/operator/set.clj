@@ -9,28 +9,21 @@
 
 (deftype UnionCursor [^BufferAllocator allocator
                       ^ICursor left-cursor
-                      ^ICursor right-cursor
-                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+                      ^ICursor right-cursor]
   ICursor
   (tryAdvance [this c]
-    (when out-root
-      (.close out-root))
-
     (if (or (.tryAdvance left-cursor
                          (reify Consumer
                            (accept [_ in-root]
-                             (set! (.out-root this) in-root))))
+                             (.accept c in-root))))
             (.tryAdvance right-cursor
                          (reify Consumer
                            (accept [_ in-root]
-                             (set! (.out-root this) in-root)))))
-      (do
-        (.accept c out-root)
-        true)
+                             (.accept c in-root)))))
+      true
       false))
 
   (close [_]
-    (util/try-close out-root)
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
@@ -88,7 +81,7 @@
     (util/try-close right-cursor)))
 
 (defn ->union-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionCursor. allocator left-cursor right-cursor nil))
+  (UnionCursor. allocator left-cursor right-cursor))
 
 (defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil true))
