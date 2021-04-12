@@ -184,7 +184,7 @@
                                          [(reify ProjectionSpec
                                             (project [_ in-root allocator]
                                               (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                    ^BigIntVector out-vec (.createVector (ty/->field "a" (.getType Types$MinorType/BIGINT) false) tu/*allocator*)
+                                                    ^BigIntVector out-vec (.createVector a-field tu/*allocator*)
                                                     row-count (.getRowCount in-root)]
                                                 (.setValueCount out-vec row-count)
                                                 (dotimes [idx row-count]
@@ -194,7 +194,7 @@
                                             (project [_ in-root allocator]
                                               (let [^BigIntVector a-vec (.getVector in-root a-field)
                                                     ^BigIntVector b-vec (.getVector in-root b-field)
-                                                    ^BigIntVector out-vec (.createVector (ty/->field "b" (.getType Types$MinorType/BIGINT) false) tu/*allocator*)
+                                                    ^BigIntVector out-vec (.createVector b-field tu/*allocator*)
                                                     row-count (.getRowCount in-root)]
                                                 (.setValueCount out-vec row-count)
                                                 (dotimes [idx row-count]
