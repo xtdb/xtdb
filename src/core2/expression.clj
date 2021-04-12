@@ -65,7 +65,7 @@
                          (case f
                            'if (do
                                  (when-not (= 3 (count args))
-                                   (throw (IllegalArgumentException. "'if' expects 3 args: " (pr-str form))))
+                                   (throw (IllegalArgumentException. (str "'if' expects 3 args: " (pr-str form)))))
 
                                  (let [[pred then else] args]
                                    {:op :if,
@@ -519,14 +519,14 @@
                      simplify-and-or-expr)]}
      :call (call-meta-expr expr))))
 
-(defn- field-present? [metadata-root field]
+(defn field-present? [metadata-root field]
   ;; TODO this goes to a nested select but we could also find a way
   ;; to inline the generated code
   (not (.isEmpty (.select (->expression-root-selector (form->expr (list '= 'field (str field))))
                           metadata-root))))
 
 (defmethod codegen-expr :metadata-field-present [{:keys [field]} _]
-  {:code `(field-present? ~metadata-root-sym ~field)
+  {:code `(field-present? ~metadata-root-sym '~field)
    :return-type Boolean})
 
 (defn metadata-field-idx [metadata-root column field type-id]
