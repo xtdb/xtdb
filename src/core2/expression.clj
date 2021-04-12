@@ -150,6 +150,9 @@
   {:min (gensym "min-vec")
    :max (gensym "max-vec")})
 
+(def ^:private numeric-types
+  #{Long Double})
+
 (defn- widen-numeric-types [type-x type-y]
   (when (and (.isAssignableFrom Number type-x)
              (.isAssignableFrom Number type-y))
@@ -464,21 +467,20 @@
 (declare meta-expr)
 
 (defn call-meta-expr [{:keys [f args] :as expr}]
-  (letfn [(var-lit-expr [f meta-value field literal]
+  (letfn [(var-lit-expr [f meta-value field literal-arg]
             (simplify-and-or-expr
              {:op :call
               :f 'or
-              :args (vec (for [field-type (cond
-                                            (instance? Date literal) [Date]
-                                            (number? literal) [Long Double]
-                                            (string? literal) [String]
-                                            (boolean? literal) [Boolean])]
-                           {:op :metadata-var-lit-call,
-                            :f f
-                            :meta-value meta-value
-                            :field-type field-type
-                            :field field,
-                            :literal literal}))}))
+              :args (vec (let [{literal-code :code, field-type :return-type} (codegen-expr literal-arg {})]
+                           (for [field-type (if (.isAssignableFrom Number field-type)
+                                              numeric-types
+                                              [field-type])]
+                             {:op :metadata-var-lit-call,
+                              :f f
+                              :meta-value meta-value
+                              :field-type field-type
+                              :field field,
+                              :literal literal-code})))}))
 
           (bool-expr [var-lit-f var-lit-meta-fn
                       lit-var-f lit-var-meta-fn]
@@ -486,9 +488,9 @@
               (case [x-op y-op]
                 [:literal :literal] expr
                 [:variable :literal] (var-lit-expr var-lit-f var-lit-meta-fn
-                                                   (:variable x-arg) (:literal y-arg))
+                                                   (:variable x-arg) y-arg)
                 [:literal :variable] (var-lit-expr lit-var-f lit-var-meta-fn
-                                                   (:variable y-arg) (:literal x-arg))
+                                                   (:variable y-arg) x-arg)
                 nil)))]
 
     (or (case f
