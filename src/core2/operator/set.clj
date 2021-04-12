@@ -5,8 +5,14 @@
            java.util.function.Consumer
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.pojo.Schema
+           [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.VectorSchemaRoot))
+
+(defn- assert-union-compatible [^Schema x ^Schema y]
+  (assert (= (for [^Field field (.getFields x)]
+               (.getName field))
+             (for [^Field field (.getFields y)]
+               (.getName field)))))
 
 (deftype UnionCursor [^BufferAllocator allocator
                       ^ICursor left-cursor
@@ -17,17 +23,21 @@
     (if (or (.tryAdvance left-cursor
                          (reify Consumer
                            (accept [_ in-root]
-                             (if (nil? (.schema this))
-                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
-                             (.accept c in-root))))
+                             (let [^VectorSchemaRoot in-root in-root]
+                               (when (pos? (.getRowCount in-root))
+                                 (if (nil? (.schema this))
+                                   (set! (.schema this) (.getSchema in-root))
+                                   (assert-union-compatible (.schema this) (.getSchema in-root)))
+                                 (.accept c in-root))))))
             (.tryAdvance right-cursor
                          (reify Consumer
                            (accept [_ in-root]
-                             (if (nil? (.schema this))
-                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
-                             (.accept c in-root)))))
+                             (let [^VectorSchemaRoot in-root in-root]
+                               (when (pos? (.getRowCount in-root))
+                                 (if (nil? (.schema this))
+                                   (set! (.schema this) (.getSchema in-root))
+                                   (assert-union-compatible (.schema this) (.getSchema in-root)))
+                                 (.accept c in-root)))))))
       true
       false))
 
@@ -70,13 +80,14 @@
                        (reify Consumer
                          (accept [_ in-root]
                            (let [^VectorSchemaRoot in-root in-root]
-                             (if (nil? (.schema this))
-                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
-                             (dotimes [n (.getRowCount in-root)]
-                               (let [k (->set-key in-root n)]
-                                 (when-not (.contains intersection-set k)
-                                   (.add intersection-set (copy-set-key allocator k)))))))))
+                             (when (pos? (.getRowCount in-root))
+                               (if (nil? (.schema this))
+                                 (set! (.schema this) (.getSchema in-root))
+                                 (assert-union-compatible (.schema this) (.getSchema in-root)))
+                               (dotimes [n (.getRowCount in-root)]
+                                 (let [k (->set-key in-root n)]
+                                   (when-not (.contains intersection-set k)
+                                     (.add intersection-set (copy-set-key allocator k))))))))))
 
     (while (and (nil? out-root)
                 (.tryAdvance left-cursor
@@ -86,7 +97,7 @@
                                    (when (pos? (.getRowCount in-root))
                                      (if (nil? (.schema this))
                                        (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                                       (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
+                                       (assert-union-compatible (.schema this) (.getSchema in-root)))
                                      (let [out-root (VectorSchemaRoot/create (.getSchema in-root) allocator)]
                                        (dotimes [n (.getRowCount in-root)]
                                          (let [match? (.contains intersection-set (->set-key in-root n))
@@ -132,7 +143,7 @@
                                    (when (pos? (.getRowCount in-root))
                                      (if (nil? (.schema this))
                                        (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                                       (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
+                                       (assert-union-compatible (.schema this) (.getSchema in-root)))
                                      (let [out-root (VectorSchemaRoot/create (.getSchema in-root) allocator)]
                                        (dotimes [n (.getRowCount in-root)]
                                          (let [k (->set-key in-root n)]
@@ -156,6 +167,69 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
+(definterface ICursorFactory
+  (^core2.ICursor createCursor []))
+
+(definterface IFixpointCursorFactory
+  (^core2.ICursor createCursor [^core2.operator.set.ICursorFactory fixpoint-cursor-factory]))
+
+(deftype FixpointCursor [^BufferAllocator allocator
+                         ^IFixpointCursorFactory fixpoint-cursor-factory
+                         ^Set fixpoint-set
+                         ^:unsynchronized-mutable ^VectorSchemaRoot out-root
+                         ^:unsynchronized-mutable ^Schema schema
+                         ^:unsynchronized-mutable done?]
+  ICursor
+  (tryAdvance [this c]
+    (if done?
+      false
+      (do (set! done? true)
+
+          (loop [fixpoint-size (.size fixpoint-set)]
+            (with-open [in-cursor (.createCursor fixpoint-cursor-factory
+                                                 (reify ICursorFactory
+                                                   (createCursor [_]
+                                                     (let [!out (atom true)]
+                                                       (reify ICursor
+                                                         (tryAdvance [_ c]
+                                                           (if (and @!out (pos? fixpoint-size))
+                                                             (do (reset! !out false)
+                                                                 (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this) 0 fixpoint-size)]
+                                                                   (.accept c out-root))
+                                                                 true)
+                                                             false)))))))]
+              (.forEachRemaining in-cursor
+                                 (reify Consumer
+                                   (accept [_ in-root]
+                                     (let [^VectorSchemaRoot in-root in-root]
+                                       (when (pos? (.getRowCount in-root))
+                                         (if (nil? (.schema this))
+                                           (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                                           (assert-union-compatible (.schema this) (.getSchema in-root)))
+                                         (when-not out-root
+                                           (set! (.out-root this) (VectorSchemaRoot/create (.schema this) allocator)))
+                                         (let [^VectorSchemaRoot out-root (.out-root this)]
+                                           (dotimes [n (.getRowCount in-root)]
+                                             (let [k (->set-key in-root n)]
+                                               (when-not (.contains fixpoint-set k)
+                                                 (.add fixpoint-set (copy-set-key allocator k))
+                                                 (util/copy-tuple in-root n out-root (.getRowCount out-root))
+                                                 (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root)))))))))))))
+            (when-not (= fixpoint-size (.size fixpoint-set))
+              (recur (.size fixpoint-set))))
+
+          (if out-root
+            (do
+              (.accept c out-root)
+              true)
+            false))))
+
+  (close [_]
+    (doseq [k fixpoint-set]
+      (release-set-key k))
+    (.clear fixpoint-set)
+    (util/try-close out-root)))
+
 (defn ->union-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (UnionCursor. allocator left-cursor right-cursor nil))
 
@@ -167,3 +241,7 @@
 
 (defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
   (DistinctCursor. allocator in-cursor (HashSet.) nil nil))
+
+(defn ->fixpoint-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                        ^IFixpointCursorFactory fixpoint-cursor-factory]
+  (FixpointCursor. allocator fixpoint-cursor-factory (HashSet.) nil nil false))

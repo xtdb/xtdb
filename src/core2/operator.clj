@@ -64,7 +64,9 @@
 
   (^core2.ICursor intersection [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
 
-  (^core2.ICursor distinct [^core2.ICursor inCursor]))
+  (^core2.ICursor distinct [^core2.ICursor inCursor])
+
+  (^core2.ICursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory]))
 
 (defn ->operator-factory
   ^core2.operator.IOperatorFactory
