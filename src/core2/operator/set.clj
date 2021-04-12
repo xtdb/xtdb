@@ -63,7 +63,8 @@
   ICursor
   (tryAdvance [this c]
     (when out-root
-      (.close out-root))
+      (.close out-root)
+      (set! (.out-root this) nil))
 
     (.forEachRemaining right-cursor
                        (reify Consumer
@@ -75,26 +76,30 @@
                              (dotimes [n (.getRowCount in-root)]
                                (let [k (->set-key in-root n)]
                                  (when-not (.contains intersection-set k)
-                                   (.add intersection-set (copy-set-key k)))))))))
+                                   (.add intersection-set (copy-set-key allocator k)))))))))
 
-    (if (.tryAdvance left-cursor
-                     (reify Consumer
-                       (accept [_ in-root]
-                         (let [^VectorSchemaRoot in-root in-root]
-                           (when (pos? (.getRowCount in-root))
-                             (if (nil? (.schema this))
-                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
-                             (let [out-root (VectorSchemaRoot/create (.getSchema in-root) allocator)]
-                               (dotimes [n in-root]
-                                 (let [match? (.contains intersection-set (->set-key in-root n))
-                                       match (if difference?
-                                               (not match?)
-                                               match?)]
-                                   (when match?
-                                     (util/copy-tuple in-root n out-root (.getRowCount out-root))
-                                     (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root))))))
-                               (set! (.out-root this) out-root)))))))
+    (while (and (nil? out-root)
+                (.tryAdvance left-cursor
+                             (reify Consumer
+                               (accept [_ in-root]
+                                 (let [^VectorSchemaRoot in-root in-root]
+                                   (when (pos? (.getRowCount in-root))
+                                     (if (nil? (.schema this))
+                                       (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                                       (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
+                                     (let [out-root (VectorSchemaRoot/create (.getSchema in-root) allocator)]
+                                       (dotimes [n (.getRowCount in-root)]
+                                         (let [match? (.contains intersection-set (->set-key in-root n))
+                                               match? (if difference?
+                                                        (not match?)
+                                                        match?)]
+                                           (when match?
+                                             (util/copy-tuple in-root n out-root (.getRowCount out-root))
+                                             (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root))))))
+                                       (when (pos? (.getRowCount out-root))
+                                         (set! (.out-root this) out-root))))))))))
+
+    (if out-root
       (do
         (.accept c out-root)
         true)
