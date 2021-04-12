@@ -5,20 +5,28 @@
            [java.util ArrayList List Set HashSet]
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot))
 
 (deftype UnionCursor [^BufferAllocator allocator
                       ^ICursor left-cursor
-                      ^ICursor right-cursor]
+                      ^ICursor right-cursor
+                      ^:unsynchronized-mutable ^Schema schema]
   ICursor
   (tryAdvance [this c]
     (if (or (.tryAdvance left-cursor
                          (reify Consumer
                            (accept [_ in-root]
+                             (if (nil? (.schema this))
+                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
                              (.accept c in-root))))
             (.tryAdvance right-cursor
                          (reify Consumer
                            (accept [_ in-root]
+                             (if (nil? (.schema this))
+                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
                              (.accept c in-root)))))
       true
       false))
@@ -41,6 +49,7 @@
                              ^ICursor right-cursor
                              ^Set intersection-set
                              ^:unsynchronized-mutable ^VectorSchemaRoot out-root
+                             ^:unsynchronized-mutable ^Schema schema
                              difference?]
   ICursor
   (tryAdvance [this c]
@@ -51,6 +60,9 @@
                        (reify Consumer
                          (accept [_ in-root]
                            (let [^VectorSchemaRoot in-root in-root]
+                             (if (nil? (.schema this))
+                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
                              (dotimes [n (.getRowCount in-root)]
                                (.add intersection-set (->set-key in-root n)))))))
 
@@ -59,6 +71,9 @@
                        (accept [_ in-root]
                          (let [^VectorSchemaRoot in-root in-root]
                            (when (pos? (.getRowCount in-root))
+                             (if (nil? (.schema this))
+                               (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
+                               (assert (= (.schema this) (.getSchema ^VectorSchemaRoot in-root))))
                              (let [out-root (VectorSchemaRoot/create (.getSchema in-root) allocator)]
                                (dotimes [n in-root]
                                  (let [match? (.contains intersection-set (->set-key in-root n))
@@ -81,10 +96,10 @@
     (util/try-close right-cursor)))
 
 (defn ->union-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionCursor. allocator left-cursor right-cursor))
+  (UnionCursor. allocator left-cursor right-cursor nil))
 
 (defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil true))
+  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil nil true))
 
 (defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil false))
+  (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil nil false))
