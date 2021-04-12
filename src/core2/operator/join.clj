@@ -92,70 +92,85 @@
   (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil))
 
 (defn- build-phase [^BufferAllocator allocator
-                    ^VectorSchemaRoot left-root
-                    ^NavigableMap left-idx->root
-                    ^Map join-key->left-idxs
-                    ^String left-column-name]
-  (let [^VectorSchemaRoot left-root (util/slice-root left-root 0)
-        left-root-idx  (if-let [left-idx-entry (.lastEntry left-idx->root)]
-                         (+ (long (.getKey left-idx-entry))
-                            (.getRowCount ^VectorSchemaRoot (.getValue left-idx-entry)))
-                         0)]
-    (.put left-idx->root left-root-idx left-root)
-    (let [left-vec (util/maybe-single-child-dense-union (.getVector left-root left-column-name))]
-      (dotimes [left-idx (.getValueCount left-vec)]
-        (let [^BigIntVector left-idxs-vec (.computeIfAbsent join-key->left-idxs
-                                                            (.hashCode left-vec left-idx)
-                                                            (reify Function
-                                                              (apply [_ x]
-                                                                (doto (BigIntVector. "" allocator)
-                                                                  (.setInitialCapacity 32)))))
-              idx (.getValueCount left-idxs-vec)
-              total-left-idx (+ left-root-idx left-idx)]
-          (.setValueCount left-idxs-vec (inc idx))
-          (.set left-idxs-vec idx total-left-idx))))))
+                    ^VectorSchemaRoot build-root
+                    ^NavigableMap build-idx->root
+                    ^Map join-key->build-idxs
+                    ^String build-column-name]
+  (let [^VectorSchemaRoot build-root (util/slice-root build-root 0)
+        build-root-idx  (if-let [build-idx-entry (.lastEntry build-idx->root)]
+                          (+ (long (.getKey build-idx-entry))
+                             (.getRowCount ^VectorSchemaRoot (.getValue build-idx-entry)))
+                          0)]
+    (.put build-idx->root build-root-idx build-root)
+    (let [build-vec (util/maybe-single-child-dense-union (.getVector build-root build-column-name))]
+      (dotimes [build-idx (.getValueCount build-vec)]
+        (let [^BigIntVector build-idxs-vec (.computeIfAbsent join-key->build-idxs
+                                                             (.hashCode build-vec build-idx)
+                                                             (reify Function
+                                                               (apply [_ x]
+                                                                 (doto (BigIntVector. "" allocator)
+                                                                   (.setInitialCapacity 32)))))
+              idx (.getValueCount build-idxs-vec)
+              total-build-idx (+ build-root-idx build-idx)]
+          (.setValueCount build-idxs-vec (inc idx))
+          (.set build-idxs-vec idx total-build-idx))))))
 
 (defn- probe-phase ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator
-                                                              ^VectorSchemaRoot right-root
-                                                              ^NavigableMap left-idx->root
-                                                              ^Map join-key->left-idxs-vec
-                                                              ^String left-column-name
-                                                              ^String right-column-name]
-  (when (pos? (.getRowCount right-root))
-    (let [left-schema (.getSchema ^VectorSchemaRoot (.getValue (.firstEntry left-idx->root)))
-          join-schema (->join-schema left-schema (.getSchema right-root))
+                                                              ^VectorSchemaRoot probe-root
+                                                              ^NavigableMap build-idx->root
+                                                              ^Map join-key->build-idxs-vec
+                                                              ^String build-column-name
+                                                              ^String probe-column-name
+                                                              semi-join?
+                                                              anti-join?]
+  (when (pos? (.getRowCount probe-root))
+    (let [join-schema (if semi-join?
+                        (.getSchema probe-root)
+                        (->join-schema (.getSchema ^VectorSchemaRoot (.getValue (.firstEntry build-idx->root)))
+                                       (.getSchema probe-root)))
           out-root (VectorSchemaRoot/create join-schema allocator)
-          right-vec (util/maybe-single-child-dense-union (.getVector right-root right-column-name))
-          left-pointer (ArrowBufPointer.)
-          right-pointer (ArrowBufPointer.)]
-      (dotimes [right-idx (.getValueCount right-vec)]
-        (when-let [^BigIntVector left-idxs-vec (.get join-key->left-idxs-vec (.hashCode right-vec right-idx))]
-          (let [right-pointer-or-object (util/pointer-or-object right-vec right-idx right-pointer)]
+          probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
+          build-pointer (ArrowBufPointer.)
+          probe-pointer (ArrowBufPointer.)]
+      (dotimes [probe-idx (.getValueCount probe-vec)]
+        (if-let [^BigIntVector build-idxs-vec (.get join-key->build-idxs-vec (.hashCode probe-vec probe-idx))]
+          (let [probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)]
             (loop [n 0
                    out-idx (.getRowCount out-root)]
-              (if (= n (.getValueCount left-idxs-vec))
+              (if (= n (.getValueCount build-idxs-vec))
                 (util/set-vector-schema-root-row-count out-root out-idx)
-                (let [total-left-idx (long (.get left-idxs-vec n))
-                      left-idx-entry (.floorEntry left-idx->root total-left-idx)
-                      ^long left-root-idx (.getKey left-idx-entry)
-                      ^VectorSchemaRoot left-root (.getValue left-idx-entry)
-                      left-idx (- total-left-idx left-root-idx)
-                      left-vec (.getVector left-root left-column-name)]
-                  (if (= (util/pointer-or-object left-vec left-idx left-pointer) right-pointer-or-object)
-                    (do (copy-tuple left-root left-idx out-root out-idx)
-                        (copy-tuple right-root right-idx out-root out-idx)
+                (let [total-build-idx (long (.get build-idxs-vec n))
+                      build-idx-entry (.floorEntry build-idx->root total-build-idx)
+                      ^long build-root-idx (.getKey build-idx-entry)
+                      ^VectorSchemaRoot build-root (.getValue build-idx-entry)
+                      build-idx (- total-build-idx build-root-idx)
+                      build-vec (.getVector build-root build-column-name)
+                      match? (= (util/pointer-or-object build-vec build-idx build-pointer) probe-pointer-or-object)
+                      match? (if anti-join?
+                               (not match?)
+                               match?)]
+                  (if match?
+                    (do (when-not semi-join?
+                          (copy-tuple build-root build-idx out-root out-idx))
+                        (copy-tuple probe-root probe-idx out-root out-idx)
                         (recur (inc n) (inc out-idx)))
-                    (recur (inc n) out-idx))))))))
+                    (recur (inc n) out-idx))))))
+          (when anti-join?
+            (let [out-idx (.getRowCount out-root)]
+              (copy-tuple probe-root probe-idx out-root out-idx)
+              (util/set-vector-schema-root-row-count out-root (inc out-idx))))))
       out-root)))
 
-(deftype EquiJoinCursor [^BufferAllocator allocator
-                         ^ICursor left-cursor
-                         ^String left-column-name
-                         ^ICursor right-cursor
-                         ^String right-column-name
-                         ^Map join-key->left-idx-pairs
-                         ^NavigableMap left-idx->root
-                         ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+(deftype JoinCursor [^BufferAllocator allocator
+                     ^ICursor build-cursor
+                     ^String build-column-name
+                     ^ICursor probe-cursor
+                     ^String probe-column-name
+                     ^Map join-key->build-idx-pairs
+                     ^NavigableMap build-idx->root
+                     ^:unsynchronized-mutable ^VectorSchemaRoot out-root
+                     semi-join?
+                     anti-join?]
 
   ICursor
   (tryAdvance [this c]
@@ -163,18 +178,18 @@
       (.close out-root)
       (set! (.out-root this) nil))
 
-    (.forEachRemaining left-cursor
+    (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ in-root]
-                           (build-phase allocator in-root left-idx->root join-key->left-idx-pairs left-column-name))))
+                           (build-phase allocator in-root build-idx->root join-key->build-idx-pairs build-column-name))))
 
-    (while (and (not (.isEmpty left-idx->root))
+    (while (and (or (not (.isEmpty build-idx->root)) anti-join?)
                 (nil? out-root)
-                (.tryAdvance right-cursor
+                (.tryAdvance probe-cursor
                              (reify Consumer
                                (accept [_ in-root]
-                                 (when-let [out-root (probe-phase allocator in-root left-idx->root join-key->left-idx-pairs
-                                                                  left-column-name right-column-name)]
+                                 (when-let [out-root (probe-phase allocator in-root build-idx->root join-key->build-idx-pairs
+                                                                  build-column-name probe-column-name semi-join? anti-join?)]
                                    (when (pos? (.getRowCount out-root))
                                      (set! (.out-root this) out-root))))))))
 
@@ -186,18 +201,32 @@
 
   (close [_]
     (util/try-close out-root)
-    (doseq [root (vals left-idx->root)]
+    (doseq [root (vals build-idx->root)]
       (util/try-close root))
-    (.clear left-idx->root)
-    (doseq [idx-pair (vals join-key->left-idx-pairs)]
+    (.clear build-idx->root)
+    (doseq [idx-pair (vals join-key->build-idx-pairs)]
       (util/try-close idx-pair))
-    (.clear join-key->left-idx-pairs)
-    (util/try-close left-cursor)
-    (util/try-close right-cursor)))
+    (.clear join-key->build-idx-pairs)
+    (util/try-close build-cursor)
+    (util/try-close probe-cursor)))
 
 (defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                          ^ICursor left-cursor,
                                          ^String left-column-name,
                                          ^ICursor right-cursor,
                                          ^String right-column-name]
-  (EquiJoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) nil))
+  (JoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) nil false false))
+
+(defn ->semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                              ^ICursor left-cursor,
+                                              ^String left-column-name,
+                                              ^ICursor right-cursor,
+                                              ^String right-column-name]
+  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true false))
+
+(defn ->anti-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                              ^ICursor left-cursor,
+                                              ^String left-column-name,
+                                              ^ICursor right-cursor,
+                                              ^String right-column-name]
+  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true true))
