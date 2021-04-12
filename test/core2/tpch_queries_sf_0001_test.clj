@@ -336,6 +336,37 @@
              :low_line_count 10}]
            (tpch-queries/tpch-q12-shipping-modes-and-order-priority))))
 
+;; TODO: Missing left outer join result for customers without orders.
+(t/deftest test-q13-customer-distribution
+  (t/is (= [#_{:c_count 0 :custdist ?}
+            {:c_count 16 :custdist 8}
+            {:c_count 17 :custdist 7}
+            {:c_count 20 :custdist 6}
+            {:c_count 13 :custdist 6}
+            {:c_count 12 :custdist 6}
+            {:c_count 9 :custdist 6}
+            {:c_count 23 :custdist 5}
+            {:c_count 14 :custdist 5}
+            {:c_count 10 :custdist 5}
+            {:c_count 21 :custdist 4}
+            {:c_count 18 :custdist 4}
+            {:c_count 11 :custdist 4}
+            {:c_count 8 :custdist 4}
+            {:c_count 7 :custdist 4}
+            {:c_count 26 :custdist 3}
+            {:c_count 22 :custdist 3}
+            {:c_count 6 :custdist 3}
+            {:c_count 5 :custdist 3}
+            {:c_count 4 :custdist 3}
+            {:c_count 29 :custdist 2}
+            {:c_count 24 :custdist 2}
+            {:c_count 19 :custdist 2}
+            {:c_count 15 :custdist 2}
+            {:c_count 28 :custdist 1}
+            {:c_count 25 :custdist 1}
+            {:c_count 3 :custdist 1}]
+           (tpch-queries/tpch-q13-customer-distribution))))
+
 (t/deftest test-q14-promotion-effect
   (t/is (= [{:promo_revenue 15.23021261159725}]
            (tpch-queries/tpch-q14-promotion-effect))))

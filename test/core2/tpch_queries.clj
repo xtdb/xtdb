@@ -617,6 +617,36 @@
     (->> (tu/<-cursor order-by-cursor)
          (into [] (mapcat seq)))))
 
+;; TODO: should behave as a left outer join and return customers
+;; without orders as well.
+(defn tpch-q13-customer-distribution []
+  (with-open [customer (.scan *op-factory* *watermark*
+                              ["c_custkey"]
+                              (constantly true) {}
+                              nil nil)
+              orders (.scan *op-factory* *watermark*
+                            ["o_orderkey" "o_comment" "o_custkey"]
+                            (constantly true)
+                            {"o_comment"
+                             (expr/->expression-vector-selector '(not (like c_comment "%special%requests%")))}
+                            nil nil)
+              orders+customer (.equiJoin *op-factory* customer "c_custkey" orders "o_custkey")
+
+              group-by-cursor (.groupBy *op-factory*
+                                        orders+customer
+                                        [(group-by/->group-spec "c_custkey")
+                                         (group-by/->count-spec "o_comment" "c_count")])
+              group-by-cursor (.groupBy *op-factory*
+                                        group-by-cursor
+                                        [(group-by/->group-spec "c_count")
+                                         (group-by/->count-spec "c_custkey" "custdist")])
+              order-by-cursor (.orderBy *op-factory*
+                                        group-by-cursor
+                                        [(order-by/->order-spec "custdist" :desc)
+                                         (order-by/->order-spec "c_count" :desc)])]
+    (->> (tu/<-cursor order-by-cursor)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q14-promotion-effect []
   (with-open [part (.scan *op-factory* *watermark*
                           ["p_partkey" "p_type"]
