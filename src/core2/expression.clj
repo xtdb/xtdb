@@ -1,6 +1,5 @@
 (ns core2.expression
-  (:require [core2.metadata :as meta]
-            core2.operator.project
+  (:require core2.operator.project
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
@@ -8,9 +7,9 @@
            java.lang.reflect.Method
            java.time.LocalDateTime
            java.util.Date
-           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types Types Types$MinorType]
+           org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 
@@ -116,6 +115,7 @@
    (.getType Types$MinorType/VARBINARY) VarBinaryVector
    (.getType Types$MinorType/VARCHAR) VarCharVector
    (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
+   (.getType Types$MinorType/TINYINT) TinyIntVector
    (.getType Types$MinorType/BIT) BitVector})
 
 (def ^:private byte-array-class (Class/forName "[B"))
@@ -127,6 +127,7 @@
    (.getType Types$MinorType/VARBINARY) byte-array-class
    (.getType Types$MinorType/VARCHAR) String
    (.getType Types$MinorType/TIMESTAMPMILLI) Date
+   (.getType Types$MinorType/TINYINT) Byte
    (.getType Types$MinorType/BIT) Boolean})
 
 (def ^:private type->cast
@@ -519,34 +520,43 @@
                      simplify-and-or-expr)]}
      :call (call-meta-expr expr))))
 
+(defn- field-present? [metadata-root field]
+  ;; TODO this goes to a nested select but we could also find a way
+  ;; to inline the generated code
+  (not (.isEmpty (.select (->expression-root-selector (list '= 'field (str field)))
+                          metadata-root))))
+
 (defmethod codegen-expr :metadata-field-present [{:keys [field]} _]
-  {:code `(meta/field-present? ~metadata-root-sym ~(str field))
+  {:code `(field-present? ~metadata-root-sym ~field)
    :return-type Boolean})
+
+(defn metadata-field-idx [metadata-root column field type-id]
+  (let [bitmap (.select (->expression-root-selector (list 'and
+                                                          (list '= 'column (str column))
+                                                          (list '= 'field (str field))
+                                                          (list '= 'type-id type-id)))
+                        metadata-root)]
+    (when-not (.isEmpty bitmap)
+      (.first bitmap))))
 
 (defmethod codegen-expr :metadata-var-lit-call [{:keys [f meta-value field literal field-type]} opts]
   (let [vl-sym (gensym 'vl)
         vec-sym (get metadata-vec-syms meta-value)
         arrow-type (types/->arrow-type field-type)]
     {:code `(boolean
-             (let [duv-idx# (meta/field-idx ~metadata-root-sym
-                                            ~(str field)
-                                            ~(str field)
-                                            ~(symbol (.getName Types$MinorType)
-                                                     (str (Types/getMinorTypeForArrowType arrow-type))))]
+             (when-let [duv-idx# (metadata-field-idx ~metadata-root-sym '~field '~field ~(types/arrow-type->type-id arrow-type))]
+               (let [~idx-sym (.getOffset ~vec-sym duv-idx#)
 
-               (when-not (neg? (long duv-idx#))
-                 (let [~idx-sym (.getOffset ~vec-sym duv-idx#)
-
-                       ~(-> vec-sym (with-tag (arrow-type->vector-type arrow-type)))
-                       (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
-                   (when-let [~vl-sym ~(:code (codegen-expr {:op :variable, :variable vec-sym}
-                                                            {:var->type {vec-sym field-type}}))]
-                     ~(:code (codegen-expr {:op :call
-                                            :f f
-                                            :args [{:code (list (type->cast field-type) vl-sym),
-                                                    :return-type field-type}
-                                                   (codegen-expr {:op :literal, :literal literal} nil)]}
-                                           opts)))))))
+                     ~(-> vec-sym (with-tag (arrow-type->vector-type arrow-type)))
+                     (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
+                 (when-let [~vl-sym ~(:code (codegen-expr {:op :variable, :variable vec-sym}
+                                                          {:var->type {vec-sym field-type}}))]
+                   ~(:code (codegen-expr {:op :call
+                                          :f f
+                                          :args [{:code (list (type->cast field-type) vl-sym),
+                                                  :return-type field-type}
+                                                 (codegen-expr {:op :literal, :literal literal} nil)]}
+                                         opts))))))
      :return-type Boolean}))
 
 (defn meta-expr->code [expr]
