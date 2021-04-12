@@ -1,12 +1,11 @@
 (ns core2.operator.select
   (:require [core2.util :as util])
   (:import core2.ICursor
-           [core2.select IVectorSchemaRootPredicate IVectorSchemaRootSelector]
+           core2.select.IVectorSchemaRootSelector
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.types.pojo.Field
-           org.apache.arrow.vector.VectorSchemaRoot
-           org.roaringbitmap.RoaringBitmap))
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (deftype SelectCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
@@ -48,17 +47,6 @@
   (close [_]
     (util/try-close out-root)
     (util/try-close in-cursor)))
-
-(defn pred->selector ^core2.select.IVectorSchemaRootSelector [^IVectorSchemaRootPredicate pred]
-  (reify IVectorSchemaRootSelector
-    (select [_ in-root]
-      (let [idx-bitmap (RoaringBitmap.)]
-
-        (dotimes [idx (.getRowCount in-root)]
-          (when (.test pred in-root idx)
-            (.add idx-bitmap idx)))
-
-        idx-bitmap))))
 
 (defn ->select-cursor ^core2.ICursor [^BufferAllocator allocator,
                                       ^ICursor in-cursor,
