@@ -408,39 +408,36 @@
 (defn- vector->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [^ValueVector v]
   (.getType (.getFieldType (.getField v))))
 
-(defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name form]
-  (let [expr (form->expr form)]
-    (reify ProjectionSpec
-      (project [_ in allocator]
-        (let [in-vecs (expression-in-vectors in expr)
-              arrow-types (mapv vector->arrow-type in-vecs)
-              expr-code (memo-generate-code arrow-types expr ::project)
-              expr-fn (memo-eval expr-code)
-              ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
-          (expr-fn in-vecs acc (.getRowCount in)))))))
+(defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name expr]
+  (reify ProjectionSpec
+    (project [_ in allocator]
+      (let [in-vecs (expression-in-vectors in expr)
+            arrow-types (mapv vector->arrow-type in-vecs)
+            expr-code (memo-generate-code arrow-types expr ::project)
+            expr-fn (memo-eval expr-code)
+            ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
+        (expr-fn in-vecs acc (.getRowCount in))))))
 
-(defn ->expression-root-selector ^core2.select.IVectorSchemaRootSelector [form]
-  (let [expr (form->expr form)]
-    (reify IVectorSchemaRootSelector
-      (select [_ in]
-        (let [in-vecs (expression-in-vectors in expr)
-              arrow-types (mapv vector->arrow-type in-vecs)
-              expr-code (memo-generate-code arrow-types expr ::select)
-              expr-fn (memo-eval expr-code)
-              acc (RoaringBitmap.)]
-          (expr-fn in-vecs acc (.getRowCount in)))))))
+(defn ->expression-root-selector ^core2.select.IVectorSchemaRootSelector [expr]
+  (reify IVectorSchemaRootSelector
+    (select [_ in]
+      (let [in-vecs (expression-in-vectors in expr)
+            arrow-types (mapv vector->arrow-type in-vecs)
+            expr-code (memo-generate-code arrow-types expr ::select)
+            expr-fn (memo-eval expr-code)
+            acc (RoaringBitmap.)]
+        (expr-fn in-vecs acc (.getRowCount in))))))
 
-(defn ->expression-vector-selector ^core2.select.IVectorSelector [form]
-  (let [expr (form->expr form)]
-    (assert (= 1 (count (variables expr))))
-    (reify IVectorSelector
-      (select [_ v]
-        (let [in-vecs [(util/maybe-single-child-dense-union v)]
-              arrow-types (mapv vector->arrow-type in-vecs)
-              expr-code (memo-generate-code arrow-types expr ::select)
-              expr-fn (memo-eval expr-code)
-              acc (RoaringBitmap.)]
-          (expr-fn in-vecs acc (.getValueCount v)))))))
+(defn ->expression-vector-selector ^core2.select.IVectorSelector [expr]
+  (assert (= 1 (count (variables expr))))
+  (reify IVectorSelector
+    (select [_ v]
+      (let [in-vecs [(util/maybe-single-child-dense-union v)]
+            arrow-types (mapv vector->arrow-type in-vecs)
+            expr-code (memo-generate-code arrow-types expr ::select)
+            expr-fn (memo-eval expr-code)
+            acc (RoaringBitmap.)]
+        (expr-fn in-vecs acc (.getValueCount v))))))
 
 (defn- simplify-and-or-expr [{:keys [f args] :as expr}]
   (let [args (filterv some? args)]
@@ -525,7 +522,7 @@
 (defn- field-present? [metadata-root field]
   ;; TODO this goes to a nested select but we could also find a way
   ;; to inline the generated code
-  (not (.isEmpty (.select (->expression-root-selector (list '= 'field (str field)))
+  (not (.isEmpty (.select (->expression-root-selector (form->expr (list '= 'field (str field))))
                           metadata-root))))
 
 (defmethod codegen-expr :metadata-field-present [{:keys [field]} _]
@@ -533,10 +530,10 @@
    :return-type Boolean})
 
 (defn metadata-field-idx [metadata-root column field type-id]
-  (let [bitmap (.select (->expression-root-selector (list 'and
-                                                          (list '= 'column (str column))
-                                                          (list '= 'field (str field))
-                                                          (list '= 'type-id type-id)))
+  (let [bitmap (.select (->expression-root-selector (form->expr (list 'and
+                                                                      (list '= 'column (str column))
+                                                                      (list '= 'field (str field))
+                                                                      (list '= 'type-id type-id))))
                         metadata-root)]
     (when-not (.isEmpty bitmap)
       (.first bitmap))))
@@ -573,8 +570,8 @@
 (def memo-meta-expr->code
   (memoize meta-expr->code))
 
-(defn ->metadata-selector [form]
-  (-> (form->expr form)
+(defn ->metadata-selector [expr]
+  (-> expr
       (meta-expr)
       (memo-meta-expr->code)
       (memo-eval)))

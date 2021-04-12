@@ -34,13 +34,13 @@
         (tu/finish-chunk node)
 
         (let [op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)
-              metadata-pred (expr/->metadata-selector '(> name "Ivan"))]
+              metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
           (letfn [(query-ivan [watermark]
                     (let [!results (atom [])]
                       (with-open [chunk-scanner (.scan op-factory watermark
                                                        ["name"]
                                                        metadata-pred
-                                                       {"name" (expr/->expression-vector-selector '(> name "Ivan"))}
+                                                       {"name" (expr/->expression-vector-selector (expr/form->expr '(> name "Ivan")))}
                                                        nil
                                                        nil)]
                         (while (.tryAdvance chunk-scanner

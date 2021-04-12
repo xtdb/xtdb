@@ -68,9 +68,9 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-vector-selector '(<= age 30)) age-vec)
+    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-vector-selector (expr/form->expr '(<= age 30))) age-vec)
                                                age-row-id-vec)
-                    (.and (align/->row-id-bitmap (.select (expr/->expression-vector-selector '(<= name "Frank")) name-vec)
+                    (.and (align/->row-id-bitmap (.select (expr/->expression-vector-selector (expr/form->expr '(<= name "Frank"))) name-vec)
                                                  name-row-id-vec)))
           roots [name-root age-root]]
       (with-open [out-root (VectorSchemaRoot/create (align/align-schemas [(.getSchema name-root) (.getSchema age-root)])

@@ -21,9 +21,9 @@
         (.set d n n)))
 
     (with-open [in (VectorSchemaRoot/of (into-array FieldVector [a b d]))]
-      (let [form '(+ a b)
-            expr-projection-spec (expr/->expression-projection-spec "c" form)]
-        (t/is (= '[a b] (expr/variables (expr/form->expr form))))
+      (let [expr (expr/form->expr '(+ a b))
+            expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+        (t/is (= '[a b] (expr/variables expr)))
         (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
           (let [v (util/maybe-single-child-dense-union acc)
                 xs (test-util/->list v)]
@@ -31,27 +31,27 @@
             (t/is (= (mapv (comp double +) (range 1000) (range 1000))
                      xs)))))
 
-      (let [form '(- a (* 2.0 b))
-            expr-projection-spec (expr/->expression-projection-spec "c" form)]
-        (t/is (= '[a b] (expr/variables (expr/form->expr form))))
+      (let [expr (expr/form->expr '(- a (* 2.0 b)))
+            expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+        (t/is (= '[a b] (expr/variables expr)))
         (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
           (let [xs (test-util/->list (util/maybe-single-child-dense-union acc))]
             (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
                      xs)))))
 
       (t/testing "support keyword and vectors"
-        (let [form '[:+ a [:+ b 2]]
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
-          (t/is (= '[a b] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '[:+ a [:+ b 2]])
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '[a b] (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
             (let [xs (test-util/->list (util/maybe-single-child-dense-union acc))]
               (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
                        xs))))))
 
       (t/testing "mixing types"
-        (let [form '(+ 2 d)
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
-          (t/is (= '[d] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(+ 2 d))
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '[d] (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list (util/maybe-single-child-dense-union acc))]
@@ -59,9 +59,9 @@
               (t/is (= (mapv + (repeat 2) (range 1000))
                        xs)))))
 
-        (let [form '(+ 2.0 d)
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
-          (t/is (= '[d] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(+ 2.0 d))
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '[d] (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list (util/maybe-single-child-dense-union acc))]
@@ -70,9 +70,9 @@
                        xs))))))
 
       (t/testing "predicate"
-        (let [form '(= a d)
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
-          (t/is (= '[a d] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(= a d))
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '[a d] (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list v)]
@@ -80,9 +80,9 @@
               (t/is (= (repeat 1000 true) xs))))))
 
       (t/testing "math"
-        (let [form '(sin a)
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
-          (t/is (= '[a] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(sin a))
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '[a] (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list v)]
@@ -90,9 +90,9 @@
               (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs))))))
 
       (t/testing "if"
-        (let [form '(if false a 0)
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
-          (t/is (= '[a] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(if false a 0))
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
+          (t/is (= '[a] (expr/variables expr)))
           (with-open [^ValueVector acc (.project expr-projection-spec in allocator)]
             (let [v (util/maybe-single-child-dense-union acc)
                   xs (test-util/->list v)]
@@ -100,17 +100,17 @@
               (t/is (= (repeat 1000 0.0) xs))))))
 
       (t/testing "cannot call arbitrary functions"
-        (let [form '(vec a)
-              expr-projection-spec (expr/->expression-projection-spec "c" form)]
+        (let [expr (expr/form->expr '(vec a))
+              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
           (t/is (thrown? IllegalArgumentException (.project expr-projection-spec in allocator)))))
 
       (t/testing "selector"
-        (let [form '(>= a 500)
-              selector (expr/->expression-root-selector form)]
-          (t/is (= '[a] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(>= a 500))
+              selector (expr/->expression-root-selector expr)]
+          (t/is (= '[a] (expr/variables expr)))
           (t/is (= 500 (.getCardinality (.select selector in)))))
 
-        (let [form '(>= a 500)
-              selector (expr/->expression-vector-selector form)]
-          (t/is (= '[a] (expr/variables (expr/form->expr form))))
+        (let [expr (expr/form->expr '(>= a 500))
+              selector (expr/->expression-vector-selector expr)]
+          (t/is (= '[a] (expr/variables expr)))
           (t/is (= 500 (.getCardinality (.select selector a)))))))))
