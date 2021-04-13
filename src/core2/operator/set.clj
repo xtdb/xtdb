@@ -172,6 +172,18 @@
 (definterface IFixpointCursorFactory
   (^core2.ICursor createCursor [^core2.operator.set.ICursorFactory cursor-factory]))
 
+(deftype FixpointResultCursor [^VectorSchemaRoot out-root ^long fixpoint-offset ^long fixpoint-size ^:volatile-mutable ^boolean done?]
+  ICursor
+  (tryAdvance [this c]
+    (if (and (not done?) (pos? fixpoint-size))
+      (do (set! (.done? this) true)
+          (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this)
+                                                                  fixpoint-offset
+                                                                  (- fixpoint-size fixpoint-offset))]
+            (.accept c out-root))
+          true)
+      false)))
+
 (deftype FixpointCursor [^BufferAllocator allocator
                          ^IFixpointCursorFactory fixpoint-cursor-factory
                          ^Set fixpoint-set
@@ -190,17 +202,7 @@
             (with-open [in-cursor (.createCursor fixpoint-cursor-factory
                                                  (reify ICursorFactory
                                                    (createCursor [_]
-                                                     (let [!cursor-done? (atom false)]
-                                                       (reify ICursor
-                                                         (tryAdvance [_ c]
-                                                           (if (and (not @!cursor-done?) (pos? fixpoint-size))
-                                                             (do (reset! !cursor-done? true)
-                                                                 (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this)
-                                                                                                                         fixpoint-offset
-                                                                                                                         (- fixpoint-size fixpoint-offset))]
-                                                                   (.accept c out-root))
-                                                                 true)
-                                                             false)))))))]
+                                                     (FixpointResultCursor. out-root fixpoint-offset fixpoint-size false))))]
               (.forEachRemaining in-cursor
                                  (reify Consumer
                                    (accept [_ in-root]
