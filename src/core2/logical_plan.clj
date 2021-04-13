@@ -7,7 +7,8 @@
             [core2.operator.project :as project]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           core2.operator.IOperatorFactory))
+           core2.operator.IOperatorFactory
+           [core2.operator.set ICursorFactory IFixpointCursorFactory]))
 
 ;; Partly based on
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
@@ -29,6 +30,9 @@
                      :columns (s/coll-of (s/or :column ::column
                                                :select ::column-expression)
                                          :min-count 1)))
+
+(s/def ::table (s/cat :op #{:table}
+                      :rows (s/coll-of (s/map-of ::named any?))))
 
 (s/def ::project (s/cat :op #{:π :pi :project}
                         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
@@ -103,6 +107,7 @@
 
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
+                             :table ::table
                              :project ::project
                              :select ::select
                              :rename ::rename
@@ -297,6 +302,22 @@
 (defmethod emit-op :slice [[_ {:keys [relation], {:keys [offset limit]} :slice}]]
   (unary-op relation (fn [^IOperatorFactory op-factory inner]
                        (.slice op-factory inner offset limit))))
+
+(def ^:private ^:dynamic *mu-variable->cursor-factory* {})
+
+(defmethod emit-op :relation [[_ relation-name]]
+  (fn [^IOperatorFactory op-factory watermark]
+    (let [^ICursorFactory cursor-factory (get *mu-variable->cursor-factory* relation-name)]
+      (assert cursor-factory)
+      (.createCursor cursor-factory))))
+
+(defmethod emit-op :fixpoint [[_ {:keys [mu-variable union-of-expressions]}]]
+  (fn [^IOperatorFactory op-factory watermark]
+    (.fixpoint op-factory (reify IFixpointCursorFactory
+                            (createCursor [_ cursor-factory]
+                              (binding [*relation->cursor-factory* (assoc *mu-variable->cursor-factory* mu-variable cursor-factory)]
+                                (let [inner-f (emit-op union-of-expressions)]
+                                  (inner-f op-factory watermark))))) false)))
 
 (defn open-q ^core2.ICursor [op-factory watermark lp]
   (let [op-f (emit-op (s/conform ::logical-plan lp))]
