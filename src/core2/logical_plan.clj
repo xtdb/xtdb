@@ -88,7 +88,6 @@
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
                              :project ::project
-                             :map ::map
                              :select ::select
                              :rename ::rename
                              :order-by ::order-by
