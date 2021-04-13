@@ -198,7 +198,6 @@
                                                                  (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this)
                                                                                                                          fixpoint-offset
                                                                                                                          (- fixpoint-size fixpoint-offset))]
-                                                                   (println (.contentToTSVString out-root))
                                                                    (.accept c out-root))
                                                                  true)
                                                              false)))))))]
