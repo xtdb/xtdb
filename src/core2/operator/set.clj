@@ -172,6 +172,9 @@
 (definterface IFixpointCursorFactory
   (^core2.ICursor createCursor [^core2.operator.set.ICursorFactory cursor-factory]))
 
+;; https://core.ac.uk/download/pdf/11454271.pdf "Algebraic optimization of recursive queries"
+;; http://webdam.inria.fr/Alice/pdfs/Chapter-14.pdf "Recursion and Negation"
+
 (deftype FixpointResultCursor [^VectorSchemaRoot out-root ^long fixpoint-offset ^long fixpoint-size ^:volatile-mutable ^boolean done?]
   ICursor
   (tryAdvance [this c]
