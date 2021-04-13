@@ -389,6 +389,13 @@
     (when-let [split-stack (maybe-split-stack stack)]
       (NodeDepthFirstSpliterator. split-stack))))
 
+(defn- node-kd-tree-build-path [build-path-fns leaf-node]
+  (reduce
+   (fn [acc build-fn]
+     (build-fn acc))
+   leaf-node
+   build-path-fns))
+
 (defn- node-kd-tree-edit [^Node kd-tree point deleted?]
   (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
@@ -396,28 +403,30 @@
         k (.getListSize point-vec)]
     (loop [parent-axis (.axis kd-tree)
            node kd-tree
-           build-fn identity]
+           build-path-fns ()]
       (if-not node
         (let [point-idx (write-point point-vec point)]
-          (build-fn (Node. point-vec point-idx (next-axis parent-axis k) nil nil deleted?)))
+          (node-kd-tree-build-path build-path-fns (Node. point-vec point-idx (next-axis parent-axis k) nil nil deleted?)))
         (let [axis (.axis node)
               element-start-idx (.getElementStartIndex point-vec (.point-idx node))
               point-axis (.get coordinates-vec (+ element-start-idx axis))]
           (cond
             (point-equals-list-element point coordinates-vec element-start-idx k)
-            (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) deleted?))
+            (node-kd-tree-build-path build-path-fns (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) deleted?))
 
             (< (aget point axis) point-axis)
             (recur (.axis node)
                    (.left node)
-                   (fn [left]
-                     (build-fn (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))))
+                   (cons (fn [left]
+                           (Node. point-vec (.point-idx node) (.axis node) left (.right node) (.deleted? node)))
+                         build-path-fns))
 
             :else
             (recur (.axis node)
                    (.right node)
-                   (fn [right]
-                     (build-fn (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))))))))))
+                   (cons (fn [right]
+                           (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))
+                         build-path-fns))))))))
 
 (extend-protocol KdTree
   Node
