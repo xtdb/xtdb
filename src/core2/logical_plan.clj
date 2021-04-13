@@ -173,6 +173,10 @@
     (fn [^IOperatorFactory op-factory watermark]
       (.scan op-factory watermark col-names metadata-pred col-preds nil nil))))
 
+(defmethod emit-op :table [[_ {:keys [rows]}]]
+  (fn [^IOperatorFactory op-factory watermark]
+    (.table op-factory rows)))
+
 (defn- unary-op [relation f]
   (let [inner-f (emit-op relation)]
     (fn [^IOperatorFactory op-factory watermark]

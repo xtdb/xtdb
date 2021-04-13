@@ -8,6 +8,7 @@
             [core2.operator.select :as select]
             [core2.operator.slice :as slice]
             [core2.operator.set :as set-op]
+            [core2.operator.table :as table]
             core2.metadata
             core2.temporal)
   (:import core2.buffer_pool.BufferPool
@@ -22,6 +23,8 @@
                         ^java.util.Map #_#_<String, IVectorPredicate> colPreds
                         ^longs temporalMinRange
                         ^longs temporalMaxRange])
+
+  (^core2.ICursor table [^java.util.List #_<Map> rows])
 
   (^core2.ICursor select [^core2.ICursor inCursor
                           ^core2.select.IVectorSchemaRootSelector selector])
@@ -79,6 +82,9 @@
     (scan [_ watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range]
       (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
                           watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range))
+
+    (table [_ rows]
+      (table/->table-cursor allocator rows))
 
     (select [_ in-cursor selector]
       (select/->select-cursor allocator in-cursor selector))
