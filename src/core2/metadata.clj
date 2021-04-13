@@ -1,5 +1,7 @@
 (ns core2.metadata
-  (:require [core2.expression :as expr]
+  (:require core2.buffer-pool
+            [core2.expression :as expr]
+            core2.object-store
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
