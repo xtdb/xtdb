@@ -16,11 +16,11 @@
     (let [node-dir (util/->path "target/can-ingest-ts-devices-small")]
       (util/delete-dir node-dir)
 
-      (with-open [node (c2/->local-node node-dir)
-                  tx-producer (c2/->local-tx-producer node-dir {})
+      (with-open [node (tu/->local-node {:node-dir node-dir})
+                  tx-producer (tu/->local-tx-producer {:node-dir node-dir})
                   info-reader (io/reader (io/resource "devices_small_device_info.csv"))
                   readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
-        (let [^IMetadataManager mm (.metadata-manager node)
+        (let [^IMetadataManager mm (:core2/metadata-manager @(:!system node))
               device-infos (mapv ts/device-info-csv->doc (csv/read-csv info-reader))
               readings (mapv ts/readings-csv->doc (csv/read-csv readings-reader))
               [initial-readings rest-readings] (split-at (count device-infos) readings)

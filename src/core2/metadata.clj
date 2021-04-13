@@ -4,7 +4,8 @@
             core2.object-store
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import clojure.lang.MapEntry
            core2.buffer_pool.BufferPool
            core2.object_store.ObjectStore
@@ -201,8 +202,9 @@
   (close [_]
     (.clear known-chunks)))
 
-(defn ->metadata-manager ^core2.metadata.IMetadataManager [^BufferAllocator allocator
-                                                           ^ObjectStore object-store
-                                                           ^BufferPool buffer-pool]
+(defn ->metadata-manager {::sys/deps {:allocator :core2/allocator
+                                      :object-store :core2/object-store
+                                      :buffer-pool :core2/buffer-pool}}
+  [{:keys [allocator ^ObjectStore object-store buffer-pool]}]
   (MetadataManager. allocator object-store buffer-pool
                     (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx @(.listObjects object-store "metadata-*")))))

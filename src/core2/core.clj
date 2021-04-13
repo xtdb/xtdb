@@ -1,87 +1,118 @@
 (ns core2.core
-  (:require [core2.buffer-pool :as bp]
-            [core2.indexer :as indexer]
-            [core2.ingest-loop :as ingest-loop]
+  (:require [core2.indexer :as indexer]
+            core2.ingest-loop
             [core2.log :as log]
-            [core2.metadata :as meta]
-            [core2.object-store :as os]
-            [core2.temporal :as temporal]
-            core2.tx
+            [core2.logical-plan :as lp]
+            [core2.system :as sys]
             [core2.tx-producer :as txp]
             [core2.util :as util])
-  (:import core2.buffer_pool.BufferPool
-           [core2.indexer IChunkManager TransactionIndexer]
+  (:import [core2.indexer IChunkManager TransactionIndexer]
            core2.ingest_loop.IIngestLoop
-           core2.log.LogReader
-           core2.metadata.IMetadataManager
-           core2.object_store.ObjectStore
-           core2.temporal.ITemporalManager
-           core2.tx_producer.TxProducer
+           core2.log.LogWriter
+           core2.operator.IOperatorFactory
            java.io.Closeable
-           java.nio.file.Path
-           java.time.Duration
+           java.lang.AutoCloseable
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(deftype Node [^BufferAllocator allocator
-               ^LogReader log-reader
-               ^ObjectStore object-store
-               ^IMetadataManager metadata-manager
-               ^ITemporalManager temporal-manager
-               ^TransactionIndexer indexer
-               ^Closeable ingest-loop
-               ^BufferPool buffer-pool]
+(defprotocol PNode
+  (await-tx
+    ^core2.tx.TransactionInstant [node tx]
+    ^core2.tx.TransactionInstant [node tx timeout])
+
+  (latest-completed-tx ^core2.tx.TransactionInstant [node])
+  (open-watermark ^core2.tx.Watermark [node])
+
+  (open-q
+    ^java.lang.AutoCloseable [node watermark query]))
+
+(defprotocol PTxProducer
+  (submit-tx
+    ^java.util.concurrent.CompletableFuture [tx-producer tx-ops]))
+
+(defrecord Node [^TransactionIndexer indexer
+                 ^IIngestLoop ingest-loop
+                 ^IOperatorFactory op-factory
+                 !system
+                 close-fn]
+  PNode
+  (await-tx [this tx] (await-tx this tx nil))
+  (await-tx [_ tx timeout] (.awaitTx ingest-loop tx timeout))
+
+  (latest-completed-tx [_] (.latestCompletedTx indexer))
+
+  (open-watermark [_] (.getWatermark ^IChunkManager indexer))
+
+  (open-q [_ watermark query] (lp/open-q op-factory watermark query))
+
   Closeable
   (close [_]
-    (util/try-close ingest-loop)
-    (util/try-close indexer)
-    (util/try-close metadata-manager)
-    (util/try-close temporal-manager)
-    (util/try-close buffer-pool)
-    (util/try-close object-store)
-    (util/try-close log-reader)
-    (util/try-close allocator)))
+    (when close-fn
+      (close-fn))))
 
-(defn ->local-node
-  (^core2.core.Node [^Path node-dir]
-   (->local-node node-dir {}))
-  (^core2.core.Node [^Path node-dir opts]
-   (let [object-dir (.resolve node-dir "objects")
-         log-dir (.resolve node-dir "log")
-         allocator (RootAllocator.)
-         log-reader (log/->local-directory-log-reader log-dir)
-         object-store (os/->file-system-object-store object-dir opts)
-         buffer-pool (bp/->memory-mapped-buffer-pool (.resolve node-dir "buffers") allocator object-store)
-         metadata-manager (meta/->metadata-manager allocator object-store buffer-pool)
-         temporal-manager (temporal/->temporal-manager allocator object-store buffer-pool metadata-manager)
-         indexer (indexer/->indexer allocator object-store metadata-manager temporal-manager opts)
-         ingest-loop (ingest-loop/->ingest-loop log-reader indexer opts)]
-     (Node. allocator log-reader object-store metadata-manager temporal-manager indexer ingest-loop buffer-pool))))
+(defn ->node {::sys/deps {:indexer :core2/indexer
+                          :ingest-loop :core2/ingest-loop
+                          :op-factory :core2/op-factory}}
+  [deps]
+  (map->Node (assoc deps :!system (atom nil))))
 
-(defn ->local-tx-producer
-  (^core2.tx_producer.LogTxProducer [^Path node-dir] (txp/->local-tx-producer node-dir))
-  (^core2.tx_producer.LogTxProducer [^Path node-dir log-writer-opts] (txp/->local-tx-producer node-dir log-writer-opts)))
+(defn ->allocator [_]
+  (RootAllocator.))
 
-(defn submit-tx ^java.util.concurrent.CompletableFuture [^TxProducer tx-producer, tx-ops]
-  (.submitTx tx-producer tx-ops))
+(defn start-node [opts]
+  (let [system (-> (sys/prep-system (into [{:core2/node `->node
+                                            :core2/allocator `->allocator
+                                            :core2/indexer 'core2.indexer/->indexer
+                                            :core2/ingest-loop 'core2.ingest-loop/->ingest-loop
+                                            :core2/log-reader 'core2.log/->local-directory-log-reader
+                                            :core2/metadata-manager 'core2.metadata/->metadata-manager
+                                            :core2/temporal-manager 'core2.temporal/->temporal-manager
+                                            :core2/object-store 'core2.object-store/->file-system-object-store
+                                            :core2/buffer-pool 'core2.buffer-pool/->memory-mapped-buffer-pool
+                                            :core2/op-factory 'core2.operator/->operator-factory}]
+                                          (cond-> opts (not (vector? opts)) vector)))
+                   (sys/start-system))]
 
-(defn await-tx
-  (^core2.tx.TransactionInstant [^Node node, tx]
-   (.awaitTx ^IIngestLoop (.ingest-loop node) tx))
-  (^core2.tx.TransactionInstant [^Node node, tx, ^Duration timeout]
-   (.awaitTx ^IIngestLoop (.ingest-loop node) tx timeout)))
+    (-> (:core2/node system)
+        (doto (-> :!system (reset! system)))
+        (assoc :close-fn #(.close ^AutoCloseable system)))))
 
-(defn latest-completed-tx ^core2.tx.TransactionInstant [^Node node]
-  (.latestCompletedTx ^TransactionIndexer (.indexer node)))
+(defrecord TxProducer [^LogWriter log-writer
+                       ^BufferAllocator allocator
+                       !system
+                       close-fn]
+  PTxProducer
+  (submit-tx [_ tx-ops]
+    (txp/submit-tx log-writer allocator tx-ops))
 
-(defn open-watermark ^core2.tx.Watermark [^Node node]
-  (.getWatermark ^IChunkManager (.indexer node)))
+  AutoCloseable
+  (close [_]
+    (when close-fn
+      (close-fn))))
+
+(defn ->tx-producer {::sys/deps {:log-writer :core2/log-writer
+                                 :allocator :core2/allocator}}
+  [deps]
+  (map->TxProducer (assoc deps :!system (atom nil))))
+
+(defn start-tx-producer [opts]
+  (let [system (-> (sys/prep-system (into [{:core2/tx-producer `->tx-producer
+                                            :core2/allocator `->allocator
+                                            :core2/log-writer 'core2.log/->local-directory-log-writer}]
+                                          (cond-> opts (not (vector? opts)) vector)))
+                   (sys/start-system))]
+
+    (-> (:core2/tx-producer system)
+        (doto (-> :!system (reset! system)))
+        (assoc :close-fn #(.close ^AutoCloseable system)))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
     (let [node-dir (util/->path node-dir)]
-      (->local-node node-dir)
+      (start-node {:core2/log-reader {:root-path (.resolve node-dir "log")}
+                   :core2/buffer-pool {:root-path (.resolve node-dir "buffers")}
+                   :core2/object-store {:root-path (.resolve node-dir "objects")}})
       (println "core2 started in" (str node-dir)))
     (binding [*out* *err*]
       (println "node directory argument required")

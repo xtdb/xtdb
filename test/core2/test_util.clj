@@ -124,3 +124,16 @@
     (doseq [^Path path (iterator-seq (.iterator (Files/list os-path)))
             :when (.endsWith (str path) ".json")]
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
+
+(defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir,
+                                                     max-rows-per-block max-rows-per-chunk]}]
+  (c2/start-node {:core2/log-reader {:root-path (.resolve node-dir "log")}
+                  :core2/buffer-pool {:root-path (.resolve node-dir "buffers")}
+                  :core2/object-store {:root-path (.resolve node-dir "objects")}
+                  :core2/indexer (->> {:max-rows-per-block max-rows-per-block
+                                       :max-rows-per-chunk max-rows-per-chunk}
+                                      (into {} (filter val) ))}))
+
+(defn ->local-tx-producer ^java.lang.AutoCloseable [{:keys [^Path node-dir clock]}]
+  (c2/start-tx-producer {:core2/log-writer (cond-> {:root-path (.resolve node-dir "log")}
+                                             clock (assoc :clock clock))}))

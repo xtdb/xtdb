@@ -9,6 +9,8 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "0.6.0"]
                  [org.clojure/spec.alpha "0.2.194"]
+                 [com.stuartsierra/dependency "0.2.0"]
+                 [org.clojure/data.json "2.0.2"]
                  [org.apache.arrow/arrow-algorithm "3.0.0"]
                  [org.apache.arrow/arrow-vector "3.0.0"]
                  [org.apache.arrow/arrow-memory-netty "3.0.0"]

@@ -2,24 +2,20 @@
   (:require [clojure.test :as t]
             [core2.core :as c2]
             [core2.expression :as expr]
-            [core2.logical-plan :as lp]
             [core2.metadata :as meta]
-            [core2.operator :as op]
             [core2.test-util :as tu]
             [core2.util :as util])
   (:import core2.metadata.IMetadataManager
+           core2.operator.IOperatorFactory
            java.util.function.Consumer
            org.apache.arrow.vector.util.Text))
 
 (t/deftest test-find-gt-ivan
   (let [node-dir (doto (util/->path "target/test-find-gt-ivan")
                    util/delete-dir)]
-    (with-open [node (c2/->local-node node-dir {:max-rows-per-chunk 10, :max-rows-per-block 2})
-                tx-producer (c2/->local-tx-producer node-dir)]
-      (let [allocator (.allocator node)
-            buffer-pool (.buffer-pool node)
-            ^IMetadataManager metadata-mgr (.metadata-manager node)
-            temporal-mgr (.temporal-manager node)]
+    (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-chunk 10, :max-rows-per-block 2})
+                tx-producer (tu/->local-tx-producer {:node-dir node-dir})]
+      (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
 
         @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Håkan", :_id 0}}])
              (tu/then-await-tx node))
@@ -34,7 +30,7 @@
 
         (tu/finish-chunk node)
 
-        (let [op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)
+        (let [^IOperatorFactory op-factory (:op-factory node)
               metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
           (letfn [(query-ivan [watermark]
                     (let [!results (atom [])]
@@ -70,61 +66,55 @@
 (t/deftest test-fixpoint-operator
   (let [node-dir (doto (util/->path "target/test-fixpoint-operator")
                    util/delete-dir)]
-    (with-open [node (c2/->local-node node-dir)]
-      (let [allocator (.allocator node)
-            buffer-pool (.buffer-pool node)
-            metadata-mgr (.metadata-manager node)
-            temporal-mgr (.temporal-manager node)
-            op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)]
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
+      (t/testing "factorial"
+        (with-open [watermark (c2/open-watermark node)
+                    fixpoint-cursor (c2/open-q node watermark '[:fixpoint Fact
+                                                                [:union
+                                                                 [:table [{:a 0 :b 1}]]
+                                                                 [:select
+                                                                  (<= a 8)
+                                                                  [:project
+                                                                   [{a (+ a 1)}
+                                                                    {b (* (+ a 1) b)}]
+                                                                   Fact]]]])]
+          (t/is (= [[{:a 0, :b 1}
+                     {:a 1, :b 1}
+                     {:a 2, :b 2}
+                     {:a 3, :b 6}
+                     {:a 4, :b 24}
+                     {:a 5, :b 120}
+                     {:a 6, :b 720}
+                     {:a 7, :b 5040}
+                     {:a 8, :b 40320}]] (tu/<-cursor fixpoint-cursor)))))
 
-        (t/testing "factorial"
-          (with-open [watermark (c2/open-watermark node)
-                      fixpoint-cursor (lp/open-q op-factory watermark '[:fixpoint Fact
-                                                                        [:union
-                                                                         [:table [{:a 0 :b 1}]]
-                                                                         [:select
-                                                                          (<= a 8)
-                                                                          [:project
-                                                                           [{a (+ a 1)}
-                                                                            {b (* (+ a 1) b)}]
-                                                                           Fact]]]])]
-            (t/is (= [[{:a 0, :b 1}
-                       {:a 1, :b 1}
-                       {:a 2, :b 2}
-                       {:a 3, :b 6}
-                       {:a 4, :b 24}
-                       {:a 5, :b 120}
-                       {:a 6, :b 720}
-                       {:a 7, :b 5040}
-                       {:a 8, :b 40320}]] (tu/<-cursor fixpoint-cursor)))))
+      (t/testing "transitive closure"
+        (with-open [watermark (c2/open-watermark node)
+                    fixpoint-cursor (c2/open-q node watermark '[:fixpoint Path
+                                                                [:union
+                                                                 [:table [{:x "a" :y "b"}
+                                                                          {:x "b" :y "c"}
+                                                                          {:x "c" :y "d"}
+                                                                          {:x "d" :y "a"}]]
+                                                                 [:project [x y]
+                                                                  [:join {edge-z path-z}
+                                                                   [:rename {y edge-z} Path]
+                                                                   [:rename {x path-z} Path]]]]])]
 
-        (t/testing "transitive closure"
-          (with-open [watermark (c2/open-watermark node)
-                      fixpoint-cursor (lp/open-q op-factory watermark '[:fixpoint Path
-                                                                        [:union
-                                                                         [:table [{:x "a" :y "b"}
-                                                                                  {:x "b" :y "c"}
-                                                                                  {:x "c" :y "d"}
-                                                                                  {:x "d" :y "a"}]]
-                                                                         [:project [x y]
-                                                                          [:join {edge-z path-z}
-                                                                           [:rename {y edge-z} Path]
-                                                                           [:rename {x path-z} Path]]]]])]
-
-            (t/is (= [[{:x (Text. "a"), :y (Text. "b")}
-                       {:x (Text. "b"), :y (Text. "c")}
-                       {:x (Text. "c"), :y (Text. "d")}
-                       {:x (Text. "d"), :y (Text. "a")}
-                       {:x (Text. "d"), :y (Text. "b")}
-                       {:x (Text. "a"), :y (Text. "c")}
-                       {:x (Text. "b"), :y (Text. "d")}
-                       {:x (Text. "c"), :y (Text. "a")}
-                       {:x (Text. "c"), :y (Text. "b")}
-                       {:x (Text. "d"), :y (Text. "c")}
-                       {:x (Text. "a"), :y (Text. "d")}
-                       {:x (Text. "b"), :y (Text. "a")}
-                       {:x (Text. "b"), :y (Text. "b")}
-                       {:x (Text. "c"), :y (Text. "c")}
-                       {:x (Text. "d"), :y (Text. "d")}
-                       {:x (Text. "a"), :y (Text. "a")}]]
-                     (tu/<-cursor fixpoint-cursor)))))))))
+          (t/is (= [[{:x (Text. "a"), :y (Text. "b")}
+                     {:x (Text. "b"), :y (Text. "c")}
+                     {:x (Text. "c"), :y (Text. "d")}
+                     {:x (Text. "d"), :y (Text. "a")}
+                     {:x (Text. "d"), :y (Text. "b")}
+                     {:x (Text. "a"), :y (Text. "c")}
+                     {:x (Text. "b"), :y (Text. "d")}
+                     {:x (Text. "c"), :y (Text. "a")}
+                     {:x (Text. "c"), :y (Text. "b")}
+                     {:x (Text. "d"), :y (Text. "c")}
+                     {:x (Text. "a"), :y (Text. "d")}
+                     {:x (Text. "b"), :y (Text. "a")}
+                     {:x (Text. "b"), :y (Text. "b")}
+                     {:x (Text. "c"), :y (Text. "c")}
+                     {:x (Text. "d"), :y (Text. "d")}
+                     {:x (Text. "a"), :y (Text. "a")}]]
+                   (tu/<-cursor fixpoint-cursor))))))))

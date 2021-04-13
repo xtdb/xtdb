@@ -1,5 +1,6 @@
 (ns core2.object-store
-  (:require [core2.util :as util])
+  (:require [core2.util :as util]
+            [core2.system :as sys])
   (:import java.io.Closeable
            [java.nio.file CopyOption Files FileSystems Path StandardCopyOption]
            [java.util.concurrent CompletableFuture Executors ExecutorService]
@@ -27,7 +28,8 @@
               (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE StandardCopyOption/REPLACE_EXISTING]))
               to-path
               (finally
-                (Files/deleteIfExists to-path-temp))))          to-path))))
+                (Files/deleteIfExists to-path-temp))))
+          to-path))))
 
   (putObject [_this k buf]
     (util/completable-future pool
@@ -65,20 +67,9 @@
   (close [_this]
     (util/shutdown-pool pool)))
 
-(defn ->file-system-object-store
-  (^core2.object_store.FileSystemObjectStore
-   [^Path root-path]
-   (->file-system-object-store root-path {}))
-  (^core2.object_store.FileSystemObjectStore
-   [^Path root-path {:keys [pool-size], :or {pool-size 4}}]
-   (util/mkdirs root-path)
-   (->FileSystemObjectStore root-path (Executors/newFixedThreadPool pool-size (util/->prefix-thread-factory "file-system-object-store-")))))
-
-;; ok, so where we at?
-
-;;; storing everything at block level
-;; need to consider dictionaries
-;; if we want everything in the object store as Arrow IPC files, need to faff about with layout ourselves
-
-;;; dictionaries
-;; looks like the Java version only writes dictionaries at the start, otherwise you're on your own
+(defn ->file-system-object-store {::sys/args {:root-path {:spec ::sys/path, :required? true}
+                                              :pool-size {:spec ::sys/pos-int, :default 4}}}
+  [{:keys [root-path pool-size]}]
+  (util/mkdirs root-path)
+  (let [pool (Executors/newFixedThreadPool pool-size (util/->prefix-thread-factory "file-system-object-store-"))]
+    (->FileSystemObjectStore root-path pool)))

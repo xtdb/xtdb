@@ -2,7 +2,8 @@
   (:require [clojure.tools.logging :as log]
             core2.indexer
             [core2.log :as c2-log]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import [core2.log LogReader LogRecord]
            [core2.indexer TransactionIndexer]
            java.io.Closeable
@@ -35,15 +36,13 @@
 
 (deftype IngestLoop [^TransactionIndexer indexer
                      ^ExecutorService pool
-                     ingest-opts]
+                     ^Duration poll-sleep-duration]
   IIngestLoop
   (awaitTx [this tx] (.awaitTx this tx nil))
 
   (awaitTx [_this tx timeout]
     (if tx
-      (let [{:keys [^Duration poll-sleep-duration],
-             :or {poll-sleep-duration (Duration/ofMillis 100)}} ingest-opts
-            poll-sleep-ms (.toMillis poll-sleep-duration)
+      (let [poll-sleep-ms (.toMillis poll-sleep-duration)
             end-ns (+ (System/nanoTime) (.toNanos timeout))
             tx-id (.tx-id tx)]
         (loop []
@@ -68,11 +67,10 @@
   (close [_]
     (util/shutdown-pool pool)))
 
-(defn ->ingest-loop
-  (^java.io.Closeable [^LogReader log-reader, ^TransactionIndexer indexer]
-   (->ingest-loop log-reader indexer {}))
-
-  (^java.io.Closeable [^LogReader log-reader, ^TransactionIndexer indexer, ingest-opts]
+(defn ->ingest-loop {::sys/deps {:log-reader :core2/log-reader
+                                 :indexer :core2/indexer}
+                     ::sys/args {:poll-sleep-duration {:spec ::sys/duration, :default "PT0.1S"}}}
+  [{:keys [log-reader indexer poll-sleep-duration]}]
    (let [pool (doto (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "ingest-loop-"))
-                (.submit ^Runnable #(ingest-loop log-reader indexer ingest-opts)))]
-     (IngestLoop. indexer pool ingest-opts))))
+                (.submit ^Runnable #(ingest-loop log-reader indexer poll-sleep-duration)))]
+     (IngestLoop. indexer pool poll-sleep-duration)))

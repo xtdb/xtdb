@@ -69,20 +69,21 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
         last-tx-instant (tx/->TransactionInstant 6240 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
     (util/delete-dir node-dir)
 
-    (with-open [node (c2/->local-node node-dir)
-                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-      (let [^BufferAllocator a (.allocator node)
-            ^ObjectStore os (.object-store node)
-            ^BufferPool bp (.buffer-pool node)
-            ^IMetadataManager mm (.metadata-manager node)
-            ^TemporalManager tm (.temporal-manager node)]
+    (with-open [node (tu/->local-node {:node-dir node-dir})
+                tx-producer (tu/->local-tx-producer {:node-dir node-dir,
+                                                     :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
+      (let [system @(:!system node)
+            ^BufferAllocator a (:core2/allocator system)
+            ^ObjectStore os (:core2/object-store system)
+            ^BufferPool bp (:core2/buffer-pool system)
+            ^IMetadataManager mm (:core2/metadata-manager system)
+            ^TemporalManager tm (:core2/temporal-manager system)]
 
         (t/is (every? nil? @(meta/with-latest-metadata mm
                               (juxt meta/latest-tx meta/latest-row-id))))
@@ -189,9 +190,9 @@
                 {:op :put, :doc {:_id #inst "2020-01-01"}}]]
     (util/delete-dir node-dir)
 
-    (with-open [node (c2/->local-node node-dir)
-                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
-      (let [^ObjectStore os (.object-store node)]
+    (with-open [node (tu/->local-node {:node-dir node-dir})
+                tx-producer (tu/->local-tx-producer {:node-dir node-dir, :clock mock-clock})]
+      (let [^ObjectStore os (:core2/object-store @(:!system node))]
 
         @(-> (c2/submit-tx tx-producer tx-ops)
              (tu/then-await-tx node))
@@ -206,8 +207,8 @@
         last-tx-instant (tx/->TransactionInstant 6240 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
-    (with-open [node (c2/->local-node node-dir)
-                tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir})
+                tx-producer (tu/->local-tx-producer {:node-dir node-dir, :clock mock-clock})]
       (let [object-dir (.resolve node-dir "objects")]
 
         (t/is (= last-tx-instant
@@ -218,7 +219,7 @@
                  (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
         (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
-        (with-open [node (c2/->local-node node-dir)]
+        (with-open [node (tu/->local-node {:node-dir node-dir})]
           (t/is (= last-tx-instant
                    (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
           (t/is (= last-tx-instant (c2/latest-completed-tx node))))
@@ -229,12 +230,12 @@
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini")]
     (util/delete-dir node-dir)
 
-    (with-open [node (c2/->local-node node-dir {:max-rows-per-chunk 3000, :max-rows-per-block 300})
-                tx-producer (c2/->local-tx-producer node-dir {})
+    (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-chunk 3000, :max-rows-per-block 300})
+                tx-producer (tu/->local-tx-producer {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^ObjectStore os (.object-store node)
-            ^IMetadataManager mm (.metadata-manager node)
+      (let [^ObjectStore os (:core2/object-store @(:!system node))
+            ^IMetadataManager mm (:core2/metadata-manager @(:!system node))
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -305,13 +306,13 @@
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
-        opts {:max-rows-per-chunk 1000, :max-rows-per-block 100}]
+        node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [node-1 (c2/->local-node node-dir opts)
-                node-2 (c2/->local-node node-dir opts)
-                node-3 (c2/->local-node node-dir opts)
-                tx-producer (c2/->local-tx-producer node-dir {})
+    (with-open [node-1 (tu/->local-node node-opts)
+                node-2 (tu/->local-node node-opts)
+                node-3 (tu/->local-node node-opts)
+                tx-producer (tu/->local-tx-producer {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
@@ -330,7 +331,7 @@
                                 (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [os ^ObjectStore (.object-store node)]]
+                  :let [os ^ObjectStore (:core2/object-store @(:!system node))]]
             (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 5))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
@@ -341,10 +342,10 @@
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
-        opts {:max-rows-per-chunk 1000, :max-rows-per-block 100}]
+        node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [tx-producer (c2/->local-tx-producer node-dir {})
+    (with-open [tx-producer (tu/->local-tx-producer {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
@@ -365,10 +366,11 @@
                                       nil
                                       (partition-all 100 first-half-tx-ops))]
 
-          (with-open [node (c2/->local-node node-dir opts)]
-            (let [^ObjectStore os (.object-store node)
-                  ^IMetadataManager mm (.metadata-manager node)
-                  ^TemporalManager tm (.temporal-manager node)]
+          (with-open [node (tu/->local-node node-opts)]
+            (let [system @(:!system node)
+                  ^ObjectStore os (:core2/object-store system)
+                  ^IMetadataManager mm (:core2/metadata-manager system)
+                  ^TemporalManager tm (:core2/temporal-manager system)]
               (t/is (= first-half-tx-instant (c2/await-tx node first-half-tx-instant (Duration/ofSeconds 5))))
               (t/is (= first-half-tx-instant (c2/latest-completed-tx node)))
 
@@ -394,9 +396,9 @@
                           (.tx-id (c2/latest-completed-tx node))
                           (.tx-id second-half-tx-instant)))
 
-                (with-open [new-node (c2/->local-node node-dir opts)]
+                (with-open [new-node (tu/->local-node node-opts)]
                   (doseq [^Node node [new-node node]
-                          :let [^TemporalManager tm (.temporal-manager node)]]
+                          :let [^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (c2/latest-completed-tx node))
                               (.tx-id second-half-tx-instant)))
@@ -412,8 +414,8 @@
                   (Thread/sleep 1000) ;; for now
 
                   (doseq [^Node node [new-node node]
-                          :let [^ObjectStore os (.object-store node)
-                                ^TemporalManager tm (.temporal-manager node)]]
+                          :let [^ObjectStore os (:core2/object-store @(:!system node))
+                                ^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
                     (t/is (= 11 (count @(.listObjects os "metadata-*"))))
                     (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
                     (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))

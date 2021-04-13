@@ -1,16 +1,12 @@
 (ns core2.tpch-test
-  (:require [clojure.instant :as inst]
-            [clojure.java.io :as io]
-            [clojure.string :as str]
+  (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [clojure.tools.logging :as log]
             [core2.core :as c2]
             [core2.json :as c2-json]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
             [core2.util :as util])
-  (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable]
-           [java.nio.file Files LinkOption]
+  (:import [java.nio.file Files LinkOption]
            [java.time Clock Duration ZoneId]))
 
 (defn- test-tpch-ingest [scale-factor expected-objects]
@@ -20,8 +16,8 @@
     (util/delete-dir node-dir)
 
     (time
-     (with-open [node (c2/->local-node node-dir)
-                 tx-producer (c2/->local-tx-producer node-dir {:clock mock-clock})]
+     (with-open [node (tu/->local-node {:node-dir node-dir})
+                 tx-producer (tu/->local-tx-producer {:node-dir node-dir, :clock mock-clock})]
        (let [last-tx (tpch/submit-docs! tx-producer scale-factor)]
          (c2/await-tx node last-tx (Duration/ofMinutes 1))
 

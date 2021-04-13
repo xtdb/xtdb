@@ -4,7 +4,8 @@
             [core2.types :as t]
             [core2.temporal.kd-tree :as kd]
             core2.tx
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import core2.buffer_pool.BufferPool
            core2.object_store.ObjectStore
            core2.metadata.IMetadataManager
@@ -298,10 +299,14 @@
     (set! (.chunk-kd-tree this) nil)
     (.clear id->internal-id)))
 
-(defn ->temporal-manager ^core2.temporal.ITemporalManager [^BufferAllocator allocator
-                                                           ^ObjectStore object-store
-                                                           ^BufferPool buffer-pool
-                                                           ^IMetadataManager metadata-manager]
+(defn ->temporal-manager {::sys/deps {:allocator :core2/allocator
+                                      :object-store :core2/object-store
+                                      :buffer-pool :core2/buffer-pool
+                                      :metadata-manager :core2/metadata-manager}}
+  [{:keys [^BufferAllocator allocator
+           ^ObjectStore object-store
+           ^BufferPool buffer-pool
+           ^IMetadataManager metadata-manager]}]
   (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil nil)
     (.populateKnownChunks)))
 

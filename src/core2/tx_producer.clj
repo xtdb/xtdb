@@ -4,17 +4,12 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.log.LogWriter
-           java.io.Closeable
-           java.nio.file.Path
            [java.util LinkedHashMap LinkedHashSet Set]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]
+           org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
-
-(definterface TxProducer
-  (^java.util.concurrent.CompletableFuture submitTx [_]))
 
 (defn- ->doc-k-types [tx-ops]
   (let [doc-k-types (LinkedHashMap.)]
@@ -126,22 +121,8 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(deftype LogTxProducer [^LogWriter log-writer, ^BufferAllocator allocator]
-  TxProducer
-  (submitTx [_this tx-ops]
-    (-> (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
-        (util/then-apply
-          (fn [result]
-            (c2-log/log-record->tx-instant result)))))
-
-  Closeable
-  (close [_]
-    (util/try-close log-writer)
-    (util/try-close allocator)))
-
-(defn ->local-tx-producer
-  (^core2.tx_producer.LogTxProducer [^Path node-dir]
-   (->local-tx-producer node-dir {}))
-  (^core2.tx_producer.LogTxProducer [^Path node-dir, log-writer-opts]
-   (LogTxProducer. (c2-log/->local-directory-log-writer (.resolve node-dir "log") log-writer-opts)
-                   (RootAllocator.))))
+(defn submit-tx [^LogWriter log-writer, ^BufferAllocator allocator, tx-ops]
+  (-> (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
+      (util/then-apply
+        (fn [result]
+          (c2-log/log-record->tx-instant result)))))

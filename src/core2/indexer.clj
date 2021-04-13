@@ -4,7 +4,8 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.temporal :as temporal]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
@@ -334,30 +335,24 @@
     (.close watermark)
     (set! (.watermark this) nil)))
 
-(defn ->indexer
-  (^core2.indexer.Indexer [^BufferAllocator allocator
-                           ^ObjectStore object-store
-                           ^IMetadataManager metadata-mgr
-                           ^ITemporalManager temporal-mgr]
-   (->indexer allocator object-store metadata-mgr temporal-mgr {}))
-
-  (^core2.indexer.Indexer [^BufferAllocator allocator
-                           ^ObjectStore object-store
-                           ^IMetadataManager metadata-mgr
-                           ^ITemporalManager temporal-mgr
-                           {:keys [max-rows-per-chunk max-rows-per-block]
-                            :or {max-rows-per-chunk 10000
-                                 max-rows-per-block 1000}}]
-   (let [[latest-row-id latest-tx] @(meta/with-latest-metadata metadata-mgr
-                                      (juxt meta/latest-row-id meta/latest-tx))
-         chunk-idx (if latest-row-id
-                       (inc (long latest-row-id))
-                       0)]
-     (Indexer. allocator
-               object-store
-               metadata-mgr
-               temporal-mgr
-               max-rows-per-chunk
-               max-rows-per-block
-               (ConcurrentSkipListMap.)
-               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)))))
+(defn ->indexer {::sys/deps {:allocator :core2/allocator
+                             :object-store :core2/object-store
+                             :metadata-mgr :core2/metadata-manager
+                             :temporal-mgr :core2/temporal-manager}
+                 ::sys/args {:max-rows-per-block {:spec ::sys/pos-int, :default 1000}
+                             :max-rows-per-chunk {:spec ::sys/pos-int, :default 10000}}}
+  [{:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
+           max-rows-per-chunk max-rows-per-block]}]
+  (let [[latest-row-id latest-tx] @(meta/with-latest-metadata metadata-mgr
+                                     (juxt meta/latest-row-id meta/latest-tx))
+        chunk-idx (if latest-row-id
+                    (inc (long latest-row-id))
+                    0)]
+    (Indexer. allocator
+              object-store
+              metadata-mgr
+              temporal-mgr
+              max-rows-per-chunk
+              max-rows-per-block
+              (ConcurrentSkipListMap.)
+              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block))))

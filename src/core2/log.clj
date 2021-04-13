@@ -1,7 +1,8 @@
 (ns core2.log
   (:require [clojure.tools.logging :as log]
             [core2.tx :as tx]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import clojure.lang.MapEntry
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
            java.nio.ByteBuffer
@@ -145,12 +146,14 @@
           (finally
             (.clear elements)))))))
 
-(defn ->local-directory-log-reader ^core2.log.LocalDirectoryLogReader [^Path root-path]
+(defn ->local-directory-log-reader {::sys/args {:root-path {:spec ::sys/path, :required? true}}}
+  [{:keys [root-path]}]
   (->LocalDirectoryLogReader root-path nil))
 
-(defn ->local-directory-log-writer ^core2.log.LocalDirectoryLogWriter
-  [^Path root-path {:keys [buffer-size clock]
-                    :or {buffer-size 4096, clock (Clock/systemUTC)}}]
+(defn ->local-directory-log-writer {::sys/args {:root-path {:spec ::sys/path, :required? true}
+                                                :buffer-size {:spec ::sys/pos-int, :default 4096}
+                                                :clock {:spec #(instance? Clock %), :default (Clock/systemUTC)}}}
+  [{:keys [^Path root-path buffer-size clock]}]
   (util/mkdirs root-path)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)

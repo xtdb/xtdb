@@ -2,8 +2,6 @@
   (:require [clojure.string :as str]
             [core2.core :as c2]
             [core2.expression :as expr]
-            [core2.logical-plan :as lp]
-            [core2.operator :as op]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
             [core2.util :as util])
@@ -12,7 +10,6 @@
            java.util.Date))
 
 (def ^:dynamic ^:private *node*)
-(def ^:dynamic ^:private ^core2.operator.IOperatorFactory *op-factory*)
 (def ^:dynamic ^:private *watermark*)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
@@ -23,8 +20,8 @@
       (let [node-dir (util/->path (str "target/" test-name))]
         (util/delete-dir node-dir)
 
-        (with-open [node (c2/->local-node node-dir)
-                    tx-producer (c2/->local-tx-producer node-dir)]
+        (with-open [node (tu/->local-node {:node-dir node-dir})
+                    tx-producer (tu/->local-tx-producer {:node-dir node-dir})]
           (let [last-tx (tpch/submit-docs! tx-producer scale-factor)]
             (c2/await-tx node last-tx (Duration/ofMinutes 2))
 
@@ -32,11 +29,7 @@
 
           (with-open [watermark (c2/open-watermark node)]
             (binding [*node* node
-                      *watermark* watermark
-                      *op-factory* (op/->operator-factory (.allocator node)
-                                                          (.metadata-manager node)
-                                                          (.temporal-manager node)
-                                                          (.buffer-pool node))]
+                      *watermark* watermark]
               (f)))))
       (catch Throwable e
         (.printStackTrace e)))))
@@ -56,7 +49,7 @@
    :return-type Long})
 
 (defn tpch-q1-pricing-summary-report []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{l_returnflag :asc} {l_linestatus :asc}]
                                [:group-by [l_returnflag l_linestatus
                                            {sum_qty (sum l_quantity)}
@@ -78,7 +71,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q3-shipping-priority []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:slice {:limit 10}
                                [:order-by [{revenue :desc}, {o_orderdate :asc}]
                                 [:group-by [l_orderkey
@@ -98,7 +91,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q5-local-supplier-volume []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{revenue :desc}]
                                [:group-by [n_name {revenue (sum disc_price)}]
                                 [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
@@ -120,7 +113,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q6-forecasting-revenue-change []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:group-by [{revenue (sum disc_price)}]
                                [:project [{disc_price (* l_extendedprice l_discount)}]
                                 [:scan [{l_shipdate (and (>= l_shipdate #inst "1994-01-01")
@@ -133,7 +126,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q7-volume-shipping []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{supp_nation :asc} {cust_nation :asc} {l_year :asc}]
                                [:group-by [supp_nation cust_nation l_year {revenue (sum volume)}]
                                 [:project [supp_nation cust_nation
@@ -163,7 +156,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q8-national-market-share []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{o_year :asc}]
                                [:project [o_year {mkt_share (/ brazil_revenue revenue)}]
                                 [:group-by [o_year {brazil_revenue (sum brazil_volume)} {revenue (sum volume)}]
@@ -199,7 +192,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q9-product-type-profit-measure []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{nation :asc}, {o_year :desc}]
                                [:group-by [nation o_year {sum_profit (sum amount)}]
                                 [:rename {n_name nation}
@@ -223,7 +216,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q10-returned-item-reporting []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:slice {:limit 20}
                                [:order-by [{revenue :desc}]
                                 [:group-by [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
@@ -243,7 +236,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q12-shipping-modes-and-order-priority []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{l_shipmode :asc}]
                                [:group-by [l_shipmode
                                            {high_line_count (sum high_line)}
@@ -272,7 +265,7 @@
 ;; TODO: should behave as a left outer join and return customers
 ;; without orders as well.
 (defn tpch-q13-customer-distribution []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{custdist :desc}, {c_count :desc}]
                                [:group-by [c_count {custdist (count c_custkey)}]
                                 [:group-by [c_custkey {c_count (count o_comment)}]
@@ -283,7 +276,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q14-promotion-effect []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:project [{promo_revenue (* 100 (/ promo_revenue revenue))}]
                                [:group-by [{promo_revenue (sum promo_disc_price)}
                                            {revenue (sum disc_price)}]
@@ -300,7 +293,7 @@
          (into [] (mapcat seq)))))
 
 (defn tpch-q19-discounted-revenue []
-  (with-open [res (lp/open-q *op-factory* *watermark*
+  (with-open [res (c2/open-q *node* *watermark*
                              '[:group-by [{revenue (sum disc_price)}]
                                [:project [{disc_price (* l_extendedprice (- 1 l_discount))}]
                                 [:select (or (and (= p_brand "Brand#12")

@@ -1,6 +1,7 @@
 (ns core2.buffer-pool
   (:require [core2.object-store :as os]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import [core2.object_store ObjectStore]
            [java.io Closeable]
            [java.nio.file Files Path]
@@ -45,6 +46,9 @@
         (.release ^ArrowBuf (.next i))
         (.remove i)))))
 
-(defn ->memory-mapped-buffer-pool [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store]
+(defn ->memory-mapped-buffer-pool {::sys/deps {:allocator :core2/allocator
+                                               :object-store :core2/object-store}
+                                   ::sys/args {:root-path {:spec ::sys/path, :required? true}}}
+  [{:keys [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store]}]
   (util/mkdirs root-path)
   (->MemoryMappedBufferPool root-path allocator object-store (ConcurrentHashMap.)))

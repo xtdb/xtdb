@@ -10,7 +10,8 @@
             [core2.operator.set :as set-op]
             [core2.operator.table :as table]
             core2.metadata
-            core2.temporal)
+            core2.temporal
+            [core2.system :as sys])
   (:import core2.buffer_pool.BufferPool
            core2.metadata.IMetadataManager
            core2.temporal.ITemporalManager
@@ -71,12 +72,15 @@
 
   (^core2.ICursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory ^boolean isIncremental]))
 
-(defn ->operator-factory
+(defn ->operator-factory {::sys/deps {:allocator :core2/allocator
+                                      :metadata-mgr :core2/metadata-manager
+                                      :temporal-mgr :core2/temporal-manager
+                                      :buffer-pool :core2/buffer-pool}}
   ^core2.operator.IOperatorFactory
-  [^BufferAllocator allocator
-   ^IMetadataManager metadata-mgr
-   ^ITemporalManager temporal-mgr
-   ^BufferPool buffer-pool]
+  [{:keys [^BufferAllocator allocator
+           ^IMetadataManager metadata-mgr
+           ^ITemporalManager temporal-mgr
+           ^BufferPool buffer-pool]}]
 
   (reify IOperatorFactory
     (scan [_ watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range]
