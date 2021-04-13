@@ -168,44 +168,68 @@
     (fn [^IOperatorFactory op-factory watermark]
       (.scan op-factory watermark col-names metadata-pred col-preds nil nil))))
 
-(defmethod emit-op :select [[_ {:keys [predicate relation]}]]
-  (let [inner-f (emit-op relation)
-        selector (expr/->expression-root-selector predicate)]
+(defn- unary-op [relation f]
+  (let [inner-f (emit-op relation)]
     (fn [^IOperatorFactory op-factory watermark]
       (let [inner (inner-f op-factory watermark)]
         (try
-          (.select op-factory inner selector)
+          (f op-factory inner)
           (catch Exception e
             (util/try-close inner)
             (throw e)))))))
 
+(defn- binary-op [left right f]
+  (let [left-f (emit-op left)
+        right-f (emit-op right)]
+    (fn [^IOperatorFactory op-factory watermark]
+      (let [left (left-f op-factory watermark)]
+        (try
+          (let [right (right-f op-factory watermark)]
+            (try
+              (f op-factory left right)
+              (catch Exception e
+                (util/try-close right)
+                (throw e))))
+          (catch Exception e
+            (util/try-close left)
+            (throw e)))))))
+
+(defmethod emit-op :select [[_ {:keys [predicate relation]}]]
+  (let [selector (expr/->expression-root-selector predicate)]
+    (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                         (.select op-factory inner selector)))))
+
 (defmethod emit-op :project [[_ {:keys [projections relation]}]]
-  (let [inner-f (emit-op relation)
-        projection-specs (for [[p-type arg] projections]
+  (let [projection-specs (for [[p-type arg] projections]
                            (case p-type
                              :column (project/->identity-projection-spec (name arg))
                              :extend (let [[col-name expr] (first arg)]
                                        (expr/->expression-projection-spec (name col-name) expr))))]
-    (fn [^IOperatorFactory op-factory watermark]
-      (let [inner (inner-f op-factory watermark)]
-        (try
-          (.project op-factory inner projection-specs)
-          (catch Exception e
-            (util/try-close inner)
-            (throw e)))))))
+    (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                         (.project op-factory inner projection-specs)))))
 
 (defmethod emit-op :rename [[_ {:keys [columns relation]}]]
-  (let [inner-f (emit-op relation)
-        rename-map (->> columns
+  (let [rename-map (->> columns
                         (into {} (map (juxt (comp name key)
                                             (comp name val)))))]
-    (fn [^IOperatorFactory op-factory watermark]
-      (let [inner (inner-f op-factory watermark)]
-        (try
-          (.rename op-factory inner rename-map)
-          (catch Exception e
-            (util/try-close inner)
-            (throw e)))))))
+    (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                         (.rename op-factory inner rename-map)))))
+
+(defmethod emit-op :union [[_ {:keys [left right]}]]
+  (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                          (.union op-factory left right))))
+
+(defmethod emit-op :intersection [[_ {:keys [left right]}]]
+  (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                          (.intersection op-factory left right))))
+
+(defmethod emit-op :difference [[_ {:keys [left right]}]]
+  (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                          (.difference op-factory left right))))
+
+(defmethod emit-op :cross-join [[_ {:keys [left right]}]]
+  (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                          (.crossJoin op-factory left right))))
 
 (defmethod emit-op :join [[_ {:keys [join-type left right]}]]
   (let [[join-type arg] join-type
@@ -215,73 +239,64 @@
                               (fn [^IOperatorFactory op-factory left right]
                                 (.equiJoin op-factory
                                            left (name left-col)
-                                           right (name right-col))))
-                 ;; TODO theta-join
-                 )
-        left-f (emit-op left)
+                                           right (name right-col)))))
         right-f (emit-op right)]
-    (fn [^IOperatorFactory op-factory watermark]
-      (let [left (left-f op-factory watermark)]
-        (try
-          (let [right (right-f op-factory watermark)]
-            (try
-              (join-f op-factory left right)
-              (catch Exception e
-                (util/try-close right)
-                (throw e))))
-          (catch Exception e
-            (util/try-close left)
-            (throw e)))))))
+    (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                            (join-f op-factory left right)))))
+
+(defmethod emit-op :semi-join [[_ {:keys [join-type left right]}]]
+  (let [[join-type arg] join-type
+        join-f (case join-type
+                 :equi-join (let [{:keys [args]} arg
+                                  [{left-col :variable} {right-col :variable}] args]
+                              (fn [^IOperatorFactory op-factory left right]
+                                (.semiEquiJoin op-factory
+                                               left (name left-col)
+                                               right (name right-col)))))]
+    (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                            (join-f op-factory left right)))))
+
+(defmethod emit-op :anti-join [[_ {:keys [join-type left right]}]]
+  (let [[join-type arg] join-type
+        join-f (case join-type
+                 :equi-join (let [{:keys [args]} arg
+                                  [{left-col :variable} {right-col :variable}] args]
+                              (fn [^IOperatorFactory op-factory left right]
+                                (.antiEquiJoin op-factory
+                                               left (name left-col)
+                                               right (name right-col)))))]
+    (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                            (join-f op-factory left right)))))
 
 (defmethod emit-op :group-by [[_ {:keys [columns relation]}]]
-  (let [inner-f (emit-op relation)
-        agg-specs (for [[col-type arg] columns]
+  (let [agg-specs (for [[col-type arg] columns]
                     (case col-type
                       :group-by (group-by/->group-spec (name arg))
                       :aggregate (let [[to-name {:keys [f args]}] (first arg)
                                        from-name (:variable (first args))
-
-                                       ;; TODO we probably want to compile these too?
                                        ->spec (case f
                                                 sum-long group-by/->sum-long-spec
-                                                sum-double group-by/->sum-double-spec
+                                                (sum sum-double) group-by/->sum-double-spec
                                                 avg-long group-by/->avg-long-spec
-                                                avg-double group-by/->avg-double-spec
+                                                (avg avg-double) group-by/->avg-double-spec
                                                 count group-by/->count-spec)]
                                    (->spec (name from-name) (name to-name)))
                       [col-type arg]))]
-    (fn [^IOperatorFactory op-factory watermark]
-      (let [inner (inner-f op-factory watermark)]
-        (try
-          (.groupBy op-factory inner agg-specs)
-          (catch Exception e
-            (util/try-close inner)
-            (throw e)))))))
+    (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                         (.groupBy op-factory inner agg-specs)))))
 
 (defmethod emit-op :order-by [[_ {:keys [order relation]}]]
-  (let [inner-f (emit-op relation)
-        order-specs (for [[order-type arg] order]
+  (let [order-specs (for [[order-type arg] order]
                       (case order-type
                         :direction (order-by/->order-spec (name (key (first arg)))
                                                           (val (first arg)))
                         :column (order-by/->order-spec (name arg) :asc)))]
-    (fn [^IOperatorFactory op-factory watermark]
-      (let [inner (inner-f op-factory watermark)]
-        (try
-          (.orderBy op-factory inner order-specs)
-          (catch Exception e
-            (util/try-close inner)
-            (throw e)))))))
+    (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                         (.orderBy op-factory inner order-specs)))))
 
 (defmethod emit-op :slice [[_ {:keys [relation], {:keys [offset limit]} :slice}]]
-  (let [inner-f (emit-op relation)]
-    (fn [^IOperatorFactory op-factory watermark]
-      (let [inner (inner-f op-factory watermark)]
-        (try
-          (.slice op-factory inner offset limit)
-          (catch Exception e
-            (util/try-close inner)
-            (throw e)))))))
+  (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                       (.slice op-factory inner offset limit))))
 
 (defn open-q ^core2.ICursor [op-factory watermark lp]
   (let [op-f (emit-op (s/conform ::logical-plan lp))]
