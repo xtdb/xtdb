@@ -66,7 +66,7 @@
 
   (^core2.ICursor distinct [^core2.ICursor inCursor])
 
-  (^core2.ICursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory]))
+  (^core2.ICursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory ^boolean isIncremental]))
 
 (defn ->operator-factory
   ^core2.operator.IOperatorFactory
@@ -114,10 +114,13 @@
       (set-op/->union-cursor left-cursor right-cursor))
 
     (difference [_ left-cursor right-cursor]
-      (set-op/->difference-cursor left-cursor right-cursor))
+      (set-op/->difference-cursor allocator left-cursor right-cursor))
 
     (intersection [_ left-cursor right-cursor]
-      (set-op/->intersection-cursor left-cursor right-cursor))
+      (set-op/->intersection-cursor allocator left-cursor right-cursor))
 
     (distinct [_ in-cursor]
-      (set-op/->intersection-cursor in-cursor))))
+      (set-op/->intersection-cursor allocator in-cursor))
+
+    (fixpoint [_ fixpoint-cursor-factory incremental?]
+      (set-op/->fixpoint-cursor allocator fixpoint-cursor-factory incremental?))))

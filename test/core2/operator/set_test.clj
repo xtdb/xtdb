@@ -24,7 +24,7 @@
                 right-cursor (tu/->cursor (Schema. [a-field b-field])
                                           [[{:a 10 :b 1}, {:a 15 :b 2}]
                                            [{:a 83 :b 3}]])
-                union-cursor (set-op/->union-cursor tu/*allocator* left-cursor right-cursor)]
+                union-cursor (set-op/->union-cursor left-cursor right-cursor)]
 
       (t/is (= [#{{:a 0, :b 15}
                   {:a 12, :b 10}}
@@ -39,7 +39,7 @@
                                            [])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [])
-                  union-cursor (set-op/->union-cursor tu/*allocator* left-cursor right-cursor)]
+                  union-cursor (set-op/->union-cursor left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor union-cursor)))))))
 
@@ -173,7 +173,6 @@
                                   (reify core2.operator.set.IFixpointCursorFactory
                                     (createCursor [_ cursor-factory]
                                       (set-op/->union-cursor
-                                       tu/*allocator*
                                        (tu/->cursor (Schema. [a-field b-field])
                                                     [[{:a 0 :b 1}]])
                                        (select/->select-cursor
@@ -208,7 +207,8 @@
                                                 (when (<= (.get ^BigIntVector (.getVector in-root a-field) idx) 8)
                                                   (.add idx-bitmap idx)))
 
-                                              idx-bitmap))))))))]
+                                              idx-bitmap)))))))
+                                  true)]
 
       (t/is (= [[{:a 0, :b 1}
                  {:a 1, :b 1}

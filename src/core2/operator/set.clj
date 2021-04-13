@@ -14,8 +14,7 @@
              (for [^Field field (.getFields y)]
                (.getName field)))))
 
-(deftype UnionCursor [^BufferAllocator allocator
-                      ^ICursor left-cursor
+(deftype UnionCursor [^ICursor left-cursor
                       ^ICursor right-cursor
                       ^:unsynchronized-mutable ^Schema schema]
   ICursor
@@ -178,14 +177,16 @@
                          ^Set fixpoint-set
                          ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                          ^:unsynchronized-mutable ^Schema schema
-                         ^:unsynchronized-mutable done?]
+                         ^:unsynchronized-mutable done?
+                         incremental?]
   ICursor
   (tryAdvance [this c]
     (if done?
       false
       (do (set! done? true)
 
-          (loop [fixpoint-size (.size fixpoint-set)]
+          (loop [fixpoint-offset 0
+                 fixpoint-size (.size fixpoint-set)]
             (with-open [in-cursor (.createCursor fixpoint-cursor-factory
                                                  (reify ICursorFactory
                                                    (createCursor [_]
@@ -194,7 +195,10 @@
                                                          (tryAdvance [_ c]
                                                            (if (and (not @!cursor-done?) (pos? fixpoint-size))
                                                              (do (reset! !cursor-done? true)
-                                                                 (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this) 0 fixpoint-size)]
+                                                                 (with-open [^VectorSchemaRoot out-root (util/slice-root (.out-root this)
+                                                                                                                         fixpoint-offset
+                                                                                                                         (- fixpoint-size fixpoint-offset))]
+                                                                   (println (.contentToTSVString out-root))
                                                                    (.accept c out-root))
                                                                  true)
                                                              false)))))))]
@@ -216,7 +220,10 @@
                                                  (util/copy-tuple in-root n out-root (.getRowCount out-root))
                                                  (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root)))))))))))))
             (when-not (= fixpoint-size (.size fixpoint-set))
-              (recur (.size fixpoint-set))))
+              (recur (if incremental?
+                       fixpoint-size
+                       0)
+                     (.size fixpoint-set))))
 
           (if out-root
             (do
@@ -230,8 +237,8 @@
     (.clear fixpoint-set)
     (util/try-close out-root)))
 
-(defn ->union-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (UnionCursor. allocator left-cursor right-cursor nil))
+(defn ->union-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
+  (UnionCursor. left-cursor right-cursor nil))
 
 (defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
   (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil nil true))
@@ -243,5 +250,6 @@
   (DistinctCursor. allocator in-cursor (HashSet.) nil nil))
 
 (defn ->fixpoint-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                        ^IFixpointCursorFactory fixpoint-cursor-factory]
-  (FixpointCursor. allocator fixpoint-cursor-factory (HashSet.) nil nil false))
+                                        ^IFixpointCursorFactory fixpoint-cursor-factory
+                                        incremental?]
+  (FixpointCursor. allocator fixpoint-cursor-factory (HashSet.) nil nil false incremental?))
