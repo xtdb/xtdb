@@ -76,22 +76,55 @@
             metadata-mgr (.metadata-manager node)
             temporal-mgr (.temporal-manager node)
             op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)]
-        (with-open [watermark (c2/open-watermark node)
-                    fixpoint-cursor (lp/open-q op-factory watermark '[:fixpoint F
-                                                                      [:union
-                                                                       [:table [{:a 0 :b 1}]]
-                                                                       [:select
-                                                                        (<= a 8)
-                                                                        [:project
-                                                                         [{a (+ a 1)}
-                                                                          {b (* (+ a 1) b)}]
-                                                                         F]]]])]
-          (t/is (= [[{:a 0, :b 1}
-                     {:a 1, :b 1}
-                     {:a 2, :b 2}
-                     {:a 3, :b 6}
-                     {:a 4, :b 24}
-                     {:a 5, :b 120}
-                     {:a 6, :b 720}
-                     {:a 7, :b 5040}
-                     {:a 8, :b 40320}]] (tu/<-cursor fixpoint-cursor))))))))
+
+        (t/testing "factorial"
+          (with-open [watermark (c2/open-watermark node)
+                      fixpoint-cursor (lp/open-q op-factory watermark '[:fixpoint Fact
+                                                                        [:union
+                                                                         [:table [{:a 0 :b 1}]]
+                                                                         [:select
+                                                                          (<= a 8)
+                                                                          [:project
+                                                                           [{a (+ a 1)}
+                                                                            {b (* (+ a 1) b)}]
+                                                                           Fact]]]])]
+            (t/is (= [[{:a 0, :b 1}
+                       {:a 1, :b 1}
+                       {:a 2, :b 2}
+                       {:a 3, :b 6}
+                       {:a 4, :b 24}
+                       {:a 5, :b 120}
+                       {:a 6, :b 720}
+                       {:a 7, :b 5040}
+                       {:a 8, :b 40320}]] (tu/<-cursor fixpoint-cursor)))))
+
+        (t/testing "transitive closure"
+          (with-open [watermark (c2/open-watermark node)
+                      fixpoint-cursor (lp/open-q op-factory watermark '[:fixpoint Path
+                                                                        [:union
+                                                                         [:table [{:x "a" :y "b"}
+                                                                                  {:x "b" :y "c"}
+                                                                                  {:x "c" :y "d"}
+                                                                                  {:x "d" :y "a"}]]
+                                                                         [:project [x y]
+                                                                          [:join {edge-z path-z}
+                                                                           [:rename {y edge-z} Path]
+                                                                           [:rename {x path-z} Path]]]]])]
+
+            (t/is (= [[{:x (Text. "a"), :y (Text. "b")}
+                       {:x (Text. "b"), :y (Text. "c")}
+                       {:x (Text. "c"), :y (Text. "d")}
+                       {:x (Text. "d"), :y (Text. "a")}
+                       {:x (Text. "d"), :y (Text. "b")}
+                       {:x (Text. "a"), :y (Text. "c")}
+                       {:x (Text. "b"), :y (Text. "d")}
+                       {:x (Text. "c"), :y (Text. "a")}
+                       {:x (Text. "c"), :y (Text. "b")}
+                       {:x (Text. "d"), :y (Text. "c")}
+                       {:x (Text. "a"), :y (Text. "d")}
+                       {:x (Text. "b"), :y (Text. "a")}
+                       {:x (Text. "b"), :y (Text. "b")}
+                       {:x (Text. "c"), :y (Text. "c")}
+                       {:x (Text. "d"), :y (Text. "d")}
+                       {:x (Text. "a"), :y (Text. "a")}]]
+                     (tu/<-cursor fixpoint-cursor)))))))))
