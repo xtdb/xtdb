@@ -75,7 +75,7 @@
                       :left ::ra-expression
                       :right ::ra-expression))
 
-(s/def ::difference (s/cat :op #{:- :except :difference}
+(s/def ::difference (s/cat :op #{:− :except :difference}
                            :left ::ra-expression
                            :right ::ra-expression))
 
