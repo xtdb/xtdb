@@ -273,8 +273,7 @@
                               (fn [^IOperatorFactory op-factory left right]
                                 (.equiJoin op-factory
                                            left (name left-col)
-                                           right (name right-col)))))
-        right-f (emit-op right)]
+                                           right (name right-col)))))]
     (binary-op left right (fn [^IOperatorFactory op-factory left right]
                             (join-f op-factory left right)))))
 
