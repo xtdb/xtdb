@@ -117,7 +117,7 @@
 
     (let [expected-file-count (.count (Files/list expected-path))]
       (t/is (= expected-file-count (.count (Files/list os-path))))
-      (t/is (= expected-file-count (count @(.listObjects os)))))
+      (t/is (= expected-file-count (count (.listObjects os)))))
 
     (c2-json/write-arrow-json-files (.toFile os-path))
 

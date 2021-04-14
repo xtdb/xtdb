@@ -128,7 +128,7 @@
                  @(meta/with-latest-metadata mm
                     (juxt meta/latest-tx meta/latest-row-id))))
 
-        (let [objects-list @(.listObjects os "metadata-*")]
+        (let [objects-list (.listObjects os "metadata-*")]
           (t/is (= 1 (count objects-list)))
           (t/is (= "metadata-00000000.arrow" (first objects-list))))
 
@@ -261,9 +261,9 @@
                @(meta/with-latest-metadata mm
                   (juxt meta/latest-tx meta/latest-row-id)))
 
-          (t/is (= 4 (count @(.listObjects os "metadata-*"))))
-          (t/is (= 1 (count @(.listObjects os "chunk-*-api-version*"))))
-          (t/is (= 4 (count @(.listObjects os "chunk-*-battery-level*")))))))
+          (t/is (= 4 (count (.listObjects os "metadata-*"))))
+          (t/is (= 1 (count (.listObjects os "chunk-*-api-version*"))))
+          (t/is (= 4 (count (.listObjects os "chunk-*-battery-level*")))))))
 
     (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
 
@@ -336,9 +336,9 @@
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; for now
-            (t/is (= 11 (count @(.listObjects os "metadata-*"))))
-            (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
-            (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))))))))
+            (t/is (= 11 (count (.listObjects os "metadata-*"))))
+            (t/is (= 2 (count (.listObjects os "chunk-*-api-version*"))))
+            (t/is (= 11 (count (.listObjects os "chunk-*-battery-level*"))))))))))
 
 (t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
@@ -379,9 +379,9 @@
                 (t/is (< (.tx-id os-tx-instant) (.tx-id first-half-tx-instant)))
                 (t/is (< os-latest-row-id (count first-half-tx-ops)))
 
-                (t/is (= 5 (count @(.listObjects os "metadata-*"))))
-                (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
-                (t/is (= 5 (count @(.listObjects os "chunk-*-battery-level*"))))
+                (t/is (= 5 (count (.listObjects os "metadata-*"))))
+                (t/is (= 2 (count (.listObjects os "chunk-*-api-version*"))))
+                (t/is (= 5 (count (.listObjects os "chunk-*-battery-level*"))))
 
                 (t/is (= 2000 (count (.id->internal-id tm)))))
 
@@ -416,8 +416,8 @@
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (:core2/object-store @(:!system node))
                                 ^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
-                    (t/is (= 11 (count @(.listObjects os "metadata-*"))))
-                    (t/is (= 2 (count @(.listObjects os "chunk-*-api-version*"))))
-                    (t/is (= 11 (count @(.listObjects os "chunk-*-battery-level*"))))
+                    (t/is (= 11 (count (.listObjects os "metadata-*"))))
+                    (t/is (= 2 (count (.listObjects os "chunk-*-api-version*"))))
+                    (t/is (= 11 (count (.listObjects os "chunk-*-battery-level*"))))
 
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
