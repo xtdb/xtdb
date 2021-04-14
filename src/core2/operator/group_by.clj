@@ -2,7 +2,7 @@
   (:require [core2.util :as util]
             [core2.types :as t])
   (:import core2.ICursor
-           [java.util ArrayList DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
+           [java.util ArrayList Comparator DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
            [java.util.stream Collector Collectors IntStream]
            org.apache.arrow.memory.util.ArrowBufPointer
@@ -166,6 +166,13 @@
 (def long-avg-finisher (reify Function
                          (apply [_ acc]
                            (.getAverage ^LongSummaryStatistics acc))))
+(def long-min-finisher (reify Function
+                         (apply [_ acc]
+                           (.getMin ^LongSummaryStatistics acc))))
+(def long-max-finisher (reify Function
+                         (apply [_ acc]
+                           (.getMax ^LongSummaryStatistics acc))))
+
 (def double-summary-supplier (reify Supplier
                                (get [_]
                                  (DoubleSummaryStatistics.))))
@@ -178,6 +185,12 @@
 (def double-avg-finisher (reify Function
                            (apply [_ acc]
                              (.getAverage ^DoubleSummaryStatistics acc))))
+(def double-min-finisher (reify Function
+                           (apply [_ acc]
+                             (.getMin ^DoubleSummaryStatistics acc))))
+(def double-max-finisher (reify Function
+                           (apply [_ acc]
+                             (.getMax ^DoubleSummaryStatistics acc))))
 
 (defn ->avg-long-spec [^String from-name ^String to-name]
   (->long-function-spec from-name to-name
@@ -191,6 +204,18 @@
                         long-summary-accumulator
                         long-sum-finisher))
 
+(defn ->min-long-spec [^String from-name ^String to-name]
+  (->long-function-spec from-name to-name
+                        long-summary-supplier
+                        long-summary-accumulator
+                        long-min-finisher))
+
+(defn ->max-long-spec [^String from-name ^String to-name]
+  (->long-function-spec from-name to-name
+                        long-summary-supplier
+                        long-summary-accumulator
+                        long-max-finisher))
+
 (defn ->avg-double-spec [^String from-name ^String to-name]
   (->double-function-spec from-name to-name
                           double-summary-supplier
@@ -202,6 +227,24 @@
                           double-summary-supplier
                           double-summary-accumulator
                           double-sum-finisher))
+
+(defn ->min-double-spec [^String from-name ^String to-name]
+  (->double-function-spec from-name to-name
+                          double-summary-supplier
+                          double-summary-accumulator
+                          double-min-finisher))
+
+(defn ->max-double-spec [^String from-name ^String to-name]
+  (->double-function-spec from-name to-name
+                          double-summary-supplier
+                          double-summary-accumulator
+                          double-max-finisher))
+
+(defn ->min-spec [^String from-name ^String to-name]
+  (->function-spec from-name to-name (Collectors/minBy (Comparator/naturalOrder))))
+
+(defn ->max-spec [^String from-name ^String to-name]
+  (->function-spec from-name to-name (Collectors/maxBy (Comparator/naturalOrder))))
 
 (defn ->count-spec [^String from-name ^String to-name]
   (->function-spec from-name to-name (Collectors/counting)))

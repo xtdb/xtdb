@@ -285,9 +285,17 @@
                                        from-name (:variable (first args))
                                        ->spec (case f
                                                 sum-long group-by/->sum-long-spec
-                                                (sum sum-double) group-by/->sum-double-spec
+                                                sum-double group-by/->sum-double-spec
+                                                min-long group-by/->min-long-spec
+                                                min-double group-by/->min-double-spec
+                                                max-long group-by/->max-long-spec
+                                                max-double group-by/->max-double-spec
                                                 avg-long group-by/->avg-long-spec
-                                                (avg avg-double) group-by/->avg-double-spec
+                                                avg-double group-by/->avg-double-spec
+                                                sum group-by/->sum-double-spec
+                                                avg group-by/->avg-double-spec
+                                                min group-by/->min-spec
+                                                max group-by/->max-spec
                                                 count group-by/->count-spec)]
                                    (->spec (name from-name) (name to-name)))
                       [col-type arg]))]
@@ -319,7 +327,7 @@
   (fn [^IOperatorFactory op-factory watermark]
     (.fixpoint op-factory (reify IFixpointCursorFactory
                             (createCursor [_ cursor-factory]
-                              (binding [*relation->cursor-factory* (assoc *mu-variable->cursor-factory* mu-variable cursor-factory)]
+                              (binding [*mu-variable->cursor-factory* (assoc *mu-variable->cursor-factory* mu-variable cursor-factory)]
                                 (let [inner-f (emit-op union-of-expressions)]
                                   (inner-f op-factory watermark))))) false)))
 

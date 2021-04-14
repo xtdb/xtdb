@@ -4,10 +4,7 @@
             [core2.test-util :as tu]
             [core2.types :as ty])
   (:import org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType
-           java.util.function.ToLongFunction
-           java.util.stream.Collectors
-           java.util.Comparator))
+           org.apache.arrow.vector.types.Types$MinorType))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -15,15 +12,11 @@
   (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
         b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
         aggregate-spec [(group-by/->group-spec "a")
-                        (group-by/->function-spec "b" "sum" (Collectors/summingLong
-                                                             (reify ToLongFunction
-                                                               (applyAsLong [_ x] x))))
-                        (group-by/->function-spec "b" "avg" (Collectors/averagingLong
-                                                             (reify ToLongFunction
-                                                               (applyAsLong [_ x] x))))
-                        (group-by/->function-spec "b" "cnt" (Collectors/counting))
-                        (group-by/->function-spec "b" "min" (Collectors/minBy (Comparator/naturalOrder)))
-                        (group-by/->function-spec "b" "max" (Collectors/maxBy (Comparator/naturalOrder)))]]
+                        (group-by/->sum-long-spec "b" "sum")
+                        (group-by/->avg-long-spec "b" "avg")
+                        (group-by/->count-spec "b" "cnt")
+                        (group-by/->min-spec "b" "min")
+                        (group-by/->max-spec "b" "max")]]
     (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                        [[{:a 1 :b 10}
                                          {:a 1 :b 20}
@@ -65,7 +58,7 @@
                                            {:a 3 :b 10}]])
                   group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->group-spec "a")
                                                                                         (group-by/->group-spec "b")
-                                                                                        (group-by/->function-spec "b" "cnt" (Collectors/counting))])]
+                                                                                        (group-by/->count-spec "b" "cnt")])]
 
         (t/is (= [#{{:a 1, :b 10, :cnt 2}
                     {:a 1, :b 20, :cnt 2}
@@ -104,7 +97,7 @@
                                            {:a 2 :b 10}
                                            {:a 3 :b 20}
                                            {:a 3 :b 10}]])
-                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->function-spec "b" "cnt" (Collectors/counting))])]
+                  group-by-cursor (group-by/->group-by-cursor tu/*allocator* in-cursor [(group-by/->count-spec "b" "cnt")])]
 
         (t/is (= [#{{:cnt 9}}]
                  (mapv set (tu/<-cursor group-by-cursor))))))))
