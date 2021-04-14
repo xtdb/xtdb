@@ -159,6 +159,23 @@
 
 (defmulti emit-op first)
 
+(defmulti ->aggregate-spec (fn [name from-name to-name & args] name))
+
+(defmethod ->aggregate-spec :avg [_ from-name to-name]
+  (group-by/->avg-number-spec from-name to-name))
+
+(defmethod ->aggregate-spec :sum [_ from-name to-name]
+  (group-by/->sum-number-spec from-name to-name))
+
+(defmethod ->aggregate-spec :min [_ from-name to-name]
+  (group-by/->min-spec from-name to-name))
+
+(defmethod ->aggregate-spec :max [_ from-name to-name]
+  (group-by/->max-spec from-name to-name))
+
+(defmethod ->aggregate-spec :count [_ from-name to-name]
+  (group-by/->count-spec from-name to-name))
+
 (defmethod emit-op :scan [[_ {:keys [columns]}]]
   (let [col-names (for [[col-type arg] columns]
                     (str (case col-type
@@ -290,24 +307,8 @@
                     (case col-type
                       :group-by (group-by/->group-spec (name arg))
                       :aggregate (let [[to-name {:keys [f args]}] (first arg)
-                                       from-name (:variable (first args))
-                                       ->spec (case f
-                                                sum-long group-by/->sum-long-spec
-                                                sum-double group-by/->sum-double-spec
-                                                min-long group-by/->min-long-spec
-                                                min-double group-by/->min-double-spec
-                                                min-number group-by/->min-number-spec
-                                                max-long group-by/->max-long-spec
-                                                max-double group-by/->max-double-spec
-                                                max-number group-by/->max-number-spec
-                                                avg-long group-by/->avg-long-spec
-                                                avg-double group-by/->avg-double-spec
-                                                sum group-by/->sum-number-spec
-                                                avg group-by/->avg-number-spec
-                                                min group-by/->min-spec
-                                                max group-by/->max-spec
-                                                count group-by/->count-spec)]
-                                   (->spec (name from-name) (name to-name)))
+                                       from-name (:variable (first args))]
+                                   (->aggregate-spec (keyword (name f)) (name from-name) (name to-name)))
                       [col-type arg]))]
     (unary-op relation (fn [^IOperatorFactory op-factory inner]
                          (.groupBy op-factory inner agg-specs)))))

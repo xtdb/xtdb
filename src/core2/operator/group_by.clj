@@ -374,10 +374,10 @@
                           number-max-finisher))
 
 (defn ->min-spec [^String from-name ^String to-name]
-  (->function-spec from-name to-name (Collectors/minBy (Comparator/naturalOrder))))
+  (->function-spec from-name to-name (Collectors/minBy (Comparator/nullsFirst (Comparator/naturalOrder)))))
 
 (defn ->max-spec [^String from-name ^String to-name]
-  (->function-spec from-name to-name (Collectors/maxBy (Comparator/naturalOrder))))
+  (->function-spec from-name to-name (Collectors/maxBy (Comparator/nullsFirst (Comparator/naturalOrder)))))
 
 (defn ->count-spec [^String from-name ^String to-name]
   (->function-spec from-name to-name (Collectors/counting)))
