@@ -154,6 +154,56 @@
                                                                    ^Function finisher]
   (LongFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
 
+(deftype NumberFunctionSpec [^String from-name
+                             ^Field field
+                             ^Supplier supplier
+                             accumulator ;; <ObjLongConsumer|ObjDoubleConsumer>
+                             ^Function finisher]
+  AggregateSpec
+  (getToField [_ in-root]
+    field)
+
+  (getFromVector [_ in-root]
+    (.getVector in-root from-name))
+
+  (aggregate [this in-root container idx-bitmap]
+    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
+          acc (if (some? container)
+                container
+                (.get supplier))
+          consumer (cond
+                     (instance? BaseIntVector from-vec)
+                     (let [^BaseIntVector from-vec from-vec]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept ^ObjLongConsumer accumulator acc (.getValueAsLong from-vec idx)))))
+
+                     (instance? FloatingPointVector from-vec)
+                     (let [^FloatingPointVector from-vec from-vec]
+                       (reify IntConsumer
+                         (accept [_ idx]
+                           (.accept ^ObjDoubleConsumer accumulator acc (.getValueAsDouble from-vec idx)))))
+
+                     :else
+                     (reify IntConsumer
+                       (accept [_ idx]
+                         (let [v (.getObject from-vec idx)]
+                           (if (integer? v)
+                             (.accept ^ObjLongConsumer accumulator acc v)
+                             (.accept ^ObjDoubleConsumer accumulator acc v))))))]
+      (.forEach ^IntStream (.stream idx-bitmap) consumer)
+      acc))
+
+  (finish [_ container]
+    (finish-maybe-optional finisher container)))
+
+(defn ->number-function-spec ^core2.operator.group_by.AggregateSpec [^String from-name
+                                                                     ^String to-name
+                                                                     ^Supplier supplier
+                                                                     accumulator
+                                                                     ^Function finisher]
+  (NumberFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
+
 (def long-summary-supplier (reify Supplier
                              (get [_]
                                (LongSummaryStatistics.))))
@@ -191,6 +241,65 @@
 (def double-max-finisher (reify Function
                            (apply [_ acc]
                              (.getMax ^DoubleSummaryStatistics acc))))
+
+(deftype NumberSummaryStatistics [^LongSummaryStatistics long-summary
+                                  ^DoubleSummaryStatistics double-summary])
+
+(def number-summary-supplier (reify Supplier
+                               (get [_]
+                                 (NumberSummaryStatistics. (LongSummaryStatistics.) (DoubleSummaryStatistics.)))))
+(def number-summary-accumulator (reify
+                                  ObjLongConsumer
+                                  (^void accept [_ acc ^long x]
+                                   (.accept ^LongSummaryStatistics (.long-summary ^NumberSummaryStatistics acc) x))
+
+                                  ObjDoubleConsumer
+                                  (^void accept [_ acc ^double x]
+                                   (.accept ^DoubleSummaryStatistics (.double-summary ^NumberSummaryStatistics acc) x))))
+(def number-sum-finisher (reify Function
+                           (apply [_ acc]
+                             (let [^NumberSummaryStatistics acc acc
+                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
+                                   ^LongSummaryStatistics long-summary (.long-summary acc)]
+                               (if (zero? (.getCount double-summary))
+                                 (if (zero? (.getCount long-summary))
+                                   (.getSum double-summary)
+                                   (.getSum long-summary))
+                                 (+ (.getSum long-summary)
+                                    (.getSum double-summary)))))))
+(def number-avg-finisher (reify Function
+                           (apply [_ acc]
+                             (let [^NumberSummaryStatistics acc acc
+                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
+                                   ^LongSummaryStatistics long-summary (.long-summary acc)
+                                   cnt (+ (.getCount long-summary)
+                                          (.getCount double-summary))]
+                               (if (zero? cnt)
+                                 (.getAverage double-summary)
+                                 (/ (+ (.getSum long-summary)
+                                       (.getSum double-summary)) cnt))))))
+(def number-min-finisher (reify Function
+                           (apply [_ acc]
+                             (let [^NumberSummaryStatistics acc acc
+                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
+                                   ^LongSummaryStatistics long-summary (.long-summary acc)]
+                               (if (zero? (.getCount double-summary))
+                                 (if (zero? (.getCount long-summary))
+                                   (.getMin double-summary)
+                                   (.getMin long-summary))
+                                 (min (.getMin ^LongSummaryStatistics long-summary)
+                                      (.getMin ^DoubleSummaryStatistics double-summary)))))))
+(def number-max-finisher (reify Function
+                           (apply [_ acc]
+                             (let [^NumberSummaryStatistics acc acc
+                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
+                                   ^LongSummaryStatistics long-summary (.long-summary acc)]
+                               (if (zero? (.getCount double-summary))
+                                 (if (zero? (.getCount long-summary))
+                                   (.getMax double-summary)
+                                   (.getMax long-summary))
+                                 (max (.getMax ^LongSummaryStatistics long-summary)
+                                      (.getMax ^DoubleSummaryStatistics double-summary)))))))
 
 (defn ->avg-long-spec [^String from-name ^String to-name]
   (->long-function-spec from-name to-name
@@ -239,6 +348,30 @@
                           double-summary-supplier
                           double-summary-accumulator
                           double-max-finisher))
+
+(defn ->avg-number-spec [^String from-name ^String to-name]
+  (->number-function-spec from-name to-name
+                          number-summary-supplier
+                          number-summary-accumulator
+                          number-avg-finisher))
+
+(defn ->sum-number-spec [^String from-name ^String to-name]
+  (->number-function-spec from-name to-name
+                          number-summary-supplier
+                          number-summary-accumulator
+                          number-sum-finisher))
+
+(defn ->min-number-spec [^String from-name ^String to-name]
+  (->number-function-spec from-name to-name
+                          number-summary-supplier
+                          number-summary-accumulator
+                          number-min-finisher))
+
+(defn ->max-number-spec [^String from-name ^String to-name]
+  (->number-function-spec from-name to-name
+                          number-summary-supplier
+                          number-summary-accumulator
+                          number-max-finisher))
 
 (defn ->min-spec [^String from-name ^String to-name]
   (->function-spec from-name to-name (Collectors/minBy (Comparator/naturalOrder))))

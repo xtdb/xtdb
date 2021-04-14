@@ -9,7 +9,7 @@
 (t/deftest ^:integration test-q1-pricing-summary-report
   (t/is (= [{:l_returnflag (Text. "A")
              :l_linestatus (Text. "F")
-             :sum_qty 380456
+             :sum_qty 380456.0
              :sum_base_price 5.3234821165E8
              :sum_disc_price 5.058224414861E8
              :sum_charge 5.26165934000839E8
@@ -19,7 +19,7 @@
              :count_order 14876}
             {:l_returnflag (Text. "N")
              :l_linestatus (Text. "F")
-             :sum_qty 8971
+             :sum_qty 8971.0
              :sum_base_price 1.238480137E7
              :sum_disc_price 1.1798257208E7
              :sum_charge 1.2282485056933E7
@@ -29,7 +29,7 @@
              :count_order 348}
             {:l_returnflag (Text. "N")
              :l_linestatus (Text. "O")
-             :sum_qty 742802
+             :sum_qty 742802.0
              :sum_base_price 1.04150284145E9
              :sum_disc_price 9.897375186346E8
              :sum_charge 1.02941853152335E9
@@ -39,7 +39,7 @@
              :count_order 29181}
             {:l_returnflag (Text. "R")
              :l_linestatus (Text. "F")
-             :sum_qty 381449
+             :sum_qty 381449.0
              :sum_base_price 5.3459444535E8
              :sum_disc_price 5.079964544067E8
              :sum_charge 5.28524219358903E8

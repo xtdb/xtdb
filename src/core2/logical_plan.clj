@@ -288,12 +288,14 @@
                                                 sum-double group-by/->sum-double-spec
                                                 min-long group-by/->min-long-spec
                                                 min-double group-by/->min-double-spec
+                                                min-number group-by/->min-number-spec
                                                 max-long group-by/->max-long-spec
                                                 max-double group-by/->max-double-spec
+                                                max-number group-by/->max-number-spec
                                                 avg-long group-by/->avg-long-spec
                                                 avg-double group-by/->avg-double-spec
-                                                sum group-by/->sum-double-spec
-                                                avg group-by/->avg-double-spec
+                                                sum group-by/->sum-number-spec
+                                                avg group-by/->avg-number-spec
                                                 min group-by/->min-spec
                                                 max group-by/->max-spec
                                                 count group-by/->count-spec)]

@@ -59,13 +59,13 @@
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:order-by [{l_returnflag :asc} {l_linestatus :asc}]
                                [:group-by [l_returnflag l_linestatus
-                                           {sum_qty (sum-long l_quantity)}
-                                           {sum_base_price (sum-double l_extendedprice)}
-                                           {sum_disc_price (sum-double disc_price)}
-                                           {sum_charge (sum-double charge)}
-                                           {avg_qty (avg-long l_quantity)}
-                                           {avg_price (avg-double l_extendedprice)}
-                                           {avg_disc (avg-double l_discount)}
+                                           {sum_qty (sum l_quantity)}
+                                           {sum_base_price (sum l_extendedprice)}
+                                           {sum_disc_price (sum disc_price)}
+                                           {sum_charge (sum charge)}
+                                           {avg_qty (avg l_quantity)}
+                                           {avg_price (avg l_extendedprice)}
+                                           {avg_disc (avg l_discount)}
                                            {count_order (count l_returnflag)}]
                                 [:project [l_returnflag l_linestatus l_shipdate l_quantity l_extendedprice l_discount l_tax
                                            {disc_price (* l_extendedprice (- 1 l_discount))}
@@ -82,7 +82,7 @@
                              '[:slice {:limit 10}
                                [:order-by [{revenue :desc}, {o_orderdate :asc}]
                                 [:group-by [l_orderkey
-                                            {revenue (sum-double disc_price)}
+                                            {revenue (sum disc_price)}
                                             o_orderdate
                                             o_shippriority]
                                  [:project [l_orderkey o_orderdate o_shippriority
@@ -100,7 +100,7 @@
 (defn tpch-q5-local-supplier-volume []
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:order-by [{revenue :desc}]
-                               [:group-by [n_name {revenue (sum-double disc_price)}]
+                               [:group-by [n_name {revenue (sum disc_price)}]
                                 [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
                                  [:select (= l_suppkey s_suppkey)
                                   [:join (= o_orderkey l_orderkey)
@@ -121,7 +121,7 @@
 
 (defn tpch-q6-forecasting-revenue-change []
   (with-open [res (lp/open-q *op-factory* *watermark*
-                             '[:group-by [{revenue (sum-double disc_price)}]
+                             '[:group-by [{revenue (sum disc_price)}]
                                [:project [{disc_price (* l_extendedprice l_discount)}]
                                 [:scan [{l_shipdate (and (>= l_shipdate #inst "1994-01-01")
                                                          (< l_shipdate #inst "1995-01-01"))}
@@ -135,7 +135,7 @@
 (defn tpch-q7-volume-shipping []
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:order-by [{supp_nation :asc} {cust_nation :asc} {l_year :asc}]
-                               [:group-by [supp_nation cust_nation l_year {revenue (sum-double volume)}]
+                               [:group-by [supp_nation cust_nation l_year {revenue (sum volume)}]
                                 [:project [supp_nation cust_nation
                                            {l_year (extract "YEAR" l_shipdate)}
                                            {volume (* l_extendedprice (- 1 l_discount))}]
@@ -166,7 +166,7 @@
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:order-by [{o_year :asc}]
                                [:project [o_year {mkt_share (/ brazil_revenue revenue)}]
-                                [:group-by [o_year {brazil_revenue (sum-double brazil_volume)} {revenue (sum-double volume)}]
+                                [:group-by [o_year {brazil_revenue (sum brazil_volume)} {revenue (sum volume)}]
                                  [:project [{o_year (extract "YEAR" o_orderdate)}
                                             {brazil_volume (if (= nation "BRAZIL")
                                                              (* l_extendedprice (- 1 l_discount))
@@ -201,7 +201,7 @@
 (defn tpch-q9-product-type-profit-measure []
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:order-by [{nation :asc}, {o_year :desc}]
-                               [:group-by [nation o_year {sum_profit (sum-double amount)}]
+                               [:group-by [nation o_year {sum_profit (sum amount)}]
                                 [:rename {n_name nation}
                                  [:project [n_name
                                             {o_year (extract "YEAR" o_orderdate)}
@@ -227,7 +227,7 @@
                              '[:slice {:limit 20}
                                [:order-by [{revenue :desc}]
                                 [:group-by [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
-                                            {revenue (sum-double disc_price)}]
+                                            {revenue (sum disc_price)}]
                                  [:project [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
                                             {disc_price (* l_extendedprice (- 1 l_discount))}]
                                   [:join (= c_nationkey n_nationkey)
@@ -246,8 +246,8 @@
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:order-by [{l_shipmode :asc}]
                                [:group-by [l_shipmode
-                                           {high_line_count (sum-long high_line)}
-                                           {low_line_count (sum-long low_line)}]
+                                           {high_line_count (sum high_line)}
+                                           {low_line_count (sum low_line)}]
                                 [:project [l_shipmode
                                            {high_line (if (or (= o_orderpriority "1-URGENT")
                                                               (= o_orderpriority "2-HIGH"))
@@ -285,8 +285,8 @@
 (defn tpch-q14-promotion-effect []
   (with-open [res (lp/open-q *op-factory* *watermark*
                              '[:project [{promo_revenue (* 100 (/ promo_revenue revenue))}]
-                               [:group-by [{promo_revenue (sum-double promo_disc_price)}
-                                           {revenue (sum-double disc_price)}]
+                               [:group-by [{promo_revenue (sum promo_disc_price)}
+                                           {revenue (sum disc_price)}]
                                 [:project [{promo_disc_price (if (like p_type "PROMO%")
                                                                (* l_extendedprice (- 1 l_discount))
                                                                0.0)}
@@ -301,7 +301,7 @@
 
 (defn tpch-q19-discounted-revenue []
   (with-open [res (lp/open-q *op-factory* *watermark*
-                             '[:group-by [{revenue (sum-double disc_price)}]
+                             '[:group-by [{revenue (sum disc_price)}]
                                [:project [{disc_price (* l_extendedprice (- 1 l_discount))}]
                                 [:select (or (and (= p_brand "Brand#12")
                                                   (or (= p_container "SM CASE")

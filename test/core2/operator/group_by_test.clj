@@ -12,11 +12,11 @@
   (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
         b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
         aggregate-spec [(group-by/->group-spec "a")
-                        (group-by/->sum-long-spec "b" "sum")
-                        (group-by/->avg-long-spec "b" "avg")
+                        (group-by/->sum-number-spec "b" "sum")
+                        (group-by/->avg-number-spec "b" "avg")
                         (group-by/->count-spec "b" "cnt")
-                        (group-by/->min-spec "b" "min")
-                        (group-by/->max-spec "b" "max")]]
+                        (group-by/->min-number-spec "b" "min")
+                        (group-by/->max-number-spec "b" "max")]]
     (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                        [[{:a 1 :b 10}
                                          {:a 1 :b 20}
