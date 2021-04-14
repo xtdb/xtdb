@@ -207,4 +207,4 @@
                                       :buffer-pool :core2/buffer-pool}}
   [{:keys [allocator ^ObjectStore object-store buffer-pool]}]
   (MetadataManager. allocator object-store buffer-pool
-                    (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-*")))))
+                    (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-")))))

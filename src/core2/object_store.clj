@@ -3,7 +3,7 @@
             [core2.system :as sys])
   (:import java.io.Closeable
            [java.nio.file CopyOption Files FileSystems Path StandardCopyOption]
-           [java.util.concurrent CompletableFuture Executors ExecutorService]
+           [java.util.concurrent Executors ExecutorService]
            java.util.UUID))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -12,8 +12,7 @@
   (^java.util.concurrent.CompletableFuture getObject [^String k, ^java.nio.file.Path to-file])
   (^java.util.concurrent.CompletableFuture putObject [^String k, ^java.nio.ByteBuffer buf])
   (^java.lang.Iterable listObjects [])
-  (^java.lang.Iterable listObjects [^String glob]
-   "glob as defined by https://docs.oracle.com/javase/8/docs/api/java/nio/file/FileSystem.html#getPathMatcher-java.lang.String-")
+  (^java.lang.Iterable listObjects [^String prefix])
   (^java.util.concurrent.CompletableFuture deleteObject [^String k]))
 
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
@@ -52,8 +51,8 @@
     (vec (sort (for [^Path path (iterator-seq (.iterator (Files/list root-path)))]
                  (str (.relativize root-path path))))))
 
-  (listObjects [_this glob]
-    (with-open [dir-stream (Files/newDirectoryStream root-path glob)]
+  (listObjects [_this prefix]
+    (with-open [dir-stream (Files/newDirectoryStream root-path (str prefix "*"))]
       (vec (sort (for [^Path path dir-stream]
                    (str (.relativize root-path path)))))))
 
