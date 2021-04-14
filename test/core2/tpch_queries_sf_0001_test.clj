@@ -336,9 +336,8 @@
              :low_line_count 10}]
            (tpch-queries/tpch-q12-shipping-modes-and-order-priority))))
 
-;; TODO: Missing left outer join result for customers without orders.
 (t/deftest test-q13-customer-distribution
-  (t/is (= [#_{:c_count 0 :custdist ?}
+  (t/is (= [{:c_count 0 :custdist 50}
             {:c_count 16 :custdist 8}
             {:c_count 17 :custdist 7}
             {:c_count 20 :custdist 6}

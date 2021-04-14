@@ -268,10 +268,17 @@
   (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{custdist :desc}, {c_count :desc}]
                                [:group-by [c_count {custdist (count c_custkey)}]
-                                [:group-by [c_custkey {c_count (count o_comment)}]
-                                 [:join {c_custkey o_custkey}
-                                  [:scan [c_custkey]]
-                                  [:scan [o_orderkey {o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]]]])]
+                                [:group-by [c_custkey {c_count (count-not-null o_comment)}]
+                                 [:union
+                                  [:project [c_custkey o_comment]
+                                   [:join {c_custkey o_custkey}
+                                    [:scan [c_custkey]]
+                                    [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]]
+                                  [:cross-join
+                                   [:anti-join {c_custkey o_custkey}
+                                    [:scan [c_custkey]]
+                                    [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]
+                                   [:table [{:o_comment nil}]]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 

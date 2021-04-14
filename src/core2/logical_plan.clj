@@ -133,7 +133,15 @@
       [:group-by [cid {sum (sum balance)}]
        [:join {cid cid}
         [:project [cid balance] Account]
-        [:project [cid] Customer]]]]]))
+        [:project [cid] Customer]]]]])
+
+  ;; left-outer-join
+  (s/conform ::logical-plan
+             '[:union
+               [:join {x y} R S]
+               [:cross-join
+                [:anti-join {x y} R S]
+                [:table [{:y nil}]]]]))
 
 (defmulti emit-op first)
 
@@ -153,6 +161,9 @@
 
 (defmethod ->aggregate-spec :count [_ from-name to-name]
   (group-by/->count-spec from-name to-name))
+
+(defmethod ->aggregate-spec :count-not-null [_ from-name to-name]
+  (group-by/->count-not-null-spec from-name to-name))
 
 (defmethod emit-op :scan [[_ {:keys [columns]}]]
   (let [col-names (for [[col-type arg] columns]

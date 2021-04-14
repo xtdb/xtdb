@@ -4,7 +4,7 @@
   (:import core2.ICursor
            [java.util ArrayList Comparator DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
-           [java.util.stream Collector Collectors IntStream]
+           [java.util.stream Collector Collector$Characteristics Collectors IntStream]
            org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -379,8 +379,22 @@
 (defn ->max-spec [^String from-name ^String to-name]
   (->function-spec from-name to-name (Collectors/maxBy (Comparator/nullsFirst (Comparator/naturalOrder)))))
 
-(defn ->count-spec [^String from-name ^String to-name]
+(defn ->count-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name]
   (->function-spec from-name to-name (Collectors/counting)))
+
+(defn ->count-not-null-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name]
+  (let [counting-collector (Collectors/counting)
+        accumulator (.accumulator counting-collector)]
+    (->function-spec from-name to-name (Collector/of (.supplier counting-collector)
+                                                     (reify BiConsumer
+                                                       (accept [_ acc x]
+                                                         (when-not (nil? x)
+                                                           (.accept accumulator acc x))))
+                                                     (.combiner counting-collector)
+                                                     (.finisher counting-collector)
+                                                     (into-array Collector$Characteristics (.characteristics counting-collector))))))
+
+
 
 (defn- copy-group-key [^BufferAllocator allocator ^List k]
   (dotimes [n (.size k)]
