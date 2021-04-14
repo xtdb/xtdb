@@ -83,24 +83,20 @@
                            :left ::ra-expression
                            :right ::ra-expression))
 
-(s/def ::join-type (s/? (s/or :equi-join (s/and ::expression
-                                                (fn [{:keys [f args]}]
-                                                  (and (contains? '#{:= =} f)
-                                                       (every? (comp #{:variable} :op) args))))
-                              :theta-join ::expression)))
+(s/def ::equi-join-columns (s/map-of ::column ::column :conform-keys true :count 1))
 
 (s/def ::join (s/cat :op #{:⋈ :join}
-                     :join-type ::join-type
+                     :columns ::equi-join-columns
                      :left ::ra-expression
                      :right ::ra-expression))
 
 (s/def ::semi-join (s/cat :op #{:⋉ :semi-join}
-                          :join-type ::join-type
+                          :columns ::equi-join-columns
                           :left ::ra-expression
                           :right ::ra-expression))
 
 (s/def ::anti-join (s/cat :op #{:▷ :anti-join}
-                          :join-type ::join-type
+                          :columns ::equi-join-columns
                           :left ::ra-expression
                           :right ::ra-expression))
 
@@ -132,28 +128,10 @@
 (comment
   (s/conform
    ::logical-plan
-   [:π [:Account/cid]
-    [:σ [:> :Account/sum 1000]
-     [:γ [:Account/cid {:Account/sum [:sum :Account/balance]}]
-      [:⋈ [:= :Account/cid :Customer/cid]
-       [:scan [:Account/cid :Account/balance]]
-       [:scan [:Customer/cid]]]]]])
-
-  (s/conform
-   ::logical-plan
-   '[:π [:Account/cid]
-     [:σ (> :Account/sum 1000)
-      [:γ [:Account/cid {:Account/sum (sum :Account/balance)}]
-       [:⋈ (= :Account/cid :Customer/cid)
-        [:scan [:Account/cid :Account/balance]]
-        [:scan [:Customer/cid]]]]]])
-
-  (s/conform
-   ::logical-plan
    '[:project [cid]
      [:select (> sum 1000)
       [:group-by [cid {sum (sum balance)}]
-       [:join
+       [:join {cid cid}
         [:project [cid balance] Account]
         [:project [cid] Customer]]]]]))
 
@@ -265,41 +243,29 @@
   (binary-op left right (fn [^IOperatorFactory op-factory left right]
                           (.crossJoin op-factory left right))))
 
-(defmethod emit-op :join [[_ {:keys [join-type left right]}]]
-  (let [[join-type arg] join-type
-        join-f (case join-type
-                 :equi-join (let [{:keys [args]} arg
-                                  [{left-col :variable} {right-col :variable}] args]
-                              (fn [^IOperatorFactory op-factory left right]
-                                (.equiJoin op-factory
+(defmethod emit-op :join [[_ {:keys [columns left right]}]]
+  (let [[left-col] (keys columns)
+        [right-col] (vals columns)]
+    (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                            (.equiJoin op-factory
+                                       left (name left-col)
+                                       right (name right-col))))))
+
+(defmethod emit-op :semi-join [[_ {:keys [columns left right]}]]
+  (let [[left-col] (keys columns)
+        [right-col] (vals columns)]
+    (binary-op left right (fn [^IOperatorFactory op-factory left right]
+                            (.semiEquiJoin op-factory
                                            left (name left-col)
-                                           right (name right-col)))))]
-    (binary-op left right (fn [^IOperatorFactory op-factory left right]
-                            (join-f op-factory left right)))))
+                                           right (name right-col))))))
 
-(defmethod emit-op :semi-join [[_ {:keys [join-type left right]}]]
-  (let [[join-type arg] join-type
-        join-f (case join-type
-                 :equi-join (let [{:keys [args]} arg
-                                  [{left-col :variable} {right-col :variable}] args]
-                              (fn [^IOperatorFactory op-factory left right]
-                                (.semiEquiJoin op-factory
-                                               left (name left-col)
-                                               right (name right-col)))))]
+(defmethod emit-op :anti-join [[_ {:keys [columns left right]}]]
+  (let [[left-col] (keys columns)
+        [right-col] (vals columns)]
     (binary-op left right (fn [^IOperatorFactory op-factory left right]
-                            (join-f op-factory left right)))))
-
-(defmethod emit-op :anti-join [[_ {:keys [join-type left right]}]]
-  (let [[join-type arg] join-type
-        join-f (case join-type
-                 :equi-join (let [{:keys [args]} arg
-                                  [{left-col :variable} {right-col :variable}] args]
-                              (fn [^IOperatorFactory op-factory left right]
-                                (.antiEquiJoin op-factory
-                                               left (name left-col)
-                                               right (name right-col)))))]
-    (binary-op left right (fn [^IOperatorFactory op-factory left right]
-                            (join-f op-factory left right)))))
+                            (.antiEquiJoin op-factory
+                                           left (name left-col)
+                                           right (name right-col))))))
 
 (defmethod emit-op :group-by [[_ {:keys [columns relation]}]]
   (let [agg-specs (for [[col-type arg] columns]

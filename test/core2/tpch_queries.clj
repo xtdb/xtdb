@@ -87,8 +87,8 @@
                                             o_shippriority]
                                  [:project [l_orderkey o_orderdate o_shippriority
                                             {disc_price (* l_extendedprice (- 1 l_discount))}]
-                                  [:join (= o_orderkey l_orderkey)
-                                   [:join (= c_custkey o_custkey)
+                                  [:join {o_orderkey l_orderkey}
+                                   [:join {c_custkey o_custkey}
                                     [:scan [c_custkey {c_mktsegment (= c_mktsegment "BUILDING")}]]
                                     [:scan [o_orderkey o_custkey o_shippriority
                                             {o_orderdate (< o_orderdate #inst "1995-03-15")}]]]
@@ -103,14 +103,14 @@
                                [:group-by [n_name {revenue (sum disc_price)}]
                                 [:project [n_name {disc_price (* l_extendedprice (- 1 l_discount))}]
                                  [:select (= l_suppkey s_suppkey)
-                                  [:join (= o_orderkey l_orderkey)
-                                   [:join (= s_nationkey c_nationkey)
-                                    [:join (= n_nationkey s_nationkey)
-                                     [:join (= r_regionkey n_regionkey)
+                                  [:join {o_orderkey l_orderkey}
+                                   [:join {s_nationkey c_nationkey}
+                                    [:join {n_nationkey s_nationkey}
+                                     [:join {r_regionkey n_regionkey}
                                       [:scan [{r_name (= r_name "ASIA")} r_regionkey]]
                                       [:scan [n_name n_nationkey n_regionkey]]]
                                      [:scan [s_suppkey s_nationkey]]]
-                                    [:join (= o_custkey c_custkey)
+                                    [:join {o_custkey c_custkey}
                                      [:scan [o_orderkey o_custkey
                                              {o_orderdate (and (>= o_orderdate #inst "1994-01-01")
                                                                (< o_orderdate #inst "1995-01-01"))}]]
@@ -144,11 +144,11 @@
                                                     (= n2_n_name "GERMANY"))
                                                (and (= n1_n_name "GERMANY")
                                                     (= n2_n_name "FRANCE")))
-                                   [:join (= c_nationkey n2_n_nationkey)
-                                    [:join (= o_custkey c_custkey)
-                                     [:join (= s_nationkey n1_n_nationkey)
-                                      [:join (= l_orderkey o_orderkey)
-                                       [:join (= s_suppkey l_suppkey)
+                                   [:join {c_nationkey n2_n_nationkey}
+                                    [:join {o_custkey c_custkey}
+                                     [:join {s_nationkey n1_n_nationkey}
+                                      [:join {l_orderkey o_orderkey}
+                                       [:join {s_suppkey l_suppkey}
                                         [:scan [s_suppkey s_nationkey]]
                                         [:scan [l_orderkey l_extendedprice l_discount l_suppkey
                                                 {l_shipdate (and (>= l_shipdate #inst "1995-01-01")
@@ -174,12 +174,12 @@
                                             {volume (* l_extendedprice (- 1 l_discount))}
                                             nation]
                                   [:rename {n2_n_name nation}
-                                   [:join (= s_nationkey n2_n_nationkey)
-                                    [:join (= c_nationkey n1_n_nationkey)
-                                     [:join (= o_custkey c_custkey)
-                                      [:join (= l_orderkey o_orderkey)
-                                       [:join (= l_suppkey s_suppkey)
-                                        [:join (= p_partkey l_partkey)
+                                   [:join {s_nationkey n2_n_nationkey}
+                                    [:join {c_nationkey n1_n_nationkey}
+                                     [:join {o_custkey c_custkey}
+                                      [:join {l_orderkey o_orderkey}
+                                       [:join {l_suppkey s_suppkey}
+                                        [:join {p_partkey l_partkey}
                                          [:scan [p_partkey {p_type (= p_type "ECONOMY ANODIZED STEEL")}]]
                                          [:scan [l_orderkey l_extendedprice l_discount l_suppkey l_partkey]]]
                                         [:scan [s_suppkey s_nationkey]]]
@@ -187,7 +187,7 @@
                                                {o_orderdate (and (>= o_orderdate #inst "1995-01-01")
                                                                  (<= o_orderdate #inst "1996-12-31"))}]]]
                                       [:scan [c_custkey c_nationkey]]]
-                                     [:join (= r_regionkey n1_n_regionkey)
+                                     [:join {r_regionkey n1_n_regionkey}
                                       [:scan [r_regionkey {r_name (= r_name "AMERICA")}]]
                                       [:rename {n_name n1_n_name
                                                 n_nationkey n1_n_nationkey
@@ -207,12 +207,12 @@
                                             {o_year (extract "YEAR" o_orderdate)}
                                             {amount (- (* l_extendedprice (- 1 l_discount))
                                                        (* ps_supplycost l_quantity))}]
-                                  [:join (= s_nationkey n_nationkey)
-                                   [:join (= l_orderkey o_orderkey)
-                                    [:join (= l_suppkey s_suppkey)
+                                  [:join {s_nationkey n_nationkey}
+                                   [:join {l_orderkey o_orderkey}
+                                    [:join {l_suppkey s_suppkey}
                                      [:select (= ps_suppkey l_suppkey)
-                                      [:join (= l_partkey ps_partkey)
-                                       [:join (= p_partkey l_partkey)
+                                      [:join {l_partkey ps_partkey}
+                                       [:join {p_partkey l_partkey}
                                         [:scan [p_partkey {p_name (like p_name "%green%")}]]
                                         [:scan [l_orderkey l_extendedprice l_discount l_suppkey l_partkey l_quantity]]]
                                        [:scan [ps_partkey ps_suppkey ps_supplycost]]]]
@@ -230,9 +230,9 @@
                                             {revenue (sum disc_price)}]
                                  [:project [c_custkey c_name c_acctbal c_phone n_name c_address c_comment
                                             {disc_price (* l_extendedprice (- 1 l_discount))}]
-                                  [:join (= c_nationkey n_nationkey)
-                                   [:join (= o_orderkey l_orderkey)
-                                    [:join (= c_custkey o_custkey)
+                                  [:join {c_nationkey n_nationkey}
+                                   [:join {o_orderkey l_orderkey}
+                                    [:join {c_custkey o_custkey}
                                      [:scan [c_custkey c_name c_acctbal c_address c_phone c_comment c_nationkey]]
                                      [:scan [o_orderkey o_custkey
                                              {o_orderdate (and (>= o_orderdate #inst "1993-10-01")
@@ -257,7 +257,7 @@
                                                               (!= o_orderpriority "2-HIGH"))
                                                        1
                                                        0)}]
-                                 [:join (= o_orderkey l_orderkey)
+                                 [:join {o_orderkey l_orderkey}
                                   [:scan [o_orderkey o_orderpriority]]
                                   [:select (and (< l_commitdate l_receiptdate)
                                                 (< l_shipdate l_commitdate))
@@ -276,7 +276,7 @@
                              '[:order-by [{custdist :desc}, {c_count :desc}]
                                [:group-by [c_count {custdist (count c_custkey)}]
                                 [:group-by [c_custkey {c_count (count o_comment)}]
-                                 [:join (= c_custkey o_custkey)
+                                 [:join {c_custkey o_custkey}
                                   [:scan [c_custkey]]
                                   [:scan [o_orderkey {o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]]]])]
     (->> (tu/<-cursor res)
@@ -291,7 +291,7 @@
                                                                (* l_extendedprice (- 1 l_discount))
                                                                0.0)}
                                            {disc_price (* l_extendedprice (- 1 l_discount))}]
-                                 [:join (= p_partkey l_partkey)
+                                 [:join {p_partkey l_partkey}
                                   [:scan [p_partkey p_type]]
                                   [:scan [l_partkey l_extendedprice l_discount
                                           {l_shipdate (and (>= l_shipdate #inst "1995-09-01")
@@ -330,7 +330,7 @@
                                                   (<= l_quantity (+ 20 10))
                                                   (>= p_size 1)
                                                   (<= p_size 15)))
-                                 [:join (= p_partkey l_partkey)
+                                 [:join {p_partkey l_partkey}
                                   [:scan [p_partkey p_brand p_container p_size]]
                                   [:scan [l_partkey l_extendedprice l_discount l_quantity
                                           {l_shipmode (or (= l_shipmode "AIR") (= l_shipmode "AIR REG"))}
