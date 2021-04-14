@@ -30,7 +30,16 @@
                    :java-source-paths ["src" "jmh"]
                    :resource-paths ["test-resources" "data"]
                    :test-selectors {:default (complement :integration)
-                                    :integration :integration}}}
+                                    :integration :integration}}
+
+             ;; TODO debate best way to multi-module this
+             ;; for now, I just want to ensure they're sufficiently isolated
+             :s3 {:source-paths ["modules/s3/src"]
+                  :java-source-paths ["modules/s3/src"]
+                  :test-paths ["modules/s3/test"]
+                  :dependencies [[software.amazon.awssdk/s3 "2.10.91"]]}
+
+             :modules [:s3]}
 
   :aliases {"jmh" ["trampoline" "run"
                    "-m" "org.openjdk.jmh.Main"
