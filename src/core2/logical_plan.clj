@@ -325,11 +325,11 @@
   (unary-op relation (fn [^IOperatorFactory op-factory inner]
                        (.slice op-factory inner offset limit))))
 
-(def ^:private ^:dynamic *mu-variable->cursor-factory* {})
+(def ^:dynamic *relation-variable->cursor-factory* {})
 
 (defmethod emit-op :relation [[_ relation-name]]
   (fn [^IOperatorFactory op-factory watermark]
-    (let [^ICursorFactory cursor-factory (get *mu-variable->cursor-factory* relation-name)]
+    (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation-name)]
       (assert cursor-factory)
       (.createCursor cursor-factory))))
 
@@ -337,7 +337,7 @@
   (fn [^IOperatorFactory op-factory watermark]
     (.fixpoint op-factory (reify IFixpointCursorFactory
                             (createCursor [_ cursor-factory]
-                              (binding [*mu-variable->cursor-factory* (assoc *mu-variable->cursor-factory* mu-variable cursor-factory)]
+                              (binding [*relation-variable->cursor-factory* (assoc *relation-variable->cursor-factory* mu-variable cursor-factory)]
                                 (let [inner-f (emit-op union-of-expressions)]
                                   (inner-f op-factory watermark))))) false)))
 

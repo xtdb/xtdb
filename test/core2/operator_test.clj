@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [core2.core :as c2]
             [core2.expression :as expr]
+            [core2.logical-plan :as lp]
             [core2.metadata :as meta]
             [core2.operator :as op]
             [core2.test-util :as tu]
@@ -65,3 +66,32 @@
                          [(Text. "Jon")]
                          [(Text. "Jeremy")]}
                        (query-ivan watermark))))))))))
+
+(t/deftest test-fixpoint-operator
+  (let [node-dir (doto (util/->path "target/test-fixpoint-operator")
+                   util/delete-dir)]
+    (with-open [node (c2/->local-node node-dir)]
+      (let [allocator (.allocator node)
+            buffer-pool (.buffer-pool node)
+            metadata-mgr (.metadata-manager node)
+            temporal-mgr (.temporal-manager node)
+            op-factory (op/->operator-factory allocator metadata-mgr temporal-mgr buffer-pool)]
+        (with-open [watermark (c2/open-watermark node)
+                    fixpoint-cursor (lp/open-q op-factory watermark '[:fixpoint F
+                                                                      [:union
+                                                                       [:table [{:a 0 :b 1}]]
+                                                                       [:select
+                                                                        (<= a 8)
+                                                                        [:project
+                                                                         [{a (+ a 1)}
+                                                                          {b (* (+ a 1) b)}]
+                                                                         F]]]])]
+          (t/is (= [[{:a 0, :b 1}
+                     {:a 1, :b 1}
+                     {:a 2, :b 2}
+                     {:a 3, :b 6}
+                     {:a 4, :b 24}
+                     {:a 5, :b 120}
+                     {:a 6, :b 720}
+                     {:a 7, :b 5040}
+                     {:a 8, :b 40320}]] (tu/<-cursor fixpoint-cursor))))))))
