@@ -64,6 +64,9 @@
                       :slice (s/keys :opt-un [::offset ::limit])
                       :relation ::ra-expression))
 
+(s/def ::distinct (s/cat :op #{:δ ::delta :distinct}
+                         :relation ::ra-expression))
+
 (s/def ::intersect (s/cat :op #{:∩ :intersect}
                           :left ::ra-expression
                           :right ::ra-expression))
@@ -114,6 +117,7 @@
                              :order-by ::order-by
                              :group-by ::group-by
                              :slice ::slice
+                             :distinct ::distinct
                              :intersect ::intersect
                              :union ::union
                              :difference ::difference
@@ -223,6 +227,10 @@
                                             (comp name val)))))]
     (unary-op relation (fn [^IOperatorFactory op-factory inner]
                          (.rename op-factory inner rename-map)))))
+
+(defmethod emit-op :distinct [[_ {:keys [relation]}]]
+  (unary-op relation (fn [^IOperatorFactory op-factory inner]
+                       (.distinct op-factory inner))))
 
 (defmethod emit-op :union [[_ {:keys [left right]}]]
   (binary-op left right (fn [^IOperatorFactory op-factory left right]
