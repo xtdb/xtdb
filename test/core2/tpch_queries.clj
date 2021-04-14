@@ -262,8 +262,6 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
-;; TODO: should behave as a left outer join and return customers
-;; without orders as well.
 (defn tpch-q13-customer-distribution []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{custdist :desc}, {c_count :desc}]
