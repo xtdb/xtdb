@@ -118,3 +118,21 @@
                      {:x (Text. "d"), :y (Text. "d")}
                      {:x (Text. "a"), :y (Text. "a")}]]
                    (tu/<-cursor fixpoint-cursor))))))))
+
+(t/deftest test-assignment-operator
+  (let [node-dir (doto (util/->path "target/test-assignment-operator")
+                   util/delete-dir)]
+    (with-open [node (tu/->local-node {:node-dir node-dir})]
+      (with-open [watermark (c2/open-watermark node)
+                  assignment-cursor (c2/open-q node watermark '[:assign [X [:table [{:a 1}]]
+                                                                         Y [:table [{:b 1}]]]
+                                                                [:join {a b} X Y]])]
+        (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
+
+      (t/testing "can see earlier assignments"
+        (with-open [watermark (c2/open-watermark node)
+                    assignment-cursor (c2/open-q node watermark '[:assign [X [:table [{:a 1}]]
+                                                                           Y [:join {a b} X [:table [{:b 1}]]]
+                                                                           X Y]
+                                                                  X])]
+          (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))))))

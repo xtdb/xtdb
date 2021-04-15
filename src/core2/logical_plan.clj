@@ -105,6 +105,10 @@
                          :mu-variable ::relation
                          :union-of-expressions (s/or :union ::union)))
 
+(s/def ::assign (s/cat :op #{:← :assign}
+                       :bindings (s/and vector? (s/* (s/cat :variable ::relation :value ::ra-expression)))
+                       :relation ::ra-expression))
+
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
                              :table ::table
@@ -122,7 +126,8 @@
                              :join ::join
                              :semi-join ::semi-join
                              :anti-join ::anti-join
-                             :fixpoint ::fixpoint))
+                             :fixpoint ::fixpoint
+                             :assign ::assign))
 
 (s/def ::logical-plan ::ra-expression)
 
@@ -135,6 +140,10 @@
        [:join {cid cid}
         [:project [cid balance] Account]
         [:project [cid] Customer]]]]])
+
+  (s/conform ::logical-plan '[:assign [X [:table [{:a 1}]]
+                                       Y [:table [{:b 1}]]]
+                              [:join {a b} X Y]])
 
   ;; left-outer-join
   (s/conform ::logical-plan
@@ -319,6 +328,23 @@
                                 (let [inner-f (emit-op union-of-expressions)]
                                   (inner-f op-factory watermark))))) false)))
 
+(defmethod emit-op :assign [[_ {:keys [bindings relation]}]]
+  (fn [^IOperatorFactory op-factory watermark]
+    (let [assignments (reduce
+                       (fn [acc {:keys [variable value]}]
+                         (assoc acc variable (let [value-f (emit-op value)]
+                                               (reify ICursorFactory
+                                                 (createCursor [_]
+                                                   (binding [*relation-variable->cursor-factory* acc]
+                                                     (value-f op-factory watermark)))))))
+                       *relation-variable->cursor-factory*
+                       bindings)]
+      (with-bindings {#'*relation-variable->cursor-factory* assignments}
+        (let [inner-f (emit-op relation)]
+          (inner-f op-factory watermark))))))
+
 (defn open-q ^core2.ICursor [op-factory watermark lp]
+  (when-not (s/valid? ::logical-plan lp)
+    (throw (IllegalArgumentException. (s/explain-str ::logical-plan lp))))
   (let [op-f (emit-op (s/conform ::logical-plan lp))]
     (op-f op-factory watermark)))

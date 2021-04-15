@@ -53,12 +53,6 @@
 
 (defn form->expr [form]
   (cond
-    (or (number? form)
-        (boolean? form)
-        (instance? Date form)
-        (string? form))
-    {:op :literal, :literal form}
-
     (symbol? form) {:op :variable, :variable form}
 
     (sequential? form) (let [[f & args] form]
@@ -76,7 +70,7 @@
                            (-> {:op :call, :f f, :args (mapv form->expr args)}
                                expand-variadics)))
 
-    :else (throw (IllegalArgumentException. (str "unexpected form: " (pr-str form))))))
+    :else {:op :literal, :literal form}))
 
 (defn postwalk-expr [f {:keys [op] :as expr}]
   (case op
@@ -168,7 +162,9 @@
   {:code (if (instance? Date literal)
            (.getTime ^Date literal)
            literal)
-   :return-type (class literal)})
+   :return-type (if (nil? literal)
+                  Comparable
+                  (class literal))})
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
   (let [type (or (get var->type variable)
