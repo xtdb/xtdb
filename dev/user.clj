@@ -21,7 +21,9 @@
                       #'core2.tpch-queries/*watermark* watermark}
         (time
          (doseq [q [#'core2.tpch-queries/tpch-q1-pricing-summary-report
+                    #'core2.tpch-queries/tpch-q2-minimum-cost-supplier
                     #'core2.tpch-queries/tpch-q3-shipping-priority
+                    #'core2.tpch-queries/tpch-q4-order-priority-checking
                     #'core2.tpch-queries/tpch-q5-local-supplier-volume
                     #'core2.tpch-queries/tpch-q6-forecasting-revenue-change
                     #'core2.tpch-queries/tpch-q7-volume-shipping
@@ -29,6 +31,7 @@
                     #'core2.tpch-queries/tpch-q9-product-type-profit-measure
                     #'core2.tpch-queries/tpch-q10-returned-item-reporting
                     #'core2.tpch-queries/tpch-q12-shipping-modes-and-order-priority
+                    #'core2.tpch-queries/tpch-q13-customer-distribution
                     #'core2.tpch-queries/tpch-q14-promotion-effect
                     #'core2.tpch-queries/tpch-q19-discounted-revenue]]
            (prn q)
