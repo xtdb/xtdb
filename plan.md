@@ -1,31 +1,31 @@
 ## Principles
 
-Multiple nodes tailing same log, sharing the same object store.
-Dependency tree to derive immutable chunks (with revisions) from each other.
-Declare data dependencies instead of building them. Especially don't do unexpected I/O.
-Persistent data sits in the object store (or log), transient data in memory or disk.
-Evict handled via new chunk version + GC.
-Non-blocking I/O everywhere it makes sense.
-Compiled queries operating on vectors/batches.
-JMH for microbenchmarks of CPU-bound pieces.
-Always also compare CPU-bound pieces with Java.
-Prefer property based testing, including stateful testing.
-API for end-to-end.
-If it gets hairy, take a step back. Avoid locks or synchronisation for example.
-Use of local in-memory Clojure state is discouraged.
-Take a break to read and review papers, avoid NIH.
-Use Java interfaces and types between subsystem boundaries.
-Focus on data, not code.
+- Multiple nodes tailing same log, sharing the same object store.
+- Dependency tree to derive immutable chunks (with revisions) from each other.
+- Declare data dependencies instead of building them. Especially don't do unexpected I/O.
+- Persistent data sits in the object store (or log), transient data in memory or disk.
+- Evict handled via new chunk version + GC.
+- Non-blocking I/O everywhere it makes sense.
+- Compiled queries operating on vectors/batches.
+- JMH for microbenchmarks of CPU-bound pieces.
+- Always also compare CPU-bound pieces with Java.
+- Prefer property based testing, including stateful testing.
+- API for end-to-end.
+- If it gets hairy, take a step back. Avoid locks or synchronisation for example.
+- Use of local in-memory Clojure state is discouraged.
+- Take a break to read and review papers, avoid NIH.
+- Use Java interfaces and types between subsystem boundaries.
+- Focus on data, not code.
 
 Data:
-Arrow columnar format everywhere.
-Nippy Arrow-extension type to bootstrap, preference is to later remove it.
-RoaringBitmap Arrow-extension type.
-Arrow used for off-heap memory management.
+- Arrow columnar format everywhere.
+- Nippy Arrow-extension type to bootstrap, preference is to later remove it.
+- RoaringBitmap Arrow-extension type.
+- Arrow used for off-heap memory management.
 
 Two main extension points:
-Single log feeding transactions (but not tied to this usage).
-Shared object store for persistence.
+- Single log feeding transactions (but not tied to this usage).
+- Shared object store for persistence.
 
 ## Problems with Classic
 
@@ -80,9 +80,9 @@ Shared object store for persistence.
 ## Deliverables
 
 1. Short-term demo (next couple of weeks)
-  - main method and configuration, logging
-  - table-operator
-  - bringing other operators into logical plan
+   - main method and configuration, logging
+   - table-operator
+   - bringing other operators into logical plan
 2. Go/No-Go for Storage/Compute + Arrow
    - Large TPC-H SF, running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
      - Kafka, S3
