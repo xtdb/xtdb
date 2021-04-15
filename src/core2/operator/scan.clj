@@ -7,7 +7,7 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           core2.buffer_pool.BufferPool
+           core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.metadata.IMetadataManager
            core2.select.IVectorSelector
@@ -106,7 +106,7 @@
     out-root))
 
 (deftype ScanCursor [^BufferAllocator allocator
-                     ^BufferPool buffer-pool
+                     ^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
                      ^Watermark watermark
                      ^Queue #_<Long> chunk-idxs
@@ -197,7 +197,7 @@
 (defn ->scan-cursor [^BufferAllocator allocator
                      ^IMetadataManager metadata-mgr
                      ^ITemporalManager temporal-manager
-                     ^BufferPool buffer-pool
+                     ^IBufferPool buffer-pool
                      ^Watermark watermark
                      ^List col-names
                      metadata-pred ;; TODO derive this from col-preds

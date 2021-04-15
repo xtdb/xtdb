@@ -12,7 +12,7 @@
             core2.metadata
             core2.temporal
             [core2.system :as sys])
-  (:import core2.buffer_pool.BufferPool
+  (:import core2.buffer_pool.IBufferPool
            core2.metadata.IMetadataManager
            core2.temporal.ITemporalManager
            org.apache.arrow.memory.BufferAllocator))
@@ -81,7 +81,7 @@
   [{:keys [^BufferAllocator allocator
            ^IMetadataManager metadata-mgr
            ^ITemporalManager temporal-mgr
-           ^BufferPool buffer-pool]}]
+           ^IBufferPool buffer-pool]}]
 
   (reify IOperatorFactory
     (scan [_ watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range]

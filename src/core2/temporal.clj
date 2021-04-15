@@ -1,30 +1,27 @@
 (ns core2.temporal
   (:require [core2.metadata :as meta]
             core2.object-store
-            [core2.types :as t]
+            [core2.system :as sys]
             [core2.temporal.kd-tree :as kd]
             core2.tx
-            [core2.util :as util]
-            [core2.system :as sys])
-  (:import core2.buffer_pool.BufferPool
-           core2.object_store.ObjectStore
+            [core2.types :as t]
+            [core2.util :as util])
+  (:import core2.buffer_pool.IBufferPool
            core2.metadata.IMetadataManager
+           core2.object_store.ObjectStore
            core2.temporal.TemporalCoordinates
-           [core2.tx TransactionInstant Watermark]
-           org.apache.arrow.memory.util.ArrowBufPointer
+           java.io.Closeable
+           java.nio.ByteBuffer
+           [java.util Arrays Comparator Date HashMap Map]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap]
+           java.util.concurrent.atomic.AtomicLong
+           [java.util.function Consumer Function IntFunction Predicate ToLongFunction]
+           [java.util.stream Stream StreamSupport]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector.types.pojo Field Schema]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.roaringbitmap.longlong.Roaring64Bitmap
-           java.nio.ByteBuffer
-           [java.util Arrays Comparator Date List Map HashMap SortedMap SortedSet Spliterator Spliterators TreeMap]
-           [java.util.function Consumer Function IntFunction LongConsumer Predicate ToLongFunction]
-           [java.util.concurrent CompletableFuture ConcurrentHashMap]
-           java.util.concurrent.locks.StampedLock
-           java.util.concurrent.atomic.AtomicLong
-           [java.util.stream Stream StreamSupport]
-           java.io.Closeable))
+           org.apache.arrow.vector.types.pojo.Schema
+           org.roaringbitmap.longlong.Roaring64Bitmap))
 
 ;; Temporal proof-of-concept plan:
 
@@ -172,7 +169,7 @@
 
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
-                          ^BufferPool buffer-pool
+                          ^IBufferPool buffer-pool
                           ^IMetadataManager metadata-manager
                           ^AtomicLong id-counter
                           ^Map id->internal-id
@@ -305,7 +302,7 @@
                                       :metadata-manager :core2/metadata-manager}}
   [{:keys [^BufferAllocator allocator
            ^ObjectStore object-store
-           ^BufferPool buffer-pool
+           ^IBufferPool buffer-pool
            ^IMetadataManager metadata-manager]}]
   (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil nil)
     (.populateKnownChunks)))

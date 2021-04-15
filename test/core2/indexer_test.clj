@@ -11,7 +11,7 @@
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
             [core2.util :as util])
-  (:import [core2.buffer_pool BufferPool MemoryMappedBufferPool]
+  (:import [core2.buffer_pool BufferPool IBufferPool]
            core2.core.Node
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
@@ -81,7 +81,7 @@
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (:core2/object-store system)
-            ^BufferPool bp (:core2/buffer-pool system)
+            ^IBufferPool bp (:core2/buffer-pool system)
             ^IMetadataManager mm (:core2/metadata-manager system)
             ^TemporalManager tm (:core2/temporal-manager system)]
 
@@ -138,7 +138,7 @@
           (let [buffer-name "metadata-00000000.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
-            (t/is (= 1 (count (.buffers ^MemoryMappedBufferPool bp))))
+            (t/is (= 1 (count (.buffers ^BufferPool bp))))
             (t/is (instance? ArrowBuf buffer))
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -177,7 +177,7 @@
             (t/is (.evictBuffer bp buffer-name))
             (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
             (t/is (zero? (.getSize (.getReferenceManager ^ArrowBuf buffer))))
-            (t/is (empty? (.buffers ^MemoryMappedBufferPool bp)))))))))
+            (t/is (empty? (.buffers ^BufferPool bp)))))))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")

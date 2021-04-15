@@ -69,7 +69,7 @@
                                             :core2/metadata-manager 'core2.metadata/->metadata-manager
                                             :core2/temporal-manager 'core2.temporal/->temporal-manager
                                             :core2/object-store 'core2.object-store/->file-system-object-store
-                                            :core2/buffer-pool 'core2.buffer-pool/->memory-mapped-buffer-pool
+                                            :core2/buffer-pool 'core2.buffer-pool/->buffer-pool
                                             :core2/op-factory 'core2.operator/->operator-factory}]
                                           (cond-> opts (not (vector? opts)) vector)))
                    (sys/start-system))]

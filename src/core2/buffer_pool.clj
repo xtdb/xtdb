@@ -9,12 +9,13 @@
            java.util.Map
            [org.apache.arrow.memory ArrowBuf BufferAllocator]))
 
-(definterface BufferPool
+(definterface IBufferPool
   (^java.util.concurrent.CompletableFuture getBuffer [^String k])
   (^boolean evictBuffer [^String k]))
 
-(deftype MemoryMappedBufferPool [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store ^Map buffers]
-  BufferPool
+(deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers
+                     ^Path cache-path]
+  IBufferPool
   (getBuffer [_ k]
     (if (nil? k)
       (CompletableFuture/completedFuture nil)
@@ -22,24 +23,28 @@
         (if-not (= ::not-found v)
           (CompletableFuture/completedFuture (doto ^ArrowBuf v
                                                (.retain)))
-          (let [buffer-path (.resolve root-path k)]
-            (-> (if (util/path-exists buffer-path)
-                  (CompletableFuture/completedFuture buffer-path)
+          (let [buffer-path (when cache-path
+                              (.resolve cache-path k))]
+            (-> (if (and buffer-path (util/path-exists buffer-path))
+                  (CompletableFuture/completedFuture (util/->mmap-path buffer-path))
                   (-> (.getObject object-store k)
                       (util/then-apply (fn [buf]
-                                         (util/write-buffer-to-path buf buffer-path)
-                                         buffer-path))))
+                                         (if buffer-path
+                                           (do
+                                             (util/write-buffer-to-path buf buffer-path)
+                                             (util/->mmap-path buffer-path))
+                                           buf)))))
                 (util/then-apply
-                  (fn [^Path buffer-path]
-                    (when buffer-path
-                      (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                                (util/->arrow-buf-view allocator (util/->mmap-path buffer-path)))))
-                        (.retain)))))))))))
+                  (fn [buf]
+                    (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                              (util/->arrow-buf-view allocator buf))))
+                      (.retain))))))))))
 
   (evictBuffer [_ k]
     (when-let [^ArrowBuf buffer (.remove buffers k)]
       (.release buffer)
-      (Files/deleteIfExists (.resolve root-path k))))
+      (when cache-path
+        (Files/deleteIfExists (.resolve cache-path k)))))
 
   Closeable
   (close [_]
@@ -48,9 +53,10 @@
         (.release ^ArrowBuf (.next i))
         (.remove i)))))
 
-(defn ->memory-mapped-buffer-pool {::sys/deps {:allocator :core2/allocator
-                                               :object-store :core2/object-store}
-                                   ::sys/args {:root-path {:spec ::sys/path, :required? true}}}
-  [{:keys [^Path root-path ^BufferAllocator allocator ^ObjectStore object-store]}]
-  (util/mkdirs root-path)
-  (->MemoryMappedBufferPool root-path allocator object-store (ConcurrentHashMap.)))
+(defn ->buffer-pool {::sys/deps {:allocator :core2/allocator
+                                 :object-store :core2/object-store}
+                     ::sys/args {:cache-path {:spec ::sys/path, :required? false}}}
+  [{:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store]}]
+  (when cache-path
+    (util/mkdirs cache-path))
+  (->BufferPool allocator object-store (ConcurrentHashMap.) cache-path))

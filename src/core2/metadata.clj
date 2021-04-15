@@ -7,7 +7,7 @@
             [core2.util :as util]
             [core2.system :as sys])
   (:import clojure.lang.MapEntry
-           core2.buffer_pool.BufferPool
+           core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
            core2.types.ReadWrite
@@ -161,7 +161,7 @@
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
-                          ^BufferPool buffer-pool
+                          ^IBufferPool buffer-pool
                           ^SortedSet known-chunks]
   IMetadataManager
   (registerNewChunk [_ live-roots chunk-idx]
