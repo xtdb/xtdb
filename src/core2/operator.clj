@@ -131,7 +131,7 @@
       (set-op/->intersection-cursor allocator left-cursor right-cursor))
 
     (distinct [_ in-cursor]
-      (set-op/->intersection-cursor allocator in-cursor))
+      (set-op/->distinct-cursor allocator in-cursor))
 
     (fixpoint [_ fixpoint-cursor-factory incremental?]
       (set-op/->fixpoint-cursor allocator fixpoint-cursor-factory incremental?))))

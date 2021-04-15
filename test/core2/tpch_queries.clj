@@ -112,6 +112,20 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q4-order-priority-checking []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:order-by [{o_orderpriority :asc}]
+                               [:group-by [o_orderpriority {order_count (count o_orderkey)}]
+                                [:semi-join {o_orderkey l_orderkey}
+                                 [:scan [{o_orderdate (and (>= o_orderdate #inst "1993-07-01")
+                                                           (< o_orderdate #inst "1993-10-01"))} o_orderpriority o_orderkey]]
+                                 [:distinct
+                                  [:project [l_orderkey]
+                                   [:select (< l_commitdate l_receiptdate)
+                                    [:scan [l_orderkey l_commitdate l_receiptdate]]]]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q5-local-supplier-volume []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{revenue :desc}]

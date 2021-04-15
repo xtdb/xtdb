@@ -128,6 +128,14 @@
              :o_shippriority 0}]
            (tpch-queries/tpch-q3-shipping-priority))))
 
+(t/deftest ^:integration test-q4-order-priority-checking
+  (t/is (= [{:o_orderpriority (Text. "1-URGENT"), :order_count 93}
+            {:o_orderpriority (Text. "2-HIGH"), :order_count 103}
+            {:o_orderpriority (Text. "3-MEDIUM"), :order_count 109}
+            {:o_orderpriority (Text. "4-NOT SPECIFIED"), :order_count 102}
+            {:o_orderpriority (Text. "5-LOW"), :order_count 128}]
+           (tpch-queries/tpch-q4-order-priority-checking))))
+
 (t/deftest ^:integration test-q5-local-supplier-volume
   (t/is (= [{:n_name (Text. "VIETNAM")
              :revenue 1000926.6999}

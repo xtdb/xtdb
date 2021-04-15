@@ -88,6 +88,14 @@
              :o_shippriority 0}]
            (tpch-queries/tpch-q3-shipping-priority))))
 
+(t/deftest test-q4-order-priority-checking
+  (t/is (= [{:o_orderpriority (Text. "1-URGENT"), :order_count 9}
+            {:o_orderpriority (Text. "2-HIGH"), :order_count 7}
+            {:o_orderpriority (Text. "3-MEDIUM"), :order_count 9}
+            {:o_orderpriority (Text. "4-NOT SPECIFIED"), :order_count 8}
+            {:o_orderpriority (Text. "5-LOW"), :order_count 12}]
+           (tpch-queries/tpch-q4-order-priority-checking))))
+
 (t/deftest test-q5-local-supplier-volume
   (t/is (= []
            (tpch-queries/tpch-q5-local-supplier-volume))))
