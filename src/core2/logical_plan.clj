@@ -102,7 +102,7 @@
 
 (s/def ::fixpoint (s/cat :op #{:μ :mu :fixpoint}
                          :mu-variable ::relation
-                         :union-of-expressions ::ra-expression))
+                         :union-of-expressions (s/or :union ::union)))
 
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
