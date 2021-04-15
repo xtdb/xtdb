@@ -1,18 +1,17 @@
 (ns core2.core
   (:require [core2.indexer :as indexer]
             core2.ingest-loop
-            [core2.log :as log]
             [core2.logical-plan :as lp]
             [core2.system :as sys]
-            [core2.tx-producer :as txp]
+            core2.tx-producer
             [core2.util :as util])
   (:import [core2.indexer IChunkManager TransactionIndexer]
            core2.ingest_loop.IIngestLoop
-           core2.log.LogWriter
            core2.operator.IOperatorFactory
+           core2.tx_producer.ITxProducer
            java.io.Closeable
            java.lang.AutoCloseable
-           [org.apache.arrow.memory BufferAllocator RootAllocator]))
+           [org.apache.arrow.memory RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -27,13 +26,14 @@
   (open-q
     ^java.lang.AutoCloseable [node watermark query]))
 
-(defprotocol PTxProducer
+(defprotocol PSubmitNode
   (submit-tx
     ^java.util.concurrent.CompletableFuture [tx-producer tx-ops]))
 
 (defrecord Node [^TransactionIndexer indexer
                  ^IIngestLoop ingest-loop
                  ^IOperatorFactory op-factory
+                 ^ITxProducer tx-producer
                  !system
                  close-fn]
   PNode
@@ -46,6 +46,10 @@
 
   (open-q [_ watermark query] (lp/open-q op-factory watermark query))
 
+  PSubmitNode
+  (submit-tx [_ tx-ops]
+    (.submitTx tx-producer tx-ops))
+
   Closeable
   (close [_]
     (when close-fn
@@ -53,7 +57,8 @@
 
 (defn ->node {::sys/deps {:indexer :core2/indexer
                           :ingest-loop :core2/ingest-loop
-                          :op-factory :core2/op-factory}}
+                          :op-factory :core2/op-factory
+                          :tx-producer :core2/tx-producer}}
   [deps]
   (map->Node (assoc deps :!system (atom nil))))
 
@@ -65,7 +70,8 @@
                                             :core2/allocator `->allocator
                                             :core2/indexer 'core2.indexer/->indexer
                                             :core2/ingest-loop 'core2.ingest-loop/->ingest-loop
-                                            :core2/log-reader 'core2.log/->local-directory-log-reader
+                                            :core2/log 'core2.log/->local-directory-log
+                                            :core2/tx-producer 'core2.tx-producer/->tx-producer
                                             :core2/metadata-manager 'core2.metadata/->metadata-manager
                                             :core2/temporal-manager 'core2.temporal/->temporal-manager
                                             :core2/object-store 'core2.object-store/->file-system-object-store
@@ -78,39 +84,36 @@
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(.close ^AutoCloseable system)))))
 
-(defrecord TxProducer [^LogWriter log-writer
-                       ^BufferAllocator allocator
-                       !system
-                       close-fn]
-  PTxProducer
+(defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
+  PSubmitNode
   (submit-tx [_ tx-ops]
-    (txp/submit-tx log-writer allocator tx-ops))
+    (.submitTx tx-producer tx-ops))
 
   AutoCloseable
   (close [_]
     (when close-fn
       (close-fn))))
 
-(defn ->tx-producer {::sys/deps {:log-writer :core2/log-writer
-                                 :allocator :core2/allocator}}
-  [deps]
-  (map->TxProducer (assoc deps :!system (atom nil))))
+(defn ->submit-node {::sys/deps {:tx-producer :core2/tx-producer}}
+  [{:keys [tx-producer]}]
+  (map->SubmitNode {:tx-producer tx-producer, :!system (atom nil)}))
 
 (defn start-tx-producer [opts]
-  (let [system (-> (sys/prep-system (into [{:core2/tx-producer `->tx-producer
+  (let [system (-> (sys/prep-system (into [{:core2/submit-node `->submit-node
+                                            :core2/tx-producer 'core2.tx-producer/->tx-producer
                                             :core2/allocator `->allocator
-                                            :core2/log-writer 'core2.log/->local-directory-log-writer}]
+                                            :core2/log 'core2.log/->local-directory-log-writer}]
                                           (cond-> opts (not (vector? opts)) vector)))
                    (sys/start-system))]
 
-    (-> (:core2/tx-producer system)
+    (-> (:core2/submit-node system)
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(.close ^AutoCloseable system)))))
 
 (defn -main [& [node-dir :as args]]
   (if node-dir
     (let [node-dir (util/->path node-dir)]
-      (start-node {:core2/log-reader {:root-path (.resolve node-dir "log")}
+      (start-node {:core2/log {:root-path (.resolve node-dir "log")}
                    :core2/buffer-pool {:cache-path (.resolve node-dir "buffers")}
                    :core2/object-store {:root-path (.resolve node-dir "objects")}})
       (println "core2 started in" (str node-dir)))

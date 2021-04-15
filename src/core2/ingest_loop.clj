@@ -14,14 +14,14 @@
   (^core2.tx.TransactionInstant awaitTx [^core2.tx.TransactionInstant tx])
   (^core2.tx.TransactionInstant awaitTx [^core2.tx.TransactionInstant tx, ^java.time.Duration timeout]))
 
-(defn- ingest-loop [^LogReader log-reader, ^TransactionIndexer indexer
+(defn- ingest-loop [^LogReader log, ^TransactionIndexer indexer
                     {:keys [^Duration poll-sleep-duration ^long batch-size],
                      :or {poll-sleep-duration (Duration/ofMillis 100)
                           batch-size 100}}]
   (let [poll-sleep-ms (.toMillis poll-sleep-duration)]
     (try
       (while true
-        (if-let [log-records (not-empty (.readRecords log-reader (some-> (.latestCompletedTx indexer) .tx-id) batch-size))]
+        (if-let [log-records (not-empty (.readRecords log (some-> (.latestCompletedTx indexer) .tx-id) batch-size))]
           (doseq [^LogRecord record log-records]
             (if (Thread/interrupted)
               (throw (InterruptedException.))
@@ -67,10 +67,10 @@
   (close [_]
     (util/shutdown-pool pool)))
 
-(defn ->ingest-loop {::sys/deps {:log-reader :core2/log-reader
+(defn ->ingest-loop {::sys/deps {:log :core2/log
                                  :indexer :core2/indexer}
                      ::sys/args {:poll-sleep-duration {:spec ::sys/duration, :default "PT0.1S"}}}
-  [{:keys [log-reader indexer poll-sleep-duration]}]
+  [{:keys [log indexer poll-sleep-duration]}]
    (let [pool (doto (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "ingest-loop-"))
-                (.submit ^Runnable #(ingest-loop log-reader indexer poll-sleep-duration)))]
+                (.submit ^Runnable #(ingest-loop log indexer poll-sleep-duration)))]
      (IngestLoop. indexer pool poll-sleep-duration)))

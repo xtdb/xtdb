@@ -27,9 +27,30 @@
 
 (def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
 
-(deftype LocalDirectoryLogReader [^Path root-path ^:volatile-mutable ^FileChannel log-channel]
+(deftype LocalDirectoryLogWriter [^Path root-path ^ExecutorService pool ^BlockingQueue queue ^Future append-loop-future]
+  LogWriter
+  (appendRecord [_ record]
+    (if (.isShutdown pool)
+      (throw (IllegalStateException. "writer is closed"))
+      (let [f (CompletableFuture.)]
+        (.put queue (MapEntry/create f record))
+        f)))
+
+  Closeable
+  (close [_]
+    (try
+      (future-cancel append-loop-future)
+      (util/shutdown-pool pool)
+      (finally
+        (loop []
+          (when-let [[^CompletableFuture f] (.poll queue)]
+            (when-not (.isDone f)
+              (.cancel f true))
+            (recur)))))))
+
+(deftype LocalDirectoryLog [^LogWriter log-writer ^Path root-path ^:volatile-mutable ^FileChannel log-channel]
   LogReader
-  (readRecords [this after-offset limit]
+  (readRecords [_ after-offset limit]
     (if (nil? log-channel)
       (let [log-path (.resolve root-path "LOG")]
         (if (util/path-exists log-path)
@@ -64,31 +85,15 @@
                 (subvec acc 1)
                 acc)))))))
 
+  LogWriter
+  (appendRecord [_ record]
+    (.appendRecord log-writer record))
+
   Closeable
   (close [_]
+    (util/try-close log-writer)
     (when log-channel
       (.close log-channel))))
-
-(deftype LocalDirectoryLogWriter [^Path root-path ^ExecutorService pool ^BlockingQueue queue ^Future append-loop-future]
-  LogWriter
-  (appendRecord [this record]
-    (if (.isShutdown pool)
-      (throw (IllegalStateException. "writer is closed"))
-      (let [f (CompletableFuture.)]
-        (.put queue (MapEntry/create f record))
-        f)))
-
-  Closeable
-  (close [_]
-    (try
-      (future-cancel append-loop-future)
-      (util/shutdown-pool pool)
-      (finally
-        (loop []
-          (when-let [[^CompletableFuture f] (.poll queue)]
-            (when-not (.isDone f)
-              (.cancel f true))
-            (recur)))))))
 
 (defn- writer-append-loop [^Path root-path ^BlockingQueue queue ^Clock clock ^long buffer-size]
   (with-open [log-channel (util/->file-channel (.resolve root-path "LOG")
@@ -146,10 +151,6 @@
           (finally
             (.clear elements)))))))
 
-(defn ->local-directory-log-reader {::sys/args {:root-path {:spec ::sys/path, :required? true}}}
-  [{:keys [root-path]}]
-  (->LocalDirectoryLogReader root-path nil))
-
 (defn ->local-directory-log-writer {::sys/args {:root-path {:spec ::sys/path, :required? true}
                                                 :buffer-size {:spec ::sys/pos-int, :default 4096}
                                                 :clock {:spec #(instance? Clock %), :default (Clock/systemUTC)}}}
@@ -159,3 +160,8 @@
         queue (ArrayBlockingQueue. buffer-size)
         append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue clock buffer-size))]
     (->LocalDirectoryLogWriter root-path pool queue append-loop-future)))
+
+(defn ->local-directory-log {::sys/args (merge (::sys/args (meta #'->local-directory-log-writer))
+                                               {:root-path {:spec ::sys/path, :required? true}})}
+  [{:keys [root-path] :as opts}]
+  (->LocalDirectoryLog (->local-directory-log-writer opts) root-path nil))

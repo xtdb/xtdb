@@ -2,7 +2,8 @@
   (:require [clojure.set :as set]
             [core2.log :as c2-log]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.system :as sys])
   (:import core2.log.LogWriter
            [java.util LinkedHashMap LinkedHashSet Set]
            org.apache.arrow.memory.BufferAllocator
@@ -10,6 +11,9 @@
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
+
+(definterface ITxProducer
+  (submitTx [^java.util.List txOps]))
 
 (defn- ->doc-k-types [tx-ops]
   (let [doc-k-types (LinkedHashMap.)]
@@ -121,8 +125,15 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(defn submit-tx [^LogWriter log-writer, ^BufferAllocator allocator, tx-ops]
-  (-> (.appendRecord log-writer (serialize-tx-ops tx-ops allocator))
-      (util/then-apply
-        (fn [result]
-          (c2-log/log-record->tx-instant result)))))
+(deftype TxProducer [^LogWriter log, ^BufferAllocator allocator]
+  ITxProducer
+  (submitTx [_ tx-ops]
+    (-> (.appendRecord log (serialize-tx-ops tx-ops allocator))
+        (util/then-apply
+          (fn [result]
+            (c2-log/log-record->tx-instant result))))))
+
+(defn ->tx-producer {::sys/deps {:log :core2/log
+                                 :allocator :core2/allocator}}
+  [{:keys [log allocator]}]
+  (TxProducer. log allocator))

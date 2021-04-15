@@ -15,15 +15,13 @@
         mock-clock (Clock/fixed (.toInstant #inst "2021-04-01") (ZoneId/of "UTC"))]
     (util/delete-dir node-dir)
 
-    (time
-     (with-open [node (tu/->local-node {:node-dir node-dir})
-                 tx-producer (tu/->local-tx-producer {:node-dir node-dir, :clock mock-clock})]
-       (let [last-tx (tpch/submit-docs! tx-producer scale-factor)]
-         (c2/await-tx node last-tx (Duration/ofMinutes 1))
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
+      (let [last-tx (tpch/submit-docs! node scale-factor)]
+        (c2/await-tx node last-tx (Duration/ofMinutes 1))
 
-         (tu/finish-chunk node)
-         (t/is (= expected-objects
-                  (count (iterator-seq (.iterator (Files/list objects-dir)))))))))
+        (tu/finish-chunk node)
+        (t/is (= expected-objects
+                 (count (iterator-seq (.iterator (Files/list objects-dir))))))))
 
     (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
 
