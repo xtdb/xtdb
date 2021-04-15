@@ -9,16 +9,16 @@
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
            [java.nio.file Path StandardOpenOption]
            java.time.Clock
-           [java.util ArrayList Date List]
+           [java.util ArrayList Date]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface LogWriter
-  (^java.util.concurrent.CompletableFuture appendRecord [^java.nio.ByteBuffer record]))
+  (^java.util.concurrent.CompletableFuture #_<LogRecord> appendRecord [^java.nio.ByteBuffer record]))
 
 (definterface LogReader
-  (^java.util.List readRecords [^Long afterOffset ^int limit]))
+  (^java.util.List #_<LogRecord> readRecords [^Long afterOffset ^int limit]))
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
 

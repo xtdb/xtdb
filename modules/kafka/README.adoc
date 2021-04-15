@@ -1,0 +1,6 @@
+= Core2 Kafka
+
+== Testing
+
+- (once) `docker-compose up -d`
+- (from core2 root) `lein with-profile +kafka test :kafka`

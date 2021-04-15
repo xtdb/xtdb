@@ -29,8 +29,9 @@
                    :source-paths ["dev"]
                    :java-source-paths ["src" "jmh"]
                    :resource-paths ["test-resources" "data"]
-                   :test-selectors {:default (complement :integration)
-                                    :integration :integration}}
+                   :test-selectors {:default (complement #{:integration :kafka})
+                                    :integration :integration
+                                    :kafka :kafka}}
 
              ;; TODO debate best way to multi-module this
              ;; for now, I just want to ensure they're sufficiently isolated
@@ -39,7 +40,11 @@
                   :test-paths ["modules/s3/test"]
                   :dependencies [[software.amazon.awssdk/s3 "2.10.91"]]}
 
-             :modules [:s3]}
+             :kafka {:source-paths ["modules/kafka/src"]
+                     :test-paths ["modules/kafka/test"]
+                     :dependencies [[org.apache.kafka/kafka-clients "2.7.0"]]}
+
+             :modules [:s3 :kafka]}
 
   :aliases {"jmh" ["trampoline" "run"
                    "-m" "org.openjdk.jmh.Main"
