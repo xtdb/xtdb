@@ -75,9 +75,8 @@
                                      op))]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})
-                tx-producer (tu/->local-tx-producer {:node-dir node-dir,
-                                                     :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
+    (with-open [node (tu/->local-node {:node-dir node-dir
+                                       :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (:core2/object-store system)
@@ -90,7 +89,7 @@
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
-                         @(c2/submit-tx tx-producer tx-ops)))))
+                         @(c2/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-instant
                  (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
@@ -190,11 +189,10 @@
                 {:op :put, :doc {:_id #inst "2020-01-01"}}]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})
-                tx-producer (tu/->local-tx-producer {:node-dir node-dir, :clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
       (let [^ObjectStore os (:core2/object-store @(:!system node))]
 
-        @(-> (c2/submit-tx tx-producer tx-ops)
+        @(-> (c2/submit-tx node tx-ops)
              (tu/then-await-tx node))
 
         (tu/finish-chunk node)
@@ -207,13 +205,12 @@
         last-tx-instant (tx/->TransactionInstant 6240 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir})
-                tx-producer (tu/->local-tx-producer {:node-dir node-dir, :clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
       (let [object-dir (.resolve node-dir "objects")]
 
         (t/is (= last-tx-instant
                  (last (for [tx-ops txs]
-                         @(c2/submit-tx tx-producer tx-ops)))))
+                         @(c2/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-instant
                  (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
@@ -231,7 +228,6 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-chunk 3000, :max-rows-per-block 300})
-                tx-producer (tu/->local-tx-producer {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [^ObjectStore os (:core2/object-store @(:!system node))
@@ -249,7 +245,7 @@
 
         (let [last-tx-instant @(reduce
                                 (fn [_acc tx-ops]
-                                  (c2/submit-tx tx-producer tx-ops))
+                                  (c2/submit-tx node tx-ops))
                                 nil
                                 (partition-all 100 tx-ops))]
 
@@ -313,7 +309,7 @@
     (with-open [node-1 (tu/->local-node node-opts)
                 node-2 (tu/->local-node node-opts)
                 node-3 (tu/->local-node node-opts)
-                tx-producer (tu/->local-tx-producer {:node-dir node-dir})
+                submit-node (tu/->local-submit-node {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
@@ -327,7 +323,7 @@
 
         (let [last-tx-instant @(reduce
                                 (fn [_ tx-ops]
-                                  (c2/submit-tx tx-producer tx-ops))
+                                  (c2/submit-tx submit-node tx-ops))
                                 nil
                                 (partition-all 100 tx-ops))]
 
@@ -348,7 +344,7 @@
         node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [tx-producer (tu/->local-tx-producer {:node-dir node-dir})
+    (with-open [submit-node (tu/->local-submit-node {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
       (let [device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
@@ -365,7 +361,7 @@
         (let [^TransactionInstant
               first-half-tx-instant @(reduce
                                       (fn [_ tx-ops]
-                                        (c2/submit-tx tx-producer tx-ops))
+                                        (c2/submit-tx submit-node tx-ops))
                                       nil
                                       (partition-all 100 first-half-tx-ops))]
 
@@ -392,7 +388,7 @@
               (let [^TransactionInstant
                     second-half-tx-instant @(reduce
                                              (fn [_ tx-ops]
-                                               (c2/submit-tx tx-producer tx-ops))
+                                               (c2/submit-tx submit-node tx-ops))
                                              nil
                                              (partition-all 100 second-half-tx-ops))]
 

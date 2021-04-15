@@ -17,7 +17,6 @@
       (util/delete-dir node-dir)
 
       (with-open [node (tu/->local-node {:node-dir node-dir})
-                  tx-producer (tu/->local-tx-producer {:node-dir node-dir})
                   info-reader (io/reader (io/resource "devices_small_device_info.csv"))
                   readings-reader (io/reader (io/resource "devices_small_readings.csv"))]
         (let [^IMetadataManager mm (:core2/metadata-manager @(:!system node))
@@ -34,7 +33,7 @@
 
           (let [last-tx-instant @(reduce
                                   (fn [_acc tx-ops]
-                                    (c2/submit-tx tx-producer tx-ops))
+                                    (c2/submit-tx node tx-ops))
                                   nil
                                   (partition-all 100 tx-ops))]
 

@@ -126,18 +126,20 @@
             :when (.endsWith (str path) ".json")]
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
-(defn ->local-node ^java.lang.AutoCloseable [{:keys [^Path node-dir
-                                                     clock max-rows-per-block max-rows-per-chunk]}]
-  (c2/start-node {:core2/log (cond-> {:root-path (.resolve node-dir "log")}
+(defn ->local-node ^core2.core.Node [{:keys [^Path node-dir
+                                             clock max-rows-per-block max-rows-per-chunk]}]
+  (c2/start-node {:core2/log (cond-> {:core2/module 'core2.log/->local-directory-log
+                                      :root-path (.resolve node-dir "log")}
                                clock (assoc :clock clock))
                   :core2/buffer-pool {:cache-path (.resolve node-dir "buffers")}
-                  :core2/object-store {:root-path (.resolve node-dir "objects")}
+                  :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
+                                       :root-path (.resolve node-dir "objects")}
                   :core2/indexer (->> {:max-rows-per-block max-rows-per-block
                                        :max-rows-per-chunk max-rows-per-chunk}
                                       (into {} (filter val)))}))
 
-(defn ->local-tx-producer ^java.lang.AutoCloseable [{:keys [^Path node-dir clock]}]
-  (c2/start-tx-producer {:core2/log (cond-> {:root-path (.resolve node-dir "log")}
+(defn ->local-submit-node ^core2.core.SubmitNode [{:keys [^Path node-dir clock]}]
+  (c2/start-submit-node {:core2/log (cond-> {:root-path (.resolve node-dir "log")}
                                       clock (assoc :clock clock))}))
 
 (defn with-tmp-dir* [prefix f]

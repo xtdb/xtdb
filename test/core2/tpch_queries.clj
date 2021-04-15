@@ -20,9 +20,8 @@
       (let [node-dir (util/->path (str "target/" test-name))]
         (util/delete-dir node-dir)
 
-        (with-open [node (tu/->local-node {:node-dir node-dir})
-                    tx-producer (tu/->local-tx-producer {:node-dir node-dir})]
-          (let [last-tx (tpch/submit-docs! tx-producer scale-factor)]
+        (with-open [node (tu/->local-node {:node-dir node-dir})]
+          (let [last-tx (tpch/submit-docs! node scale-factor)]
             (c2/await-tx node last-tx (Duration/ofMinutes 2))
 
             (tu/finish-chunk node))
