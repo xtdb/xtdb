@@ -1,34 +1,59 @@
 (ns core2.s3
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [core2.object-store]
-            [core2.system :as sys])
+            [core2.object-store :as os]
+            [core2.system :as sys]
+            [core2.util :as util])
   (:import core2.object_store.ObjectStore
            core2.s3.S3Configurator
            java.io.Closeable
+           java.util.function.Function
+           java.util.concurrent.CompletableFuture
            software.amazon.awssdk.core.async.AsyncRequestBody
-           [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest ListObjectsV2Request ListObjectsV2Response PutObjectRequest S3Object]
+           [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
   ObjectStore
   (getObject [_ k to-path]
-    (.getObject client
-                (-> (GetObjectRequest/builder)
-                    (.bucket bucket)
-                    (.key (str prefix k))
-                    (->> (.configureGet configurator))
-                    ^GetObjectRequest (.build))
-                to-path))
+    (-> (.getObject client
+                    (-> (GetObjectRequest/builder)
+                        (.bucket bucket)
+                        (.key (str prefix k))
+                        (->> (.configureGet configurator))
+                        ^GetObjectRequest (.build))
+                    to-path)
+        (.exceptionally (reify Function
+                          (apply [_ e]
+                            (try
+                              (throw (.getCause ^Exception e))
+                              (catch NoSuchKeyException _
+                                (throw (os/obj-missing-exception k)))))))))
 
   (putObject [_ k buf]
-    (.putObject client
-                (-> (PutObjectRequest/builder)
-                    (.bucket bucket)
-                    (.key (str prefix k))
-                    (->> (.configurePut configurator))
-                    ^PutObjectRequest (.build))
-                (AsyncRequestBody/fromByteBuffer buf)))
+    (-> (.headObject client
+                     (-> (HeadObjectRequest/builder)
+                         (.bucket bucket)
+                         (.key (str prefix k))
+                         (->> (.configureHead configurator))
+                         ^HeadObjectRequest (.build)))
+        (util/then-apply (fn [_resp] true))
+        (.exceptionally (reify Function
+                          (apply [_ e]
+                            (let [e (.getCause ^Exception e)]
+                              (if (instance? NoSuchKeyException e)
+                                false
+                                (throw e))))))
+        (util/then-compose (fn [exists?]
+                             (if exists?
+                               (CompletableFuture/completedFuture nil)
+                               (.putObject client
+                                           (-> (PutObjectRequest/builder)
+                                               (.bucket bucket)
+                                               (.key (str prefix k))
+                                               (->> (.configurePut configurator))
+                                               ^PutObjectRequest (.build))
+                                           (AsyncRequestBody/fromByteBuffer buf)))))))
 
   (listObjects [this] (.listObjects this nil))
 

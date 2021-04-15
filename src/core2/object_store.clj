@@ -1,6 +1,6 @@
 (ns core2.object-store
-  (:require [core2.util :as util]
-            [core2.system :as sys])
+  (:require [core2.system :as sys]
+            [core2.util :as util])
   (:import java.io.Closeable
            [java.nio.file CopyOption Files FileSystems Path StandardCopyOption]
            [java.util.concurrent Executors ExecutorService]
@@ -9,26 +9,34 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ObjectStore
-  (^java.util.concurrent.CompletableFuture getObject [^String k, ^java.nio.file.Path to-file])
+  (^java.util.concurrent.CompletableFuture getObject [^String k, ^java.nio.file.Path to-file]
+   "Writes the object to the given path.
+    If the object doesn't exist, the CF completes with an IllegalStateException.")
+
   (^java.util.concurrent.CompletableFuture putObject [^String k, ^java.nio.ByteBuffer buf])
   (^java.lang.Iterable listObjects [])
   (^java.lang.Iterable listObjects [^String prefix])
   (^java.util.concurrent.CompletableFuture deleteObject [^String k]))
+
+(defn obj-missing-exception [k]
+  (IllegalStateException. (format "Object '%s' doesn't exist." k)))
 
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore
   (getObject [_this k to-path]
     (util/completable-future pool
       (let [from-path (.resolve root-path k)]
-        (when (util/path-exists from-path)
-          (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
-            (try
-              (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
-              (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE StandardCopyOption/REPLACE_EXISTING]))
-              to-path
-              (finally
-                (Files/deleteIfExists to-path-temp))))
-          to-path))))
+        (when-not (util/path-exists from-path)
+          (throw (obj-missing-exception k)))
+
+        (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
+          (try
+            (Files/copy from-path to-path-temp ^"[Ljava.nio.file.CopyOption;" (into-array CopyOption #{StandardCopyOption/REPLACE_EXISTING}))
+            (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE StandardCopyOption/REPLACE_EXISTING]))
+            to-path
+            (finally
+              (Files/deleteIfExists to-path-temp))))
+        to-path)))
 
   (putObject [_this k buf]
     (util/completable-future pool

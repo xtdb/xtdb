@@ -145,7 +145,9 @@
         ^List args [f]]
     (.invokeWithArguments (.getTarget call-site) args)))
 
-(defn then-apply {:style/indent :defn} [^CompletableFuture fut f]
+(defn then-apply {:style/indent :defn}
+  ^java.util.concurrent.CompletableFuture
+  [^CompletableFuture fut f]
   (.thenApply fut (->jfn f)))
 
 (defn then-compose {:style/indent :defn} [^CompletableFuture fut f]
