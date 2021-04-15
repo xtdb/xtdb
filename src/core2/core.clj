@@ -65,16 +65,16 @@
 (defn ->allocator [_]
   (RootAllocator.))
 
-(defn start-node [opts]
+(defn start-node ^core2.core.Node [opts]
   (let [system (-> (sys/prep-system (into [{:core2/node `->node
                                             :core2/allocator `->allocator
                                             :core2/indexer 'core2.indexer/->indexer
                                             :core2/ingest-loop 'core2.ingest-loop/->ingest-loop
-                                            :core2/log 'core2.log/->local-directory-log
+                                            :core2/log 'core2.log/->log
                                             :core2/tx-producer 'core2.tx-producer/->tx-producer
                                             :core2/metadata-manager 'core2.metadata/->metadata-manager
                                             :core2/temporal-manager 'core2.temporal/->temporal-manager
-                                            :core2/object-store 'core2.object-store/->file-system-object-store
+                                            :core2/object-store 'core2.object-store/->object-store
                                             :core2/buffer-pool 'core2.buffer-pool/->buffer-pool
                                             :core2/op-factory 'core2.operator/->operator-factory}]
                                           (cond-> opts (not (vector? opts)) vector)))
@@ -98,7 +98,7 @@
   [{:keys [tx-producer]}]
   (map->SubmitNode {:tx-producer tx-producer, :!system (atom nil)}))
 
-(defn start-tx-producer [opts]
+(defn start-submit-node ^core2.core.SubmitNode [opts]
   (let [system (-> (sys/prep-system (into [{:core2/submit-node `->submit-node
                                             :core2/tx-producer 'core2.tx-producer/->tx-producer
                                             :core2/allocator `->allocator

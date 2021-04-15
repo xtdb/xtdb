@@ -1,15 +1,15 @@
 (ns core2.log
   (:require [clojure.tools.logging :as log]
+            [core2.system :as sys]
             [core2.tx :as tx]
-            [core2.util :as util]
-            [core2.system :as sys])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
            java.nio.ByteBuffer
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
            [java.nio.file Path StandardOpenOption]
            java.time.Clock
-           [java.util ArrayList Date]
+           [java.util ArrayList Date List]
            [java.util.concurrent ArrayBlockingQueue BlockingQueue CompletableFuture Executors ExecutorService Future]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -18,9 +18,28 @@
   (^java.util.concurrent.CompletableFuture appendRecord [^java.nio.ByteBuffer record]))
 
 (definterface LogReader
-  (^java.util.List readRecords [^Long after-offset ^int limit]))
+  (^java.util.List readRecords [^Long afterOffset ^int limit]))
 
 (defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
+
+(deftype InMemoryLog [!records]
+  LogWriter
+  (appendRecord [_ record]
+    (CompletableFuture/completedFuture
+     (let [records (swap! !records (fn [records]
+                                     (conj records (->LogRecord (count records) (Date.) record))))]
+       (nth records (dec (count records))))))
+
+  LogReader
+  (readRecords [_ after-offset limit]
+    (let [records @!records
+          offset (if after-offset
+                   (inc ^long after-offset)
+                   0)]
+      (subvec records offset (min (+ offset limit) (count records))))))
+
+(defn ->log [_]
+  (InMemoryLog. (atom [])))
 
 (defn log-record->tx-instant ^core2.tx.TransactionInstant [^LogRecord record]
   (tx/->TransactionInstant (.offset record) (.time record)))

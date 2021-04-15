@@ -11,57 +11,54 @@
            org.apache.arrow.vector.util.Text))
 
 (t/deftest test-find-gt-ivan
-  (let [node-dir (doto (util/->path "target/test-find-gt-ivan")
-                   util/delete-dir)]
-    (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-chunk 10, :max-rows-per-block 2})
-                tx-producer (tu/->local-tx-producer {:node-dir node-dir})]
-      (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
+  (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
+    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
 
-        @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Håkan", :_id 0}}])
-             (tu/then-await-tx node))
+      @(-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 0}}])
+           (tu/then-await-tx node))
 
-        (tu/finish-chunk node)
+      (tu/finish-chunk node)
 
-        @(c2/submit-tx tx-producer [{:op :put, :doc {:name "James", :_id 1}}
-                                 {:op :put, :doc {:name "Dan", :_id 2}}])
+      @(c2/submit-tx node [{:op :put, :doc {:name "James", :_id 1}}
+                           {:op :put, :doc {:name "Dan", :_id 2}}])
 
-        @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Jon", :_id 3}}])
-             (tu/then-await-tx node))
+      @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jon", :_id 3}}])
+           (tu/then-await-tx node))
 
-        (tu/finish-chunk node)
+      (tu/finish-chunk node)
 
-        (let [^IOperatorFactory op-factory (:op-factory node)
-              metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
-          (letfn [(query-ivan [watermark]
-                    (let [!results (atom [])]
-                      (with-open [chunk-scanner (.scan op-factory watermark
-                                                       ["name"]
-                                                       metadata-pred
-                                                       {"name" (expr/->expression-vector-selector (expr/form->expr '(> name "Ivan")))}
-                                                       nil
-                                                       nil)]
-                        (while (.tryAdvance chunk-scanner
-                                            (reify Consumer
-                                              (accept [_ root]
-                                                (swap! !results into (tu/root->rows root)))))))
-                      (set @!results)))]
-            (with-open [watermark (c2/open-watermark node)]
-              (t/is (= #{0 1} (.knownChunks metadata-mgr)))
-              (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
-                    "only needs to scan chunk 1")
+      (let [^IOperatorFactory op-factory (:op-factory node)
+            metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
+        (letfn [(query-ivan [watermark]
+                  (let [!results (atom [])]
+                    (with-open [chunk-scanner (.scan op-factory watermark
+                                                     ["name"]
+                                                     metadata-pred
+                                                     {"name" (expr/->expression-vector-selector (expr/form->expr '(> name "Ivan")))}
+                                                     nil
+                                                     nil)]
+                      (while (.tryAdvance chunk-scanner
+                                          (reify Consumer
+                                            (accept [_ root]
+                                              (swap! !results into (tu/root->rows root)))))))
+                    (set @!results)))]
+          (with-open [watermark (c2/open-watermark node)]
+            (t/is (= #{0 1} (.knownChunks metadata-mgr)))
+            (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
+                  "only needs to scan chunk 1")
 
-              @(-> (c2/submit-tx tx-producer [{:op :put, :doc {:name "Jeremy", :_id 4}}])
-                   (tu/then-await-tx node))
+            @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 4}}])
+                 (tu/then-await-tx node))
 
-              (t/is (= #{[(Text. "James")]
-                         [(Text. "Jon")]}
-                       (query-ivan watermark))))
+            (t/is (= #{[(Text. "James")]
+                       [(Text. "Jon")]}
+                     (query-ivan watermark))))
 
-            (with-open [watermark (c2/open-watermark node)]
-              (t/is (= #{[(Text. "James")]
-                         [(Text. "Jon")]
-                         [(Text. "Jeremy")]}
-                       (query-ivan watermark))))))))))
+          (with-open [watermark (c2/open-watermark node)]
+            (t/is (= #{[(Text. "James")]
+                       [(Text. "Jon")]
+                       [(Text. "Jeremy")]}
+                     (query-ivan watermark)))))))))
 
 (t/deftest test-fixpoint-operator
   (let [node-dir (doto (util/->path "target/test-fixpoint-operator")
@@ -120,19 +117,17 @@
                    (tu/<-cursor fixpoint-cursor))))))))
 
 (t/deftest test-assignment-operator
-  (let [node-dir (doto (util/->path "target/test-assignment-operator")
-                   util/delete-dir)]
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
+  (with-open [node (c2/start-node {})]
+    (with-open [watermark (c2/open-watermark node)
+                assignment-cursor (c2/open-q node watermark '[:assign [X [:table [{:a 1}]]
+                                                                       Y [:table [{:b 1}]]]
+                                                              [:join {a b} X Y]])]
+      (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
+
+    (t/testing "can see earlier assignments"
       (with-open [watermark (c2/open-watermark node)
                   assignment-cursor (c2/open-q node watermark '[:assign [X [:table [{:a 1}]]
-                                                                         Y [:table [{:b 1}]]]
-                                                                [:join {a b} X Y]])]
-        (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
-
-      (t/testing "can see earlier assignments"
-        (with-open [watermark (c2/open-watermark node)
-                    assignment-cursor (c2/open-q node watermark '[:assign [X [:table [{:a 1}]]
-                                                                           Y [:join {a b} X [:table [{:b 1}]]]
-                                                                           X Y]
-                                                                  X])]
-          (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))))))
+                                                                         Y [:join {a b} X [:table [{:b 1}]]]
+                                                                         X Y]
+                                                                X])]
+        (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor)))))))
