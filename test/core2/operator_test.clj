@@ -30,18 +30,13 @@
       (let [^IOperatorFactory op-factory (:op-factory node)
             metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
         (letfn [(query-ivan [watermark]
-                  (let [!results (atom [])]
-                    (with-open [chunk-scanner (.scan op-factory watermark
-                                                     ["name"]
-                                                     metadata-pred
-                                                     {"name" (expr/->expression-vector-selector (expr/form->expr '(> name "Ivan")))}
-                                                     nil
-                                                     nil)]
-                      (while (.tryAdvance chunk-scanner
-                                          (reify Consumer
-                                            (accept [_ root]
-                                              (swap! !results into (tu/root->rows root)))))))
-                    (set @!results)))]
+                  (with-open [chunk-scanner (.scan op-factory watermark
+                                                   ["name"]
+                                                   metadata-pred
+                                                   {"name" (expr/->expression-vector-selector (expr/form->expr '(> name "Ivan")))}
+                                                   nil
+                                                   nil)]
+                    (into #{} (mapcat seq) (tu/<-cursor chunk-scanner))))]
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= #{0 1} (.knownChunks metadata-mgr)))
             (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
@@ -50,14 +45,14 @@
             @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 4}}])
                  (tu/then-await-tx node))
 
-            (t/is (= #{[(Text. "James")]
-                       [(Text. "Jon")]}
+            (t/is (= #{{:name (Text. "James")}
+                       {:name (Text. "Jon")}}
                      (query-ivan watermark))))
 
           (with-open [watermark (c2/open-watermark node)]
-            (t/is (= #{[(Text. "James")]
-                       [(Text. "Jon")]
-                       [(Text. "Jeremy")]}
+            (t/is (= #{{:name (Text. "James")}
+                       {:name (Text. "Jon")}
+                       {:name (Text. "Jeremy")}}
                      (query-ivan watermark)))))))))
 
 (t/deftest test-fixpoint-operator
