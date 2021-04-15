@@ -97,9 +97,9 @@
                                                                           {:x "c" :y "d"}
                                                                           {:x "d" :y "a"}]]
                                                                  [:project [x y]
-                                                                  [:join {edge-z path-z}
-                                                                   [:rename {y edge-z} Path]
-                                                                   [:rename {x path-z} Path]]]]])]
+                                                                  [:join {z z}
+                                                                   [:rename {y z} Path]
+                                                                   [:rename {x z} Path]]]]])]
 
           (t/is (= [[{:x (Text. "a"), :y (Text. "b")}
                      {:x (Text. "b"), :y (Text. "c")}

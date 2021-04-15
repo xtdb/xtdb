@@ -60,6 +60,20 @@
                   {:a 0, :b 0}}]
                (mapv set (tu/<-cursor join-cursor)))))
 
+    (t/testing "same column name"
+      (with-open [left-cursor (tu/->cursor (Schema. [a-field])
+                                           [[{:a 12}, {:a 0}]
+                                            [{:a 100}]])
+                  right-cursor (tu/->cursor (Schema. [a-field])
+                                            [[{:a 12}, {:a 2}]
+                                             [{:a 100} {:a 0}]])
+                  join-cursor (join/->equi-join-cursor tu/*allocator* left-cursor "a" right-cursor "a")]
+
+        (t/is (= [#{{:a 12}}
+                  #{{:a 100}
+                    {:a 0}}]
+                 (mapv set (tu/<-cursor join-cursor))))))
+
     (t/testing "empty input"
       (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                            [[{:a 12}, {:a 0}]

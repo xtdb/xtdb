@@ -10,10 +10,16 @@
            [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.VectorBatchAppender))
 
-(defn- ->join-schema ^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
-  (let [fields (concat (.getFields left-schema) (.getFields right-schema))]
-    (assert (apply distinct? fields))
-    (Schema. fields)))
+(defn- ->join-schema
+  (^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
+   (->join-schema left-schema right-schema #{}))
+  (^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema skip-left-column?]
+   (let [fields (concat (for [^Field f (.getFields left-schema)
+                              :when (not (skip-left-column? (.getName f)))]
+                          f)
+                        (.getFields right-schema))]
+     (assert (apply distinct? fields))
+     (Schema. fields))))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
   (let [out-idx (.getRowCount out-root)
@@ -113,12 +119,14 @@
                                                               ^String build-column-name
                                                               ^String probe-column-name
                                                               semi-join?
-                                                              anti-join?]
+                                                              anti-join?
+                                                              skip-build-column?]
   (when (pos? (.getRowCount probe-root))
     (let [join-schema (if semi-join?
                         (.getSchema probe-root)
                         (->join-schema (.getSchema ^VectorSchemaRoot (.getValue (.firstEntry build-idx->root)))
-                                       (.getSchema probe-root)))
+                                       (.getSchema probe-root)
+                                       skip-build-column?))
           out-root (VectorSchemaRoot/create join-schema allocator)
           probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
           build-pointer (ArrowBufPointer.)
@@ -161,7 +169,8 @@
                      ^NavigableMap build-idx->root
                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      semi-join?
-                     anti-join?]
+                     anti-join?
+                     skip-build-column?]
 
   ICursor
   (tryAdvance [this c]
@@ -180,7 +189,7 @@
                              (reify Consumer
                                (accept [_ in-root]
                                  (when-let [out-root (probe-phase allocator in-root build-idx->root join-key->build-idx-pairs
-                                                                  build-column-name probe-column-name semi-join? anti-join?)]
+                                                                  build-column-name probe-column-name semi-join? anti-join? skip-build-column?)]
                                    (when (pos? (.getRowCount out-root))
                                      (set! (.out-root this) out-root))))))))
 
@@ -206,18 +215,21 @@
                                          ^String left-column-name,
                                          ^ICursor right-cursor,
                                          ^String right-column-name]
-  (JoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) nil false false))
+  (let [skip-build-column? (if (= left-column-name right-column-name)
+                             #{left-column-name}
+                             #{})]
+    (JoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) nil false false skip-build-column?)))
 
 (defn ->semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                               ^ICursor left-cursor,
                                               ^String left-column-name,
                                               ^ICursor right-cursor,
                                               ^String right-column-name]
-  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true false))
+  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true false #{}))
 
 (defn ->anti-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                               ^ICursor left-cursor,
                                               ^String left-column-name,
                                               ^ICursor right-cursor,
                                               ^String right-column-name]
-  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true true))
+  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true true #{}))
