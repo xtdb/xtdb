@@ -147,10 +147,10 @@
                                                 {l_shipdate (and (>= l_shipdate #inst "1995-01-01")
                                                                  (<= l_shipdate #inst "1996-12-31"))}]]]
                                        [:scan [o_orderkey o_custkey]]]
-                                      [:rename {n_name n1_n_name, n_nationkey n1_n_nationkey}
+                                      [:rename n1
                                        [:scan [{n_name (or (= n_name "GERMANY") (= n_name "FRANCE"))} n_nationkey]]]]
                                      [:scan [c_custkey c_nationkey]]]
-                                    [:rename {n_name n2_n_name, n_nationkey n2_n_nationkey}
+                                    [:rename n2
                                      [:scan [{n_name (or (= n_name "GERMANY") (= n_name "FRANCE"))} n_nationkey]]]]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
@@ -182,11 +182,9 @@
                                       [:scan [c_custkey c_nationkey]]]
                                      [:join {r_regionkey n1_n_regionkey}
                                       [:scan [r_regionkey {r_name (= r_name "AMERICA")}]]
-                                      [:rename {n_name n1_n_name
-                                                n_nationkey n1_n_nationkey
-                                                n_regionkey n1_n_regionkey}
+                                      [:rename n1
                                        [:scan [n_name n_nationkey n_regionkey]]]]]
-                                    [:rename {n_name n2_n_name, n_nationkey n2_n_nationkey}
+                                    [:rename n2
                                      [:scan [n_name n_nationkey]]]]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))

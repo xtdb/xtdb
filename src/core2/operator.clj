@@ -34,7 +34,8 @@
                            ^java.util.List #_<ProjectionSpec> projectionSpecs])
 
   (^core2.ICursor rename [^core2.ICursor inCursor
-                          ^java.util.Map #_#_<String, String> renameMap])
+                          ^java.util.Map #_#_<String, String> renameMap
+                          ^String prefix])
 
   (^core2.ICursor equiJoin [^core2.ICursor leftCursor
                             ^String leftColName
@@ -96,8 +97,8 @@
     (project [_ in-cursor projection-specs]
       (project/->project-cursor allocator in-cursor projection-specs))
 
-    (rename [_ in-cursor rename-map]
-      (rename/->rename-cursor allocator in-cursor rename-map))
+    (rename [_ in-cursor rename-map prefix]
+      (rename/->rename-cursor allocator in-cursor rename-map prefix))
 
     (equiJoin [_ left-cursor left-column-name right-cursor right-column-name]
       (join/->equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))

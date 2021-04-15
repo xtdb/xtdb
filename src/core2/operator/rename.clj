@@ -7,9 +7,12 @@
            org.apache.arrow.vector.VectorSchemaRoot
            org.apache.arrow.vector.types.pojo.Field))
 
+(def ^:const ^String relation-prefix-delimiter "_")
+
 (deftype RenameCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^Map #_#_<String, String> rename-map
+                       ^String prefix
                        ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
   ICursor
   (tryAdvance [this c]
@@ -22,8 +25,12 @@
                          (let [^VectorSchemaRoot in-root in-root
                                ^Iterable out-vecs (for [^Field field (.getFields (.getSchema in-root))
                                                         :let [in-vec (.getVector in-root field)
-                                                              field-name (.getName field)]]
-                                                    (-> (.getTransferPair in-vec (get rename-map field-name field-name) allocator)
+                                                              field-name (.getName field)
+                                                              new-field-name (get rename-map field-name field-name)
+                                                              new-field-name (if prefix
+                                                                               (str prefix relation-prefix-delimiter new-field-name)
+                                                                               new-field-name)]]
+                                                    (-> (.getTransferPair in-vec new-field-name allocator)
                                                         (doto (.splitAndTransfer 0 (.getValueCount in-vec)))
                                                         (.getTo)))]
                            (set! (.out-root this) (VectorSchemaRoot. out-vecs))))))
@@ -36,5 +43,5 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->rename-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^Map #_#_<String, String> rename-map]
-  (RenameCursor. allocator in-cursor rename-map nil))
+(defn ->rename-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^Map #_#_<String, String> rename-map ^String prefix]
+  (RenameCursor. allocator in-cursor rename-map prefix nil))

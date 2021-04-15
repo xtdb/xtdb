@@ -17,7 +17,7 @@
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
 (s/def ::named (some-fn keyword? symbol?))
-(s/def ::relation ::named)
+(s/def ::relation (s/and ::named (complement namespace)))
 (s/def ::column ::named)
 
 (s/def ::expression (s/conformer expr/form->expr))
@@ -43,6 +43,7 @@
                        :relation ::ra-expression))
 
 (s/def ::rename (s/cat :op #{:ρ :rho :rename}
+                       :prefix (s/? ::relation)
                        :columns (s/? (s/map-of ::column ::column :conform-keys true))
                        :relation ::ra-expression))
 
@@ -227,12 +228,12 @@
     (unary-op relation (fn [^IOperatorFactory op-factory inner]
                          (.project op-factory inner projection-specs)))))
 
-(defmethod emit-op :rename [[_ {:keys [columns relation]}]]
+(defmethod emit-op :rename [[_ {:keys [columns relation prefix]}]]
   (let [rename-map (->> columns
                         (into {} (map (juxt (comp name key)
                                             (comp name val)))))]
     (unary-op relation (fn [^IOperatorFactory op-factory inner]
-                         (.rename op-factory inner rename-map)))))
+                         (.rename op-factory inner rename-map (some-> prefix (name)))))))
 
 (defmethod emit-op :distinct [[_ {:keys [relation]}]]
   (unary-op relation (fn [^IOperatorFactory op-factory inner]
