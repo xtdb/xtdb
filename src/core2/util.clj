@@ -400,12 +400,14 @@
           source-buffer)))))
 
 (defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
-  (when-not (.isDirect nio-buffer)
-    (throw (IllegalArgumentException. (str "not a direct buffer: " nio-buffer))))
-  (ArrowBuf. (->NioViewReferenceManager allocator nio-buffer (AtomicInteger. 1))
-             nil
-             (.capacity nio-buffer)
-             (MemoryUtil/getByteBufferAddress nio-buffer)))
+  (let [nio-buffer (if (.isDirect nio-buffer)
+                     nio-buffer
+                     (doto (ByteBuffer/allocateDirect (.capacity nio-buffer))
+                       (.put nio-buffer)))]
+    (ArrowBuf. (->NioViewReferenceManager allocator nio-buffer (AtomicInteger. 1))
+               nil
+               (.capacity nio-buffer)
+               (MemoryUtil/getByteBufferAddress nio-buffer))))
 
 (defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ArrowBuf buffer]
   (let [prefix-size (if (= (.getInt buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
