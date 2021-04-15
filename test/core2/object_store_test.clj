@@ -1,26 +1,22 @@
 (ns core2.object-store-test
-  (:require [clojure.java.io :as io]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [core2.object-store :as os]
             [core2.test-util :as tu])
   (:import core2.object_store.ObjectStore
            java.nio.ByteBuffer
-           java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
+           java.nio.charset.StandardCharsets
            java.util.concurrent.ExecutionException))
 
 (defn- get-object [^ObjectStore obj-store, k]
-  ;; TODO maybe we could have getObject put into a buffer somewhere, save this tmp-file dance
-  (let [tmp-file (Files/createTempFile "obj-" "" (make-array FileAttribute 0))]
-    (Files/delete tmp-file)
-    (try
-      @(.getObject obj-store (name k) tmp-file)
-      (read-string (String. (Files/readAllBytes tmp-file)))
-      (catch ExecutionException e
-        (throw (.getCause e))))))
+  (try
+    (let [^ByteBuffer buf @(.getObject obj-store (name k))]
+      (read-string (str (.decode StandardCharsets/UTF_8 buf))))
+    (catch ExecutionException e
+      (throw (.getCause e)))))
 
 (defn- put-object [^ObjectStore obj-store k obj]
-  @(.putObject obj-store (name k) (ByteBuffer/wrap (.getBytes (pr-str obj)))))
+  (let [^ByteBuffer buf (.encode StandardCharsets/UTF_8 (pr-str obj))]
+    @(.putObject obj-store (name k) buf)))
 
 (defn ^::os-test test-put-delete [^ObjectStore obj-store]
   (let [alice {:_id :alice, :name "Alice"}]

@@ -1,14 +1,13 @@
 (ns core2.buffer-pool
-  (:require [core2.object-store :as os]
-            [core2.util :as util]
-            [core2.system :as sys])
-  (:import [core2.object_store ObjectStore]
-           [java.io Closeable]
+  (:require core2.object-store
+            [core2.system :as sys]
+            [core2.util :as util])
+  (:import core2.object_store.ObjectStore
+           java.io.Closeable
            [java.nio.file Files Path]
-           [java.util Map]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           java.util.UUID))
+           java.util.Map
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]))
 
 (definterface BufferPool
   (^java.util.concurrent.CompletableFuture getBuffer [^String k])
@@ -24,15 +23,18 @@
           (CompletableFuture/completedFuture (doto ^ArrowBuf v
                                                (.retain)))
           (let [buffer-path (.resolve root-path k)]
-            (util/then-apply
-              (if (util/path-exists buffer-path)
-                (CompletableFuture/completedFuture buffer-path)
-                (.getObject object-store k buffer-path))
-              (fn [^Path buffer-path]
-                (when buffer-path
-                  (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                            (util/->arrow-buf-view allocator (util/->mmap-path buffer-path)))))
-                    (.retain))))))))))
+            (-> (if (util/path-exists buffer-path)
+                  (CompletableFuture/completedFuture buffer-path)
+                  (-> (.getObject object-store k)
+                      (util/then-apply (fn [buf]
+                                         (util/write-buffer-to-path buf buffer-path)
+                                         buffer-path))))
+                (util/then-apply
+                  (fn [^Path buffer-path]
+                    (when buffer-path
+                      (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                                (util/->arrow-buf-view allocator (util/->mmap-path buffer-path)))))
+                        (.retain)))))))))))
 
   (evictBuffer [_ k]
     (when-let [^ArrowBuf buffer (.remove buffers k)]

@@ -7,22 +7,26 @@
   (:import core2.object_store.ObjectStore
            core2.s3.S3Configurator
            java.io.Closeable
-           java.util.function.Function
            java.util.concurrent.CompletableFuture
-           software.amazon.awssdk.core.async.AsyncRequestBody
+           java.util.function.Function
+           [software.amazon.awssdk.core ResponseBytes]
+           [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
            [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
   ObjectStore
-  (getObject [_ k to-path]
+  (getObject [_ k]
     (-> (.getObject client
                     (-> (GetObjectRequest/builder)
                         (.bucket bucket)
                         (.key (str prefix k))
                         (->> (.configureGet configurator))
                         ^GetObjectRequest (.build))
-                    to-path)
+                    (AsyncResponseTransformer/toBytes))
+        (.thenApply (reify Function
+                      (apply [_ bs]
+                        (.asByteBuffer ^ResponseBytes bs))))
         (.exceptionally (reify Function
                           (apply [_ e]
                             (try
