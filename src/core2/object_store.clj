@@ -1,10 +1,12 @@
 (ns core2.object-store
-  (:require [core2.system :as sys]
+  (:require [clojure.string :as str]
+            [core2.system :as sys]
             [core2.util :as util])
   (:import java.io.Closeable
            [java.nio.file CopyOption Files FileSystems Path StandardCopyOption]
-           [java.util.concurrent Executors ExecutorService]
-           java.util.UUID))
+           [java.util NavigableMap UUID]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]
+           java.util.function.Supplier))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -20,6 +22,35 @@
 
 (defn obj-missing-exception [k]
   (IllegalStateException. (format "Object '%s' doesn't exist." k)))
+
+(deftype InMemoryObjectStore [^NavigableMap os]
+  ObjectStore
+  (getObject [_this k to-path]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [buf (or (.get os k)
+                       (throw (obj-missing-exception k)))]
+           (util/write-buffer-to-path buf to-path)
+           to-path)))))
+
+  (putObject [_this k buf]
+    (.putIfAbsent os k buf)
+    (CompletableFuture/completedFuture nil))
+
+  (listObjects [_this]
+    (vec (.keySet os)))
+
+  (listObjects [_this prefix]
+    (->> (.keySet (.tailMap os prefix))
+         (into [] (take-while #(str/starts-with? % prefix)))))
+
+  (deleteObject [_this k]
+    (.remove os k)
+    (CompletableFuture/completedFuture nil)))
+
+(defn ->object-store [_]
+  (->InMemoryObjectStore (ConcurrentSkipListMap.)))
 
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore

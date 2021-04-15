@@ -58,6 +58,9 @@
               ~@body)))
      '~sym))
 
+(def-obj-store-tests in-mem [f]
+  (f (os/->object-store {})))
+
 (def-obj-store-tests fs [f]
   (tu/with-tmp-dirs #{os-path}
     (f (os/->file-system-object-store {:root-path os-path, :pool-size 2}))))
