@@ -49,6 +49,42 @@
              :count_order 14902}]
            (tpch-queries/tpch-q1-pricing-summary-report))))
 
+(t/deftest ^:integration test-q2-minimum-cost-supplier
+  (t/is (= [{:s_acctbal 4186.95
+             :s_name (Text. "Supplier#000000077")
+             :n_name (Text. "GERMANY")
+             :p_partkey (Text. "partkey_249")
+             :p_mfgr (Text. "Manufacturer#4")
+             :s_address (Text. "wVtcr0uH3CyrSiWMLsqnB09Syo,UuZxPMeBghlY")
+             :s_phone (Text. "17-281-345-4863")
+             :s_comment (Text. "the slyly final asymptotes. blithely pending theodoli")}
+            {:s_acctbal 1883.37
+             :s_name (Text. "Supplier#000000086")
+             :n_name (Text. "ROMANIA")
+             :p_partkey (Text. "partkey_1015")
+             :p_mfgr (Text. "Manufacturer#4")
+             :s_address (Text. "J1fgg5QaqnN")
+             :s_phone (Text. "29-903-665-7065")
+             :s_comment
+             (Text. "cajole furiously special, final requests: furiously spec")}
+            {:s_acctbal 1687.81
+             :s_name (Text. "Supplier#000000017")
+             :n_name (Text. "ROMANIA")
+             :p_partkey (Text. "partkey_1634")
+             :p_mfgr (Text. "Manufacturer#2")
+             :s_address (Text. "c2d,ESHRSkK3WYnxpgw6aOqN0q")
+             :s_phone (Text. "29-601-884-9219")
+             :s_comment (Text. "eep against the furiously bold ideas. fluffily bold packa")}
+            {:s_acctbal 287.16
+             :s_name (Text. "Supplier#000000052")
+             :n_name (Text. "ROMANIA")
+             :p_partkey (Text. "partkey_323")
+             :p_mfgr (Text. "Manufacturer#4")
+             :s_address (Text. "WCk XCHYzBA1dvJDSol4ZJQQcQN,")
+             :s_phone (Text. "29-974-934-4713")
+             :s_comment (Text. "dolites are slyly against the furiously regular packages. ironic, final deposits cajole quickly")}]
+           (tpch-queries/tpch-q2-minimum-cost-supplier))))
+
 (t/deftest ^:integration test-q3-shipping-priority
   (t/is (= [{:l_orderkey (Text. "orderkey_47714")
              :revenue 267010.5894

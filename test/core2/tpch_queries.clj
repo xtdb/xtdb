@@ -70,6 +70,28 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q2-minimum-cost-supplier []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:assign [PartSupp [:join {s_suppkey ps_suppkey}
+                                                      [:join {n_nationkey s_nationkey}
+                                                       [:join {n_regionkey r_regionkey}
+                                                        [:scan [n_name n_regionkey n_nationkey]]
+                                                        [:scan [r_regionkey {r_name (= r_name "EUROPE")}]]]
+                                                       [:scan [s_nationkey s_suppkey s_acctbal s_name s_address s_phone s_comment]]]
+                                                  [:scan [ps_suppkey ps_partkey ps_supplycost]]]]
+                               [:slice {:limit 100}
+                                [:order-by [{s_acctbal :desc}, {n_name :asc} {s_name :asc} {p_partkey :asc}]
+                                 [:project [s_acctbal s_name n_name p_partkey p_mfgr s_address s_phone s_comment]
+                                  [:select (= ps_supplycost min_ps_supplycost)
+                                   [:join {ps_partkey ps_partkey}
+                                    [:join {ps_partkey p_partkey}
+                                     PartSupp
+                                     [:scan [p_partkey p_mfgr {p_size (= p_size 15)} {p_type (like p_type "%BRASS")}]]]
+                                    [:group-by [ps_partkey {min_ps_supplycost (min ps_supplycost)}]
+                                     PartSupp]]]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q3-shipping-priority []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:slice {:limit 10}
@@ -262,11 +284,11 @@
 
 (defn tpch-q13-customer-distribution []
   (with-open [res (c2/open-q *node* *watermark*
-                             '[:order-by [{custdist :desc}, {c_count :desc}]
-                               [:group-by [c_count {custdist (count c_custkey)}]
-                                [:group-by [c_custkey {c_count (count-not-null o_comment)}]
-                                 [:assign [Customers [:scan [c_custkey]]
-                                           Orders [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]
+                             '[:assign [Customers [:scan [c_custkey]]
+                                        Orders [:scan [{o_comment (not (like o_comment "%special%requests%"))} o_custkey]]]
+                               [:order-by [{custdist :desc}, {c_count :desc}]
+                                [:group-by [c_count {custdist (count c_custkey)}]
+                                 [:group-by [c_custkey {c_count (count-not-null o_comment)}]
                                   [:union
                                    [:project [c_custkey o_comment]
                                     [:join {c_custkey o_custkey} Customers Orders]]

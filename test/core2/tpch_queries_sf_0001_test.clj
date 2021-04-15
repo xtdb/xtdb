@@ -49,6 +49,10 @@
              :count_order 1457}]
            (tpch-queries/tpch-q1-pricing-summary-report))))
 
+(t/deftest test-q2-minimum-cost-supplier
+  (t/is (= []
+           (tpch-queries/tpch-q2-minimum-cost-supplier))))
+
 (t/deftest test-q3-shipping-priority
   (t/is (= [{:l_orderkey (Text. "orderkey_1637")
              :revenue 164224.9253
