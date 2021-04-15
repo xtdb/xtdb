@@ -111,7 +111,7 @@
   (if node-dir
     (let [node-dir (util/->path node-dir)]
       (start-node {:core2/log-reader {:root-path (.resolve node-dir "log")}
-                   :core2/buffer-pool {:root-path (.resolve node-dir "buffers")}
+                   :core2/buffer-pool {:cache-path (.resolve node-dir "buffers")}
                    :core2/object-store {:root-path (.resolve node-dir "objects")}})
       (println "core2 started in" (str node-dir)))
     (binding [*out* *err*]
