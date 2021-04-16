@@ -394,6 +394,43 @@
              :s_phone (Text. "34-852-489-8585")}]
            (tpch-queries/tpch-q15-top-supplier))))
 
+(t/deftest test-q16-part-supplier-relationship
+  (t/is (= [{:p_brand (Text. "Brand#11") :p_type (Text. "PROMO ANODIZED TIN") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#11") :p_type (Text. "SMALL PLATED COPPER") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#11") :p_type (Text. "STANDARD POLISHED TIN") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#13") :p_type (Text. "MEDIUM ANODIZED STEEL") :p_size 36 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#14") :p_type (Text. "SMALL ANODIZED NICKEL") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#15") :p_type (Text. "LARGE ANODIZED BRASS") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#21") :p_type (Text. "LARGE BURNISHED COPPER") :p_size 19 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#23") :p_type (Text. "ECONOMY BRUSHED COPPER") :p_size 9 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#25") :p_type (Text. "MEDIUM PLATED BRASS") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#31") :p_type (Text. "ECONOMY PLATED STEEL") :p_size 23 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#31") :p_type (Text. "PROMO POLISHED TIN") :p_size 23 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#32") :p_type (Text. "MEDIUM BURNISHED BRASS") :p_size 49 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#33") :p_type (Text. "LARGE BRUSHED TIN") :p_size 36 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#33") :p_type (Text. "SMALL BURNISHED NICKEL") :p_size 3 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#34") :p_type (Text. "LARGE PLATED BRASS") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#34") :p_type (Text. "MEDIUM BRUSHED COPPER") :p_size 9 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#34") :p_type (Text. "SMALL PLATED BRASS") :p_size 14 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#35") :p_type (Text. "STANDARD ANODIZED STEEL") :p_size 23 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#43") :p_type (Text. "PROMO POLISHED BRASS") :p_size 19 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#43") :p_type (Text. "SMALL BRUSHED NICKEL") :p_size 9 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#44") :p_type (Text. "SMALL PLATED COPPER") :p_size 19 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#52") :p_type (Text. "MEDIUM BURNISHED TIN") :p_size 45 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#52") :p_type (Text. "SMALL BURNISHED NICKEL") :p_size 14 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#53") :p_type (Text. "MEDIUM BRUSHED COPPER") :p_size 3 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#55") :p_type (Text. "STANDARD ANODIZED BRASS") :p_size 36 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#55") :p_type (Text. "STANDARD BRUSHED COPPER") :p_size 3 :supplier_cnt 4}
+            {:p_brand (Text. "Brand#13") :p_type (Text. "SMALL BRUSHED NICKEL") :p_size 19 :supplier_cnt 2}
+            {:p_brand (Text. "Brand#25") :p_type (Text. "SMALL BURNISHED COPPER") :p_size 3 :supplier_cnt 2}
+            {:p_brand (Text. "Brand#43") :p_type (Text. "MEDIUM ANODIZED BRASS") :p_size 14 :supplier_cnt 2}
+            {:p_brand (Text. "Brand#53") :p_type (Text. "STANDARD PLATED STEEL") :p_size 45 :supplier_cnt 2}
+            {:p_brand (Text. "Brand#24") :p_type (Text. "MEDIUM PLATED STEEL") :p_size 19 :supplier_cnt 1}
+            {:p_brand (Text. "Brand#51") :p_type (Text. "ECONOMY POLISHED STEEL") :p_size 49 :supplier_cnt 1}
+            {:p_brand (Text. "Brand#53") :p_type (Text. "LARGE BURNISHED NICKEL") :p_size 23 :supplier_cnt 1}
+            {:p_brand (Text. "Brand#54") :p_type (Text. "ECONOMY ANODIZED BRASS") :p_size 9 :supplier_cnt 1}]
+           (tpch-queries/tpch-q16-part-supplier-relationship))))
+
 (t/deftest test-q19-discounted-revenue
   (t/is (= []
            (tpch-queries/tpch-q19-discounted-revenue))))

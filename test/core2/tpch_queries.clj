@@ -368,6 +368,29 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q16-part-supplier-relationship []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:order-by [{supplier_cnt :desc} {p_brand :asc} {p_type :asc} {p_size :asc}]
+                               [:group-by [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]
+                                [:distinct
+                                 [:project [p_brand p_type p_size ps_suppkey]
+                                  [:join {p_partkey ps_partkey}
+                                   [:semi-join {p_size p_size}
+                                    [:scan [p_partkey {p_brand (!= p_brand "Brand#45")} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]]
+                                    [:table [{:p_size 49}
+                                             {:p_size 14}
+                                             {:p_size 23}
+                                             {:p_size 45}
+                                             {:p_size 19}
+                                             {:p_size 3}
+                                             {:p_size 36}
+                                             {:p_size 9}]]]
+                                   [:anti-join {ps_suppkey s_suppkey}
+                                    [:scan [ps_partkey ps_suppkey]]
+                                    [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q19-discounted-revenue []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:group-by [{revenue (sum disc_price)}]
