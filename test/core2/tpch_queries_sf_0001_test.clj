@@ -339,6 +339,10 @@
              :c_comment (Text. "ously final packages haggle blithely after the express deposits. furiou")}]
            (tpch-queries/tpch-q10-returned-item-reporting))))
 
+(t/deftest test-q11-important-stock-identification
+  (t/is (= []
+           (tpch-queries/tpch-q11-important-stock-identification))))
+
 (t/deftest test-q12-shipping-modes-and-order-priority
   (t/is (= [{:l_shipmode (Text. "MAIL")
              :high_line_count 5

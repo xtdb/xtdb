@@ -268,6 +268,26 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q11-important-stock-identification []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:assign [PartSupp [:project [ps_partkey {value (* ps_supplycost ps_availqty)}]
+                                                  [:join {s_suppkey ps_suppkey}
+                                                   [:join {n_nationkey s_nationkey}
+                                                    [:scan [n_nationkey {n_name (= n_name "GERMANY")}]]
+                                                    [:scan [s_nationkey s_suppkey]]]
+                                                   [:scan [ps_partkey ps_suppkey ps_supplycost ps_availqty]]]]]
+                               [:order-by [{value :desc}]
+                                [:project [ps_partkey value]
+                                 [:select (> value total)
+                                  [:cross-join
+                                   [:group-by [ps_partkey {value (sum value)}]
+                                    PartSupp]
+                                   [:project [{total (* total 0.0001)}]
+                                    [:group-by [{total (sum value)}]
+                                     PartSupp]]]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q12-shipping-modes-and-order-priority []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:order-by [{l_shipmode :asc}]

@@ -30,6 +30,7 @@
                     #'core2.tpch-queries/tpch-q8-national-market-share
                     #'core2.tpch-queries/tpch-q9-product-type-profit-measure
                     #'core2.tpch-queries/tpch-q10-returned-item-reporting
+                    #'core2.tpch-queries/tpch-q11-important-stock-identification
                     #'core2.tpch-queries/tpch-q12-shipping-modes-and-order-priority
                     #'core2.tpch-queries/tpch-q13-customer-distribution
                     #'core2.tpch-queries/tpch-q14-promotion-effect
