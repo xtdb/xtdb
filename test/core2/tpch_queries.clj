@@ -348,6 +348,26 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q15-top-supplier []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:assign [Revenue [:group-by [supplier_no {total_revenue (sum disc_price)}]
+                                                 [:rename {l_suppkey supplier_no}
+                                                  [:project [l_suppkey {disc_price (* l_extendedprice (- 1 l_discount))}]
+                                                   [:scan [l_suppkey l_extendedprice l_discount
+                                                           {l_shipdate (and (>= l_shipdate #inst "1996-01-01")
+                                                                            (< l_shipdate #inst "1996-04-01"))}]]]]]]
+                               [:project [s_suppkey s_name s_address s_phone total_revenue]
+                                [:select
+                                 (= total_revenue max_total_revenue)
+                                 [:cross-join
+                                  [:join {supplier_no s_suppkey}
+                                   Revenue
+                                   [:scan [s_suppkey s_name s_address s_phone]]]
+                                  [:group-by [{max_total_revenue (max total_revenue)}]
+                                   Revenue]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q19-discounted-revenue []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:group-by [{revenue (sum disc_price)}]

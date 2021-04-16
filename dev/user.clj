@@ -34,6 +34,7 @@
                     #'core2.tpch-queries/tpch-q12-shipping-modes-and-order-priority
                     #'core2.tpch-queries/tpch-q13-customer-distribution
                     #'core2.tpch-queries/tpch-q14-promotion-effect
+                    #'core2.tpch-queries/tpch-q15-top-supplier
                     #'core2.tpch-queries/tpch-q19-discounted-revenue]]
            (prn q)
            (prn (time (count (@q))))))))))

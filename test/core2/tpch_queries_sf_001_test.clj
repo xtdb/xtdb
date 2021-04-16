@@ -927,6 +927,14 @@
   (t/is (= [{:promo_revenue 15.486545812284072}]
            (tpch-queries/tpch-q14-promotion-effect))))
 
+(t/deftest ^:integration test-q15-top-supplier
+  (t/is (= [{:total_revenue 1161099.4636
+             :s_suppkey (Text. "suppkey_21")
+             :s_name (Text. "Supplier#000000021")
+             :s_address (Text. "81CavellcrJ0PQ3CPBID0Z0JwyJm0ka5igEs")
+             :s_phone (Text. "12-253-590-5816")}]
+           (tpch-queries/tpch-q15-top-supplier))))
+
 (t/deftest ^:integration test-q19-discounted-revenue
   (t/is (= [{:revenue 22923.028}]
            (tpch-queries/tpch-q19-discounted-revenue))))
