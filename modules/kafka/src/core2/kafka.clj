@@ -106,8 +106,8 @@
           (let [partition-count (count (.partitions desc))]
             (when-not (= 1 partition-count)
               (throw (IllegalStateException. (format "'%s' topic has %d partitions, required 1"
-                                                     topic-name partition-count))))))
-
+                                                     topic-name partition-count))))
+            :exists))
 
         (when create-topic?
           (let [new-topic (doto (NewTopic. ^String topic-name

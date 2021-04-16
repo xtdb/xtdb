@@ -29,7 +29,7 @@
                    :source-paths ["dev"]
                    :java-source-paths ["src" "jmh"]
                    :resource-paths ["test-resources" "data"]
-                   :test-selectors {:default (complement #{:integration :kafka})
+                   :test-selectors {:default (complement (some-fn :integration :kafka))
                                     :integration :integration
                                     :kafka :kafka}}
 
