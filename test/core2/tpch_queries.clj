@@ -33,13 +33,17 @@
       (catch Throwable e
         (.printStackTrace e)))))
 
-(defmethod expr/codegen-call [:like Comparable String] [{[{x :code} {y :code}] :args}]
-  {:code `(boolean (re-find ~(re-pattern (str/replace y #"%" ".*")) ~x))
+(defmethod expr/codegen-call [:like Comparable String] [{[{x :code} {pattern :code}] :args}]
+  {:code `(boolean (re-find ~(re-pattern (str/replace pattern #"%" ".*")) ~x))
    :return-type Boolean})
 
-(defmethod expr/codegen-call [:extract String Date] [{[{x :code} {y :code}] :args}]
-  {:code `(.get (.atOffset (Instant/ofEpochMilli ~y) ZoneOffset/UTC)
-                ~(case x
+(defmethod expr/codegen-call [:substr Comparable Long Long] [{[{x :code} {start :code} {length :code}] :args}]
+  {:code `(subs ~x (dec ~start) (+ (dec ~start) ~length))
+   :return-type String})
+
+(defmethod expr/codegen-call [:extract String Date] [{[{field :code} {x :code}] :args}]
+  {:code `(.get (.atOffset (Instant/ofEpochMilli ~x) ZoneOffset/UTC)
+                ~(case field
                    "YEAR" `ChronoField/YEAR
                    "MONTH" `ChronoField/MONTH_OF_YEAR
                    "DAY" `ChronoField/DAY_OF_MONTH
