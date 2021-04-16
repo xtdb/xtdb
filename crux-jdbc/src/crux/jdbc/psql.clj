@@ -2,7 +2,8 @@
   (:require [crux.jdbc :as j]
             [next.jdbc :as jdbc]
             [next.jdbc.result-set :as jdbcr]
-            [clojure.tools.logging :as log]))
+            [clojure.tools.logging :as log]
+            [crux.system :as sys]))
 
 (defn- check-tx-time-col [pool]
   (when-not (= "timestamp with time zone"
@@ -13,11 +14,15 @@
     (log/warn (str "`tx_time` column not in UTC format. "
                    "See https://github.com/juxt/crux/releases/tag/20.09-1.12.1 for more details."))))
 
-(defn ->dialect [_]
+(defn ->dialect {::sys/args {:drop-table? {:spec ::sys/boolean, :default false}}}
+  [{:keys [drop-table?]}]
   (reify j/Dialect
     (db-type [_] :postgresql)
 
     (setup-schema! [_ pool]
+      (when drop-table?
+        (jdbc/execute! pool ["DROP TABLE IF EXISTS tx_events"]))
+
       (doto pool
         (jdbc/execute! ["
 CREATE TABLE IF NOT EXISTS tx_events (
