@@ -188,7 +188,11 @@
                          (MapEntry/create (name col-name)
                                           (expr/->expression-vector-selector select-expr)))
                        (into {}))
-        metadata-pred (expr/->metadata-selector {:op :call, :f 'and, :args (vec (vals selects))})]
+        args (vec (concat (for [col-name col-names
+                                :when (not (contains? selects col-name))]
+                            {:op :variable :variable (symbol col-name)})
+                          (vals selects)))
+        metadata-pred (expr/->metadata-selector {:op :call, :f 'and, :args args})]
 
     (fn [^IOperatorFactory op-factory watermark]
       (.scan op-factory watermark col-names metadata-pred col-preds nil nil))))

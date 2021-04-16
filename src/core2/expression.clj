@@ -504,7 +504,8 @@
 (defn- meta-expr [{:keys [op] :as expr}]
   (expand-variadics
    (case op
-     (:literal :variable) nil
+     :literal nil
+     :variable (meta-fallback-expr expr)
      :if {:op :call
           :f 'and
           :args [(meta-fallback-expr (:pred expr))
