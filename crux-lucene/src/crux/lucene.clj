@@ -248,6 +248,5 @@
                     (when-let [evicting-eids (not-empty (:evicting-eids ev))]
                       (evict! indexer index-writer evicting-eids)))
                   (index-tx! index-writer (:submitted-tx ev))
-                  (.commit index-writer)
                   (.maybeRefreshBlocking searcher-manager)))
     lucene-store))
