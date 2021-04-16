@@ -44,31 +44,48 @@
                                :user "postgres"}}
       f)))
 
+(defn with-postgres-opts [db-spec f]
+  (with-jdbc-opts {:dialect 'crux.jdbc.psql/->dialect
+                   :db-spec db-spec}
+    f))
+
 (defn with-each-jdbc-node [f]
-  (t/testing "H2 Database"
+  (t/testing "H2"
     (with-h2-opts f))
-  (t/testing "SQLite Database"
+
+  (t/testing "SQLite"
     (with-sqlite-opts f))
-  (t/testing "Postgresql Database"
+
+  (t/testing "embedded Postgres"
     (with-embedded-postgres f))
 
   ;; Optional:
-  #_(t/testing "MySQL Database"
-      ;; docker run --rm --name crux-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -p 3306:3306 -d mysql:8.0.21
-      ;; mariadb -h 127.0.0.1 -u root -p
-      ;; CREATE DATABASE cruxtest;
-      (with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"} f))
+  #_
+  (t/testing "Postgres"
+    ;; docker run --rm --name crux-psql -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:13.2
+    ;; psql -U postgres -h 127.0.0.1
+    ;; CREATE DATABASE cruxtest;
+    (with-postgres-opts {:dbname "cruxtest", :user "postgres", :password "postgres"} f))
 
-  #_(when (.exists (clojure.java.io/file ".testing-oracle.edn"))
-      (t/testing "Oracle Database"
-        (with-jdbc-node "oracle" f
-          (read-string (slurp ".testing-oracle.edn")))))
+  #_
+  (t/testing "MySQL Database"
+    ;; docker run --rm --name crux-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -p 3306:3306 -d mysql:8.0.21
+    ;; mariadb -h 127.0.0.1 -u root -p
+    ;; CREATE DATABASE cruxtest;
+    (with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"} f))
 
-  #_(t/testing "MSSQL Database"
-      ;; docker run --rm --name crux-mssql -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
-      ;; mssql-cli
-      ;; CREATE DATABASE cruxtest;
-      (with-mssql-opts {:db-spec {:dbname "cruxtest"}
-                        :pool-opts {:username "sa"
-                                    :password "yourStrong(!)Password"}}
-        f)))
+  #_
+  (when (.exists (clojure.java.io/file ".testing-oracle.edn"))
+    (t/testing "Oracle Database"
+      (with-jdbc-node "oracle" f
+        (read-string (slurp ".testing-oracle.edn")))))
+
+  #_
+  (t/testing "MSSQL Database"
+    ;; docker run --rm --name crux-mssql -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+    ;; mssql-cli
+    ;; CREATE DATABASE cruxtest;
+    (with-mssql-opts {:db-spec {:dbname "cruxtest"}
+                      :pool-opts {:username "sa"
+                                  :password "yourStrong(!)Password"}}
+      f)))
