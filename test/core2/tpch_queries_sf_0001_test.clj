@@ -431,6 +431,10 @@
             {:p_brand (Text. "Brand#54") :p_type (Text. "ECONOMY ANODIZED BRASS") :p_size 9 :supplier_cnt 1}]
            (tpch-queries/tpch-q16-part-supplier-relationship))))
 
+(t/deftest test-q17-small-quantity-order-revenue
+  (t/is (= []
+           (tpch-queries/tpch-q17-small-quantity-order-revenue))))
+
 (t/deftest test-q19-discounted-revenue
   (t/is (= []
            (tpch-queries/tpch-q19-discounted-revenue))))

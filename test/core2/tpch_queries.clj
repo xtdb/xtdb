@@ -391,6 +391,19 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q17-small-quantity-order-revenue []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:project [{avg_yearly (/ sum_extendedprice 7)}]
+                               [:group-by [{sum_extendedprice (sum l_extendedprice)}]
+                                [:select (< l_quantity small_avg_qty)
+                                 [:join {p_partkey l_partkey}
+                                  [:scan [p_partkey {p_brand (= p_brand "Brand#23")} {p_container (= p_container "MED_BOX")}]]
+                                  [:project [l_partkey {small_avg_qty (* 0.2 avg_qty)}]
+                                   [:group-by [l_partkey {avg_qty (avg l_quantity)}]
+                                    [:scan [l_partkey l_quantity]]]]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q19-discounted-revenue []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:group-by [{revenue (sum disc_price)}]

@@ -1235,6 +1235,10 @@
 (t/deftest ^:integration test-q16-part-supplier-relationship
   (t/is (= q16-result (tpch-queries/tpch-q16-part-supplier-relationship))))
 
+(t/deftest ^:integration test-q17-small-quantity-order-revenue
+  (t/is (= []
+           (tpch-queries/tpch-q17-small-quantity-order-revenue))))
+
 (t/deftest ^:integration test-q19-discounted-revenue
   (t/is (= [{:revenue 22923.028}]
            (tpch-queries/tpch-q19-discounted-revenue))))
