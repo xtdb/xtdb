@@ -33,6 +33,6 @@ WHERE table_schema=DATABASE() AND table_name='tx_events' AND index_name='tx_even
                        first
                        :IdxPresent))
 
-        (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx ON tx_events(compacted, event_key)"]))
+        (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx ON tx_events(event_key)"]))
 
       (check-tx-time-col ds))))

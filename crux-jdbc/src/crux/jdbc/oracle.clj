@@ -23,7 +23,7 @@ CREATE TABLE tx_events (
   v BLOB NOT NULL,
   compacted INTEGER NOT NULL)"])
 
-       (jdbc/execute! pool ["CREATE INDEX tx_events_event_key_idx ON tx_events(compacted, event_key)"])))))
+       (jdbc/execute! pool ["CREATE INDEX tx_events_event_key_idx ON tx_events(event_key)"])))))
 
 (defmethod j/->date :oracle [^TIMESTAMP d _]
   (assert d)

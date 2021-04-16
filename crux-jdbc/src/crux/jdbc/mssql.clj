@@ -34,7 +34,7 @@ CREATE TABLE tx_events (
   v VARBINARY(max) NOT NULL,
   compacted INTEGER NOT NULL)"])
 
-         (jdbc/execute! ["CREATE INDEX tx_events_event_key_idx ON tx_events(compacted, event_key)"])
+         (jdbc/execute! ["CREATE INDEX tx_events_event_key_idx ON tx_events(event_key)"])
 
          (check-tx-time-col))))))
 
