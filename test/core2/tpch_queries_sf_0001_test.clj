@@ -435,6 +435,10 @@
   (t/is (= []
            (tpch-queries/tpch-q17-small-quantity-order-revenue))))
 
+(t/deftest test-q18-large-volume-customer
+  (t/is (= []
+           (tpch-queries/tpch-q18-large-volume-customer))))
+
 (t/deftest test-q19-discounted-revenue
   (t/is (= []
            (tpch-queries/tpch-q19-discounted-revenue))))

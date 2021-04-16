@@ -37,6 +37,7 @@
                     #'core2.tpch-queries/tpch-q15-top-supplier
                     #'core2.tpch-queries/tpch-q16-part-supplier-relationship
                     #'core2.tpch-queries/tpch-q17-small-quantity-order-revenue
+                    #'core2.tpch-queries/tpch-q18-large-volume-customer
                     #'core2.tpch-queries/tpch-q19-discounted-revenue]]
            (prn q)
            (prn (time (count (@q))))))))))

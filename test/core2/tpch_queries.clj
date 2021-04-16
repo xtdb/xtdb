@@ -404,6 +404,23 @@
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
+(defn tpch-q18-large-volume-customer []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[:slice {:limit 100}
+                               [:order-by [{o_totalprice :desc} {o_orderdate :asc}]
+                                [:group-by [c_name c_custkey o_orderkey o_orderdate o_totalprice {sum_qty (sum l_quantity)}]
+                                 [:join {o_orderkey l_orderkey}
+                                  [:join {o_custkey c_custkey}
+                                   [:semi-join {o_orderkey l_orderkey}
+                                    [:scan [o_orderkey o_custkey o_orderdate o_totalprice]]
+                                    [:select (> sum_qty 300)
+                                     [:group-by [l_orderkey {sum_qty (sum l_quantity)}]
+                                      [:scan [l_orderkey l_quantity]]]]]
+                                   [:scan [c_name c_custkey]]]
+                                  [:scan [l_orderkey l_quantity]]]]]])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
 (defn tpch-q19-discounted-revenue []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:group-by [{revenue (sum disc_price)}]

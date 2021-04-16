@@ -1239,6 +1239,21 @@
   (t/is (= []
            (tpch-queries/tpch-q17-small-quantity-order-revenue))))
 
+(t/deftest ^:integration test-q18-large-volume-customer
+  (t/is (= [{:c_name (Text. "Customer#000000667"),
+             :c_custkey (Text. "custkey_667"),
+             :o_orderkey (Text. "orderkey_29158"),
+             :o_orderdate (util/date->local-date-time #inst "1995-10-21"),
+             :o_totalprice 439687.23,
+             :sum_qty 305.0}
+            {:c_name (Text. "Customer#000000178"),
+             :c_custkey (Text. "custkey_178"),
+             :o_orderkey (Text. "orderkey_6882"),
+             :o_orderdate (util/date->local-date-time #inst "1997-04-09")
+             :o_totalprice 422359.65,
+             :sum_qty 303.0}]
+           (tpch-queries/tpch-q18-large-volume-customer))))
+
 (t/deftest ^:integration test-q19-discounted-revenue
   (t/is (= [{:revenue 22923.028}]
            (tpch-queries/tpch-q19-discounted-revenue))))
