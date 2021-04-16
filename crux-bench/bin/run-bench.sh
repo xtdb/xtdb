@@ -29,17 +29,19 @@ TASKDEF_ARN=$(aws ecs register-task-definition\
                   --network-mode "awsvpc" \
                   --container-definitions \
                   '[{
+                      "name":"postgres",
+                      "image":"postgres:13.2",
+                      "essential":true,
+                      "environment":[{"name":"POSTGRES_PASSWORD", "value":"postgres"}],
+                      "portMappings":[{"containerPort":5432}]
+                    }, {
                       "name":"zookeeper-container",
-                      "cpu":1024,
-                      "memory":2048,
                       "image":"confluentinc/cp-zookeeper:5.3.1",
                       "essential":true,
                       "environment":[{"name":"ZOOKEEPER_CLIENT_PORT", "value":"2181"},{"name":"ZOOKEEPER_TICK_TIME", "value":"2000"}],
                       "portMappings":[{"containerPort":2181}]
                     }, {
                       "name":"broker-container",
-                      "cpu":1024,
-                      "memory":2048,
                       "image":"confluentinc/cp-enterprise-kafka:5.3.1",
                       "dependsOn":[{"condition":"START","containerName":"zookeeper-container"}],
                       "essential":true,

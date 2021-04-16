@@ -282,6 +282,20 @@
         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :crux.metrics.cloudwatch/reporter cw-reporter-opts}))
 
+   "postgres-rocksdb"
+   (fn [^File data-dir]
+     {:crux.jdbc/connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect
+                                            :drop-table? true}
+                                  :db-spec {:dbname "postgres",
+                                            :user "postgres",
+                                            :password "postgres"}}
+      :crux/tx-log {:crux/module 'crux.jdbc/->tx-log
+                    :connection-pool :crux.jdbc/connection-pool}
+      :crux/document-store {:crux/module 'crux.jdbc/->document-store
+                            :connection-pool :crux.jdbc/connection-pool}
+      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
+
    "standalone-lmdb"
    (fn [data-dir]
      {:crux/tx-log {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}

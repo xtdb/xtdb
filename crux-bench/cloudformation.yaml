@@ -159,9 +159,15 @@ Resources:
         - 'EC2'
       NetworkMode: 'host'
       ContainerDefinitions:
+        - Name: 'postgres'
+          Image: postgres:13.2
+          Essential: true
+          Environment:
+            - Name: 'POSTGRES_PASSWORD'
+              Value: 'postgres'
+          PortMappings:
+            - ContainerPort: 5432
         - Name: 'zookeeper-container'
-          Cpu: 1024
-          Memory: 2048
           Image: confluentinc/cp-zookeeper:5.3.1
           Essential: true
           Environment:
@@ -172,8 +178,6 @@ Resources:
           PortMappings:
             - ContainerPort: 2181
         - Name: 'broker-container'
-          Cpu: 1024
-          Memory: 2048
           Image: confluentinc/cp-enterprise-kafka:5.3.1
           DependsOn:
             - Condition: 'START'
@@ -192,7 +196,7 @@ Resources:
             - ContainerPort: 9092
         - Name: 'bench-container'
           Cpu: 2048
-          Memory: 8146
+          Memory: 8192
           Image: '955308952094.dkr.ecr.eu-west-2.amazonaws.com/crux-bench:master'
           Essential: true
           Secrets:
