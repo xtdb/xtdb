@@ -133,10 +133,11 @@
           probe-pointer (ArrowBufPointer.)]
       (dotimes [probe-idx (.getValueCount probe-vec)]
         (if-let [^BigIntVector build-idxs-vec (.get join-key->build-idxs-vec (.hashCode probe-vec probe-idx))]
-          (let [probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)]
+          (let [value-count (.getValueCount build-idxs-vec)
+                probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)]
             (loop [n 0
                    out-idx (.getRowCount out-root)]
-              (if (= n (.getValueCount build-idxs-vec))
+              (if (= n value-count)
                 (util/set-vector-schema-root-row-count out-root out-idx)
                 (let [total-build-idx (long (.get build-idxs-vec n))
                       build-idx-entry (.floorEntry build-idx->root total-build-idx)
@@ -149,10 +150,22 @@
                                (not match?)
                                match?)]
                   (if match?
-                    (do (when-not semi-join?
-                          (util/copy-tuple build-root build-idx out-root out-idx))
-                        (util/copy-tuple probe-root probe-idx out-root out-idx)
-                        (recur (inc n) (inc out-idx)))
+                    (cond
+                      (not semi-join?)
+                      (do (util/copy-tuple build-root build-idx out-root out-idx)
+                          (util/copy-tuple probe-root probe-idx out-root out-idx)
+                          (recur (inc n) (inc out-idx)))
+
+                      anti-join?
+                      (if (= (inc n) value-count)
+                        (do (util/copy-tuple probe-root probe-idx out-root out-idx)
+                            (recur (inc n) (inc out-idx)))
+                        (recur (inc n) out-idx))
+
+                      semi-join?
+                      (do (util/copy-tuple probe-root probe-idx out-root out-idx)
+                          (recur value-count (inc out-idx))))
+
                     (recur (inc n) out-idx))))))
           (when anti-join?
             (let [out-idx (.getRowCount out-root)]
