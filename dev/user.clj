@@ -12,7 +12,7 @@
   (in-ns 'dev))
 
 (comment
-  (def node (time (core2.core/->local-node (core2.util/->path "target/tpch-queries-sf-001"))))
+  (def node (time (core2.test-util/->local-node {:node-dir (core2.util/->path "target/tpch-queries-sf-001")})))
   (with-open [watermark (core2.core/open-watermark node)]
     (let [^core2.core.Node node node]
       (with-bindings {#'core2.tpch-queries/*node* node
