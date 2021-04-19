@@ -1,5 +1,13 @@
 # core2
 
+## Developing
+
+- Start and connect to your REPL in the usual fashion
+- `(dev)`
+- `(go)`
+- `node` is then bound to a started node, using `data/dev-node` as a persistent data directory
+- `lein test` to run unit tests, `lein test :integration` to run integration tests
+
 ## Copyright & License
 
 The MIT License (MIT)
