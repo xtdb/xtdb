@@ -487,15 +487,15 @@
 (defn tpch-q21-suppliers-who-kept-orders-waiting []
   (with-open [res (c2/open-q *node* *watermark*
                              '[:assign [L1 [:join {l1_l_suppkey s_suppkey}
-                                            [:join {l1_l_orderkey o_orderkey}
-                                             [:select (!= l1_l_suppkey l2_l_suppkey)
-                                              [:join {l1_l_orderkey l2_l_orderkey}
-                                               [:select (> l1_l_receiptdate l1_l_commitdate)
+                                            [:select (!= l1_l_suppkey l2_l_suppkey)
+                                             [:join {l1_l_orderkey l2_l_orderkey}
+                                              [:select (> l1_l_receiptdate l1_l_commitdate)
+                                               [:join {l1_l_orderkey o_orderkey}
                                                 [:rename l1
-                                                 [:scan [_id l_orderkey l_suppkey l_receiptdate l_commitdate]]]]
-                                               [:rename l2
-                                                [:scan [l_orderkey l_suppkey]]]]]
-                                             [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]
+                                                 [:scan [_id l_orderkey l_suppkey l_receiptdate l_commitdate]]]
+                                                [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
+                                              [:rename l2
+                                               [:scan [l_orderkey l_suppkey]]]]]
                                             [:semi-join {s_nationkey n_nationkey}
                                              [:scan [s_nationkey s_suppkey s_name]]
                                              [:scan [n_nationkey {n_name (= n_name "SAUDI ARABIA")}]]]]]
