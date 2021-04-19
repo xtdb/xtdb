@@ -85,7 +85,7 @@ Two main extension points:
    - bringing other operators into logical plan
 2. Go/No-Go for Storage/Compute + Arrow
    - Large TPC-H SF, running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
-     - Kafka, S3
+     - DONE Kafka, S3
      - Some level of deployment/monitoring
      - Full TPC-H
    - Join order benchmarking - WatDiv, graph
