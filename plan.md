@@ -54,13 +54,7 @@ Two main extension points:
 - Performance
   - Core2 requires scanning everything, queries too slow.
     Mitigated by TPC-H SF, WatDiv
-    Possible solutions:
-    - Bloom filters
-    - Block-level metadata
-    - Predicate push-down
   - Cold caches - low latency queries require remote data transfer
-    Possible solutions:
-    - Tiered caching
   - Buffer pool doesn't evict anything
   - Can't get temporal index working remotely, append-only
   - By making advanced temporality possible, we forego low-latency performance for as-of-now queries
@@ -80,14 +74,22 @@ Two main extension points:
 ## Deliverables
 
 1. Short-term demo (next couple of weeks)
-   - main method and configuration, logging
-   - table-operator
-   - bringing other operators into logical plan
+   - TODO main method and configuration, logging
+     - port over crux.main
+   - DONE table-operator
+   - DONE bringing other operators into logical plan
 2. Go/No-Go for Storage/Compute + Arrow
    - Large TPC-H SF, running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
      - DONE Kafka, S3
-     - Some level of deployment/monitoring
-     - Full TPC-H
+     - TODO Some level of deployment/monitoring
+       - create uberjar
+     - TODO Full TPC-H
+     - Check queries too slow, possible solutions
+       - Bloom filters
+       - Block-level metadata
+       - Predicate push-down
+     - Check cold caches, possible solutions:
+       - Tiered caching
    - Join order benchmarking - WatDiv, graph
      - WCOJ?
    - Dealing with updates over time - historical dataset (TS Devices)
@@ -99,6 +101,7 @@ Two main extension points:
      - Merging of temporal Arrow chunks?
 3. Core2 as a viable alternative to Crux
    - Deployment, monitoring
+     - multi-module (Kafka, S3)
    - Documentation, marketing
    - Features, functionality
      - Higher-level queries
