@@ -492,7 +492,7 @@
                                               [:select (> l1_l_receiptdate l1_l_commitdate)
                                                [:join {l1_l_orderkey o_orderkey}
                                                 [:rename l1
-                                                 [:scan [_id l_orderkey l_suppkey l_receiptdate l_commitdate]]]
+                                                 [:scan [l_orderkey l_suppkey l_receiptdate l_commitdate]]]
                                                 [:scan [o_orderkey {o_orderstatus (= o_orderstatus "F")}]]]]
                                               [:semi-join {s_nationkey n_nationkey}
                                                [:scan [s_nationkey s_suppkey s_name]]
@@ -501,9 +501,9 @@
                                               [:scan [l_orderkey l_suppkey]]]]]]
                                [:slice {:limit 100}
                                 [:order-by [{numwait :desc} {s_name :asc}]
-                                 [:group-by [s_name {numwait (count l1__id)}]
+                                 [:group-by [s_name {numwait (count l1_l_orderkey)}]
                                   [:distinct
-                                   [:project [s_name l1__id]
+                                   [:project [s_name l1_l_orderkey]
                                     [:anti-join {l1_l_orderkey l3_l_orderkey}
                                      L1
                                      [:select (!= l3_l_suppkey l1_l_suppkey)
