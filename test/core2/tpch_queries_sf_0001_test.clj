@@ -451,6 +451,26 @@
   (t/is (= []
            (tpch-queries/tpch-q21-suppliers-who-kept-orders-waiting))))
 
-;; (t/deftest test-q22-global-sales-opportunity
-;;   (t/is (= []
-;;            (tpch-queries/tpch-q22-global-sales-opportunity))))
+(t/deftest test-q22-global-sales-opportunity
+  (t/is (= [{:cntrycode (Text. "13")
+             :numcust 1
+             :totacctbal 5679.84}
+            {:cntrycode (Text. "17")
+             :numcust 1
+             :totacctbal 9127.27}
+            {:cntrycode (Text. "18")
+             :numcust 2
+             :totacctbal 14647.99}
+            {:cntrycode (Text. "23")
+             :numcust 1
+             :totacctbal 9255.67}
+            {:cntrycode (Text. "29")
+             :numcust 2
+             :totacctbal 17195.08}
+            {:cntrycode (Text. "30")
+             :numcust 1
+             :totacctbal 7638.57}
+            {:cntrycode (Text. "31")
+             :numcust 1
+             :totacctbal 9331.13}]
+           (tpch-queries/tpch-q22-global-sales-opportunity))))

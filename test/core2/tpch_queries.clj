@@ -517,6 +517,25 @@
 
 (defn tpch-q22-global-sales-opportunity []
   (with-open [res (c2/open-q *node* *watermark*
-                             '[])]
+                             '[:assign [Customer [:semi-join {cntrycode cntrycode}
+                                                  [:project [c_custkey {cntrycode (substr c_phone 1 2)} c_acctbal]
+                                                   [:scan [c_custkey c_phone c_acctbal]]]
+                                                  [:table [{:cntrycode "13"}
+                                                           {:cntrycode "31"}
+                                                           {:cntrycode "23"}
+                                                           {:cntrycode "29"}
+                                                           {:cntrycode "30"}
+                                                           {:cntrycode "18"}
+                                                           {:cntrycode "17"}]]]]
+                               [:order-by [{cntrycode :asc}]
+                                [:group-by [cntrycode {numcust (count c_custkey)} {totacctbal (sum c_acctbal)}]
+                                 [:anti-join {c_custkey o_custkey}
+                                  [:select (> c_acctbal avg_acctbal)
+                                   [:cross-join
+                                    Customer
+                                    [:group-by [{avg_acctbal (avg c_acctbal)}]
+                                     [:select (> c_acctbal 0.0)
+                                      Customer]]]]
+                                  [:scan [o_custkey]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))

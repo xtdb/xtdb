@@ -41,6 +41,9 @@
                     #'core2.tpch-queries/tpch-q16-part-supplier-relationship
                     #'core2.tpch-queries/tpch-q17-small-quantity-order-revenue
                     #'core2.tpch-queries/tpch-q18-large-volume-customer
-                    #'core2.tpch-queries/tpch-q19-discounted-revenue]]
+                    #'core2.tpch-queries/tpch-q19-discounted-revenue
+                    #'core2.tpch-queries/tpch-q20-potential-part-promotion
+                    #'core2.tpch-queries/tpch-q21-suppliers-who-kept-orders-waiting
+                    #'core2.tpch-queries/tpch-q22-global-sales-opportunity]]
            (prn q)
            (prn (time (count (@q))))))))))
