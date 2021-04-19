@@ -6,8 +6,6 @@
             [core2.test-util :as tu]
             [core2.util :as util])
   (:import core2.metadata.IMetadataManager
-           core2.operator.IOperatorFactory
-           java.util.function.Consumer
            org.apache.arrow.vector.util.Text))
 
 (t/deftest test-find-gt-ivan
@@ -27,16 +25,11 @@
 
       (tu/finish-chunk node)
 
-      (let [^IOperatorFactory op-factory (:op-factory node)
-            metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
+      (let [metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
         (letfn [(query-ivan [watermark]
-                  (with-open [chunk-scanner (.scan op-factory watermark
-                                                   ["name"]
-                                                   metadata-pred
-                                                   {"name" (expr/->expression-vector-selector (expr/form->expr '(> name "Ivan")))}
-                                                   nil
-                                                   nil)]
-                    (into #{} (mapcat seq) (tu/<-cursor chunk-scanner))))]
+                  (with-open [res (c2/open-q node watermark
+                                             '[:scan [{name (> name "Ivan")}]])]
+                    (into #{} (mapcat seq) (tu/<-cursor res))))]
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= #{0 1} (.knownChunks metadata-mgr)))
             (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
