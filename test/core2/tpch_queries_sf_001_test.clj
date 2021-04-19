@@ -1257,3 +1257,36 @@
 (t/deftest ^:integration test-q19-discounted-revenue
   (t/is (= [{:revenue 22923.028}]
            (tpch-queries/tpch-q19-discounted-revenue))))
+
+;; (t/deftest ^:integration test-q20-potential-part-promotion
+;;   (t/is (= [{:s_name (Text. "Supplier#000000013")
+;;              :s_address (Text. "HK71HQyWoqRWOX8GI FpgAifW,2PoH")}]
+;;            (tpch-queries/tpch-q20-potential-part-promotion))))
+
+;; (t/deftest ^:integration test-q21-suppliers-who-kept-orders-waiting
+;;   (t/is (= [{:s_name (Text. "Supplier#000000074") :numwait 9}]
+;;            (tpch-queries/tpch-q21-suppliers-who-kept-orders-waiting))))
+
+;; (t/deftest ^:integration test-q22-global-sales-opportunity
+;;   (t/is (= [{:cntrycode "13"
+;;              :numcust 10
+;;              :totacctbal 75359.29}
+;;             {:cntrycode "17"
+;;              :numcust 8
+;;              :totacctbal 62288.98}
+;;             {:cntrycode "18"
+;;              :numcust 14
+;;              :totacctbal 111072.45}
+;;             {:cntrycode "23"
+;;              :numcust 5
+;;              :totacctbal 40458.86}
+;;             {:cntrycode "29"
+;;              :numcust 11
+;;              :totacctbal 88722.85}
+;;             {:cntrycode "30"
+;;              :numcust 17
+;;              :totacctbal 122189.33}
+;;             {:cntrycode "31"
+;;              :numcust 8
+;;              :totacctbal 66313.16}]
+;;            (tpch-queries/tpch-q22-global-sales-opportunity))))

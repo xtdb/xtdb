@@ -463,3 +463,21 @@
                                           {l_shipinstruct (= l_shipinstruct "DELIVER IN PERSON")}]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
+
+(defn tpch-q20-potential-part-promotion []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
+(defn tpch-q21-suppliers-who-kept-orders-waiting []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
+
+(defn tpch-q22-global-sales-opportunity []
+  (with-open [res (c2/open-q *node* *watermark*
+                             '[])]
+    (->> (tu/<-cursor res)
+         (into [] (mapcat seq)))))
