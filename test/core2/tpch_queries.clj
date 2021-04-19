@@ -34,7 +34,7 @@
         (.printStackTrace e)))))
 
 (defmethod expr/codegen-call [:like Comparable String] [{[{x :code} {pattern :code}] :args}]
-  {:code `(boolean (re-find ~(re-pattern (str/replace pattern #"%" ".*")) ~x))
+  {:code `(boolean (re-find ~(re-pattern (str "^" (str/replace pattern #"%" ".*") "$")) ~x))
    :return-type Boolean})
 
 (defmethod expr/codegen-call [:substr Comparable Long Long] [{[{x :code} {start :code} {length :code}] :args}]
@@ -122,10 +122,8 @@
                                 [:semi-join {o_orderkey l_orderkey}
                                  [:scan [{o_orderdate (and (>= o_orderdate #inst "1993-07-01")
                                                            (< o_orderdate #inst "1993-10-01"))} o_orderpriority o_orderkey]]
-                                 [:distinct
-                                  [:project [l_orderkey]
-                                   [:select (< l_commitdate l_receiptdate)
-                                    [:scan [l_orderkey l_commitdate l_receiptdate]]]]]]]])]
+                                 [:select (< l_commitdate l_receiptdate)
+                                  [:scan [l_orderkey l_commitdate l_receiptdate]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 
@@ -466,7 +464,23 @@
 
 (defn tpch-q20-potential-part-promotion []
   (with-open [res (c2/open-q *node* *watermark*
-                             '[])]
+                             '[:order-by [{s_name :asc}]
+                               [:project [s_name s_address]
+                                [:semi-join {s_suppkey ps_suppkey}
+                                 [:join {n_nationkey s_nationkey}
+                                  [:scan [{n_name (= n_name "CANADA")} n_nationkey]]
+                                  [:scan [s_name s_address s_nationkey s_suppkey]]]
+                                 [:select (and (= l_suppkey ps_suppkey)
+                                               (> ps_availqty sum_qty))
+                                  [:join {ps_partkey l_partkey}
+                                   [:semi-join {ps_partkey p_partkey}
+                                    [:scan [ps_suppkey ps_partkey ps_availqty]]
+                                    [:scan [p_partkey {p_name (like p_name "forest%")}]]]
+                                   [:project [l_partkey l_suppkey {sum_qty (* 0.5 sum_qty)}]
+                                    [:group-by [l_partkey l_suppkey {sum_qty (sum l_quantity)}]
+                                     [:scan [l_partkey l_suppkey l_quantity
+                                             {l_shipdate (and (>= l_shipdate #inst "1994-01-01")
+                                                              (< l_shipdate #inst "1995-01-01"))}]]]]]]]]])]
     (->> (tu/<-cursor res)
          (into [] (mapcat seq)))))
 

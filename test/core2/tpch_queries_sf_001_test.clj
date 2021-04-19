@@ -1258,10 +1258,10 @@
   (t/is (= [{:revenue 22923.028}]
            (tpch-queries/tpch-q19-discounted-revenue))))
 
-;; (t/deftest ^:integration test-q20-potential-part-promotion
-;;   (t/is (= [{:s_name (Text. "Supplier#000000013")
-;;              :s_address (Text. "HK71HQyWoqRWOX8GI FpgAifW,2PoH")}]
-;;            (tpch-queries/tpch-q20-potential-part-promotion))))
+(t/deftest ^:integration test-q20-potential-part-promotion
+  (t/is (= [{:s_name (Text. "Supplier#000000013")
+             :s_address (Text. "HK71HQyWoqRWOX8GI FpgAifW,2PoH")}]
+           (tpch-queries/tpch-q20-potential-part-promotion))))
 
 ;; (t/deftest ^:integration test-q21-suppliers-who-kept-orders-waiting
 ;;   (t/is (= [{:s_name (Text. "Supplier#000000074") :numwait 9}]

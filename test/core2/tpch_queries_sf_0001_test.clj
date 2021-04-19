@@ -443,9 +443,9 @@
   (t/is (= []
            (tpch-queries/tpch-q19-discounted-revenue))))
 
-;; (t/deftest test-q20-potential-part-promotion
-;;   (t/is (= []
-;;            (tpch-queries/tpch-q20-potential-part-promotion))))
+(t/deftest test-q20-potential-part-promotion
+  (t/is (= []
+           (tpch-queries/tpch-q20-potential-part-promotion))))
 
 ;; (t/deftest test-q21-suppliers-who-kept-orders-waiting
 ;;   (t/is (= []
