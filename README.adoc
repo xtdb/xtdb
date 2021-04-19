@@ -1,0 +1,51 @@
+= core2
+
+== Developing
+
+- Start and connect to your REPL in the usual fashion
+- `(dev)`
+- `(go)`
+- `node` is then bound to a started node, using `data/dev-node` as a persistent data directory
+- `lein test` to run unit tests, `lein test :integration` to run integration tests
+
+== Differences to Classic
+
+Main require: `[core2.core :as c2]`
+
+Transactions are slightly different to Classic:
+
+- `[:crux.tx/put <doc>]` -> `{:op :put, :doc <doc>}`. Put and delete supported thus far.
+- `:crux.db/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
+- `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
+
+Core2 has the concept of 'watermarks', similar to `crux/db` but (as yet) without the ability to specify VT/TT.
+These are `Closeable` - use them in a `with-open`.
+
+At the moment, the main query function is on the node itself, `open-q` taking a watermark and a relational-algebra query plan.
+Have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
+
+[source,clojure]
+----
+(with-open [node (c2/start-node {})
+            watermark (c2/open-watermark node)
+            res (c2/open-q node watermark
+                           '[:scan [{name (> name "Ivan")}]])]
+  ...)
+----
+
+== Plan
+
+See `plan.md` for upcoming development notes.
+
+== Copyright & License
+
+The MIT License (MIT)
+
+Copyright © 2021 JUXT LTD.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
