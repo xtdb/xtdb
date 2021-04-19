@@ -74,8 +74,7 @@ Two main extension points:
 ## Deliverables
 
 1. Short-term demo (next couple of weeks)
-   - TODO main method and configuration, logging
-     - port over crux.main
+   - DONE main method and configuration, logging
    - DONE table-operator
    - DONE bringing other operators into logical plan
 2. Go/No-Go for Storage/Compute + Arrow

@@ -109,14 +109,3 @@
     (-> (:core2/submit-node system)
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(.close ^AutoCloseable system)))))
-
-(defn -main [& [node-dir :as args]]
-  (if node-dir
-    (let [node-dir (util/->path node-dir)]
-      (start-node {:core2/log {:root-path (.resolve node-dir "log")}
-                   :core2/buffer-pool {:cache-path (.resolve node-dir "buffers")}
-                   :core2/object-store {:root-path (.resolve node-dir "objects")}})
-      (println "core2 started in" (str node-dir)))
-    (binding [*out* *err*]
-      (println "node directory argument required")
-      (System/exit 1))))

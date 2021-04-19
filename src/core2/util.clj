@@ -171,6 +171,15 @@
     (catch Exception e
       (log/warn e "could not close"))))
 
+(def uncaught-exception-handler
+  (reify Thread$UncaughtExceptionHandler
+    (uncaughtException [_ thread throwable]
+      (log/error throwable "Uncaught exception:"))))
+
+(defn install-uncaught-exception-handler! []
+  (when-not (Thread/getDefaultUncaughtExceptionHandler)
+    (Thread/setDefaultUncaughtExceptionHandler uncaught-exception-handler)))
+
 (defn shutdown-pool
   ([^ExecutorService pool]
    (shutdown-pool pool 60))

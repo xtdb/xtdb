@@ -11,6 +11,7 @@
                  [org.clojure/spec.alpha "0.2.194"]
                  [com.stuartsierra/dependency "0.2.0"]
                  [org.clojure/data.json "2.0.2"]
+                 [org.clojure/tools.cli "1.0.206"]
                  [org.apache.arrow/arrow-algorithm "3.0.0"]
                  [org.apache.arrow/arrow-vector "3.0.0"]
                  [org.apache.arrow/arrow-memory-netty "3.0.0"]
@@ -52,7 +53,8 @@
                    "-rf" "json"
                    "-rff" "target/jmh-result.json"]}
 
-  :main core2.core
+  :main core2.main
+  :aot [core2.main]
 
   :java-source-paths ["src"]
 
