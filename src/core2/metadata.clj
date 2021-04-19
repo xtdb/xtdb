@@ -1,11 +1,11 @@
 (ns core2.metadata
   (:require core2.buffer-pool
             [core2.expression :as expr]
-            core2.object-store
+            [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [core2.system :as sys])
+            [core2.bloom :as bloom])
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
@@ -16,11 +16,11 @@
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            java.util.function.Consumer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector]
            [org.apache.arrow.vector.holders NullableBigIntHolder NullableTimeStampMilliHolder ValueHolder]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           org.apache.arrow.vector.types.pojo.Schema
+           [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Schema]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -40,7 +40,9 @@
             type-id-field
             (t/->primitive-dense-union-field "min")
             (t/->primitive-dense-union-field "max")
-            (t/->field "count" (.getType Types$MinorType/BIGINT) false)]))
+            (t/->field "count" (.getType Types$MinorType/BIGINT) false)
+            (t/->field "bloom" (ArrowType$FixedSizeList. (bit-shift-left 1 10)) false
+                       (t/->field "bloom-bits" (.getType Types$MinorType/BIT) false))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%08x.arrow" chunk-idx))
@@ -107,6 +109,7 @@
                   (.setSafe idx (.getValueCount field-vec)))
 
                 (write-min-max field-vec metadata-root idx)
+                (bloom/write-bloom field-vec metadata-root idx)
 
                 (util/set-vector-schema-root-row-count metadata-root (inc idx)))))]
 

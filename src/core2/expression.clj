@@ -1,5 +1,6 @@
 (ns core2.expression
-  (:require core2.operator.project
+  (:require [core2.bloom :as bloom]
+            core2.operator.project
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
@@ -7,8 +8,9 @@
            java.lang.reflect.Method
            java.time.LocalDateTime
            java.util.Date
+           org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
+           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector]
            org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
@@ -142,7 +144,9 @@
 
 (def ^:private metadata-vec-syms
   {:min (gensym "min-vec")
-   :max (gensym "max-vec")})
+   :max (gensym "max-vec")
+   :bloom (gensym "bloom-vec")
+   :bloom-bits (gensym "bloom-bits-vec")})
 
 (def ^:private numeric-types
   #{Long Double})
@@ -489,14 +493,18 @@
     (or (case f
           and (-> {:op :call, :f 'and, :args (map meta-expr args)} simplify-and-or-expr)
           or (-> {:op :call, :f 'or, :args (map meta-expr args)} simplify-and-or-expr)
-          < (bool-expr '< :min '> :max)
-          <= (bool-expr '<= :min '>= :max)
-          > (bool-expr '> :max '< :min)
-          >= (bool-expr '>= :max '<= :min)
-          = (meta-expr {:op :call,
-                        :f 'and,
-                        :args [{:op :call, :f '<=, :args args}
-                               {:op :call, :f '>=, :args args}]})
+          < (bool-expr '< :min, '> :max)
+          <= (bool-expr '<= :min, '>= :max)
+          > (bool-expr '> :max, '< :min)
+          >= (bool-expr '>= :max, '<= :min)
+          = {:op :call
+             :f 'and
+             :args [(meta-expr {:op :call,
+                                :f 'and,
+                                :args [{:op :call, :f '<=, :args args}
+                                       {:op :call, :f '>=, :args args}]})
+
+                    (bool-expr nil :bloom-filter, nil :bloom-filter)]}
           nil)
 
         (meta-fallback-expr expr))))
@@ -535,34 +543,52 @@
     (when-not (.isEmpty bitmap)
       (.first bitmap))))
 
-(defmethod codegen-expr :metadata-var-lit-call [{:keys [f meta-value field literal field-type]} opts]
-  (let [vl-sym (gensym 'vl)
-        vec-sym (get metadata-vec-syms meta-value)
-        arrow-type (types/->arrow-type field-type)]
-    {:code `(boolean
-             (when-let [duv-idx# (metadata-field-idx ~metadata-root-sym '~field '~field ~(types/arrow-type->type-id arrow-type))]
-               (let [~idx-sym (.getOffset ~vec-sym duv-idx#)
+(defmethod codegen-expr :metadata-var-lit-call [{:keys [f meta-value field literal field-type]} {:keys [allocator] :as opts}]
+  (let [arrow-type (types/->arrow-type field-type)]
+    (if (= meta-value :bloom-filter)
+      {:code `(boolean
+               (when-let [~idx-sym (metadata-field-idx ~metadata-root-sym '~field '~field
+                                                       ~(types/arrow-type->type-id arrow-type))]
+                 (bloom/bloom-contains? ~(:bloom metadata-vec-syms)
+                                        ~(:bloom-bits metadata-vec-syms)
+                                        ~idx-sym
+                                        ~(bloom/literal-hashes allocator literal))))
+       :return-type Boolean}
 
-                     ~(-> vec-sym (with-tag (arrow-type->vector-type arrow-type)))
-                     (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
-                 (when-let [~vl-sym ~(:code (codegen-expr {:op :variable, :variable vec-sym}
-                                                          {:var->type {vec-sym field-type}}))]
-                   ~(:code (codegen-expr {:op :call
-                                          :f f
-                                          :args [{:code (list (type->cast field-type) vl-sym),
-                                                  :return-type field-type}
-                                                 (codegen-expr {:op :literal, :literal literal} nil)]}
-                                         opts))))))
-     :return-type Boolean}))
+      (let [vl-sym (gensym 'vl)
+            vec-sym (get metadata-vec-syms meta-value)]
+        {:code `(boolean
+                 (when-let [duv-idx# (metadata-field-idx ~metadata-root-sym '~field '~field
+                                                         ~(types/arrow-type->type-id arrow-type))]
+                   (let [~idx-sym (.getOffset ~vec-sym duv-idx#)
+
+                         ~(-> vec-sym (with-tag (arrow-type->vector-type arrow-type)))
+                         (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
+                     (when-let [~vl-sym ~(:code (codegen-expr {:op :variable, :variable vec-sym}
+                                                              {:var->type {vec-sym field-type}}))]
+                       ~(:code (codegen-expr {:op :call
+                                              :f f
+                                              :args [{:code (list (type->cast field-type) vl-sym),
+                                                      :return-type field-type}
+                                                     (codegen-expr {:op :literal, :literal literal} nil)]}
+                                             opts))))))
+         :return-type Boolean}))))
 
 (defn meta-expr->code [expr]
-  `(fn [~(-> metadata-root-sym (with-tag VectorSchemaRoot))]
-     (let [~(-> (:min metadata-vec-syms) (with-tag DenseUnionVector))
-           (.getVector ~metadata-root-sym "min")
+  (with-open [allocator (RootAllocator.)]
+    `(fn [~(-> metadata-root-sym (with-tag VectorSchemaRoot))]
+       (let [~(-> (:min metadata-vec-syms) (with-tag DenseUnionVector))
+             (.getVector ~metadata-root-sym "min")
 
-           ~(-> (:max metadata-vec-syms) (with-tag DenseUnionVector))
-           (.getVector ~metadata-root-sym "max")]
-       ~(:code (postwalk-expr #(codegen-expr % {}) expr)))))
+             ~(-> (:max metadata-vec-syms) (with-tag DenseUnionVector))
+             (.getVector ~metadata-root-sym "max")
+
+             ~(-> (:bloom metadata-vec-syms) (with-tag FixedSizeListVector))
+             (.getVector ~metadata-root-sym "bloom")
+
+             ~(-> (:bloom-bits metadata-vec-syms) (with-tag BitVector))
+             (.getDataVector ~(:bloom metadata-vec-syms))]
+         ~(:code (postwalk-expr #(codegen-expr % {:allocator allocator}) expr))))))
 
 (def memo-meta-expr->code
   (memoize meta-expr->code))

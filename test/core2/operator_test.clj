@@ -48,6 +48,35 @@
                        {:name (Text. "Jeremy")}}
                      (query-ivan watermark)))))))))
 
+(t/deftest test-find-eq-ivan
+  (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
+    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
+
+      @(-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 1}}
+                               {:op :put, :doc {:name "James", :_id 2}}
+                               {:op :put, :doc {:name "Ivan", :_id 3}}])
+           (tu/then-await-tx node))
+
+      (tu/finish-chunk node)
+
+      @(-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 1}}
+                               {:op :put, :doc {:name "James", :_id 2}}])
+           (tu/then-await-tx node))
+
+      (tu/finish-chunk node)
+      (let [metadata-pred (expr/->metadata-selector (expr/form->expr '(= name "Ivan")))]
+        (letfn [(query-ivan [watermark]
+                  (with-open [res (c2/open-q node watermark
+                                             '[:scan [{name (= name "Ivan")}]])]
+                    (into #{} (mapcat seq) (tu/<-cursor res))))]
+          (with-open [watermark (c2/open-watermark node)]
+            (t/is (= #{0 3} (.knownChunks metadata-mgr)))
+            (t/is (= [0] (meta/matching-chunks metadata-mgr watermark metadata-pred))
+                  "only needs to scan chunk 0")
+
+            (t/is (= #{{:name (Text. "Ivan")}}
+                     (query-ivan watermark)))))))))
+
 (t/deftest test-fixpoint-operator
   (let [node-dir (doto (util/->path "target/test-fixpoint-operator")
                    util/delete-dir)]
