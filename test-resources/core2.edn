@@ -1,5 +1,0 @@
-{:core2/log {:core2/module core2.log/->local-directory-log
-             :root-path "data/dev-node/log"}
- :core2/buffer-pool {:cache-path "data/dev-node/buffers"}
- :core2/object-store {:core2/module core2.object-store/->file-system-object-store
-                      :root-path "data/dev-node/objects"}}
