@@ -1,17 +1,17 @@
 (ns core2.core
-  (:require [core2.indexer :as indexer]
+  (:require [clojure.pprint :as pp]
+            [core2.indexer :as indexer]
             core2.ingest-loop
             [core2.logical-plan :as lp]
             [core2.system :as sys]
-            core2.tx-producer
-            [core2.util :as util])
+            core2.tx-producer)
   (:import [core2.indexer IChunkManager TransactionIndexer]
            core2.ingest_loop.IIngestLoop
            core2.operator.IOperatorFactory
            core2.tx_producer.ITxProducer
-           java.io.Closeable
+           [java.io Closeable Writer]
            java.lang.AutoCloseable
-           [org.apache.arrow.memory RootAllocator]))
+           org.apache.arrow.memory.RootAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -55,6 +55,9 @@
     (when close-fn
       (close-fn))))
 
+(defmethod print-method Node [_node ^Writer w] (.write w "#<Core2Node>"))
+(defmethod pp/simple-dispatch Node [it] (print-method it *out*))
+
 (defn ->node {::sys/deps {:indexer :core2/indexer
                           :ingest-loop :core2/ingest-loop
                           :op-factory :core2/op-factory
@@ -93,6 +96,9 @@
   (close [_]
     (when close-fn
       (close-fn))))
+
+(defmethod print-method SubmitNode [_node ^Writer w] (.write w "#<Core2SubmitNode>"))
+(defmethod pp/simple-dispatch SubmitNode [it] (print-method it *out*))
 
 (defn ->submit-node {::sys/deps {:tx-producer :core2/tx-producer}}
   [{:keys [tx-producer]}]

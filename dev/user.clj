@@ -1,12 +1,15 @@
 (ns user
-  (:require [clojure.java.io :as io]
-            [clojure.tools.namespace.repl :as ctn]))
+  (:require [clojure.tools.namespace.repl :as ctn]))
 
 (doseq [ns '[user core2.temporal.simd]]
   (ctn/disable-reload! (create-ns ns)))
 
 (defn reset []
   (ctn/refresh))
+
+(defn dev []
+  (require 'dev)
+  (in-ns 'dev))
 
 (comment
   (def node (time (core2.core/->local-node (core2.util/->path "target/tpch-queries-sf-001"))))

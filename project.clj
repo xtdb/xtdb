@@ -19,13 +19,16 @@
 
   :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
+                                  [org.clojure/tools.namespace "1.1.0"]
+                                  [integrant "0.8.0"]
+                                  [integrant/repl "0.3.1"]
+
                                   [org.clojure/test.check "0.10.0"]
                                   [io.airlift.tpch/tpch "0.10"]
+                                  [org.clojure/data.csv "1.0.0"]
                                   [org.openjdk.jmh/jmh-core "1.27"]
                                   [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
-                                  [org.clojure/data.csv "1.0.0"]
-                                  [cheshire "5.10.0"]
-                                  [org.clojure/tools.namespace "1.1.0"]]
+                                  [cheshire "5.10.0"]]
                    :repl-options {:init-ns user}
                    :source-paths ["dev"]
                    :java-source-paths ["src" "jmh"]
