@@ -113,7 +113,6 @@
                     (Text. "device-info-demo000001") -6688467811848818630
                     (Text. "reading-demo000001") -8292973307042192125}
                    (.id->internal-id tm)))
-          (prn (.id->internal-id tm))
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
