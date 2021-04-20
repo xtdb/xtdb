@@ -20,7 +20,8 @@
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector VarCharVector VectorLoader VectorSchemaRoot]
+           org.apache.arrow.vector.complex.StructVector
            org.apache.arrow.vector.util.Text))
 
 (def txs
@@ -152,12 +153,22 @@
             (with-open [^VectorSchemaRoot metadata-batch (VectorSchemaRoot/create (.getSchema footer) a)
                         record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) buffer)]
               (.load (VectorLoader. metadata-batch) record-batch)
-              (t/is (= 40 (.getRowCount metadata-batch)))
-              (t/is (= "_id" (str (.getObject (.getVector metadata-batch "column") 0))))
-              (t/is (= "_row-id" (str (.getObject (.getVector metadata-batch "field") 0))))
-              (t/is (= 0 (.getObject (.getVector metadata-batch "min") 0)))
-              (t/is (= 3 (.getObject (.getVector metadata-batch "max") 0)))
-              (t/is (= 4 (.getObject (.getVector metadata-batch "count") 0)))
+              (t/is (= 20 (.getRowCount metadata-batch)))
+              (t/is (= "_id" (-> (.getVector metadata-batch "column")
+                                 (.getObject 0)
+                                 (str))))
+              (t/is (= "device-info-demo000000"
+                       (-> ^StructVector (.getVector metadata-batch "min")
+                           ^VarCharVector (.getChild "varchar")
+                           (.getObject 0)
+                           (str))))
+              (t/is (= "reading-demo000001"
+                       (-> ^StructVector (.getVector metadata-batch "max")
+                           ^VarCharVector (.getChild "varchar")
+                           (.getObject 0)
+                           (str))))
+              (t/is (= 4 (-> ^BigIntVector (.getVector metadata-batch "count")
+                             (.get 0))))
 
               (let [from (.getVector metadata-batch "count")
                     tp (.getTransferPair from a)]
@@ -254,8 +265,8 @@
           (tu/finish-chunk node)
 
           (t/is [last-tx-instant (dec (count tx-ops))]
-               @(meta/with-latest-metadata mm
-                  (juxt meta/latest-tx meta/latest-row-id)))
+                @(meta/with-latest-metadata mm
+                   (juxt meta/latest-tx meta/latest-row-id)))
 
           (let [objs (.listObjects os)]
             (t/is (= 4 (count (filter #(re-matches #"metadata-.*" %) objs))))

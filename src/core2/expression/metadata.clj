@@ -1,11 +1,11 @@
 (ns core2.expression.metadata
   (:require [core2.bloom :as bloom]
             [core2.expression :as expr]
+            [core2.metadata :as meta]
             [core2.types :as types])
   (:import org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector]
-           org.apache.arrow.vector.VectorSchemaRoot
-           org.apache.arrow.vector.BitVector))
+           [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (defn- simplify-and-or-expr [{:keys [f args] :as expr}]
   (let [args (filterv some? args)]
@@ -97,77 +97,49 @@
 (def ^:private metadata-vec-syms
   {:min (gensym "min-vec")
    :max (gensym "max-vec")
-   :bloom (gensym "bloom-vec")
-   :bloom-bits (gensym "bloom-bits-vec")})
-
-(defn field-present? [metadata-root field]
-  ;; TODO this goes to a nested select but we could also find a way
-  ;; to inline the generated code
-  (not (.isEmpty (.select (expr/->expression-root-selector (expr/form->expr (list '= 'field (str field))))
-                          metadata-root))))
+   :bloom (gensym "bloom-vec")})
 
 (defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
-  {:code `(field-present? ~metadata-root-sym '~field)
+  {:code `(boolean
+           (meta/metadata-column-idx ~metadata-root-sym '~(str field)))
    :return-type Boolean})
 
-(defn metadata-field-idx [metadata-root column field type-id]
-  (let [bitmap (.select (expr/->expression-root-selector
-                         (expr/form->expr
-                          (list 'and
-                                (list '= 'column (str column))
-                                (list '= 'field (str field))
-                                (list '= 'type-id type-id))))
-                        metadata-root)]
-    (when-not (.isEmpty bitmap)
-      (.first bitmap))))
-
 (defmethod expr/codegen-expr :metadata-var-lit-call [{:keys [f meta-value field literal field-type]} {:keys [allocator] :as opts}]
-  (let [arrow-type (types/->arrow-type field-type)]
-    (if (= meta-value :bloom-filter)
-      {:code `(boolean
-               (when-let [~expr/idx-sym (metadata-field-idx ~metadata-root-sym '~field '~field
-                                                            ~(types/arrow-type->type-id arrow-type))]
-                 (bloom/bloom-contains? ~(:bloom metadata-vec-syms)
-                                        ~(:bloom-bits metadata-vec-syms)
-                                        ~expr/idx-sym
-                                        ~(bloom/literal-hashes allocator literal))))
-       :return-type Boolean}
+  (let [field-name (str field)]
+    {:code `(boolean
+             (when-let [~(-> expr/idx-sym (vary-meta assoc :tag 'long))
+                        (meta/metadata-column-idx ~metadata-root-sym ~field-name)]
+               ~(if (= meta-value :bloom-filter)
+                  `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym
+                                          ~(bloom/literal-hashes allocator literal))
 
-      (let [vl-sym (gensym 'vl)
-            vec-sym (get metadata-vec-syms meta-value)]
-        {:code `(boolean
-                 (when-let [duv-idx# (metadata-field-idx ~metadata-root-sym '~field '~field
-                                                         ~(types/arrow-type->type-id arrow-type))]
-                   (let [~expr/idx-sym (.getOffset ~vec-sym duv-idx#)
-
-                         ~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                         (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
-                     (when-let [~vl-sym ~(:code (expr/codegen-expr
-                                                 {:op :variable, :variable vec-sym}
-                                                 {:var->type {vec-sym field-type}}))]
+                  (let [arrow-type (types/->arrow-type field-type)
+                        vec-sym (get metadata-vec-syms meta-value)]
+                    `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
+                           (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
                        ~(:code (expr/codegen-expr
                                 {:op :call
                                  :f f
-                                 :args [{:code (list (expr/type->cast field-type) vl-sym),
+                                 :args [{:code (list (expr/type->cast field-type)
+                                                     (:code (expr/codegen-expr
+                                                             {:op :variable, :variable vec-sym}
+                                                             {:var->type {vec-sym field-type}}))),
                                          :return-type field-type}
                                         (expr/codegen-expr {:op :literal, :literal literal} nil)]}
-                                opts))))))
-         :return-type Boolean}))))
+                                opts)))))))
+     :return-type Boolean}))
 
 (defn meta-expr->code [expr]
   (with-open [allocator (RootAllocator.)]
     `(fn [~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))]
-       (let [~(-> (:min metadata-vec-syms) (expr/with-tag DenseUnionVector))
+       (let [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
              (.getVector ~metadata-root-sym "min")
 
-             ~(-> (:max metadata-vec-syms) (expr/with-tag DenseUnionVector))
+             ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
              (.getVector ~metadata-root-sym "max")
 
              ~(-> (:bloom metadata-vec-syms) (expr/with-tag FixedSizeListVector))
-             (.getVector ~metadata-root-sym "bloom")
-
-             ~(-> (:bloom-bits metadata-vec-syms) (expr/with-tag BitVector))
-             (.getDataVector ~(:bloom metadata-vec-syms))]
+             (.getVector ~metadata-root-sym "bloom")]
          ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:allocator allocator}) expr))))))
 
 (def memo-meta-expr->code

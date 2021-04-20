@@ -1,20 +1,19 @@
 (ns core2.bloom
   (:require [core2.types :as types])
   (:import org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BitVector FieldVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.FixedSizeListVector
+           [org.apache.arrow.vector BitVector FieldVector ValueVector]
+           [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            org.apache.arrow.vector.types.Types))
 
 (def bloom-bits (bit-shift-left 1 10))
 (def bit-mask (dec bloom-bits))
 
 (defn bloom-contains? [^FixedSizeListVector bloom-vec
-                       ^BitVector bit-vec
                        ^long idx
                        hashes]
   (let [bit-idx (.getElementStartIndex bloom-vec idx)]
     (every? (fn [^long hash]
-              (pos? (.get bit-vec (+ bit-idx hash))))
+              (pos? (.get ^BitVector (.getDataVector bloom-vec) (+ bit-idx hash))))
             hashes)))
 
 (defn literal-hashes [^BufferAllocator allocator literal]
@@ -27,10 +26,9 @@
          (-> el-hash (bit-shift-right 10) (bit-and bit-mask))
          (-> el-hash (bit-shift-right 20) (bit-and bit-mask))]))))
 
-(defn write-bloom [^FieldVector field-vec, ^VectorSchemaRoot metadata-root, idx]
-  (let [^FixedSizeListVector bloom-vec (.getVector metadata-root "bloom")
-        ^BitVector bit-vec (.getDataVector bloom-vec)
-        bit-idx (.startNewValue bloom-vec idx)]
+(defn write-bloom [^FixedSizeListVector bloom-vec, meta-idx, ^ValueVector field-vec]
+  (let [^BitVector bit-vec (.getDataVector bloom-vec)
+        bit-idx (.startNewValue bloom-vec meta-idx)]
     (dotimes [in-idx (.getValueCount field-vec)]
       (let [el-hash (.hashCode field-vec in-idx)]
         (.setSafeToOne bit-vec (+ bit-idx (-> el-hash (bit-and bit-mask))))
