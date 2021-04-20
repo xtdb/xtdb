@@ -56,7 +56,8 @@
   (kd-tree-delete [_ allocator point])
   (kd-tree-range-search [_ min-range max-range])
   (kd-tree-depth-first [_])
-  (kd-tree-point-vec [_]))
+  (kd-tree-point-vec [_])
+  (kd-tree-depth [_]))
 
 (deftype Node [^FixedSizeListVector point-vec ^int point-idx ^byte axis left right ^boolean deleted?]
   Closeable
@@ -123,7 +124,8 @@
     (Spliterators/emptyIntSpliterator))
   (kd-tree-depth-first [_]
     (Spliterators/emptyIntSpliterator))
-  (kd-tree-point-vec [_]))
+  (kd-tree-point-vec [_])
+  (kd-tree-depth [_] 0))
 
 (def ^:private ^Class objects-class
   (Class/forName "[Ljava.lang.Object;"))
@@ -451,7 +453,24 @@
       (NodeDepthFirstSpliterator. stack)))
 
   (kd-tree-point-vec [this]
-    (.point-vec this)))
+    (.point-vec this))
+
+  (kd-tree-depth [kd-tree]
+    (let [stack (doto (ArrayDeque.)
+                  (.push [1 kd-tree]))]
+      (loop [[depth ^Node node] (.poll stack)
+             max-depth 0]
+        (if-not node
+          max-depth
+          (let [depth (long depth)]
+            (when-let [left (.left node)]
+              (.push stack [(inc depth) left]))
+
+            (when-let [right (.right node)]
+              (.push stack [(inc depth) right]))
+
+            (recur (.poll stack)
+                   (max depth max-depth))))))))
 
 (defn kd-tree-point ^java.util.List [kd-tree ^long idx]
   (.getObject ^FixedSizeListVector (kd-tree-point-vec kd-tree) idx))
@@ -730,4 +749,7 @@
       (ColumnDepthFirstSpliterator. axis-delete-flag-vec 0 (.getValueCount axis-delete-flag-vec))))
 
   (kd-tree-point-vec [kd-tree]
-    (.getVector kd-tree point-vec-idx)))
+    (.getVector kd-tree point-vec-idx))
+
+  (kd-tree-depth [_]
+    (throw (UnsupportedOperationException.))))
