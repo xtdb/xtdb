@@ -78,11 +78,15 @@ Two main extension points:
    - DONE table-operator
    - DONE bringing other operators into logical plan
 2. Go/No-Go for Storage/Compute + Arrow
-   - Large TPC-H SF, running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
+   - Large TPC-H SF (1?), running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
      - DONE Kafka, S3
      - TODO Some level of deployment/monitoring
        - create uberjar
-     - TODO Full TPC-H
+     - DONE Full TPC-H
+     - Larger TPC-H scale factors - check ingest + query
+       - linear growth in aggregate queries, sub-linear in accesses
+     - Concurrency - check running ingest + multiple queries in parallel
+       - Running multiple TPC-H nodes in the cloud - check everything works same as locally
      - Check queries too slow, possible solutions
        - DONE Bloom filters
        - Block-level metadata
@@ -131,6 +135,8 @@ Bugs/clean up:
 - JMH - how to leverage, still needed?
 
 Should have:
+- External sort in query engine
+- We don't currently coalesce small intermediate blocks in the query engine
 - Parameters beyond table-operator - override values in expressions without recompiling.
 - Support lists/cardinality-many?
 - Reconstructing the log - storage of incoming transactions in object store
