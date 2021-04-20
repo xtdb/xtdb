@@ -12,7 +12,7 @@
            core2.temporal.TemporalCoordinates
            java.io.Closeable
            java.nio.ByteBuffer
-           [java.util Arrays Comparator Date HashMap Map]
+           [java.util Arrays Comparator Date HashMap Map Random]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function IntFunction Predicate ToLongFunction]
@@ -173,6 +173,8 @@
                           ^IMetadataManager metadata-manager
                           ^AtomicLong id-counter
                           ^Map id->internal-id
+                          ^Roaring64Bitmap known-ids
+                          ^Random rng
                           ^:unsynchronized-mutable chunk-kd-tree
                           ^:volatile-mutable kd-tree]
   TemporalManangerPrivate
@@ -215,7 +217,11 @@
                         id)
                       (reify Function
                         (apply [_ x]
-                          (.incrementAndGet id-counter)))))
+                          (loop [id (.nextLong rng)]
+                            (if (.contains known-ids id)
+                              (recur (.nextLong rng))
+                              (do (.addLong known-ids id)
+                                  id)))))))
 
   (registerNewChunk [this chunk-idx]
     (when chunk-kd-tree
@@ -304,7 +310,7 @@
            ^ObjectStore object-store
            ^IBufferPool buffer-pool
            ^IMetadataManager metadata-manager]}]
-  (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) nil nil)
+  (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0) nil nil)
     (.populateKnownChunks)))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
