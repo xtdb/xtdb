@@ -41,7 +41,7 @@
             (t/->primitive-dense-union-field "min")
             (t/->primitive-dense-union-field "max")
             (t/->field "count" (.getType Types$MinorType/BIGINT) false)
-            (t/->field "bloom" (ArrowType$FixedSizeList. (bit-shift-left 1 10)) false
+            (t/->field "bloom" (ArrowType$FixedSizeList. bloom/bloom-bits) false
                        (t/->field "bloom-bits" (.getType Types$MinorType/BIT) false))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
