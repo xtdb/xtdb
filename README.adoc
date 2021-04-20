@@ -7,6 +7,7 @@
 - `(go)`
 - `node` is then bound to a started node, using `data/dev-node` as a persistent data directory
 - `lein test` to run unit tests, `lein test :integration` to run integration tests
+- To attach YourKit, `lein run with-profile +attach-yourkit repl :headless` (assumes YourKit in `/opt/yourkit` as installed by the AUR)
 
 == Differences to Classic
 

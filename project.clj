@@ -48,7 +48,9 @@
                      :test-paths ["modules/kafka/test"]
                      :dependencies [[org.apache.kafka/kafka-clients "2.7.0"]]}
 
-             :modules [:s3 :kafka]}
+             :modules [:s3 :kafka]
+
+             :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}
 
   :aliases {"jmh" ["trampoline" "run"
                    "-m" "org.openjdk.jmh.Main"
