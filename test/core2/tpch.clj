@@ -1,16 +1,11 @@
 (ns core2.tpch
   (:require [clojure.instant :as inst]
-            [clojure.java.io :as io]
             [clojure.string :as str]
-            [clojure.test :as t]
             [clojure.tools.logging :as log]
-            [core2.core :as c2]
-            [core2.json :as c2-json]
-            [core2.test-util :as tu]
-            [core2.util :as util])
+            [core2.core :as c2])
   (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable]
-           [java.nio.file Files LinkOption]
-           [java.time Clock Duration ZoneId]))
+           java.util.Date
+           [java.time Instant Period]))
 
 (def table->pkey
   {"part" [:p_partkey]
@@ -35,7 +30,7 @@
                       TpchColumnType$Base/DOUBLE
                       (.getDouble c b)
                       TpchColumnType$Base/DATE
-                      (inst/read-instant-date (GenerateUtils/formatDate (.getDate c b))))])
+                      (Date/from (.plus Instant/EPOCH (Period/ofDays (.getDate c b)))))])
                  (into {}))
         table-name (.getTableName t)
         pkey-columns (get table->pkey table-name)
