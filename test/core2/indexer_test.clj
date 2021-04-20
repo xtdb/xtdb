@@ -108,11 +108,12 @@
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
 
         (t/testing "temporal"
-          (t/is (= {(Text. "device-info-demo000000") 1
-                    (Text. "reading-demo000000") 2
-                    (Text. "device-info-demo000001") 3
-                    (Text. "reading-demo000001") 4}
+          (t/is (= {(Text. "device-info-demo000000") -4962768465676381896
+                    (Text. "reading-demo000000") 4437113781045784766
+                    (Text. "device-info-demo000001") -6688467811848818630
+                    (Text. "reading-demo000001") -8292973307042192125}
                    (.id->internal-id tm)))
+          (prn (.id->internal-id tm))
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
