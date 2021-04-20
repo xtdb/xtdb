@@ -68,92 +68,6 @@
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
   (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
 
-(deftype DoubleFunctionSpec [^String from-name ^Field field ^Supplier supplier ^ObjDoubleConsumer accumulator ^Function finisher]
-  AggregateSpec
-  (getToField [_ in-root]
-    field)
-
-  (getFromVector [_ in-root]
-    (.getVector in-root from-name))
-
-  (aggregate [this in-root container idx-bitmap]
-    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
-          acc (if (some? container)
-                container
-                (.get supplier))
-          consumer (cond
-                     (instance? BaseIntVector from-vec)
-                     (let [^BaseIntVector from-vec from-vec]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept accumulator acc (.getValueAsLong from-vec idx)))))
-
-                     (instance? FloatingPointVector from-vec)
-                     (let [^FloatingPointVector from-vec from-vec]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept accumulator acc (.getValueAsDouble from-vec idx)))))
-
-                     :else
-                     (reify IntConsumer
-                       (accept [_ idx]
-                         (.accept accumulator acc (.getObject from-vec idx)))))]
-      (.forEach ^IntStream (.stream idx-bitmap) consumer)
-      acc))
-
-  (finish [_ container]
-    (finish-maybe-optional finisher container)))
-
-(defn ->double-function-spec ^core2.operator.group_by.AggregateSpec [^String from-name
-                                                                     ^String to-name
-                                                                     ^Supplier supplier
-                                                                     ^ObjDoubleConsumer accumulator
-                                                                     ^Function finisher]
-  (DoubleFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
-
-(deftype LongFunctionSpec [^String from-name ^Field field ^Supplier supplier ^ObjLongConsumer accumulator ^Function finisher]
-  AggregateSpec
-  (getToField [_ in-root]
-    field)
-
-  (getFromVector [_ in-root]
-    (.getVector in-root from-name))
-
-  (aggregate [this in-root container idx-bitmap]
-    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
-          acc (if (some? container)
-                container
-                (.get supplier))
-          consumer (cond
-                     (instance? BaseIntVector from-vec)
-                     (let [^BaseIntVector from-vec from-vec]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept accumulator acc (.getValueAsLong from-vec idx)))))
-
-                     (instance? FloatingPointVector from-vec)
-                     (let [^FloatingPointVector from-vec from-vec]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept accumulator acc (.getValueAsDouble from-vec idx)))))
-
-                     :else
-                     (reify IntConsumer
-                       (accept [_ idx]
-                         (.accept accumulator acc (.getObject from-vec idx)))))]
-      (.forEach ^IntStream (.stream idx-bitmap) consumer)
-      acc))
-
-  (finish [_ container]
-    (finish-maybe-optional finisher container)))
-
-(defn ->long-function-spec ^core2.operator.group_by.AggregateSpec [^String from-name
-                                                                   ^String to-name
-                                                                   ^Supplier supplier
-                                                                   ^ObjLongConsumer accumulator
-                                                                   ^Function finisher]
-  (LongFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
-
 (deftype NumberFunctionSpec [^String from-name
                              ^Field field
                              ^Supplier supplier
@@ -203,44 +117,6 @@
                                                                      accumulator
                                                                      ^Function finisher]
   (NumberFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
-
-(def long-summary-supplier (reify Supplier
-                             (get [_]
-                               (LongSummaryStatistics.))))
-(def long-summary-accumulator (reify ObjLongConsumer
-                                (accept [_ acc x]
-                                  (.accept ^LongSummaryStatistics acc x))))
-(def long-sum-finisher (reify Function
-                         (apply [_ acc]
-                           (.getSum ^LongSummaryStatistics acc))))
-(def long-avg-finisher (reify Function
-                         (apply [_ acc]
-                           (.getAverage ^LongSummaryStatistics acc))))
-(def long-min-finisher (reify Function
-                         (apply [_ acc]
-                           (.getMin ^LongSummaryStatistics acc))))
-(def long-max-finisher (reify Function
-                         (apply [_ acc]
-                           (.getMax ^LongSummaryStatistics acc))))
-
-(def double-summary-supplier (reify Supplier
-                               (get [_]
-                                 (DoubleSummaryStatistics.))))
-(def double-summary-accumulator (reify ObjDoubleConsumer
-                                  (accept [_ acc x]
-                                    (.accept ^DoubleSummaryStatistics acc x))))
-(def double-sum-finisher (reify Function
-                           (apply [_ acc]
-                             (.getSum ^DoubleSummaryStatistics acc))))
-(def double-avg-finisher (reify Function
-                           (apply [_ acc]
-                             (.getAverage ^DoubleSummaryStatistics acc))))
-(def double-min-finisher (reify Function
-                           (apply [_ acc]
-                             (.getMin ^DoubleSummaryStatistics acc))))
-(def double-max-finisher (reify Function
-                           (apply [_ acc]
-                             (.getMax ^DoubleSummaryStatistics acc))))
 
 (deftype NumberSummaryStatistics [^LongSummaryStatistics long-summary
                                   ^DoubleSummaryStatistics double-summary])
@@ -300,54 +176,6 @@
                                    (.getMax long-summary))
                                  (max (.getMax ^LongSummaryStatistics long-summary)
                                       (.getMax ^DoubleSummaryStatistics double-summary)))))))
-
-(defn ->avg-long-spec [^String from-name ^String to-name]
-  (->long-function-spec from-name to-name
-                        long-summary-supplier
-                        long-summary-accumulator
-                        long-avg-finisher))
-
-(defn ->sum-long-spec [^String from-name ^String to-name]
-  (->long-function-spec from-name to-name
-                        long-summary-supplier
-                        long-summary-accumulator
-                        long-sum-finisher))
-
-(defn ->min-long-spec [^String from-name ^String to-name]
-  (->long-function-spec from-name to-name
-                        long-summary-supplier
-                        long-summary-accumulator
-                        long-min-finisher))
-
-(defn ->max-long-spec [^String from-name ^String to-name]
-  (->long-function-spec from-name to-name
-                        long-summary-supplier
-                        long-summary-accumulator
-                        long-max-finisher))
-
-(defn ->avg-double-spec [^String from-name ^String to-name]
-  (->double-function-spec from-name to-name
-                          double-summary-supplier
-                          double-summary-accumulator
-                          double-avg-finisher))
-
-(defn ->sum-double-spec [^String from-name ^String to-name]
-  (->double-function-spec from-name to-name
-                          double-summary-supplier
-                          double-summary-accumulator
-                          double-sum-finisher))
-
-(defn ->min-double-spec [^String from-name ^String to-name]
-  (->double-function-spec from-name to-name
-                          double-summary-supplier
-                          double-summary-accumulator
-                          double-min-finisher))
-
-(defn ->max-double-spec [^String from-name ^String to-name]
-  (->double-function-spec from-name to-name
-                          double-summary-supplier
-                          double-summary-accumulator
-                          double-max-finisher))
 
 (defn ->avg-number-spec [^String from-name ^String to-name]
   (->number-function-spec from-name to-name
