@@ -84,7 +84,7 @@ Two main extension points:
        - create uberjar
      - TODO Full TPC-H
      - Check queries too slow, possible solutions
-       - Bloom filters
+       - DONE Bloom filters
        - Block-level metadata
        - Predicate push-down
      - Check cold caches, possible solutions:
