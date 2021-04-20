@@ -78,6 +78,6 @@
 
       help (println help)
 
-      :else (with-open [_node (c2/start-node (doto node-opts prn))]
+      :else (with-open [_node (c2/start-node node-opts)]
               (log/info "Node started")
               @(shutdown-hook-promise)))))
