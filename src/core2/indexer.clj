@@ -342,7 +342,7 @@
                              :metadata-mgr :core2/metadata-manager
                              :temporal-mgr :core2/temporal-manager}
                  ::sys/args {:max-rows-per-block {:spec ::sys/pos-int, :default 1000}
-                             :max-rows-per-chunk {:spec ::sys/pos-int, :default 10000}}}
+                             :max-rows-per-chunk {:spec ::sys/pos-int, :default 100000}}}
   [{:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
            max-rows-per-chunk max-rows-per-block]}]
   (let [[latest-row-id latest-tx] @(meta/with-latest-metadata metadata-mgr
