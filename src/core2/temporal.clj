@@ -123,7 +123,6 @@
 
 (definterface ITemporalManager
   (^Object getTemporalWatermark [])
-  (^long getInternalId [^Object id])
   (^void registerNewChunk [^long chunk-idx])
   (^void updateTemporalCoordinates [^java.util.SortedMap row-id->temporal-coordinates])
   (^core2.temporal.TemporalRoots createTemporalRoots [^core2.tx.Watermark watermark
@@ -133,6 +132,7 @@
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (definterface TemporalManangerPrivate
+  (^long getOrCreateInternalId [^Object id])
   (^void populateKnownChunks []))
 
 (def ^:private temporal-columns
@@ -203,14 +203,10 @@
                                  (let [^VectorSchemaRoot id-root id-root
                                        id-vec (.getVector id-root 1)]
                                    (dotimes [n (.getValueCount id-vec)]
-                                     (.getInternalId this (.getObject id-vec n)))))))))
+                                     (.getOrCreateInternalId this (.getObject id-vec n)))))))))
       (set! (.kd-tree this) @acc)))
 
-  ITemporalManager
-  (getTemporalWatermark [_]
-    (some->> kd-tree (kd/retain-node-kd-tree allocator)))
-
-  (getInternalId [_ id]
+  (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
                       (if (bytes? id)
                         (ByteBuffer/wrap id)
@@ -222,6 +218,10 @@
                               (recur (.nextLong rng))
                               (do (.addLong known-ids id)
                                   id)))))))
+
+  ITemporalManager
+  (getTemporalWatermark [_]
+    (some->> kd-tree (kd/retain-node-kd-tree allocator)))
 
   (registerNewChunk [this chunk-idx]
     (when chunk-kd-tree
@@ -238,7 +238,7 @@
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
                            (applyAsLong [_ id]
-                             (.getInternalId this id)))
+                             (.getOrCreateInternalId this id)))
           update-kd-tree-fn (fn [kd-tree]
                               (reduce
                                (fn [kd-tree coordinates]
