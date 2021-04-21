@@ -32,7 +32,7 @@
         (tu/check-json-file expected-path actual-path)))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
-  (test-tpch-ingest 0.01 225))
+  (test-tpch-ingest 0.01 67))
 
 (t/deftest can-submit-tpch-docs-0.001
   (test-tpch-ingest 0.001 67))

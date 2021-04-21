@@ -16,7 +16,7 @@
 ;; 10000     17           0.0085
 ;; 100000    20           0.0154
 
-(def ^:const ^:private default-bloom-bits (bit-shift-left 1 17))
+(def ^:const ^:private default-bloom-bits (bit-shift-left 1 20))
 
 (defn- init-bloom-bits ^long []
   (let [bloom-bits (Long/getLong "core2.bloom.bits" default-bloom-bits)]
