@@ -1,11 +1,13 @@
 (ns core2.metadata
-  (:require core2.buffer-pool
+  (:require [core2.bloom :as bloom]
+            core2.buffer-pool
             [core2.expression :as expr]
+            [core2.expression.metadata :as expr.meta]
+            core2.object-store
             [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.bloom :as bloom])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
@@ -16,8 +18,8 @@
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            java.util.function.Consumer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector]
+           [org.apache.arrow.vector BigIntVector FieldVector TinyIntVector VarCharVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.holders NullableBigIntHolder NullableTimeStampMilliHolder ValueHolder]
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Schema]
@@ -132,16 +134,16 @@
   (t/read-duv-value (.getVector metadata-root "max") idx out-holder))
 
 (defn latest-tx [^VectorSchemaRoot metadata-root]
-  (let [tx-id-idx (expr/metadata-field-idx metadata-root
-                                           '_tx-id '_tx-id
-                                           (-> (t/primitive-type->arrow-type :bigint)
-                                               (t/arrow-type->type-id)))
+  (let [tx-id-idx (expr.meta/metadata-field-idx metadata-root
+                                                '_tx-id '_tx-id
+                                                (-> (t/primitive-type->arrow-type :bigint)
+                                                    (t/arrow-type->type-id)))
         tx-id-holder (NullableBigIntHolder.)
 
-        tx-time-idx (expr/metadata-field-idx metadata-root
-                                             '_tx-time '_tx-time
-                                             (-> (t/primitive-type->arrow-type :timestampmilli)
-                                                 (t/arrow-type->type-id)))
+        tx-time-idx (expr.meta/metadata-field-idx metadata-root
+                                                  '_tx-time '_tx-time
+                                                  (-> (t/primitive-type->arrow-type :timestampmilli)
+                                                      (t/arrow-type->type-id)))
         tx-time-holder (NullableTimeStampMilliHolder.)]
 
     (read-max-value metadata-root tx-id-idx tx-id-holder)
@@ -150,8 +152,10 @@
     (tx/->TransactionInstant (.value tx-id-holder) (Date. (.value tx-time-holder)))))
 
 (defn latest-row-id [^VectorSchemaRoot metadata-root]
-  (let [row-id-idx (expr/metadata-field-idx metadata-root '_tx-id '_row-id (-> (t/primitive-type->arrow-type :bigint)
-                                                                               (t/arrow-type->type-id)))
+  (let [row-id-idx (expr.meta/metadata-field-idx metadata-root
+                                                 '_tx-id '_row-id
+                                                 (-> (t/primitive-type->arrow-type :bigint)
+                                                     (t/arrow-type->type-id)))
         row-id-holder (NullableBigIntHolder.)]
     (read-max-value metadata-root row-id-idx row-id-holder)
     (.value row-id-holder)))

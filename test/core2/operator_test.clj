@@ -4,7 +4,8 @@
             [core2.expression :as expr]
             [core2.metadata :as meta]
             [core2.test-util :as tu]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.expression.metadata :as expr.meta])
   (:import core2.metadata.IMetadataManager
            org.apache.arrow.vector.util.Text))
 
@@ -25,7 +26,7 @@
 
       (tu/finish-chunk node)
 
-      (let [metadata-pred (expr/->metadata-selector (expr/form->expr '(> name "Ivan")))]
+      (let [metadata-pred (expr.meta/->metadata-selector (expr/form->expr '(> name "Ivan")))]
         (letfn [(query-ivan [watermark]
                   (with-open [res (c2/open-q node watermark
                                              '[:scan [{name (> name "Ivan")}]])]
@@ -64,7 +65,7 @@
            (tu/then-await-tx node))
 
       (tu/finish-chunk node)
-      (let [metadata-pred (expr/->metadata-selector (expr/form->expr '(= name "Ivan")))]
+      (let [metadata-pred (expr.meta/->metadata-selector (expr/form->expr '(= name "Ivan")))]
         (letfn [(query-ivan [watermark]
                   (with-open [res (c2/open-q node watermark
                                              '[:scan [{name (= name "Ivan")}]])]

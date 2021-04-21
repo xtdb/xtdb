@@ -5,7 +5,8 @@
             [core2.operator.group-by :as group-by]
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.expression.metadata :as expr.meta])
   (:import clojure.lang.MapEntry
            core2.operator.IOperatorFactory
            [core2.operator.set ICursorFactory IFixpointCursorFactory]))
@@ -192,7 +193,7 @@
                                 :when (not (contains? selects col-name))]
                             {:op :variable :variable (symbol col-name)})
                           (vals selects)))
-        metadata-pred (expr/->metadata-selector {:op :call, :f 'and, :args args})]
+        metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args})]
 
     (fn [^IOperatorFactory op-factory watermark]
       (.scan op-factory watermark col-names metadata-pred col-preds nil nil))))
