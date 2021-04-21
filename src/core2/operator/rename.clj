@@ -1,5 +1,8 @@
 (ns core2.operator.rename
-  (:require [core2.util :as util])
+  (:require [clojure.set :as set]
+            [clojure.string :as str]
+            [core2.operator.scan :as scan]
+            [core2.util :as util])
   (:import core2.ICursor
            java.util.Map
            java.util.function.Consumer
@@ -19,25 +22,32 @@
     (when out-root
       (.close out-root))
 
-    (if (.tryAdvance in-cursor
-                     (reify Consumer
-                       (accept [_ in-root]
-                         (let [^VectorSchemaRoot in-root in-root
-                               ^Iterable out-vecs (for [^Field field (.getFields (.getSchema in-root))
-                                                        :let [in-vec (.getVector in-root field)
-                                                              field-name (.getName field)
-                                                              new-field-name (get rename-map field-name field-name)
-                                                              new-field-name (if prefix
-                                                                               (str prefix relation-prefix-delimiter new-field-name)
-                                                                               new-field-name)]]
-                                                    (-> (.getTransferPair in-vec new-field-name allocator)
-                                                        (doto (.splitAndTransfer 0 (.getValueCount in-vec)))
-                                                        (.getTo)))]
-                           (set! (.out-root this) (VectorSchemaRoot. out-vecs))))))
-      (do
-        (.accept c out-root)
-        true)
-      false))
+    (binding [scan/*column->pushdown-bloom* (let [prefix-pattern (re-pattern (str "^" prefix relation-prefix-delimiter))
+                                                  invert-rename-map (set/map-invert rename-map)]
+                                              (->> (for [[k v] scan/*column->pushdown-bloom*
+                                                         :let [k (str/replace k prefix-pattern "")
+                                                               new-field-name (get invert-rename-map k k)]]
+                                                     [new-field-name v])
+                                                   (into {})))]
+      (if (.tryAdvance in-cursor
+                       (reify Consumer
+                         (accept [_ in-root]
+                           (let [^VectorSchemaRoot in-root in-root
+                                 ^Iterable out-vecs (for [^Field field (.getFields (.getSchema in-root))
+                                                          :let [in-vec (.getVector in-root field)
+                                                                field-name (.getName field)
+                                                                new-field-name (get rename-map field-name field-name)
+                                                                new-field-name (if prefix
+                                                                                 (str prefix relation-prefix-delimiter new-field-name)
+                                                                                 new-field-name)]]
+                                                      (-> (.getTransferPair in-vec new-field-name allocator)
+                                                          (doto (.splitAndTransfer 0 (.getValueCount in-vec)))
+                                                          (.getTo)))]
+                             (set! (.out-root this) (VectorSchemaRoot. out-vecs))))))
+        (do
+          (.accept c out-root)
+          true)
+        false)))
 
   (close [_]
     (util/try-close out-root)

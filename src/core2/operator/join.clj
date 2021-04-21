@@ -1,5 +1,7 @@
 (ns core2.operator.join
-  (:require [core2.util :as util])
+  (:require [core2.bloom :as bloom]
+            [core2.operator.scan :as scan]
+            [core2.util :as util])
   (:import core2.ICursor
            [java.util ArrayList HashMap List Map NavigableMap TreeMap]
            [java.util.function Consumer Function]
@@ -8,7 +10,8 @@
            [org.apache.arrow.vector BigIntVector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types.pojo Field Schema]
-           org.apache.arrow.vector.util.VectorBatchAppender))
+           org.apache.arrow.vector.util.VectorBatchAppender
+           org.roaringbitmap.buffer.MutableRoaringBitmap))
 
 (defn- ->join-schema
   (^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
@@ -92,7 +95,8 @@
                     ^VectorSchemaRoot build-root
                     ^NavigableMap build-idx->root
                     ^Map join-key->build-idxs
-                    ^String build-column-name]
+                    ^String build-column-name
+                    ^MutableRoaringBitmap pushdown-bloom]
   (let [^VectorSchemaRoot build-root (util/slice-root build-root 0)
         build-root-idx  (if-let [build-idx-entry (.lastEntry build-idx->root)]
                           (+ (long (.getKey build-idx-entry))
@@ -101,6 +105,7 @@
     (.put build-idx->root build-root-idx build-root)
     (let [build-vec (util/maybe-single-child-dense-union (.getVector build-root build-column-name))]
       (dotimes [build-idx (.getValueCount build-vec)]
+        (.add pushdown-bloom ^ints (bloom/bloom-hashes build-vec build-idx))
         (let [^BigIntVector build-idxs-vec (.computeIfAbsent join-key->build-idxs
                                                              (.hashCode build-vec build-idx)
                                                              (reify Function
@@ -180,6 +185,7 @@
                      ^String probe-column-name
                      ^Map join-key->build-idx-pairs
                      ^NavigableMap build-idx->root
+                     ^MutableRoaringBitmap pushdown-bloom
                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      semi-join?
                      anti-join?
@@ -194,17 +200,20 @@
     (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ in-root]
-                           (build-phase allocator in-root build-idx->root join-key->build-idx-pairs build-column-name))))
+                           (build-phase allocator in-root build-idx->root join-key->build-idx-pairs build-column-name pushdown-bloom))))
 
     (while (and (or (not (.isEmpty build-idx->root)) anti-join?)
                 (nil? out-root)
-                (.tryAdvance probe-cursor
-                             (reify Consumer
-                               (accept [_ in-root]
-                                 (when-let [out-root (probe-phase allocator in-root build-idx->root join-key->build-idx-pairs
-                                                                  build-column-name probe-column-name semi-join? anti-join? skip-build-column?)]
-                                   (when (pos? (.getRowCount out-root))
-                                     (set! (.out-root this) out-root))))))))
+                (binding [scan/*column->pushdown-bloom* (if anti-join?
+                                                          scan/*column->pushdown-bloom*
+                                                          (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
+                  (.tryAdvance probe-cursor
+                               (reify Consumer
+                                 (accept [_ in-root]
+                                   (when-let [out-root (probe-phase allocator in-root build-idx->root join-key->build-idx-pairs
+                                                                    build-column-name probe-column-name semi-join? anti-join? skip-build-column?)]
+                                     (when (pos? (.getRowCount out-root))
+                                       (set! (.out-root this) out-root)))))))))
 
     (if out-root
       (do
@@ -217,6 +226,7 @@
     (doseq [root (vals build-idx->root)]
       (util/try-close root))
     (.clear build-idx->root)
+    (.clear pushdown-bloom)
     (doseq [idx-pair (vals join-key->build-idx-pairs)]
       (util/try-close idx-pair))
     (.clear join-key->build-idx-pairs)
@@ -231,18 +241,21 @@
   (let [skip-build-column? (if (= left-column-name right-column-name)
                              #{left-column-name}
                              #{})]
-    (JoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) nil false false skip-build-column?)))
+    (JoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+                 nil false false skip-build-column?)))
 
 (defn ->semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                               ^ICursor left-cursor,
                                               ^String left-column-name,
                                               ^ICursor right-cursor,
                                               ^String right-column-name]
-  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true false #{}))
+  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+               nil true false #{}))
 
 (defn ->anti-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
                                               ^ICursor left-cursor,
                                               ^String left-column-name,
                                               ^ICursor right-cursor,
                                               ^String right-column-name]
-  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) nil true true #{}))
+  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+               nil true true #{}))

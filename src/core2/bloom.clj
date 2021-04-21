@@ -24,7 +24,7 @@
     bloom-bits))
 
 (def ^:const bloom-bits (init-bloom-bits))
-(def ^:private ^:const bloom-bit-mask (dec bloom-bits))
+(def ^:const bloom-bit-mask (dec bloom-bits))
 (def ^:const bloom-k 3)
 
 (defn bloom-false-positive-probability?
@@ -53,25 +53,28 @@
 
 ;; Cassandra-style hashes:
 ;; https://www.researchgate.net/publication/220770131_Less_Hashing_Same_Performance_Building_a_Better_Bloom_Filter
-(defn bloom-hashes ^ints [^ValueVector vec ^long idx ^long k ^long mask]
-  (let [hash-1 (.hashCode vec idx initial-murmur-hasher)
-        hash-2 (.hashCode vec idx (MurmurHasher. hash-1))
-        acc (int-array k)]
-    (dotimes [n k]
-      (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))
-    acc))
+(defn bloom-hashes
+  (^ints [^ValueVector vec ^long idx]
+   (bloom-hashes vec idx bloom-k bloom-bit-mask))
+  (^ints [^ValueVector vec ^long idx ^long k ^long mask]
+   (let [hash-1 (.hashCode vec idx initial-murmur-hasher)
+         hash-2 (.hashCode vec idx (MurmurHasher. hash-1))
+         acc (int-array k)]
+     (dotimes [n k]
+       (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))
+     acc)))
 
 (defn literal-hashes ^ints [^BufferAllocator allocator literal]
   (let [arrow-type (types/->arrow-type (class literal))
         minor-type (Types/getMinorTypeForArrowType arrow-type)]
     (with-open [^ValueVector vec (.getNewVector minor-type (types/->field "_" arrow-type false) allocator nil)]
       (types/set-safe! vec 0 literal)
-      (bloom-hashes vec 0 bloom-k bloom-bit-mask))))
+      (bloom-hashes vec 0))))
 
 (defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^ValueVector field-vec]
   (let [bloom (RoaringBitmap.)]
     (dotimes [in-idx (.getValueCount field-vec)]
-      (let [^ints el-hashes (bloom-hashes field-vec in-idx bloom-k bloom-bit-mask)]
+      (let [^ints el-hashes (bloom-hashes field-vec in-idx)]
         (.add bloom el-hashes)))
     (let [ba (byte-array (.serializedSizeInBytes bloom))]
       (.serialize bloom (ByteBuffer/wrap ba))
