@@ -10,15 +10,28 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-;; TODO: this is way too low, needs to be 16-17 Assumes n = 10000
-;; (max-rows-per-chunk) false-positive is then: 0.008561966 (for 17)
+;; max-rows  bloom-bits  false-positive
+;; 1000      13           0.0288
+;; 10000     16           0.0495
+;; 10000     17           0.0085
+;; 100000    20           0.0154
 
-(def ^:const bloom-bits (bit-shift-left 1 10))
-(def ^:const bit-mask (dec bloom-bits))
+(def ^:const ^:private default-bloom-bits (bit-shift-left 1 17))
+
+(defn- init-bloom-bits ^long []
+  (let [bloom-bits (Long/getLong "core2.bloom.bits" default-bloom-bits)]
+    (assert (= 1 (Long/bitCount bloom-bits)))
+    bloom-bits))
+
+(def ^:const bloom-bits (init-bloom-bits))
+(def ^:private ^:const bloom-bit-mask (dec bloom-bits))
 (def ^:const bloom-k 3)
 
-(defn bloom-false-positive-probability? ^double [^long n ^long k ^long m]
-  (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k))
+(defn bloom-false-positive-probability?
+  (^double [^long n]
+   (bloom-false-positive-probability? n bloom-k bloom-bits))
+  (^double [^long n ^long k ^long m]
+   (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k)))
 
 (defn bloom->bitmap ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^VarBinaryVector bloom-vec ^long idx]
   (let [pointer (.getDataPointer bloom-vec idx)
@@ -48,17 +61,17 @@
       (aset acc n (unchecked-int (bit-and mask (+ hash-1 (* hash-2 n))))))
     acc))
 
-(defn literal-hashes [^BufferAllocator allocator literal]
+(defn literal-hashes ^ints [^BufferAllocator allocator literal]
   (let [arrow-type (types/->arrow-type (class literal))
         minor-type (Types/getMinorTypeForArrowType arrow-type)]
     (with-open [^ValueVector vec (.getNewVector minor-type (types/->field "_" arrow-type false) allocator nil)]
       (types/set-safe! vec 0 literal)
-      (bloom-hashes vec 0 bloom-k bit-mask))))
+      (bloom-hashes vec 0 bloom-k bloom-bit-mask))))
 
 (defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^ValueVector field-vec]
   (let [bloom (RoaringBitmap.)]
     (dotimes [in-idx (.getValueCount field-vec)]
-      (let [^ints el-hashes (bloom-hashes field-vec in-idx bloom-k bit-mask)]
+      (let [^ints el-hashes (bloom-hashes field-vec in-idx bloom-k bloom-bit-mask)]
         (.add bloom el-hashes)))
     (let [ba (byte-array (.serializedSizeInBytes bloom))]
       (.serialize bloom (ByteBuffer/wrap ba))

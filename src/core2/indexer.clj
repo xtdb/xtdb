@@ -1,5 +1,7 @@
 (ns core2.indexer
-  (:require [core2.metadata :as meta]
+  (:require [clojure.tools.logging :as log]
+            [core2.metadata :as meta]
+            [core2.bloom :as bloom]
             core2.temporal
             [core2.tx :as tx]
             [core2.types :as t]
@@ -347,7 +349,13 @@
                                      (juxt meta/latest-row-id meta/latest-tx))
         chunk-idx (if latest-row-id
                     (inc (long latest-row-id))
-                    0)]
+                    0)
+        bloom-false-positive-probability (bloom/bloom-false-positive-probability? max-rows-per-chunk)]
+    (when (> bloom-false-positive-probability 0.05)
+      (log/warn "Bloom should be sized for large chunks:" max-rows-per-chunk
+                "false positive probability:" bloom-false-positive-probability
+                "bits:" bloom/bloom-bits
+                "can be set via system property core2.bloom.bits"))
     (Indexer. allocator
               object-store
               metadata-mgr
