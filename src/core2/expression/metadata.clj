@@ -110,8 +110,12 @@
              (when-let [~(-> expr/idx-sym (vary-meta assoc :tag 'long))
                         (meta/metadata-column-idx ~metadata-root-sym ~field-name)]
                ~(if (= meta-value :bloom-filter)
-                  `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym
-                                          ~(bloom/literal-hashes allocator literal))
+                  `(bloom/bloom-contains? ~(:bloom metadata-vec-syms)
+                                          ~expr/idx-sym
+                                          ~(let [^ints hashes (bloom/literal-hashes allocator literal)]
+                                             `(doto (int-array ~(alength hashes))
+                                                ~@(for [[idx h] (map-indexed vector hashes)]
+                                                    `(aset ~idx ~h)))))
 
                   (let [arrow-type (types/->arrow-type field-type)
                         vec-sym (get metadata-vec-syms meta-value)]
