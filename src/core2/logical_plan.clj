@@ -1,12 +1,12 @@
 (ns core2.logical-plan
   (:require [clojure.spec.alpha :as s]
             [core2.expression :as expr]
+            [core2.expression.metadata :as expr.meta]
             core2.operator
             [core2.operator.group-by :as group-by]
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
-            [core2.util :as util]
-            [core2.expression.metadata :as expr.meta])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.operator.IOperatorFactory
            [core2.operator.set ICursorFactory IFixpointCursorFactory]))

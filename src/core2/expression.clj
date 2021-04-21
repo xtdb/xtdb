@@ -1,6 +1,5 @@
 (ns core2.expression
-  (:require [core2.bloom :as bloom]
-            core2.operator.project
+  (:require core2.operator.project
             [core2.types :as types]
             [core2.util :as util])
   (:import core2.operator.project.ProjectionSpec
@@ -8,10 +7,8 @@
            java.lang.reflect.Method
            java.time.LocalDateTime
            java.util.Date
-           org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector]
-           org.apache.arrow.vector.types.Types$MinorType
+           [org.apache.arrow.vector BitVector ValueVector VarCharVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
 

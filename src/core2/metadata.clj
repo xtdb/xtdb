@@ -1,7 +1,6 @@
 (ns core2.metadata
   (:require [core2.bloom :as bloom]
             core2.buffer-pool
-            [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
             core2.object-store
             [core2.system :as sys]
