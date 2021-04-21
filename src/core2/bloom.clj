@@ -2,9 +2,11 @@
   (:require [core2.types :as types])
   (:import org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.hash.MurmurHasher
-           [org.apache.arrow.vector BitVector FieldVector ValueVector]
-           [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
-           org.apache.arrow.vector.types.Types))
+           [org.apache.arrow.vector BitVector FieldVector ValueVector VarBinaryVector]
+           org.apache.arrow.vector.types.Types
+           java.nio.ByteBuffer
+           org.roaringbitmap.RoaringBitmap
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -18,16 +20,19 @@
 (defn bloom-false-positive-probability? ^double [^long n ^long k ^long m]
   (Math/pow (- 1 (Math/exp (/ (- k) (double (/ m n))))) k))
 
+(defn bloom->bitmap ^org.roaringbitmap.buffer.ImmutableRoaringBitmap [^VarBinaryVector bloom-vec ^long idx]
+  (let [pointer (.getDataPointer bloom-vec idx)
+        nio-buffer (.nioBuffer (.getBuf pointer) (.getOffset pointer) (.getLength pointer))]
+    (ImmutableRoaringBitmap. nio-buffer)))
 
-(defn bloom-contains? [^FixedSizeListVector bloom-vec
+(defn bloom-contains? [^VarBinaryVector bloom-vec
                        ^long idx
                        ^ints hashes]
-  (let [^BitVector bit-vec (.getDataVector bloom-vec)
-        bit-idx (.getElementStartIndex bloom-vec idx)]
+  (let [^ImmutableRoaringBitmap bloom (bloom->bitmap bloom-vec idx)]
     (loop [n 0]
       (if (= n (alength hashes))
         true
-        (if (pos? (.get bit-vec (+ bit-idx (aget hashes n))))
+        (if (.contains bloom (aget hashes n))
           (recur (inc n))
           false)))))
 
@@ -50,10 +55,11 @@
       (types/set-safe! vec 0 literal)
       (bloom-hashes vec 0 bloom-k bit-mask))))
 
-(defn write-bloom [^FixedSizeListVector bloom-vec, meta-idx, ^ValueVector field-vec]
-  (let [^BitVector bit-vec (.getDataVector bloom-vec)
-        bit-idx (.startNewValue bloom-vec meta-idx)]
+(defn write-bloom [^VarBinaryVector bloom-vec, ^long meta-idx, ^ValueVector field-vec]
+  (let [bloom (RoaringBitmap.)]
     (dotimes [in-idx (.getValueCount field-vec)]
       (let [^ints el-hashes (bloom-hashes field-vec in-idx bloom-k bit-mask)]
-        (dotimes [m (alength el-hashes)]
-          (.setSafeToOne bit-vec (+ bit-idx (aget el-hashes m))))))))
+        (.add bloom el-hashes)))
+    (let [ba (byte-array (.serializedSizeInBytes bloom))]
+      (.serialize bloom (ByteBuffer/wrap ba))
+      (.setSafe bloom-vec meta-idx ba))))

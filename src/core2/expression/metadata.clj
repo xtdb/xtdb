@@ -4,8 +4,8 @@
             [core2.metadata :as meta]
             [core2.types :as types])
   (:import org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
-           org.apache.arrow.vector.VectorSchemaRoot))
+           org.apache.arrow.vector.complex.StructVector
+           [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]))
 
 (defn- simplify-and-or-expr [{:keys [f args] :as expr}]
   (let [args (filterv some? args)]
@@ -142,7 +142,7 @@
              ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
              (.getVector ~metadata-root-sym "max")
 
-             ~(-> (:bloom metadata-vec-syms) (expr/with-tag FixedSizeListVector))
+             ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
              (.getVector ~metadata-root-sym "bloom")]
          ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:allocator allocator}) expr))))))
 

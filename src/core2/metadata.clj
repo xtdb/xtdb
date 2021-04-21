@@ -16,10 +16,10 @@
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            java.util.function.Consumer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector FieldVector TimeStampMilliVector VarCharVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector FixedSizeListVector StructVector]
+           [org.apache.arrow.vector BigIntVector FieldVector TimeStampMilliVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$FixedSizeList Schema]
+           [org.apache.arrow.vector.types.pojo ArrowType Schema]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -50,8 +50,7 @@
             (apply t/->field "max"
                    (.getType Types$MinorType/STRUCT) false
                    type-meta-fields)
-            (t/->field "bloom" (ArrowType$FixedSizeList. bloom/bloom-bits) false
-                       (t/->field "bloom-bits" (.getType Types$MinorType/BIT) false))]))
+            (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)]))
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%08x.arrow" chunk-idx))
@@ -95,7 +94,7 @@
 
         ^StructVector min-vec (.getVector metadata-root "min")
         ^StructVector max-vec (.getVector metadata-root "max")
-        ^FixedSizeListVector bloom-vec (.getVector metadata-root "bloom")]
+        ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
 
     (.setRowCount metadata-root col-count)
 
