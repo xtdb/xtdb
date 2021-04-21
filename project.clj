@@ -16,27 +16,31 @@
                  [org.roaringbitmap/RoaringBitmap "0.9.10"]]
 
   :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [org.clojure/tools.namespace "1.1.0"]
-                                  [integrant "0.8.0"]
-                                  [integrant/repl "0.3.1"]
 
-                                  [org.clojure/test.check "0.10.0"]
-                                  [io.airlift.tpch/tpch "0.10"]
-                                  [org.clojure/data.csv "1.0.0"]
-                                  [org.openjdk.jmh/jmh-core "1.27"]
-                                  [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
-                                  [cheshire "5.10.0"]]
-                   :repl-options {:init-ns user}
-                   :source-paths ["dev"]
-                   :java-source-paths ["src" "jmh"]
-                   :resource-paths ["test-resources" "data"]
-                   :test-selectors {:default (complement (some-fn :integration :kafka))
-                                    :integration :integration
-                                    :kafka :kafka}}
+             :dev [:tpch :s3 :kafka
+                   {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
+                                   [org.clojure/tools.namespace "1.1.0"]
+                                   [integrant "0.8.0"]
+                                   [integrant/repl "0.3.1"]
+
+                                   [org.clojure/test.check "0.10.0"]
+                                   [org.clojure/data.csv "1.0.0"]
+                                   [org.openjdk.jmh/jmh-core "1.27"]
+                                   [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
+                                   [cheshire "5.10.0"]]
+                    :repl-options {:init-ns user}
+                    :source-paths ["dev"]
+                    :java-source-paths ["src" "jmh"]
+                    :resource-paths ["test-resources" "data"]
+                    :test-selectors {:default (complement (some-fn :integration :kafka))
+                                     :integration :integration
+                                     :kafka :kafka}}]
 
              ;; TODO debate best way to multi-module this
              ;; for now, I just want to ensure they're sufficiently isolated
+             :tpch {:source-paths ["modules/tpch/src"]
+                    :dependencies [[io.airlift.tpch/tpch "0.10"]]}
+
              :s3 {:source-paths ["modules/s3/src"]
                   :java-source-paths ["modules/s3/src"]
                   :test-paths ["modules/s3/test"]
@@ -45,8 +49,6 @@
              :kafka {:source-paths ["modules/kafka/src"]
                      :test-paths ["modules/kafka/test"]
                      :dependencies [[org.apache.kafka/kafka-clients "2.7.0"]]}
-
-             :modules [:s3 :kafka]
 
              :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}
 
