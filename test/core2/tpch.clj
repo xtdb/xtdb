@@ -56,14 +56,14 @@
    (log/debug "Transacting TPC-H tables...")
    (->> (TpchTable/getTables)
         (reduce (fn [_last-tx ^TpchTable t]
-                  (let [[last-tx doc-count] (->> (tpch-table->docs t scale-factor)
-                                                 (partition-all 1000)
-                                                 (reduce (fn [[_last-tx last-doc-count] batch]
-                                                           [@(c2/submit-tx tx-producer
+                  (let [[!last-tx doc-count] (->> (tpch-table->docs t scale-factor)
+                                                  (partition-all 1000)
+                                                  (reduce (fn [[_!last-tx last-doc-count] batch]
+                                                            [(c2/submit-tx tx-producer
                                                                            (vec (for [doc batch]
                                                                                   {:op :put, :doc doc})))
-                                                            (+ last-doc-count (count batch))])
-                                                         [nil 0]))]
+                                                             (+ last-doc-count (count batch))])
+                                                          [nil 0]))]
                     (log/debug "Transacted" doc-count (.getTableName t))
-                    last-tx))
+                    @!last-tx))
                 nil))))
