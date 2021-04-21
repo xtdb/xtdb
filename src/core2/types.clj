@@ -24,6 +24,28 @@
    Date (.getType Types$MinorType/TIMESTAMPMILLI)
    LocalDateTime (.getType Types$MinorType/TIMESTAMPMILLI)})
 
+(def ^:private byte-array-class (Class/forName "[B"))
+
+(def arrow-type->vector-type
+  {(.getType Types$MinorType/NULL) NullVector
+   (.getType Types$MinorType/BIGINT) BigIntVector
+   (.getType Types$MinorType/FLOAT8) Float8Vector
+   (.getType Types$MinorType/VARBINARY) VarBinaryVector
+   (.getType Types$MinorType/VARCHAR) VarCharVector
+   (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
+   (.getType Types$MinorType/TINYINT) TinyIntVector
+   (.getType Types$MinorType/BIT) BitVector})
+
+(def arrow-type->java-type
+  {(.getType Types$MinorType/NULL) nil
+   (.getType Types$MinorType/BIGINT) Long
+   (.getType Types$MinorType/FLOAT8) Double
+   (.getType Types$MinorType/VARBINARY) byte-array-class
+   (.getType Types$MinorType/VARCHAR) String
+   (.getType Types$MinorType/TIMESTAMPMILLI) Date
+   (.getType Types$MinorType/TINYINT) Byte
+   (.getType Types$MinorType/BIT) Boolean})
+
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 

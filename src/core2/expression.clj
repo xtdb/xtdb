@@ -104,27 +104,7 @@
                       (map :variable)
                       (distinct)))))
 
-(def ^:private arrow-type->vector-type
-  {(.getType Types$MinorType/NULL) NullVector
-   (.getType Types$MinorType/BIGINT) BigIntVector
-   (.getType Types$MinorType/FLOAT8) Float8Vector
-   (.getType Types$MinorType/VARBINARY) VarBinaryVector
-   (.getType Types$MinorType/VARCHAR) VarCharVector
-   (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
-   (.getType Types$MinorType/TINYINT) TinyIntVector
-   (.getType Types$MinorType/BIT) BitVector})
-
 (def ^:private byte-array-class (Class/forName "[B"))
-
-(def ^:private arrow-type->java-type
-  {(.getType Types$MinorType/NULL) nil
-   (.getType Types$MinorType/BIGINT) Long
-   (.getType Types$MinorType/FLOAT8) Double
-   (.getType Types$MinorType/VARBINARY) byte-array-class
-   (.getType Types$MinorType/VARCHAR) String
-   (.getType Types$MinorType/TIMESTAMPMILLI) Date
-   (.getType Types$MinorType/TINYINT) Byte
-   (.getType Types$MinorType/BIT) Boolean})
 
 (def ^:private type->cast
   {Long 'long
@@ -357,10 +337,10 @@
 
 (defn- generate-code [arrow-types expr expression-type]
   (let [vars (variables expr)
-        var->type (zipmap vars (map #(get arrow-type->java-type % Comparable) arrow-types))
+        var->type (zipmap vars (map #(get types/arrow-type->java-type % Comparable) arrow-types))
         {:keys [code return-type]} (postwalk-expr #(codegen-expr % {:var->type var->type}) expr)
         args (for [[k v] (map vector vars arrow-types)]
-               (-> k (with-tag (get arrow-type->vector-type v DenseUnionVector))))]
+               (-> k (with-tag (get types/arrow-type->vector-type v DenseUnionVector))))]
     (case expression-type
       ::project
       (if (= Comparable return-type)
@@ -372,7 +352,7 @@
                (types/set-safe! (.getVectorByType acc# type-id#) offset# value#)))
            acc#)
         (let [arrow-return-type (types/->arrow-type return-type)
-              ^Class vector-return-type (get arrow-type->vector-type arrow-return-type)
+              ^Class vector-return-type (get types/arrow-type->vector-type arrow-return-type)
               return-type-id (types/arrow-type->type-id arrow-return-type)
               inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))]
           `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
@@ -562,7 +542,7 @@
                                                          ~(types/arrow-type->type-id arrow-type))]
                    (let [~idx-sym (.getOffset ~vec-sym duv-idx#)
 
-                         ~(-> vec-sym (with-tag (arrow-type->vector-type arrow-type)))
+                         ~(-> vec-sym (with-tag (types/arrow-type->vector-type arrow-type)))
                          (.getVectorByType ~vec-sym ~(types/arrow-type->type-id arrow-type))]
                      (when-let [~vl-sym ~(:code (codegen-expr {:op :variable, :variable vec-sym}
                                                               {:var->type {vec-sym field-type}}))]
