@@ -1,0 +1,15 @@
+= Bench
+
+A rudimentary bench adapted from Classic. It currently only runs TPC-H, and only runs it ad-hoc (on Fargate) - it doesn't have any of the daily scheduling.
+
+Dependencies:
+
+- AWS CLI (Arch: `aws-cli` or `aws-cli-v2-bin` from the AUR) + credentials set up
+
+All run through scripts in `./bin`:
+
+- `run-cloudformation.sh` - updates the CloudFormation stack (`./cloudformation/bench.yml`)
+- `ecr-login.sh` - logs you in to ECR so that you can push the Docker image
+- `build-docker.sh` - builds the bench Docker image
+- `push-docker.sh` - pushes the bench Docker image
+- `run-bench.sh --scale-factor 0.01 --count 1` - kicks off an ECS job.

@@ -1,0 +1,208 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: A stack for running Core2 Benchmarks
+
+Resources:
+  # ECS Resources
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: 'core2-bench'
+      ClusterSettings:
+        - Name: 'containerInsights'
+          Value: 'enabled'
+
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'core2-bench'
+      RetentionInDays: 365
+
+  LogGroupDev:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: 'core2-bench-dev'
+      RetentionInDays: 14
+
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: 'core2-bench'
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+          "rules": [
+          {
+            "rulePriority": 1,
+            "description": "Only keep latest five images of master",
+            "selection": {
+              "tagStatus": "tagged",
+              "tagPrefixList": ["master"],
+              "countType": "imageCountMoreThan",
+              "countNumber": 5
+            },
+            "action": { "type": "expire" }
+          },
+          {
+            "rulePriority": 2,
+            "description": "Only keep master-images for 14 days",
+            "selection": {
+              "tagStatus": "tagged",
+              "tagPrefixList": ["master-"],
+              "countType": "sinceImagePushed",
+              "countNumber": 14,
+              "countUnit": "days"
+            },
+            "action": { "type": "expire" }
+          },
+          {
+            "rulePriority": 3,
+            "description": "Only keep commit-sha images for 5 days",
+            "selection": {
+              "tagStatus": "tagged",
+              "tagPrefixList": ["commit-"],
+              "countType": "sinceImagePushed",
+              "countNumber": 5,
+              "countUnit": "days"
+            },
+            "action": { "type": "expire" }
+          },
+          {
+            "rulePriority": 4,
+            "description": "Delete untagged images",
+            "selection": {
+              "tagStatus": "untagged",
+              "countType": "imageCountMoreThan",
+              "countNumber": 1
+            },
+            "action": { "type": "expire" }
+          }]
+          },
+
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskExecutionRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS Tasks to download images from ECR
+                - 'ecr:GetAuthorizationToken'
+                - 'ecr:BatchCheckLayerAvailability'
+                - 'ecr:GetDownloadUrlForLayer'
+                - 'ecr:BatchGetImage'
+
+                # Allow the ECS tasks to upload logs to CloudWatch
+                - 'logs:CreateLogStream'
+                - 'logs:PutLogEvents'
+
+                # Allow the ECS tasks to get secret values from the secrets manager
+                - 'secretsmanager:GetSecretValue'
+
+              Resource: '*'
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: [ecs-tasks.amazonaws.com]
+          Action: ['sts:AssumeRole']
+      Path: /
+      Policies:
+        - PolicyName: AmazonECSTaskRolePolicy
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+                # Allow the ECS tasks to upload/download from s3
+                - 's3:GetObject'
+                - 's3:PutObject'
+                - 's3:DeleteObject'
+                - 's3:ListBucket'
+              Resource:
+                - "arn:aws:s3:::core2-bench"
+                - "arn:aws:s3:::core2-bench/*"
+
+  BenchBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: 'core2-bench'
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-after-three-days
+            ExpirationInDays: 3
+            Status: Enabled
+
+  BenchTask:
+    Type: AWS::ECS::TaskDefinition
+    DependsOn:
+      - ECRRepository
+      - LogGroup
+    Properties:
+      Cpu: '4 vCPU'
+      Memory: '12GB'
+      Family: 'core2-bench'
+      ExecutionRoleArn:
+        Fn::GetAtt: ["ECSTaskExecutionRole", "Arn"]
+      TaskRoleArn:
+        Fn::GetAtt: ["ECSTaskRole", "Arn"]
+      RequiresCompatibilities:
+        - 'FARGATE'
+      NetworkMode: 'awsvpc'
+      ContainerDefinitions:
+        - Name: 'zookeeper'
+          Image: confluentinc/cp-zookeeper:6.1.1
+          Essential: true
+          Environment:
+            - Name: 'ZOOKEEPER_CLIENT_PORT'
+              Value: '2181'
+            - Name: 'ZOOKEEPER_TICK_TIME'
+              Value: '2000'
+          PortMappings:
+            - ContainerPort: 2181
+        - Name: 'kafka'
+          Image: confluentinc/cp-server:6.1.1
+          DependsOn:
+            - Condition: 'START'
+              ContainerName: 'zookeeper'
+          Essential: true
+          Environment:
+            - Name: 'KAFKA_BROKER_ID'
+              Value: '1'
+            - Name: 'KAFKA_ZOOKEEPER_CONNECT'
+              Value: 'localhost:2181'
+            - Name: 'KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR'
+              Value: '1'
+            - Name: 'KAFKA_ADVERTISED_LISTENERS'
+              Value: 'PLAINTEXT://localhost:9092'
+          PortMappings:
+            - ContainerPort: 9092
+        - Name: 'core2-bench'
+          Cpu: 2048
+          Memory: 8192
+          Image: '955308952094.dkr.ecr.eu-west-1.amazonaws.com/core2-bench:latest'
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-1'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+Outputs:
+  ClusterName:
+    Description: The name of the ECS cluster
+    Value: !Ref 'ECSCluster'
+    Export:
+      Name: !Join [ ':', [ !Ref 'AWS::StackName', 'ClusterName' ] ]

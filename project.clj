@@ -15,9 +15,7 @@
                  [org.apache.arrow/arrow-memory-netty "3.0.0"]
                  [org.roaringbitmap/RoaringBitmap "0.9.10"]]
 
-  :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-
-             :dev [:tpch :s3 :kafka
+  :profiles {:dev [:tpch :s3 :kafka
                    {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                    [org.clojure/tools.namespace "1.1.0"]
                                    [integrant "0.8.0"]
@@ -49,6 +47,14 @@
              :kafka {:source-paths ["modules/kafka/src"]
                      :test-paths ["modules/kafka/test"]
                      :dependencies [[org.apache.kafka/kafka-clients "2.7.0"]]}
+
+             :bench [:s3 :kafka :tpch
+                     {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
+                      :resource-paths ["modules/bench/resources"]
+                      :source-paths ["modules/bench/src"]
+                      :test-paths ["modules/bench/test"]
+                      :main ^:skip-aot clojure.main
+                      :uberjar-name "core2-bench.jar"}]
 
              :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}
 
