@@ -4,8 +4,6 @@
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
-  :repositories {"jcenter" {:url "https://jcenter.bintray.com"}}
-
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "0.6.0"]
                  [org.clojure/spec.alpha "0.2.194"]
@@ -15,7 +13,7 @@
                  [org.apache.arrow/arrow-algorithm "3.0.0"]
                  [org.apache.arrow/arrow-vector "3.0.0"]
                  [org.apache.arrow/arrow-memory-netty "3.0.0"]
-                 [org.roaringbitmap/RoaringBitmap "0.9.8"]]
+                 [org.roaringbitmap/RoaringBitmap "0.9.10"]]
 
   :profiles {:uberjar {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
