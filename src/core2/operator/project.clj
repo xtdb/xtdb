@@ -6,6 +6,8 @@
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.VectorSchemaRoot))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (definterface ProjectionSpec
   (^org.apache.arrow.vector.ValueVector project [^org.apache.arrow.vector.VectorSchemaRoot inRoot
                                                  ^org.apache.arrow.memory.BufferAllocator allocator]))

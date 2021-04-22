@@ -9,6 +9,8 @@
            org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.VectorSchemaRoot))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (deftype TableCursor [^BufferAllocator allocator
                       ^List rows
                       ^:unsynchronized-mutable done?]

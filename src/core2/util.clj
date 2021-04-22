@@ -25,6 +25,8 @@
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowRecordBatch ArrowFooter MessageSerializer]
            org.roaringbitmap.RoaringBitmap))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 ;;; IO
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]

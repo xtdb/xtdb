@@ -7,6 +7,8 @@
            org.apache.arrow.vector.types.pojo.Field
            org.apache.arrow.vector.VectorSchemaRoot))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (deftype SelectCursor [^BufferAllocator allocator
                        ^ICursor in-cursor
                        ^IVectorSchemaRootSelector selector

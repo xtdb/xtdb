@@ -8,6 +8,8 @@
            [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.VectorSchemaRoot))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn- assert-union-compatible [^Schema x ^Schema y]
   (assert (= (for [^Field field (.getFields x)]
                (.getName field))

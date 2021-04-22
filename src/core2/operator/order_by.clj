@@ -10,6 +10,8 @@
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.arrow.vector TimeStampMilliVector ValueVector VectorSchemaRoot]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (deftype OrderSpec [^String col-name, ^Keyword direction])
 
 (defn ->order-spec [col-name direction]

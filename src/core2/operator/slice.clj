@@ -4,6 +4,8 @@
            java.util.function.Consumer
            org.apache.arrow.vector.VectorSchemaRoot))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn offset+length [^long offset, ^long limit,
                      ^long idx, ^long row-count]
   (let [root-offset (max (- offset idx) 0)

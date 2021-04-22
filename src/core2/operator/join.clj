@@ -13,6 +13,8 @@
            org.apache.arrow.vector.util.VectorBatchAppender
            org.roaringbitmap.buffer.MutableRoaringBitmap))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn- ->join-schema
   (^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
    (->join-schema left-schema right-schema #{}))

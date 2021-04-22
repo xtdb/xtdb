@@ -10,6 +10,8 @@
            org.apache.arrow.vector.VectorSchemaRoot
            org.apache.arrow.vector.types.pojo.Field))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (def ^:const ^String relation-prefix-delimiter "_")
 
 (deftype RenameCursor [^BufferAllocator allocator

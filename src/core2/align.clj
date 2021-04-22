@@ -9,6 +9,8 @@
            org.roaringbitmap.longlong.Roaring64Bitmap
            org.roaringbitmap.RoaringBitmap))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn ->row-id-bitmap
   (^org.roaringbitmap.longlong.Roaring64Bitmap [^BigIntVector row-id-vec]
    (->row-id-bitmap nil row-id-vec))

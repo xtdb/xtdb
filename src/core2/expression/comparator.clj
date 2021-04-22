@@ -4,6 +4,8 @@
   (:import java.util.Date
            org.apache.arrow.vector.types.pojo.ArrowType))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (definterface FieldVecComparator
   (^int compareIdx [^org.apache.arrow.vector.FieldVector left-vec, ^int left-idx
                     ^org.apache.arrow.vector.FieldVector right-vec, ^int right-idx]))

@@ -7,6 +7,8 @@
            org.apache.arrow.vector.complex.StructVector
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (defn- simplify-and-or-expr [{:keys [f args] :as expr}]
   (let [args (filterv some? args)]
     (case (count args)

@@ -12,6 +12,8 @@
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.roaringbitmap.RoaringBitmap))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 (definterface AggregateSpec
   (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
   (^org.apache.arrow.vector.ValueVector getFromVector [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
