@@ -34,10 +34,6 @@
   {:code `(.compareTo ~@emitted-args)
    :return-type Long})
 
-(defmethod expr/codegen-call [:compare expr/byte-array-class expr/byte-array-class] [{:keys [emitted-args]}]
-  {:code `(Arrays/compareUnsigned ~@emitted-args)
-   :return-type Long})
-
 (defmethod expr/codegen-call [:compare String String] [{:keys [emitted-args]}]
   {:code `(Arrays/compareUnsigned ~@emitted-args)
    :return-type Long})
