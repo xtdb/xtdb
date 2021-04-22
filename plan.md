@@ -124,9 +124,13 @@ Two main extension points:
    - Migration from Classic
    - How much of Crux should Core2 pull in?
 
-Bugs/clean up:
+Bugs:
+- TODO OOM on 0.1 queries (Fargate)
+- TODO chunk names have 2^32 numbers, row-ids are 2^64
+- TODO Exception during query, close node -> Arrow memory leak error
+
+Clean up:
 - DUV completeness (removal of some DUV hacks/pain)
-- Verify distributed error handling assumptions
 - Clean up data model: Java/Clojure types, Java Arrow types, representation of types (keywords, ArrowType, class etc.), conversion between types.
 - Clean up Spliterator operators.
 - Consider VectorSchemaRoot and Roaring selection forwarding and avoid copies?
