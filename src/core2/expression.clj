@@ -139,12 +139,7 @@
   (fn [{:keys [op]} var->type]
     op))
 
-(defn intern-string ^clojure.lang.Symbol [^String x]
-  (let [bs (.getBytes ^String x StandardCharsets/UTF_8)
-        ns (create-ns 'core2.expression.literals)
-        var (gensym 'literal)]
-    (intern ns (with-meta var {:tag (class bs)}) bs)
-    (with-meta (symbol (str ns) (str var)) {:literal x})))
+(def ^:dynamic *init-expressions*)
 
 (defn resolve-string ^String [x]
   (cond
@@ -163,7 +158,9 @@
     {:code (.getTime ^Date literal)
      :return-type Date}
     (string? literal)
-    {:code (intern-string literal)
+    {:code (let [s (gensym "string-literal")]
+             (swap! *init-expressions* concat [s `(.getBytes ~literal StandardCharsets/UTF_8)])
+             (with-meta s {:literal literal}))
      :return-type String}
     (nil? literal)
     {:code nil :return-type Comparable}
@@ -405,25 +402,29 @@
 (defn- generate-code [arrow-types expr expression-type]
   (let [vars (variables expr)
         var->type (zipmap vars (map #(get types/arrow-type->java-type % Comparable) arrow-types))
-        {:keys [code return-type]} (postwalk-expr #(codegen-expr % {:var->type var->type}) expr)
+        init-expressions (atom [])
+        {:keys [code return-type]} (binding [*init-expressions* init-expressions]
+                                     (postwalk-expr #(codegen-expr % {:var->type var->type}) expr))
         args (for [[k v] (map vector vars arrow-types)]
                (-> k (with-tag (get types/arrow-type->vector-type v DenseUnionVector))))]
     (case expression-type
       ::project
       (if (= Comparable return-type)
         `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-           (dotimes [~idx-sym row-count#]
-             (let [value# ~code
-                   type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
-                   offset# (util/write-type-id acc# ~idx-sym type-id#)]
-               (types/set-safe! (.getVectorByType acc# type-id#) offset# value#)))
+           (let [~@@init-expressions]
+             (dotimes [~idx-sym row-count#]
+               (let [value# ~code
+                     type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
+                     offset# (util/write-type-id acc# ~idx-sym type-id#)]
+                 (types/set-safe! (.getVectorByType acc# type-id#) offset# value#))))
            acc#)
         (let [arrow-return-type (types/->arrow-type return-type)
               ^Class vector-return-type (get types/arrow-type->vector-type arrow-return-type)
               return-type-id (types/arrow-type->type-id arrow-return-type)
               inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))]
           `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-             (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
+             (let [~@@init-expressions
+                   ~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
                  (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
                    (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
@@ -434,11 +435,12 @@
       ::select
       (do (assert (= Boolean return-type))
           `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
-             (dotimes [~idx-sym row-count#]
-               (try
-                 (when ~code
-                   (.add acc# ~idx-sym))
-                 (catch ClassCastException e#)))
+             (let [~@@init-expressions]
+               (dotimes [~idx-sym row-count#]
+                 (try
+                   (when ~code
+                     (.add acc# ~idx-sym))
+                   (catch ClassCastException e#))))
              acc#)))))
 
 (def ^:private memo-generate-code (memoize generate-code))
