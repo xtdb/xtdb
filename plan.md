@@ -80,8 +80,8 @@ Two main extension points:
 2. Go/No-Go for Storage/Compute + Arrow
    - Large TPC-H SF (1?), running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
      - DONE Kafka, S3
-     - TODO Some level of deployment/monitoring
-       - create uberjar
+     - Some level of deployment/monitoring
+       - DONE create uberjar
      - DONE Full TPC-H
      - Larger TPC-H scale factors - check ingest + query
        - linear growth in aggregate queries, sub-linear in accesses
