@@ -204,7 +204,8 @@
                                        id-vec (.getVector id-root 1)]
                                    (dotimes [n (.getValueCount id-vec)]
                                      (.getOrCreateInternalId this (.getObject id-vec n)))))))))
-      (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator @acc))))
+      (with-open [^Closeable kd-tree @acc]
+        (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator kd-tree)))))
 
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
