@@ -123,16 +123,17 @@
                         vec-sym (get metadata-vec-syms meta-value)]
                     `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                            (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
-                       ~(:code (expr/codegen-expr
-                                {:op :call
-                                 :f f
-                                 :args [{:code (list (expr/type->cast field-type)
-                                                     (:code (expr/codegen-expr
-                                                             {:op :variable, :variable vec-sym}
-                                                             {:var->type {vec-sym field-type}}))),
-                                         :return-type field-type}
-                                        (expr/codegen-expr {:op :literal, :literal literal} nil)]}
-                                opts)))))))
+                       (when-not (.isNull ~vec-sym ~expr/idx-sym)
+                         ~(:code (expr/codegen-expr
+                                  {:op :call
+                                   :f f
+                                   :args [{:code (list (expr/type->cast field-type)
+                                                       (:code (expr/codegen-expr
+                                                               {:op :variable, :variable vec-sym}
+                                                               {:var->type {vec-sym field-type}}))),
+                                           :return-type field-type}
+                                          (expr/codegen-expr {:op :literal, :literal literal} nil)]}
+                                  opts))))))))
      :return-type Boolean}))
 
 (defn meta-expr->code [expr]
