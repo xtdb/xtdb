@@ -8,7 +8,7 @@
            java.lang.reflect.Method
            [java.time Instant LocalDateTime ZoneOffset]
            java.time.temporal.ChronoField
-           java.util.Date
+           [java.util Arrays Date]
            [org.apache.arrow.vector BitVector ValueVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.util.Text
@@ -108,7 +108,7 @@
                       (map :variable)
                       (distinct)))))
 
-(def ^:private byte-array-class (Class/forName "[B"))
+(def byte-array-class (Class/forName "[B"))
 
 (def type->cast
   {Long 'long

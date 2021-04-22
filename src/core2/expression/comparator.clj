@@ -1,7 +1,7 @@
 (ns core2.expression.comparator
   (:require [core2.expression :as expr]
             [core2.types :as types])
-  (:import java.util.Date
+  (:import [java.util Arrays Date]
            org.apache.arrow.vector.types.pojo.ArrowType))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -18,8 +18,16 @@
   {:code `(Double/compare ~@emitted-args)
    :return-type Long})
 
+(defmethod expr/codegen-call [:compare Number Number] [{:keys [emitted-args]}]
+  {:code `(Double/compare ~@emitted-args)
+   :return-type Long})
+
 (defmethod expr/codegen-call [:compare Date Date] [{:keys [emitted-args]}]
   {:code `(Long/compare ~@emitted-args)
+   :return-type Long})
+
+(defmethod expr/codegen-call [:compare expr/byte-array-class expr/byte-array-class] [{:keys [emitted-args]}]
+  {:code `(Arrays/compareUnsigned ~@emitted-args)
    :return-type Long})
 
 (defmethod expr/codegen-call [:compare Comparable Comparable] [{:keys [emitted-args]}]
@@ -27,6 +35,7 @@
    :return-type Long})
 
 (prefer-method expr/codegen-call [:compare Date Date] [:compare Comparable Comparable])
+(prefer-method expr/codegen-call [:compare Number Number] [:compare Comparable Comparable])
 
 (defn- comparator-code [^ArrowType arrow-type]
   (let [left-vec-sym (gensym 'left-vec)
