@@ -232,7 +232,8 @@
 ;; NOTE: also updates value count of the vector.
 (defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
   ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
-  (let [sub-vec (.getVectorByType duv type-id)
+  (let [type-id (unchecked-byte type-id)
+        sub-vec (.getVectorByType duv type-id)
         offset (.getValueCount sub-vec)
         offset-buffer (.getOffsetBuffer duv)
         offset-idx (* DenseUnionVector/OFFSET_WIDTH idx)
