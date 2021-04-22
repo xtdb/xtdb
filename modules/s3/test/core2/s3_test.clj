@@ -5,9 +5,7 @@
             [core2.system :as sys])
   (:import java.util.UUID))
 
-(def bucket
-  (or (System/getProperty "core2.s3-test.bucket")
-      "jms-crux-test"))
+(def bucket (System/getProperty "core2.s3-test.bucket"))
 
 (def ^:dynamic *obj-store*)
 
