@@ -24,7 +24,7 @@
   (open-watermark ^core2.tx.Watermark [node])
 
   (open-q
-    ^java.lang.AutoCloseable [node watermark query]))
+    ^core2.ICursor [node watermark query]))
 
 (defprotocol PSubmitNode
   (submit-tx

@@ -1,10 +1,13 @@
 (ns core2.tpch-queries-sf-0001-test
   (:require [clojure.test :as t]
-            [core2.tpch-queries :as tpch-queries]
+            [core2.tpch :as tpch]
+            [core2.tpch-test :as tpch-test]
             [core2.util :as util])
   (:import org.apache.arrow.vector.util.Text))
 
-(t/use-fixtures :once (tpch-queries/with-tpch-data 0.001 "tpch-queries-sf-0001"))
+(t/use-fixtures :once (partial tpch-test/with-tpch-data
+                               {:scale-factor 0.001
+                                :node-dir (util/->path "target/tpch-queries-sf-0001")}))
 
 (t/deftest test-q1-pricing-summary-report
   (t/is (= [{:l_returnflag (Text. "A")
@@ -47,11 +50,11 @@
              :avg_price 25100.09693891558
              :avg_disc 0.05002745367192862
              :count_order 1457}]
-           (tpch-queries/tpch-q1-pricing-summary-report))))
+           (tpch-test/run-query tpch/tpch-q1-pricing-summary-report))))
 
 (t/deftest test-q2-minimum-cost-supplier
   (t/is (= []
-           (tpch-queries/tpch-q2-minimum-cost-supplier))))
+           (tpch-test/run-query tpch/tpch-q2-minimum-cost-supplier))))
 
 (t/deftest test-q3-shipping-priority
   (t/is (= [{:l_orderkey (Text. "orderkey_1637")
@@ -86,7 +89,7 @@
              :revenue 3055.9365,
              :o_orderdate (util/date->local-date-time #inst "1995-02-17")
              :o_shippriority 0}]
-           (tpch-queries/tpch-q3-shipping-priority))))
+           (tpch-test/run-query tpch/tpch-q3-shipping-priority))))
 
 (t/deftest test-q4-order-priority-checking
   (t/is (= [{:o_orderpriority (Text. "1-URGENT"), :order_count 9}
@@ -94,24 +97,24 @@
             {:o_orderpriority (Text. "3-MEDIUM"), :order_count 9}
             {:o_orderpriority (Text. "4-NOT SPECIFIED"), :order_count 8}
             {:o_orderpriority (Text. "5-LOW"), :order_count 12}]
-           (tpch-queries/tpch-q4-order-priority-checking))))
+           (tpch-test/run-query tpch/tpch-q4-order-priority-checking))))
 
 (t/deftest test-q5-local-supplier-volume
   (t/is (= []
-           (tpch-queries/tpch-q5-local-supplier-volume))))
+           (tpch-test/run-query tpch/tpch-q5-local-supplier-volume))))
 
 (t/deftest test-q6-forecasting-revenue-change
   (t/is (= [{:revenue 77949.9186}]
-           (tpch-queries/tpch-q6-forecasting-revenue-change))))
+           (tpch-test/run-query tpch/tpch-q6-forecasting-revenue-change))))
 
 (t/deftest test-q7-volume-shipping
   (t/is (= []
-           (tpch-queries/tpch-q7-volume-shipping))))
+           (tpch-test/run-query tpch/tpch-q7-volume-shipping))))
 
 (t/deftest test-q8-national-market-share
   (t/is (= [{:o_year 1995, :mkt_share 0.0}
             {:o_year 1996, :mkt_share 0.0}]
-           (tpch-queries/tpch-q8-national-market-share))))
+           (tpch-test/run-query tpch/tpch-q8-national-market-share))))
 
 (t/deftest test-q9-product-type-profit-measure
   (t/is (= [{:nation (Text. "ARGENTINA") :o_year 1998 :sum_profit 17779.069700000007}
@@ -174,7 +177,7 @@
             {:nation (Text. "UNITED STATES") :o_year 1994 :sum_profit 31671.2}
             {:nation (Text. "UNITED STATES") :o_year 1993 :sum_profit 55057.469}
             {:nation (Text. "UNITED STATES") :o_year 1992 :sum_profit 51970.23}]
-           (tpch-queries/tpch-q9-product-type-profit-measure))))
+           (tpch-test/run-query tpch/tpch-q9-product-type-profit-measure))))
 
 (t/deftest test-q10-returned-item-reporting
   (t/is (= [{:c_custkey (Text. "custkey_121")
@@ -337,11 +340,11 @@
              :n_name (Text. "ARGENTINA")
              :c_address (Text. "zLOCP0wh92OtBihgspOGl4")
              :c_comment (Text. "ously final packages haggle blithely after the express deposits. furiou")}]
-           (tpch-queries/tpch-q10-returned-item-reporting))))
+           (tpch-test/run-query tpch/tpch-q10-returned-item-reporting))))
 
 (t/deftest test-q11-important-stock-identification
   (t/is (= []
-           (tpch-queries/tpch-q11-important-stock-identification))))
+           (tpch-test/run-query tpch/tpch-q11-important-stock-identification))))
 
 (t/deftest test-q12-shipping-modes-and-order-priority
   (t/is (= [{:l_shipmode (Text. "MAIL")
@@ -350,7 +353,7 @@
             {:l_shipmode (Text. "SHIP")
              :high_line_count 5
              :low_line_count 10}]
-           (tpch-queries/tpch-q12-shipping-modes-and-order-priority))))
+           (tpch-test/run-query tpch/tpch-q12-shipping-modes-and-order-priority))))
 
 (t/deftest test-q13-customer-distribution
   (t/is (= [{:c_count 0 :custdist 50}
@@ -380,11 +383,11 @@
             {:c_count 28 :custdist 1}
             {:c_count 25 :custdist 1}
             {:c_count 3 :custdist 1}]
-           (tpch-queries/tpch-q13-customer-distribution))))
+           (tpch-test/run-query tpch/tpch-q13-customer-distribution))))
 
 (t/deftest test-q14-promotion-effect
   (t/is (= [{:promo_revenue 15.23021261159725}]
-           (tpch-queries/tpch-q14-promotion-effect))))
+           (tpch-test/run-query tpch/tpch-q14-promotion-effect))))
 
 (t/deftest test-q15-top-supplier
   (t/is (= [{:total_revenue 797313.3838
@@ -392,7 +395,7 @@
              :s_name (Text. "Supplier#000000010")
              :s_address (Text. "Saygah3gYWMp72i PY")
              :s_phone (Text. "34-852-489-8585")}]
-           (tpch-queries/tpch-q15-top-supplier))))
+           (tpch-test/run-query tpch/tpch-q15-top-supplier))))
 
 (t/deftest test-q16-part-supplier-relationship
   (t/is (= [{:p_brand (Text. "Brand#11") :p_type (Text. "PROMO ANODIZED TIN") :p_size 45 :supplier_cnt 4}
@@ -429,27 +432,27 @@
             {:p_brand (Text. "Brand#51") :p_type (Text. "ECONOMY POLISHED STEEL") :p_size 49 :supplier_cnt 1}
             {:p_brand (Text. "Brand#53") :p_type (Text. "LARGE BURNISHED NICKEL") :p_size 23 :supplier_cnt 1}
             {:p_brand (Text. "Brand#54") :p_type (Text. "ECONOMY ANODIZED BRASS") :p_size 9 :supplier_cnt 1}]
-           (tpch-queries/tpch-q16-part-supplier-relationship))))
+           (tpch-test/run-query tpch/tpch-q16-part-supplier-relationship))))
 
 (t/deftest test-q17-small-quantity-order-revenue
   (t/is (= []
-           (tpch-queries/tpch-q17-small-quantity-order-revenue))))
+           (tpch-test/run-query tpch/tpch-q17-small-quantity-order-revenue))))
 
 (t/deftest test-q18-large-volume-customer
   (t/is (= []
-           (tpch-queries/tpch-q18-large-volume-customer))))
+           (tpch-test/run-query tpch/tpch-q18-large-volume-customer))))
 
 (t/deftest test-q19-discounted-revenue
   (t/is (= []
-           (tpch-queries/tpch-q19-discounted-revenue))))
+           (tpch-test/run-query tpch/tpch-q19-discounted-revenue))))
 
 (t/deftest test-q20-potential-part-promotion
   (t/is (= []
-           (tpch-queries/tpch-q20-potential-part-promotion))))
+           (tpch-test/run-query tpch/tpch-q20-potential-part-promotion))))
 
 (t/deftest test-q21-suppliers-who-kept-orders-waiting
   (t/is (= []
-           (tpch-queries/tpch-q21-suppliers-who-kept-orders-waiting))))
+           (tpch-test/run-query tpch/tpch-q21-suppliers-who-kept-orders-waiting))))
 
 (t/deftest test-q22-global-sales-opportunity
   (t/is (= [{:cntrycode (Text. "13")
@@ -473,4 +476,4 @@
             {:cntrycode (Text. "31")
              :numcust 1
              :totacctbal 9331.13}]
-           (tpch-queries/tpch-q22-global-sales-opportunity))))
+           (tpch-test/run-query tpch/tpch-q22-global-sales-opportunity))))
