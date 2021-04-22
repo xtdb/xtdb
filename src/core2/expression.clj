@@ -9,7 +9,8 @@
            [java.time Instant LocalDateTime ZoneOffset]
            java.time.temporal.ChronoField
            [java.util Arrays Date]
-           [org.apache.arrow.vector BitVector ValueVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ValueVector VectorSchemaRoot]
+           java.nio.charset.StandardCharsets
            org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
@@ -114,7 +115,7 @@
   {Long 'long
    Double 'double
    byte-array-class 'bytes
-   String 'str
+   String 'bytes
    Date 'long
    Boolean 'boolean})
 
@@ -138,20 +139,42 @@
   (fn [{:keys [op]} var->type]
     op))
 
+(defn intern-string ^clojure.lang.Symbol [^String x]
+  (let [bs (.getBytes ^String x StandardCharsets/UTF_8)
+        ns (create-ns 'core2.expression.literals)
+        var (gensym 'literal)]
+    (intern ns (with-meta var {:tag (class bs)}) bs)
+    (with-meta (symbol (str ns) (str var)) {:literal x})))
+
+(defn resolve-string ^String [x]
+  (cond
+    (bytes? x)
+    (String. ^bytes x StandardCharsets/UTF_8)
+
+    (string? x)
+    x
+
+    :else
+    (:literal (meta x))))
+
 (defmethod codegen-expr :literal [{:keys [literal]} _]
-  {:code (if (instance? Date literal)
-           (.getTime ^Date literal)
-           literal)
-   :return-type (if (nil? literal)
-                  Comparable
-                  (class literal))})
+  (cond
+    (instance? Date literal)
+    {:code (.getTime ^Date literal)
+     :return-type Date}
+    (string? literal)
+    {:code (intern-string literal)
+     :return-type String}
+    (nil? literal)
+    {:code nil :return-type Comparable}
+    :else
+    {:code literal :return-type (class literal)}))
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
   (let [type (or (get var->type variable)
                  (throw (IllegalArgumentException. (str "unknown variable: " variable))))]
     {:code (condp = type
              Boolean `(== 1 (.get ~variable ~idx-sym))
-             String `(str (.getObject ~variable ~idx-sym))
              Comparable `(normalize-union-value (.getObject ~variable ~idx-sym))
              `(.get ~variable ~idx-sym))
      :return-type type}))
@@ -189,11 +212,19 @@
   {:code `(Arrays/equals ~@emitted-args)
    :return-type Boolean})
 
+(defmethod codegen-call [:= String String] [{:keys [emitted-args]}]
+  {:code `(Arrays/equals ~@emitted-args)
+   :return-type Boolean})
+
 (defmethod codegen-call [:!= Object Object] [{:keys [emitted-args]}]
   {:code `(not= ~@emitted-args)
    :return-type Boolean})
 
 (defmethod codegen-call [:!= byte-array-class byte-array-class] [{:keys [emitted-args]}]
+  {:code `(not (Arrays/equals ~@emitted-args))
+   :return-type Boolean})
+
+(defmethod codegen-call [:!= String String] [{:keys [emitted-args]}]
   {:code `(not (Arrays/equals ~@emitted-args))
    :return-type Boolean})
 
@@ -213,8 +244,13 @@
   {:code `(neg? (Arrays/compareUnsigned ~@emitted-args))
    :return-type Boolean})
 
+(defmethod codegen-call [:< String String] [{:keys [emitted-args]}]
+  {:code `(neg? (Arrays/compareUnsigned ~@emitted-args))
+   :return-type Boolean})
+
 (prefer-method codegen-call [:< Number Number] [:< Comparable Comparable])
 (prefer-method codegen-call [:< Date Date] [:< Comparable Comparable])
+(prefer-method codegen-call [:< String String] [:< Comparable Comparable])
 
 (defmethod codegen-call [:<= Number Number] [{:keys [emitted-args]}]
   {:code `(<= ~@emitted-args)
@@ -232,8 +268,13 @@
   {:code `(not (pos? (Arrays/compareUnsigned ~@emitted-args)))
    :return-type Boolean})
 
+(defmethod codegen-call [:<= String String] [{:keys [emitted-args]}]
+  {:code `(not (pos? (Arrays/compareUnsigned ~@emitted-args)))
+   :return-type Boolean})
+
 (prefer-method codegen-call [:<= Number Number] [:<= Comparable Comparable])
 (prefer-method codegen-call [:<= Date Date] [:<= Comparable Comparable])
+(prefer-method codegen-call [:<= String String] [:<= Comparable Comparable])
 
 (defmethod codegen-call [:> Number Number] [{:keys [emitted-args]}]
   {:code `(> ~@emitted-args)
@@ -251,8 +292,13 @@
   {:code `(pos? (Arrays/compareUnsigned ~@emitted-args))
    :return-type Boolean})
 
+(defmethod codegen-call [:> String String] [{:keys [emitted-args]}]
+  {:code `(pos? (Arrays/compareUnsigned ~@emitted-args))
+   :return-type Boolean})
+
 (prefer-method codegen-call [:> Number Number] [:> Comparable Comparable])
 (prefer-method codegen-call [:> Date Date] [:> Comparable Comparable])
+(prefer-method codegen-call [:> String String] [:> Comparable Comparable])
 
 (defmethod codegen-call [:>= Number Number] [{:keys [emitted-args]}]
   {:code `(>= ~@emitted-args)
@@ -270,8 +316,13 @@
   {:code `(not (neg? (Arrays/compareUnsigned ~@emitted-args)))
    :return-type Boolean})
 
+(defmethod codegen-call [:>= String String] [{:keys [emitted-args]}]
+  {:code `(not (neg? (Arrays/compareUnsigned ~@emitted-args)))
+   :return-type Boolean})
+
 (prefer-method codegen-call [:>= Number Number] [:>= Comparable Comparable])
 (prefer-method codegen-call [:>= Date Date] [:>= Comparable Comparable])
+(prefer-method codegen-call [:>= String String] [:>= Comparable Comparable])
 
 (defmethod codegen-call [:and Boolean Boolean] [{:keys [emitted-args]}]
   {:code `(and ~@emitted-args)
@@ -314,16 +365,18 @@
    :return-type Long})
 
 (defmethod codegen-call [:like Comparable String] [{[{x :code} {pattern :code}] :args}]
-  {:code `(boolean (re-find ~(re-pattern (str "^" (str/replace pattern #"%" ".*") "$")) ~x))
+  {:code `(boolean (re-find ~(re-pattern (str "^" (str/replace (resolve-string pattern) #"%" ".*") "$"))
+                            (resolve-string ~x)))
    :return-type Boolean})
 
 (defmethod codegen-call [:substr Comparable Long Long] [{[{x :code} {start :code} {length :code}] :args}]
-  {:code `(subs ~x (dec ~start) (+ (dec ~start) ~length))
+  {:code `(.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
+                     StandardCharsets/UTF_8)
    :return-type String})
 
 (defmethod codegen-call [:extract String Date] [{[{field :code} {x :code}] :args}]
   {:code `(.get (.atOffset (Instant/ofEpochMilli ~x) ZoneOffset/UTC)
-                ~(case field
+                ~(case (resolve-string field)
                    "YEAR" `ChronoField/YEAR
                    "MONTH" `ChronoField/MONTH_OF_YEAR
                    "DAY" `ChronoField/DAY_OF_MONTH
@@ -345,7 +398,7 @@
     (instance? LocalDateTime v)
     (.getTime (util/local-date-time->date v))
     (instance? Text v)
-    (str v)
+    (.getBytes ^Text v)
     :else
     v))
 
@@ -373,12 +426,8 @@
              (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
                  (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
-                   (.set ~inner-acc-sym offset# ~(cond
-                                                   (= BitVector vector-return-type)
+                   (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
                                                    `(if ~code 1 0)
-                                                   (= VarCharVector vector-return-type)
-                                                   `(Text. ~code)
-                                                   :else
                                                    code))))
                acc#))))
 

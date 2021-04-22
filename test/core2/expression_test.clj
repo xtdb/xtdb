@@ -4,21 +4,25 @@
             [core2.test-util :as test-util]
             [core2.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector ValueVector VectorSchemaRoot]))
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector ValueVector VarCharVector VectorSchemaRoot]
+           org.apache.arrow.vector.util.Text))
 
 (t/deftest can-compile-simple-expression
   (with-open [allocator (RootAllocator.)
               a (Float8Vector. "a" allocator)
               b (Float8Vector. "b" allocator)
-              d (BigIntVector. "d" allocator)]
+              d (BigIntVector. "d" allocator)
+              e (VarCharVector. "e" allocator)]
     (let [rows 1000]
       (.setValueCount a rows)
       (.setValueCount b rows)
       (.setValueCount d rows)
+      (.setValueCount e rows)
       (dotimes [n rows]
         (.set a n (double n))
         (.set b n (double n))
-        (.set d n n)))
+        (.set d n n)
+        (.setSafe e n (Text. (format "%04d" n)))))
 
     (with-open [in (VectorSchemaRoot/of (into-array FieldVector [a b d]))]
       (let [expr (expr/form->expr '(+ a b))
@@ -113,4 +117,9 @@
         (let [expr (expr/form->expr '(>= a 500))
               selector (expr/->expression-vector-selector expr)]
           (t/is (= '[a] (expr/variables expr)))
-          (t/is (= 500 (.getCardinality (.select selector a)))))))))
+          (t/is (= 500 (.getCardinality (.select selector a)))))
+
+        (let [expr (expr/form->expr '(>= e "0500"))
+              selector (expr/->expression-vector-selector expr)]
+          (t/is (= '[e] (expr/variables expr)))
+          (t/is (= 500 (.getCardinality (.select selector e)))))))))

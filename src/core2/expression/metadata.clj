@@ -47,7 +47,7 @@
                               :meta-value meta-value
                               :field-type field-type
                               :field field,
-                              :literal literal-code})))}))
+                              :literal (:literal literal-arg)})))}))
 
           (bool-expr [var-lit-f var-lit-meta-fn
                       lit-var-f lit-var-meta-fn]
