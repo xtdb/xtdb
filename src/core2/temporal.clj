@@ -188,24 +188,26 @@
                            (util/then-apply util/try-close))])
                     (reduce into []))]
       @(CompletableFuture/allOf (into-array CompletableFuture futs))
-      (doseq [chunk-idx known-chunks]
-        (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
-                    temporal-chunks (util/->chunks temporal-buffer allocator)]
-          (.forEachRemaining temporal-chunks
-                             (reify Consumer
-                               (accept [_ temporal-root]
-                                 (swap! acc #(kd/merge-kd-trees allocator % temporal-root))))))
-        (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                    id-chunks (util/->chunks id-buffer allocator)]
-          (.forEachRemaining id-chunks
-                             (reify Consumer
-                               (accept [_ id-root]
-                                 (let [^VectorSchemaRoot id-root id-root
-                                       id-vec (.getVector id-root 1)]
-                                   (dotimes [n (.getValueCount id-vec)]
-                                     (.getOrCreateInternalId this (.getObject id-vec n)))))))))
-      (with-open [^Closeable kd-tree @acc]
-        (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator kd-tree)))))
+      (try
+        (doseq [chunk-idx known-chunks]
+          (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
+                      temporal-chunks (util/->chunks temporal-buffer allocator)]
+            (.forEachRemaining temporal-chunks
+                               (reify Consumer
+                                 (accept [_ temporal-root]
+                                   (swap! acc #(kd/merge-kd-trees allocator % temporal-root))))))
+          (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+                      id-chunks (util/->chunks id-buffer allocator)]
+            (.forEachRemaining id-chunks
+                               (reify Consumer
+                                 (accept [_ id-root]
+                                   (let [^VectorSchemaRoot id-root id-root
+                                         id-vec (.getVector id-root 1)]
+                                     (dotimes [n (.getValueCount id-vec)]
+                                       (.getOrCreateInternalId this (.getObject id-vec n)))))))))
+        (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator @acc))
+        (finally
+          (util/try-close @acc)))))
 
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
