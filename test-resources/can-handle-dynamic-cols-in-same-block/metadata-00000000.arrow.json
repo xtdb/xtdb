@@ -181,6 +181,167 @@
         "name" : "binary"
       },
       "children" : [ ]
+    },{
+      "name" : "blocks",
+      "nullable" : false,
+      "type" : {
+        "name" : "list"
+      },
+      "children" : [{
+        "name" : "block-meta",
+        "nullable" : true,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "min",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "null",
+            "nullable" : true,
+            "type" : {
+              "name" : "null"
+            },
+            "children" : [ ]
+          },{
+            "name" : "bigint",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
+            "name" : "float8",
+            "nullable" : true,
+            "type" : {
+              "name" : "floatingpoint",
+              "precision" : "DOUBLE"
+            },
+            "children" : [ ]
+          },{
+            "name" : "varbinary",
+            "nullable" : true,
+            "type" : {
+              "name" : "binary"
+            },
+            "children" : [ ]
+          },{
+            "name" : "varchar",
+            "nullable" : true,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "timestampmilli",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MILLISECOND",
+              "timezone" : null
+            },
+            "children" : [ ]
+          },{
+            "name" : "tinyint",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 8,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
+            "name" : "bit",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "max",
+          "nullable" : false,
+          "type" : {
+            "name" : "struct"
+          },
+          "children" : [{
+            "name" : "null",
+            "nullable" : true,
+            "type" : {
+              "name" : "null"
+            },
+            "children" : [ ]
+          },{
+            "name" : "bigint",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 64,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
+            "name" : "float8",
+            "nullable" : true,
+            "type" : {
+              "name" : "floatingpoint",
+              "precision" : "DOUBLE"
+            },
+            "children" : [ ]
+          },{
+            "name" : "varbinary",
+            "nullable" : true,
+            "type" : {
+              "name" : "binary"
+            },
+            "children" : [ ]
+          },{
+            "name" : "varchar",
+            "nullable" : true,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          },{
+            "name" : "timestampmilli",
+            "nullable" : true,
+            "type" : {
+              "name" : "timestamp",
+              "unit" : "MILLISECOND",
+              "timezone" : null
+            },
+            "children" : [ ]
+          },{
+            "name" : "tinyint",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 8,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
+            "name" : "bit",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          }]
+        },{
+          "name" : "bloom",
+          "nullable" : false,
+          "type" : {
+            "name" : "binary"
+          },
+          "children" : [ ]
+        }]
+      }]
     }]
   },
   "batches" : [{
@@ -302,6 +463,113 @@
       "VALIDITY" : [1,1,1],
       "OFFSET" : [0,126,164,202],
       "DATA" : ["3a3000000b0000000100000002000000040000000600010007000000090000000a0001000b0001000c0000000e0001000f000000600000006200000064000000660000006a0000006c0000006e0000007200000076000000780000007c00000072236b1e9fb7ad57a9e92d0f4357cd99a7e0056bddc47ae521b2eddb7604","3a30000003000000050000000600000008000000200000002200000024000000fc2a28c85465","3a30000003000000010000000c0000000f00000020000000220000002400000072237ae57604"]
+    },{
+      "name" : "blocks",
+      "count" : 3,
+      "VALIDITY" : [1,1,1],
+      "OFFSET" : [0,1,2,3],
+      "children" : [{
+        "name" : "block-meta",
+        "count" : 3,
+        "VALIDITY" : [1,1,1],
+        "children" : [{
+          "name" : "min",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "children" : [{
+            "name" : "null",
+            "count" : 3
+          },{
+            "name" : "bigint",
+            "count" : 3,
+            "VALIDITY" : [0,1,0],
+            "DATA" : ["0","0","0"]
+          },{
+            "name" : "float8",
+            "count" : 3,
+            "VALIDITY" : [1,0,0],
+            "DATA" : [24.0,0.0,0.0]
+          },{
+            "name" : "varbinary",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "OFFSET" : [0,0,0,0],
+            "DATA" : ["","",""]
+          },{
+            "name" : "varchar",
+            "count" : 3,
+            "VALIDITY" : [1,0,0],
+            "OFFSET" : [0,3,3,3],
+            "DATA" : ["bar","",""]
+          },{
+            "name" : "timestampmilli",
+            "count" : 3,
+            "VALIDITY" : [1,0,1],
+            "DATA" : [1577836800000,0,1577836800000]
+          },{
+            "name" : "tinyint",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          },{
+            "name" : "bit",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          }]
+        },{
+          "name" : "max",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "children" : [{
+            "name" : "null",
+            "count" : 3
+          },{
+            "name" : "bigint",
+            "count" : 3,
+            "VALIDITY" : [0,1,0],
+            "DATA" : ["0","0","0"]
+          },{
+            "name" : "float8",
+            "count" : 3,
+            "VALIDITY" : [1,0,0],
+            "DATA" : [52.0,0.0,0.0]
+          },{
+            "name" : "varbinary",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "OFFSET" : [0,0,0,0],
+            "DATA" : ["","",""]
+          },{
+            "name" : "varchar",
+            "count" : 3,
+            "VALIDITY" : [1,0,0],
+            "OFFSET" : [0,3,3,3],
+            "DATA" : ["foo","",""]
+          },{
+            "name" : "timestampmilli",
+            "count" : 3,
+            "VALIDITY" : [1,0,1],
+            "DATA" : [1609459200000,0,1577836800000]
+          },{
+            "name" : "tinyint",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          },{
+            "name" : "bit",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          }]
+        },{
+          "name" : "bloom",
+          "count" : 3,
+          "VALIDITY" : [1,1,1],
+          "OFFSET" : [0,126,164,202],
+          "DATA" : ["3a3000000b0000000100000002000000040000000600010007000000090000000a0001000b0001000c0000000e0001000f000000600000006200000064000000660000006a0000006c0000006e0000007200000076000000780000007c00000072236b1e9fb7ad57a9e92d0f4357cd99a7e0056bddc47ae521b2eddb7604","3a30000003000000050000000600000008000000200000002200000024000000fc2a28c85465","3a30000003000000010000000c0000000f00000020000000220000002400000072237ae57604"]
+        }]
+      }]
     }]
   }]
 }

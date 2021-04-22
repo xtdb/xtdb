@@ -1,8 +1,7 @@
 (ns core2.metadata
-  (:require [core2.bloom :as bloom]
-            core2.buffer-pool
+  (:require [core2.blocks :as blocks]
+            [core2.bloom :as bloom]
             [core2.expression.comparator :as expr.comp]
-            core2.object-store
             [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
@@ -11,21 +10,22 @@
            core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
+           core2.util.IChunkCursor
            java.io.Closeable
            [java.util Date List SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            java.util.function.Consumer
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector TimeStampMilliVector VarBinaryVector VarCharVector VectorSchemaRoot]
-           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types Types Types$MinorType]
-           [org.apache.arrow.vector.types.pojo ArrowType Schema]
+           [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List Schema]
            org.apache.arrow.vector.util.Text))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IMetadataManager
-  (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx])
+  (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx, ^long max-rows-per-block])
   (^java.util.SortedSet knownChunks [])
   (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.Function f]))
 
@@ -40,6 +40,7 @@
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "column" (.getType Types$MinorType/VARCHAR) false)
+
             (t/->field "count" (.getType Types$MinorType/BIGINT) false)
             (t/->field "min-row-id" (.getType Types$MinorType/BIGINT) false)
             (t/->field "max-row-id" (.getType Types$MinorType/BIGINT) false)
@@ -50,7 +51,17 @@
             (apply t/->field "max"
                    (.getType Types$MinorType/STRUCT) false
                    type-meta-fields)
-            (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)]))
+            (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)
+
+            (t/->field "blocks" (ArrowType$List.) false
+                       (t/->field "block-meta" (.getType Types$MinorType/STRUCT) true
+                                  (apply t/->field "min"
+                                         (.getType Types$MinorType/STRUCT) false
+                                         type-meta-fields)
+                                  (apply t/->field "max"
+                                         (.getType Types$MinorType/STRUCT) false
+                                         type-meta-fields)
+                                  (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%08x.arrow" chunk-idx))
@@ -73,6 +84,9 @@
           min-vec (.getChild min-meta-vec type-name)
           max-vec (.getChild max-meta-vec type-name)]
 
+      (.setIndexDefined min-meta-vec meta-idx)
+      (.setIndexDefined max-meta-vec meta-idx)
+
       (dotimes [field-vec-idx (.getValueCount field-vec)]
         (when (or (.isNull min-vec meta-idx)
                   (and (not (.isNull field-vec field-vec-idx))
@@ -84,7 +98,7 @@
                        (pos? (.compareIdx vec-comparator field-vec field-vec-idx max-vec meta-idx))))
           (.copyFromSafe max-vec field-vec-idx meta-idx field-vec))))))
 
-(defn write-meta [^VectorSchemaRoot metadata-root, live-roots]
+(defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]
   (let [col-count (count live-roots)
 
         ^VarCharVector column-name-vec (.getVector metadata-root "column")
@@ -94,7 +108,13 @@
 
         ^StructVector min-vec (.getVector metadata-root "min")
         ^StructVector max-vec (.getVector metadata-root "max")
-        ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
+        ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")
+
+        ^ListVector blocks-vec (.getVector metadata-root "blocks")
+        ^StructVector blocks-data-vec (.getDataVector blocks-vec)
+        ^StructVector blocks-min-vec (.getChild blocks-data-vec "min")
+        ^StructVector blocks-max-vec (.getChild blocks-data-vec "max")
+        ^VarBinaryVector blocks-bloom-vec (.getChild blocks-data-vec "bloom")]
 
     (.setRowCount metadata-root col-count)
 
@@ -113,8 +133,33 @@
                (.setIndexDefined min-vec column-idx)
                (.setIndexDefined max-vec column-idx)
 
-               (doseq [child-vec (.getChildrenFromFields column-vec)]
-                 (write-min-max child-vec min-vec max-vec column-idx))
+               (with-open [^IChunkCursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
+                 (let [start-block-idx (.startNewValue blocks-vec column-idx)
+
+                       ^long end-block-idx
+                       (loop [block-idx start-block-idx]
+                         (if (.tryAdvance slices
+                                          (reify Consumer
+                                            (accept [_ sliced-root]
+                                              (let [^VectorSchemaRoot sliced-root sliced-root
+                                                    ^DenseUnionVector column-vec (.getVector sliced-root col-name)]
+                                                (.setValueCount blocks-data-vec (inc block-idx))
+
+                                                (.setValueCount column-vec (.getRowCount sliced-root))
+
+                                                (when (pos? (.getRowCount sliced-root))
+                                                  (.setIndexDefined blocks-data-vec block-idx)
+
+                                                  (doseq [child-vec (.getChildrenFromFields column-vec)]
+                                                    (write-min-max child-vec blocks-min-vec blocks-max-vec block-idx)
+
+                                                    (write-min-max child-vec min-vec max-vec column-idx))
+
+                                                  (bloom/write-bloom blocks-bloom-vec block-idx column-vec))))))
+                           (recur (inc block-idx))
+                           block-idx))]
+
+                   (.endValue blocks-vec column-idx (- end-block-idx start-block-idx))))
 
                (bloom/write-bloom bloom-vec column-idx column-vec))))))
 
@@ -169,9 +214,9 @@
                           ^IBufferPool buffer-pool
                           ^SortedSet known-chunks]
   IMetadataManager
-  (registerNewChunk [_ live-roots chunk-idx]
+  (registerNewChunk [_ live-roots chunk-idx max-rows-per-block]
     (let [metadata-buf (with-open [metadata-root (VectorSchemaRoot/create metadata-schema allocator)]
-                         (write-meta metadata-root live-roots)
+                         (write-meta metadata-root live-roots chunk-idx max-rows-per-block)
 
                          (util/root->arrow-ipc-byte-buffer metadata-root :file))]
 
