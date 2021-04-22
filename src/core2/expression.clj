@@ -1,11 +1,13 @@
 (ns core2.expression
   (:require core2.operator.project
             [core2.types :as types]
-            [core2.util :as util])
+            [core2.util :as util]
+            [clojure.string :as str])
   (:import core2.operator.project.ProjectionSpec
            [core2.select IVectorSchemaRootSelector IVectorSelector]
            java.lang.reflect.Method
-           java.time.LocalDateTime
+           [java.time Instant LocalDateTime ZoneOffset]
+           java.time.temporal.ChronoField
            java.util.Date
            [org.apache.arrow.vector BitVector ValueVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -309,6 +311,24 @@
 
 (defmethod codegen-call [:/ Long Long] [{:keys [emitted-args]}]
   {:code `(quot ~@emitted-args)
+   :return-type Long})
+
+(defmethod codegen-call [:like Comparable String] [{[{x :code} {pattern :code}] :args}]
+  {:code `(boolean (re-find ~(re-pattern (str "^" (str/replace pattern #"%" ".*") "$")) ~x))
+   :return-type Boolean})
+
+(defmethod codegen-call [:substr Comparable Long Long] [{[{x :code} {start :code} {length :code}] :args}]
+  {:code `(subs ~x (dec ~start) (+ (dec ~start) ~length))
+   :return-type String})
+
+(defmethod codegen-call [:extract String Date] [{[{field :code} {x :code}] :args}]
+  {:code `(.get (.atOffset (Instant/ofEpochMilli ~x) ZoneOffset/UTC)
+                ~(case field
+                   "YEAR" `ChronoField/YEAR
+                   "MONTH" `ChronoField/MONTH_OF_YEAR
+                   "DAY" `ChronoField/DAY_OF_MONTH
+                   "HOUR" `ChronoField/HOUR_OF_DAY
+                   "MINUTE" `ChronoField/MINUTE_OF_HOUR))
    :return-type Long})
 
 (doseq [^Method method (.getDeclaredMethods Math)
