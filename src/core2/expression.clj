@@ -7,11 +7,12 @@
   (:import core2.operator.project.ProjectionSpec
            [core2.select IVectorSchemaRootSelector IVectorSelector]
            java.lang.reflect.Method
+           java.nio.ByteBuffer
+           java.nio.charset.StandardCharsets
            [java.time Instant LocalDateTime ZoneOffset]
            java.time.temporal.ChronoField
-           [java.util Arrays Date]
-           [org.apache.arrow.vector BitVector ValueVector VectorSchemaRoot]
-           java.nio.charset.StandardCharsets
+           java.util.Date
+           [org.apache.arrow.vector BaseVariableWidthVector BitVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            org.roaringbitmap.RoaringBitmap))
 
@@ -66,7 +67,7 @@
                      {:op :literal
                       :literal form
                       :init-variable (with-meta s {:literal form})
-                      :init-code `(.getBytes ~form StandardCharsets/UTF_8)})
+                      :init-code `(ByteBuffer/wrap (.getBytes ~form StandardCharsets/UTF_8))})
 
     :else {:op :literal, :literal form}))
 
@@ -110,8 +111,6 @@
 (def type->cast
   {Long 'long
    Double 'double
-   byte-array-class 'bytes
-   String 'bytes
    Date 'long
    Boolean 'boolean})
 
@@ -139,6 +138,9 @@
 
 (defn resolve-string ^String [x]
   (cond
+    (instance? ByteBuffer x)
+    (str (.decode StandardCharsets/UTF_8 (.duplicate ^ByteBuffer x)))
+
     (bytes? x)
     (String. ^bytes x StandardCharsets/UTF_8)
 
@@ -161,11 +163,39 @@
     :else
     {:code literal :return-type (class literal)}))
 
+(defn element->nio-buffer ^java.nio.ByteBuffer [^ValueVector vec ^long idx]
+  (let [value-buffer (.getDataBuffer vec)
+        offset-buffer (.getOffsetBuffer vec)
+        offset-idx (* idx BaseVariableWidthVector/OFFSET_WIDTH)
+        offset (.getInt offset-buffer offset-idx)
+        end-offset (.getInt offset-buffer (+ offset-idx BaseVariableWidthVector/OFFSET_WIDTH))]
+    (.nioBuffer value-buffer offset (- end-offset offset))))
+
+(defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
+  (let [rem-x (.remaining x)
+        rem-y (.remaining y)
+        limit (min rem-x rem-y)
+        char-limit (bit-shift-right limit 1)
+        diff (.compareTo (.limit (.asCharBuffer x) char-limit)
+                         (.limit (.asCharBuffer y) char-limit))]
+    (if (zero? diff)
+      (loop [n (bit-and-not limit 1)]
+        (if (= n limit)
+          (- rem-x rem-y)
+          (let [x-byte (.get x n)
+                y-byte (.get y n)]
+            (if (= x-byte y-byte)
+              (recur (inc n))
+              (Byte/compareUnsigned x-byte y-byte)))))
+      diff)))
+
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
   (let [type (or (get var->type variable)
                  (throw (IllegalArgumentException. (str "unknown variable: " variable))))]
     {:code (condp = type
              Boolean `(== 1 (.get ~variable ~idx-sym))
+             String `(element->nio-buffer ~variable ~idx-sym)
+             byte-array-class `(element->nio-buffer ~variable ~idx-sym)
              Comparable `(normalize-union-value (types/get-object ~variable ~idx-sym))
              `(.get ~variable ~idx-sym))
      :return-type type}))
@@ -199,24 +229,8 @@
   {:code `(= ~@emitted-args)
    :return-type Boolean})
 
-(defmethod codegen-call [:= byte-array-class byte-array-class] [{:keys [emitted-args]}]
-  {:code `(Arrays/equals ~@emitted-args)
-   :return-type Boolean})
-
-(defmethod codegen-call [:= String String] [{:keys [emitted-args]}]
-  {:code `(Arrays/equals ~@emitted-args)
-   :return-type Boolean})
-
 (defmethod codegen-call [:!= Object Object] [{:keys [emitted-args]}]
   {:code `(not= ~@emitted-args)
-   :return-type Boolean})
-
-(defmethod codegen-call [:!= byte-array-class byte-array-class] [{:keys [emitted-args]}]
-  {:code `(not (Arrays/equals ~@emitted-args))
-   :return-type Boolean})
-
-(defmethod codegen-call [:!= String String] [{:keys [emitted-args]}]
-  {:code `(not (Arrays/equals ~@emitted-args))
    :return-type Boolean})
 
 (defmethod codegen-call [:< Number Number] [{:keys [emitted-args]}]
@@ -232,11 +246,11 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:< byte-array-class byte-array-class] [{:keys [emitted-args]}]
-  {:code `(neg? (Arrays/compareUnsigned ~@emitted-args))
+  {:code `(neg? (compare-nio-buffers-unsigned ~@emitted-args))
    :return-type Boolean})
 
 (defmethod codegen-call [:< String String] [{:keys [emitted-args]}]
-  {:code `(neg? (Arrays/compareUnsigned ~@emitted-args))
+  {:code `(neg? (compare-nio-buffers-unsigned ~@emitted-args))
    :return-type Boolean})
 
 (prefer-method codegen-call [:< Number Number] [:< Comparable Comparable])
@@ -256,11 +270,11 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:<= byte-array-class byte-array-class] [{:keys [emitted-args]}]
-  {:code `(not (pos? (Arrays/compareUnsigned ~@emitted-args)))
+  {:code `(not (pos? (compare-nio-buffers-unsigned ~@emitted-args)))
    :return-type Boolean})
 
 (defmethod codegen-call [:<= String String] [{:keys [emitted-args]}]
-  {:code `(not (pos? (Arrays/compareUnsigned ~@emitted-args)))
+  {:code `(not (pos? (compare-nio-buffers-unsigned ~@emitted-args)))
    :return-type Boolean})
 
 (prefer-method codegen-call [:<= Number Number] [:<= Comparable Comparable])
@@ -280,11 +294,11 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:> byte-array-class byte-array-class] [{:keys [emitted-args]}]
-  {:code `(pos? (Arrays/compareUnsigned ~@emitted-args))
+  {:code `(pos? (compare-nio-buffers-unsigned ~@emitted-args))
    :return-type Boolean})
 
 (defmethod codegen-call [:> String String] [{:keys [emitted-args]}]
-  {:code `(pos? (Arrays/compareUnsigned ~@emitted-args))
+  {:code `(pos? (compare-nio-buffers-unsigned ~@emitted-args))
    :return-type Boolean})
 
 (prefer-method codegen-call [:> Number Number] [:> Comparable Comparable])
@@ -304,11 +318,11 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:>= byte-array-class byte-array-class] [{:keys [emitted-args]}]
-  {:code `(not (neg? (Arrays/compareUnsigned ~@emitted-args)))
+  {:code `(not (neg? (compare-nio-buffers-unsigned ~@emitted-args)))
    :return-type Boolean})
 
 (defmethod codegen-call [:>= String String] [{:keys [emitted-args]}]
-  {:code `(not (neg? (Arrays/compareUnsigned ~@emitted-args)))
+  {:code `(not (neg? (compare-nio-buffers-unsigned ~@emitted-args)))
    :return-type Boolean})
 
 (prefer-method codegen-call [:>= Number Number] [:>= Comparable Comparable])
@@ -361,8 +375,8 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:substr Comparable Long Long] [{[{x :code} {start :code} {length :code}] :args}]
-  {:code `(.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
-                     StandardCharsets/UTF_8)
+  {:code `(ByteBuffer/wrap (.getBytes (subs (resolve-string ~x) (dec ~start) (+ (dec ~start) ~length))
+                                      StandardCharsets/UTF_8))
    :return-type String})
 
 (defmethod codegen-call [:extract String Date] [{[{field :code} {x :code}] :args}]
@@ -389,7 +403,9 @@
     (instance? Date v)
     (.getTime ^Date v)
     (string? v)
-    (.getBytes ^String v StandardCharsets/UTF_8)
+    (ByteBuffer/wrap (.getBytes ^String v StandardCharsets/UTF_8))
+    (bytes? v)
+    (ByteBuffer/wrap v)
     :else
     v))
 
@@ -426,15 +442,19 @@
         (let [arrow-return-type (types/->arrow-type return-type)
               ^Class vector-return-type (get types/arrow-type->vector-type arrow-return-type)
               return-type-id (types/arrow-type->type-id arrow-return-type)
-              inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))]
+              inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))
+              offset-sym (gensym "offset")]
           `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
              (let [~@(init-expressions expr)
                    ~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
-                 (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
-                   (.set ~inner-acc-sym offset# ~(if (= BitVector vector-return-type)
-                                                   `(if ~code 1 0)
-                                                   code))))
+                 (let [~offset-sym (util/write-type-id acc# ~idx-sym ~return-type-id)]
+                   ~(if (.isAssignableFrom BaseVariableWidthVector vector-return-type)
+                      `(let [bb# ~code]
+                         (.set ~inner-acc-sym ~offset-sym bb# (.position bb#) (.remaining bb#)))
+                      `(.set ~inner-acc-sym ~offset-sym ~(if (= BitVector vector-return-type)
+                                                           `(if ~code 1 0)
+                                                           code)))))
                acc#))))
 
       ::select

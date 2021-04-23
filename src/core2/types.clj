@@ -3,6 +3,7 @@
             [core2.util :as util])
   (:import java.time.LocalDateTime
            java.util.Date
+           java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -90,18 +91,34 @@
   (get-object [this idx] (.getObject this ^int idx))
 
   VarBinaryVector
-  (set-safe! [this idx v] (.setSafe this ^int idx ^bytes v))
+  (set-safe! [this idx v] (cond
+                            (instance? ByteBuffer v)
+                            (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
+
+                            (bytes? v)
+                            (.setSafe this ^int idx ^bytes v)
+
+                            :else
+                            (throw (IllegalArgumentException.))))
   (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.get this ^int idx))
 
   VarCharVector
   (set-safe! [this idx v] (cond
+                            (instance? ByteBuffer v)
+                            (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
+
                             (bytes? v)
                             (.setSafe this ^int idx ^bytes v)
+
                             (string? v)
                             (.setSafe this ^int idx (.getBytes ^String v StandardCharsets/UTF_8))
+
                             (instance? Text v)
-                            (.setSafe this ^int idx ^Text v)))
+                            (.setSafe this ^int idx ^Text v)
+
+                            :else
+                            (throw (IllegalArgumentException.))))
   (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
 

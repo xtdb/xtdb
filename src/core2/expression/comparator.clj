@@ -1,7 +1,7 @@
 (ns core2.expression.comparator
   (:require [core2.expression :as expr]
             [core2.types :as types])
-  (:import [java.util Arrays Date]
+  (:import java.util.Date
            org.apache.arrow.vector.types.pojo.ArrowType))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -27,7 +27,7 @@
    :return-type Long})
 
 (defmethod expr/codegen-call [:compare expr/byte-array-class expr/byte-array-class] [{:keys [emitted-args]}]
-  {:code `(Arrays/compareUnsigned ~@emitted-args)
+  {:code `(expr/compare-nio-buffers-unsigned ~@emitted-args)
    :return-type Long})
 
 (defmethod expr/codegen-call [:compare Comparable Comparable] [{:keys [emitted-args]}]
@@ -35,7 +35,7 @@
    :return-type Long})
 
 (defmethod expr/codegen-call [:compare String String] [{:keys [emitted-args]}]
-  {:code `(Arrays/compareUnsigned ~@emitted-args)
+  {:code `(expr/compare-nio-buffers-unsigned ~@emitted-args)
    :return-type Long})
 
 (prefer-method expr/codegen-call [:compare Date Date] [:compare Comparable Comparable])
