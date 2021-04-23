@@ -120,18 +120,20 @@
                                                     `(aset ~idx ~h)))))
 
                   (let [arrow-type (types/->arrow-type field-type)
-                        vec-sym (get metadata-vec-syms meta-value)]
+                        vec-sym (get metadata-vec-syms meta-value)
+                        variable-code (expr/codegen-expr
+                                       {:op :variable, :variable vec-sym}
+                                       {:var->type {vec-sym field-type}})]
                     `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                            (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
                          ~(:code (expr/codegen-expr
                                   {:op :call
                                    :f f
-                                   :args [{:code (list (expr/type->cast field-type)
-                                                       (:code (expr/codegen-expr
-                                                               {:op :variable, :variable vec-sym}
-                                                               {:var->type {vec-sym field-type}}))),
-                                           :return-type field-type}
+                                   :args [(if-let [cast (expr/type->cast field-type)]
+                                            {:code (list cast (:code variable-code)),
+                                             :return-type field-type}
+                                            variable-code)
                                           (expr/codegen-expr literal nil)]}
                                   opts))))))))
      :return-type Boolean}))
