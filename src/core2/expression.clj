@@ -106,8 +106,6 @@
                       (map :variable)
                       (distinct)))))
 
-(def byte-array-class (Class/forName "[B"))
-
 (def type->cast
   {Long 'long
    Double 'double
@@ -195,7 +193,7 @@
     {:code (condp = type
              Boolean `(== 1 (.get ~variable ~idx-sym))
              String `(element->nio-buffer ~variable ~idx-sym)
-             byte-array-class `(element->nio-buffer ~variable ~idx-sym)
+             types/byte-array-class `(element->nio-buffer ~variable ~idx-sym)
              Comparable `(normalize-union-value (types/get-object ~variable ~idx-sym))
              `(.get ~variable ~idx-sym))
      :return-type type}))
@@ -245,7 +243,7 @@
   {:code `(neg? (compare ~@emitted-args))
    :return-type Boolean})
 
-(defmethod codegen-call [:< byte-array-class byte-array-class] [{:keys [emitted-args]}]
+(defmethod codegen-call [:< types/byte-array-class types/byte-array-class] [{:keys [emitted-args]}]
   {:code `(neg? (compare-nio-buffers-unsigned ~@emitted-args))
    :return-type Boolean})
 
@@ -269,7 +267,7 @@
   {:code `(not (pos? (compare ~@emitted-args)))
    :return-type Boolean})
 
-(defmethod codegen-call [:<= byte-array-class byte-array-class] [{:keys [emitted-args]}]
+(defmethod codegen-call [:<= types/byte-array-class types/byte-array-class] [{:keys [emitted-args]}]
   {:code `(not (pos? (compare-nio-buffers-unsigned ~@emitted-args)))
    :return-type Boolean})
 
@@ -293,7 +291,7 @@
   {:code `(pos? (compare ~@emitted-args))
    :return-type Boolean})
 
-(defmethod codegen-call [:> byte-array-class byte-array-class] [{:keys [emitted-args]}]
+(defmethod codegen-call [:> types/byte-array-class types/byte-array-class] [{:keys [emitted-args]}]
   {:code `(pos? (compare-nio-buffers-unsigned ~@emitted-args))
    :return-type Boolean})
 
@@ -317,7 +315,7 @@
   {:code `(not (neg? (compare ~@emitted-args)))
    :return-type Boolean})
 
-(defmethod codegen-call [:>= byte-array-class byte-array-class] [{:keys [emitted-args]}]
+(defmethod codegen-call [:>= types/byte-array-class types/byte-array-class] [{:keys [emitted-args]}]
   {:code `(not (neg? (compare-nio-buffers-unsigned ~@emitted-args)))
    :return-type Boolean})
 

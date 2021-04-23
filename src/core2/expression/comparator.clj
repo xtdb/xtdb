@@ -26,7 +26,7 @@
   {:code `(Long/compare ~@emitted-args)
    :return-type Long})
 
-(defmethod expr/codegen-call [:compare expr/byte-array-class expr/byte-array-class] [{:keys [emitted-args]}]
+(defmethod expr/codegen-call [:compare types/byte-array-class types/byte-array-class] [{:keys [emitted-args]}]
   {:code `(expr/compare-nio-buffers-unsigned ~@emitted-args)
    :return-type Long})
 

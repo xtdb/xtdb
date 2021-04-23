@@ -13,18 +13,19 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
+(def byte-array-class (Class/forName "[B"))
+
 (def ->arrow-type
   {nil (.getType Types$MinorType/NULL)
    Long (.getType Types$MinorType/BIGINT)
    Double (.getType Types$MinorType/FLOAT8)
-   (Class/forName "[B") (.getType Types$MinorType/VARBINARY)
+   byte-array-class (.getType Types$MinorType/VARBINARY)
+   ByteBuffer (.getType Types$MinorType/VARBINARY)
    String (.getType Types$MinorType/VARCHAR)
    Text (.getType Types$MinorType/VARCHAR)
    Boolean (.getType Types$MinorType/BIT)
    Date (.getType Types$MinorType/TIMESTAMPMILLI)
    LocalDateTime (.getType Types$MinorType/TIMESTAMPMILLI)})
-
-(def ^:private byte-array-class (Class/forName "[B"))
 
 (def arrow-type->vector-type
   {(.getType Types$MinorType/NULL) NullVector
