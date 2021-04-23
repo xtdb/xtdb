@@ -17,8 +17,7 @@
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo Field Schema]
-           org.apache.arrow.vector.types.Types$MinorType
-           org.apache.arrow.vector.util.Text))
+           org.apache.arrow.vector.types.Types$MinorType))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 

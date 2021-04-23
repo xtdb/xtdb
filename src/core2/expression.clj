@@ -13,18 +13,7 @@
            [org.apache.arrow.vector BitVector ValueVector VectorSchemaRoot]
            java.nio.charset.StandardCharsets
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
-
-;; TODO:
-
-;; Normalise constants and get methods for
-;; Text/bytes/Dates/Intervals. Support ArrowBufPointers?
-
-;; Add tests for things beyond numbers.
-
-;; Example of other built-in ops needed are things related to strings,
-;; dates, casts and temporal intervals.
 
 (set! *unchecked-math* :warn-on-boxed)
 

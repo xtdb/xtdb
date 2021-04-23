@@ -22,8 +22,7 @@
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector VarCharVector VectorLoader VectorSchemaRoot]
-           org.apache.arrow.vector.complex.StructVector
-           org.apache.arrow.vector.util.Text))
+           org.apache.arrow.vector.complex.StructVector))
 
 (def txs
   [[{:op :put

@@ -2,10 +2,10 @@
   (:require [clojure.test :as t]
             [core2.expression :as expr]
             [core2.test-util :as test-util]
+            [core2.types :as ty]
             [core2.util :as util])
   (:import org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector ValueVector VarCharVector VectorSchemaRoot]
-           org.apache.arrow.vector.util.Text))
+           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector ValueVector VarCharVector VectorSchemaRoot]))
 
 (t/deftest can-compile-simple-expression
   (with-open [allocator (RootAllocator.)
@@ -22,7 +22,7 @@
         (.set a n (double n))
         (.set b n (double n))
         (.set d n n)
-        (.setSafe e n (Text. (format "%04d" n)))))
+        (ty/set-safe! e n (format "%04d" n))))
 
     (with-open [in (VectorSchemaRoot/of (into-array FieldVector [a b d]))]
       (let [expr (expr/form->expr '(+ a b))

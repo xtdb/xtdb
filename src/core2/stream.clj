@@ -6,7 +6,6 @@
            [java.util.function BiConsumer Consumer DoubleConsumer IntConsumer LongConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
            java.time.LocalDateTime
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.util.Text
            org.apache.arrow.vector.types.pojo.Field
            [org.apache.arrow.vector BigIntVector Float8Vector IntVector NullVector TinyIntVector ValueVector]
            [org.apache.arrow.vector.complex DenseUnionVector VectorWithOrdinal]

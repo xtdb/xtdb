@@ -2,8 +2,7 @@
   (:require [clojure.test :as t]
             [core2.tpch :as tpch]
             [core2.tpch-test :as tpch-test]
-            [core2.util :as util])
-  (:import org.apache.arrow.vector.util.Text))
+            [core2.util :as util]))
 
 (t/use-fixtures :once (partial tpch-test/with-tpch-data
                                {:scale-factor 0.001
