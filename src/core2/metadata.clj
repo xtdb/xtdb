@@ -1,33 +1,42 @@
 (ns core2.metadata
   (:require [core2.blocks :as blocks]
             [core2.bloom :as bloom]
+            core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
+            core2.object-store
             [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util])
-  (:import clojure.lang.MapEntry
-           core2.buffer_pool.IBufferPool
+  (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
            core2.util.IChunkCursor
            java.io.Closeable
-           [java.util Date List SortedSet]
+           [java.util Date HashMap List Map SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
-           java.util.function.Consumer
+           [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector FieldVector TimeStampMilliVector VarBinaryVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List Schema]
-           org.apache.arrow.vector.util.Text))
+           org.apache.arrow.vector.util.Text
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IMetadataManager
   (^void registerNewChunk [^java.util.Map roots, ^long chunk-idx, ^long max-rows-per-block])
   (^java.util.SortedSet knownChunks [])
-  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.Function f]))
+  (^java.util.concurrent.CompletableFuture withMetadata [^long chunkIdx, ^java.util.function.BiFunction f]))
+
+(definterface IMetadataIndices
+  (^Long columnIndex [^String columnName])
+  (^Long blockIndex [^String column-name, ^long blockIdx])
+  (^long blockCount []))
+
+(defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
 (defn type->field-name [^ArrowType arrow-type]
   (-> (Types/getMinorTypeForArrowType arrow-type)
@@ -169,45 +178,70 @@
     ;; there may be a more idiomatic way to achieve this
     (.setRowCount metadata-root col-count)))
 
-(defn metadata-column-idx [^VectorSchemaRoot metadata-root, ^String col-name]
-  (let [col-count (.getRowCount metadata-root)
-        ^VarCharVector column-name-vector (.getVector metadata-root "column")]
-    (loop [idx 0]
-      (when (< idx col-count)
-        (if (= col-name (t/get-object column-name-vector idx))
-          idx
-          (recur (inc idx)))))))
+(deftype MetadataIndices [^Map col-idx-cache
+                          ^long col-count
+                          ^VarCharVector column-name-vec
+                          ^ListVector blocks-vec]
+  IMetadataIndices
+  (columnIndex [_ col-name]
+    (.computeIfAbsent col-idx-cache col-name
+                      (reify Function
+                        (apply [_ field-name]
+                          (loop [idx 0]
+                            (when (< idx col-count)
+                              (if (= col-name (t/get-object column-name-vec idx))
+                                idx
+                                (recur (inc idx)))))))))
+
+  (blockIndex [this col-name block-idx]
+    (when-let [col-idx (.columnIndex this col-name)]
+      (let [block-idx (+ (.getElementStartIndex blocks-vec col-idx) block-idx)]
+        (when (< block-idx (.getElementEndIndex blocks-vec col-idx))
+          (when-not (.isNull (.getDataVector blocks-vec) block-idx)
+            block-idx)))))
+
+  (blockCount [this]
+    (let [tx-id-idx (.columnIndex this "_tx-id")]
+      (- (.getElementEndIndex blocks-vec tx-id-idx)
+         (.getElementStartIndex blocks-vec tx-id-idx)))))
+
+(defn ->metadata-idxs ^core2.metadata.IMetadataIndices [^VectorSchemaRoot metadata-root]
+  (MetadataIndices. (HashMap.)
+                    (.getRowCount metadata-root)
+                    (.getVector metadata-root "column")
+                    (.getVector metadata-root "blocks")))
 
 (defn with-metadata [^IMetadataManager metadata-mgr, ^long chunk-idx, f]
-  (.withMetadata metadata-mgr chunk-idx (util/->jfn f)))
+  (.withMetadata metadata-mgr chunk-idx (util/->jbifn f)))
 
 (defn with-latest-metadata [^IMetadataManager metadata-mgr, f]
   (if-let [chunk-idx (last (.knownChunks metadata-mgr))]
     (with-metadata metadata-mgr chunk-idx f)
     (CompletableFuture/completedFuture nil)))
 
-(defn latest-tx [^VectorSchemaRoot metadata-root]
-  (let [^StructVector max-vec (.getVector metadata-root "max")
-        tx-id-idx (metadata-column-idx metadata-root "_tx-id")
-        tx-time-idx (metadata-column-idx metadata-root "_tx-time")]
+(defn latest-tx [_chunk-idx ^VectorSchemaRoot metadata-root]
+  (let [metadata-idxs (->metadata-idxs metadata-root)
+        ^StructVector max-vec (.getVector metadata-root "max")]
     (tx/->TransactionInstant (-> max-vec
                                  ^BigIntVector
                                  (.getChild (type->field-name (.getType Types$MinorType/BIGINT)))
-                                 (.get tx-id-idx))
+                                 (.get (.columnIndex metadata-idxs "_tx-id")))
                              (Date. (-> max-vec
                                         ^TimeStampMilliVector
                                         (.getChild (type->field-name (.getType Types$MinorType/TIMESTAMPMILLI)))
-                                        (.get tx-time-idx))))))
+                                        (.get (.columnIndex metadata-idxs "_tx-time")))))))
 
-(defn latest-row-id [^VectorSchemaRoot metadata-root]
-  (.get ^BigIntVector (.getVector metadata-root "max-row-id")
-        (metadata-column-idx metadata-root "_tx-id")))
+(defn latest-row-id [_chunk-idx ^VectorSchemaRoot metadata-root]
+  (let [metadata-idxs (->metadata-idxs metadata-root)]
+    (.get ^BigIntVector (.getVector metadata-root "max-row-id")
+          (.columnIndex metadata-idxs "_tx-id"))))
 
 (defn matching-chunks [^IMetadataManager metadata-mgr, ^Watermark watermark, metadata-pred]
   (->> (for [^long chunk-idx (.knownChunks metadata-mgr)
              :while (or (nil? watermark) (< chunk-idx (.chunk-idx watermark)))]
-         (MapEntry/create chunk-idx (with-metadata metadata-mgr chunk-idx metadata-pred)))
-       vec (filter (comp deref val)) keys))
+         (with-metadata metadata-mgr chunk-idx metadata-pred))
+       vec
+       (into [] (keep deref))))
 
 (deftype MetadataManager [^BufferAllocator allocator
                           ^ObjectStore object-store
@@ -237,7 +271,7 @@
                     (.tryAdvance chunk
                                  (reify Consumer
                                    (accept [_ metadata-root]
-                                     (deliver res (.apply f metadata-root))))))
+                                     (deliver res (.apply f chunk-idx metadata-root))))))
 
                   (assert (realized? res))
                   @res

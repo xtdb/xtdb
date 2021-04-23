@@ -2,11 +2,12 @@
   (:require [clojure.test :as t]
             [core2.core :as c2]
             [core2.expression :as expr]
+            [core2.expression.metadata :as expr.meta]
             [core2.metadata :as meta]
             [core2.test-util :as tu]
-            [core2.util :as util]
-            [core2.expression.metadata :as expr.meta])
-  (:import core2.metadata.IMetadataManager))
+            [core2.util :as util])
+  (:import core2.metadata.IMetadataManager
+           org.roaringbitmap.RoaringBitmap))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
@@ -17,10 +18,11 @@
 
       (tu/finish-chunk node)
 
-      @(c2/submit-tx node [{:op :put, :doc {:name "James", :_id 1}}
-                           {:op :put, :doc {:name "Dan", :_id 2}}])
+      @(c2/submit-tx node [{:op :put, :doc {:name "Dan", :_id 1}}
+                           {:op :put, :doc {:name "Ivan", :_id 2}}])
 
-      @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jon", :_id 3}}])
+      @(-> (c2/submit-tx node [{:op :put, :doc {:name "James", :_id 3}}
+                               {:op :put, :doc {:name "Jon", :_id 4}}])
            (tu/then-await-tx node))
 
       (tu/finish-chunk node)
@@ -32,10 +34,12 @@
                     (into #{} (mapcat seq) (tu/<-cursor res))))]
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= #{0 1} (.knownChunks metadata-mgr)))
-            (t/is (= [1] (meta/matching-chunks metadata-mgr watermark metadata-pred))
-                  "only needs to scan chunk 1")
+            (t/is (= [(meta/map->ChunkMatch
+                       {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]
+                     (meta/matching-chunks metadata-mgr watermark metadata-pred))
+                  "only needs to scan chunk 1, block 1")
 
-            @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 4}}])
+            @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 5}}])
                  (tu/then-await-tx node))
 
             (t/is (= #{{:name "James"}
@@ -71,7 +75,9 @@
                     (into #{} (mapcat seq) (tu/<-cursor res))))]
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= #{0 3} (.knownChunks metadata-mgr)))
-            (t/is (= [0] (meta/matching-chunks metadata-mgr watermark metadata-pred))
+            (t/is (= [(meta/map->ChunkMatch
+                       {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]
+                     (meta/matching-chunks metadata-mgr watermark metadata-pred))
                   "only needs to scan chunk 0")
 
             (t/is (= #{{:name "Ivan"}}

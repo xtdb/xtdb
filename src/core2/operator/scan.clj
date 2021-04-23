@@ -1,7 +1,6 @@
 (ns core2.operator.scan
   (:require [core2.align :as align]
             [core2.bloom :as bloom]
-            [core2.expression :as expr]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
             [core2.temporal :as temporal]
@@ -20,8 +19,8 @@
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
-           org.roaringbitmap.longlong.Roaring64Bitmap
-           org.roaringbitmap.buffer.MutableRoaringBitmap))
+           org.roaringbitmap.buffer.MutableRoaringBitmap
+           org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -113,9 +112,10 @@
 (defn- matches-pushdown-bloom? [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* col-name)]
     @(meta/with-metadata metadata-manager chunk-idx
-       (fn [^VectorSchemaRoot metadata-root]
-         (let [^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")
-               idx (meta/metadata-column-idx metadata-root col-name)
+       (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
+         (let [metadata-idxs (meta/->metadata-idxs metadata-root)
+               ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")
+               idx (.columnIndex metadata-idxs col-name)
                metadata-bloom (bloom/bloom->bitmap bloom-vec idx)]
            (MutableRoaringBitmap/intersects pushdown-bloom metadata-bloom))))
     true))
@@ -125,7 +125,7 @@
                      ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
                      ^Watermark watermark
-                     ^Queue #_<Long> chunk-idxs
+                     ^Queue #_<ChunkMatch> matching-chunks
                      ^List col-names
                      ^Map col-preds
                      ^longs temporal-min-range
@@ -176,14 +176,14 @@
 
               (next-chunk []
                 (loop []
-                  (when-let [chunk-idx (.poll chunk-idxs)]
+                  (when-let [{:keys [chunk-idx block-idxs]} (.poll matching-chunks)]
                     (let [chunks (->> (for [col-name real-col-names
                                             :when (matches-pushdown-bloom? metadata-manager chunk-idx col-name)]
                                         (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                             (util/then-apply
                                               (fn [buf]
                                                 (when buf
-                                                  (MapEntry/create col-name (util/->chunks buf allocator)))))))
+                                                  (MapEntry/create col-name (util/->chunks buf allocator {:block-idxs block-idxs})))))))
                                       (remove nil?)
                                       vec
                                       (into {} (map deref)))
@@ -221,7 +221,7 @@
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range]
-  (let [chunk-idxs (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
+  (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
     (ScanCursor. allocator buffer-pool temporal-manager metadata-manager watermark
-                 chunk-idxs col-names col-preds temporal-min-range temporal-max-range
+                 matching-chunks col-names col-preds temporal-min-range temporal-max-range
                  nil nil false)))
