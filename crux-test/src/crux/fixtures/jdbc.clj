@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [crux.fixtures :as fix]
             [crux.jdbc :as j]
-            [clojure.test :as t])
+            [clojure.test :as t]
+            [next.jdbc :as jdbc])
   (:import com.opentable.db.postgres.embedded.EmbeddedPostgres))
 
 (defn- with-jdbc-opts [{:keys [pool-opts dialect db-spec]} f]
@@ -60,32 +61,38 @@
     (with-embedded-postgres f))
 
   ;; Optional:
+  ;; in `crux-jdbc`: `docker-compose up` (`docker-compose up -d` for background)
+
   #_
   (t/testing "Postgres"
-    ;; docker run --rm --name crux-psql -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres:13.2
-    ;; psql -U postgres -h 127.0.0.1
-    ;; CREATE DATABASE cruxtest;
-    (with-postgres-opts {:dbname "cruxtest", :user "postgres", :password "postgres"} f))
+    (with-open [conn (jdbc/get-connection {:dbtype "postgresql", :user "postgres", :password "postgres"})]
+      (jdbc/execute! conn ["DROP DATABASE IF EXISTS cruxtest"])
+      (jdbc/execute! conn ["CREATE DATABASE cruxtest"]))
+    (with-postgres-opts {:dbname "cruxtest", :user "postgres", :password "postgres"}
+      f))
 
   #_
   (t/testing "MySQL Database"
-    ;; docker run --rm --name crux-mysql -e MYSQL_ROOT_PASSWORD=my-secret-pw -p 3306:3306 -d mysql:8.0.21
-    ;; mariadb -h 127.0.0.1 -u root -p
-    ;; CREATE DATABASE cruxtest;
-    (with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"} f))
+    (with-open [conn (jdbc/get-connection {:dbtype "mysql", :user "root", :password "my-secret-pw"})]
+      (jdbc/execute! conn ["DROP DATABASE IF EXISTS cruxtest"])
+      (jdbc/execute! conn ["CREATE DATABASE cruxtest"]))
+    (with-mysql-opts {:dbname "cruxtest", :user "root", :password "my-secret-pw"}
+      f))
 
+  #_
+  (t/testing "MSSQL Database"
+    (with-open [conn (jdbc/get-connection {:dbtype "mssql", :user "sa", :password "yourStrong(!)Password"})]
+      (jdbc/execute! conn ["DROP DATABASE IF EXISTS cruxtest"])
+      (jdbc/execute! conn ["CREATE DATABASE cruxtest"]))
+    (with-mssql-opts {:db-spec {:dbname "cruxtest"}
+                      :pool-opts {:username "sa"
+                                  :password "yourStrong(!)Password"}}
+      f))
+
+  ;; TODO this one's gone stale
   #_
   (when (.exists (clojure.java.io/file ".testing-oracle.edn"))
     (t/testing "Oracle Database"
       (with-jdbc-node "oracle" f
         (read-string (slurp ".testing-oracle.edn")))))
-
-  #_
-  (t/testing "MSSQL Database"
-    ;; docker run --rm --name crux-mssql -e 'ACCEPT_EULA=Y' -e 'SA_PASSWORD=yourStrong(!)Password' -e 'MSSQL_PID=Express' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2017-latest-ubuntu
-    ;; mssql-cli
-    ;; CREATE DATABASE cruxtest;
-    (with-mssql-opts {:db-spec {:dbname "cruxtest"}
-                      :pool-opts {:username "sa"
-                                  :password "yourStrong(!)Password"}}
-      f)))
+  )
