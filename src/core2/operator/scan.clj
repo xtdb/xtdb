@@ -19,8 +19,10 @@
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
+           [org.apache.arrow.vector.complex ListVector StructVector]
            org.roaringbitmap.buffer.MutableRoaringBitmap
-           org.roaringbitmap.longlong.Roaring64Bitmap))
+           org.roaringbitmap.longlong.Roaring64Bitmap
+           [org.roaringbitmap IntConsumer RoaringBitmap]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -109,16 +111,30 @@
         (util/try-close temporal-roots)))
     out-root))
 
-(defn- matches-pushdown-bloom? [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name]
+(defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* col-name)]
     @(meta/with-metadata metadata-manager chunk-idx
        (fn [_chunk-idx ^VectorSchemaRoot metadata-root]
          (let [metadata-idxs (meta/->metadata-idxs metadata-root)
-               ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")
-               idx (.columnIndex metadata-idxs col-name)
-               metadata-bloom (bloom/bloom->bitmap bloom-vec idx)]
-           (MutableRoaringBitmap/intersects pushdown-bloom metadata-bloom))))
-    true))
+               ^VarBinaryVector bloom-vec (.getVector metadata-root "bloom")]
+           (when (MutableRoaringBitmap/intersects pushdown-bloom
+                                                  (bloom/bloom->bitmap bloom-vec (.columnIndex metadata-idxs col-name)))
+             (let [filtered-block-idxs (RoaringBitmap.)
+                   ^ListVector blocks-vec (.getVector metadata-root "blocks")
+                   ^StructVector blocks-data-vec (.getDataVector blocks-vec)
+                   ^VarBinaryVector blocks-bloom-vec (.getChild blocks-data-vec "bloom")]
+               (.forEach block-idxs
+                         (reify IntConsumer
+                           (accept [_ block-idx]
+                             (when-let [bloom-vec-idx (.blockIndex metadata-idxs col-name block-idx)]
+                               (when (and (not (.isNull blocks-data-vec bloom-vec-idx))
+                                          (MutableRoaringBitmap/intersects pushdown-bloom
+                                                                           (bloom/bloom->bitmap blocks-bloom-vec bloom-vec-idx)))
+                                 (.add filtered-block-idxs block-idx))))))
+
+               (when-not (.isEmpty filtered-block-idxs)
+                 filtered-block-idxs))))))
+    block-idxs))
 
 (deftype ScanCursor [^BufferAllocator allocator
                      ^IBufferPool buffer-pool
@@ -177,22 +193,27 @@
               (next-chunk []
                 (loop []
                   (when-let [{:keys [chunk-idx block-idxs]} (.poll matching-chunks)]
-                    (let [chunks (->> (for [col-name real-col-names
-                                            :when (matches-pushdown-bloom? metadata-manager chunk-idx col-name)]
-                                        (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
-                                            (util/then-apply
-                                              (fn [buf]
-                                                (when buf
-                                                  (MapEntry/create col-name (util/->chunks buf allocator {:block-idxs block-idxs})))))))
-                                      (remove nil?)
-                                      vec
-                                      (into {} (map deref)))
-                          out-root (create-out-root chunks)]
-                      (set! (.chunks this) chunks)
-                      (set! (.out-root this) out-root)
+                    (or (when-let [block-idxs (reduce (fn [block-idxs col-name]
+                                                        (or (->> block-idxs
+                                                                 (filter-pushdown-bloom-block-idxs metadata-manager chunk-idx col-name))
+                                                            (reduced nil)))
+                                                      block-idxs
+                                                      real-col-names)]
+                          (let [chunks (->> (for [col-name real-col-names]
+                                              (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
+                                                  (util/then-apply
+                                                    (fn [buf]
+                                                      (when buf
+                                                        (MapEntry/create col-name (util/->chunks buf allocator {:block-idxs block-idxs})))))))
+                                            (remove nil?)
+                                            vec
+                                            (into {} (map deref)))
+                                out-root (create-out-root chunks)]
+                            (set! (.chunks this) chunks)
+                            (set! (.out-root this) out-root)
 
-                      (or (next-block chunks out-root)
-                          (recur))))))]
+                            (next-block chunks out-root)))
+                        (recur)))))]
 
         (or (when chunks
               (next-block chunks out-root))
