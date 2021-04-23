@@ -6,9 +6,6 @@
   (:import microsoft.sql.DateTimeOffset
            java.util.Date))
 
-(defn- schema-exists? [ds]
-  (seq (jdbc/execute-one! ds ["SELECT * FROM sysobjects WHERE name='tx_events' and xtype='U'"])))
-
 (defn- check-tx-time-col [ds]
   (when-not (= "datetimeoffset"
                (-> (jdbc/execute-one! ds
@@ -23,9 +20,9 @@
     (db-type [_] :mssql)
 
     (setup-schema! [_ ds]
-     (when-not (schema-exists? ds)
-       (doto ds
-         (jdbc/execute! ["
+      (doto ds
+        (jdbc/execute! ["
+IF NOT EXISTS (select * from sys.tables where name='tx_events')
 CREATE TABLE tx_events (
   event_offset INT NOT NULL IDENTITY PRIMARY KEY,
   event_key VARCHAR(1000),
@@ -34,9 +31,15 @@ CREATE TABLE tx_events (
   v VARBINARY(max) NOT NULL,
   compacted INTEGER NOT NULL)"])
 
-         (jdbc/execute! ["CREATE INDEX tx_events_event_key_idx ON tx_events(event_key)"])
+        (jdbc/execute! ["
+IF EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id('dbo.tx_events') AND NAME ='tx_events_event_key_idx')
+DROP INDEX tx_events.tx_events_event_key_idx"])
 
-         (check-tx-time-col))))))
+        (jdbc/execute! ["
+IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id('dbo.tx_events') AND NAME ='tx_events_event_key_idx_2')
+CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"])
+
+        (check-tx-time-col)))))
 
 (defmethod j/->date :mssql [^DateTimeOffset d _]
   (Date/from (.toInstant (.getOffsetDateTime d))))
