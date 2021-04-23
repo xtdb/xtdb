@@ -204,7 +204,7 @@
                                    (let [^VectorSchemaRoot id-root id-root
                                          id-vec (.getVector id-root 1)]
                                      (dotimes [n (.getValueCount id-vec)]
-                                       (.getOrCreateInternalId this (.getObject id-vec n)))))))))
+                                       (.getOrCreateInternalId this (t/get-object id-vec n)))))))))
         (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator @acc))
         (finally
           (util/try-close @acc)))))

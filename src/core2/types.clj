@@ -3,7 +3,9 @@
             [core2.util :as util])
   (:import java.time.LocalDateTime
            java.util.Date
+           java.nio.charset.StandardCharsets
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
+           org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Field FieldType]
            org.apache.arrow.vector.util.Text))
@@ -43,6 +45,9 @@
    (.getType Types$MinorType/TINYINT) Byte
    (.getType Types$MinorType/BIT) Boolean})
 
+(defn arrow-type->type-id ^long [^ArrowType arrow-type]
+  (long (.getFlatbufID (.getTypeID arrow-type))))
+
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
@@ -51,16 +56,19 @@
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])
-  (set-null! [value-vector idx]))
+  (set-null! [value-vector idx])
+  (get-object [value-vector idx]))
 
 (extend-protocol PValueVector
   BigIntVector
   (set-safe! [this idx v] (.setSafe this ^int idx ^long v))
   (set-null! [this idx] (.setNull this ^int idx))
+  (get-object [this idx] (.get this ^int idx))
 
   BitVector
   (set-safe! [this idx v] (.setSafe this ^int idx ^int (if v 1 0)))
   (set-null! [this idx] (.setNull this ^int idx))
+  (get-object [this idx] (.getObject this ^int idx))
 
   TimeStampMilliVector
   (set-safe! [this idx v] (.setSafe this ^int idx (if (int? v)
@@ -69,24 +77,41 @@
                                                                 (util/local-date-time->date v)
                                                                 ^Date v)))))
   (set-null! [this idx] (.setNull this ^int idx))
+  (get-object [this idx] (Date. (.get this ^int idx)))
 
   Float8Vector
   (set-safe! [this idx v] (.setSafe this ^int idx ^double v))
   (set-null! [this idx] (.setNull this ^int idx))
+  (get-object [this idx] (.get this ^int idx))
 
   NullVector
   (set-safe! [this idx v])
   (set-null! [this idx])
+  (get-object [this idx] (.getObject this ^int idx))
 
   VarBinaryVector
   (set-safe! [this idx v] (.setSafe this ^int idx ^bytes v))
   (set-null! [this idx] (.setNull this ^int idx))
+  (get-object [this idx] (.get this ^int idx))
 
   VarCharVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (if (instance? Text v)
-                                                    ^Text v
-                                                    (Text. (str v)))))
-  (set-null! [this idx] (.setNull this ^int idx)))
+  (set-safe! [this idx v] (cond
+                            (bytes? v)
+                            (.setSafe this ^int idx ^bytes v)
+                            (string? v)
+                            (.setSafe this ^int idx (.getBytes ^String v StandardCharsets/UTF_8))
+                            (instance? Text v)
+                            (.setSafe this ^int idx ^Text v)))
+  (set-null! [this idx] (.setNull this ^int idx))
+  (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
+
+  DenseUnionVector
+  (set-safe! [this idx v] (let [type-id (arrow-type->type-id (->arrow-type (class v)))
+                                offset (util/write-type-id this idx type-id)]
+                            (set-safe! (.getVectorByType this (.getTypeId this idx)) offset v)))
+  (set-null! [this idx] (set-safe! this idx nil))
+  (get-object [this idx] (get-object (.getVectorByType this (.getTypeId this idx))
+                                     (.getOffset this idx))))
 
 (def ->minor-type
   (->> (for [^Types$MinorType t (Types$MinorType/values)]
@@ -95,9 +120,6 @@
 
 (def primitive-types
   #{:null :bigint :float8 :varbinary :varchar :bit :timestampmilli})
-
-(defn arrow-type->type-id ^long [^ArrowType arrow-type]
-  (long (.getFlatbufID (.getTypeID arrow-type))))
 
 (defn primitive-type->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [type-k]
   (.getType ^Types$MinorType (->minor-type type-k)))

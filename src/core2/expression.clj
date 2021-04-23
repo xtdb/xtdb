@@ -177,7 +177,7 @@
                  (throw (IllegalArgumentException. (str "unknown variable: " variable))))]
     {:code (condp = type
              Boolean `(== 1 (.get ~variable ~idx-sym))
-             Comparable `(normalize-union-value (.getObject ~variable ~idx-sym))
+             Comparable `(normalize-union-value (types/get-object ~variable ~idx-sym))
              `(.get ~variable ~idx-sym))
      :return-type type}))
 
@@ -397,10 +397,10 @@
 
 (defn normalize-union-value [v]
   (cond
-    (instance? LocalDateTime v)
-    (.getTime (util/local-date-time->date v))
-    (instance? Text v)
-    (.getBytes ^Text v)
+    (instance? Date v)
+    (.getTime ^Date v)
+    (string? v)
+    (.getBytes ^String v StandardCharsets/UTF_8)
     :else
     v))
 

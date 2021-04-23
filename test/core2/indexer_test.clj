@@ -10,6 +10,7 @@
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
+            [core2.types :as ty]
             [core2.util :as util])
   (:import [core2.buffer_pool BufferPool IBufferPool]
            core2.core.Node
@@ -109,10 +110,10 @@
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
 
         (t/testing "temporal"
-          (t/is (= {(Text. "device-info-demo000000") -4962768465676381896
-                    (Text. "reading-demo000000") 4437113781045784766
-                    (Text. "device-info-demo000001") -6688467811848818630
-                    (Text. "reading-demo000001") -8292973307042192125}
+          (t/is (= {"device-info-demo000000" -4962768465676381896
+                    "reading-demo000000" 4437113781045784766
+                    "device-info-demo000001" -6688467811848818630
+                    "reading-demo000001" -8292973307042192125}
                    (.id->internal-id tm)))
           (with-open [watermark (c2/open-watermark node)]
             (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
@@ -155,18 +156,15 @@
               (.load (VectorLoader. metadata-batch) record-batch)
               (t/is (= 20 (.getRowCount metadata-batch)))
               (t/is (= "_id" (-> (.getVector metadata-batch "column")
-                                 (.getObject 0)
-                                 (str))))
+                                 (ty/get-object 0))))
               (t/is (= "device-info-demo000000"
                        (-> ^StructVector (.getVector metadata-batch "min")
                            ^VarCharVector (.getChild "varchar")
-                           (.getObject 0)
-                           (str))))
+                           (ty/get-object 0))))
               (t/is (= "reading-demo000001"
                        (-> ^StructVector (.getVector metadata-batch "max")
                            ^VarCharVector (.getChild "varchar")
-                           (.getObject 0)
-                           (str))))
+                           (ty/get-object 0))))
               (t/is (= 4 (-> ^BigIntVector (.getVector metadata-batch "count")
                              (.get 0))))
 

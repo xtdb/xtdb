@@ -29,7 +29,7 @@
     (.getVector in-root name))
 
   (aggregate [this in-root container idx-bitmap]
-    (or container (.getObject (.getFromVector this in-root) (.first idx-bitmap))))
+    (or container (t/get-object (.getFromVector this in-root) (.first idx-bitmap))))
 
   (finish [_ container]
     container))
@@ -61,7 +61,7 @@
                   (.supplier collector))
                 (reify ObjIntConsumer
                   (accept [_ acc idx]
-                    (.accept accumulator acc (.getObject from-vec idx))))
+                    (.accept accumulator acc (t/get-object from-vec idx))))
                 accumulator)))
 
   (finish [_ container]
@@ -103,7 +103,7 @@
                      :else
                      (reify IntConsumer
                        (accept [_ idx]
-                         (let [v (.getObject from-vec idx)]
+                         (let [v (t/get-object from-vec idx)]
                            (if (integer? v)
                              (.accept ^ObjLongConsumer accumulator acc v)
                              (.accept ^ObjDoubleConsumer accumulator acc v))))))]

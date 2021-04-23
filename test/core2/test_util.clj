@@ -31,13 +31,13 @@
   (let [field-vecs (.getFieldVectors root)]
     (mapv (fn [idx]
             (vec (for [^FieldVector field-vec field-vecs]
-                   (.getObject field-vec idx))))
+                   (ty/get-object field-vec idx))))
           (range (.getRowCount root)))))
 
 (defn ->list ^java.util.List [^ValueVector v]
   (let [acc (ArrayList.)]
     (dotimes [n (.getValueCount v)]
-      (.add acc (.getObject v n)))
+      (.add acc (ty/get-object v n)))
     acc))
 
 (defn then-await-tx
@@ -99,9 +99,9 @@
 (t/deftest round-trip-cursor
   (with-allocator
     (fn []
-      (let [blocks [[{:name (Text. "foo"), :age 20}
-                     {:name (Text. "bar"), :age 25}]
-                    [{:name (Text. "baz"), :age 30}]]]
+      (let [blocks [[{:name "foo", :age 20}
+                     {:name "bar", :age 25}]
+                    [{:name "baz", :age 30}]]]
         (with-open [cursor (->cursor (Schema. [(ty/->field "name" (.getType Types$MinorType/VARCHAR) false)
                                                (ty/->field "age" (.getType Types$MinorType/BIGINT) false)])
                                      blocks)]

@@ -7,8 +7,7 @@
             [core2.expression :as expr])
   (:import java.util.List
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.util.Text))
+           org.apache.arrow.vector.complex.DenseUnionVector))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -23,17 +22,11 @@
 (t/deftest test-align
   (with-open [age-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "age" #{:bigint}) tu/*allocator*)
                         (util/set-value-count 5)
-                        (util/write-type-id 0 bigint-type-id)
-                        (util/write-type-id 1 bigint-type-id)
-                        (util/write-type-id 2 bigint-type-id)
-                        (util/write-type-id 3 bigint-type-id)
-                        (util/write-type-id 4 bigint-type-id)
-                        (-> (.getBigIntVector bigint-type-id)
-                            (doto (.setSafe 0 12)
-                              (.setSafe 1 42)
-                              (.setSafe 2 15)
-                              (.setSafe 3 83)
-                              (.setSafe 4 25))))
+                        (ty/set-safe! 0 12)
+                        (ty/set-safe! 1 42)
+                        (ty/set-safe! 2 15)
+                        (ty/set-safe! 3 83)
+                        (ty/set-safe! 4 25))
 
               age-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
                                (.setValueCount 5)
@@ -48,15 +41,10 @@
 
               name-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "name" #{:varchar}) tu/*allocator*)
                          (util/set-value-count 4)
-                         (util/write-type-id 0 varchar-type-id)
-                         (util/write-type-id 1 varchar-type-id)
-                         (util/write-type-id 2 varchar-type-id)
-                         (util/write-type-id 3 varchar-type-id)
-                         (-> (.getVarCharVector varchar-type-id)
-                             (doto (.setSafe 0 (Text. "Al"))
-                               (.setSafe 1 (Text. "Dave"))
-                               (.setSafe 2 (Text. "Bob"))
-                               (.setSafe 3 (Text. "Steve")))))
+                         (ty/set-safe! 0 "Al")
+                         (ty/set-safe! 1 "Dave")
+                         (ty/set-safe! 2 "Bob")
+                         (ty/set-safe! 3 "Steve"))
 
               name-row-id-vec (doto (BigIntVector. "_row-id" tu/*allocator*)
                                 (.setValueCount 4)
@@ -76,6 +64,6 @@
       (with-open [out-root (VectorSchemaRoot/create (align/align-schemas [(.getSchema name-root) (.getSchema age-root)])
                                                     tu/*allocator*)]
         (align/align-vectors roots row-ids nil out-root)
-        (t/is (= [[(Text. "Dave") 12]
-                  [(Text. "Bob") 15]]
+        (t/is (= [["Dave" 12]
+                  ["Bob" 15]]
                  (tu/root->rows out-root)))))))

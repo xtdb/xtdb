@@ -6,8 +6,7 @@
             [core2.test-util :as tu]
             [core2.util :as util]
             [core2.expression.metadata :as expr.meta])
-  (:import core2.metadata.IMetadataManager
-           org.apache.arrow.vector.util.Text))
+  (:import core2.metadata.IMetadataManager))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
@@ -39,14 +38,14 @@
             @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 4}}])
                  (tu/then-await-tx node))
 
-            (t/is (= #{{:name (Text. "James")}
-                       {:name (Text. "Jon")}}
+            (t/is (= #{{:name "James"}
+                       {:name "Jon"}}
                      (query-ivan watermark))))
 
           (with-open [watermark (c2/open-watermark node)]
-            (t/is (= #{{:name (Text. "James")}
-                       {:name (Text. "Jon")}
-                       {:name (Text. "Jeremy")}}
+            (t/is (= #{{:name "James"}
+                       {:name "Jon"}
+                       {:name "Jeremy"}}
                      (query-ivan watermark)))))))))
 
 (t/deftest test-find-eq-ivan
@@ -75,7 +74,7 @@
             (t/is (= [0] (meta/matching-chunks metadata-mgr watermark metadata-pred))
                   "only needs to scan chunk 0")
 
-            (t/is (= #{{:name (Text. "Ivan")}}
+            (t/is (= #{{:name "Ivan"}}
                      (query-ivan watermark)))))))))
 
 (t/deftest test-fixpoint-operator
@@ -116,22 +115,22 @@
                                                                    [:rename {y z} Path]
                                                                    [:rename {x z} Path]]]]])]
 
-          (t/is (= [[{:x (Text. "a"), :y (Text. "b")}
-                     {:x (Text. "b"), :y (Text. "c")}
-                     {:x (Text. "c"), :y (Text. "d")}
-                     {:x (Text. "d"), :y (Text. "a")}
-                     {:x (Text. "d"), :y (Text. "b")}
-                     {:x (Text. "a"), :y (Text. "c")}
-                     {:x (Text. "b"), :y (Text. "d")}
-                     {:x (Text. "c"), :y (Text. "a")}
-                     {:x (Text. "c"), :y (Text. "b")}
-                     {:x (Text. "d"), :y (Text. "c")}
-                     {:x (Text. "a"), :y (Text. "d")}
-                     {:x (Text. "b"), :y (Text. "a")}
-                     {:x (Text. "b"), :y (Text. "b")}
-                     {:x (Text. "c"), :y (Text. "c")}
-                     {:x (Text. "d"), :y (Text. "d")}
-                     {:x (Text. "a"), :y (Text. "a")}]]
+          (t/is (= [[{:x "a", :y "b"}
+                     {:x "b", :y "c"}
+                     {:x "c", :y "d"}
+                     {:x "d", :y "a"}
+                     {:x "d", :y "b"}
+                     {:x "a", :y "c"}
+                     {:x "b", :y "d"}
+                     {:x "c", :y "a"}
+                     {:x "c", :y "b"}
+                     {:x "d", :y "c"}
+                     {:x "a", :y "d"}
+                     {:x "b", :y "a"}
+                     {:x "b", :y "b"}
+                     {:x "c", :y "c"}
+                     {:x "d", :y "d"}
+                     {:x "a", :y "a"}]]
                    (tu/<-cursor fixpoint-cursor))))))))
 
 (t/deftest test-assignment-operator

@@ -129,7 +129,7 @@
         ^VarCharVector column-name-vector (.getVector metadata-root "column")]
     (loop [idx 0]
       (when (< idx col-count)
-        (if (= col-name (str (.getObject column-name-vector idx)))
+        (if (= col-name (t/get-object column-name-vector idx))
           idx
           (recur (inc idx)))))))
 

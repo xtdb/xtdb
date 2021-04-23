@@ -18,25 +18,6 @@
 (def ^:private ^{:tag 'long} default-characteristics
   (bit-or Spliterator/ORDERED Spliterator/SIZED Spliterator/SUBSIZED Spliterator/IMMUTABLE Spliterator/NONNULL))
 
-(defprotocol PArrowToClojure
-  (arrow->clojure [this]))
-
-(extend-protocol PArrowToClojure
-  Text
-  (arrow->clojure [this]
-    (str this))
-
-  LocalDateTime
-  (arrow->clojure [this]
-    (util/local-date-time->date this))
-
-  Object
-  (arrow->clojure [this]
-    this)
-
-  nil
-  (arrow->clojure [this]))
-
 (deftype ValueVectorWithOrdinalSpliterator [^ValueVector v ^:unsynchronized-mutable ^int idx ^int end-idx ^int characteristics]
   Spliterator
   (^boolean tryAdvance [this ^Consumer f]
@@ -107,7 +88,7 @@
   Spliterator
   (^boolean tryAdvance [this ^Consumer f]
    (if (< idx end-idx)
-     (do (.accept f (arrow->clojure (.getObject v idx)))
+     (do (.accept f (t/get-object v idx))
          (set! (.idx this) (inc idx))
          true)
      false))
@@ -116,7 +97,7 @@
    (let [n end-idx]
      (loop [idx idx]
        (if (< idx n)
-         (do (.accept f (arrow->clojure (.getObject v idx)))
+         (do (.accept f (t/get-object v idx))
              (recur (inc idx)))
          (set! (.idx this) idx)))))
 
