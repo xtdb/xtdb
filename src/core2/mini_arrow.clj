@@ -60,8 +60,23 @@
   ([^String format ^String name children]
    (->ArrowSchema format name nil 0 children nil)))
 
-(defn compare-buffers-unsigned ^long [^ByteBuffer a ^ByteBuffer b]
-  (.compareTo (.asCharBuffer a) (.asCharBuffer b)))
+(defn compare-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
+  (let [rem-x (.remaining x)
+        rem-y (.remaining y)
+        limit (min rem-x rem-y)
+        char-limit (bit-shift-right limit 1)
+        diff (.compareTo (.limit (.asCharBuffer x) char-limit)
+                         (.limit (.asCharBuffer y) char-limit))]
+    (if (zero? diff)
+      (loop [n (bit-and-not limit 1)]
+        (if (= n limit)
+          (- rem-x rem-y)
+          (let [x-byte (.get x n)
+                y-byte (.get y n)]
+            (if (= x-byte y-byte)
+              (recur (inc n))
+              (Byte/compareUnsigned x-byte y-byte)))))
+      diff)))
 
 (defn- ts-format->zone-id ^java.time.ZoneId [^String format]
   (let [maybe-tz (.split format ":")]
