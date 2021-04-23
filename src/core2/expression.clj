@@ -2,7 +2,8 @@
   (:require core2.operator.project
             [core2.types :as types]
             [core2.util :as util]
-            [clojure.string :as str])
+            [clojure.string :as str]
+            [clojure.walk :as w])
   (:import core2.operator.project.ProjectionSpec
            [core2.select IVectorSchemaRootSelector IVectorSelector]
            java.lang.reflect.Method
@@ -71,6 +72,12 @@
 
                            (-> {:op :call, :f f, :args (mapv form->expr args)}
                                expand-variadics)))
+
+    (string? form) (let [s (gensym "string-literal")]
+                     {:op :literal
+                      :literal form
+                      :init-variable (with-meta s {:literal form})
+                      :init-code `(.getBytes ~form StandardCharsets/UTF_8)})
 
     :else {:op :literal, :literal form}))
 
@@ -152,15 +159,13 @@
     :else
     (:literal (meta x))))
 
-(defmethod codegen-expr :literal [{:keys [literal]} _]
+(defmethod codegen-expr :literal [{:keys [literal init-variable]} _]
   (cond
     (instance? Date literal)
     {:code (.getTime ^Date literal)
      :return-type Date}
     (string? literal)
-    {:code (let [s (gensym "string-literal")]
-             (swap! *init-expressions* concat [s `(.getBytes ~literal StandardCharsets/UTF_8)])
-             (with-meta s {:literal literal}))
+    {:code init-variable
      :return-type String}
     (nil? literal)
     {:code nil :return-type Comparable}
@@ -399,19 +404,30 @@
     :else
     v))
 
+;; TODO: cannot easily extend postwalk-expr, as metadata-var-lit-call
+;; assumes the literal to been untouched.
+(defn init-expressions [expr]
+  (let [acc (atom [])]
+    (w/postwalk (fn [expr]
+                  (when (map? expr)
+                    (let [{:keys [op init-variable init-code]} expr]
+                      (when (and (= :literal op) init-variable)
+                        (swap! acc concat [init-variable init-code]))))
+                  expr)
+                expr)
+    @acc))
+
 (defn- generate-code [arrow-types expr expression-type]
   (let [vars (variables expr)
         var->type (zipmap vars (map #(get types/arrow-type->java-type % Comparable) arrow-types))
-        init-expressions (atom [])
-        {:keys [code return-type]} (binding [*init-expressions* init-expressions]
-                                     (postwalk-expr #(codegen-expr % {:var->type var->type}) expr))
+        {:keys [code return-type]} (postwalk-expr #(codegen-expr % {:var->type var->type}) expr)
         args (for [[k v] (map vector vars arrow-types)]
                (-> k (with-tag (get types/arrow-type->vector-type v DenseUnionVector))))]
     (case expression-type
       ::project
       (if (= Comparable return-type)
         `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-           (let [~@@init-expressions]
+           (let [~@(init-expressions expr)]
              (dotimes [~idx-sym row-count#]
                (let [value# ~code
                      type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
@@ -423,7 +439,7 @@
               return-type-id (types/arrow-type->type-id arrow-return-type)
               inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))]
           `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-             (let [~@@init-expressions
+             (let [~@(init-expressions expr)
                    ~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
                  (let [offset# (util/write-type-id acc# ~idx-sym ~return-type-id)]
@@ -435,7 +451,7 @@
       ::select
       (do (assert (= Boolean return-type))
           `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
-             (let [~@@init-expressions]
+             (let [~@(init-expressions expr)]
                (dotimes [~idx-sym row-count#]
                  (try
                    (when ~code

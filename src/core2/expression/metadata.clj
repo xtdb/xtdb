@@ -47,7 +47,7 @@
                               :meta-value meta-value
                               :field-type field-type
                               :field field,
-                              :literal (:literal literal-arg)})))}))
+                              :literal literal-arg})))}))
 
           (bool-expr [var-lit-f var-lit-meta-fn
                       lit-var-f lit-var-meta-fn]
@@ -114,7 +114,7 @@
                ~(if (= meta-value :bloom-filter)
                   `(bloom/bloom-contains? ~(:bloom metadata-vec-syms)
                                           ~expr/idx-sym
-                                          ~(let [^ints hashes (bloom/literal-hashes allocator literal)]
+                                          ~(let [^ints hashes (bloom/literal-hashes allocator (:literal literal))]
                                              `(doto (int-array ~(alength hashes))
                                                 ~@(for [[idx h] (map-indexed vector hashes)]
                                                     `(aset ~idx ~h)))))
@@ -132,27 +132,24 @@
                                                                {:op :variable, :variable vec-sym}
                                                                {:var->type {vec-sym field-type}}))),
                                            :return-type field-type}
-                                          (expr/codegen-expr {:op :literal, :literal literal} nil)]}
+                                          (expr/codegen-expr literal nil)]}
                                   opts))))))))
      :return-type Boolean}))
 
 (defn meta-expr->code [expr]
   (with-open [allocator (RootAllocator.)]
-    (let [init-expressions (atom [])]
-      (binding [expr/*init-expressions* init-expressions]
-        (let [code (:code (expr/postwalk-expr #(expr/codegen-expr % {:allocator allocator}) (meta-expr expr)))]
-          `(fn [~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))]
-             (let [~@@init-expressions
+    `(fn [~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))]
+       (let [~@(expr/init-expressions expr)
 
-                   ~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
-                   (.getVector ~metadata-root-sym "min")
+             ~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
+             (.getVector ~metadata-root-sym "min")
 
-                   ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
-                   (.getVector ~metadata-root-sym "max")
+             ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
+             (.getVector ~metadata-root-sym "max")
 
-                   ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
-                   (.getVector ~metadata-root-sym "bloom")]
-               ~code)))))))
+             ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
+             (.getVector ~metadata-root-sym "bloom")]
+         ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:allocator allocator}) expr))))))
 
 (def memo-meta-expr->code
   (memoize meta-expr->code))
@@ -161,5 +158,6 @@
 
 (defn ->metadata-selector [expr]
   (-> expr
+      (meta-expr)
       (memo-meta-expr->code)
       (memo-eval)))
