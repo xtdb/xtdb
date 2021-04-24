@@ -1,0 +1,72 @@
+= Benchmarks
+
+== Racket Datalog
+
+Several Datalog tests from the Racket Datalog examples have been translated and
+re-used within Crux's query tests.
+
+Specifically, from https://github.com/racket/datalog/tree/master/tests/examples
+
+- tutorial.rkt
+- path.rkt
+- revpath.rkt
+- bidipath.rkt
+- sym.rkt
+
+[#datalog]
+== Datalog Research
+
+Several Datalog examples from a classic Datalog paper have been translated and
+re-used within Crux's query tests.
+
+.What you Always Wanted to Know About Datalog (And Never Dared to Ask)
+****
+[%hardbreaks]
+https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/630444d76e5aa81867344cb11aaddaab8dc8174c
+Stefano Ceri, Georg Gottlob, Letizia Tanca, Published in IEEE Trans. Knowl. Data Eng. 1989
+DOI:10.1109/69.43410
+****
+
+Specifically:
+
+- "sgc"
+- 3 examples of "stratified Datalog"
+
+[#watdiv]
+== WatDiv SPARQL Tests
+
+****
+[%hardbreaks]
+Waterloo SPARQL Diversity Test Suite
+https://dsg.uwaterloo.ca/watdiv/
+****
+
+WatDiv has been developed to measure how an RDF data management system performs
+across a wide spectrum of SPARQL queries with varying structural
+characteristics and selectivity classes.
+
+Benchmarking has been performed against the WatDiv test suite. These tests
+demonstrate comprehensive RDF subgraph matching. Note that Crux does not
+natively implement the RDF specification and only a simplified subset of the
+RDF tests have been translated for use in Crux. See the Crux tests for details.
+
+[#lubm]
+== LUBM Web Ontology Language (OWL) Tests
+
+****
+[%hardbreaks]
+Lehigh University Benchmark
+http://swat.cse.lehigh.edu/projects/lubm/
+****
+
+The Lehigh University Benchmark is developed to facilitate the evaluation of
+Semantic Web repositories in a standard and systematic way. The benchmark is
+intended to evaluate the performance of those repositories with respect to
+extensional queries over a large data set that commits to a single realistic
+ontology. It consists of a university domain ontology, customizable and
+repeatable synthetic data, a set of test queries, and several performance
+metrics.
+
+Benchmarking has been performed against the LUBM test suite. These tests
+demonstrate extreme stress testing for subgraph matching. See the Crux tests
+for details.

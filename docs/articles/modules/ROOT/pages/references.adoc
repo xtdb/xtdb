@@ -1,73 +1,62 @@
 = References
 :page-aliases: about::references.adoc
 
-== Racket Datalog
-
-Several Datalog tests from the Racket Datalog examples have been translated and
-re-used within Crux's query tests.
-
-Specifically, from https://github.com/racket/datalog/tree/master/tests/examples
-
-- tutorial.rkt
-- path.rkt
-- revpath.rkt
-- bidipath.rkt
-- sym.rkt
-
 [#datalog]
-== Datalog Research
+== Datalog
 
-Several Datalog examples from a classic Datalog paper have been translated and
-re-used within Crux's query tests.
+* https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/fa1570dc4e7853c2c6d0ff21a1ac8327e4ebe4b5[What you Always Wanted to Know About Datalog (And Never Dared to Ask)], Ceri, Gottlob, Tanca. IEEE Trans. Knowl. Data Eng. 1989.
+* https://www2.eecs.berkeley.edu/Pubs/TechRpts/2009/EECS-2009-173.html[Dedalus: Datalog in Time and Space], Alvaro, Marczak, et al. Technical Report No. UCB/EECS-2009-173. December 2009.
 
-.What you Always Wanted to Know About Datalog (And Never Dared to Ask)
-****
-[%hardbreaks]
-https://www.semanticscholar.org/paper/What-you-Always-Wanted-to-Know-About-Datalog-(And-Ceri-Gottlob/630444d76e5aa81867344cb11aaddaab8dc8174c
-Stefano Ceri, Georg Gottlob, Letizia Tanca, Published in IEEE Trans. Knowl. Data Eng. 1989
-DOI:10.1109/69.43410
-****
+[#queryplanner]
+== Query Planner
 
-Specifically:
+* http://db.in.tum.de/~freitag/papers/techreport-freitag-tum-i2082.pdf[Combining Worst-Case Optimal and Traditional Binary Join Processing], Freitag et al.
 
-- "sgc"
-- 3 examples of "stratified Datalog"
+[#graph]
+== Graph Representation and Traversal
 
-[#watdiv]
-== WatDiv SPARQL Tests
+* https://people.engr.tamu.edu/davis/GraphBLAS.html[SuiteSparse: GraphBLAS. Graph algorithms in the language of linear algebra.]
+* https://oss.redislabs.com/redisgraph/design/[RedisGraph: A High Performance In-Memory Graph Database]
+* http://www.vldb.org/pvldb/vol11/p1978-jamour.pdf[A Demonstration of MAGiQ:Matrix Algebra Approach for Solving RDF Graph Queries], Jamour, Abdelaziz, Kalnis. Proceedings of the VLDB Endowment. August 2018.
+* https://www.researchgate.net/publication/273399902_Data_structures_for_temporal_graphs_based_on_compact_sequence_representations[Data structures for temporal graphs based on compact sequence representations], Caro, Rodriguez, Brisaboa. Information Systems 51. 2015.
 
-****
-[%hardbreaks]
-Waterloo SPARQL Diversity Test Suite
-https://dsg.uwaterloo.ca/watdiv/
-****
+[#datastructures]
+== Data Structures
 
-WatDiv has been developed to measure how an RDF data management system performs
-across a wide spectrum of SPARQL queries with varying structural
-characteristics and selectivity classes.
+* https://www.researchgate.net/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation[k2-Trees for Compact Web Graph Representation], Brisaboa, Ladra, Navarro. String Processing and Information Retrieval, 16th International Symposium. 2009.
+* https://arxiv.org/abs/2103.15203[Mathematics of Digital Hyperspace], Kepner, Davis, et al. March 2021.
+* https://www.cs.cmu.edu/~huanche1/publications/surf_paper.pdf[SuRF: Practical Range Query Filtering with Fast Succinct Tries], Zhang, Lim, et al. SIGMOD '18: Proceedings of the 2018 International Conference on Management of Data, Pages 323–336. May 2018.
 
-Benchmarking has been performed against the WatDiv test suite. These tests
-demonstrate comprehensive RDF subgraph matching. Note that Crux does not
-natively implement the RDF specification and only a simplified subset of the
-RDF tests have been translated for use in Crux. See the Crux tests for details.
+[#temporal]
+== Bi-Temporality
 
-[#lubm]
-== LUBM Web Ontology Language (OWL) Tests
+* https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59490/file/ICDE15-bitemporal-timeline.pdf[Bi-temporal Timeline Index: A Data Structure forProcessing Queries on Bi-temporal Data], Kaufmann et al. 2015 IEEE 31st International Conference on Data Engineering, April 2015.
+* https://www2.cs.arizona.edu/~rts/pubs/ISDec94.pdf[Unifying Temporal Data Models via a Conceptual Model], Jensen, Snodgrass. Information Systems, Volume 19, Issue 7, October 1994, Pages 513-547.
+* http://people.cs.aau.dk/~csj/Glossary/[The Consensus Glossary of Temporal Database Concepts]
+* http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
+* https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass, ISBN 1-55860-436-7. 2000.
+* https://www.marklogic.com/blog/bitemporal/[A Deep Dive into Bitemporal], Woolridge. 2016.
+* http://blog.podsnap.com/bitemp.html[Sign of the Times - Managing inhomogeneously bitemporal data with Datomic and Clojure], Fraenkel. May 2014.
 
-****
-[%hardbreaks]
-Lehigh University Benchmark
-http://swat.cse.lehigh.edu/projects/lubm/
-****
+[#zcurves]
+== Z-Curves
+* http://hermanntropf.de/media/multidimensionalrangequery.pdf[Multidimensional Range Search in Dynamically Balanced Trees], Tropf, Herzog. Applied Informatics, Pages 71-77. 1981.
+* https://redis.io/topics/indexes#multi-dimensional-indexes[Redis Multi-Dimensional Indexes]
 
-The Lehigh University Benchmark is developed to facilitate the evaluation of
-Semantic Web repositories in a standard and systematic way. The benchmark is
-intended to evaluate the performance of those repositories with respect to
-extensional queries over a large data set that commits to a single realistic
-ontology. It consists of a university domain ontology, customizable and
-repeatable synthetic data, a set of test queries, and several performance
-metrics.
+[#relationalalgebra]
+== Relational Algebra
 
-Benchmarking has been performed against the LUBM test suite. These tests
-demonstrate extreme stress testing for subgraph matching. See the Crux tests
-for details.
+* http://www.thethirdmanifesto.com/[The Third Manifesto], Darwen, Date.
+* https://www.dcs.warwick.ac.uk/~hugh/TTM/DTATRM.pdf[Databases, Types, and The Relational Model: The Third Manifesto], Date, Darwen. 3rd edition, Addison-Wesley, 2006 (ISBN: 0-321-39942-0).
+* https://www.dcs.warwick.ac.uk/~hugh/TTM/OnTSQL2.pdf[An  Overview  and  Analysis of Proposals Based on the TSQL2 Approach], Date, Darwen. 2005.
+
+[#storagevscompute]
+== Storage vs. Compute
+
+* http://pages.cs.wisc.edu/~yxy/cs839-s20/papers/p2170-tan.pdf[Choosing A Cloud DBMS: Architectures and Tradeoffs], Tan, Ghanem, et al. Proceedings of the VLDB Endowment, Vol. 12, No. 12. August 2019.
+* https://people.csail.mit.edu/kraska/pub/sigmod08-s3.pdf[Building a Database on S3], Brantner, Florescu, et al. 2008.
+* https://www.usenix.org/system/files/nsdi20-paper-vuppalapati.pdf[Building An Elastic Query Engine on Disaggregated Storage], Vuppalapati, Miron, et al. 17th USENIX Symposium on Networked Systems Design and Implementation. 2020.
+* https://www.microsoft.com/en-us/research/uploads/prod/2019/05/socrates.pdf[Socrates: The New SQL Server in the Cloud],  Antonopoulos, Budovski, et al. SIGMOD '19: Proceedings of the 2019 International Conference on Management of Data, Pages 1743–1756. June 2019.
+* https://www.vertica.com/wp-content/uploads/2018/05/Vertica_EON_SIGMOD_Paper.pdf[Eon Mode: Bringing the Vertica Columnar Database to the Cloud], Vandiver, Prasad, et al.  SIGMOD '18: Proceedings of the 2018 International Conference on Management of Data, Pages 797–809. May 2018.
+* https://media.amazonwebservices.com/blog/2017/aurora-design-considerations-paper.pdf[Amazon Aurora: Design Considerations for High Throughput Cloud-Native Relational Databases], Verbitski, Gupta, et al. SIGMOD '17: Proceedings of the 2017 ACM International Conference on Management of Data, Pages 1041–1052. May 2017.
+* https://www.eecg.utoronto.ca/~ashvin/publications/hailstorm.pdf[Hailstorm: Disaggregated Compute and Storage forDistributed LSM-based Databases], Bindschaedler, Goel, Zwaenepoel. ASPLOS '20: Proceedings of the Twenty-Fifth International Conference on Architectural Support for Programming Languages and Operating Systems, Pages 301–316. March 2020.

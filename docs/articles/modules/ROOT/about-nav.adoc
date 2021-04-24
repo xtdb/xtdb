@@ -1,2 +1,3 @@
-.About Crux
+.Research
+* xref:benchmarks.adoc[References]
 * xref:references.adoc[References]
