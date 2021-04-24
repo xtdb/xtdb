@@ -1,0 +1,10 @@
+version: '2'
+services:
+  oracle:
+    image: oracle/database:18.4.0-xe
+    ports:
+      - "51521:1521"
+      - "55500:5500"
+    environment:
+      ORACLE_PWD: mysecurepassword
+      ORACLE_CHARACTERSET: AL32UTF8

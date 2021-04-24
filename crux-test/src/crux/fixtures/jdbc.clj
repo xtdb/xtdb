@@ -89,10 +89,24 @@
                                   :password "yourStrong(!)Password"}}
       f))
 
-  ;; TODO this one's gone stale
+  ;; Oh, Oracle.
+  ;; Right. Set up. We create a Docker image for Oracle Express Edition (XE)
+  ;; - `git clone https://github.com/oracle/docker-images.git /tmp/oracle-docker`
+  ;; - `cd /tmp/oracle-docker/OracleDatabase/SingleInstance/dockerfiles`
+  ;; - `./buildContainerImage.sh -x -v 18.4.0`
+  ;; Go make a cup of coffee.
+  ;; Build completed in 530 seconds. Let's continue.
+
+  ;; - `docker-compose -f docker-compose.oracle.yml up -d`
+  ;; Time to go make another cup of coffee.
+
+  ;; The below still fails with an auth error, I can't see why. Sorry :(
+
   #_
-  (when (.exists (clojure.java.io/file ".testing-oracle.edn"))
-    (t/testing "Oracle Database"
-      (with-jdbc-node "oracle" f
-        (read-string (slurp ".testing-oracle.edn")))))
+  (t/testing "Oracle Database"
+    (with-jdbc-opts {:dialect 'crux.jdbc.oracle/->dialect
+                     :db-spec {:jdbcUrl "jdbc:oracle:thin:@127.0.0.1:51521:XE"}
+                     :pool-opts {:username "sys as sysdba"
+                                 :password "mysecurepassword"}}
+      f))
   )
