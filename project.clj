@@ -30,14 +30,16 @@
                     :source-paths ["dev"]
                     :java-source-paths ["src" "jmh"]
                     :resource-paths ["test-resources" "data"]
-                    :test-selectors {:default (complement (some-fn :integration :kafka))
+                    :test-selectors {:default (complement (some-fn :integration :kafka :timescale))
                                      :integration :integration
-                                     :kafka :kafka}}]
+                                     :kafka :kafka
+                                     :timescale :timescale}}]
 
              ;; TODO debate best way to multi-module this
              ;; for now, I just want to ensure they're sufficiently isolated
              :datasets {:source-paths ["modules/datasets/src"]
-                        :dependencies [[io.airlift.tpch/tpch "0.10"]]}
+                        :dependencies [[io.airlift.tpch/tpch "0.10"]
+                                       [org.clojure/data.csv "1.0.0"]]}
 
              :s3 {:source-paths ["modules/s3/src"]
                   :java-source-paths ["modules/s3/src"]
