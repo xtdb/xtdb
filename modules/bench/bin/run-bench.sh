@@ -28,7 +28,7 @@ COMMAND='['
 if [[ "$#" -eq 0 ]]; then echo "No benchmark passed."; exit 1; fi
 
 case $1 in
-    tpch)
+    tpch|ts-devices)
         COMMAND+='"'"core2.bench.$1"'"'
         shift 1;;
     *) echo "Unknown benchmark passed: $1"; exit 1;;
@@ -37,7 +37,7 @@ esac
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
-        --scale-factor)
+        --scale-factor|--size)
             COMMAND+=", \"$1\", \"$2\""
             shift 2;;
         --count)

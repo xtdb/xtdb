@@ -97,6 +97,7 @@ Two main extension points:
    - Join order benchmarking - WatDiv, graph
      - WCOJ?
    - Dealing with updates over time - historical dataset (TS Devices)
+     - DONE ingest bench
    - Scalable temporal indexing + querying
      - Exercise temporal side, TPC-BiH
    - Bigger than local node databases

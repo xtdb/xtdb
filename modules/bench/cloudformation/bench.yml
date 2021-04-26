@@ -125,7 +125,6 @@ Resources:
             Statement:
             - Effect: Allow
               Action:
-                # Allow the ECS tasks to upload/download from s3
                 - 's3:GetObject'
                 - 's3:PutObject'
                 - 's3:DeleteObject'
@@ -133,6 +132,12 @@ Resources:
               Resource:
                 - "arn:aws:s3:::core2-bench"
                 - "arn:aws:s3:::core2-bench/*"
+            - Effect: Allow
+              Action:
+                - 's3:GetObject'
+              Resource:
+                - "arn:aws:s3:::crux-datasets"
+                - "arn:aws:s3:::crux-datasets/*"
 
   BenchBucket:
     Type: AWS::S3::Bucket
