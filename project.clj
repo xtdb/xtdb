@@ -15,7 +15,7 @@
                  [org.apache.arrow/arrow-memory-netty "3.0.0"]
                  [org.roaringbitmap/RoaringBitmap "0.9.10"]]
 
-  :profiles {:dev [:tpch :s3 :kafka
+  :profiles {:dev [:datasets :s3 :kafka
                    {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                    [org.clojure/tools.namespace "1.1.0"]
                                    [integrant "0.8.0"]
@@ -36,8 +36,8 @@
 
              ;; TODO debate best way to multi-module this
              ;; for now, I just want to ensure they're sufficiently isolated
-             :tpch {:source-paths ["modules/tpch/src"]
-                    :dependencies [[io.airlift.tpch/tpch "0.10"]]}
+             :datasets {:source-paths ["modules/datasets/src"]
+                        :dependencies [[io.airlift.tpch/tpch "0.10"]]}
 
              :s3 {:source-paths ["modules/s3/src"]
                   :java-source-paths ["modules/s3/src"]
@@ -48,7 +48,7 @@
                      :test-paths ["modules/kafka/test"]
                      :dependencies [[org.apache.kafka/kafka-clients "2.7.0"]]}
 
-             :bench [:s3 :kafka :tpch
+             :bench [:s3 :kafka :datasets
                      {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
                       :resource-paths ["modules/bench/resources"]
                       :source-paths ["modules/bench/src"]
