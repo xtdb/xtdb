@@ -89,8 +89,9 @@ Two main extension points:
        - Running multiple TPC-H nodes in the cloud - check everything works same as locally
      - Check queries too slow, possible solutions
        - DONE Bloom filters
-       - Block-level metadata
+       - DONE Block-level metadata
        - Predicate push-down
+         - DONE for joins passing bloom filters
      - Check cold caches, possible solutions:
        - Tiered caching
    - Join order benchmarking - WatDiv, graph
