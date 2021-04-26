@@ -9,7 +9,6 @@ pom.xml.asc
 /.nrepl-port
 .hgignore
 .hg/
-/data/
 
 # Ignore Gradle project-specific cache directory
 .gradle
