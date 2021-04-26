@@ -3,8 +3,8 @@
             [clojure.tools.logging :as log])
   (:import java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
-           [java.lang.reflect Field Method]
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
+           [java.lang.reflect Field Method]
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
@@ -15,14 +15,14 @@
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
-           [java.util.stream IntStream]
+           java.util.stream.IntStream
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowRecordBatch ArrowFooter MessageSerializer]
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -471,14 +471,20 @@
       (.close current-batch))
     (.close root)))
 
-(defn ->chunks ^core2.util.IChunkCursor [^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
-  (let [footer (read-arrow-footer ipc-file-format-buffer)
-        root (VectorSchemaRoot/create (.getSchema footer) allocator)]
-    (ChunkCursor. ipc-file-format-buffer
-                  (LinkedList. (.getRecordBatches footer))
-                  root
-                  (VectorLoader. root)
-                  nil)))
+(defn ^core2.util.IChunkCursor ->chunks
+  ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
+   (->chunks ipc-file-format-buffer allocator {}))
+  ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator {:keys [^RoaringBitmap block-idxs]}]
+   (let [footer (read-arrow-footer ipc-file-format-buffer)
+         root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+     (ChunkCursor. ipc-file-format-buffer
+                   (LinkedList. (cond->> (.getRecordBatches footer)
+                                  block-idxs (keep-indexed (fn [idx record-batch]
+                                                             (when (.contains block-idxs ^int idx)
+                                                               record-batch)))))
+                   root
+                   (VectorLoader. root)
+                   nil))))
 
 (declare du-copy)
 

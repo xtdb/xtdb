@@ -1,6 +1,7 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
             [core2.metadata :as meta]
+            [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             core2.temporal
             [core2.tx :as tx]
@@ -102,56 +103,15 @@
 (defn- ->live-root [field-name allocator]
   (VectorSchemaRoot/create (Schema. [t/row-id-field (t/->primitive-dense-union-field field-name)]) allocator))
 
-(deftype SliceCursor [^VectorSchemaRoot root
-                      ^long max-rows-per-block
-                      ^:unsynchronized-mutable ^long start-row-id
-                      ^:unsynchronized-mutable ^int start-idx
-                      ^:unsynchronized-mutable ^VectorSchemaRoot current-slice]
-  IChunkCursor
-  (getSchema [_] (.getSchema root))
-
-  (tryAdvance [this c]
-    (when current-slice
-      (.close current-slice)
-      (set! (.current-slice this) nil))
-
-    (let [row-count (.getRowCount root)]
-      (if-not (< start-idx row-count)
-        false
-        (let [^BigIntVector row-id-vec (.getVector root t/row-id-field)
-              target-row-id (+ start-row-id max-rows-per-block)
-              ^long len (loop [len 0]
-                          (let [idx (+ start-idx len)]
-                            (if (or (>= idx row-count)
-                                    (>= (.get row-id-vec idx) target-row-id))
-                              len
-                              (recur (inc len)))))
-
-              ^VectorSchemaRoot sliced-root (util/slice-root root start-idx len)]
-
-          (set! (.current-slice this) sliced-root)
-          (.accept c sliced-root)
-
-          (set! (.start-row-id this) (+ start-row-id max-rows-per-block))
-          (set! (.start-idx this) (+ start-idx len))
-          true))))
-
-  (close [_]
-    (when current-slice
-      (.close current-slice))))
-
-(defn ->slices ^core2.util.IChunkCursor [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
-  (SliceCursor. root max-rows-per-block start-row-id 0 nil))
-
 (defn ->live-slices [^Watermark watermark, col-names]
   (into {}
         (keep (fn [col-name]
                 (when-let [root (-> (.column->root watermark)
                                     (get col-name))]
                   (MapEntry/create col-name
-                                   (->slices root
-                                             (.chunk-idx watermark)
-                                             (.max-rows-per-block watermark))))))
+                                   (blocks/->slices root
+                                                    (.chunk-idx watermark)
+                                                    (.max-rows-per-block watermark))))))
         col-names))
 
 (defn- chunk-object-key [^long chunk-idx col-name]
@@ -295,13 +255,13 @@
             chunk-idx (.chunk-idx watermark)]
         (util/build-arrow-ipc-byte-buffer write-root :file
           (fn [write-batch!]
-            (with-open [^IChunkCursor slices (->slices live-root chunk-idx max-rows-per-block)]
-              (while (.tryAdvance slices
-                                  (reify Consumer
-                                    (accept [_ sliced-root]
-                                      (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                        (.load loader arb)
-                                        (write-batch!))))))))))))
+            (with-open [^IChunkCursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
+              (.forEachRemaining slices
+                                 (reify Consumer
+                                   (accept [_ sliced-root]
+                                     (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                       (.load loader arb)
+                                       (write-batch!)))))))))))
 
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
@@ -312,18 +272,14 @@
   (finishChunk [this]
     (when-not (.isEmpty live-roots)
       (try
-        (let [chunk-idx (.chunk-idx watermark)
-              futs (reduce
-                    (fn [acc [^String col-name, ^VectorSchemaRoot live-root]]
-                      (conj acc (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root))))
-                    []
-                    live-roots)]
-
-          @(-> (CompletableFuture/allOf (into-array CompletableFuture futs))
+        (let [chunk-idx (.chunk-idx watermark)]
+          @(-> (CompletableFuture/allOf (->> (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                                               (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root)))
+                                             (into-array CompletableFuture)))
                (util/then-apply
                  (fn [_]
                    (.registerNewChunk temporal-mgr chunk-idx)
-                   (.registerNewChunk metadata-mgr live-roots chunk-idx))))
+                   (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block))))
 
           (with-open [old-watermark watermark]
             (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)

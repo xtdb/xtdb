@@ -3,9 +3,12 @@
             [core2.expression :as expr]
             [core2.metadata :as meta]
             [core2.types :as types])
-  (:import org.apache.arrow.memory.RootAllocator
-           org.apache.arrow.vector.complex.StructVector
-           [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]))
+  (:import core2.metadata.IMetadataIndices
+           java.util.HashMap
+           org.apache.arrow.memory.RootAllocator
+           [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
+           [org.apache.arrow.vector.complex ListVector StructVector]
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -95,6 +98,8 @@
      :call (call-meta-expr expr))))
 
 (def ^:private metadata-root-sym (gensym "metadata-root"))
+(def ^:private metadata-idxs-sym (gensym "metadata-idxs"))
+(def ^:private block-idx-sym (gensym "block-idx"))
 
 (def ^:private metadata-vec-syms
   {:min (gensym "min-vec")
@@ -102,15 +107,19 @@
    :bloom (gensym "bloom-vec")})
 
 (defmethod expr/codegen-expr :metadata-field-present [{:keys [field]} _]
-  {:code `(boolean
-           (meta/metadata-column-idx ~metadata-root-sym '~(str field)))
-   :return-type Boolean})
+  (let [field-name (str field)]
+    {:code `(boolean
+             (if ~block-idx-sym
+               (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
+               (.columnIndex ~metadata-idxs-sym ~field-name)))
+     :return-type Boolean}))
 
 (defmethod expr/codegen-expr :metadata-var-lit-call [{:keys [f meta-value field literal field-type]} {:keys [allocator] :as opts}]
   (let [field-name (str field)]
     {:code `(boolean
-             (when-let [~(-> expr/idx-sym (vary-meta assoc :tag 'long))
-                        (meta/metadata-column-idx ~metadata-root-sym ~field-name)]
+             (when-let [~expr/idx-sym (if ~block-idx-sym
+                                        (.blockIndex ~metadata-idxs-sym ~field-name ~block-idx-sym)
+                                        (.columnIndex ~metadata-idxs-sym ~field-name))]
                ~(if (= meta-value :bloom-filter)
                   `(bloom/bloom-contains? ~(:bloom metadata-vec-syms)
                                           ~expr/idx-sym
@@ -138,20 +147,37 @@
                                   opts))))))))
      :return-type Boolean}))
 
+(defn check-meta [chunk-idx ^VectorSchemaRoot metadata-root ^IMetadataIndices metadata-idxs check-meta-f]
+  (when (check-meta-f (.getVector metadata-root "min")
+                      (.getVector metadata-root "max")
+                      (.getVector metadata-root "bloom")
+                      nil)
+    (let [block-idxs (RoaringBitmap.)
+          ^ListVector blocks-vec (.getVector metadata-root "blocks")
+          ^StructVector blocks-data-vec (.getDataVector blocks-vec)
+
+          blocks-min-vec (.getChild blocks-data-vec "min")
+          blocks-max-vec (.getChild blocks-data-vec "max")
+          blocks-bloom-vec (.getChild blocks-data-vec "bloom")]
+
+      (dotimes [block-idx (.blockCount metadata-idxs)]
+        (when (check-meta-f blocks-min-vec blocks-max-vec blocks-bloom-vec block-idx)
+          (.add block-idxs block-idx)))
+
+      (when-not (.isEmpty block-idxs)
+        (meta/->ChunkMatch chunk-idx block-idxs)))))
+
 (defn meta-expr->code [expr]
   (with-open [allocator (RootAllocator.)]
-    `(fn [~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))]
+    `(fn [chunk-idx# ~(-> metadata-root-sym (expr/with-tag VectorSchemaRoot))]
        (let [~@(expr/init-expressions expr)
-
-             ~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
-             (.getVector ~metadata-root-sym "min")
-
-             ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
-             (.getVector ~metadata-root-sym "max")
-
-             ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
-             (.getVector ~metadata-root-sym "bloom")]
-         ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:allocator allocator}) expr))))))
+             ~(-> metadata-idxs-sym (expr/with-tag IMetadataIndices)) (meta/->metadata-idxs ~metadata-root-sym)]
+         (check-meta chunk-idx# ~metadata-root-sym ~metadata-idxs-sym
+                     (fn check-meta# [~(-> (:min metadata-vec-syms) (expr/with-tag StructVector))
+                                      ~(-> (:max metadata-vec-syms) (expr/with-tag StructVector))
+                                      ~(-> (:bloom metadata-vec-syms) (expr/with-tag VarBinaryVector))
+                                      ~block-idx-sym]
+                       ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:allocator allocator}) expr))))))))
 
 (def memo-meta-expr->code
   (memoize meta-expr->code))
