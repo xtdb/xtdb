@@ -795,7 +795,7 @@
         ^ArrowBuffer last-buffer (last buffers)
         buffer-length (DataSizeRoundingUtil/roundUpTo8Multiple (+ (.getOffset last-buffer)
                                                                   (.getSize last-buffer)))
-        record-batch (proxy [ArrowRecordBatch] [n field-nodes (repeat 9 (.getEmpty allocator))]
+        record-batch (proxy [ArrowRecordBatch] [n field-nodes (repeat (count buffers) (.getEmpty allocator))]
                        (computeBodyLength []
                          buffer-length))]
     (.set arrow-record-buffers-layout-field record-batch buffers)
