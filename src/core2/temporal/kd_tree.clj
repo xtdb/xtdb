@@ -9,7 +9,7 @@
            [java.util.function Consumer Function IntConsumer IntFunction Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BitVectorHelper BigIntVector IntVector TinyIntVector VectorSchemaRoot VectorUnloader]
            org.apache.arrow.vector.util.DataSizeRoundingUtil
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
@@ -807,7 +807,7 @@
              (let [n (if (= coordinates-node node)
                        (* k n)
                        n)
-                   validity-size (long (Math/ceil (/ ^long n Byte/SIZE)))]
+                   validity-size (BitVectorHelper/getValidityBufferSize n)]
                (.add buffers (ArrowBuffer. offset validity-size))
                (let [next-offset (long (DataSizeRoundingUtil/roundUpTo8Multiple (+ offset validity-size)))
                      size-factor (long (cond
