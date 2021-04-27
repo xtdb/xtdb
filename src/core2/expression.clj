@@ -1,15 +1,16 @@
 (ns core2.expression
-  (:require core2.operator.project
+  (:require [clojure.string :as str]
+            [clojure.walk :as w]
+            core2.operator.project
             [core2.types :as types]
-            [core2.util :as util]
-            [clojure.string :as str]
-            [clojure.walk :as w])
-  (:import core2.operator.project.ProjectionSpec
+            [core2.util :as util])
+  (:import core2.DenseUnionUtil
+           core2.operator.project.ProjectionSpec
            [core2.select IVectorSchemaRootSelector IVectorSelector]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
-           [java.time Instant LocalDateTime ZoneOffset]
+           [java.time Instant ZoneOffset]
            java.time.temporal.ChronoField
            java.util.Date
            [org.apache.arrow.vector BaseVariableWidthVector BitVector ValueVector VectorSchemaRoot]
@@ -434,7 +435,7 @@
              (dotimes [~idx-sym row-count#]
                (let [value# ~code
                      type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
-                     offset# (util/write-type-id acc# ~idx-sym type-id#)]
+                     offset# (DenseUnionUtil/writeTypeId acc# ~idx-sym type-id#)]
                  (types/set-safe! (.getVectorByType acc# type-id#) offset# value#))))
            acc#)
         (let [arrow-return-type (types/->arrow-type return-type)
@@ -446,7 +447,7 @@
              (let [~@(init-expressions expr)
                    ~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
-                 (let [~offset-sym (util/write-type-id acc# ~idx-sym ~return-type-id)]
+                 (let [~offset-sym (DenseUnionUtil/writeTypeId acc# ~idx-sym ~return-type-id)]
                    ~(if (.isAssignableFrom BaseVariableWidthVector vector-return-type)
                       `(let [bb# ~code]
                          (.set ~inner-acc-sym ~offset-sym bb# (.position bb#) (.remaining bb#)))

@@ -2,12 +2,12 @@
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
             [core2.util :as util])
-  (:import core2.ICursor
+  (:import [core2 DenseUnionUtil ICursor]
            [java.util ArrayList HashMap List Map NavigableMap TreeMap]
            [java.util.function Consumer Function]
-           org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector BitVector ElementAddressableVector ValueVector VectorSchemaRoot]
+           org.apache.arrow.memory.util.ArrowBufPointer
+           [org.apache.arrow.vector BigIntVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types.pojo Field Schema]
            org.apache.arrow.vector.util.VectorBatchAppender
@@ -40,7 +40,7 @@
         (if (and (instance? DenseUnionVector left-vec)
                  (instance? DenseUnionVector out-vec))
           (dotimes [m row-count]
-            (util/du-copy left-vec left-idx out-vec (+ out-idx m)))
+            (DenseUnionUtil/copyIdxSafe left-vec left-idx out-vec (+ out-idx m)))
           (dotimes [m row-count]
             (.copyFrom out-vec left-idx (+ out-idx m) left-vec)))))
     (util/set-vector-schema-root-row-count out-root (+ out-idx row-count))))

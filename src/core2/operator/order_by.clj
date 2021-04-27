@@ -1,14 +1,14 @@
 (ns core2.operator.order-by
   (:require [core2.util :as util])
   (:import clojure.lang.Keyword
-           core2.ICursor
+           [core2 DenseUnionUtil ICursor]
            [java.util ArrayList Collections Comparator List]
            java.util.function.Consumer
            [org.apache.arrow.algorithm.sort DefaultVectorComparators VectorValueComparator]
            org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.vector TimeStampMilliVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.types.pojo.Field
-           [org.apache.arrow.vector TimeStampMilliVector ValueVector VectorSchemaRoot]))
+           org.apache.arrow.vector.types.pojo.Field))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -40,7 +40,7 @@
                                  (dotimes [idx in-row-count]
                                    (if (and (instance? DenseUnionVector acc-vec)
                                             (instance? DenseUnionVector in-vec))
-                                     (util/du-copy in-vec idx acc-vec (+ acc-row-count idx))
+                                     (DenseUnionUtil/copyIdxSafe in-vec idx acc-vec (+ acc-row-count idx))
                                      (.copyFromSafe acc-vec idx (+ acc-row-count idx) in-vec)))))
 
                              (util/set-vector-schema-root-row-count acc-root (+ acc-row-count in-row-count))))))
@@ -99,7 +99,7 @@
                       (dotimes [idx (.size sorted-idxs)]
                         (if (and (instance? DenseUnionVector in-vec)
                                  (instance? DenseUnionVector out-vec))
-                          (util/du-copy in-vec (.get sorted-idxs idx) out-vec idx)
+                          (DenseUnionUtil/copyIdxSafe in-vec (.get sorted-idxs idx) out-vec idx)
                           (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
                   (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
                   (.accept c out-root)

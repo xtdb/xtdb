@@ -1,10 +1,11 @@
 (ns core2.tx-producer
   (:require [clojure.set :as set]
             [core2.log :as c2-log]
+            [core2.system :as sys]
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.system :as sys])
-  (:import core2.log.LogWriter
+            [core2.util :as util])
+  (:import core2.DenseUnionUtil
+           core2.log.LogWriter
            [java.util LinkedHashMap LinkedHashSet Set]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampVector VectorSchemaRoot]
@@ -78,7 +79,7 @@
           (let [{:keys [op _valid-time-start _valid-time-end] :as tx-op} (nth tx-ops tx-op-n)
                 op-type-id (case op :put 0, :delete 1)
                 ^StructVector op-vec (.getStruct tx-ops-duv op-type-id)
-                tx-op-offset (util/write-type-id tx-ops-duv tx-op-n op-type-id)
+                tx-op-offset (DenseUnionUtil/writeTypeId tx-ops-duv tx-op-n op-type-id)
                 valid-time-start-vec (.getChild op-vec "_valid-time-start" TimeStampVector)
                 valid-time-end-vec (.getChild op-vec "_valid-time-end" TimeStampVector)]
             (case op
@@ -91,7 +92,7 @@
                                :let [^DenseUnionVector value-duv (.getChild document-vec (name k) DenseUnionVector)]]
                          (if (some? v)
                            (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                                 value-offset (util/write-type-id value-duv tx-op-offset type-id)]
+                                 value-offset (DenseUnionUtil/writeTypeId value-duv tx-op-offset type-id)]
                              (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
 
                            (util/set-value-count value-duv (inc (.getValueCount value-duv)))))))
@@ -102,7 +103,7 @@
 
                         (if (some? id)
                           (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type id))))
-                                value-offset (util/write-type-id id-duv tx-op-offset type-id)]
+                                value-offset (DenseUnionUtil/writeTypeId id-duv tx-op-offset type-id)]
                             (t/set-safe! (.getVectorByType id-duv type-id) value-offset id))
 
                           (util/set-value-count id-duv (inc (.getValueCount id-duv))))))

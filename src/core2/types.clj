@@ -1,10 +1,11 @@
 (ns core2.types
   (:require [clojure.string :as str]
             [core2.util :as util])
-  (:import java.time.LocalDateTime
-           java.util.Date
+  (:import core2.DenseUnionUtil
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
+           java.time.LocalDateTime
+           java.util.Date
            [org.apache.arrow.vector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types Types$MinorType UnionMode]
@@ -125,7 +126,7 @@
 
   DenseUnionVector
   (set-safe! [this idx v] (let [type-id (arrow-type->type-id (->arrow-type (class v)))
-                                offset (util/write-type-id this idx type-id)]
+                                offset (DenseUnionUtil/writeTypeId this idx type-id)]
                             (set-safe! (.getVectorByType this (.getTypeId this idx)) offset v)))
   (set-null! [this idx] (set-safe! this idx nil))
   (get-object [this idx] (get-object (.getVectorByType this (.getTypeId this idx))

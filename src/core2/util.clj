@@ -1,7 +1,8 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import java.io.ByteArrayOutputStream
+  (:import core2.DenseUnionUtil
+           java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
            [java.lang.reflect Field Method]
@@ -209,17 +210,13 @@
 
      (VectorSchemaRoot. acc))))
 
-(def ^:private ^Field dense-union-value-count-field
-  (doto (.getDeclaredField DenseUnionVector "valueCount")
-    (.setAccessible true)))
-
 ;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
 ;; solve the VSR calling this.
 (defn set-value-count [^ValueVector v ^long value-count]
   (let [value-count (int value-count)]
     (cond
       (instance? DenseUnionVector v)
-      (.set dense-union-value-count-field v value-count)
+      (DenseUnionUtil/setValueCount v value-count)
 
       (and (instance? NonNullableStructVector v)
            (zero? (.getNullCount v)))
@@ -230,26 +227,6 @@
 
       :else
       (.setValueCount v value-count))))
-
-;; NOTE: also updates value count of the vector.
-(defn write-type-id ^long [^DenseUnionVector duv, ^long idx ^long type-id]
-  ;; type-id :: byte, return :: int, but Clojure doesn't allow it.
-  (let [type-id (unchecked-byte type-id)
-        sub-vec (.getVectorByType duv type-id)
-        offset (.getValueCount sub-vec)
-        offset-buffer (.getOffsetBuffer duv)
-        offset-idx (* DenseUnionVector/OFFSET_WIDTH idx)
-        offset-buffer (if (>= offset-idx (.capacity offset-buffer))
-                        (do (.reAlloc duv)
-                            (.getOffsetBuffer duv))
-                        offset-buffer)]
-    (.setTypeId duv idx type-id)
-    (.setInt offset-buffer offset-idx offset)
-    (set-value-count sub-vec (inc offset))
-
-    (set-value-count duv (inc idx))
-
-    offset))
 
 (def ^:private ^Field vector-schema-root-row-count-field
   (doto (.getDeclaredField VectorSchemaRoot "rowCount")
@@ -486,13 +463,11 @@
                    (VectorLoader. root)
                    nil))))
 
-(declare du-copy)
-
 (defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^IntStream idxs ^long size ^ValueVector out-vec]
   (if (instance? DenseUnionVector in-vec)
     (.forEach idxs (reify IntConsumer
                      (accept [_ idx]
-                       (du-copy in-vec idx out-vec (.getValueCount out-vec)))))
+                       (DenseUnionUtil/copyIdxSafe in-vec idx out-vec (.getValueCount out-vec)))))
     (do (.setInitialCapacity out-vec size)
         (.allocateNew out-vec)
         (.forEach idxs (reify IntConsumer
@@ -545,20 +520,11 @@
       (ArrowBufPointer. buffer-copy 0 length))
     x))
 
-(defn du-copy [^DenseUnionVector src-vec, ^long src-idx, ^DenseUnionVector dest-vec, ^long dest-idx]
-  (let [type-id (.getTypeId src-vec src-idx)
-        offset (write-type-id dest-vec dest-idx type-id)]
-    (.copyFromSafe (.getVectorByType dest-vec type-id)
-                   (.getOffset src-vec src-idx)
-                   offset
-                   (.getVectorByType src-vec type-id))
-    nil))
-
 (defn copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long out-idx]
   (dotimes [n (root-field-count in-root)]
     (let [in-vec (.getVector in-root n)
           out-vec (.getVector out-root (.getName in-vec))]
       (if (and (instance? DenseUnionVector in-vec)
                (instance? DenseUnionVector out-vec))
-        (du-copy in-vec idx out-vec out-idx)
+        (DenseUnionUtil/copyIdxSafe in-vec idx out-vec out-idx)
         (.copyFromSafe out-vec idx out-idx in-vec)))))

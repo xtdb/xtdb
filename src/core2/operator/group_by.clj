@@ -1,14 +1,14 @@
 (ns core2.operator.group-by
-  (:require [core2.util :as util]
-            [core2.types :as t])
-  (:import core2.ICursor
+  (:require [core2.types :as t]
+            [core2.util :as util])
+  (:import [core2 DenseUnionUtil ICursor]
            [java.util ArrayList Comparator DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
-           [java.util.function BiConsumer Consumer Function IntConsumer Supplier ObjDoubleConsumer ObjIntConsumer ObjLongConsumer]
+           [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
-           org.apache.arrow.memory.util.ArrowBufPointer
            org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.memory.util.ArrowBufPointer
+           [org.apache.arrow.vector BaseIntVector FloatingPointVector ValueVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector BaseIntVector BitVector ElementAddressableVector FloatingPointVector ValueVector VectorSchemaRoot]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.roaringbitmap.RoaringBitmap))
 
@@ -277,7 +277,7 @@
             (let [v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
               (if (instance? DenseUnionVector out-vec)
                 (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                      value-offset (util/write-type-id out-vec out-idx type-id)]
+                      value-offset (DenseUnionUtil/writeTypeId out-vec out-idx type-id)]
                   (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
                 (t/set-safe! out-vec out-idx v)))))))
     (util/set-vector-schema-root-row-count out-root row-count)

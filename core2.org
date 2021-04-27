@@ -689,3 +689,64 @@ looking at du-copy:
   - write-type-id 8.5s, 72% of du-copy
     - set-value-count 4s, 15M calls, 33% of du-copy
   - DUV.reAlloc 1.3s, 11% of du-copy
+
+** DenseUnionUtil
+trying to shave off some time by extracting du-copy out to a Java class, where we can be sure method calls aren't going via boxed intermediate methods.
+seems a ~5-10% improvement on Q5 and Q9
+*** pre
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1178.844639 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3349.225611 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2226.656121 msecs"
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1146.709411 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3361.117374 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2253.609079 msecs"
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1168.857154 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3330.433117 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2189.573789 msecs"
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1133.470663 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3324.900396 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2201.697073 msecs"
+
+*** post
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1191.521239 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3161.144765 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2169.250004 msecs"
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1156.828099 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3079.154028 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2094.028161 msecs"
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1149.643137 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3110.748285 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2085.596161 msecs"
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1178.077209 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 3073.089175 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 2072.93805 msecs"

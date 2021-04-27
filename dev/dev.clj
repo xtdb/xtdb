@@ -61,7 +61,13 @@
       (time
        (tpch/submit-docs! node 0.1))))
 
-  (with-open [wm (c2/open-watermark node)
-              res (c2/open-q node wm tpch/tpch-q5-local-supplier-volume)]
-    (time
-     (count (into [] (mapcat seq (tu/<-cursor res)))))))
+  (do
+    (newline)
+    (doseq [!q [#'tpch/tpch-q1-pricing-summary-report
+                #'tpch/tpch-q5-local-supplier-volume
+                #'tpch/tpch-q9-product-type-profit-measure]]
+      (prn !q)
+      (with-open [wm (c2/open-watermark node)
+                  res (c2/open-q node wm @!q)]
+        (time
+         (count (into [] (mapcat seq (tu/<-cursor res)))))))))

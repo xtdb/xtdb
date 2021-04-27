@@ -1,15 +1,15 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
-            [core2.metadata :as meta]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
-            core2.temporal
+            [core2.metadata :as meta]
+            [core2.system :as sys]
+            [core2.temporal :as temporal]
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.temporal :as temporal]
-            [core2.util :as util]
-            [core2.system :as sys])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
+           core2.DenseUnionUtil
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal ITemporalManager TemporalCoordinates]
@@ -47,7 +47,7 @@
         ^DenseUnionVector field-vec (.getVector content-root 1)
         value-count (.getRowCount content-root)
         type-id (.getTypeId src-vec src-idx)
-        offset (util/write-type-id field-vec (.getValueCount field-vec) type-id)]
+        offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
 
     (.setSafe row-id-vec value-count ^int row-id)
 
@@ -68,7 +68,7 @@
 (defn ->tx-time-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Date tx-time]
   (doto ^DenseUnionVector (.createVector tx-time-field allocator)
     (util/set-value-count 1)
-    (util/write-type-id 0 timestampmilli-type-id)
+    (DenseUnionUtil/writeTypeId 0 timestampmilli-type-id)
     (-> (.getTimeStampMilliVector timestampmilli-type-id)
         (.setSafe 0 (.getTime tx-time)))))
 
@@ -82,7 +82,7 @@
 (defn ->tx-id-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^long tx-id]
   (doto ^DenseUnionVector (.createVector tx-id-field allocator)
     (util/set-value-count 1)
-    (util/write-type-id 0 bigint-type-id)
+    (DenseUnionUtil/writeTypeId 0 bigint-type-id)
     (-> (.getBigIntVector bigint-type-id)
         (.setSafe 0 tx-id))))
 
@@ -96,7 +96,7 @@
 (defn ->tombstone-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Boolean tombstone?]
   (doto ^DenseUnionVector (.createVector tombstone-field allocator)
     (util/set-value-count 1)
-    (util/write-type-id 0 bit-type-id)
+    (DenseUnionUtil/writeTypeId 0 bit-type-id)
     (-> (.getBitVector bit-type-id)
         (.setSafe 0 (if tombstone? 1 0)))))
 

@@ -1,12 +1,10 @@
 (ns core2.operator.table
-  (:require [core2.util :as util]
-            [core2.types :as ty])
-  (:import core2.ICursor
+  (:require [core2.types :as ty])
+  (:import [core2 DenseUnionUtil ICursor]
            [java.util ArrayList List]
-           java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.complex.DenseUnionVector
+           org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.VectorSchemaRoot))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -29,7 +27,7 @@
                   (doseq [[k v] row]
                     (let [type-id (ty/arrow-type->type-id (ty/->arrow-type (class v)))
                           ^DenseUnionVector duv (.getVector out-root (name k))
-                          offset (util/write-type-id duv n type-id)]
+                          offset (DenseUnionUtil/writeTypeId duv n type-id)]
                       (when (some? v)
                         (ty/set-safe! (.getVectorByType duv type-id) offset v))))))
               (.setRowCount out-root row-count)

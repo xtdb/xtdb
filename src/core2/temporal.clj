@@ -7,6 +7,7 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.buffer_pool.IBufferPool
+           core2.DenseUnionUtil
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalCoordinates
@@ -285,7 +286,7 @@
               (util/set-value-count temporal-duv-vec value-count)
               (util/set-value-count temporal-vec value-count)
               (dotimes [n value-count]
-                (let [offset (util/write-type-id temporal-duv-vec n timestampmilli-type-id)
+                (let [offset (DenseUnionUtil/writeTypeId temporal-duv-vec n timestampmilli-type-id)
                       ^longs coordinate (aget coordinates n)
                       row-id (aget coordinate row-id-idx)]
                   (.addLong row-id-bitmap-out row-id)
