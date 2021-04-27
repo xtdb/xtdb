@@ -92,6 +92,8 @@ Two main extension points:
        - DONE Block-level metadata
        - Predicate push-down
          - DONE for joins passing bloom filters
+     - Upgrade to Arrow 4.0.0
+       - Investigate Dataset API?
      - Check cold caches, possible solutions:
        - Tiered caching
    - Join order benchmarking - WatDiv, graph
@@ -99,6 +101,7 @@ Two main extension points:
    - Dealing with updates over time - historical dataset (TS Devices)
      - DONE ingest bench
    - Scalable temporal indexing + querying
+     - Temporal predicates in logical plan
      - Exercise temporal side, TPC-BiH
    - Bigger than local node databases
      - Buffer pool eviction
