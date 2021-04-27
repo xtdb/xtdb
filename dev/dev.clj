@@ -1,5 +1,6 @@
 (ns dev
   (:require [core2.core :as c2]
+            [core2.tpch :as tpch]
             [core2.util :as util]
             [integrant.core :as i]
             [integrant.repl :as ir]
@@ -51,3 +52,8 @@
 (def go ir/go)
 (def halt ir/halt)
 (def reset ir/reset)
+
+(comment
+  (def !submit-tpch
+    (future
+      (tpch/submit-docs! node 0.1))))
