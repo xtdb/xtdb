@@ -782,13 +782,14 @@
          ^long k k]
      (with-open [ch (util/->file-channel path util/write-new-file-opts)
                  write-ch (WriteChannel. ch)
-                 ;; out-root (VectorSchemaRoot/create schema allocator)
                  empty-buffer (.buffer allocator 0)]
-       (.write write-ch util/arrow-magic)
-       (.align write-ch)
+       (doto write-ch
+         (.write util/arrow-magic)
+         (.align))
 
-       (let [offset (MessageSerializer/serialize write-ch schema)
-             axis-delete-flag-node (ArrowFieldNode. n 0)
+       (MessageSerializer/serialize write-ch schema)
+
+       (let [axis-delete-flag-node (ArrowFieldNode. n 0)
              split-value-node (ArrowFieldNode. n 0)
              skip-pointer-node (ArrowFieldNode. n 0)
              point-node (ArrowFieldNode. n 0)
@@ -834,17 +835,22 @@
                padding (long (mod (+ start metadata-length prefix-size) 8))
                metadata-length (long (if (zero? padding)
                                        metadata-length
-                                       (+ metadata-length (- 8 padding))))
-               _ (.writeIntLittleEndian write-ch MessageSerializer/IPC_CONTINUATION_TOKEN)
-               _ (.writeIntLittleEndian write-ch metadata-length)
-               _ (.write write-ch metadata)
-               start-buffers (.align write-ch)
-               _ (.writeZeros write-ch buffer-length)
-               block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)]
-           (.writeIntLittleEndian write-ch 0xFFFFFFFF)
-           (.writeIntLittleEndian write-ch 0)
-           (let [footer (ArrowFooter. schema [] [block])
+                                       (+ metadata-length (- 8 padding))))]
+           (doto write-ch
+             (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
+             (.writeIntLittleEndian metadata-length)
+             (.write metadata)
+             (.align)
+             (.writeZeros buffer-length))
+
+           (doto write-ch
+             (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
+             (.writeIntLittleEndian 0))
+
+           (let [block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)
+                 footer (ArrowFooter. schema [] [block])
                  footer-size (.write write-ch footer false)]
              (.writeIntLittleEndian write-ch footer-size))))
+
        (.write write-ch util/arrow-magic))
      path)))
