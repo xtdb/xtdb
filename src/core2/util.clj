@@ -70,9 +70,14 @@
   (^java.nio.channels.FileChannel [^Path path options]
    (FileChannel/open path (into-array OpenOption options))))
 
-(defn ->mmap-path ^java.nio.MappedByteBuffer [^Path path]
-  (with-open [in (->file-channel path)]
-    (.map in FileChannel$MapMode/READ_ONLY 0 (.size in))))
+(defn ->mmap-path
+  (^java.nio.MappedByteBuffer [^Path path]
+   (->mmap-path path FileChannel$MapMode/READ_ONLY))
+  (^java.nio.MappedByteBuffer [^Path path ^FileChannel$MapMode map-mode]
+   (with-open [in (->file-channel path (if (= FileChannel$MapMode/READ_ONLY map-mode)
+                                         #{StandardOpenOption/READ}
+                                         #{StandardOpenOption/READ StandardOpenOption/WRITE}))]
+     (.map in map-mode 0 (.size in)))))
 
 (defn write-buffer-to-path [^ByteBuffer from-buffer ^Path to-path]
   (with-open [file-ch (->file-channel to-path write-new-file-opts)
