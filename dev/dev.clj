@@ -27,7 +27,7 @@
          (set-log-level! ~ns level#)))))
 
 (def dev-node-dir
-  (io/file "data/dev-node"))
+  (io/file "dev/dev-node"))
 
 (def node)
 
