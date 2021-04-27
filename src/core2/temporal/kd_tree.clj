@@ -15,6 +15,13 @@
 
 ;; TODO:
 
+;; - Sort and build the tree in-place from a point vector instead of array.
+;; - Build Arrow IPC tree in-place on disk from points from multiple trees.
+;; - Static/Dynamic tree node.
+;;   - Revisit index and point access.
+;;   - Revisit deletion.
+;;   - Revisit need for explicit axis.
+
 ;; Step 2:
 
 ;; Later, we can merge older chunks, either when registering new ones,
