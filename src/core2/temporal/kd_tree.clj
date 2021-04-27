@@ -10,11 +10,12 @@
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot VectorUnloader]
+           org.apache.arrow.vector.util.DataSizeRoundingUtil
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.ipc WriteChannel]
-           [org.apache.arrow.vector.ipc.message ArrowFooter MessageSerializer]))
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowBuffer ArrowFieldNode ArrowFooter ArrowRecordBatch MessageSerializer]))
 
 ;; TODO:
 
@@ -746,21 +747,104 @@
   (kd-tree-depth [_]
     (throw (UnsupportedOperationException.))))
 
-;; WIP
-(defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points ^long k]
-  (let [^Schema schema (->column-kd-tree-schema k)]
-    (with-open [ch (util/->file-channel path util/write-new-file-opts)
-                write-ch (WriteChannel. ch)
-                out-root (VectorSchemaRoot/create schema allocator)]
-      (.write write-ch util/arrow-magic)
-      (.align write-ch)
-      (let [offset (MessageSerializer/serialize write-ch schema)
-            record-batch (.getRecordBatch (VectorUnloader. out-root))
-            block (MessageSerializer/serialize write-ch record-batch)]
-        (.writeIntLittleEndian write-ch 0xFFFFFFFF)
-        (.writeIntLittleEndian write-ch 0)
-        (let [footer (ArrowFooter. schema [] [block])
-              footer-size (.write write-ch footer false)]
-          (.writeIntLittleEndian write-ch footer-size)))
-      (.write write-ch util/arrow-magic))
-    path))
+(comment
+  (with-open [allocator (RootAllocator.)]
+    (->disk-kd-tree
+     allocator
+     (util/->path "target/kd-tree-6.arrow")
+     []
+     10
+     3))
+
+  (def bb (util/->mmap-path (util/->path "target/kd-tree-6.arrow") java.nio.channels.FileChannel$MapMode/READ_WRITE))
+
+  (with-open [allocator (RootAllocator.)
+              b (doto (util/->arrow-buf-view allocator bb)
+                  (.retain))
+              c (util/->chunks b allocator)]
+    (.forEachRemaining c (reify Consumer
+                           (accept [_ x]
+                             (.set ^TinyIntVector (.getVector ^VectorSchemaRoot x "axis-delete-flag") 0 1)
+                             (prn (.getObject (.getVector ^VectorSchemaRoot x "axis-delete-flag") 0)))))))
+
+
+(def ^:private ^java.lang.reflect.Field arrow-record-buffers-layout-field
+  (doto (.getDeclaredField ArrowRecordBatch "buffersLayout")
+    (.setAccessible true)))
+
+;; TODO: actually store the points and build the tree in place.
+(defn ->disk-kd-tree
+  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k]
+   (->disk-kd-tree allocator path points (count points) k))
+  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points n k]
+   (let [^Schema schema (->column-kd-tree-schema k)
+         ^long n n
+         ^long k k]
+     (with-open [ch (util/->file-channel path util/write-new-file-opts)
+                 write-ch (WriteChannel. ch)
+                 ;; out-root (VectorSchemaRoot/create schema allocator)
+                 empty-buffer (.buffer allocator 0)]
+       (.write write-ch util/arrow-magic)
+       (.align write-ch)
+
+       (let [offset (MessageSerializer/serialize write-ch schema)
+             axis-delete-flag-node (ArrowFieldNode. n 0)
+             split-value-node (ArrowFieldNode. n 0)
+             skip-pointer-node (ArrowFieldNode. n 0)
+             point-node (ArrowFieldNode. n 0)
+             coordinates-node (ArrowFieldNode. (* k n) 0)
+             ^List field-nodes [axis-delete-flag-node
+                                split-value-node
+                                skip-pointer-node
+                                point-node
+                                coordinates-node]
+             buffers (ArrayList.)]
+
+         (loop [offset 0
+                [node & nodes] field-nodes]
+           (when node
+             (let [n (if (= coordinates-node node)
+                       (* k n)
+                       n)
+                   validity-size (long (Math/ceil (/ ^long n Byte/SIZE)))]
+               (.add buffers (ArrowBuffer. offset validity-size))
+               (let [next-offset (long (DataSizeRoundingUtil/roundUpTo8Multiple (+ offset validity-size)))
+                     size-factor (long (cond
+                                         (= axis-delete-flag-node node) Byte/BYTES
+                                         (= split-value-node node) Long/BYTES
+                                         (= skip-pointer-node node) Integer/BYTES
+                                         (= point-node node) 0
+                                         (= coordinates-node node) Long/BYTES))
+                     size (* n size-factor)]
+                 (when-not (zero? size)
+                   (.add buffers (ArrowBuffer. next-offset (* n size-factor))))
+                 (recur (DataSizeRoundingUtil/roundUpTo8Multiple (+ next-offset size)) nodes)))))
+
+         (let [^ArrowBuffer last-buffer (last buffers)
+               buffer-length (DataSizeRoundingUtil/roundUpTo8Multiple (+ (.getOffset last-buffer)
+                                                                         (.getSize last-buffer)))
+               record-batch (proxy [ArrowRecordBatch] [n (ArrayList. field-nodes) (repeat 9 empty-buffer)]
+                              (computeBodyLength []
+                                buffer-length))
+               _ (.set arrow-record-buffers-layout-field record-batch buffers)
+               start (.getCurrentPosition write-ch)
+               metadata (MessageSerializer/serializeMetadata record-batch)
+               metadata-length (.remaining metadata)
+               prefix-size 8
+               padding (long (mod (+ start metadata-length prefix-size) 8))
+               metadata-length (long (if (zero? padding)
+                                       metadata-length
+                                       (+ metadata-length (- 8 padding))))
+               _ (.writeIntLittleEndian write-ch MessageSerializer/IPC_CONTINUATION_TOKEN)
+               _ (.writeIntLittleEndian write-ch metadata-length)
+               _ (.write write-ch metadata)
+               start-buffers (.align write-ch)
+               _ (.writeZeros write-ch buffer-length)
+               block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)]
+           (.writeIntLittleEndian write-ch 0xFFFFFFFF)
+           (.writeIntLittleEndian write-ch 0)
+           (let [footer (ArrowFooter. schema [] [block])
+                 footer-size (.write write-ch footer false)]
+             (.writeIntLittleEndian write-ch footer-size))))
+       (.write write-ch util/arrow-magic))
+     path)))
