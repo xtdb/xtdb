@@ -56,4 +56,5 @@
 (comment
   (def !submit-tpch
     (future
-      (tpch/submit-docs! node 0.1))))
+      (time
+       (tpch/submit-docs! node 0.1)))))
