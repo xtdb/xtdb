@@ -61,9 +61,7 @@
        (util/->mmap-path from-path))))
 
   (putObject [_this k buf]
-    ;; TODO slice because write-buffer-to-path (->seekable-byte-channel)
-    ;; doesn't correctly handle limit != capacity
-    (let [buf (.slice buf)]
+    (let [buf (.duplicate buf)]
       (util/completable-future pool
         (let [to-path (.resolve root-path k)]
           (util/mkdirs (.getParent to-path))

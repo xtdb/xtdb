@@ -30,7 +30,7 @@
 ;;; IO
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]
-  (let [buffer (.duplicate buffer)]
+  (let [buffer (.slice buffer)]
     (proxy [SeekableByteChannel] []
       (isOpen []
         true)
