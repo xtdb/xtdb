@@ -100,9 +100,10 @@ Two main extension points:
      - WCOJ?
    - Dealing with updates over time - historical dataset (TS Devices)
      - DONE ingest bench
+     - Temporal range predicates in logical plan scan
    - Scalable temporal indexing + querying
-     - Temporal predicates in logical plan
      - Exercise temporal side, TPC-BiH
+     - Interval algebra predicates in logical plan select
    - Bigger than local node databases
      - Buffer pool eviction
      - Ability to query several temporal chunks (live and Arrow).
