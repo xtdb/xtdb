@@ -15,7 +15,6 @@
 
 ;; TODO:
 
-;; - Sort and build the tree in-place from a point vector instead of array.
 ;; - Build Arrow IPC tree in-place on disk from points from multiple trees.
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
@@ -134,19 +133,6 @@
   (kd-tree-point-vec [_])
   (kd-tree-depth [_] 0))
 
-(def ^:private ^Class objects-class
-  (Class/forName "[Ljava.lang.Object;"))
-
-(defn- ensure-points-array ^objects [points]
-  (let [^objects points (if (instance? objects-class points)
-                          points
-                          (object-array points))]
-    (dotimes [idx (alength points)]
-      (let [point (aget points idx)]
-        (when-not (instance? longs-class point)
-          (aset points idx (->longs point)))))
-    points))
-
 (defn- write-point ^long [^FixedSizeListVector point-vec ^longs point]
   (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
         idx (.getValueCount point-vec)
@@ -160,12 +146,15 @@
   (t/->field "point" (ArrowType$FixedSizeList. k) false
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 
-(defmacro ^:private swap-array [xs n m]
-  `(let [xs# ~xs
-         tmp# (aget xs# ~n)]
-     (doto xs#
-       (aset ~n (aget xs# ~m))
-       (aset ~m tmp#))))
+(defmacro ^:private swap-point [point-vec coordinates-vec n m]
+  `(let [n-idx# (.getElementStartIndex ~point-vec ~n)
+         m-idx# (.getElementStartIndex ~point-vec ~m)]
+     (dotimes [idx# (.getListSize ~point-vec)]
+       (let [n-idx# (+ n-idx# idx#)
+             m-idx# (+ m-idx# idx#)
+             tmp# (.get ~coordinates-vec n-idx#)]
+         (.set ~coordinates-vec n-idx# (.get ~coordinates-vec m-idx#))
+         (.set ~coordinates-vec m-idx# tmp#)))))
 
 (defn- upper-int ^long [^long x]
   (unsigned-bit-shift-right x Integer/SIZE))
@@ -176,33 +165,35 @@
 (defn- two-ints-as-long ^long [^long x ^long y]
   (bit-or (bit-shift-left x Integer/SIZE) y))
 
-(defn- three-way-partition ^long [^objects xs ^long low ^long hi ^Comparator pivot-comparator]
-  (let [pivot (aget xs (quot (+ low hi) 2))]
+(defn- three-way-partition ^long [^FixedSizeListVector point-vec ^long low ^long hi ^long axis]
+  (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+        pivot-idx (+ (.getElementStartIndex point-vec (quot (+ low hi) 2)) axis)
+        pivot (.get coordinates-vec pivot-idx)]
     (loop [i (int low)
            j (int low)
            k (inc (int hi))]
       (if (< j k)
-        (let [diff (.compare pivot-comparator (aget xs j) pivot)]
+        (let [diff (Long/compare (.get coordinates-vec (+ (.getElementStartIndex point-vec j) axis)) pivot)]
           (cond
             (neg? diff)
-            (do (swap-array xs i j)
+            (do (swap-point point-vec coordinates-vec i j)
                 (recur (inc i) (inc j) k))
 
             (pos? diff)
             (let [k (dec k)]
-              (swap-array xs j k)
+              (swap-point point-vec coordinates-vec j k)
               (recur i j k))
 
             :else
             (recur i (inc j) k)))
         (two-ints-as-long i (dec k))))))
 
-(defn- quick-select ^long [^objects xs ^long low ^long hi ^Comparator pivot-comparator]
+(defn- quick-select ^long [^FixedSizeListVector point-vec ^long low ^long hi ^long axis]
   (let [k (quot (+ low hi) 2)]
     (loop [low low
            hi (dec hi)]
       (if (< low hi)
-        (let [left-right (three-way-partition xs low hi pivot-comparator)
+        (let [left-right (three-way-partition point-vec low hi axis)
               left (upper-int left-right)
               right (lower-int left-right)]
           (cond
@@ -218,35 +209,26 @@
 
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
   (when (not-empty points)
-    (let [^objects points (ensure-points-array points)
-          n (alength points)
-          k (count (aget points 0))
-          axis->comparator (object-array
-                            (for [axis (range k)]
-                              (Comparator/comparingLong
-                               (reify ToLongFunction
-                                 (applyAsLong [_ x]
-                                   (aget ^longs x axis))))))
-          point-vec (.createVector ^Field (->point-field k) allocator)]
+    (let [k (count (first points))
+          ^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)]
+      (doseq [point points]
+        (write-point point-vec (->longs point)))
       (try
         ((fn step [^long start ^long end ^long axis]
-           (if (= (inc start) end)
-             (let [point (aget points start)
-                   idx (write-point point-vec point)]
-               (Node. point-vec idx axis nil nil false))
-             (let [median (quick-select points start end (aget axis->comparator axis))
-                   next-axis (next-axis axis k)
-                   point (aget points median)
-                   idx (write-point point-vec point)]
-               (Node. point-vec
-                      idx
-                      axis
-                      (when (< start median)
-                        (step start median next-axis))
-                      (when (< (inc median) end)
-                        (step (inc median) end next-axis))
-                      false))))
-         0 (alength points) 0)
+           (let [median (quick-select point-vec start end axis)
+                 next-axis (next-axis axis k)]
+             (when-not (= start median)
+               (swap-point point-vec coordinates-vec start median))
+             (Node. point-vec
+                    start
+                    axis
+                    (when (< start median)
+                      (step (inc start) (inc median) next-axis))
+                    (when (< (inc median) end)
+                      (step (inc median) end next-axis))
+                    false)))
+         0 (.getValueCount point-vec) 0)
         (catch Throwable t
           (util/try-close point-vec)
           (throw t))))))
