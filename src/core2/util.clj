@@ -284,7 +284,7 @@
     (fn [write-batch!]
       (write-batch!))))
 
-(def ^:private ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
+(def ^{:tag 'bytes} arrow-magic (.getBytes "ARROW1" StandardCharsets/UTF_8))
 
 (defn- validate-arrow-magic [^ArrowBuf ipc-file-format-buffer]
   (when-not (zero? (ByteFunctionHelpers/compare ipc-file-format-buffer

@@ -3,15 +3,18 @@
             [core2.util :as util]
             [clojure.tools.logging :as log])
   (:import [java.io Closeable]
+           java.nio.file.Path
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             IdentityHashMap List Map Spliterator Spliterator$OfInt Spliterators]
            [java.util.function Consumer Function IntConsumer IntFunction Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector IntVector TinyIntVector VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
-           [org.apache.arrow.vector.types Types$MinorType]))
+           [org.apache.arrow.vector.types Types$MinorType]
+           [org.apache.arrow.vector.ipc WriteChannel]
+           [org.apache.arrow.vector.ipc.message ArrowFooter MessageSerializer]))
 
 ;; TODO:
 
@@ -742,3 +745,22 @@
 
   (kd-tree-depth [_]
     (throw (UnsupportedOperationException.))))
+
+;; WIP
+(defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points ^long k]
+  (let [^Schema schema (->column-kd-tree-schema k)]
+    (with-open [ch (util/->file-channel path util/write-new-file-opts)
+                write-ch (WriteChannel. ch)
+                out-root (VectorSchemaRoot/create schema allocator)]
+      (.write write-ch util/arrow-magic)
+      (.align write-ch)
+      (let [offset (MessageSerializer/serialize write-ch schema)
+            record-batch (.getRecordBatch (VectorUnloader. out-root))
+            block (MessageSerializer/serialize write-ch record-batch)]
+        (.writeIntLittleEndian write-ch 0xFFFFFFFF)
+        (.writeIntLittleEndian write-ch 0)
+        (let [footer (ArrowFooter. schema [] [block])
+              footer-size (.write write-ch footer false)]
+          (.writeIntLittleEndian write-ch footer-size)))
+      (.write write-ch util/arrow-magic))
+    path))
