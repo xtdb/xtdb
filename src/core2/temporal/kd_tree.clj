@@ -9,7 +9,7 @@
            [java.util.function Consumer Function IntConsumer IntFunction Predicate ToLongFunction]
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BitVectorHelper BigIntVector IntVector TinyIntVector VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector TypeLayout VectorSchemaRoot VectorUnloader]
            org.apache.arrow.vector.util.DataSizeRoundingUtil
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
@@ -772,6 +772,35 @@
   (doto (.getDeclaredField ArrowRecordBatch "buffersLayout")
     (.setAccessible true)))
 
+(defn- ->empty-record-batch ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^BufferAllocator allocator ^Schema schema ^long n]
+  (let [step-fn (fn step [^long multiplier ^Field f]
+                  (let [t (.getType f)]
+                    (cons {:field-node (ArrowFieldNode. multiplier 0)
+                           :sizes (vec (for [^BufferLayout bl (.getBufferLayouts (TypeLayout/getTypeLayout t))]
+                                         (long (Math/ceil (/ (* multiplier (.getTypeBitWidth bl)) Byte/SIZE)))))}
+                          (mapcat (partial step (if (instance? ArrowType$FixedSizeList t)
+                                                  (* multiplier (.getListSize ^ArrowType$FixedSizeList t))
+                                                  multiplier))
+                                  (.getChildren f)))))
+        field-nodes+sizes (mapcat (partial step-fn n) (.getFields schema))
+        field-nodes (mapv :field-node field-nodes+sizes)
+        sizes (mapcat :sizes field-nodes+sizes)
+        offsets (reductions
+                 (fn [^long offset ^long size]
+                   (DataSizeRoundingUtil/roundUpTo8Multiple (+ offset size)))
+                 0
+                 sizes)
+        buffers (vec (for [[offset size] (map vector offsets sizes)]
+                       (ArrowBuffer. offset size)))
+        ^ArrowBuffer last-buffer (last buffers)
+        buffer-length (DataSizeRoundingUtil/roundUpTo8Multiple (+ (.getOffset last-buffer)
+                                                                  (.getSize last-buffer)))
+        record-batch (proxy [ArrowRecordBatch] [n field-nodes (repeat 9 (.getEmpty allocator))]
+                       (computeBodyLength []
+                         buffer-length))]
+    (.set arrow-record-buffers-layout-field record-batch buffers)
+    record-batch))
+
 ;; TODO: actually store the points and build the tree in place.
 (defn ->disk-kd-tree
   (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k]
@@ -781,76 +810,39 @@
          ^long n n
          ^long k k]
      (with-open [ch (util/->file-channel path util/write-new-file-opts)
-                 write-ch (WriteChannel. ch)
-                 empty-buffer (.buffer allocator 0)]
+                 write-ch (WriteChannel. ch)]
        (doto write-ch
          (.write util/arrow-magic)
          (.align))
 
        (MessageSerializer/serialize write-ch schema)
 
-       (let [axis-delete-flag-node (ArrowFieldNode. n 0)
-             split-value-node (ArrowFieldNode. n 0)
-             skip-pointer-node (ArrowFieldNode. n 0)
-             point-node (ArrowFieldNode. n 0)
-             coordinates-node (ArrowFieldNode. (* k n) 0)
-             ^List field-nodes [axis-delete-flag-node
-                                split-value-node
-                                skip-pointer-node
-                                point-node
-                                coordinates-node]
-             buffers (ArrayList.)]
+       (let [^ArrowRecordBatch record-batch (->empty-record-batch allocator schema n)
+             buffer-length (.computeBodyLength record-batch)
+             start (.getCurrentPosition write-ch)
+             metadata (MessageSerializer/serializeMetadata record-batch)
+             metadata-length (.remaining metadata)
+             prefix-size 8
+             padding (long (mod (+ start metadata-length prefix-size) 8))
+             metadata-length (long (if (zero? padding)
+                                     metadata-length
+                                     (+ metadata-length (- 8 padding))))]
+         (doto write-ch
+           (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
+           (.writeIntLittleEndian metadata-length)
+           (.write metadata)
+           (.align))
 
-         (loop [offset 0
-                [node & nodes] field-nodes]
-           (when node
-             (let [n (if (= coordinates-node node)
-                       (* k n)
-                       n)
-                   validity-size (BitVectorHelper/getValidityBufferSize n)]
-               (.add buffers (ArrowBuffer. offset validity-size))
-               (let [next-offset (long (DataSizeRoundingUtil/roundUpTo8Multiple (+ offset validity-size)))
-                     size-factor (long (cond
-                                         (= axis-delete-flag-node node) Byte/BYTES
-                                         (= split-value-node node) Long/BYTES
-                                         (= skip-pointer-node node) Integer/BYTES
-                                         (= point-node node) 0
-                                         (= coordinates-node node) Long/BYTES))
-                     size (* n size-factor)]
-                 (when-not (zero? size)
-                   (.add buffers (ArrowBuffer. next-offset (* n size-factor))))
-                 (recur (DataSizeRoundingUtil/roundUpTo8Multiple (+ next-offset size)) nodes)))))
+         (.writeZeros write-ch buffer-length)
 
-         (let [^ArrowBuffer last-buffer (last buffers)
-               buffer-length (DataSizeRoundingUtil/roundUpTo8Multiple (+ (.getOffset last-buffer)
-                                                                         (.getSize last-buffer)))
-               record-batch (proxy [ArrowRecordBatch] [n (ArrayList. field-nodes) (repeat 9 empty-buffer)]
-                              (computeBodyLength []
-                                buffer-length))
-               _ (.set arrow-record-buffers-layout-field record-batch buffers)
-               start (.getCurrentPosition write-ch)
-               metadata (MessageSerializer/serializeMetadata record-batch)
-               metadata-length (.remaining metadata)
-               prefix-size 8
-               padding (long (mod (+ start metadata-length prefix-size) 8))
-               metadata-length (long (if (zero? padding)
-                                       metadata-length
-                                       (+ metadata-length (- 8 padding))))]
-           (doto write-ch
-             (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
-             (.writeIntLittleEndian metadata-length)
-             (.write metadata)
-             (.align)
-             (.writeZeros buffer-length))
+         (doto write-ch
+           (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
+           (.writeIntLittleEndian 0))
 
-           (doto write-ch
-             (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
-             (.writeIntLittleEndian 0))
-
-           (let [block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)
-                 footer (ArrowFooter. schema [] [block])
-                 footer-size (.write write-ch footer false)]
-             (.writeIntLittleEndian write-ch footer-size))))
+         (let [block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)
+               footer (ArrowFooter. schema [] [block])
+               footer-size (.write write-ch footer false)]
+           (.writeIntLittleEndian write-ch footer-size)))
 
        (.write write-ch util/arrow-magic))
      path)))

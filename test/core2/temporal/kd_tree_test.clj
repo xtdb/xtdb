@@ -7,6 +7,7 @@
            [java.util.stream StreamSupport]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
+           [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
            [org.apache.arrow.vector.complex FixedSizeListVector]
            core2.temporal.kd_tree.Node))
 
@@ -375,3 +376,36 @@
               (t/is (= (kd/kd-tree->seq kd-tree)
                        (kd/kd-tree->seq merged-tree)
                        (kd/kd-tree->seq rebuilt-tree))))))))))
+
+(t/deftest empty-record-batch
+  (with-open [allocator (RootAllocator.)
+              ^ArrowRecordBatch record-batch (@#'kd/->empty-record-batch allocator (@#'kd/->column-kd-tree-schema 3) 10)]
+
+    (t/is (= [{:length 10, :nullCount 0}
+              {:length 10, :nullCount 0}
+              {:length 10, :nullCount 0}
+              {:length 10, :nullCount 0}
+              {:length 30, :nullCount 0}]
+             (mapv (comp #(dissoc % :class) bean)
+                   (.getNodes record-batch))))
+
+    (t/is (= [{:offset 0,
+               :size 2}
+              {:offset 8,
+               :size 10}
+              {:offset 24,
+               :size 2}
+              {:offset 32,
+               :size 80}
+              {:offset 112,
+               :size 2}
+              {:offset 120,
+               :size 40}
+              {:offset 160,
+               :size 2}
+              {:offset 168,
+               :size 4}
+              {:offset 176,
+               :size 240}]
+             (mapv (comp #(dissoc % :class) bean)
+                   (.getBuffersLayout record-batch))))))
