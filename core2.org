@@ -642,3 +642,50 @@ then select
 ** Post operators plan <2021-03-04 Thu>
 Next aim:
 - Updates/deletes + transaction-time timeslice queries
+
+* Profiling TPC-H SF0.1 Queries <2021-04-27 Tue>
+times are YourKit times, see [[https://s3.console.aws.amazon.com/s3/buckets/test-jms?region=eu-west-1&prefix=core2-profiler-snapshots/&showversions=false][S3 bucket]]. queries were warmed up beforehand
+
+** Q1, scan project group. overall 23s.
+- scan align-roots 15s, 66% overall
+  - align-vectors 8.5s, 37% overall, 56% of align-roots
+    - du-copy 6.8s, 80% of align-vectors
+      - write-type-id 4.5s, 66% of du-copy
+        - set-value-count 2s, 8M calls, 30% of du-copy
+      - DUV.reAlloc 0.7s, 10% of du-copy
+  - createTemporalRoots 6s, 26% overall, 40% of align-roots
+- aggregate-groups 3s, 15%
+  - pointer-or-object 1.6s, 1.1M calls, 47% of aggregate-groups
+
+** Q5, scan, join, group. overall 86s.
+seems dominated by joins
+- join, probe-phase 66s, 76% of overall
+  - copy-tuple 61s, 4M calls, 93% of probe-phase, 71% of overall
+    - du-copy (invokePrim) 53s, 34M calls, 80% of probe-phase
+      - du-copy (invokeStatic) 48s, 34M calls, 72% of probe-phase
+      - unaccounted 5s, 8% of probe phase, between invokePrim and invokeStatic
+- scan, align-roots 14s, 16% of overall
+  - createTemporalRoots 7.8s, 59% of align-roots, 10% of overall
+  - align-vectors 5s, 37% of align-roots, 6% of overall
+    - du-copy (direct to invokeStatic) 4s, 80% of align-vectors.
+
+looking at du-copy (invokeStatic) - 52s, 36M calls, 60% overall:
+- write-type-id 37s, 71% of du-copy
+  - util/set-value-count, 19s, 73M calls, 37% of du-copy
+  - another 6s dropped between write-type-id invokePrim and invokeStatic
+
+** Q9, scans, PK joins, project, group, overall 33s.
+seems dominated by scan:
+- scan align-roots 20s, 61% overall
+  - createTemporalRoots 11s, 34% overall
+  - align-vectors 8s, 25% overall
+    - du-copy 6s, 72% of align-vectors
+- probe-phase (join) 8.5s, 25%
+  - copy-tuple 6.7s, 80% of probe-phase
+    - du-copy 5.8s, 68% of probe-phase
+
+looking at du-copy:
+- 12s, 7M calls, 35% overall
+  - write-type-id 8.5s, 72% of du-copy
+    - set-value-count 4s, 15M calls, 33% of du-copy
+  - DUV.reAlloc 1.3s, 11% of du-copy
