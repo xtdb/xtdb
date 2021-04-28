@@ -154,7 +154,7 @@
     (dotimes [n (alength ^longs point)]
       (.setSafe coordinates-vec (+ list-idx n) (aget ^longs point n)))
     (dotimes [n (count point)]
-      (.setSafe coordinates-vec (+ list-idx n) (long (get point n))))))
+      (.setSafe coordinates-vec (+ list-idx n) (long (nth point n))))))
 
 (defn- write-point ^long [^FixedSizeListVector point-vec point]
   (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
