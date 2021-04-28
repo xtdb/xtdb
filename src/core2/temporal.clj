@@ -225,7 +225,7 @@
 
   ITemporalManager
   (getTemporalWatermark [_]
-    (some->> kd-tree (kd/retain-node-kd-tree allocator)))
+    (some-> kd-tree (kd/kd-tree-retain allocator)))
 
   (registerNewChunk [this chunk-idx]
     (when chunk-kd-tree
