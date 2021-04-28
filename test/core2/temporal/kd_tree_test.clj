@@ -1,5 +1,6 @@
 (ns core2.temporal.kd-tree-test
   (:require [clojure.test :as t]
+            [core2.util :as util]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
   (:import [java.util Collection Date HashMap List]
@@ -317,7 +318,9 @@
                                      (sort (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
-  (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]]
+  (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]
+        test-dir (util/->path "target/kd-tree-sanity-check")]
+    (util/delete-dir test-dir)
     (with-open [allocator (RootAllocator.)
                 kd-tree (kd/->node-kd-tree allocator points)
                 ^Node insert-kd-tree (reduce
@@ -325,7 +328,9 @@
                                         (kd/kd-tree-insert acc allocator point))
                                       nil
                                       points)
-                ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)]
+                ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)
+                ^VectorSchemaRoot disk-kd-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree.arrow") points 2)
+                                                    (kd/->mmap-kd-tree allocator))]
       (t/is (= [[7 2] [5 4] [2 3] [8 1]]
 
                (-> kd-tree
@@ -344,12 +349,19 @@
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/intStream false)
                    (.toArray)
+                   (->> (mapv (partial kd/kd-tree-point column-kd-tree))))
+
+               (-> disk-kd-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (StreamSupport/intStream false)
+                   (.toArray)
                    (->> (mapv (partial kd/kd-tree-point column-kd-tree)))))
             "wikipedia-test")
 
       (t/testing "seq"
         (t/is (= (kd/kd-tree->seq kd-tree)
-                 (kd/kd-tree->seq column-kd-tree))))
+                 (kd/kd-tree->seq column-kd-tree)
+                 (kd/kd-tree->seq disk-kd-tree))))
 
       (t/testing "empty tree"
         (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
@@ -362,6 +374,10 @@
 
         (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
           (t/is (empty? (kd/kd-tree->seq kd-tree)))))
+
+      (t/testing "arrow"
+        (t/is (= (.contentToTSVString column-kd-tree)
+                 (.contentToTSVString disk-kd-tree))))
 
       (t/testing "merge"
         (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]

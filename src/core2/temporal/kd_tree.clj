@@ -4,6 +4,7 @@
             [clojure.tools.logging :as log])
   (:import [java.io Closeable]
            java.nio.file.Path
+           java.nio.channels.FileChannel$MapMode
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             IdentityHashMap List Map Spliterator Spliterator$OfInt Spliterators]
            [java.util.function Consumer Function IntConsumer IntFunction Predicate ToLongFunction]
@@ -19,7 +20,6 @@
 
 ;; TODO:
 
-;; - Build Arrow IPC tree in-place on disk from points from multiple trees.
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
@@ -801,48 +801,106 @@
     (.set arrow-record-buffers-layout-field record-batch buffers)
     record-batch))
 
-;; TODO: actually store the points and build the tree in place.
+(defn- ->empty-disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path n k]
+  (util/mkdirs (.getParent path))
+  (let [^Schema schema (->column-kd-tree-schema k)
+        ^long n n
+        ^long k k]
+    (with-open [ch (util/->file-channel path util/write-new-file-opts)
+                write-ch (WriteChannel. ch)]
+      (doto write-ch
+        (.write util/arrow-magic)
+        (.align))
+
+      (MessageSerializer/serialize write-ch schema)
+
+      (let [^ArrowRecordBatch record-batch (->empty-record-batch allocator schema n)
+            buffer-length (.computeBodyLength record-batch)
+            start (.getCurrentPosition write-ch)
+            metadata (MessageSerializer/serializeMetadata record-batch)
+            metadata-length (.remaining metadata)
+            prefix-size 8
+            padding (long (mod (+ start metadata-length prefix-size) 8))
+            metadata-length (long (if (zero? padding)
+                                    metadata-length
+                                    (+ metadata-length (- 8 padding))))]
+        (doto write-ch
+          (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
+          (.writeIntLittleEndian metadata-length)
+          (.write metadata)
+          (.align))
+
+        (.writeZeros write-ch buffer-length)
+
+        (doto write-ch
+          (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
+          (.writeIntLittleEndian 0))
+
+        (let [block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)
+              footer (ArrowFooter. schema [] [block])
+              footer-size (.write write-ch footer false)]
+          (.writeIntLittleEndian write-ch footer-size)))
+
+      (.write write-ch util/arrow-magic))
+    path))
+
+(defn- build-tree-in-place [^BufferAllocator allocator ^VectorSchemaRoot kd-tree points]
+  (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis-delete-flag")
+        ^BigIntVector split-value-vec (.getVector kd-tree "split-value")
+        ^IntVector skip-pointer-vec (.getVector kd-tree "skip-pointer")
+        ^FixedSizeListVector point-vec (.getVector kd-tree "point")
+        ^BigIntVector coordinates-vec (.getDataVector point-vec)
+        k (.getListSize point-vec)]
+
+    (reduce
+     (fn [^long idx point]
+       (let [point (->longs point)
+             list-idx (.getElementStartIndex point-vec idx)]
+         (dotimes [n (alength point)]
+           (.set coordinates-vec (+ list-idx n) (aget point n)))
+         (inc idx)))
+     0
+     points)
+
+    ((fn step [^long start ^long end ^long axis]
+       (let [median (quick-select point-vec start end axis)
+             next-axis (next-axis axis k)
+             axis-delete-flag (inc axis)]
+         (when-not (= start median)
+           (swap-point point-vec coordinates-vec start median))
+         (.set axis-delete-flag-vec start axis-delete-flag)
+         (.copyFrom split-value-vec (+ (.getElementStartIndex point-vec start) axis) start coordinates-vec)
+         (when (< start median)
+           (step (inc start) (inc median) next-axis))
+         (if (< (inc median) end)
+           (do (.set skip-pointer-vec start (inc median))
+               (step (inc median) end next-axis))
+           (.set skip-pointer-vec start -1))
+         false))
+     0 (.getValueCount point-vec) 0)))
+
 (defn ->disk-kd-tree
   (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k]
    (->disk-kd-tree allocator path points (count points) k))
   (^java.nio.file.Path [^BufferAllocator allocator ^Path path points n k]
-   (let [^Schema schema (->column-kd-tree-schema k)
-         ^long n n
-         ^long k k]
-     (with-open [ch (util/->file-channel path util/write-new-file-opts)
-                 write-ch (WriteChannel. ch)]
-       (doto write-ch
-         (.write util/arrow-magic)
-         (.align))
-
-       (MessageSerializer/serialize write-ch schema)
-
-       (let [^ArrowRecordBatch record-batch (->empty-record-batch allocator schema n)
-             buffer-length (.computeBodyLength record-batch)
-             start (.getCurrentPosition write-ch)
-             metadata (MessageSerializer/serializeMetadata record-batch)
-             metadata-length (.remaining metadata)
-             prefix-size 8
-             padding (long (mod (+ start metadata-length prefix-size) 8))
-             metadata-length (long (if (zero? padding)
-                                     metadata-length
-                                     (+ metadata-length (- 8 padding))))]
-         (doto write-ch
-           (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
-           (.writeIntLittleEndian metadata-length)
-           (.write metadata)
-           (.align))
-
-         (.writeZeros write-ch buffer-length)
-
-         (doto write-ch
-           (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
-           (.writeIntLittleEndian 0))
-
-         (let [block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)
-               footer (ArrowFooter. schema [] [block])
-               footer-size (.write write-ch footer false)]
-           (.writeIntLittleEndian write-ch footer-size)))
-
-       (.write write-ch util/arrow-magic))
+   (let [^Path path (->empty-disk-kd-tree allocator path n k)
+         nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
+     (with-open [arrow-buf (doto (util/->arrow-buf-view allocator nio-buffer)
+                             (.retain))
+                 chunks (util/->chunks arrow-buf allocator)]
+       (.tryAdvance chunks (reify Consumer
+                             (accept [_ root]
+                               (build-tree-in-place allocator root points)))))
+     (.force nio-buffer)
      path)))
+
+(defn ->mmap-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Path path]
+  (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_ONLY)
+        res (promise)]
+    (with-open [arrow-buf (doto (util/->arrow-buf-view allocator nio-buffer)
+                            (.retain))
+                chunks (util/->chunks arrow-buf allocator)]
+      (.tryAdvance chunks (reify Consumer
+                            (accept [_ root]
+                              (deliver res (util/slice-root root 0))))))
+    @res))

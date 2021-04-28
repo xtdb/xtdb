@@ -1,5 +1,6 @@
 (ns core2.temporal.kd-tree-microbench-test
   (:require [clojure.test :as t]
+            [core2.util :as util]
             [core2.temporal.kd-tree :as kd])
   (:import [java.util Collection HashMap Random]
            [java.util.function Predicate]
@@ -30,7 +31,9 @@
                             [n
                              (long-array (map first min+max-pairs))
                              (long-array (map second min+max-pairs))])))
-            query->count (HashMap.)]
+            query->count (HashMap.)
+            test-dir (util/->path "target/kd-tree-micro-bench")]
+        (util/delete-dir test-dir)
 
         (prn :range-queries-scan qs)
         (time
@@ -84,9 +87,24 @@
                               (StreamSupport/intStream false)
                               (.count)))))))
 
-            (let [_ (prn :node-kd-tree->seq)
-                  kd-tree-seq (time (vec (kd/kd-tree->seq kd-tree)))
-                  _ (prn :column-tree->seq)
-                  col-tree-seq (time (vec (kd/kd-tree->seq column-kd-tree)))]
+            (prn :build-disk-kd-tree ns)
+            (with-open [^VectorSchemaRoot disk-kd-tree (time
+                                                        (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k)) points k)
+                                                             (kd/->mmap-kd-tree allocator)))]
+              (prn :range-queries-disk-kd-tree qs)
+              (dotimes [_ ts]
+                (time
+                 (doseq [[query-id min-range max-range] queries]
+                   (t/is (= (.get query->count query-id)
+                            (-> (kd/kd-tree-range-search disk-kd-tree min-range max-range)
+                                (StreamSupport/intStream false)
+                                (.count)))))))
 
-              (t/is (= kd-tree-seq col-tree-seq)))))))))
+              (let [_ (prn :node-kd-tree->seq)
+                    kd-tree-seq (time (vec (kd/kd-tree->seq kd-tree)))
+                    _ (prn :column-tree->seq)
+                    col-tree-seq (time (vec (kd/kd-tree->seq column-kd-tree)))
+                    _ (prn :disk-tree->seq)
+                    disk-tree-seq (time (vec (kd/kd-tree->seq disk-kd-tree)))]
+
+                (t/is (= kd-tree-seq col-tree-seq disk-tree-seq))))))))))
