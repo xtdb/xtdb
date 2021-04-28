@@ -8,9 +8,10 @@ We have highlighted a shortlist of papers and books for anyone interested in the
 architecture of Crux. We consider these works to be of high value and directly relevant to the
 current design of Crux.
 
+* https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
 * http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
 * https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass, ISBN 1-55860-436-7. 2000.
-* http://db.in.tum.de/~freitag/papers/techreport-freitag-tum-i2082.pdf[Combining Worst-Case Optimal and Traditional Binary Join Processing], Freitag et al.
+* http://hermanntropf.de/media/multidimensionalrangequery.pdf[Multidimensional Range Search in Dynamically Balanced Trees], Tropf, Herzog. Applied Informatics, Pages 71-77. 1981.
 
 
 [#bibliography]
@@ -85,6 +86,8 @@ and its architecture -- past, present, and very-near-future.
 [#queryplanner]
 === Query Planner
 
+* https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
+* https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
 * http://db.in.tum.de/~freitag/papers/techreport-freitag-tum-i2082.pdf[Combining Worst-Case Optimal and Traditional Binary Join Processing], Freitag et al.
 * http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=CFD3DCD1A3AECA50776F3A913BF541B4?doi=10.1.1.498.5779&rep=rep1&type=pdf[Execution Strategies for SQL Subqueries], Elhemali, Galindo-Legaria, et al. Proceedings of the ACM SIGMOD International Conference on Management of Data. 2007.
 * https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf[Translating SQL into the Relational Algebra], Bussche, Vansummeren. 2009.
@@ -170,6 +173,7 @@ our overall philosophy, or simply be something we find interesting in the field.
 [#misc]
 === Miscellaneous
 
+* https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/[Designing Data-Intensive Applications], Kleppmann. O'Reilly, ISBN: 9781449373320. 2017.
 * http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf[The End of an Architectural Era (It’s Time for a Complete Rewrite)], Stonebraker, Hachem, et al. VLDB '07: Proceedings of the 33rd international conference on Very large data bases, Pages 1150–1160. 2007.
 * https://arxiv.org/pdf/1610.09166.pdf[Push vs. Pull-Based Loop Fusion in Query Engines], Shaikhha, Dashti, Koch. Journal of Functional Programming, Vol. 28. 2018.
 
