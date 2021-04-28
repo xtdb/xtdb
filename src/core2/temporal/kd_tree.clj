@@ -864,20 +864,18 @@
   (^java.nio.file.Path [^BufferAllocator allocator ^Path path points n k]
    (let [^Path path (->empty-disk-kd-tree allocator path n k)
          nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
-     (with-open [arrow-buf (doto (util/->arrow-buf-view allocator nio-buffer)
-                             (.retain))
+     (with-open [arrow-buf (util/->arrow-buf-view allocator nio-buffer)
                  chunks (util/->chunks arrow-buf allocator)]
        (.tryAdvance chunks (reify Consumer
                              (accept [_ root]
-                               (build-tree-in-place allocator root points)))))
-     (.force nio-buffer)
+                               (build-tree-in-place allocator root points))))
+       (.force nio-buffer))
      path)))
 
 (defn ->mmap-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
         res (promise)]
-    (with-open [arrow-buf (doto (util/->arrow-buf-view allocator nio-buffer)
-                            (.retain))
+    (with-open [arrow-buf (util/->arrow-buf-view allocator nio-buffer)
                 chunks (util/->chunks arrow-buf allocator)]
       (.tryAdvance chunks (reify Consumer
                             (accept [_ root]
