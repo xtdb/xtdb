@@ -13,7 +13,7 @@
            core2.temporal.TemporalCoordinates
            java.io.Closeable
            java.nio.ByteBuffer
-           [java.util Arrays Comparator Date HashMap Map Random]
+           [java.util Arrays Comparator Date HashMap Map Random Spliterator$OfInt]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function IntFunction Predicate ToLongFunction]
