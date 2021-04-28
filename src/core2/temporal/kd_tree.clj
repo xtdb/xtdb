@@ -1009,5 +1009,8 @@
     (util/try-close dynamic-kd-tree)
     (.clear static-delete-bitmap)))
 
-(defn ->merged-kd-tree ^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
-  (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.) (kd-tree-size static-kd-tree)))
+(defn ->merged-kd-tree
+  (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree]
+   (->merged-kd-tree static-kd-tree nil))
+  (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
+   (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.) (kd-tree-size static-kd-tree))))

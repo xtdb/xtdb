@@ -9,7 +9,7 @@
            [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
            [org.apache.arrow.vector.complex FixedSizeListVector]
-           core2.temporal.kd_tree.Node))
+           [core2.temporal.kd_tree MergedKdTree Node]))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
 ;; chapter 10 "Bitemporal Tables".
@@ -429,7 +429,18 @@
 
                       (let [merged-tree (kd/kd-tree-delete merged-tree allocator node-to-insert)]
                         (t/is (= 6 (kd/kd-tree-size merged-tree)))
-                        (t/is (= expected-nodes (set (map vec (kd/kd-tree->seq merged-tree)))))))))))))))))
+                        (t/is (= expected-nodes (set (map vec (kd/kd-tree->seq merged-tree))))))))
+
+                  (t/testing "empty dynamic tree"
+                    (let [node-to-insert [10 10]]
+                      (with-open [merged-tree (kd/->merged-kd-tree static-tree)]
+                        (t/is (= 4 (kd/kd-tree-size merged-tree)))
+                        (t/is (empty? (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert))))
+                        (with-open [^MergedKdTree merged-tree (kd/kd-tree-insert merged-tree allocator node-to-insert)]
+                          (t/is (= 5 (kd/kd-tree-size merged-tree)))
+                          (t/is (= 4 (kd/kd-tree-size static-tree)))
+                          (t/is (= [node-to-insert]
+                                   (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert)))))))))))))))))
 
 (t/deftest empty-record-batch
   (with-open [allocator (RootAllocator.)
