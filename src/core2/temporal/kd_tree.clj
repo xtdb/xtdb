@@ -780,6 +780,10 @@
     (.set arrow-record-buffers-layout-field record-batch buffers)
     record-batch))
 
+(def ^:private ^java.lang.reflect.Field write-channel-current-position-field
+  (doto (.getDeclaredField WriteChannel "currentPosition")
+    (.setAccessible true)))
+
 (defn- ->empty-disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path n k]
   (util/mkdirs (.getParent path))
   (let [^Schema schema (->column-kd-tree-schema k)
@@ -809,7 +813,8 @@
           (.write metadata)
           (.align))
 
-        (.writeZeros write-ch buffer-length)
+        (.position ch (+ (.getCurrentPosition write-ch) buffer-length))
+        (.set write-channel-current-position-field write-ch (.position ch))
 
         (doto write-ch
           (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
