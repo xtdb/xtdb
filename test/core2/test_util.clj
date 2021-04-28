@@ -126,11 +126,12 @@
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
 (defn ->local-node ^core2.core.Node [{:keys [^Path node-dir
-                                             clock max-rows-per-block max-rows-per-chunk]}]
+                                             clock max-rows-per-block max-rows-per-chunk buffers-dir]
+                                      :or {buffers-dir "buffers"}}]
   (c2/start-node {:core2/log (cond-> {:core2/module 'core2.log/->local-directory-log
                                       :root-path (.resolve node-dir "log")}
                                clock (assoc :clock clock))
-                  :core2/buffer-pool {:cache-path (.resolve node-dir "buffers")}
+                  :core2/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
                   :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
                                        :root-path (.resolve node-dir "objects")}
                   :core2/indexer (->> {:max-rows-per-block max-rows-per-block

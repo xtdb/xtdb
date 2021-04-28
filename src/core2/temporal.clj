@@ -177,39 +177,34 @@
                           ^Map id->internal-id
                           ^Roaring64Bitmap known-ids
                           ^Random rng
-                          ^:unsynchronized-mutable chunk-kd-tree
+                          ^:unsynchronized-mutable kd-tree-chunk-idx
                           ^:volatile-mutable kd-tree]
   TemporalManangerPrivate
   (populateKnownChunks [this]
-    (let [acc (atom nil)
-          known-chunks (.knownChunks metadata-manager)
+    (let [known-chunks (.knownChunks metadata-manager)
           futs (->> (for [chunk-idx known-chunks]
-                      [(-> (.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
-                           (util/then-apply util/try-close))
-                       (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                           (util/then-apply util/try-close))])
-                    (reduce into []))]
+                      (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+                          (util/then-apply util/try-close)))
+                    (into []))]
       @(CompletableFuture/allOf (into-array CompletableFuture futs))
-      (try
-        (doseq [chunk-idx known-chunks]
-          (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
-                      temporal-chunks (util/->chunks temporal-buffer allocator)]
-            (.forEachRemaining temporal-chunks
-                               (reify Consumer
-                                 (accept [_ temporal-root]
-                                   (swap! acc #(kd/merge-kd-trees allocator % temporal-root))))))
-          (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                      id-chunks (util/->chunks id-buffer allocator)]
-            (.forEachRemaining id-chunks
-                               (reify Consumer
-                                 (accept [_ id-root]
-                                   (let [^VectorSchemaRoot id-root id-root
-                                         id-vec (.getVector id-root 1)]
-                                     (dotimes [n (.getValueCount id-vec)]
-                                       (.getOrCreateInternalId this (t/get-object id-vec n)))))))))
-        (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator @acc))
-        (finally
-          (util/try-close @acc)))))
+      (doseq [chunk-idx known-chunks]
+        (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+                    id-chunks (util/->chunks id-buffer allocator)]
+          (.forEachRemaining id-chunks
+                             (reify Consumer
+                               (accept [_ id-root]
+                                 (let [^VectorSchemaRoot id-root id-root
+                                       id-vec (.getVector id-root 1)]
+                                   (dotimes [n (.getValueCount id-vec)]
+                                     (.getOrCreateInternalId this (t/get-object id-vec n)))))))))
+      (when-let [temporal-chunk-idx (last known-chunks)]
+        (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key temporal-chunk-idx))
+                    temporal-chunks (util/->chunks temporal-buffer allocator)]
+          (.tryAdvance temporal-chunks
+                       (reify Consumer
+                         (accept [_ temporal-root]
+                           (set! (.kd-tree this) (kd/->merged-kd-tree (util/slice-root temporal-root 0)))
+                           (set! (.kd-tree-chunk-idx this) temporal-chunk-idx))))))))
 
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
@@ -229,16 +224,25 @@
     (some-> kd-tree (kd/kd-tree-retain allocator)))
 
   (registerNewChunk [this chunk-idx]
-    (when chunk-kd-tree
-      (with-open [^Closeable old-chunk-kd-tree chunk-kd-tree
-                  rebuilt-chunk-kd-tree (kd/rebuild-node-kd-tree allocator old-chunk-kd-tree)]
-        (let [temporal-buf (with-open [^VectorSchemaRoot temporal-root (kd/->column-kd-tree allocator rebuilt-chunk-kd-tree k)]
-                             (util/root->arrow-ipc-byte-buffer temporal-root :file))]
-          @(.putObject object-store (->temporal-obj-key chunk-idx) temporal-buf)
-          (set! (.chunk-kd-tree this) nil))))
     (when kd-tree
-      (with-open [^Closeable old-kd-tree kd-tree]
-        (set! (.kd-tree this) (kd/rebuild-node-kd-tree allocator old-kd-tree)))))
+      (let [prev-kd-tree-chunk-idx kd-tree-chunk-idx
+            path (util/->temp-file (->temporal-obj-key chunk-idx) "")]
+        (try
+          (with-open [^Closeable old-kd-tree kd-tree]
+            (let [temporal-buf (-> (kd/->disk-kd-tree allocator path (kd/kd-tree->seq old-kd-tree) k)
+                                   (util/->mmap-path))
+                  new-temporal-obj-key (->temporal-obj-key chunk-idx)]
+              @(.putObject object-store new-temporal-obj-key temporal-buf)
+              (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool new-temporal-obj-key)
+                          temporal-chunks (util/->chunks temporal-buffer allocator)]
+                (.tryAdvance temporal-chunks
+                             (reify Consumer
+                               (accept [_ temporal-root]
+                                 (set! (.kd-tree this) (kd/->merged-kd-tree (util/slice-root temporal-root 0)))))))))
+          (some->> prev-kd-tree-chunk-idx (->temporal-obj-key) (.evictBuffer buffer-pool))
+          (set! (.kd-tree-chunk-idx this) chunk-idx)
+          (finally
+            (util/delete-file path))))))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
@@ -250,7 +254,6 @@
                                  (insert-coordinates kd-tree allocator id->long-id-fn coordinates))
                                kd-tree
                                (vals row-id->temporal-coordinates)))]
-      (set! (.chunk-kd-tree this) (update-kd-tree-fn chunk-kd-tree))
       (set! (.kd-tree this) (update-kd-tree-fn kd-tree))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
@@ -304,8 +307,6 @@
   (close [this]
     (util/try-close kd-tree)
     (set! (.kd-tree this) nil)
-    (util/try-close chunk-kd-tree)
-    (set! (.chunk-kd-tree this) nil)
     (.clear id->internal-id)))
 
 (defn ->temporal-manager {::sys/deps {:allocator :core2/allocator

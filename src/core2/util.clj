@@ -101,11 +101,18 @@
   (when (path-exists dir)
     (Files/walkFileTree dir file-deletion-visitor)))
 
+(defn delete-file [^Path file]
+  (Files/delete file))
+
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
 
 (defn ->path ^Path [^String path]
   (.toPath (io/file path)))
+
+(defn ->temp-file ^Path [^String prefix ^String suffix]
+  (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
+    (delete-file)))
 
 (def ^:private ^ZoneId utc (ZoneId/of "UTC"))
 
@@ -301,7 +308,11 @@
     (Class/forName "io.netty.util.internal.PlatformDependent")
     (eval
      '(fn free-direct-buffer [nio-buffer]
-        (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)))
+        (try
+          (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)
+          (catch Exception e
+            (when-not (instance? IllegalArgumentException (.getCause e))
+              (throw e))))))
     (catch ClassNotFoundException e
       (fn free-direct-buffer-nop [_]))))
 
@@ -359,9 +370,9 @@
     (loop [n (dec decrement)]
       (let [new-ref-count (dec-ref-count ref-count)]
         (when (zero? new-ref-count)
-          (let [nio-buffer nio-buffer]
+          (let [freed-nio-buffer nio-buffer]
             (set! (.nio-buffer this) nil)
-            (try-free-direct-buffer nio-buffer)))
+            (try-free-direct-buffer freed-nio-buffer)))
         (if (zero? n)
           (zero? new-ref-count)
           (recur (dec n))))))

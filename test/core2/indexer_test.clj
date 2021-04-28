@@ -138,7 +138,7 @@
           (let [buffer-name "metadata-00000000.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
-            (t/is (= 1 (count (.buffers ^BufferPool bp))))
+            (t/is (= 2 (count (.buffers ^BufferPool bp))))
             (t/is (instance? ArrowBuf buffer))
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
@@ -181,10 +181,11 @@
             (.close buffer)
             (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (t/is (.evictBuffer bp buffer-name))
+            (t/is (true? (.evictBuffer bp buffer-name)))
+            (t/is (false? (.evictBuffer bp buffer-name)))
             (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
             (t/is (zero? (.getSize (.getReferenceManager ^ArrowBuf buffer))))
-            (t/is (empty? (.buffers ^BufferPool bp)))))))))
+            (t/is (= 1 (count (.buffers ^BufferPool bp))))))))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
@@ -314,9 +315,9 @@
         node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
 
-    (with-open [node-1 (tu/->local-node node-opts)
-                node-2 (tu/->local-node node-opts)
-                node-3 (tu/->local-node node-opts)
+    (with-open [node-1 (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))
+                node-2 (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))
+                node-3 (tu/->local-node (assoc node-opts :buffers-dir "buffers-3"))
                 submit-node (tu/->local-submit-node {:node-dir node-dir})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
@@ -373,7 +374,7 @@
                                       nil
                                       (partition-all 100 first-half-tx-ops))]
 
-          (with-open [node (tu/->local-node node-opts)]
+          (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [system @(:!system node)
                   ^ObjectStore os (:core2/object-store system)
                   ^IMetadataManager mm (:core2/metadata-manager system)
@@ -404,11 +405,12 @@
                           (.tx-id (c2/latest-completed-tx node))
                           (.tx-id second-half-tx-instant)))
 
-                (with-open [new-node (tu/->local-node node-opts)]
+                (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
                           :let [^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
+
                     (t/is (<= (.tx-id first-half-tx-instant)
-                              (.tx-id (c2/latest-completed-tx node))
+                              (.tx-id (c2/await-tx node first-half-tx-instant (Duration/ofSeconds 5)))
                               (.tx-id second-half-tx-instant)))
 
                     (with-open [watermark (c2/open-watermark node)]
