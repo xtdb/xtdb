@@ -9,6 +9,7 @@ architecture of Crux. We consider these works to be of high value and directly r
 current design of Crux.
 
 * https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
+* https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
 * http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
 * https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass, ISBN 1-55860-436-7. 2000.
 * http://hermanntropf.de/media/multidimensionalrangequery.pdf[Multidimensional Range Search in Dynamically Balanced Trees], Tropf, Herzog. Applied Informatics, Pages 71-77. 1981.
