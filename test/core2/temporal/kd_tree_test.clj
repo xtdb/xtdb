@@ -5,7 +5,6 @@
             [core2.temporal.kd-tree :as kd])
   (:import [java.util Collection Date HashMap List]
            [java.util.function Predicate ToLongFunction]
-           [java.util.stream StreamSupport]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
@@ -34,8 +33,8 @@
 
 (t/deftest bitemporal-tx-time-split-test
   (let [kd-tree nil
-        id->internal-id-map  (doto (HashMap.)
-                               (.put 7797 7797))
+        id->internal-id-map (doto (HashMap.)
+                              (.put 7797 7797))
         id->internal-id (reify ToLongFunction
                           (applyAsLong [_ x]
                             (.get id->internal-id-map x)))
@@ -335,22 +334,18 @@
 
                (-> kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/intStream false)
                    (->> (kd/kd-tree->seq kd-tree)))
 
                (-> insert-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/intStream false)
                    (->> (kd/kd-tree->seq insert-kd-tree)))
 
                (-> column-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/intStream false)
                    (->> (kd/kd-tree->seq column-kd-tree)))
 
                (-> disk-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (StreamSupport/intStream false)
                    (->> (kd/kd-tree->seq disk-kd-tree))))
             "wikipedia-test")
 
@@ -359,17 +354,26 @@
                  (kd/kd-tree->seq column-kd-tree)
                  (kd/kd-tree->seq disk-kd-tree))))
 
+      (t/testing "size"
+        (t/is (= (count points)
+                 (kd/kd-tree-size kd-tree)
+                 (kd/kd-tree-size insert-kd-tree)
+                 (kd/kd-tree-size column-kd-tree)
+                 (kd/kd-tree-size disk-kd-tree))))
+
       (t/testing "empty tree"
         (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
           (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
 
         (t/is (nil? (kd/->node-kd-tree allocator [])))
+        (t/is (zero? (kd/kd-tree-size (kd/->node-kd-tree allocator []))))
 
         (with-open [^Node kd-tree (kd/kd-tree-insert nil allocator [1 2])]
           (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
 
         (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
-          (t/is (empty? (kd/kd-tree->seq kd-tree)))))
+          (t/is (empty? (kd/kd-tree->seq kd-tree)))
+          (t/is (zero? (kd/kd-tree-size kd-tree)))))
 
       (t/testing "arrow"
         (t/is (= (.contentToTSVString column-kd-tree)
@@ -379,15 +383,21 @@
         (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]
           (let [node-to-delete [2 1]
                 ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
+            (t/is (= 3 (kd/kd-tree-size new-tree-with-tombstone)))
             (with-open [old-tree-with-node-to-be-deleted (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
                         ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
                                                                               new-tree-with-tombstone
                                                                               2)
                         merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
                         rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
+              (t/is (= 4 (kd/kd-tree-size old-tree-with-node-to-be-deleted)))
               (t/is (= (kd/kd-tree->seq kd-tree)
                        (kd/kd-tree->seq merged-tree)
-                       (kd/kd-tree->seq rebuilt-tree))))))))))
+                       (kd/kd-tree->seq rebuilt-tree)))
+
+              (t/is (= (kd/kd-tree-size kd-tree)
+                       (kd/kd-tree-size merged-tree)
+                       (kd/kd-tree-size rebuilt-tree))))))))))
 
 (t/deftest empty-record-batch
   (with-open [allocator (RootAllocator.)

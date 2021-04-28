@@ -14,11 +14,11 @@
            core2.temporal.kd_tree.IKdTreePointAccess
            java.io.Closeable
            java.nio.ByteBuffer
-           [java.util Arrays Comparator Date HashMap Map Random Spliterator$OfInt]
+           [java.util Arrays Comparator Date HashMap Map Random]
            [java.util.concurrent CompletableFuture ConcurrentHashMap]
            java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function IntFunction Predicate ToLongFunction]
-           [java.util.stream Stream StreamSupport]
+           [java.util.stream IntStream Stream]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -260,7 +260,7 @@
           ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
           coordinates (if (.isEmpty row-id-bitmap)
                         (Stream/empty)
-                        (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
+                        (-> ^IntStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range)
                             (.mapToObj (reify IntFunction
                                          (apply [_ x]
                                            (.getArrayPoint point-access x))))))]
@@ -335,11 +335,10 @@
                     (aset valid-time-start-idx (dec valid-time-end-ms))
                     (aset tx-time-end-idx end-of-time-ms))
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-        overlap (-> ^Spliterator$OfInt (kd/kd-tree-range-search
-                                        kd-tree
-                                        min-range
-                                        max-range)
-                    (StreamSupport/intStream false)
+        overlap (-> ^IntStream (kd/kd-tree-range-search
+                                kd-tree
+                                min-range
+                                max-range)
                     (.mapToObj (reify IntFunction
                                  (apply [_ x]
                                    (.getArrayPoint point-access x))))
