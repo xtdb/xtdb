@@ -41,10 +41,12 @@
                       (.retain))))))))))
 
   (evictBuffer [_ k]
-    (when-let [^ArrowBuf buffer (.remove buffers k)]
-      (.release buffer)
-      (when cache-path
-        (Files/deleteIfExists (.resolve cache-path k)))))
+    (if-let [^ArrowBuf buffer (.remove buffers k)]
+      (do (.release buffer)
+          (when cache-path
+            (Files/deleteIfExists (.resolve cache-path k)))
+          true)
+      false))
 
   Closeable
   (close [_]
