@@ -773,8 +773,26 @@
        (ColumnDepthFirstSpliterator. axis-delete-flag-vec 0 (.getValueCount axis-delete-flag-vec))
        false)))
 
-  (kd-tree-depth [_]
-    (throw (UnsupportedOperationException.)))
+  (kd-tree-depth [kd-tree]
+    (let [^IntVector skip-pointer-vec (.getVector kd-tree "skip-pointer")
+          ^FixedSizeListVector point-vec (.getVector kd-tree "point")]
+      ((fn step [^long idx ^long end-idx]
+         (if (< idx end-idx)
+           (let [left-idx (inc idx)
+                 right-idx (.get skip-pointer-vec idx)
+                 right-idx (if (neg? right-idx)
+                             end-idx
+                             right-idx)
+                 visit-left? (not= left-idx right-idx)
+                 visit-right? (not= right-idx end-idx)]
+
+             (inc (max (long (if visit-right?
+                               (step right-idx end-idx)
+                               0))
+                       (long (if visit-left?
+                               (step left-idx right-idx)
+                               0)))))
+           0)) 0 (.getValueCount point-vec))))
 
   (kd-tree-retain [this allocator]
     (util/slice-root this 0))
@@ -923,15 +941,14 @@
                               (deliver res (util/slice-root root 0))))))
     @res))
 
-;; TODO: doesn't actually allow access to the points.
-(deftype MergedKdTree [static-kd-tree dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size]
+(deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size]
   KdTree
   (kd-tree-insert [this allocator point]
-    (kd-tree-insert dynamic-kd-tree allocator point)
+    (set! (.dynamic-kd-tree this) (kd-tree-insert dynamic-kd-tree allocator point))
     this)
 
   (kd-tree-delete [this allocator point]
-    (kd-tree-delete dynamic-kd-tree allocator point)
+    (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))
     (.forEach ^IntStream (kd-tree-range-search static-kd-tree point point)
               (reify IntConsumer
                 (accept [_ x]
@@ -992,5 +1009,5 @@
     (util/try-close dynamic-kd-tree)
     (.clear static-delete-bitmap)))
 
-(defn ->merged-kd-tree [static-kd-tree dynamic-kd-tree]
+(defn ->merged-kd-tree ^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
   (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.) (kd-tree-size static-kd-tree)))

@@ -354,6 +354,12 @@
                  (kd/kd-tree->seq column-kd-tree)
                  (kd/kd-tree->seq disk-kd-tree))))
 
+      (t/testing "depth"
+        (t/is (= 3
+                 (kd/kd-tree-depth kd-tree)
+                 (kd/kd-tree-depth column-kd-tree)
+                 (kd/kd-tree-depth disk-kd-tree))))
+
       (t/testing "size"
         (t/is (= (count points)
                  (kd/kd-tree-size kd-tree)
@@ -397,7 +403,33 @@
 
               (t/is (= (kd/kd-tree-size kd-tree)
                        (kd/kd-tree-size merged-tree)
-                       (kd/kd-tree-size rebuilt-tree))))))))))
+                       (kd/kd-tree-size rebuilt-tree)))
+
+              (t/testing "merged tree"
+                (with-open [dynamic-tree (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])
+                            old-tree (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
+                            ^VectorSchemaRoot static-tree (kd/->column-kd-tree allocator old-tree 2)
+                            merged-tree (kd/->merged-kd-tree static-tree dynamic-tree)]
+                  (t/is (= 7 (kd/kd-tree-size merged-tree)))
+                  (t/is (= 3 (kd/kd-tree-depth merged-tree)))
+
+                  (let [unknown-node [0 0]
+                        expected-nodes (set (map vec (kd/kd-tree->seq rebuilt-tree)))
+                        merged-tree (kd/kd-tree-delete merged-tree allocator node-to-delete)]
+                    (t/is (= 6 (kd/kd-tree-size merged-tree)))
+                    (t/is (= 6 (kd/kd-tree-size (kd/kd-tree-delete merged-tree allocator node-to-delete))))
+                    (t/is (= 6 (kd/kd-tree-size (kd/kd-tree-delete merged-tree allocator unknown-node))))
+                    (t/is (= expected-nodes (set (map vec (kd/kd-tree->seq merged-tree)))))
+
+                    (let [node-to-insert [10 10]
+                          merged-tree (kd/kd-tree-insert merged-tree allocator node-to-insert)]
+                      (t/is (= 7 (kd/kd-tree-size merged-tree)))
+                      (t/is (= (conj expected-nodes node-to-insert)
+                               (set (map vec (kd/kd-tree->seq merged-tree)))))
+
+                      (let [merged-tree (kd/kd-tree-delete merged-tree allocator node-to-insert)]
+                        (t/is (= 6 (kd/kd-tree-size merged-tree)))
+                        (t/is (= expected-nodes (set (map vec (kd/kd-tree->seq merged-tree)))))))))))))))))
 
 (t/deftest empty-record-batch
   (with-open [allocator (RootAllocator.)
