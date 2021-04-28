@@ -874,7 +874,7 @@
      path)))
 
 (defn ->mmap-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Path path]
-  (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_ONLY)
+  (let [nio-buffer (util/->mmap-path path)
         res (promise)]
     (with-open [arrow-buf (doto (util/->arrow-buf-view allocator nio-buffer)
                             (.retain))
