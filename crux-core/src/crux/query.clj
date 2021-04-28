@@ -6,6 +6,7 @@
             [clojure.java.io :as io]
             [com.stuartsierra.dependency :as dep]
             [crux.cache :as cache]
+            [crux.cache.lru :as lru]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.index :as idx]
@@ -1543,7 +1544,7 @@
     (db/open-index-snapshot index-store)))
 
 (defn- with-entity-resolver-cache [entity-resolver-fn {:keys [entity-cache-size]}]
-  (let [entity-cache (cache/->cache {:cache-size entity-cache-size})]
+  (let [entity-cache (lru/->lru-cache {:cache-size entity-cache-size})]
     (fn [k]
       (cache/compute-if-absent entity-cache k mem/copy-to-unpooled-buffer entity-resolver-fn))))
 

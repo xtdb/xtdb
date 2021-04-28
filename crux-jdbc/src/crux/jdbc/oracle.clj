@@ -4,8 +4,12 @@
             [taoensso.nippy :as nippy])
   (:import [oracle.sql BLOB TIMESTAMP]))
 
-(defn- schema-exists? [pool]
-  (-> (jdbc/execute-one! pool ["SELECT COUNT(*) FROM user_tables where table_name = 'TX_EVENTS'"])
+(defn- table-exists? [pool tbl-name]
+  (-> (jdbc/execute-one! pool ["SELECT COUNT(*) FROM user_tables where table_name = ?" tbl-name])
+      first val pos?))
+
+(defn- idx-exists? [pool idx-name]
+  (-> (jdbc/execute-one! pool ["SELECT COUNT(*) FROM user_indexes where index_name = ?" idx-name])
       first val pos?))
 
 (defn ->dialect [_]
@@ -13,17 +17,21 @@
     (db-type [_] :oracle)
 
     (setup-schema! [_ pool]
-     (when-not (schema-exists? pool)
-       (jdbc/execute! pool ["
+      (when-not (table-exists? pool "TX_EVENTS")
+        (jdbc/execute! pool ["
 CREATE TABLE tx_events (
   event_offset SMALLINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   event_key VARCHAR2(255),
   tx_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   topic VARCHAR2(255) NOT NULL,
   v BLOB NOT NULL,
-  compacted INTEGER NOT NULL)"])
+  compacted INTEGER NOT NULL)"]))
 
-       (jdbc/execute! pool ["CREATE INDEX tx_events_event_key_idx ON tx_events(event_key)"])))))
+      (when (idx-exists? pool "TX_EVENTS_EVENT_KEY_IDX")
+        (jdbc/execute! pool ["DROP INDEX TX_EVENTS_EVENT_KEY_IDX"]))
+
+      (when-not (idx-exists? pool "TX_EVENTS_EVENT_KEY_IDX_2")
+        (jdbc/execute! pool ["CREATE INDEX TX_EVENTS_EVENT_KEY_IDX_2 ON tx_events(event_key)"])))))
 
 (defmethod j/->date :oracle [^TIMESTAMP d _]
   (assert d)
