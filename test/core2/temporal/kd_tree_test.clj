@@ -336,26 +336,22 @@
                (-> kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/intStream false)
-                   (.toArray)
-                   (->> (mapv (partial kd/kd-tree-point kd-tree))))
+                   (->> (kd/kd-tree->seq kd-tree)))
 
                (-> insert-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/intStream false)
-                   (.toArray)
-                   (->> (mapv (partial kd/kd-tree-point insert-kd-tree))))
+                   (->> (kd/kd-tree->seq insert-kd-tree)))
 
                (-> column-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/intStream false)
-                   (.toArray)
-                   (->> (mapv (partial kd/kd-tree-point column-kd-tree))))
+                   (->> (kd/kd-tree->seq column-kd-tree)))
 
                (-> disk-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (StreamSupport/intStream false)
-                   (.toArray)
-                   (->> (mapv (partial kd/kd-tree-point column-kd-tree)))))
+                   (->> (kd/kd-tree->seq disk-kd-tree))))
             "wikipedia-test")
 
       (t/testing "seq"

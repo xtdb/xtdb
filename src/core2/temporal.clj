@@ -11,6 +11,7 @@
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalCoordinates
+           core2.temporal.kd_tree.IKdTreePointAccess
            java.io.Closeable
            java.nio.ByteBuffer
            [java.util Arrays Comparator Date HashMap Map Random Spliterator$OfInt]
@@ -256,12 +257,13 @@
     (let [kd-tree (.temporal-watermark watermark)
           row-id-bitmap-out (Roaring64Bitmap.)
           roots (HashMap.)
+          ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
           coordinates (if (.isEmpty row-id-bitmap)
                         (Stream/empty)
                         (-> (StreamSupport/intStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range) false)
                             (.mapToObj (reify IntFunction
                                          (apply [_ x]
-                                           (kd/kd-tree-array-point kd-tree x))))))]
+                                           (.getArrayPoint point-access x))))))]
       (if (empty? columns)
         (.forEach coordinates
                   (reify Consumer
@@ -332,6 +334,7 @@
                     (aset id-idx id)
                     (aset valid-time-start-idx (dec valid-time-end-ms))
                     (aset tx-time-end-idx end-of-time-ms))
+        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
         overlap (-> ^Spliterator$OfInt (kd/kd-tree-range-search
                                         kd-tree
                                         min-range
@@ -339,7 +342,7 @@
                     (StreamSupport/intStream false)
                     (.mapToObj (reify IntFunction
                                  (apply [_ x]
-                                   (kd/kd-tree-array-point kd-tree x))))
+                                   (.getArrayPoint point-access x))))
                     (.toArray))
         kd-tree (reduce
                  (fn [kd-tree ^longs point]
