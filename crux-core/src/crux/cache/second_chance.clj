@@ -13,27 +13,43 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- random-entry ^java.util.Map$Entry [^ConcurrentHashMap m]
-  (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
-    (let [len (alength table)
-          start (.nextInt (ThreadLocalRandom/current) len)]
-      (loop [i start]
-        (if-let [^Map$Entry e (aget table i)]
-          e
-          (let [next (inc i)
-                next (if (= next len)
-                       0
-                       next)]
-            (when-not (= next start)
-              (recur next))))))))
+  (when-not (.isEmpty m)
+    (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable m)]
+      (let [len (alength table)
+            start (.nextInt (ThreadLocalRandom/current) len)]
+        (loop [i start]
+          (if-let [^Map$Entry e (aget table i)]
+            e
+            (let [next (inc i)
+                  next (if (= next len)
+                         0
+                         next)]
+              (when-not (= next start)
+                (recur next)))))))))
 
 (declare resize-cache)
 
-(deftype SecondChanceCache [^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
-                            ^long size adaptive-sizing? ^double adaptive-break-even-level
+(definterface SecondChanceCachePrivate
+  (^java.util.Map getHot [])
+  (^void maybeResizeCache []))
+
+(deftype SecondChanceCache [^:unsynchronized-mutable ^ConcurrentHashMap hot ^Queue cooling ^double cooling-factor ^ICache cold
+                            ^long size adaptive-sizing? ^double adaptive-break-even-level ^double downsize-load-factor
                             ^Semaphore resize-semaphore]
   Object
   (toString [_]
     (str hot))
+
+  SecondChanceCachePrivate
+  (getHot [this]
+    hot)
+
+  (maybeResizeCache [this]
+    (when-not (.isEmpty hot)
+      (when-let [table (ConcurrentHashMapTableAccess/getConcurrentHashMapTable hot)]
+        (when (< (double (/ (.size hot) (alength table))) downsize-load-factor)
+          (set! (.hot this) (doto (ConcurrentHashMap. 0)
+                              (.putAll hot)))))))
 
   ICache
   (computeIfAbsent [this k stored-key-fn f]
@@ -41,12 +57,13 @@
                                (let [k (stored-key-fn k)
                                      v (if-some [v (.valAt cold k)]
                                          v
-                                         (f k))]
-                                 (.computeIfAbsent hot k (reify Function
-                                                           (apply [_ k]
-                                                             (ValuePointer. v))))))
+                                         (f k))
+                                     vp (.computeIfAbsent hot k (reify Function
+                                                                  (apply [_ k]
+                                                                    (ValuePointer. v))))]
+                                 (resize-cache this)
+                                 vp))
           v (.swizzle vp)]
-      (resize-cache this)
       v))
 
   (evict [this k]
@@ -72,7 +89,8 @@
     (.clear cooling)))
 
 (defn move-to-cooling-state [^SecondChanceCache cache]
-  (let [hot ^ConcurrentHashMap (.hot cache)
+  (.maybeResizeCache cache)
+  (let [hot ^ConcurrentHashMap (.getHot cache)
         cooling ^Queue (.cooling cache)]
     (while (< (.size cooling)
               (long (Math/ceil (* (.cooling-factor cache) (.size hot)))))
@@ -103,18 +121,17 @@
         (.setDaemon true))))
 
 (defn- move-to-cold-state [^SecondChanceCache cache]
-  (let [hot ^ConcurrentHashMap (.hot cache)
-        cooling ^Queue (.cooling cache)
+  (let [cooling ^Queue (.cooling cache)
         cold ^ICache (.cold cache)
         hot-target-size (if (.adaptive-sizing? cache)
                           (long (Math/pow (.size cache)
                                           (+ (.adaptive-break-even-level cache)
                                              (double (.get free-memory-ratio)))))
                           (.size cache))]
-    (while (> (.size hot) hot-target-size)
+    (while (> (.size (.getHot cache)) hot-target-size)
       (when-let [vp ^ValuePointer (.poll cooling)]
         (when-some [k (.getKey vp)]
-          (.remove hot k)
+          (.remove (.getHot cache) k)
           (.computeIfAbsent cold k identity (constantly (.getValue vp)))))
       (move-to-cooling-state cache))))
 
@@ -140,19 +157,23 @@
                                   :spec ::sys/boolean}
                :adaptive-break-even-level {:doc "Adaptive break even memory usage level"
                                            :default 0.8
-                                           :spec ::sys/pos-double}}}
+                                           :spec ::sys/pos-double}
+               :downsize-load-factor {:doc "Downsize load factor"
+                                      :default 0.01
+                                      :spec ::sys/pos-double}}}
   ^crux.cache.ICache [{:keys [^long cache-size ^double cooling-factor cold-cache
-                              adaptive-sizing? adaptive-break-even-level]
+                              adaptive-sizing? adaptive-break-even-level downsize-load-factor]
                        :or {cache-size  (* 128 1024)
                             adaptive-sizing? true
                             cooling-factor 0.1
-                            adaptive-break-even-level 0.8}
+                            adaptive-break-even-level 0.8
+                            downsize-load-factor 0.01}
                        :as opts}]
-  (let [hot (ConcurrentHashMap.)
+  (let [hot (ConcurrentHashMap. 0)
         cooling (LinkedBlockingQueue.)
         cold (or cold-cache (crux.cache.nop/->nop-cache opts))]
     (when adaptive-sizing?
       (locking free-memory-thread
         (when-not (.isAlive free-memory-thread)
           (.start free-memory-thread))))
-    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level (Semaphore. 1))))
+    (->SecondChanceCache hot cooling cooling-factor cold cache-size adaptive-sizing? adaptive-break-even-level downsize-load-factor (Semaphore. 1))))
