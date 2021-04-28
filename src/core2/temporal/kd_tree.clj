@@ -7,8 +7,8 @@
            java.nio.channels.FileChannel$MapMode
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             IdentityHashMap List Map Spliterator Spliterator$OfInt Spliterators]
-           [java.util.function Consumer Function IntConsumer IntFunction Predicate ToLongFunction]
-           [java.util.stream StreamSupport]
+           [java.util.function Consumer Function IntConsumer IntFunction IntPredicate Predicate ToLongFunction]
+           [java.util.stream IntStream StreamSupport]
            [org.apache.arrow.memory BufferAllocator RootAllocator]
            [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector TypeLayout VectorSchemaRoot VectorUnloader]
            org.apache.arrow.vector.util.DataSizeRoundingUtil
@@ -16,7 +16,8 @@
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
            [org.apache.arrow.vector.types Types$MinorType]
            [org.apache.arrow.vector.ipc WriteChannel]
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowBuffer ArrowFieldNode ArrowFooter ArrowRecordBatch MessageSerializer]))
+           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowBuffer ArrowFieldNode ArrowFooter ArrowRecordBatch MessageSerializer]
+           org.roaringbitmap.RoaringBitmap))
 
 ;; TODO:
 
@@ -886,3 +887,42 @@
                             (accept [_ root]
                               (deliver res (util/slice-root root 0))))))
     @res))
+
+;; TODO: doesn't actually allow access to the points.
+(deftype MergedKdTree [static-kd-tree dynamic-kd-tree ^RoaringBitmap static-delete-bitmap]
+  KdTree
+  (kd-tree-insert [this allocator point]
+    (kd-tree-insert dynamic-kd-tree allocator point)
+    this)
+
+  (kd-tree-delete [this allocator point]
+    (kd-tree-delete dynamic-kd-tree allocator point)
+    (.forEachRemaining ^Spliterator$OfInt (kd-tree-range-search static-kd-tree point point)
+                       (reify IntConsumer
+                         (accept [_ x]
+                           (.add static-delete-bitmap x))))
+    this)
+
+  (kd-tree-range-search [_ min-range max-range]
+    (.spliterator (IntStream/concat (.filter (StreamSupport/intStream (kd-tree-range-search static-kd-tree min-range max-range) false)
+                                             (reify IntPredicate
+                                               (test [_ x]
+                                                 (not (.contains static-delete-bitmap x)))))
+                                    (StreamSupport/intStream (kd-tree-range-search dynamic-kd-tree min-range max-range) false))))
+
+  (kd-tree-depth-first [_]
+    (.spliterator (IntStream/concat (.filter (StreamSupport/intStream (kd-tree-depth-first static-kd-tree) false)
+                                             (reify IntPredicate
+                                               (test [_ x]
+                                                 (not (.contains static-delete-bitmap x)))))
+                                    (StreamSupport/intStream (kd-tree-depth-first dynamic-kd-tree) false))))
+
+  (kd-tree-point-vec [_]
+    (throw (UnsupportedOperationException.)))
+
+  (kd-tree-depth [_]
+    (max (long (kd-tree-depth static-kd-tree))
+         (long (kd-tree-depth dynamic-kd-tree)))))
+
+(defn ->merged-kd-tree [static-kd-tree dynamic-kd-tree]
+  (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.)))
