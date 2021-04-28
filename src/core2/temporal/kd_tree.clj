@@ -110,17 +110,6 @@
              (recur (inc n#))
              false))))))
 
-(defn- try-enable-simd []
-  (try
-    (require 'core2.temporal.simd :reload)
-    true
-    (catch clojure.lang.Compiler$CompilerException e
-      (if (instance? ClassNotFoundException (.getCause e))
-        false
-        (throw e)))))
-
-(defonce simd-enabled? (try-enable-simd))
-
 (def ^:private ^Class longs-class (Class/forName "[J"))
 
 (defn- ->longs ^longs [xs]

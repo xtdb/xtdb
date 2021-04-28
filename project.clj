@@ -84,7 +84,7 @@
              "-Darrow.enable_null_check_for_get=false"
              "--illegal-access=warn" ;; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
              #_"--add-modules=jdk.incubator.vector" ;; doesn't work if it doesn't exist, like on JDK11.
-             "--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
+             #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
              #_"-Darrow.memory.debug.allocator=true"
              #_"-Darrow.enable_unsafe_memory_access=true"]
 
