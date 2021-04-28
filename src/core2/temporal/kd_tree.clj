@@ -747,27 +747,6 @@
   (kd-tree-depth [_]
     (throw (UnsupportedOperationException.))))
 
-(comment
-  (with-open [allocator (RootAllocator.)]
-    (->disk-kd-tree
-     allocator
-     (util/->path "target/kd-tree-6.arrow")
-     []
-     10
-     3))
-
-  (def bb (util/->mmap-path (util/->path "target/kd-tree-6.arrow") java.nio.channels.FileChannel$MapMode/READ_WRITE))
-
-  (with-open [allocator (RootAllocator.)
-              b (doto (util/->arrow-buf-view allocator bb)
-                  (.retain))
-              c (util/->chunks b allocator)]
-    (.forEachRemaining c (reify Consumer
-                           (accept [_ x]
-                             (.set ^TinyIntVector (.getVector ^VectorSchemaRoot x "axis-delete-flag") 0 1)
-                             (prn (.getObject (.getVector ^VectorSchemaRoot x "axis-delete-flag") 0)))))))
-
-
 (def ^:private ^java.lang.reflect.Field arrow-record-buffers-layout-field
   (doto (.getDeclaredField ArrowRecordBatch "buffersLayout")
     (.setAccessible true)))
