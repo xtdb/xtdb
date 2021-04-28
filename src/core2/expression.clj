@@ -479,6 +479,9 @@
 
 (defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name expr]
   (reify ProjectionSpec
+    (getField [_ _in-schema]
+      (types/->primitive-dense-union-field col-name))
+
     (project [_ in allocator]
       (let [in-vecs (expression-in-vectors in expr)
             arrow-types (mapv vector->arrow-type in-vecs)

@@ -1,6 +1,6 @@
 (ns core2.operator.set
   (:require [core2.util :as util])
-  (:import core2.ICursor
+  (:import core2.IChunkCursor
            [java.util ArrayList List Set HashSet]
            java.util.function.Consumer
            org.apache.arrow.memory.util.ArrowBufPointer
@@ -16,10 +16,14 @@
              (for [^Field field (.getFields y)]
                (.getName field)))))
 
-(deftype UnionCursor [^ICursor left-cursor
-                      ^ICursor right-cursor
+(deftype UnionCursor [^IChunkCursor left-cursor
+                      ^IChunkCursor right-cursor
                       ^:unsynchronized-mutable ^Schema schema]
-  ICursor
+  IChunkCursor
+  (getSchema [_]
+    (assert (= (.getSchema left-cursor) (.getSchema right-cursor)))
+    (.getSchema left-cursor))
+
   (tryAdvance [this c]
     (if (or (.tryAdvance left-cursor
                          (reify Consumer
@@ -65,13 +69,17 @@
     acc))
 
 (deftype IntersectionCursor [^BufferAllocator allocator
-                             ^ICursor left-cursor
-                             ^ICursor right-cursor
+                             ^IChunkCursor left-cursor
+                             ^IChunkCursor right-cursor
                              ^Set intersection-set
                              ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                              ^:unsynchronized-mutable ^Schema schema
                              difference?]
-  ICursor
+  IChunkCursor
+  (getSchema [_]
+    (assert (= (.getSchema left-cursor) (.getSchema right-cursor)))
+    (.getSchema left-cursor))
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -126,11 +134,13 @@
     (util/try-close right-cursor)))
 
 (deftype DistinctCursor [^BufferAllocator allocator
-                         ^ICursor in-cursor
+                         ^IChunkCursor in-cursor
                          ^Set seen-set
                          ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                          ^:unsynchronized-mutable ^Schema schema]
-  ICursor
+  IChunkCursor
+  (getSchema [_] (.getSchema in-cursor))
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -169,16 +179,18 @@
     (util/try-close in-cursor)))
 
 (definterface ICursorFactory
-  (^core2.ICursor createCursor []))
+  (^core2.IChunkCursor createCursor []))
 
 (definterface IFixpointCursorFactory
-  (^core2.ICursor createCursor [^core2.operator.set.ICursorFactory cursor-factory]))
+  (^core2.IChunkCursor createCursor [^core2.operator.set.ICursorFactory cursor-factory]))
 
 ;; https://core.ac.uk/download/pdf/11454271.pdf "Algebraic optimization of recursive queries"
 ;; http://webdam.inria.fr/Alice/pdfs/Chapter-14.pdf "Recursion and Negation"
 
 (deftype FixpointResultCursor [^VectorSchemaRoot out-root ^long fixpoint-offset ^long fixpoint-size ^:volatile-mutable ^boolean done?]
-  ICursor
+  IChunkCursor
+  (getSchema [_] (.getSchema out-root))
+
   (tryAdvance [this c]
     (if (and (not done?) (pos? fixpoint-size))
       (do (set! (.done? this) true)
@@ -196,7 +208,10 @@
                          ^:unsynchronized-mutable ^Schema schema
                          ^:unsynchronized-mutable done?
                          incremental?]
-  ICursor
+  IChunkCursor
+  ;; TODO
+  (getSchema [_] (throw (UnsupportedOperationException.)))
+
   (tryAdvance [this c]
     (if done?
       false
@@ -243,19 +258,19 @@
     (.clear fixpoint-set)
     (util/try-close out-root)))
 
-(defn ->union-cursor ^core2.ICursor [^ICursor left-cursor, ^ICursor right-cursor]
+(defn ->union-cursor ^core2.IChunkCursor [^IChunkCursor left-cursor, ^IChunkCursor right-cursor]
   (UnionCursor. left-cursor right-cursor nil))
 
-(defn ->difference-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
+(defn ->difference-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor left-cursor, ^IChunkCursor right-cursor]
   (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil nil true))
 
-(defn ->intersection-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
+(defn ->intersection-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor left-cursor, ^IChunkCursor right-cursor]
   (IntersectionCursor. allocator left-cursor right-cursor (HashSet.) nil nil false))
 
-(defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
+(defn ->distinct-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor]
   (DistinctCursor. allocator in-cursor (HashSet.) nil nil))
 
-(defn ->fixpoint-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                        ^IFixpointCursorFactory fixpoint-cursor-factory
-                                        incremental?]
+(defn ->fixpoint-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
+                                             ^IFixpointCursorFactory fixpoint-cursor-factory
+                                             incremental?]
   (FixpointCursor. allocator fixpoint-cursor-factory (HashSet.) nil nil false incremental?))

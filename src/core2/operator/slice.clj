@@ -1,6 +1,6 @@
 (ns core2.operator.slice
   (:require [core2.util :as util])
-  (:import core2.ICursor
+  (:import core2.IChunkCursor
            java.util.function.Consumer
            org.apache.arrow.vector.VectorSchemaRoot))
 
@@ -15,12 +15,14 @@
     (when (pos? root-length)
       [root-offset root-length])))
 
-(deftype SliceCursor [^ICursor in-cursor
+(deftype SliceCursor [^IChunkCursor in-cursor
                       ^long offset
                       ^long limit
                       ^:unsynchronized-mutable ^long idx
                       ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
-  ICursor
+  IChunkCursor
+  (getSchema [_] (.getSchema in-cursor))
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -52,5 +54,5 @@
 
     (.close in-cursor)))
 
-(defn ->slice-cursor ^core2.ICursor [in-cursor offset limit]
+(defn ->slice-cursor ^core2.IChunkCursor [in-cursor offset limit]
   (SliceCursor. in-cursor (or offset 0) (or limit Long/MAX_VALUE) 0 nil))

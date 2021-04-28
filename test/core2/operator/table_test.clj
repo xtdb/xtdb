@@ -1,9 +1,7 @@
 (ns core2.operator.table-test
   (:require [clojure.test :as t]
             [core2.operator.table :as table]
-            [core2.util :as util]
-            [core2.test-util :as tu]
-            [core2.types :as ty]))
+            [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
 

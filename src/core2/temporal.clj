@@ -137,20 +137,20 @@
   (^long getOrCreateInternalId [^Object id])
   (^void populateKnownChunks []))
 
-(def ^:private temporal-columns
+(def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
          [col-name (t/->primitive-dense-union-field col-name #{:timestampmilli})])
        (into {})))
 
 (defn temporal-column? [col-name]
-  (contains? temporal-columns col-name))
+  (contains? ->temporal-field col-name))
 
 (def ^:private timestampmilli-type-id
   (-> (t/primitive-type->arrow-type :timestampmilli)
       (t/arrow-type->type-id)))
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
-  (Schema. [t/row-id-field (get temporal-columns col-name)]))
+  (Schema. [t/row-id-field (get ->temporal-field col-name)]))
 
 (def ^:const ^int id-idx 0)
 (def ^:const ^int row-id-idx 1)

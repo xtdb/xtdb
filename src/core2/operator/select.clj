@@ -1,6 +1,6 @@
 (ns core2.operator.select
   (:require [core2.util :as util])
-  (:import core2.ICursor
+  (:import core2.IChunkCursor
            core2.select.IVectorSchemaRootSelector
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
@@ -10,10 +10,12 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype SelectCursor [^BufferAllocator allocator
-                       ^ICursor in-cursor
+                       ^IChunkCursor in-cursor
                        ^IVectorSchemaRootSelector selector
                        ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
-  ICursor
+  IChunkCursor
+  (getSchema [_] (.getSchema in-cursor))
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -50,7 +52,7 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->select-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                      ^ICursor in-cursor,
-                                      ^IVectorSchemaRootSelector selector]
+(defn ->select-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
+                                           ^IChunkCursor in-cursor,
+                                           ^IVectorSchemaRootSelector selector]
   (SelectCursor. allocator in-cursor selector nil))

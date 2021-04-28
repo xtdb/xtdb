@@ -12,18 +12,22 @@
 
 (t/deftest test-project
   (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
+        c-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                     [[{:a 12, :b 10}
                                       {:a 0, :b 15}]
                                      [{:a 100, :b 83}]])
                 project-cursor (project/->project-cursor tu/*allocator* cursor
                                                          [(project/->identity-projection-spec "a")
+
                                                           (reify ProjectionSpec
+                                                            (getField [_ _in-schema] c-field)
+
                                                             (project [_ in-root allocator]
                                                               (let [^BigIntVector a-vec (.getVector in-root a-field)
                                                                     ^BigIntVector b-vec (.getVector in-root b-field)
-                                                                    ^BigIntVector c-vec (.createVector (ty/->field "c" (.getType Types$MinorType/BIGINT) false) tu/*allocator*)
+                                                                    ^BigIntVector c-vec (.createVector c-field tu/*allocator*)
                                                                     row-count (.getRowCount in-root)]
                                                                 (.setValueCount c-vec row-count)
                                                                 (dotimes [idx row-count]

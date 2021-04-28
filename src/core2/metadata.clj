@@ -11,7 +11,7 @@
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
-           core2.util.IChunkCursor
+           core2.IChunkCursor
            java.io.Closeable
            [java.util Date HashMap List Map SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]

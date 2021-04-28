@@ -6,7 +6,7 @@
             [core2.types :as ty]
             [core2.util :as util])
   (:import core2.core.Node
-           core2.ICursor
+           [core2 IChunkCursor ICursor]
            core2.object_store.FileSystemObjectStore
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
@@ -63,10 +63,12 @@
 (defn finish-chunk [^Node node]
   (.finishChunk ^core2.indexer.Indexer (.indexer node)))
 
-(defn ->cursor ^core2.ICursor [schema blocks]
+(defn ->cursor ^core2.IChunkCursor [schema blocks]
   (let [blocks (LinkedList. blocks)
         root (VectorSchemaRoot/create schema *allocator*)]
-    (reify ICursor
+    (reify IChunkCursor
+      (getSchema [_] schema)
+
       (tryAdvance [_ c]
         (if-let [block (some-> (.poll blocks) vec)]
           (do

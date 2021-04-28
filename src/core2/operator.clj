@@ -18,60 +18,60 @@
            org.apache.arrow.memory.BufferAllocator))
 
 (definterface IOperatorFactory
-  (^core2.ICursor scan [^core2.tx.Watermark watermark
-                        ^java.util.List #_<String> colNames,
-                        metadataPred
-                        ^java.util.Map #_#_<String, IVectorPredicate> colPreds
-                        ^longs temporalMinRange
-                        ^longs temporalMaxRange])
+  (^core2.IChunkCursor scan [^core2.tx.Watermark watermark
+                             ^java.util.List #_<String> colNames,
+                             metadataPred
+                             ^java.util.Map #_#_<String, IVectorPredicate> colPreds
+                             ^longs temporalMinRange
+                             ^longs temporalMaxRange])
 
-  (^core2.ICursor table [^java.util.List #_<Map> rows])
+  (^core2.IChunkCursor table [^java.util.List #_<Map> rows])
 
-  (^core2.ICursor select [^core2.ICursor inCursor
-                          ^core2.select.IVectorSchemaRootSelector selector])
+  (^core2.IChunkCursor select [^core2.IChunkCursor inCursor
+                               ^core2.select.IVectorSchemaRootSelector selector])
 
-  (^core2.ICursor project [^core2.ICursor inCursor
-                           ^java.util.List #_<ProjectionSpec> projectionSpecs])
+  (^core2.IChunkCursor project [^core2.IChunkCursor inCursor
+                                ^java.util.List #_<ProjectionSpec> projectionSpecs])
 
-  (^core2.ICursor rename [^core2.ICursor inCursor
-                          ^java.util.Map #_#_<String, String> renameMap
-                          ^String prefix])
+  (^core2.IChunkCursor rename [^core2.IChunkCursor inCursor
+                               ^java.util.Map #_#_<String, String> renameMap
+                               ^String prefix])
 
-  (^core2.ICursor equiJoin [^core2.ICursor leftCursor
-                            ^String leftColName
-                            ^core2.ICursor rightCursor
-                            ^String rightColName])
+  (^core2.IChunkCursor equiJoin [^core2.IChunkCursor leftCursor
+                                 ^String leftColName
+                                 ^core2.IChunkCursor rightCursor
+                                 ^String rightColName])
 
-  (^core2.ICursor semiEquiJoin [^core2.ICursor leftCursor
-                                ^String leftColName
-                                ^core2.ICursor rightCursor
-                                ^String rightColName])
+  (^core2.IChunkCursor semiEquiJoin [^core2.IChunkCursor leftCursor
+                                     ^String leftColName
+                                     ^core2.IChunkCursor rightCursor
+                                     ^String rightColName])
 
-  (^core2.ICursor antiEquiJoin [^core2.ICursor leftCursor
-                                ^String leftColName
-                                ^core2.ICursor rightCursor
-                                ^String rightColName])
+  (^core2.IChunkCursor antiEquiJoin [^core2.IChunkCursor leftCursor
+                                     ^String leftColName
+                                     ^core2.IChunkCursor rightCursor
+                                     ^String rightColName])
 
-  (^core2.ICursor crossJoin [^core2.ICursor leftCursor
-                             ^core2.ICursor rightCursor])
+  (^core2.IChunkCursor crossJoin [^core2.IChunkCursor leftCursor
+                                  ^core2.IChunkCursor rightCursor])
 
-  (^core2.ICursor orderBy [^core2.ICursor inCursor
-                           ^java.util.List #_<SortSpec> orderSpecs])
+  (^core2.IChunkCursor orderBy [^core2.IChunkCursor inCursor
+                                ^java.util.List #_<SortSpec> orderSpecs])
 
-  (^core2.ICursor groupBy [^core2.ICursor inCursor
-                           ^java.util.List #_<AggregateSpec> aggregateSpecs])
+  (^core2.IChunkCursor groupBy [^core2.IChunkCursor inCursor
+                                ^java.util.List #_<AggregateSpec> aggregateSpecs])
 
-  (^core2.ICursor slice [^core2.ICursor inCursor, ^Long offset, ^Long limit])
+  (^core2.IChunkCursor slice [^core2.IChunkCursor inCursor, ^Long offset, ^Long limit])
 
-  (^core2.ICursor union [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
+  (^core2.IChunkCursor union [^core2.IChunkCursor leftCursor ^core2.IChunkCursor rightCursor])
 
-  (^core2.ICursor difference [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
+  (^core2.IChunkCursor difference [^core2.IChunkCursor leftCursor ^core2.IChunkCursor rightCursor])
 
-  (^core2.ICursor intersection [^core2.ICursor leftCursor ^core2.ICursor rightCursor])
+  (^core2.IChunkCursor intersection [^core2.IChunkCursor leftCursor ^core2.IChunkCursor rightCursor])
 
-  (^core2.ICursor distinct [^core2.ICursor inCursor])
+  (^core2.IChunkCursor distinct [^core2.IChunkCursor inCursor])
 
-  (^core2.ICursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory ^boolean isIncremental]))
+  (^core2.IChunkCursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory ^boolean isIncremental]))
 
 (defn ->operator-factory {::sys/deps {:allocator :core2/allocator
                                       :metadata-mgr :core2/metadata-manager
