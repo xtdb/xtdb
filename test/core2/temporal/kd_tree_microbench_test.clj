@@ -4,7 +4,7 @@
             [core2.temporal.kd-tree :as kd])
   (:import [java.util Collection HashMap Random]
            [java.util.function Predicate]
-           [java.util.stream StreamSupport]
+           [java.util.stream IntStream]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
            core2.temporal.kd_tree.Node))
@@ -57,9 +57,7 @@
             (time
              (doseq [[query-id min-range max-range] queries]
                (t/is (= (.get query->count query-id)
-                        (-> (kd/kd-tree-range-search kd-tree min-range max-range)
-                            (StreamSupport/intStream false)
-                            (.count))))))))
+                        (.count ^IntStream (kd/kd-tree-range-search kd-tree min-range max-range))))))))
 
 
         (prn :build-node-kd-tree-bulk ns)
@@ -71,9 +69,7 @@
             (time
              (doseq [[query-id min-range max-range] queries]
                (t/is (= (.get query->count query-id)
-                        (-> (kd/kd-tree-range-search kd-tree min-range max-range)
-                            (StreamSupport/intStream false)
-                            (.count)))))))
+                        (.count ^IntStream (kd/kd-tree-range-search kd-tree min-range max-range)))))))
 
           (prn :build-column-kd-tree ns)
           (with-open [^VectorSchemaRoot column-kd-tree (time
@@ -83,9 +79,7 @@
               (time
                (doseq [[query-id min-range max-range] queries]
                  (t/is (= (.get query->count query-id)
-                          (-> (kd/kd-tree-range-search column-kd-tree min-range max-range)
-                              (StreamSupport/intStream false)
-                              (.count)))))))
+                          (.count ^IntStream (kd/kd-tree-range-search column-kd-tree min-range max-range)))))))
 
             (prn :build-disk-kd-tree ns)
             (with-open [^VectorSchemaRoot disk-kd-tree (time
@@ -96,9 +90,7 @@
                 (time
                  (doseq [[query-id min-range max-range] queries]
                    (t/is (= (.get query->count query-id)
-                            (-> (kd/kd-tree-range-search disk-kd-tree min-range max-range)
-                                (StreamSupport/intStream false)
-                                (.count)))))))
+                            (.count ^IntStream (kd/kd-tree-range-search disk-kd-tree min-range max-range)))))))
 
               (let [_ (prn :node-kd-tree->seq)
                     kd-tree-seq (time (vec (kd/kd-tree->seq kd-tree)))
