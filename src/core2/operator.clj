@@ -71,7 +71,9 @@
 
   (^core2.IChunkCursor distinct [^core2.IChunkCursor inCursor])
 
-  (^core2.IChunkCursor fixpoint [^core2.operator.set.IFixpointCursorFactory fixpointCursorFactory ^boolean isIncremental]))
+  (^core2.IChunkCursor fixpoint [^core2.IChunkCursor baseCursor
+                                 ^core2.operator.set.IFixpointCursorFactory recursiveCursorFactory
+                                 ^boolean isIncremental]))
 
 (defn ->operator-factory {::sys/deps {:allocator :core2/allocator
                                       :metadata-mgr :core2/metadata-manager
@@ -133,5 +135,5 @@
     (distinct [_ in-cursor]
       (set-op/->distinct-cursor allocator in-cursor))
 
-    (fixpoint [_ fixpoint-cursor-factory incremental?]
-      (set-op/->fixpoint-cursor allocator fixpoint-cursor-factory incremental?))))
+    (fixpoint [_ base-cursor recursive-cursor-factory incremental?]
+      (set-op/->fixpoint-cursor allocator base-cursor recursive-cursor-factory incremental?))))

@@ -104,7 +104,8 @@
 
 (s/def ::fixpoint (s/cat :op #{:μ :mu :fixpoint}
                          :mu-variable ::relation
-                         :union-of-expressions (s/or :union ::union)))
+                         :base ::ra-expression
+                         :recursive ::ra-expression))
 
 (s/def ::assign (s/cat :op #{:← :assign}
                        :bindings (s/and vector? (s/* (s/cat :variable ::relation :value ::ra-expression)))
@@ -325,13 +326,17 @@
       (assert cursor-factory)
       (.createCursor cursor-factory))))
 
-(defmethod emit-op :fixpoint [[_ {:keys [mu-variable union-of-expressions]}]]
-  (fn [^IOperatorFactory op-factory watermark]
-    (.fixpoint op-factory (reify IFixpointCursorFactory
-                            (createCursor [_ cursor-factory]
-                              (binding [*relation-variable->cursor-factory* (assoc *relation-variable->cursor-factory* mu-variable cursor-factory)]
-                                (let [inner-f (emit-op union-of-expressions)]
-                                  (inner-f op-factory watermark))))) false)))
+(defmethod emit-op :fixpoint [[_ {:keys [mu-variable base recursive]}]]
+  (let [base-f (emit-op base)
+        recursive-f (emit-op recursive)]
+    (fn [^IOperatorFactory op-factory watermark]
+      (.fixpoint op-factory
+                 (base-f op-factory watermark)
+                 (reify IFixpointCursorFactory
+                   (createCursor [_ cursor-factory]
+                     (binding [*relation-variable->cursor-factory* (assoc *relation-variable->cursor-factory* mu-variable cursor-factory)]
+                       (recursive-f op-factory watermark))))
+                 false))))
 
 (defmethod emit-op :assign [[_ {:keys [bindings relation]}]]
   (fn [^IOperatorFactory op-factory watermark]

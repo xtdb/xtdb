@@ -202,61 +202,64 @@
       false)))
 
 (deftype FixpointCursor [^BufferAllocator allocator
-                         ^IFixpointCursorFactory fixpoint-cursor-factory
+                         ^IChunkCursor base-cursor
+                         ^IFixpointCursorFactory recursive-cursor-factory
                          ^Set fixpoint-set
                          ^:unsynchronized-mutable ^VectorSchemaRoot out-root
-                         ^:unsynchronized-mutable ^Schema schema
                          ^:unsynchronized-mutable done?
                          incremental?]
   IChunkCursor
-  ;; TODO
-  (getSchema [_] (throw (UnsupportedOperationException.)))
+  (getSchema [_] (.getSchema base-cursor))
 
   (tryAdvance [this c]
     (if done?
       false
-      (do (set! done? true)
+      (let [schema (.getSchema this)]
+        (set! done? true)
+
+        (let [c (reify Consumer
+                  (accept [_ in-root]
+                    (let [^VectorSchemaRoot in-root in-root
+                          ^VectorSchemaRoot out-root (.out-root this)]
+                      (when (pos? (.getRowCount in-root))
+                        (assert-union-compatible schema (.getSchema in-root))
+                        (when-not out-root
+                          (set! (.out-root this) (VectorSchemaRoot/create schema allocator)))
+                        (let [^VectorSchemaRoot out-root (.out-root this)]
+                          (dotimes [n (.getRowCount in-root)]
+                            (let [k (->set-key in-root n)]
+                              (when-not (.contains fixpoint-set k)
+                                (.add fixpoint-set (copy-set-key allocator k))
+                                (util/copy-tuple in-root n out-root (.getRowCount out-root))
+                                (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root)))))))))))]
+
+          (.forEachRemaining base-cursor c)
 
           (loop [fixpoint-offset 0
                  fixpoint-size (.size fixpoint-set)]
-            (with-open [in-cursor (.createCursor fixpoint-cursor-factory
+            (with-open [in-cursor (.createCursor recursive-cursor-factory
                                                  (reify ICursorFactory
                                                    (createCursor [_]
                                                      (FixpointResultCursor. out-root fixpoint-offset fixpoint-size false))))]
-              (.forEachRemaining in-cursor
-                                 (reify Consumer
-                                   (accept [_ in-root]
-                                     (let [^VectorSchemaRoot in-root in-root]
-                                       (when (pos? (.getRowCount in-root))
-                                         (if (nil? (.schema this))
-                                           (set! (.schema this) (.getSchema ^VectorSchemaRoot in-root))
-                                           (assert-union-compatible (.schema this) (.getSchema in-root)))
-                                         (when-not out-root
-                                           (set! (.out-root this) (VectorSchemaRoot/create (.schema this) allocator)))
-                                         (let [^VectorSchemaRoot out-root (.out-root this)]
-                                           (dotimes [n (.getRowCount in-root)]
-                                             (let [k (->set-key in-root n)]
-                                               (when-not (.contains fixpoint-set k)
-                                                 (.add fixpoint-set (copy-set-key allocator k))
-                                                 (util/copy-tuple in-root n out-root (.getRowCount out-root))
-                                                 (util/set-vector-schema-root-row-count out-root (inc (.getRowCount out-root)))))))))))))
+              (.forEachRemaining in-cursor c))
             (when-not (= fixpoint-size (.size fixpoint-set))
               (recur (if incremental?
                        fixpoint-size
                        0)
-                     (.size fixpoint-set))))
+                     (.size fixpoint-set)))))
 
-          (if out-root
-            (do
-              (.accept c out-root)
-              true)
-            false))))
+        (if out-root
+          (do
+            (.accept c out-root)
+            true)
+          false))))
 
   (close [_]
     (doseq [k fixpoint-set]
       (release-set-key k))
     (.clear fixpoint-set)
-    (util/try-close out-root)))
+    (util/try-close out-root)
+    (util/try-close base-cursor)))
 
 (defn ->union-cursor ^core2.IChunkCursor [^IChunkCursor left-cursor, ^IChunkCursor right-cursor]
   (UnionCursor. left-cursor right-cursor nil))
@@ -271,6 +274,8 @@
   (DistinctCursor. allocator in-cursor (HashSet.) nil nil))
 
 (defn ->fixpoint-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
-                                             ^IFixpointCursorFactory fixpoint-cursor-factory
+                                             ^IChunkCursor base-cursor
+                                             ^IFixpointCursorFactory recursive-cursor-factory
                                              incremental?]
-  (FixpointCursor. allocator fixpoint-cursor-factory (HashSet.) nil nil false incremental?))
+  (FixpointCursor. allocator base-cursor recursive-cursor-factory
+                   (HashSet.) nil false incremental?))
