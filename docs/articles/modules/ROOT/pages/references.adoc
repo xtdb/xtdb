@@ -90,6 +90,7 @@ and its architecture -- past, present, and very-near-future.
 * https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
 * https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
 * http://db.in.tum.de/~freitag/papers/techreport-freitag-tum-i2082.pdf[Combining Worst-Case Optimal and Traditional Binary Join Processing], Freitag et al.
+* https://users.dcc.uchile.cl/~gnavarro/ps/sigmod21.pdf[Worst-Case Optimal Graph Joins in Almost No Space], Arroyuelo, Hogan, et al. SIGMOD '21. 2021.
 * http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=CFD3DCD1A3AECA50776F3A913BF541B4?doi=10.1.1.498.5779&rep=rep1&type=pdf[Execution Strategies for SQL Subqueries], Elhemali, Galindo-Legaria, et al. Proceedings of the ACM SIGMOD International Conference on Management of Data. 2007.
 * https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf[Translating SQL into the Relational Algebra], Bussche, Vansummeren. 2009.
 * https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf[Unnesting Arbitrary Queries], Neumann, Kemper. BTW. 2015.
@@ -112,6 +113,9 @@ and its architecture -- past, present, and very-near-future.
 * https://en.wikipedia.org/wiki/K-d_tree[k-d Tree]. Wikipedia.
 * https://en.wikipedia.org/wiki/R*_tree[R* Tree]. Wikipedia.
 * https://research-repository.griffith.edu.au/bitstream/handle/10072/43351/76130_1.pdf?sequence=1&isAllowed=y[A Triangular Decomposition Access Method for Temporal Data - TD-tree], Stantic, Topor, et al. ADC '11: Proceedings of the Twenty-Second Australasian Database Conference, Vol. 115, Pages 113–122. 2011.
+* https://arxiv.org/abs/2104.13793[Fast Parallel Hypertree Decompositions in Logarithmic Recursion Depth], Gottlob, Lanzinger, et al. 2021.
+** https://github.com/cem-okulmus/log-k-decomp[Reference Implementation], GitHub.
+* https://arxiv.org/abs/2104.13457[Hypersuccinct Trees -- New universal tree source codes for optimal compressed tree data structures], Munro, Nicholson, et al. 2021.
 
 [#raytracing]
 === Data Structures: Raytracing
