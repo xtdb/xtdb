@@ -1,8 +1,8 @@
 (ns core2.operator.slice
-  (:require [core2.util :as util])
   (:import core2.IChunkCursor
            java.util.function.Consumer
-           org.apache.arrow.vector.VectorSchemaRoot))
+           [org.apache.arrow.vector ValueVector VectorSchemaRoot])
+  (:require [core2.util :as util]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -15,34 +15,32 @@
     (when (pos? root-length)
       [root-offset root-length])))
 
-(deftype SliceCursor [^IChunkCursor in-cursor
+(deftype SliceCursor [^VectorSchemaRoot out-root
+                      ^IChunkCursor in-cursor
                       ^long offset
                       ^long limit
-                      ^:unsynchronized-mutable ^long idx
-                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+                      ^:unsynchronized-mutable ^long idx]
   IChunkCursor
   (getSchema [_] (.getSchema in-cursor))
 
   (tryAdvance [this c]
-    (when out-root
-      (.close out-root)
-      (set! (.out-root this) nil))
+    (.clear out-root)
 
-    (while (and (nil? out-root)
+    (while (and (zero? (.getRowCount out-root))
                 (< (- idx offset) limit)
                 (.tryAdvance in-cursor
                              (reify Consumer
-                               (accept [_ root]
-                                 (let [^VectorSchemaRoot root root
-                                       row-count (.getRowCount root)
+                               (accept [_ in-root]
+                                 (let [^VectorSchemaRoot in-root in-root
+                                       row-count (.getRowCount in-root)
                                        old-idx (.idx this)]
 
                                    (set! (.-idx this) (+ old-idx row-count))
 
                                    (when-let [[root-offset root-length] (offset+length offset limit old-idx row-count)]
-                                     (set! (.out-root this) (util/slice-root root root-offset root-length)))))))))
+                                     (util/slice-root-to in-root root-offset root-length out-root))))))))
 
-    (if out-root
+    (if (pos? (.getRowCount out-root))
       (do
         (.accept c out-root)
         true)
@@ -54,5 +52,6 @@
 
     (.close in-cursor)))
 
-(defn ->slice-cursor ^core2.IChunkCursor [in-cursor offset limit]
-  (SliceCursor. in-cursor (or offset 0) (or limit Long/MAX_VALUE) 0 nil))
+(defn ->slice-cursor ^core2.IChunkCursor [allocator ^IChunkCursor in-cursor offset limit]
+  (SliceCursor. (VectorSchemaRoot/create (.getSchema in-cursor) allocator)
+                in-cursor (or offset 0) (or limit Long/MAX_VALUE) 0))

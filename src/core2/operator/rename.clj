@@ -16,16 +16,15 @@
 
 (deftype RenameCursor [^BufferAllocator allocator
                        ^Schema out-schema
+                       ^VectorSchemaRoot out-root
                        ^IChunkCursor in-cursor
                        ^Map #_#_<String, String> rename-map
-                       ^String prefix
-                       ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+                       ^String prefix]
   IChunkCursor
   (getSchema [_] out-schema)
 
-  (tryAdvance [this c]
-    (when out-root
-      (.close out-root))
+  (tryAdvance [_ c]
+    (.clear out-root)
 
     (binding [scan/*column->pushdown-bloom* (let [prefix-pattern (re-pattern (str "^" prefix relation-prefix-delimiter))
                                                   invert-rename-map (set/map-invert rename-map)]
@@ -37,18 +36,12 @@
       (if (.tryAdvance in-cursor
                        (reify Consumer
                          (accept [_ in-root]
-                           (let [^VectorSchemaRoot in-root in-root
-                                 ^Iterable out-vecs (for [^Field field (.getFields (.getSchema in-root))
-                                                          :let [in-vec (.getVector in-root field)
-                                                                field-name (.getName field)
-                                                                new-field-name (get rename-map field-name field-name)
-                                                                new-field-name (if prefix
-                                                                                 (str prefix relation-prefix-delimiter new-field-name)
-                                                                                 new-field-name)]]
-                                                      (-> (.getTransferPair in-vec new-field-name allocator)
-                                                          (doto (.splitAndTransfer 0 (.getValueCount in-vec)))
-                                                          (.getTo)))]
-                             (set! (.out-root this) (VectorSchemaRoot. out-vecs))))))
+                           (let [^VectorSchemaRoot in-root in-root]
+                             (dotimes [vec-idx (count (.getFields out-schema))]
+                               (doto (.makeTransferPair (.getVector in-root vec-idx)
+                                                        (.getVector out-root vec-idx))
+                                 (.transfer)))
+                             (util/set-vector-schema-root-row-count out-root (.getRowCount in-root))))))
         (do
           (.accept c out-root)
           true)
@@ -59,10 +52,12 @@
     (util/try-close in-cursor)))
 
 (defn ->rename-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^Map #_#_<String, String> rename-map ^String prefix]
-  (RenameCursor. allocator
-                 (Schema. (for [^Field field (.getFields (.getSchema in-cursor))]
-                            (let [old-name (.getName field)
-                                  new-name (cond->> (get rename-map old-name old-name)
-                                             prefix (str prefix relation-prefix-delimiter))]
-                              (Field. new-name (.getFieldType field) (.getChildren field)))))
-                 in-cursor rename-map prefix nil))
+  (let [schema (Schema. (for [^Field field (.getFields (.getSchema in-cursor))]
+                          (let [old-name (.getName field)
+                                new-name (cond->> (get rename-map old-name old-name)
+                                           prefix (str prefix relation-prefix-delimiter))]
+                            (Field. new-name (.getFieldType field) (.getChildren field)))))]
+
+    (RenameCursor. allocator schema
+                   (VectorSchemaRoot/create schema allocator)
+                   in-cursor rename-map prefix)))

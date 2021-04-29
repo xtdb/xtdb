@@ -182,9 +182,9 @@
                                         [(reify ProjectionSpec
                                            (getField [_ _in-schema] a-field)
 
-                                           (project [_ in-root allocator]
+                                           (project [_ in-root out-vec]
                                              (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                   ^BigIntVector out-vec (.createVector a-field tu/*allocator*)
+                                                   ^BigIntVector out-vec out-vec
                                                    row-count (.getRowCount in-root)]
                                                (.setValueCount out-vec row-count)
                                                (dotimes [idx row-count]
@@ -194,10 +194,10 @@
                                          (reify ProjectionSpec
                                            (getField [_ _in-schema] b-field)
 
-                                           (project [_ in-root allocator]
+                                           (project [_ in-root out-vec]
                                              (let [^BigIntVector a-vec (.getVector in-root a-field)
                                                    ^BigIntVector b-vec (.getVector in-root b-field)
-                                                   ^BigIntVector out-vec (.createVector b-field tu/*allocator*)
+                                                   ^BigIntVector out-vec out-vec
                                                    row-count (.getRowCount in-root)]
                                                (.setValueCount out-vec row-count)
                                                (dotimes [idx row-count]

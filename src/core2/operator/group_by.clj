@@ -281,16 +281,14 @@
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^Schema out-schema
+                        ^VectorSchemaRoot out-root
                         ^IChunkCursor in-cursor
-                        ^List aggregate-specs
-                        ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+                        ^List aggregate-specs]
   IChunkCursor
   (getSchema [_] out-schema)
 
   (tryAdvance [this c]
-    (when out-root
-      (.close out-root)
-      (set! (.out-root this) nil))
+    (.clear out-root)
 
     (let [group->accs (HashMap.)]
       (try
@@ -317,8 +315,9 @@
     (util/try-close in-cursor)))
 
 (defn ->group-by-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^List aggregate-specs]
-  (GroupByCursor. allocator
-                  (let [in-schema (.getSchema in-cursor)]
-                    (Schema. (for [^AggregateSpec spec aggregate-specs]
-                               (.getToField spec in-schema))))
-                  in-cursor aggregate-specs nil))
+  (let [in-schema (.getSchema in-cursor)
+        out-schema (Schema. (for [^AggregateSpec spec aggregate-specs]
+                              (.getToField spec in-schema)))]
+    (GroupByCursor. allocator out-schema
+                    (VectorSchemaRoot/create out-schema allocator)
+                    in-cursor aggregate-specs)))

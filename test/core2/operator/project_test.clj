@@ -13,7 +13,7 @@
 (t/deftest test-project
   (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
         b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
-        c-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
+        out-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                     [[{:a 12, :b 10}
                                       {:a 0, :b 15}]
@@ -22,17 +22,16 @@
                                                          [(project/->identity-projection-spec "a")
 
                                                           (reify ProjectionSpec
-                                                            (getField [_ _in-schema] c-field)
+                                                            (getField [_ _in-schema] out-field)
 
-                                                            (project [_ in-root allocator]
-                                                              (let [^BigIntVector a-vec (.getVector in-root a-field)
+                                                            (project [_ in-root out-vec]
+                                                              (let [row-count (.getRowCount in-root)
+                                                                    ^BigIntVector a-vec (.getVector in-root a-field)
                                                                     ^BigIntVector b-vec (.getVector in-root b-field)
-                                                                    ^BigIntVector c-vec (.createVector c-field tu/*allocator*)
-                                                                    row-count (.getRowCount in-root)]
-                                                                (.setValueCount c-vec row-count)
+                                                                    ^BigIntVector out-vec out-vec]
+                                                                (.setValueCount out-vec row-count)
                                                                 (dotimes [idx row-count]
-                                                                  (.set c-vec idx (+ (.get a-vec idx) (.get b-vec idx))))
-                                                                c-vec)))])]
+                                                                  (.setSafe out-vec idx (+ (.get a-vec idx) (.get b-vec idx)))))))])]
       (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
                 [{:a 100, :c 183}]]
                (tu/<-cursor project-cursor))))))

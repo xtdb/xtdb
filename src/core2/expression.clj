@@ -482,13 +482,13 @@
     (getField [_ _in-schema]
       (types/->primitive-dense-union-field col-name))
 
-    (project [_ in allocator]
-      (let [in-vecs (expression-in-vectors in expr)
+    (project [_ in-root out-vec]
+      (let [in-vecs (expression-in-vectors in-root expr)
             arrow-types (mapv vector->arrow-type in-vecs)
             expr-code (memo-generate-code arrow-types expr ::project)
             expr-fn (memo-eval expr-code)
-            ^DenseUnionVector acc (.createVector (types/->primitive-dense-union-field col-name) allocator)]
-        (expr-fn in-vecs acc (.getRowCount in))))))
+            ^DenseUnionVector out-vec out-vec]
+        (expr-fn in-vecs out-vec (.getRowCount in-root))))))
 
 (defn ->expression-root-selector ^core2.select.IVectorSchemaRootSelector [expr]
   (reify IVectorSchemaRootSelector

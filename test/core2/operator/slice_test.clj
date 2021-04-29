@@ -52,7 +52,7 @@
     (letfn [(slice [offset length]
               (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (.getType Types$MinorType/BIGINT) false)])
                                               blocks)
-                          slice-cursor (slice/->slice-cursor cursor offset length)]
+                          slice-cursor (slice/->slice-cursor tu/*allocator* cursor offset length)]
                 (tu/<-cursor slice-cursor)))]
       (t/is (= blocks (slice nil nil)))
 

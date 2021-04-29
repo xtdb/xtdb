@@ -75,39 +75,32 @@
     idxs))
 
 (deftype OrderByCursor [^BufferAllocator allocator
+                        ^VectorSchemaRoot out-root
                         ^IChunkCursor in-cursor
-                        ^List #_<OrderSpec> order-specs
-                        ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+                        ^List #_<OrderSpec> order-specs]
   IChunkCursor
   (getSchema [_] (.getSchema in-cursor))
 
-  (tryAdvance [this c]
-    (when out-root
-      (.close out-root))
+  (tryAdvance [_ c]
+    (.clear out-root)
 
-    (if-not out-root
-      (if-let [acc-root (accumulate-roots in-cursor allocator)]
-        (with-open [acc-root acc-root]
-          (let [sorted-idxs (order-root acc-root order-specs)
-                out-root (VectorSchemaRoot/create (.getSchema acc-root) allocator)]
-
-            (set! (.out-root this) out-root)
-
-            (if (pos? (.getRowCount acc-root))
-              (do (dotimes [n (util/root-field-count acc-root)]
-                    (let [in-vec (.getVector acc-root n)
-                          out-vec (.getVector out-root n)]
-                      (util/set-value-count out-vec (.getValueCount in-vec))
-                      (dotimes [idx (.size sorted-idxs)]
-                        (if (and (instance? DenseUnionVector in-vec)
-                                 (instance? DenseUnionVector out-vec))
-                          (DenseUnionUtil/copyIdxSafe in-vec (.get sorted-idxs idx) out-vec idx)
-                          (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
-                  (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
-                  (.accept c out-root)
-                  true)
-              false)))
-        false)
+    (if-let [acc-root (accumulate-roots in-cursor allocator)]
+      (with-open [acc-root acc-root]
+        (let [sorted-idxs (order-root acc-root order-specs)]
+          (if (pos? (.getRowCount acc-root))
+            (do (dotimes [n (util/root-field-count acc-root)]
+                  (let [in-vec (.getVector acc-root n)
+                        out-vec (.getVector out-root n)]
+                    (util/set-value-count out-vec (.getValueCount in-vec))
+                    (dotimes [idx (.size sorted-idxs)]
+                      (if (and (instance? DenseUnionVector in-vec)
+                               (instance? DenseUnionVector out-vec))
+                        (DenseUnionUtil/copyIdxSafe in-vec (.get sorted-idxs idx) out-vec idx)
+                        (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
+                (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
+                (.accept c out-root)
+                true)
+            false)))
       false))
 
   (close [_]
@@ -115,4 +108,5 @@
     (util/try-close in-cursor)))
 
 (defn ->order-by-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^List #_<OrderSpec> order-specs]
-  (OrderByCursor. allocator in-cursor order-specs nil))
+  (OrderByCursor. allocator (VectorSchemaRoot/create (.getSchema in-cursor) allocator)
+                  in-cursor order-specs))

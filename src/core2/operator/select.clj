@@ -10,39 +10,32 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype SelectCursor [^BufferAllocator allocator
+                       ^VectorSchemaRoot out-root
                        ^IChunkCursor in-cursor
-                       ^IVectorSchemaRootSelector selector
-                       ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
+                       ^IVectorSchemaRootSelector selector]
   IChunkCursor
-  (getSchema [_] (.getSchema in-cursor))
+  (getSchema [_] (.getSchema out-root))
 
-  (tryAdvance [this c]
-    (when out-root
-      (.close out-root)
-      (set! (.out-root this) nil))
+  (tryAdvance [_ c]
+    (.clear out-root)
 
-    (while (and (nil? out-root)
+    (while (and (zero? (.getRowCount out-root))
                 (.tryAdvance in-cursor
                              (reify Consumer
                                (accept [_ in-root]
                                  (let [^VectorSchemaRoot in-root in-root
-                                       schema (.getSchema in-root)
                                        idx-bitmap (.select selector in-root)
                                        selected-count (.getCardinality idx-bitmap)]
-
                                    (when (pos? selected-count)
-                                     (let [^VectorSchemaRoot out-root (VectorSchemaRoot/create schema allocator)]
-                                       (set! (.out-root this) out-root)
+                                     (doseq [^Field field (.getFields (.getSchema in-root))]
+                                       (util/project-vec (.getVector in-root field)
+                                                         (.stream idx-bitmap)
+                                                         (.getCardinality idx-bitmap)
+                                                         (.getVector out-root field)))
 
-                                       (doseq [^Field field (.getFields schema)]
-                                         (util/project-vec (.getVector in-root field)
-                                                           (.stream idx-bitmap)
-                                                           (.getCardinality idx-bitmap)
-                                                           (.getVector out-root field)))
+                                     (util/set-vector-schema-root-row-count out-root selected-count))))))))
 
-                                       (util/set-vector-schema-root-row-count out-root selected-count)))))))))
-
-    (if out-root
+    (if (pos? (.getRowCount out-root))
       (do
         (.accept c out-root)
         true)
@@ -55,4 +48,5 @@
 (defn ->select-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
                                            ^IChunkCursor in-cursor,
                                            ^IVectorSchemaRootSelector selector]
-  (SelectCursor. allocator in-cursor selector nil))
+  (SelectCursor. allocator (VectorSchemaRoot/create (.getSchema in-cursor) allocator)
+                 in-cursor selector))

@@ -137,8 +137,9 @@
                  filtered-block-idxs))))))
     block-idxs))
 
-(deftype ScanCursor [^Schema out-schema
-                     ^BufferAllocator allocator
+(deftype ScanCursor [^BufferAllocator allocator
+                     ^Schema out-schema
+                     ^VectorSchemaRoot out-root
                      ^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
@@ -148,7 +149,6 @@
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range
-                     ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
   IChunkCursor
@@ -156,11 +156,7 @@
 
   (tryAdvance [this c]
     (let [real-col-names (remove temporal/temporal-column? col-names)]
-      (letfn [(create-out-root [^Map chunks]
-                (when (= (count chunks) (count real-col-names))
-                  (VectorSchemaRoot/create out-schema allocator)))
-
-              (next-block [chunks ^VectorSchemaRoot out-root]
+      (letfn [(next-block [chunks]
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
                     (do
@@ -176,18 +172,14 @@
                         (.close chunk))
                       (set! (.chunks this) nil)
 
-                      (util/try-close out-root)
-                      (set! (.out-root this) nil)
+                      (.clear out-root)
 
                       false))))
 
               (live-chunk []
-                (let [chunks (idx/->live-slices watermark real-col-names)
-                      out-root (create-out-root chunks)]
+                (let [chunks (idx/->live-slices watermark real-col-names)]
                   (set! (.chunks this) chunks)
-                  (set! (.out-root this) out-root)
-
-                  (next-block chunks out-root)))
+                  (next-block chunks)))
 
               (next-chunk []
                 (loop []
@@ -206,16 +198,14 @@
                                                                                                               :close-buffer? true}))))))
                                             (remove nil?)
                                             vec
-                                            (into {} (map deref)))
-                                out-root (create-out-root chunks)]
+                                            (into {} (map deref)))]
                             (set! (.chunks this) chunks)
-                            (set! (.out-root this) out-root)
 
-                            (next-block chunks out-root)))
+                            (next-block chunks)))
                         (recur)))))]
 
         (or (when chunks
-              (next-block chunks out-root))
+              (next-block chunks))
 
             (next-chunk)
 
@@ -227,9 +217,8 @@
 
   (close [_]
     (doseq [^IChunkCursor chunk (vals chunks)]
-      (.close chunk))
-    (when out-root
-      (.close out-root))))
+      (util/try-close chunk))
+    (util/try-close out-root)))
 
 (defn ->scan-cursor [^BufferAllocator allocator
                      ^IMetadataManager metadata-manager
@@ -241,12 +230,13 @@
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range]
-  (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
-    (ScanCursor. (Schema. (for [^String col-name col-names]
-                            (or (temporal/->temporal-field col-name)
-                                (t/->primitive-dense-union-field col-name))))
-                 allocator
+  (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))
+        schema (Schema. (for [^String col-name col-names]
+                          (or (temporal/->temporal-field col-name)
+                              (t/->primitive-dense-union-field col-name))))]
+    (ScanCursor. allocator schema
+                 (VectorSchemaRoot/create schema allocator)
                  buffer-pool temporal-manager metadata-manager watermark
                  matching-chunks col-names col-preds
                  temporal-min-range temporal-max-range
-                 nil nil false)))
+                 #_chunks nil #_live-chunk-done? false)))

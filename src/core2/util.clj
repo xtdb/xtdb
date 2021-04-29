@@ -208,20 +208,6 @@
 (defn root-field-count ^long [^VectorSchemaRoot root]
   (.size (.getFields (.getSchema root))))
 
-(defn slice-root
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx]
-   (slice-root root start-idx (- (.getRowCount root) start-idx)))
-
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx ^long len]
-   (let [num-fields (root-field-count root)
-         acc (ArrayList. num-fields)]
-     (dotimes [n num-fields]
-       (let [field-vec (.getVector root n)]
-         (.add acc (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
-                             (.splitAndTransfer start-idx len))))))
-
-     (VectorSchemaRoot. acc))))
-
 ;; TODO: can maybe tweak in DenseUnionVector, but that doesn't
 ;; solve the VSR calling this.
 (defn set-value-count [^ValueVector v ^long value-count]
@@ -249,6 +235,43 @@
     (.set vector-schema-root-row-count-field root row-count)
     (dotimes [n (root-field-count root)]
       (set-value-count (.getVector root n) row-count))))
+
+(defn slice-root
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root]
+   (slice-root root 0))
+
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx]
+   (slice-root root start-idx (- (.getRowCount root) start-idx)))
+
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot root ^long start-idx ^long len]
+   (let [num-fields (root-field-count root)
+         acc (ArrayList. num-fields)]
+     (dotimes [n num-fields]
+       (let [field-vec (.getVector root n)]
+         (.add acc (.getTo (doto (.getTransferPair field-vec (.getAllocator field-vec))
+                             (.splitAndTransfer start-idx len))))))
+
+     (VectorSchemaRoot. acc))))
+
+(defn slice-root-to
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot in-root, ^VectorSchemaRoot out-root]
+   (slice-root-to in-root 0 out-root))
+
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot in-root, ^long start-idx, ^VectorSchemaRoot out-root]
+   (slice-root-to in-root start-idx (- (.getRowCount in-root) start-idx) out-root))
+
+  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot in-root, ^long start-idx, ^long len, ^VectorSchemaRoot out-root]
+   (.clear out-root)
+
+   (let [num-fields (root-field-count in-root)
+         len (min (.getRowCount in-root) len)]
+     (dotimes [n num-fields]
+       (let [in-vec (.getVector in-root n)
+             out-vec (.getVector out-root n)]
+         (doto (.makeTransferPair in-vec out-vec)
+           (.splitAndTransfer start-idx len))))
+     (doto out-root
+       (set-vector-schema-root-row-count len)))))
 
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]

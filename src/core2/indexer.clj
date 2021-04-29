@@ -125,7 +125,7 @@
    (reduce
     (fn [^Map acc ^Map$Entry kv]
       (let [k (.getKey kv)
-            v (util/slice-root ^VectorSchemaRoot (.getValue kv) 0)]
+            v (util/slice-root ^VectorSchemaRoot (.getValue kv))]
         (doto acc
           (.put k v))))
     (TreeMap.)

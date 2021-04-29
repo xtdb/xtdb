@@ -121,7 +121,7 @@
       (order-by/->order-by-cursor allocator in-cursor order-specs))
 
     (slice [_ in-cursor offset limit]
-      (slice/->slice-cursor in-cursor offset limit))
+      (slice/->slice-cursor allocator in-cursor offset limit))
 
     (union [_ left-cursor right-cursor]
       (set-op/->union-cursor left-cursor right-cursor))
