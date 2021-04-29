@@ -1,7 +1,7 @@
 (ns core2.operator.order-by
   (:require [core2.util :as util])
   (:import clojure.lang.Keyword
-           [core2 DenseUnionUtil ICursor]
+           [core2 DenseUnionUtil IChunkCursor]
            [java.util ArrayList Collections Comparator List]
            java.util.function.Consumer
            [org.apache.arrow.algorithm.sort DefaultVectorComparators VectorValueComparator]
@@ -17,7 +17,7 @@
 (defn ->order-spec [col-name direction]
   (OrderSpec. col-name direction))
 
-(defn- accumulate-roots ^org.apache.arrow.vector.VectorSchemaRoot [^ICursor in-cursor, ^BufferAllocator allocator]
+(defn- accumulate-roots ^org.apache.arrow.vector.VectorSchemaRoot [^IChunkCursor in-cursor, ^BufferAllocator allocator]
   (let [!acc-root (atom nil)]
     (.forEachRemaining in-cursor
                        (reify Consumer
@@ -75,10 +75,12 @@
     idxs))
 
 (deftype OrderByCursor [^BufferAllocator allocator
-                        ^ICursor in-cursor
+                        ^IChunkCursor in-cursor
                         ^List #_<OrderSpec> order-specs
                         ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
-  ICursor
+  IChunkCursor
+  (getSchema [_] (.getSchema in-cursor))
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root))
@@ -112,5 +114,5 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->order-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<OrderSpec> order-specs]
+(defn ->order-by-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^List #_<OrderSpec> order-specs]
   (OrderByCursor. allocator in-cursor order-specs nil))

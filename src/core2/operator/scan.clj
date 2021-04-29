@@ -9,20 +9,21 @@
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.buffer_pool.IBufferPool
-           core2.ICursor
+           core2.IChunkCursor
            core2.metadata.IMetadataManager
            core2.select.IVectorSelector
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
-           core2.util.IChunkCursor
+           core2.IChunkCursor
            [java.util HashMap LinkedList List Map Queue]
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
+           org.apache.arrow.vector.types.pojo.Schema
+           [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
-           org.roaringbitmap.longlong.Roaring64Bitmap
-           [org.roaringbitmap IntConsumer RoaringBitmap]))
+           org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -32,7 +33,7 @@
   (when (= (count col-names) (count chunks))
     (let [in-roots (HashMap.)]
       (when (every? true? (for [col-name col-names
-                                :let [^ICursor chunk (get chunks col-name)]
+                                :let [^IChunkCursor chunk (get chunks col-name)]
                                 :when chunk]
                             (.tryAdvance chunk
                                          (reify Consumer
@@ -136,7 +137,8 @@
                  filtered-block-idxs))))))
     block-idxs))
 
-(deftype ScanCursor [^BufferAllocator allocator
+(deftype ScanCursor [^Schema out-schema
+                     ^BufferAllocator allocator
                      ^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
@@ -149,17 +151,14 @@
                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
+  IChunkCursor
+  (getSchema [_] out-schema)
 
-  ICursor
   (tryAdvance [this c]
     (let [real-col-names (remove temporal/temporal-column? col-names)]
       (letfn [(create-out-root [^Map chunks]
                 (when (= (count chunks) (count real-col-names))
-                  (VectorSchemaRoot/create (align/align-schemas (for [col-name col-names]
-                                                                  (if (temporal/temporal-column? col-name)
-                                                                    (temporal/->temporal-root-schema col-name)
-                                                                    (.getSchema ^IChunkCursor (.get chunks col-name)))))
-                                           allocator)))
+                  (VectorSchemaRoot/create out-schema allocator)))
 
               (next-block [chunks ^VectorSchemaRoot out-root]
                 (loop []
@@ -173,7 +172,7 @@
                         (recur)))
 
                     (do
-                      (doseq [^ICursor chunk (vals chunks)]
+                      (doseq [^IChunkCursor chunk (vals chunks)]
                         (.close chunk))
                       (set! (.chunks this) nil)
 
@@ -227,7 +226,7 @@
             false))))
 
   (close [_]
-    (doseq [^ICursor chunk (vals chunks)]
+    (doseq [^IChunkCursor chunk (vals chunks)]
       (.close chunk))
     (when out-root
       (.close out-root))))
@@ -243,6 +242,11 @@
                      ^longs temporal-min-range
                      ^longs temporal-max-range]
   (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
-    (ScanCursor. allocator buffer-pool temporal-manager metadata-manager watermark
-                 matching-chunks col-names col-preds temporal-min-range temporal-max-range
+    (ScanCursor. (Schema. (for [^String col-name col-names]
+                            (or (temporal/->temporal-field col-name)
+                                (t/->primitive-dense-union-field col-name))))
+                 allocator
+                 buffer-pool temporal-manager metadata-manager watermark
+                 matching-chunks col-names col-preds
+                 temporal-min-range temporal-max-range
                  nil nil false)))

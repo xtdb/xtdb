@@ -170,44 +170,49 @@
 
     (with-open [factorial-cursor (set-op/->fixpoint-cursor
                                   tu/*allocator*
+                                  (tu/->cursor (Schema. [a-field b-field])
+                                               [[{:a 0 :b 1}]])
                                   (reify core2.operator.set.IFixpointCursorFactory
                                     (createCursor [_ cursor-factory]
-                                      (set-op/->union-cursor
-                                       (tu/->cursor (Schema. [a-field b-field])
-                                                    [[{:a 0 :b 1}]])
-                                       (select/->select-cursor
+                                      (select/->select-cursor
+                                       tu/*allocator*
+                                       (project/->project-cursor
                                         tu/*allocator*
-                                        (project/->project-cursor
-                                         tu/*allocator*
-                                         (.createCursor cursor-factory)
-                                         [(reify ProjectionSpec
-                                            (project [_ in-root allocator]
-                                              (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                    ^BigIntVector out-vec (.createVector a-field tu/*allocator*)
-                                                    row-count (.getRowCount in-root)]
-                                                (.setValueCount out-vec row-count)
-                                                (dotimes [idx row-count]
-                                                  (.set out-vec idx (+ (.get a-vec idx) 1)))
-                                                out-vec)))
-                                          (reify ProjectionSpec
-                                            (project [_ in-root allocator]
-                                              (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                    ^BigIntVector b-vec (.getVector in-root b-field)
-                                                    ^BigIntVector out-vec (.createVector b-field tu/*allocator*)
-                                                    row-count (.getRowCount in-root)]
-                                                (.setValueCount out-vec row-count)
-                                                (dotimes [idx row-count]
-                                                  (.set out-vec idx (* (+ (.get a-vec idx) 1) (.get b-vec idx))))
-                                                out-vec)))])
-                                        (reify IVectorSchemaRootSelector
-                                          (select [_ in-root]
-                                            (let [idx-bitmap (RoaringBitmap.)]
+                                        (.createCursor cursor-factory)
+                                        [(reify ProjectionSpec
+                                           (getField [_ _in-schema] a-field)
 
-                                              (dotimes [idx (.getRowCount in-root)]
-                                                (when (<= (.get ^BigIntVector (.getVector in-root a-field) idx) 8)
-                                                  (.add idx-bitmap idx)))
+                                           (project [_ in-root allocator]
+                                             (let [^BigIntVector a-vec (.getVector in-root a-field)
+                                                   ^BigIntVector out-vec (.createVector a-field tu/*allocator*)
+                                                   row-count (.getRowCount in-root)]
+                                               (.setValueCount out-vec row-count)
+                                               (dotimes [idx row-count]
+                                                 (.set out-vec idx (+ (.get a-vec idx) 1)))
+                                               out-vec)))
 
-                                              idx-bitmap)))))))
+                                         (reify ProjectionSpec
+                                           (getField [_ _in-schema] b-field)
+
+                                           (project [_ in-root allocator]
+                                             (let [^BigIntVector a-vec (.getVector in-root a-field)
+                                                   ^BigIntVector b-vec (.getVector in-root b-field)
+                                                   ^BigIntVector out-vec (.createVector b-field tu/*allocator*)
+                                                   row-count (.getRowCount in-root)]
+                                               (.setValueCount out-vec row-count)
+                                               (dotimes [idx row-count]
+                                                 (.set out-vec idx (* (+ (.get a-vec idx) 1) (.get b-vec idx))))
+                                               out-vec)))])
+
+                                       (reify IVectorSchemaRootSelector
+                                         (select [_ in-root]
+                                           (let [idx-bitmap (RoaringBitmap.)]
+
+                                             (dotimes [idx (.getRowCount in-root)]
+                                               (when (<= (.get ^BigIntVector (.getVector in-root a-field) idx) 8)
+                                                 (.add idx-bitmap idx)))
+
+                                             idx-bitmap))))))
                                   true)]
 
       (t/is (= [[{:a 0, :b 1}

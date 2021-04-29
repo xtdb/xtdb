@@ -14,7 +14,7 @@
            core2.object_store.ObjectStore
            [core2.temporal ITemporalManager TemporalCoordinates]
            [core2.tx TransactionInstant Watermark]
-           core2.util.IChunkCursor
+           core2.IChunkCursor
            java.io.Closeable
            [java.util Collections Date Map Map$Entry TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]

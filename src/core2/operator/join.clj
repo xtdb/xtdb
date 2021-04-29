@@ -2,7 +2,7 @@
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
             [core2.util :as util])
-  (:import [core2 DenseUnionUtil ICursor]
+  (:import [core2 DenseUnionUtil IChunkCursor ICursor]
            [java.util ArrayList HashMap List Map NavigableMap TreeMap]
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
@@ -23,7 +23,13 @@
                               :when (not (skip-left-column? (.getName f)))]
                           f)
                         (.getFields right-schema))]
-     (assert (apply distinct? fields))
+     (try
+       (assert (apply distinct? fields))
+       (catch Throwable t
+         (clojure.pprint/pprint {:left left-schema
+                                 :right right-schema
+                                 :skip-left-column? skip-left-column?})
+         (throw t)))
      (Schema. fields))))
 
 (defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
@@ -46,11 +52,14 @@
     (util/set-vector-schema-root-row-count out-root (+ out-idx row-count))))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
-                          ^ICursor left-cursor
-                          ^ICursor right-cursor
+                          ^Schema out-schema
+                          ^IChunkCursor left-cursor
+                          ^IChunkCursor right-cursor
                           ^List left-roots
                           ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
-  ICursor
+  IChunkCursor
+  (getSchema [_] out-schema)
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -68,9 +77,7 @@
                                (accept [_ in-root]
                                  (let [^VectorSchemaRoot right-root in-root]
                                    (when (pos? (.getRowCount right-root))
-                                     (let [left-schema (.getSchema ^VectorSchemaRoot (first left-roots))
-                                           join-schema (->join-schema left-schema (.getSchema right-root))]
-                                       (set! (.out-root this) (VectorSchemaRoot/create join-schema allocator)))
+                                     (set! (.out-root this) (VectorSchemaRoot/create out-schema allocator))
 
                                      (doseq [^VectorSchemaRoot left-root left-roots]
                                        (dotimes [left-idx (.getRowCount left-root)]
@@ -90,8 +97,10 @@
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
-  (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.) nil))
+(defn ->cross-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor left-cursor, ^IChunkCursor right-cursor]
+  (CrossJoinCursor. allocator (->join-schema (.getSchema left-cursor) (.getSchema right-cursor))
+                    left-cursor right-cursor
+                    (ArrayList.) nil))
 
 (defn- build-phase [^BufferAllocator allocator
                     ^VectorSchemaRoot build-root
@@ -120,24 +129,19 @@
           (.set build-idxs-vec idx total-build-idx))))))
 
 (defn- probe-phase ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator
+                                                              ^Schema out-schema
                                                               ^VectorSchemaRoot probe-root
                                                               ^NavigableMap build-idx->root
                                                               ^Map join-key->build-idxs-vec
                                                               ^String build-column-name
                                                               ^String probe-column-name
                                                               semi-join?
-                                                              anti-join?
-                                                              skip-build-column?]
+                                                              anti-join?]
   (when (pos? (.getRowCount probe-root))
-    (let [join-schema (if semi-join?
-                        (.getSchema probe-root)
-                        (->join-schema (.getSchema ^VectorSchemaRoot (.getValue (.firstEntry build-idx->root)))
-                                       (.getSchema probe-root)
-                                       skip-build-column?))
-          probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
+    (let [probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
           build-pointer (ArrowBufPointer.)
           probe-pointer (ArrowBufPointer.)
-          out-root (VectorSchemaRoot/create join-schema allocator)]
+          out-root (VectorSchemaRoot/create out-schema allocator)]
       (try
         (dotimes [probe-idx (.getValueCount probe-vec)]
           (if-let [^BigIntVector build-idxs-vec (.get join-key->build-idxs-vec (.hashCode probe-vec probe-idx))]
@@ -185,6 +189,7 @@
       out-root)))
 
 (deftype JoinCursor [^BufferAllocator allocator
+                     ^Schema out-schema
                      ^ICursor build-cursor
                      ^String build-column-name
                      ^ICursor probe-cursor
@@ -194,10 +199,11 @@
                      ^MutableRoaringBitmap pushdown-bloom
                      ^:unsynchronized-mutable ^VectorSchemaRoot out-root
                      semi-join?
-                     anti-join?
-                     skip-build-column?]
+                     anti-join?]
 
-  ICursor
+  IChunkCursor
+  (getSchema [_] out-schema)
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -216,8 +222,8 @@
                   (.tryAdvance probe-cursor
                                (reify Consumer
                                  (accept [_ in-root]
-                                   (when-let [out-root (probe-phase allocator in-root build-idx->root join-key->build-idx-pairs
-                                                                    build-column-name probe-column-name semi-join? anti-join? skip-build-column?)]
+                                   (when-let [out-root (probe-phase allocator out-schema in-root build-idx->root join-key->build-idx-pairs
+                                                                    build-column-name probe-column-name semi-join? anti-join?)]
                                      (when (pos? (.getRowCount out-root))
                                        (set! (.out-root this) out-root)))))))))
 
@@ -239,29 +245,36 @@
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                         ^ICursor left-cursor,
-                                         ^String left-column-name,
-                                         ^ICursor right-cursor,
-                                         ^String right-column-name]
-  (let [skip-build-column? (if (= left-column-name right-column-name)
-                             #{left-column-name}
-                             #{})]
-    (JoinCursor. allocator left-cursor left-column-name right-cursor right-column-name (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
-                 nil false false skip-build-column?)))
-
-(defn ->semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                              ^ICursor left-cursor,
+(defn ->equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
+                                              ^IChunkCursor left-cursor,
                                               ^String left-column-name,
-                                              ^ICursor right-cursor,
+                                              ^IChunkCursor right-cursor,
                                               ^String right-column-name]
-  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
-               nil true false #{}))
+  (JoinCursor. allocator
+               (->join-schema (.getSchema left-cursor) (.getSchema right-cursor)
+                              (if (= left-column-name right-column-name)
+                                #{left-column-name}
+                                #{}))
+               left-cursor left-column-name right-cursor right-column-name
+               (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+               nil false false))
 
-(defn ->anti-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                              ^ICursor left-cursor,
-                                              ^String left-column-name,
-                                              ^ICursor right-cursor,
-                                              ^String right-column-name]
-  (JoinCursor. allocator right-cursor right-column-name left-cursor left-column-name (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
-               nil true true #{}))
+(defn ->semi-equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
+                                                   ^IChunkCursor left-cursor,
+                                                   ^String left-column-name,
+                                                   ^IChunkCursor right-cursor,
+                                                   ^String right-column-name]
+  (JoinCursor. allocator (.getSchema left-cursor)
+               right-cursor right-column-name left-cursor left-column-name
+               (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+               nil true false))
+
+(defn ->anti-equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
+                                                   ^IChunkCursor left-cursor,
+                                                   ^String left-column-name,
+                                                   ^IChunkCursor right-cursor,
+                                                   ^String right-column-name]
+  (JoinCursor. allocator (.getSchema left-cursor)
+               right-cursor right-column-name left-cursor left-column-name
+               (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+               nil true true))

@@ -1,7 +1,7 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import core2.DenseUnionUtil
+  (:import [core2 DenseUnionUtil IChunkCursor]
            java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
@@ -434,13 +434,6 @@
                       (.retain))]
     (MessageSerializer/deserializeRecordBatch batch body-buffer)))
 
-(gen-interface
- :name core2.util.IChunkCursor
- :extends [core2.ICursor]
- :methods [[getSchema [] org.apache.arrow.vector.types.pojo.Schema]])
-
-(import core2.util.IChunkCursor)
-
 (deftype ChunkCursor [^ArrowBuf buf,
                       ^Queue blocks
                       ^VectorSchemaRoot root
@@ -468,7 +461,7 @@
       (.close current-batch))
     (.close root)))
 
-(defn ^core2.util.IChunkCursor ->chunks
+(defn ^core2.IChunkCursor ->chunks
   ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
    (->chunks ipc-file-format-buffer allocator {}))
   ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator {:keys [^RoaringBitmap block-idxs]}]

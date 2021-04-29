@@ -1,13 +1,13 @@
 (ns core2.operator.group-by
   (:require [core2.types :as t]
             [core2.util :as util])
-  (:import [core2 DenseUnionUtil ICursor]
+  (:import [core2 DenseUnionUtil IChunkCursor]
            [java.util ArrayList Comparator DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector BaseIntVector FloatingPointVector ValueVector VectorSchemaRoot]
+           [org.apache.arrow.vector BaseIntVector FloatingPointVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
            org.roaringbitmap.RoaringBitmap))
@@ -15,15 +15,15 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface AggregateSpec
-  (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
+  (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.types.pojo.Schema inSchema])
   (^org.apache.arrow.vector.ValueVector getFromVector [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
   (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object container]))
 
 (deftype GroupSpec [^String name]
   AggregateSpec
-  (getToField [this in-root]
-    (.getField (.getFromVector this in-root)))
+  (getToField [_this in-schema]
+    (.findField in-schema name))
 
   (getFromVector [_ in-root]
     (.getVector in-root name))
@@ -45,11 +45,8 @@
 
 (deftype FunctionSpec [^String from-name ^Field field ^Collector collector]
   AggregateSpec
-  (getToField [_ in-root]
-    field)
-
-  (getFromVector [_ in-root]
-    (.getVector in-root from-name))
+  (getToField [_ _in-schema] field)
+  (getFromVector [_ in-root] (.getVector in-root from-name))
 
   (aggregate [this in-root container idx-bitmap]
     (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
@@ -76,8 +73,7 @@
                              accumulator ;; <ObjLongConsumer|ObjDoubleConsumer>
                              ^Function finisher]
   AggregateSpec
-  (getToField [_ in-root]
-    field)
+  (getToField [_ _in-schema] field)
 
   (getFromVector [_ in-root]
     (.getVector in-root from-name))
@@ -273,21 +269,24 @@
     (dotimes [n (.size aggregate-specs)]
       (let [out-vec (.getVector out-root n)]
         (dotimes [out-idx row-count]
-          (let [^List accs (.get all-accs out-idx)]
-            (let [v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
-              (if (instance? DenseUnionVector out-vec)
-                (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                      value-offset (DenseUnionUtil/writeTypeId out-vec out-idx type-id)]
-                  (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
-                (t/set-safe! out-vec out-idx v)))))))
+          (let [^List accs (.get all-accs out-idx)
+                v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
+            (if (instance? DenseUnionVector out-vec)
+              (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                    value-offset (DenseUnionUtil/writeTypeId out-vec out-idx type-id)]
+                (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
+              (t/set-safe! out-vec out-idx v))))))
     (util/set-vector-schema-root-row-count out-root row-count)
     out-root))
 
 (deftype GroupByCursor [^BufferAllocator allocator
-                        ^ICursor in-cursor
+                        ^Schema out-schema
+                        ^IChunkCursor in-cursor
                         ^List aggregate-specs
                         ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
-  ICursor
+  IChunkCursor
+  (getSchema [_] out-schema)
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root)
@@ -299,9 +298,7 @@
                            (reify Consumer
                              (accept [_ in-root]
                                (when-not (.out-root this)
-                                 (let [group-by-schema (Schema. (for [^AggregateSpec aggregate-spec aggregate-specs]
-                                                                  (.getToField aggregate-spec ^VectorSchemaRoot in-root)))]
-                                   (set! (.out-root this) (VectorSchemaRoot/create group-by-schema allocator))))
+                                 (set! (.out-root this) (VectorSchemaRoot/create out-schema allocator)))
                                (aggregate-groups allocator in-root aggregate-specs group->accs))))
 
         (if-not (.isEmpty group->accs)
@@ -319,5 +316,9 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->group-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List aggregate-specs]
-  (GroupByCursor. allocator in-cursor aggregate-specs nil))
+(defn ->group-by-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^List aggregate-specs]
+  (GroupByCursor. allocator
+                  (let [in-schema (.getSchema in-cursor)]
+                    (Schema. (for [^AggregateSpec spec aggregate-specs]
+                               (.getToField spec in-schema))))
+                  in-cursor aggregate-specs nil))

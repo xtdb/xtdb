@@ -1,7 +1,7 @@
 (ns core2.blocks
   (:require [core2.util :as util]
             [core2.types :as t])
-  (:import core2.util.IChunkCursor
+  (:import core2.IChunkCursor
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
 
 (deftype SliceCursor [^VectorSchemaRoot root
@@ -42,5 +42,5 @@
     (when current-slice
       (.close current-slice))))
 
-(defn ->slices ^core2.util.IChunkCursor [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
+(defn ->slices ^core2.IChunkCursor [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
   (SliceCursor. root max-rows-per-block start-row-id 0 nil))

@@ -3,23 +3,26 @@
             [clojure.string :as str]
             [core2.operator.scan :as scan]
             [core2.util :as util])
-  (:import core2.ICursor
-           java.util.Map
+  (:import core2.IChunkCursor
            java.util.function.Consumer
+           java.util.Map
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.VectorSchemaRoot
-           org.apache.arrow.vector.types.pojo.Field))
+           [org.apache.arrow.vector.types.pojo Field Schema]
+           org.apache.arrow.vector.VectorSchemaRoot))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (def ^:const ^String relation-prefix-delimiter "_")
 
 (deftype RenameCursor [^BufferAllocator allocator
-                       ^ICursor in-cursor
+                       ^Schema out-schema
+                       ^IChunkCursor in-cursor
                        ^Map #_#_<String, String> rename-map
                        ^String prefix
                        ^:unsynchronized-mutable ^VectorSchemaRoot out-root]
-  ICursor
+  IChunkCursor
+  (getSchema [_] out-schema)
+
   (tryAdvance [this c]
     (when out-root
       (.close out-root))
@@ -55,5 +58,11 @@
     (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->rename-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^Map #_#_<String, String> rename-map ^String prefix]
-  (RenameCursor. allocator in-cursor rename-map prefix nil))
+(defn ->rename-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^Map #_#_<String, String> rename-map ^String prefix]
+  (RenameCursor. allocator
+                 (Schema. (for [^Field field (.getFields (.getSchema in-cursor))]
+                            (let [old-name (.getName field)
+                                  new-name (cond->> (get rename-map old-name old-name)
+                                             prefix (str prefix relation-prefix-delimiter))]
+                              (Field. new-name (.getFieldType field) (.getChildren field)))))
+                 in-cursor rename-map prefix nil))

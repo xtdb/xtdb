@@ -89,14 +89,13 @@
         (with-open [watermark (c2/open-watermark node)
                     fixpoint-cursor (c2/open-q node watermark
                                                '[:fixpoint Fact
-                                                 [:union
-                                                  [:table [{:a 0 :b 1}]]
-                                                  [:select
-                                                   (<= a 8)
-                                                   [:project
-                                                    [{a (+ a 1)}
-                                                     {b (* (+ a 1) b)}]
-                                                    Fact]]]])]
+                                                 [:table [{:a 0 :b 1}]]
+                                                 [:select
+                                                  (<= a 8)
+                                                  [:project
+                                                   [{a (+ a 1)}
+                                                    {b (* (+ a 1) b)}]
+                                                   Fact]]])]
           (t/is (= [[{:a 0, :b 1}
                      {:a 1, :b 1}
                      {:a 2, :b 2}
@@ -112,15 +111,14 @@
         (with-open [watermark (c2/open-watermark node)
                     fixpoint-cursor (c2/open-q node watermark
                                                '[:fixpoint Path
-                                                 [:union
-                                                  [:table [{:x "a" :y "b"}
-                                                           {:x "b" :y "c"}
-                                                           {:x "c" :y "d"}
-                                                           {:x "d" :y "a"}]]
-                                                  [:project [x y]
-                                                   [:join {z z}
-                                                    [:rename {y z} Path]
-                                                    [:rename {x z} Path]]]]])]
+                                                 [:table [{:x "a" :y "b"}
+                                                          {:x "b" :y "c"}
+                                                          {:x "c" :y "d"}
+                                                          {:x "d" :y "a"}]]
+                                                 [:project [x y]
+                                                  [:join {z z}
+                                                   [:rename {y z} Path]
+                                                   [:rename {x z} Path]]]])]
 
           (t/is (= [[{:x "a", :y "b"}
                      {:x "b", :y "c"}

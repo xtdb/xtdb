@@ -1,6 +1,6 @@
 (ns core2.operator.table
   (:require [core2.types :as ty])
-  (:import [core2 DenseUnionUtil ICursor]
+  (:import [core2 DenseUnionUtil IChunkCursor]
            [java.util ArrayList List]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -10,17 +10,17 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (deftype TableCursor [^BufferAllocator allocator
+                      ^Schema schema
                       ^List rows
                       ^:unsynchronized-mutable done?]
-  ICursor
+  IChunkCursor
+  (getSchema [_] schema)
+
   (tryAdvance [this c]
     (if (or done? (.isEmpty rows))
       false
       (do (set! (.done? this) true)
-          (with-open [out-root (VectorSchemaRoot/create (Schema.
-                                                         (for [k (keys (first rows))]
-                                                           (ty/->primitive-dense-union-field (name k))))
-                                                        allocator)]
+          (with-open [out-root (VectorSchemaRoot/create schema allocator)]
             (let [row-count (.size rows)]
               (dotimes [n row-count]
                 (let [row (.get rows n)]
@@ -37,7 +37,10 @@
   (close [_]
     (.clear rows)))
 
-(defn ->table-cursor ^core2.ICursor [^BufferAllocator allocator,
-                                     ^List rows]
+(defn ->table-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
+                                          ^List rows]
   (assert (or (empty? rows) (= 1 (count (distinct (map keys rows))))))
-  (TableCursor. allocator (ArrayList. rows) false))
+  (TableCursor. allocator
+                (Schema. (for [k (keys (first rows))]
+                           (ty/->primitive-dense-union-field (name k))))
+                (ArrayList. rows) false))
