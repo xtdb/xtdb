@@ -21,7 +21,6 @@
 
 ;; TODO:
 
-;; - Replace depth-first for column tree with stream/filter over indexes.
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
@@ -690,51 +689,6 @@
     (when-let [split-stack (maybe-split-stack stack)]
       (ColumnRangeSearchSpliterator. axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k split-stack))))
 
-
-(deftype ColumnDepthFirstSpliterator [^TinyIntVector axis-delete-flag-vec
-                                      ^:unsynchronized-mutable ^int idx
-                                      ^int end]
-  Spliterator$OfInt
-  (^void forEachRemaining [this ^IntConsumer c]
-    (loop [idx idx]
-      (if (= idx end)
-        (set! (.idx this) end)
-        (let [axis-delete-flag (.get axis-delete-flag-vec idx)
-              deleted? (neg? axis-delete-flag)]
-
-          (when-not deleted?
-            (.accept c idx))
-
-          (recur (inc idx))))))
-
-  (^boolean tryAdvance [this ^IntConsumer c]
-    (loop []
-      (if (= idx end)
-        false
-        (let [current-idx idx
-              axis-delete-flag (.get axis-delete-flag-vec current-idx)
-              deleted? (neg? axis-delete-flag)]
-
-          (set! (.idx this) (inc current-idx))
-
-          (if deleted?
-            (recur)
-            (do (.accept c current-idx)
-                true))))))
-
-  (characteristics [_]
-    (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
-
-  (estimateSize [_]
-    Long/MAX_VALUE)
-
-  (trySplit [this]
-    (let [split-point (quot (+ idx end) 2)]
-      (when (and (> split-point idx)
-                 (< split-point end))
-        (set! (.idx this) split-point)
-        (ColumnDepthFirstSpliterator. axis-delete-flag-vec idx split-point)))))
-
 (defn merge-kd-trees ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree-from "axis-delete-flag")
         n (.getRowCount kd-tree-from)
@@ -777,9 +731,10 @@
 
   (kd-tree-depth-first [kd-tree]
     (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis-delete-flag")]
-      (StreamSupport/intStream
-       (ColumnDepthFirstSpliterator. axis-delete-flag-vec 0 (.getValueCount axis-delete-flag-vec))
-       false)))
+      (.filter (IntStream/range 0 (.getValueCount axis-delete-flag-vec))
+               (reify IntPredicate
+                 (test [_ x]
+                   (pos? (.get axis-delete-flag-vec x)))))))
 
   (kd-tree-depth [kd-tree]
     (let [^IntVector skip-pointer-vec (.getVector kd-tree "skip-pointer")
