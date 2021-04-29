@@ -328,8 +328,10 @@
                                       nil
                                       points)
                 ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)
-                ^VectorSchemaRoot disk-kd-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree.arrow") points 2)
-                                                    (kd/->mmap-kd-tree allocator))]
+                ^VectorSchemaRoot disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points 2)
+                                                                (kd/->mmap-kd-tree allocator))
+                ^VectorSchemaRoot disk-kd-tree-from-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_2.arrow") kd-tree 2)
+                                                              (kd/->mmap-kd-tree allocator))]
       (t/is (= [[7 2] [5 4] [2 3] [8 1]]
 
                (-> kd-tree
@@ -344,28 +346,35 @@
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (->> (kd/kd-tree->seq column-kd-tree)))
 
-               (-> disk-kd-tree
+               (-> disk-kd-tree-from-points
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq disk-kd-tree))))
+                   (->> (kd/kd-tree->seq disk-kd-tree-from-points)))
+
+               (-> disk-kd-tree-from-tree
+                   (kd/kd-tree-range-search [0 0] [8 4])
+                   (->> (kd/kd-tree->seq disk-kd-tree-from-tree))))
             "wikipedia-test")
 
       (t/testing "seq"
         (t/is (= (kd/kd-tree->seq kd-tree)
                  (kd/kd-tree->seq column-kd-tree)
-                 (kd/kd-tree->seq disk-kd-tree))))
+                 (kd/kd-tree->seq disk-kd-tree-from-points)
+                 (kd/kd-tree->seq disk-kd-tree-from-tree))))
 
       (t/testing "depth"
         (t/is (= 3
                  (kd/kd-tree-depth kd-tree)
                  (kd/kd-tree-depth column-kd-tree)
-                 (kd/kd-tree-depth disk-kd-tree))))
+                 (kd/kd-tree-depth disk-kd-tree-from-points)
+                 (kd/kd-tree-depth disk-kd-tree-from-tree))))
 
       (t/testing "size"
         (t/is (= (count points)
                  (kd/kd-tree-size kd-tree)
                  (kd/kd-tree-size insert-kd-tree)
                  (kd/kd-tree-size column-kd-tree)
-                 (kd/kd-tree-size disk-kd-tree))))
+                 (kd/kd-tree-size disk-kd-tree-from-points)
+                 (kd/kd-tree-size disk-kd-tree-from-tree))))
 
       (t/testing "empty tree"
         (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
@@ -383,7 +392,8 @@
 
       (t/testing "arrow"
         (t/is (= (.contentToTSVString column-kd-tree)
-                 (.contentToTSVString disk-kd-tree))))
+                 (.contentToTSVString disk-kd-tree-from-points)
+                 (.contentToTSVString disk-kd-tree-from-tree))))
 
       (t/testing "merge"
         (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]

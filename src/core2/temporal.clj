@@ -229,7 +229,7 @@
             path (util/->temp-file (->temporal-obj-key chunk-idx) "")]
         (try
           (with-open [^Closeable old-kd-tree kd-tree]
-            (let [temporal-buf (-> (kd/->disk-kd-tree allocator path (kd/kd-tree->seq old-kd-tree) k)
+            (let [temporal-buf (-> (kd/->disk-kd-tree allocator path old-kd-tree k)
                                    (util/->mmap-path))
                   new-temporal-obj-key (->temporal-obj-key chunk-idx)]
               @(.putObject object-store new-temporal-obj-key temporal-buf)
