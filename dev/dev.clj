@@ -1,13 +1,13 @@
 (ns dev
   (:require [clojure.java.io :as io]
             [core2.core :as c2]
+            [core2.test-util :as tu]
             [core2.tpch :as tpch]
-            [core2.tpch-test :as tpch-test]
             [core2.util :as util]
             [integrant.core :as i]
-            [integrant.repl :as ir]
-            [core2.test-util :as tu])
+            [integrant.repl :as ir])
   (:import [ch.qos.logback.classic Level Logger]
+           java.time.Duration
            org.slf4j.LoggerFactory))
 
 (defn set-log-level! [ns level]
@@ -58,8 +58,10 @@
 (comment
   (def !submit-tpch
     (future
-      (time
-       (tpch/submit-docs! node 0.1))))
+      (let [last-tx (time
+                     (tpch/submit-docs! node 0.1))]
+        (time (c2/await-tx node last-tx (Duration/ofHours 1)))
+        (time (tu/finish-chunk node)))))
 
   (do
     (newline)
@@ -70,4 +72,4 @@
       (with-open [wm (c2/open-watermark node)
                   res (c2/open-q node wm @!q)]
         (time
-         (count (into [] (mapcat seq (tu/<-cursor res)))))))))
+         (prn (count (into [] (mapcat seq (tu/<-cursor res))))))))))
