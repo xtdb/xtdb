@@ -155,13 +155,14 @@
                          (.add matching-probe-idxs probe-idx)))))
 
       (let [match-count (count matching-probe-idxs)]
-        (dotimes [match-idx match-count]
-          (when-not semi-join?
+        (when-not semi-join?
+          (dotimes [match-idx match-count]
             (let [^BuildPointer build-pointer (nth matching-build-pointers match-idx)]
               (util/copy-tuple (.root build-pointer) (.idx build-pointer)
-                               out-root match-idx)))
-          (util/copy-tuple probe-root (nth matching-probe-idxs match-idx)
-                           out-root match-idx))
+                               out-root match-idx))))
+
+        (util/copy-tuples probe-root matching-probe-idxs out-root)
+
         (util/set-vector-schema-root-row-count out-root match-count))
 
       out-root)))

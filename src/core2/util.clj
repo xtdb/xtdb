@@ -518,3 +518,15 @@
                (instance? DenseUnionVector out-vec))
         (DenseUnionUtil/copyIdxSafe in-vec idx out-vec out-idx)
         (.copyFromSafe out-vec idx out-idx in-vec)))))
+
+(defn copy-tuples [^VectorSchemaRoot in-root ^List idxs ^VectorSchemaRoot out-root]
+  (dotimes [n (root-field-count in-root)]
+    (let [in-vec (.getVector in-root n)
+          out-vec (.getVector out-root (.getName in-vec))]
+      (if (and (instance? DenseUnionVector in-vec)
+               (instance? DenseUnionVector out-vec))
+        (dotimes [match-idx (count idxs)]
+          (DenseUnionUtil/copyIdxSafe in-vec (nth idxs match-idx) out-vec match-idx))
+
+        (dotimes [match-idx (count idxs)]
+          (.copyFromSafe out-vec (nth idxs match-idx) match-idx in-vec))))))
