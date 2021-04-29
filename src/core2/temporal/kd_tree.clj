@@ -19,6 +19,45 @@
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowBuffer ArrowFieldNode ArrowFooter ArrowRecordBatch MessageSerializer]
            org.roaringbitmap.RoaringBitmap))
 
+;; NOTE:
+
+;; Current design is limited to Integer/MAX_SIZE entries.
+
+;; As each insertion results in one insert, one delete of the
+;; potentially previous version, and an insert to cap the times of
+;; that previous version, we have 3 actual edits per insert. The
+;; deletes are dropped during the flushing to disk, so we can say 2
+;; edits. Corrections result in several more edits, depending on how
+;; many existing rectangles they overlap.
+
+;; This means this design support upto (/ Integer/MAX_SIZE 2) updates
+;; (without corrections), which is the same number as a gigabyte, so
+;; roughly a billion.
+
+;; Each entry in the tree currently takes 61 bytes (1 byte
+;; axis-delete-flag, 8 bytes split-value, 4 bytes skip-pointer, (* 6
+;; 8) bytes points), but we can round this up to 64 for simplicity, as
+;; each of the columns will also have a validity bit. This means that
+;; the maximum tree would be roughly (ignoring overhead) 128G of raw
+;; kd tree column data, and that each entity update takes 128 bytes.
+
+;; One could engineer away the axis-delete-flag column (to support
+;; deletes) and the split-value column (for performance, duplicates
+;; axis value from the point), which makes each entry 52 bytes, so it
+;; won't save that much.
+
+;; The first temporal tree from TPC-H SF 0.1 is 5M and compresses to
+;; about 1M with gzip, so say a factor of 5. But this doesn't help in
+;; practice as the compressed tree cannot be queried.
+
+;; The limitation of Integer/MAX_SIZE can be lifted as this is a per
+;; vector count limit in Arrow Java (but not Arrow), and one can split
+;; the tree into several record batches with some (solvable)
+;; complications to the in-place sorting and point access. It would
+;; remove the need to create an empty tree in place though, as one
+;; could first write down blocks of the raw data split in batches, and
+;; then sort that on disk.
+
 ;; TODO:
 
 ;; - Static/Dynamic tree node.
