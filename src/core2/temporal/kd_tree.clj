@@ -58,6 +58,14 @@
 ;; could first write down blocks of the raw data split in batches, and
 ;; then sort that on disk.
 
+;; Currently we rebuild the full tree per chunk in a stop-the-world
+;; operation. This will keep slowing down ingest, as eventually this
+;; tree will become quite large - upto 128G as mentioned above. There
+;; are various ways of mitigating that, like introducing some form of
+;; double buffering to the ingest, where there are 3 states -
+;; live-live-chunk, live-background-indexing-chunk-minus-one,
+;; done-chunks
+
 ;; TODO:
 
 ;; - Static/Dynamic tree node.
