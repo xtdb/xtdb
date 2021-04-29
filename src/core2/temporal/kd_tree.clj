@@ -21,6 +21,7 @@
 
 ;; TODO:
 
+;; - Replace depth-first for column tree with stream/filter over indexes.
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
@@ -75,7 +76,8 @@
   (kd-tree-depth [_])
   (kd-tree-retain [_ allocator])
   (kd-tree-point-access [_])
-  (kd-tree-size [_]))
+  (kd-tree-size [_])
+  (kd-tree-value-count [_]))
 
 (deftype Node [^FixedSizeListVector point-vec ^int point-idx ^byte axis left right ^boolean deleted?]
   Closeable
@@ -144,7 +146,8 @@
   (kd-tree-retain [_ _])
   (kd-tree-point-access [_]
     (NilPointAccess.))
-  (kd-tree-size [_] 0))
+  (kd-tree-size [_] 0)
+  (kd-tree-value-count [_] 0))
 
 (defn- write-coordinates [^BigIntVector coordinates-vec ^long list-idx point]
   (if (instance? longs-class point)
@@ -510,7 +513,10 @@
     (KdTreeVectorPointAccess. (.point-vec kd-tree)))
 
   (kd-tree-size [kd-tree]
-    (.count ^IntStream (kd-tree-depth-first kd-tree))))
+    (.count ^IntStream (kd-tree-depth-first kd-tree)))
+
+  (kd-tree-value-count [kd-tree]
+    (.getValueCount ^FixedSizeListVector (.point-vec kd-tree))))
 
 (defn kd-tree->seq
   ([kd-tree]
@@ -803,7 +809,10 @@
     (KdTreeVectorPointAccess. (.getVector kd-tree point-vec-idx)))
 
   (kd-tree-size [kd-tree]
-    (.count ^IntStream (kd-tree-depth-first kd-tree))))
+    (.count ^IntStream (kd-tree-depth-first kd-tree)))
+
+  (kd-tree-value-count [kd-tree]
+    (.getValueCount (.getVector kd-tree point-vec-idx))))
 
 (def ^:private ^java.lang.reflect.Field arrow-record-buffers-layout-field
   (doto (.getDeclaredField ArrowRecordBatch "buffersLayout")
@@ -961,24 +970,24 @@
                               (deliver res (util/slice-root root 0))))))
     @res))
 
-(deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^int static-size]
+(deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^int static-value-count]
   IKdTreePointAccess
   (getPoint [_ idx]
-    (if (< idx static-size)
+    (if (< idx static-value-count)
       (.getPoint static-access idx)
-      (.getPoint dynamic-access (- idx static-size))))
+      (.getPoint dynamic-access (- idx static-value-count))))
 
   (getArrayPoint [_ idx]
-    (if (< idx static-size)
+    (if (< idx static-value-count)
       (.getArrayPoint static-access idx)
-      (.getArrayPoint dynamic-access (- idx static-size))))
+      (.getArrayPoint dynamic-access (- idx static-value-count))))
 
   (getCoordinate [_ idx axis]
-    (if (< idx static-size)
+    (if (< idx static-value-count)
       (.getCoordinate static-access idx axis)
-      (.getCoordinate dynamic-access (- idx static-size) axis))))
+      (.getCoordinate dynamic-access (- idx static-value-count) axis))))
 
-(deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size]
+(deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size ^int static-value-count]
   KdTree
   (kd-tree-insert [this allocator point]
     (set! (.dynamic-kd-tree this) (kd-tree-insert dynamic-kd-tree allocator point))
@@ -1000,7 +1009,7 @@
                       (.map ^IntStream (kd-tree-range-search dynamic-kd-tree min-range max-range)
                             (reify IntUnaryOperator
                               (applyAsInt [_ x]
-                                (+ static-size x))))))
+                                (+ static-value-count x))))))
 
   (kd-tree-depth-first [_]
     (IntStream/concat (.filter ^IntStream (kd-tree-depth-first static-kd-tree)
@@ -1010,7 +1019,7 @@
                       (.map ^IntStream (kd-tree-depth-first dynamic-kd-tree)
                             (reify IntUnaryOperator
                               (applyAsInt [_ x]
-                                (+ static-size x))))))
+                                (+ static-value-count x))))))
 
   (kd-tree-depth [_]
     (max (long (kd-tree-depth static-kd-tree))
@@ -1020,14 +1029,19 @@
     (MergedKdTree. (kd-tree-retain (.static-kd-tree kd-tree) allocator)
                    (kd-tree-retain (.dynamic-kd-tree kd-tree) allocator)
                    (.clone ^RoaringBitmap (.static-delete-bitmap kd-tree))
-                   (.static-size kd-tree)))
+                   (.static-size kd-tree)
+                   (.static-value-count kd-tree)))
 
   (kd-tree-point-access [kd-tree]
-    (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree) static-size))
+    (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree) static-value-count))
 
   (kd-tree-size [kd-tree]
     (+ (- static-size (.getCardinality static-delete-bitmap))
        (.count ^IntStream (kd-tree-depth-first dynamic-kd-tree))))
+
+  (kd-tree-value-count [kd-tree]
+    (+ (long (kd-tree-value-count static-kd-tree))
+       (long (kd-tree-value-count dynamic-kd-tree))))
 
   Closeable
   (close [_]
@@ -1039,4 +1053,4 @@
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree]
    (->merged-kd-tree static-kd-tree nil))
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
-   (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.) (kd-tree-size static-kd-tree))))
+   (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.) (kd-tree-size static-kd-tree) (kd-tree-value-count static-kd-tree))))

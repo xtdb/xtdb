@@ -400,6 +400,7 @@
           (let [node-to-delete [2 1]
                 ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
             (t/is (= 3 (kd/kd-tree-size new-tree-with-tombstone)))
+            (t/is (= 4 (kd/kd-tree-value-count new-tree-with-tombstone)))
             (with-open [old-tree-with-node-to-be-deleted (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
                         ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
                                                                               new-tree-with-tombstone
@@ -407,6 +408,7 @@
                         merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
                         rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
               (t/is (= 4 (kd/kd-tree-size old-tree-with-node-to-be-deleted)))
+
               (t/is (= (kd/kd-tree->seq kd-tree)
                        (kd/kd-tree->seq merged-tree)
                        (kd/kd-tree->seq rebuilt-tree)))
