@@ -124,43 +124,46 @@
                                                               ^VectorSchemaRoot probe-root
                                                               ^Map join-key->build-pointers
                                                               ^String probe-column-name
-                                                              semi-join?
-                                                              anti-join?]
+                                                              semi-join? anti-join?]
   (when (pos? (.getRowCount probe-root))
     (let [probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
-          probe-pointer (ArrowBufPointer.)]
+          probe-pointer (ArrowBufPointer.)
+          matching-build-pointers (ArrayList.)
+          matching-probe-idxs (ArrayList.)]
       (dotimes [probe-idx (.getValueCount probe-vec)]
-        (if-let [^List build-pointers (.get join-key->build-pointers (.hashCode probe-vec probe-idx))]
-          (let [probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)
-                value-count (count build-pointers)]
-            (loop [n 0
-                   out-idx (.getRowCount out-root)]
-              (if (= n value-count)
-                (util/set-vector-schema-root-row-count out-root out-idx)
-                (let [^BuildPointer build-pointer (nth build-pointers n)]
-                  (if (cond-> (= (.pointer-or-object build-pointer) probe-pointer-or-object)
-                        anti-join? not)
-                    (cond
-                      (not semi-join?)
-                      (do (util/copy-tuple (.root build-pointer) (.idx build-pointer) out-root out-idx)
-                          (util/copy-tuple probe-root probe-idx out-root out-idx)
-                          (recur (inc n) (inc out-idx)))
+        (let [match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode probe-vec probe-idx))]
+                       (let [probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)
+                             build-pointer-it (.iterator build-pointers)]
+                         (loop [match? false]
+                           (if-let [^BuildPointer build-pointer (when (.hasNext build-pointer-it)
+                                                                  (.next build-pointer-it))]
+                             (cond
+                               (not= (.pointer-or-object build-pointer) probe-pointer-or-object)
+                               (recur match?)
 
-                      anti-join?
-                      (if (= (inc n) value-count)
-                        (do (util/copy-tuple probe-root probe-idx out-root out-idx)
-                            (recur (inc n) (inc out-idx)))
-                        (recur (inc n) out-idx))
+                               semi-join? true
 
-                      semi-join?
-                      (do (util/copy-tuple probe-root probe-idx out-root out-idx)
-                          (recur value-count (inc out-idx))))
+                               :else (do
+                                       (.add matching-build-pointers build-pointer)
+                                       (.add matching-probe-idxs probe-idx)
+                                       (recur true)))
+                             match?))))]
+          (cond
+            anti-join? (when-not match?
+                         (.add matching-probe-idxs probe-idx))
+            semi-join? (when match?
+                         (.add matching-probe-idxs probe-idx)))))
 
-                    (recur (inc n) out-idx))))))
-          (when anti-join?
-            (let [out-idx (.getRowCount out-root)]
-              (util/copy-tuple probe-root probe-idx out-root out-idx)
-              (util/set-vector-schema-root-row-count out-root (inc out-idx))))))
+      (let [match-count (count matching-probe-idxs)]
+        (dotimes [match-idx match-count]
+          (when-not semi-join?
+            (let [^BuildPointer build-pointer (nth matching-build-pointers match-idx)]
+              (util/copy-tuple (.root build-pointer) (.idx build-pointer)
+                               out-root match-idx)))
+          (util/copy-tuple probe-root (nth matching-probe-idxs match-idx)
+                           out-root match-idx))
+        (util/set-vector-schema-root-row-count out-root match-count))
+
       out-root)))
 
 (deftype JoinCursor [^BufferAllocator allocator
