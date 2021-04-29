@@ -1039,7 +1039,7 @@
 
   (kd-tree-size [kd-tree]
     (+ (- static-size (.getCardinality static-delete-bitmap))
-       (.count ^IntStream (kd-tree-depth-first dynamic-kd-tree))))
+       (long (kd-tree-size dynamic-kd-tree))))
 
   (kd-tree-value-count [kd-tree]
     (+ (long (kd-tree-value-count static-kd-tree))
