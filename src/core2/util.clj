@@ -18,7 +18,7 @@
            [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
            java.util.stream.IntStream
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator OwnershipTransferResult ReferenceManager]
+           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
@@ -343,80 +343,30 @@
       (throw (IllegalStateException. "ref count has gone negative")))
     new-ref-count))
 
-(deftype NioViewReferenceManager [^BufferAllocator allocator ^:volatile-mutable ^ByteBuffer nio-buffer ^AtomicInteger ref-count]
-  ReferenceManager
-  (deriveBuffer [this source-buffer index length]
-    (ArrowBuf. this
-               nil
-               length
-               (+ (.memoryAddress source-buffer) index)))
-
-  (getAccountedSize [this]
-    (.getSize this))
-
-  (getAllocator [this]
-    allocator)
-
-  (getRefCount [this]
-    (.get ref-count))
-
-  (getSize [this]
-    (if-let [nio-buffer nio-buffer]
-      (.capacity nio-buffer)
-      0))
-
-  (release [this]
-    (.release this 1))
-
-  (release [this decrement]
-    (when-not (pos? decrement)
-      (throw (IllegalArgumentException. "decrement must be positive")))
-    (loop [n (dec decrement)]
-      (let [new-ref-count (dec-ref-count ref-count)]
-        (when (zero? new-ref-count)
-          (let [freed-nio-buffer nio-buffer]
-            (set! (.nio-buffer this) nil)
-            (try-free-direct-buffer freed-nio-buffer)))
-        (if (zero? n)
-          (zero? new-ref-count)
-          (recur (dec n))))))
-
-  (retain [this]
-    (.retain this 1))
-
-  (retain [this src-buffer allocator]
-    (when-not (identical? allocator (.getAllocator this))
-      (throw (IllegalStateException. "cannot retain nio buffer in other allocator")))
-    (doto (.slice src-buffer)
-      (.readerIndex (.readerIndex src-buffer))
-      (.writerIndex (.writerIndex src-buffer))
-      (-> (.getReferenceManager) (.retain))))
-
-  (retain [this increment]
-    (when-not (pos? increment)
-      (throw (IllegalArgumentException. "increment must be positive")))
-    (let [new-ref-count (inc-ref-count ref-count increment)]
-      (when-not (pos? new-ref-count)
-        (throw (IllegalStateException. "ref count was at zero")))))
-
-  (transferOwnership [this source-buffer target-allocator]
-    (let [source-buffer (.retain this source-buffer target-allocator)]
-      (reify OwnershipTransferResult
-        (getAllocationFit [this]
-          true)
-
-        (getTransferredBuffer [this]
-          source-buffer)))))
+(def ^:private ^Method allocation-manager-associate-method
+  (doto (.getDeclaredMethod AllocationManager "associate" (into-array Class [BufferAllocator]))
+    (.setAccessible true)))
 
 (defn ->arrow-buf-view ^org.apache.arrow.memory.ArrowBuf [^BufferAllocator allocator ^ByteBuffer nio-buffer]
   (let [nio-buffer (if (.isDirect nio-buffer)
                      nio-buffer
-                     (doto (ByteBuffer/allocateDirect (.capacity nio-buffer))
-                       (.put nio-buffer)))]
-    (ArrowBuf. (->NioViewReferenceManager allocator nio-buffer (AtomicInteger. 1))
-               nil
-               (.capacity nio-buffer)
-               (MemoryUtil/getByteBufferAddress nio-buffer))))
+                     (-> (ByteBuffer/allocateDirect (.capacity nio-buffer))
+                         (.put (.duplicate nio-buffer))
+                         (.clear)))
+        address (MemoryUtil/getByteBufferAddress nio-buffer)
+        size (.capacity nio-buffer)
+        allocation-manager (proxy [AllocationManager] [allocator]
+                             (getSize [] size)
+                             (memoryAddress [] address)
+                             (release0 []
+                               (try-free-direct-buffer nio-buffer)))
+        listener (.getListener allocator)
+        _ (with-open [reservation (.newReservation allocator)]
+            (.onPreAllocation listener size)
+            (.reserve reservation size)
+            (.onAllocation listener size))
+        buffer-ledger (.invoke allocation-manager-associate-method allocation-manager (object-array [allocator]))]
+    (ArrowBuf. buffer-ledger nil size address)))
 
 (defn ->arrow-record-batch-view ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^ArrowBlock block ^ArrowBuf buffer]
   (let [prefix-size (if (= (.getInt buffer (.getOffset block)) MessageSerializer/IPC_CONTINUATION_TOKEN)
@@ -438,14 +388,15 @@
                       ^Queue blocks
                       ^VectorSchemaRoot root
                       ^VectorLoader loader
-                      ^:unsynchronized-mutable ^ArrowRecordBatch current-batch]
+                      ^:unsynchronized-mutable ^ArrowRecordBatch current-batch
+                      ^boolean close-buffer?]
   IChunkCursor
   (getSchema [_]
     (.getSchema root))
 
   (tryAdvance [this c]
     (when current-batch
-      (.close current-batch)
+      (try-close current-batch)
       (set! (.current-batch this) nil))
 
     (if-let [block (.poll blocks)]
@@ -458,13 +409,15 @@
 
   (close [_]
     (when current-batch
-      (.close current-batch))
-    (.close root)))
+      (try-close current-batch))
+    (try-close root)
+    (when close-buffer?
+      (try-close buf))))
 
 (defn ^core2.IChunkCursor ->chunks
   ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
    (->chunks ipc-file-format-buffer allocator {}))
-  ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator {:keys [^RoaringBitmap block-idxs]}]
+  ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator {:keys [^RoaringBitmap block-idxs close-buffer?]}]
    (let [footer (read-arrow-footer ipc-file-format-buffer)
          root (VectorSchemaRoot/create (.getSchema footer) allocator)]
      (ChunkCursor. ipc-file-format-buffer
@@ -474,7 +427,8 @@
                                                                record-batch)))))
                    root
                    (VectorLoader. root)
-                   nil))))
+                   nil
+                   (boolean close-buffer?)))))
 
 (defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^IntStream idxs ^long size ^ValueVector out-vec]
   (if (instance? DenseUnionVector in-vec)

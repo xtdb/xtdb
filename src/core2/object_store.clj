@@ -45,7 +45,11 @@
 
   (deleteObject [_this k]
     (.remove os k)
-    (CompletableFuture/completedFuture nil)))
+    (CompletableFuture/completedFuture nil))
+
+  Closeable
+  (close [_]
+    (.clear os)))
 
 (defn ->object-store ^core2.object_store.ObjectStore [_]
   (->InMemoryObjectStore (ConcurrentSkipListMap.)))

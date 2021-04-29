@@ -202,8 +202,8 @@
                                               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                                   (util/then-apply
                                                     (fn [buf]
-                                                      (when buf
-                                                        (MapEntry/create col-name (util/->chunks buf allocator {:block-idxs block-idxs})))))))
+                                                      (MapEntry/create col-name (util/->chunks buf allocator {:block-idxs block-idxs
+                                                                                                              :close-buffer? true}))))))
                                             (remove nil?)
                                             vec
                                             (into {} (map deref)))

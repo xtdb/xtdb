@@ -178,14 +178,17 @@
 
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (.close buffer)
-            (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+            (let [size (.getSize (.getReferenceManager ^ArrowBuf buffer))]
+              (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer)))
+              (.close buffer)
+              (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
-            (t/is (true? (.evictBuffer bp buffer-name)))
-            (t/is (false? (.evictBuffer bp buffer-name)))
-            (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
-            (t/is (zero? (.getSize (.getReferenceManager ^ArrowBuf buffer))))
-            (t/is (= 1 (count (.buffers ^BufferPool bp))))))))))
+              (t/is (true? (.evictBuffer bp buffer-name)))
+              (t/is (false? (.evictBuffer bp buffer-name)))
+              (t/is (zero? (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
+              (t/is (= size (.getSize (.getReferenceManager ^ArrowBuf buffer))))
+              (t/is (zero? (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
+              (t/is (= 1 (count (.buffers ^BufferPool bp)))))))))))
 
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
@@ -338,7 +341,7 @@
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (:core2/object-store @(:!system node))]]
-            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 5))))
+            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 10))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
