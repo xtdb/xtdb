@@ -311,8 +311,12 @@
         (try
           (io.netty.util.internal.PlatformDependent/freeDirectBuffer nio-buffer)
           (catch Exception e
-            (when-not (instance? IllegalArgumentException (.getCause e))
-              (throw e))))))
+            ;; NOTE: this happens when we give a sliced buffer from
+            ;; the in-memory object store to the buffer pool.
+            (let [cause (.getCause e)]
+              (when-not (and (instance? IllegalArgumentException cause)
+                             (= "duplicate or slice" (.getMessage cause)))
+                (throw e)))))))
     (catch ClassNotFoundException e
       (fn free-direct-buffer-nop [_]))))
 

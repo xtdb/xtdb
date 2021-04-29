@@ -21,7 +21,6 @@
 
 ;; TODO:
 
-;; - Figure out operator-test cleaner issue.
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
