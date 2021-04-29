@@ -105,10 +105,14 @@ Two main extension points:
    - Scalable temporal indexing + querying
      - Exercise temporal side, TPC-BiH
      - Interval algebra predicates in logical plan select
+     - How far does the current kd-tree take us? Need different
+       approach or fixable as initial cut?
    - Bigger than local node databases
      - Buffer pool eviction
-     - Ability to query several temporal chunks (live and Arrow).
-     - Merging of temporal Arrow chunks?
+     - DONE Ability to query several temporal chunks (live and Arrow).
+     - DONE Merging of temporal Arrow chunks?
+     - Double buffering during ingest? Split into live-live and
+       live-indexing?
 3. Core2 as a viable alternative to Crux
    - Deployment, monitoring
      - multi-module (Kafka, S3)
