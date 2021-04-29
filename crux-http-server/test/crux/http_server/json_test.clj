@@ -90,6 +90,35 @@
                :qps {"queryEdn" (pr-str '{:find [(pull e [*])]
                                           :where [[e :firstName "Sally"]]})}})))
 
+    (t/is (= [[{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]
+              [{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]
+              [{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]]
+             (json-get
+              {:url "/_crux/query"
+               :qps {"queryEdn" (pr-str '{:find [(pull e [*])]
+                                          :in [n c k s [i ...] m]
+                                          ;; :limit 1 ;; can use this to mitigate streaming open-q bag effect
+                                          :where [[e :firstName n]
+                                                  [(= c 123)]
+                                                  [(= k :firstName)]
+                                                  [(contains? s i)]
+                                                  [(= m {:a {:b {:c :d :e "f"}}})]]})
+                     "inArgsEdn" (pr-str ["Sally" 123 :firstName [0 1 2] [0 1 2] {:a {:b {:c :d :e "f"}}}])}})))
+
+    (t/is (= [[{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]
+              [{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]
+              [{"crux.db/id" "sal", "firstName" "Sally", "lastName" "Example"}]]
+             (json-get
+              {:url "/_crux/query"
+               :qps {"queryEdn" (pr-str '{:find [(pull e [*])]
+                                          :in [n c k s [i ...] m]
+                                          :where [[e :firstName n]
+                                                  [(= c 123)]
+                                                  [(= k "firstName")]
+                                                  [(contains? s i)]
+                                                  [(= m {:a {:b {:c "d" :e "f"}}})]]})
+                     "inArgsJson" (json/write-value-as-string ["Sally" 123 "firstName" [0 1 2] [0 1 2] {"a" {"b" {"c" "d" "e" "f"}}}])}})))
+
     (t/testing "pull"
       (let [{:strs [txId] :as tx} (submit-tx [["put" {"crux.db/id" "link", "linking" "jed"}]])]
         (t/is (= tx

@@ -61,3 +61,6 @@
                          crux-object-mapper)
           (finally
             (cio/try-close results)))))))
+
+(defn write-str [v]
+  (j/write-value-as-string v))
