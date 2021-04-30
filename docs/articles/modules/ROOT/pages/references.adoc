@@ -11,8 +11,9 @@ current design of Crux.
 * https://cs.stanford.edu/people/chrismre/papers/paper49.Ngo.pdf[Worst-case Optimal Join Algorithms], Ngo, Porat, et al. Journal of the ACM, Vol. 64, No. 3, Article 16. 2018.
 * https://arxiv.org/abs/1310.3314[Skew Strikes Back: New Developments in the Theory of Join Algorithms], Ngo, Re, Rudra. ACM SIGMOD Record, Vol. 42, No. 4, Pages 5-16. 2014.
 * http://people.cs.aau.dk/~csj/Thesis/[Temporal Database Management], Jensen. 2000.
-* https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass, ISBN 1-55860-436-7. 2000.
+* https://www2.cs.arizona.edu/~rts/tdbbook.pdf[Developing Time-Oriented Database Applications in SQL], Snodgrass. ISBN 1-55860-436-7. 2000.
 * http://hermanntropf.de/media/multidimensionalrangequery.pdf[Multidimensional Range Search in Dynamically Balanced Trees], Tropf, Herzog. Applied Informatics, Pages 71-77. 1981.
+* https://www.infoq.com/presentations/Deconstructing-Database/[Deconstructing the Database], Hickey. InfoQ. 2013.
 
 
 [#bibliography]
@@ -174,13 +175,38 @@ our overall philosophy, or simply be something we find interesting in the field.
 
 * https://arxiv.org/abs/2104.10939[HINT: A Hierarchical Index for Intervals in Main Memory], Christodoulou, Bouros, Mamoulis. April 2021.
 * https://arxiv.org/abs/2103.15203[Mathematics of Digital Hyperspace], Kepner, Davis, et al. March 2021.
+* https://www.youtube.com/watch?v=rX0ItVEVjHc[Data-Oriented Design and C++], Acton. CppCon (YouTube). 2014.
+
+[#philosophy]
+=== Design Philosophy
+
+* https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/[Designing Data-Intensive Applications], Kleppmann. O'Reilly, ISBN: 9781449373320. 2017.
+* https://martin.kleppmann.com/2015/03/04/turning-the-database-inside-out.html[Turning the Database Inside-Out], Kleppmann. StrangeLoop. 2014.
+* https://www.infoq.com/presentations/Datomic-Database-Value/[The Database as a Value], Hickey. InfoQ. 2012.
+* https://www.infoq.com/presentations/Deconstructing-Database/[Deconstructing the Database], Hickey. InfoQ. 2013.
 
 [#misc]
 === Miscellaneous
 
-* https://www.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/[Designing Data-Intensive Applications], Kleppmann. O'Reilly, ISBN: 9781449373320. 2017.
 * http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf[The End of an Architectural Era (It’s Time for a Complete Rewrite)], Stonebraker, Hachem, et al. VLDB '07: Proceedings of the 33rd international conference on Very large data bases, Pages 1150–1160. 2007.
 * https://arxiv.org/pdf/1610.09166.pdf[Push vs. Pull-Based Loop Fusion in Query Engines], Shaikhha, Dashti, Koch. Journal of Functional Programming, Vol. 28. 2018.
+* https://www.youtube.com/watch?v=BuE6JvQE_CY[Is Kafka a Database?], Kleppmann. Kafka Summit London (YouTube). 2019.
+
+[#juxt]
+=== JUXT Resources
+
+Our own talks and articles are listed in reverse-chronological order. Although older resources are still
+relevant to the philosophy and design of Crux, newer resources will always provide a better undersatnding
+of implementation details.
+
+* https://opencrux.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. opencrux.com. 2021.
+* https://opencrux.com/blog/crux-sql.html[Crux SQL: Query your Datalog database with SQL], Pither. Crux Blog. 2020.
+* https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Blog. 2019.
+* https://www.youtube.com/watch?v=Zn-J26PGugM[Introducing Crux: A Bitemporal Database], Taylor, Pither. Scala in the City (YouTube). October 2019.
+* https://www.youtube.com/watch?v=YjAVsvYGbuU[The Design and Implementation of a Bitemporal DBMS], Råberg. ClojuTRE (YouTube). September 2019.
+* https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.
+* https://www.youtube.com/watch?v=3Stja6YUB94[The Crux of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
+* https://soundcloud.com/defn-771544745/49-crux-with-jon-and-jeremy[defn Podcast #49: Crux with Jon and Jeremy], Pither, Taylor. Soundcloud. May 2019.
 
 [#courses]
 === Courses
