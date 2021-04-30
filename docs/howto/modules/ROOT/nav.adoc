@@ -1,4 +1,5 @@
 .How-To Guides
+* xref:quickstart.adoc[Quickstart]
 * xref:command-line-crux.adoc[Command Line Crux]
 * xref:in-a-box.adoc[Crux-in-a-Box (on RocksDB)]
 * xref:confluent-cloud.adoc[Crux on Confluent Cloud]
