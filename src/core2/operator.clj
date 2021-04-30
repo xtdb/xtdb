@@ -67,7 +67,7 @@
                           (vals selects)))
         metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args})]
 
-    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+    (fn [^BufferAllocator allocator, dbs]
       (let [^IQueryDataSource db (or (get dbs source)
                                      (throw (err/illegal-arg :unknown-db
                                                              {::err/message "Query refers to unknown db"
@@ -76,12 +76,12 @@
         (.scan db allocator col-names metadata-pred col-preds nil nil)))))
 
 (defmethod emit-op :table [[_ {:keys [rows]}]]
-  (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+  (fn [^BufferAllocator allocator, dbs]
     (table/->table-cursor allocator rows)))
 
 (defn- unary-op [relation f]
   (let [inner-f (emit-op relation)]
-    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+    (fn [^BufferAllocator allocator, dbs]
       (let [inner (inner-f allocator dbs)]
         (try
           (f allocator inner)
@@ -92,7 +92,7 @@
 (defn- binary-op [left right f]
   (let [left-f (emit-op left)
         right-f (emit-op right)]
-    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+    (fn [^BufferAllocator allocator, dbs]
       (let [left (left-f allocator dbs)]
         (try
           (let [right (right-f allocator dbs)]
@@ -205,7 +205,7 @@
 (defmethod emit-op :fixpoint [[_ {:keys [mu-variable base recursive]}]]
   (let [base-f (emit-op base)
         recursive-f (emit-op recursive)]
-    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+    (fn [^BufferAllocator allocator, dbs]
       (set-op/->fixpoint-cursor allocator
                                 (base-f allocator dbs)
                                 (reify IFixpointCursorFactory
@@ -215,7 +215,7 @@
                  false))))
 
 (defmethod emit-op :assign [[_ {:keys [bindings relation]}]]
-  (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+  (fn [^BufferAllocator allocator, dbs]
     (let [assignments (reduce
                        (fn [acc {:keys [variable value]}]
                          (assoc acc variable (let [value-f (emit-op value)]
