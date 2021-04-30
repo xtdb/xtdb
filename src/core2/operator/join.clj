@@ -3,7 +3,7 @@
             [core2.operator.scan :as scan]
             [core2.util :as util])
   (:import [core2 DenseUnionUtil IChunkCursor ICursor]
-           [java.util ArrayList HashMap List Map NavigableMap TreeMap]
+           [java.util ArrayList HashMap List Map NavigableMap Set TreeMap]
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
@@ -100,100 +100,82 @@
                       left-cursor right-cursor
                       (ArrayList.))))
 
-(defn- build-phase [^BufferAllocator allocator
-                    ^VectorSchemaRoot build-root
-                    ^NavigableMap build-idx->root
-                    ^Map join-key->build-idxs
+(deftype BuildPointer [^VectorSchemaRoot root, ^int idx, pointer-or-object])
+
+(defn- build-phase [^VectorSchemaRoot build-root
+                    ^List build-roots
+                    ^Map join-key->build-pointers
                     ^String build-column-name
                     ^MutableRoaringBitmap pushdown-bloom]
   (let [^VectorSchemaRoot build-root (util/slice-root build-root)
-        build-root-idx  (if-let [build-idx-entry (.lastEntry build-idx->root)]
-                          (+ (long (.getKey build-idx-entry))
-                             (.getRowCount ^VectorSchemaRoot (.getValue build-idx-entry)))
-                          0)]
-    (.put build-idx->root build-root-idx build-root)
-    (let [build-vec (util/maybe-single-child-dense-union (.getVector build-root build-column-name))]
-      (dotimes [build-idx (.getValueCount build-vec)]
-        (.add pushdown-bloom ^ints (bloom/bloom-hashes build-vec build-idx))
-        (let [^BigIntVector build-idxs-vec (.computeIfAbsent join-key->build-idxs
-                                                             (.hashCode build-vec build-idx)
-                                                             (reify Function
-                                                               (apply [_ x]
-                                                                 (doto (BigIntVector. "" allocator)
-                                                                   (.setInitialCapacity 32)))))
-              idx (.getValueCount build-idxs-vec)
-              total-build-idx (+ build-root-idx build-idx)]
-          (.setValueCount build-idxs-vec (inc idx))
-          (.set build-idxs-vec idx total-build-idx))))))
+        build-vec (util/maybe-single-child-dense-union (.getVector build-root build-column-name))]
+    (.add build-roots build-root)
+    (dotimes [build-idx (.getValueCount build-vec)]
+      (.add pushdown-bloom ^ints (bloom/bloom-hashes build-vec build-idx))
+      (doto ^List (.computeIfAbsent join-key->build-pointers
+                                    (.hashCode build-vec build-idx)
+                                    (reify Function
+                                      (apply [_ x]
+                                        (ArrayList.))))
+        (.add (BuildPointer. build-root build-idx
+                             (util/pointer-or-object build-vec build-idx)))))))
 
-(defn- probe-phase ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator
-                                                              ^Schema out-schema
-                                                              ^VectorSchemaRoot out-root
+(defn- probe-phase ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot out-root
                                                               ^VectorSchemaRoot probe-root
-                                                              ^NavigableMap build-idx->root
-                                                              ^Map join-key->build-idxs-vec
-                                                              ^String build-column-name
+                                                              ^Map join-key->build-pointers
                                                               ^String probe-column-name
-                                                              semi-join?
-                                                              anti-join?]
+                                                              semi-join? anti-join?]
   (when (pos? (.getRowCount probe-root))
     (let [probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
-          build-pointer (ArrowBufPointer.)
-          probe-pointer (ArrowBufPointer.)]
+          probe-pointer (ArrowBufPointer.)
+          matching-build-pointers (ArrayList.)
+          matching-probe-idxs (ArrayList.)]
       (dotimes [probe-idx (.getValueCount probe-vec)]
-        (if-let [^BigIntVector build-idxs-vec (.get join-key->build-idxs-vec (.hashCode probe-vec probe-idx))]
-          (let [value-count (.getValueCount build-idxs-vec)
-                probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)]
-            (loop [n 0
-                   out-idx (.getRowCount out-root)]
-              (if (= n value-count)
-                (util/set-vector-schema-root-row-count out-root out-idx)
-                (let [total-build-idx (long (.get build-idxs-vec n))
-                      build-idx-entry (.floorEntry build-idx->root total-build-idx)
-                      ^long build-root-idx (.getKey build-idx-entry)
-                      ^VectorSchemaRoot build-root (.getValue build-idx-entry)
-                      build-idx (- total-build-idx build-root-idx)
-                      build-vec (.getVector build-root build-column-name)
-                      match? (= (util/pointer-or-object build-vec build-idx build-pointer) probe-pointer-or-object)
-                      match? (if anti-join?
-                               (not match?)
-                               match?)]
-                  (if match?
-                    (cond
-                      (not semi-join?)
-                      (do (util/copy-tuple build-root build-idx out-root out-idx)
-                          (util/copy-tuple probe-root probe-idx out-root out-idx)
-                          (recur (inc n) (inc out-idx)))
+        (let [match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode probe-vec probe-idx))]
+                       (let [probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)
+                             build-pointer-it (.iterator build-pointers)]
+                         (loop [match? false]
+                           (if-let [^BuildPointer build-pointer (when (.hasNext build-pointer-it)
+                                                                  (.next build-pointer-it))]
+                             (cond
+                               (not= (.pointer-or-object build-pointer) probe-pointer-or-object)
+                               (recur match?)
 
-                      anti-join?
-                      (if (= (inc n) value-count)
-                        (do (util/copy-tuple probe-root probe-idx out-root out-idx)
-                            (recur (inc n) (inc out-idx)))
-                        (recur (inc n) out-idx))
+                               semi-join? true
 
-                      semi-join?
-                      (do (util/copy-tuple probe-root probe-idx out-root out-idx)
-                          (recur value-count (inc out-idx))))
+                               :else (do
+                                       (.add matching-build-pointers build-pointer)
+                                       (.add matching-probe-idxs probe-idx)
+                                       (recur true)))
+                             match?))))]
+          (cond
+            anti-join? (when-not match?
+                         (.add matching-probe-idxs probe-idx))
+            semi-join? (when match?
+                         (.add matching-probe-idxs probe-idx)))))
 
-                    (recur (inc n) out-idx))))))
-          (when anti-join?
-            (let [out-idx (.getRowCount out-root)]
-              (util/copy-tuple probe-root probe-idx out-root out-idx)
-              (util/set-vector-schema-root-row-count out-root (inc out-idx))))))
+      (let [match-count (count matching-probe-idxs)]
+        (when-not semi-join?
+          (dotimes [match-idx match-count]
+            (let [^BuildPointer build-pointer (nth matching-build-pointers match-idx)]
+              (util/copy-tuple (.root build-pointer) (.idx build-pointer)
+                               out-root match-idx))))
+
+        (util/copy-tuples probe-root matching-probe-idxs out-root)
+
+        (util/set-vector-schema-root-row-count out-root match-count))
+
       out-root)))
 
 (deftype JoinCursor [^BufferAllocator allocator
                      ^Schema out-schema
                      ^VectorSchemaRoot out-root
-                     ^ICursor build-cursor
-                     ^String build-column-name
-                     ^ICursor probe-cursor
-                     ^String probe-column-name
-                     ^Map join-key->build-idx-pairs
-                     ^NavigableMap build-idx->root
+                     ^ICursor build-cursor, ^String build-column-name
+                     ^ICursor probe-cursor, ^String probe-column-name
+                     ^List build-roots
+                     ^Map join-key->build-pointers
                      ^MutableRoaringBitmap pushdown-bloom
-                     semi-join?
-                     anti-join?]
+                     semi-join? anti-join?]
 
   IChunkCursor
   (getSchema [_] out-schema)
@@ -204,9 +186,10 @@
     (.forEachRemaining build-cursor
                        (reify Consumer
                          (accept [_ in-root]
-                           (build-phase allocator in-root build-idx->root join-key->build-idx-pairs build-column-name pushdown-bloom))))
+                           (build-phase in-root build-roots join-key->build-pointers build-column-name pushdown-bloom))))
 
-    (while (and (or (not (.isEmpty build-idx->root)) anti-join?)
+    (while (and (or (not (.isEmpty join-key->build-pointers))
+                    anti-join?)
                 (zero? (.getRowCount out-root))
                 (binding [scan/*column->pushdown-bloom* (if anti-join?
                                                           scan/*column->pushdown-bloom*
@@ -214,8 +197,8 @@
                   (.tryAdvance probe-cursor
                                (reify Consumer
                                  (accept [_ in-root]
-                                   (probe-phase allocator out-schema out-root in-root build-idx->root join-key->build-idx-pairs
-                                                build-column-name probe-column-name semi-join? anti-join?)))))))
+                                   (probe-phase out-root in-root join-key->build-pointers
+                                                probe-column-name semi-join? anti-join?)))))))
 
     (if (pos? (.getRowCount out-root))
       (do
@@ -225,13 +208,9 @@
 
   (close [_]
     (util/try-close out-root)
-    (doseq [root (vals build-idx->root)]
-      (util/try-close root))
-    (.clear build-idx->root)
     (.clear pushdown-bloom)
-    (doseq [idx-pair (vals join-key->build-idx-pairs)]
-      (util/try-close idx-pair))
-    (.clear join-key->build-idx-pairs)
+    (run! util/try-close build-roots)
+    (.clear build-roots)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
@@ -247,7 +226,7 @@
     (JoinCursor. allocator schema
                  (VectorSchemaRoot/create schema allocator)
                  left-cursor left-column-name right-cursor right-column-name
-                 (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+                 (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                  false false)))
 
 (defn ->semi-equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
@@ -259,7 +238,7 @@
     (JoinCursor. allocator schema
                  (VectorSchemaRoot/create schema allocator)
                  right-cursor right-column-name left-cursor left-column-name
-                 (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+                 (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                  true false)))
 
 (defn ->anti-equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
@@ -271,5 +250,5 @@
     (JoinCursor. allocator schema
                  (VectorSchemaRoot/create schema allocator)
                  right-cursor right-column-name left-cursor left-column-name
-                 (HashMap.) (TreeMap.) (MutableRoaringBitmap.)
+                 (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
                  true true)))

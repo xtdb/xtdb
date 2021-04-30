@@ -695,27 +695,6 @@ trying to shave off some time by extracting du-copy out to a Java class, where w
 seems a ~5-10% improvement on Q5 and Q9
 *** pre
 #'core2.tpch/tpch-q1-pricing-summary-report
-"Elapsed time: 1178.844639 msecs"
-#'core2.tpch/tpch-q5-local-supplier-volume
-"Elapsed time: 3349.225611 msecs"
-#'core2.tpch/tpch-q9-product-type-profit-measure
-"Elapsed time: 2226.656121 msecs"
-
-#'core2.tpch/tpch-q1-pricing-summary-report
-"Elapsed time: 1146.709411 msecs"
-#'core2.tpch/tpch-q5-local-supplier-volume
-"Elapsed time: 3361.117374 msecs"
-#'core2.tpch/tpch-q9-product-type-profit-measure
-"Elapsed time: 2253.609079 msecs"
-
-#'core2.tpch/tpch-q1-pricing-summary-report
-"Elapsed time: 1168.857154 msecs"
-#'core2.tpch/tpch-q5-local-supplier-volume
-"Elapsed time: 3330.433117 msecs"
-#'core2.tpch/tpch-q9-product-type-profit-measure
-"Elapsed time: 2189.573789 msecs"
-
-#'core2.tpch/tpch-q1-pricing-summary-report
 "Elapsed time: 1133.470663 msecs"
 #'core2.tpch/tpch-q5-local-supplier-volume
 "Elapsed time: 3324.900396 msecs"
@@ -724,29 +703,21 @@ seems a ~5-10% improvement on Q5 and Q9
 
 *** post
 #'core2.tpch/tpch-q1-pricing-summary-report
-"Elapsed time: 1191.521239 msecs"
-#'core2.tpch/tpch-q5-local-supplier-volume
-"Elapsed time: 3161.144765 msecs"
-#'core2.tpch/tpch-q9-product-type-profit-measure
-"Elapsed time: 2169.250004 msecs"
-
-#'core2.tpch/tpch-q1-pricing-summary-report
-"Elapsed time: 1156.828099 msecs"
-#'core2.tpch/tpch-q5-local-supplier-volume
-"Elapsed time: 3079.154028 msecs"
-#'core2.tpch/tpch-q9-product-type-profit-measure
-"Elapsed time: 2094.028161 msecs"
-
-#'core2.tpch/tpch-q1-pricing-summary-report
-"Elapsed time: 1149.643137 msecs"
-#'core2.tpch/tpch-q5-local-supplier-volume
-"Elapsed time: 3110.748285 msecs"
-#'core2.tpch/tpch-q9-product-type-profit-measure
-"Elapsed time: 2085.596161 msecs"
-
-#'core2.tpch/tpch-q1-pricing-summary-report
 "Elapsed time: 1178.077209 msecs"
 #'core2.tpch/tpch-q5-local-supplier-volume
 "Elapsed time: 3073.089175 msecs"
 #'core2.tpch/tpch-q9-product-type-profit-measure
 "Elapsed time: 2072.93805 msecs"
+
+** reusing VSRs in operators
+
+** probe-phase vectorisation
+`probe-phase` was being dominated by calls to `copy-tuple`, which had a lot of per-row overhead (e.g. looking up vectors in VSR). we refactored probe-phase so that this overhead could be amortised over a block - it now keeps track of the probe-idxs to copy and copies them all in one go at the end of the block (`copy-tuples`). We still have to call `copy-tuple` individually for the build side because rows there can come from any build root.
+
+*** post
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 1063.493334 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 2409.118736 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 1749.365797 msecs"
