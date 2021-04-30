@@ -17,6 +17,6 @@
       (t/is (empty? (tu/<-cursor table-cursor)))))
 
   (t/testing "requires same columns"
-    (t/is (thrown? AssertionError
+    (t/is (thrown? IllegalArgumentException
                    (table/->table-cursor tu/*allocator* [{:a 12, :b "foo"}
                                                          {:a 100}])))))

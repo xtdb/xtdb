@@ -1,5 +1,6 @@
 (ns core2.operator.table
-  (:require [core2.types :as ty])
+  (:require [core2.types :as ty]
+            [core2.error :as err])
   (:import [core2 DenseUnionUtil IChunkCursor]
            [java.util ArrayList List]
            org.apache.arrow.memory.BufferAllocator
@@ -39,7 +40,11 @@
 
 (defn ->table-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
                                           ^List rows]
-  (assert (or (empty? rows) (= 1 (count (distinct (map keys rows))))))
+  (when-not (or (empty? rows) (= 1 (count (distinct (map keys rows)))))
+    (throw (err/illegal-arg :mismatched-keys-in-table
+                            {::err/message "Mismatched keys in table"
+                             :key-sets (into #{} (map keys) rows)})))
+
   (TableCursor. allocator
                 (Schema. (for [k (keys (first rows))]
                            (ty/->primitive-dense-union-field (name k))))
