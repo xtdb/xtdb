@@ -2,12 +2,13 @@
   (:require [clojure.pprint :as pp]
             [core2.indexer :as indexer]
             core2.ingest-loop
-            [core2.logical-plan :as lp]
+            [core2.operator :as op]
             [core2.system :as sys]
-            core2.tx-producer)
-  (:import [core2.indexer IChunkManager TransactionIndexer]
+            core2.tx-producer
+            [core2.util :as util])
+  (:import core2.data_source.IDataSourceFactory
+           [core2.indexer IChunkManager TransactionIndexer]
            core2.ingest_loop.IIngestLoop
-           core2.operator.IOperatorFactory
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
@@ -21,10 +22,8 @@
     ^core2.tx.TransactionInstant [node tx timeout])
 
   (latest-completed-tx ^core2.tx.TransactionInstant [node])
-  (open-watermark ^core2.tx.Watermark [node])
 
-  (open-q
-    ^core2.ICursor [node watermark query]))
+  (open-db ^core2.data_source.QueryDataSource [node]))
 
 (defprotocol PSubmitNode
   (submit-tx
@@ -32,7 +31,7 @@
 
 (defrecord Node [^TransactionIndexer indexer
                  ^IIngestLoop ingest-loop
-                 ^IOperatorFactory op-factory
+                 ^IDataSourceFactory data-source-factory
                  ^ITxProducer tx-producer
                  !system
                  close-fn]
@@ -42,9 +41,8 @@
 
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
-  (open-watermark [_] (.getWatermark ^IChunkManager indexer))
-
-  (open-q [_ watermark query] (lp/open-q op-factory watermark query))
+  (open-db [_]
+    (.openDataSource data-source-factory (.getWatermark ^IChunkManager indexer)))
 
   PSubmitNode
   (submit-tx [_ tx-ops]
@@ -60,10 +58,19 @@
 
 (defn ->node {::sys/deps {:indexer :core2/indexer
                           :ingest-loop :core2/ingest-loop
-                          :op-factory :core2/op-factory
+                          :data-source-factory :core2/data-source-factory
                           :tx-producer :core2/tx-producer}}
   [deps]
   (map->Node (assoc deps :!system (atom nil))))
+
+(defn open-q ^core2.ICursor [db query]
+  (let [allocator (RootAllocator.)]
+    (try
+      (-> (op/open-q allocator db query)
+          (util/and-also-close allocator))
+      (catch Throwable t
+        (util/try-close allocator)
+        (throw t)))))
 
 (defn ->allocator [_]
   (RootAllocator.))
@@ -79,7 +86,7 @@
                                             :core2/temporal-manager 'core2.temporal/->temporal-manager
                                             :core2/object-store 'core2.object-store/->object-store
                                             :core2/buffer-pool 'core2.buffer-pool/->buffer-pool
-                                            :core2/op-factory 'core2.operator/->operator-factory}]
+                                            :core2/data-source-factory 'core2.data-source/->data-source-factory}]
                                           (cond-> opts (not (vector? opts)) vector)))
                    (sys/start-system))]
 

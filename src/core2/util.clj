@@ -461,6 +461,21 @@
                    nil
                    (boolean close-buffer?)))))
 
+(defn ^core2.IChunkCursor and-also-close [^IChunkCursor cursor, ^AutoCloseable closeable]
+  (reify IChunkCursor
+    (getSchema [_] (.getSchema cursor))
+    (characteristics [_] (.characteristics cursor))
+    (estimateSize [_] (.estimateSize cursor))
+    (getComparator [_] (.getComparator cursor))
+    (getExactSizeIfKnown [_] (.getExactSizeIfKnown cursor))
+    (hasCharacteristics [_ c] (.hasCharacteristics cursor c))
+    (tryAdvance [_ c] (.tryAdvance cursor c))
+    (trySplit [_] (.trySplit cursor))
+
+    (close [_]
+      (try-close cursor)
+      (try-close closeable))))
+
 (defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^IntStream idxs ^long size ^ValueVector out-vec]
   (if (instance? DenseUnionVector in-vec)
     (.forEach idxs (reify IntConsumer

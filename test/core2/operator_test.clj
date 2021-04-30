@@ -27,15 +27,14 @@
 
     (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))
           metadata-pred (expr.meta/->metadata-selector (expr/form->expr '(> name "Ivan")))]
-      (letfn [(query-ivan [watermark]
-                (with-open [res (c2/open-q node watermark
-                                           '[:scan [{name (> name "Ivan")}]])]
+      (letfn [(query-ivan [db]
+                (with-open [res (c2/open-q db '[:scan [{name (> name "Ivan")}]])]
                   (into #{} (mapcat seq) (tu/<-cursor res))))]
-        (with-open [watermark (c2/open-watermark node)]
+        (with-open [db (c2/open-db node)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
           (t/is (= [(meta/map->ChunkMatch
                      {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]
-                   (meta/matching-chunks metadata-mgr watermark metadata-pred))
+                   (meta/matching-chunks metadata-mgr (.watermark db) metadata-pred))
                 "only needs to scan chunk 1, block 1")
 
           @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 5}}])
@@ -43,13 +42,13 @@
 
           (t/is (= #{{:name "James"}
                      {:name "Jon"}}
-                   (query-ivan watermark))))
+                   (query-ivan db))))
 
-        (with-open [watermark (c2/open-watermark node)]
+        (with-open [db (c2/open-db node)]
           (t/is (= #{{:name "James"}
                      {:name "Jon"}
                      {:name "Jeremy"}}
-                   (query-ivan watermark))))))))
+                   (query-ivan db))))))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
@@ -67,35 +66,33 @@
     (tu/finish-chunk node)
     (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))
           metadata-pred (expr.meta/->metadata-selector (expr/form->expr '(= name "Ivan")))]
-      (letfn [(query-ivan [watermark]
-                (with-open [res (c2/open-q node watermark
-                                           '[:scan [{name (= name "Ivan")}]])]
+      (letfn [(query-ivan [db]
+                (with-open [res (c2/open-q db '[:scan [{name (= name "Ivan")}]])]
                   (into #{} (mapcat seq) (tu/<-cursor res))))]
-        (with-open [watermark (c2/open-watermark node)]
+        (with-open [db (c2/open-db node)]
           (t/is (= #{0 3} (.knownChunks metadata-mgr)))
           (t/is (= [(meta/map->ChunkMatch
                      {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]
-                   (meta/matching-chunks metadata-mgr watermark metadata-pred))
+                   (meta/matching-chunks metadata-mgr (.watermark db) metadata-pred))
                 "only needs to scan chunk 0")
 
           (t/is (= #{{:name "Ivan"}}
-                   (query-ivan watermark))))))))
+                   (query-ivan db))))))))
 
 (t/deftest test-fixpoint-operator
   (let [node-dir (doto (util/->path "target/test-fixpoint-operator")
                    util/delete-dir)]
     (with-open [node (tu/->local-node {:node-dir node-dir})]
       (t/testing "factorial"
-        (with-open [watermark (c2/open-watermark node)
-                    fixpoint-cursor (c2/open-q node watermark
-                                               '[:fixpoint Fact
-                                                 [:table [{:a 0 :b 1}]]
-                                                 [:select
-                                                  (<= a 8)
-                                                  [:project
-                                                   [{a (+ a 1)}
-                                                    {b (* (+ a 1) b)}]
-                                                   Fact]]])]
+        (with-open [db (c2/open-db node)
+                    fixpoint-cursor (c2/open-q db '[:fixpoint Fact
+                                                    [:table [{:a 0 :b 1}]]
+                                                    [:select
+                                                     (<= a 8)
+                                                     [:project
+                                                      [{a (+ a 1)}
+                                                       {b (* (+ a 1) b)}]
+                                                      Fact]]])]
           (t/is (= [[{:a 0, :b 1}
                      {:a 1, :b 1}
                      {:a 2, :b 2}
@@ -108,17 +105,16 @@
                    (tu/<-cursor fixpoint-cursor)))))
 
       (t/testing "transitive closure"
-        (with-open [watermark (c2/open-watermark node)
-                    fixpoint-cursor (c2/open-q node watermark
-                                               '[:fixpoint Path
-                                                 [:table [{:x "a" :y "b"}
-                                                          {:x "b" :y "c"}
-                                                          {:x "c" :y "d"}
-                                                          {:x "d" :y "a"}]]
-                                                 [:project [x y]
-                                                  [:join {z z}
-                                                   [:rename {y z} Path]
-                                                   [:rename {x z} Path]]]])]
+        (with-open [db (c2/open-db node)
+                    fixpoint-cursor (c2/open-q db '[:fixpoint Path
+                                                    [:table [{:x "a" :y "b"}
+                                                             {:x "b" :y "c"}
+                                                             {:x "c" :y "d"}
+                                                             {:x "d" :y "a"}]]
+                                                    [:project [x y]
+                                                     [:join {z z}
+                                                      [:rename {y z} Path]
+                                                      [:rename {x z} Path]]]])]
 
           (t/is (= [[{:x "a", :y "b"}
                      {:x "b", :y "c"}
@@ -140,18 +136,16 @@
 
 (t/deftest test-assignment-operator
   (with-open [node (c2/start-node {})]
-    (with-open [watermark (c2/open-watermark node)
-                assignment-cursor (c2/open-q node watermark
-                                             '[:assign [X [:table [{:a 1}]]
-                                                        Y [:table [{:b 1}]]]
-                                               [:join {a b} X Y]])]
+    (with-open [db (c2/open-db node)
+                assignment-cursor (c2/open-q db '[:assign [X [:table [{:a 1}]]
+                                                           Y [:table [{:b 1}]]]
+                                                  [:join {a b} X Y]])]
       (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
 
     (t/testing "can see earlier assignments"
-      (with-open [watermark (c2/open-watermark node)
-                  assignment-cursor (c2/open-q node watermark
-                                               '[:assign [X [:table [{:a 1}]]
-                                                          Y [:join {a b} X [:table [{:b 1}]]]
-                                                          X Y]
-                                                 X])]
+      (with-open [db (c2/open-db node)
+                  assignment-cursor (c2/open-q db '[:assign [X [:table [{:a 1}]]
+                                                             Y [:join {a b} X [:table [{:b 1}]]]
+                                                             X Y]
+                                                    X])]
         (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor)))))))

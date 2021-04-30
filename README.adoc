@@ -19,18 +19,16 @@ Transactions are slightly different to Classic:
 - `:crux.db/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 
-Core2 has the concept of 'watermarks', similar to `crux/db` but (as yet) without the ability to specify VT/TT.
-These are `Closeable` - use them in a `with-open`.
+Core2 has the concept of 'db's, similar to `crux/open-db` but (as yet) without the ability to specify VT/TT.
 
-At the moment, the main query function is on the node itself, `open-q` taking a watermark and a relational-algebra query plan.
+At the moment, the main query function is on the node itself, `open-q` taking a 'db' and a relational-algebra query plan.
 Have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
 
 [source,clojure]
 ----
 (with-open [node (c2/start-node {})
-            watermark (c2/open-watermark node)
-            res (c2/open-q node watermark
-                           '[:scan [{name (> name "Ivan")}]])]
+            db (c2/open-db node)
+            res (c2/open-q db '[:scan [{name (> name "Ivan")}]])]
   ...)
 ----
 

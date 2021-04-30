@@ -1,139 +1,230 @@
 (ns core2.operator
-  (:require [core2.operator.group-by :as group-by]
-            [core2.operator.join :as join]
+  (:require [clojure.spec.alpha :as s]
+            core2.data-source
+            [core2.expression :as expr]
+            [core2.expression.metadata :as expr.meta]
+            [core2.logical-plan :as lp]
+            [core2.operator.group-by :as group-by]
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
-            [core2.operator.rename :as rename]
-            [core2.operator.scan :as scan]
-            [core2.operator.select :as select]
-            [core2.operator.slice :as slice]
-            [core2.operator.set :as set-op]
             [core2.operator.table :as table]
-            core2.metadata
-            core2.temporal
-            [core2.system :as sys])
-  (:import core2.buffer_pool.IBufferPool
-           core2.metadata.IMetadataManager
-           core2.temporal.ITemporalManager
+            [core2.util :as util]
+            [core2.operator.slice :as slice]
+            [core2.operator.select :as select]
+            [core2.operator.rename :as rename]
+            [core2.operator.set :as set-op]
+            [core2.operator.join :as join])
+  (:import clojure.lang.MapEntry
+           core2.data_source.IQueryDataSource
+           [core2.operator.set ICursorFactory IFixpointCursorFactory]
            org.apache.arrow.memory.BufferAllocator))
 
-(definterface IOperatorFactory
-  (^core2.IChunkCursor scan [^core2.tx.Watermark watermark
-                             ^java.util.List #_<String> colNames,
-                             metadataPred
-                             ^java.util.Map #_#_<String, IVectorPredicate> colPreds
-                             ^longs temporalMinRange
-                             ^longs temporalMaxRange])
+(defmulti emit-op first)
 
-  (^core2.IChunkCursor table [^java.util.List #_<Map> rows])
+(alter-meta! #'emit-op assoc :private true)
 
-  (^core2.IChunkCursor select [^core2.IChunkCursor inCursor
-                               ^core2.select.IVectorSchemaRootSelector selector])
+(defmulti ->aggregate-spec
+  (fn [name from-name to-name & args]
+    name))
 
-  (^core2.IChunkCursor project [^core2.IChunkCursor inCursor
-                                ^java.util.List #_<ProjectionSpec> projectionSpecs])
+(alter-meta! #'->aggregate-spec assoc :private true)
 
-  (^core2.IChunkCursor rename [^core2.IChunkCursor inCursor
-                               ^java.util.Map #_#_<String, String> renameMap
-                               ^String prefix])
+(defmethod ->aggregate-spec :avg [_ from-name to-name]
+  (group-by/->avg-number-spec from-name to-name))
 
-  (^core2.IChunkCursor equiJoin [^core2.IChunkCursor leftCursor
-                                 ^String leftColName
-                                 ^core2.IChunkCursor rightCursor
-                                 ^String rightColName])
+(defmethod ->aggregate-spec :sum [_ from-name to-name]
+  (group-by/->sum-number-spec from-name to-name))
 
-  (^core2.IChunkCursor semiEquiJoin [^core2.IChunkCursor leftCursor
-                                     ^String leftColName
-                                     ^core2.IChunkCursor rightCursor
-                                     ^String rightColName])
+(defmethod ->aggregate-spec :min [_ from-name to-name]
+  (group-by/->min-spec from-name to-name))
 
-  (^core2.IChunkCursor antiEquiJoin [^core2.IChunkCursor leftCursor
-                                     ^String leftColName
-                                     ^core2.IChunkCursor rightCursor
-                                     ^String rightColName])
+(defmethod ->aggregate-spec :max [_ from-name to-name]
+  (group-by/->max-spec from-name to-name))
 
-  (^core2.IChunkCursor crossJoin [^core2.IChunkCursor leftCursor
-                                  ^core2.IChunkCursor rightCursor])
+(defmethod ->aggregate-spec :count [_ from-name to-name]
+  (group-by/->count-spec from-name to-name))
 
-  (^core2.IChunkCursor orderBy [^core2.IChunkCursor inCursor
-                                ^java.util.List #_<SortSpec> orderSpecs])
+(defmethod ->aggregate-spec :count-not-null [_ from-name to-name]
+  (group-by/->count-not-null-spec from-name to-name))
 
-  (^core2.IChunkCursor groupBy [^core2.IChunkCursor inCursor
-                                ^java.util.List #_<AggregateSpec> aggregateSpecs])
+(defmethod emit-op :scan [[_ {:keys [columns]}]]
+  (let [col-names (for [[col-type arg] columns]
+                    (str (case col-type
+                           :column arg
+                           :select (key (first arg)))))
+        selects (->> (for [[col-type arg] columns
+                           :when (= col-type :select)]
+                       (first arg))
+                     (into {}))
+        col-preds (->> (for [[col-name select-expr] selects]
+                         (MapEntry/create (name col-name)
+                                          (expr/->expression-vector-selector select-expr)))
+                       (into {}))
+        args (vec (concat (for [col-name col-names
+                                :when (not (contains? selects col-name))]
+                            {:op :variable :variable (symbol col-name)})
+                          (vals selects)))
+        metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args})]
 
-  (^core2.IChunkCursor slice [^core2.IChunkCursor inCursor, ^Long offset, ^Long limit])
+    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+      (.scan db allocator col-names metadata-pred col-preds nil nil))))
 
-  (^core2.IChunkCursor union [^core2.IChunkCursor leftCursor ^core2.IChunkCursor rightCursor])
+(defmethod emit-op :table [[_ {:keys [rows]}]]
+  (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+    (table/->table-cursor allocator rows)))
 
-  (^core2.IChunkCursor difference [^core2.IChunkCursor leftCursor ^core2.IChunkCursor rightCursor])
+(defn- unary-op [relation f]
+  (let [inner-f (emit-op relation)]
+    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+      (let [inner (inner-f allocator db)]
+        (try
+          (f allocator inner)
+          (catch Exception e
+            (util/try-close inner)
+            (throw e)))))))
 
-  (^core2.IChunkCursor intersection [^core2.IChunkCursor leftCursor ^core2.IChunkCursor rightCursor])
+(defn- binary-op [left right f]
+  (let [left-f (emit-op left)
+        right-f (emit-op right)]
+    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+      (let [left (left-f allocator db)]
+        (try
+          (let [right (right-f allocator db)]
+            (try
+              (f allocator left right)
+              (catch Exception e
+                (util/try-close right)
+                (throw e))))
+          (catch Exception e
+            (util/try-close left)
+            (throw e)))))))
 
-  (^core2.IChunkCursor distinct [^core2.IChunkCursor inCursor])
+(defmethod emit-op :select [[_ {:keys [predicate relation]}]]
+  (let [selector (expr/->expression-root-selector predicate)]
+    (unary-op relation (fn [allocator inner]
+                         (select/->select-cursor allocator inner selector)))))
 
-  (^core2.IChunkCursor fixpoint [^core2.IChunkCursor baseCursor
-                                 ^core2.operator.set.IFixpointCursorFactory recursiveCursorFactory
-                                 ^boolean isIncremental]))
+(defmethod emit-op :project [[_ {:keys [projections relation]}]]
+  (let [projection-specs (for [[p-type arg] projections]
+                           (case p-type
+                             :column (project/->identity-projection-spec (name arg))
+                             :extend (let [[col-name expr] (first arg)]
+                                       (expr/->expression-projection-spec (name col-name) expr))))]
+    (unary-op relation (fn [allocator inner]
+                         (project/->project-cursor allocator inner projection-specs)))))
 
-(defn ->operator-factory {::sys/deps {:allocator :core2/allocator
-                                      :metadata-mgr :core2/metadata-manager
-                                      :temporal-mgr :core2/temporal-manager
-                                      :buffer-pool :core2/buffer-pool}}
-  ^core2.operator.IOperatorFactory
-  [{:keys [^BufferAllocator allocator
-           ^IMetadataManager metadata-mgr
-           ^ITemporalManager temporal-mgr
-           ^IBufferPool buffer-pool]}]
+(defmethod emit-op :rename [[_ {:keys [columns relation prefix]}]]
+  (let [rename-map (->> columns
+                        (into {} (map (juxt (comp name key)
+                                            (comp name val)))))]
+    (unary-op relation (fn [allocator inner]
+                         (rename/->rename-cursor allocator inner rename-map (some-> prefix (name)))))))
 
-  (reify IOperatorFactory
-    (scan [_ watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range]
-      (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
-                          watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range))
+(defmethod emit-op :distinct [[_ {:keys [relation]}]]
+  (unary-op relation (fn [allocator inner]
+                       (set-op/->distinct-cursor allocator inner))))
 
-    (table [_ rows]
-      (table/->table-cursor allocator rows))
+(defmethod emit-op :union [[_ {:keys [left right]}]]
+  (binary-op left right (fn [_allocator left right]
+                          (set-op/->union-cursor left right))))
 
-    (select [_ in-cursor selector]
-      (select/->select-cursor allocator in-cursor selector))
+(defmethod emit-op :intersection [[_ {:keys [left right]}]]
+  (binary-op left right (fn [allocator left right]
+                          (set-op/->intersection-cursor allocator left right))))
 
-    (project [_ in-cursor projection-specs]
-      (project/->project-cursor allocator in-cursor projection-specs))
+(defmethod emit-op :difference [[_ {:keys [left right]}]]
+  (binary-op left right (fn [allocator left right]
+                          (set-op/->difference-cursor allocator left right))))
 
-    (rename [_ in-cursor rename-map prefix]
-      (rename/->rename-cursor allocator in-cursor rename-map prefix))
+(defmethod emit-op :cross-join [[_ {:keys [left right]}]]
+  (binary-op left right (fn [allocator left right]
+                          (join/->cross-join-cursor allocator left right))))
 
-    (equiJoin [_ left-cursor left-column-name right-cursor right-column-name]
-      (join/->equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
+(defmethod emit-op :join [[_ {:keys [columns left right]}]]
+  (let [[left-col] (keys columns)
+        [right-col] (vals columns)]
+    (binary-op left right (fn [allocator left right]
+                            (join/->equi-join-cursor allocator
+                                                     left (name left-col)
+                                                     right (name right-col))))))
 
-    (semiEquiJoin [_ left-cursor left-column-name right-cursor right-column-name]
-      (join/->semi-equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
+(defmethod emit-op :semi-join [[_ {:keys [columns left right]}]]
+  (let [[left-col] (keys columns)
+        [right-col] (vals columns)]
+    (binary-op left right (fn [allocator left right]
+                            (join/->semi-equi-join-cursor allocator
+                                                          left (name left-col)
+                                                          right (name right-col))))))
 
-    (antiEquiJoin [_ left-cursor left-column-name right-cursor right-column-name]
-      (join/->anti-equi-join-cursor allocator left-cursor left-column-name right-cursor right-column-name))
+(defmethod emit-op :anti-join [[_ {:keys [columns left right]}]]
+  (let [[left-col] (keys columns)
+        [right-col] (vals columns)]
+    (binary-op left right (fn [allocator left right]
+                            (join/->anti-equi-join-cursor allocator
+                                                          left (name left-col)
+                                                          right (name right-col))))))
 
-    (crossJoin [_ left-cursor right-cursor]
-      (join/->cross-join-cursor allocator left-cursor right-cursor))
+(defmethod emit-op :group-by [[_ {:keys [columns relation]}]]
+  (let [agg-specs (for [[col-type arg] columns]
+                    (case col-type
+                      :group-by (group-by/->group-spec (name arg))
+                      :aggregate (let [[to-name {:keys [f args]}] (first arg)
+                                       from-name (:variable (first args))]
+                                   (->aggregate-spec (keyword (name f)) (name from-name) (name to-name)))
+                      [col-type arg]))]
+    (unary-op relation (fn [allocator inner]
+                         (group-by/->group-by-cursor allocator inner agg-specs)))))
 
-    (groupBy [_ in-cursor aggregate-specs]
-      (group-by/->group-by-cursor allocator in-cursor aggregate-specs))
+(defmethod emit-op :order-by [[_ {:keys [order relation]}]]
+  (let [order-specs (for [[order-type arg] order]
+                      (case order-type
+                        :direction (order-by/->order-spec (name (key (first arg)))
+                                                          (val (first arg)))
+                        :column (order-by/->order-spec (name arg) :asc)))]
+    (unary-op relation (fn [allocator inner]
+                         (order-by/->order-by-cursor allocator inner order-specs)))))
 
-    (orderBy [_ in-cursor order-specs]
-      (order-by/->order-by-cursor allocator in-cursor order-specs))
+(defmethod emit-op :slice [[_ {:keys [relation], {:keys [offset limit]} :slice}]]
+  (unary-op relation (fn [allocator inner]
+                       (slice/->slice-cursor allocator inner offset limit))))
 
-    (slice [_ in-cursor offset limit]
-      (slice/->slice-cursor allocator in-cursor offset limit))
+(def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 
-    (union [_ left-cursor right-cursor]
-      (set-op/->union-cursor left-cursor right-cursor))
+(defmethod emit-op :relation [[_ relation-name]]
+  (fn [_allocator _db]
+    (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation-name)]
+      (assert cursor-factory)
+      (.createCursor cursor-factory))))
 
-    (difference [_ left-cursor right-cursor]
-      (set-op/->difference-cursor allocator left-cursor right-cursor))
+(defmethod emit-op :fixpoint [[_ {:keys [mu-variable base recursive]}]]
+  (let [base-f (emit-op base)
+        recursive-f (emit-op recursive)]
+    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+      (set-op/->fixpoint-cursor allocator
+                                (base-f allocator db)
+                                (reify IFixpointCursorFactory
+                                  (createCursor [_ cursor-factory]
+                                    (binding [*relation-variable->cursor-factory* (assoc *relation-variable->cursor-factory* mu-variable cursor-factory)]
+                                      (recursive-f allocator db))))
+                 false))))
 
-    (intersection [_ left-cursor right-cursor]
-      (set-op/->intersection-cursor allocator left-cursor right-cursor))
+(defmethod emit-op :assign [[_ {:keys [bindings relation]}]]
+  (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+    (let [assignments (reduce
+                       (fn [acc {:keys [variable value]}]
+                         (assoc acc variable (let [value-f (emit-op value)]
+                                               (reify ICursorFactory
+                                                 (createCursor [_]
+                                                   (binding [*relation-variable->cursor-factory* acc]
+                                                     (value-f allocator db)))))))
+                       *relation-variable->cursor-factory*
+                       bindings)]
+      (with-bindings {#'*relation-variable->cursor-factory* assignments}
+        (let [inner-f (emit-op relation)]
+          (inner-f allocator db))))))
 
-    (distinct [_ in-cursor]
-      (set-op/->distinct-cursor allocator in-cursor))
-
-    (fixpoint [_ base-cursor recursive-cursor-factory incremental?]
-      (set-op/->fixpoint-cursor allocator base-cursor recursive-cursor-factory incremental?))))
+(defn open-q ^core2.ICursor [allocator db lp]
+  (when-not (s/valid? ::lp/logical-plan lp)
+    (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan lp))))
+  (let [op-f (emit-op (s/conform ::lp/logical-plan lp))]
+    (op-f allocator db)))

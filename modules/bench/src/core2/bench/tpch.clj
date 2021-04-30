@@ -16,11 +16,11 @@
     (bench/with-timing :finish-chunk
       (bench/finish-chunk node))))
 
-(defn query-tpch [node watermark]
+(defn query-tpch [db]
   (doseq [q tpch/queries]
     (bench/with-timing (str "query " (:name (meta q)))
       (try
-        (with-open [cursor (c2/open-q node watermark @q)]
+        (with-open [cursor (c2/open-q db @q)]
           (.forEachRemaining cursor
                              (reify Consumer
                                (accept [_ root]))))
@@ -32,12 +32,12 @@
     (bench/with-timing :ingest
       (ingest-tpch node {:scale-factor 0.01}))
 
-    (with-open [watermark (c2/open-watermark node)]
+    (with-open [db (c2/open-db node)]
       (bench/with-timing :cold-queries
-        (query-tpch node watermark))
+        (query-tpch db))
 
       (bench/with-timing :hot-queries
-        (query-tpch node watermark)))))
+        (query-tpch db)))))
 
 (defn -main [& args]
   (try
@@ -52,12 +52,12 @@
         (bench/with-timing :ingest
           (ingest-tpch node opts))
 
-        (with-open [watermark (c2/open-watermark node)]
+        (with-open [db (c2/open-db node)]
           (bench/with-timing :cold-queries
-            (query-tpch node watermark))
+            (query-tpch db))
 
           (bench/with-timing :hot-queries
-            (query-tpch node watermark)))))
+            (query-tpch db)))))
 
     (catch Exception e
       (.printStackTrace e)

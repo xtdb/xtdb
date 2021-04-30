@@ -10,7 +10,7 @@
            [java.time Clock Duration ZoneId]))
 
 (def ^:dynamic *node*)
-(def ^:dynamic *watermark*)
+(def ^:dynamic *db*)
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
@@ -24,9 +24,9 @@
 
       (tu/finish-chunk node))
 
-    (with-open [watermark (c2/open-watermark node)]
+    (with-open [db (c2/open-db node)]
       (binding [*node* node
-                *watermark* watermark]
+                *db* db]
         (f)))))
 
 (defn- test-tpch-ingest [scale-factor expected-objects]
@@ -47,7 +47,7 @@
             (tu/check-json-file expected-path actual-path)))))))
 
 (defn run-query [q]
-  (with-open [res (c2/open-q *node* *watermark* q)]
+  (with-open [res (c2/open-q *db* q)]
     (into [] (mapcat seq) (tu/<-cursor res))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01

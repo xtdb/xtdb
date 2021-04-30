@@ -13,7 +13,7 @@
                                                  :topic-name topic-name}})]
       (let [tx @(c2/submit-tx node [{:op :put, :doc {:_id "foo"}}])]
         (c2/await-tx node tx (Duration/ofSeconds 1))
-        (with-open [wm (c2/open-watermark node)
-                    res (c2/open-q node wm '[:scan [_id]])]
+        (with-open [db (c2/open-db node)
+                    res (c2/open-q db '[:scan [_id]])]
           (t/is (= [{:_id (Text. "foo")}]
                    (into [] (mapcat seq) (tu/<-cursor res)))))))))
