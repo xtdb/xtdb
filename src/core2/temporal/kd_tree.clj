@@ -996,7 +996,7 @@
    (let [^Path path (->empty-disk-kd-tree allocator path n k)
          nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
      (with-open [arrow-buf (util/->arrow-buf-view allocator nio-buffer)
-                 chunks (util/->chunks arrow-buf allocator)]
+                 chunks (util/->chunks arrow-buf)]
        (.tryAdvance chunks (reify Consumer
                              (accept [_ root]
                                (build-tree-in-place allocator root points))))
@@ -1007,7 +1007,7 @@
   (let [nio-buffer (util/->mmap-path path)
         res (promise)]
     (with-open [arrow-buf (util/->arrow-buf-view allocator nio-buffer)
-                chunks (util/->chunks arrow-buf allocator)]
+                chunks (util/->chunks arrow-buf)]
       (.tryAdvance chunks (reify Consumer
                             (accept [_ root]
                               (deliver res (util/slice-root root 0))))))

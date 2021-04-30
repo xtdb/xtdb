@@ -137,8 +137,7 @@
                  filtered-block-idxs))))))
     block-idxs))
 
-(deftype ScanCursor [^BufferAllocator allocator
-                     ^Schema out-schema
+(deftype ScanCursor [^Schema out-schema
                      ^VectorSchemaRoot out-root
                      ^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
@@ -194,8 +193,8 @@
                                               (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx col-name))
                                                   (util/then-apply
                                                     (fn [buf]
-                                                      (MapEntry/create col-name (util/->chunks buf allocator {:block-idxs block-idxs
-                                                                                                              :close-buffer? true}))))))
+                                                      (MapEntry/create col-name (util/->chunks buf {:block-idxs block-idxs
+                                                                                                    :close-buffer? true}))))))
                                             (remove nil?)
                                             vec
                                             (into {} (map deref)))]
@@ -220,21 +219,22 @@
       (util/try-close chunk))
     (util/try-close out-root)))
 
-(defn ->scan-cursor [^BufferAllocator allocator
-                     ^IMetadataManager metadata-manager
-                     ^ITemporalManager temporal-manager
-                     ^IBufferPool buffer-pool
-                     ^Watermark watermark
-                     ^List col-names
-                     metadata-pred ;; TODO derive this from col-preds
-                     ^Map col-preds
-                     ^longs temporal-min-range
-                     ^longs temporal-max-range]
+(defn ^core2.operator.scan.ScanCursor ->scan-cursor
+  [^BufferAllocator allocator
+   ^IMetadataManager metadata-manager
+   ^ITemporalManager temporal-manager
+   ^IBufferPool buffer-pool
+   ^Watermark watermark
+   ^List col-names
+   metadata-pred ;; TODO derive this from col-preds
+   ^Map col-preds
+   ^longs temporal-min-range, ^longs temporal-max-range]
+
   (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))
         schema (Schema. (for [^String col-name col-names]
                           (or (temporal/->temporal-field col-name)
                               (t/->primitive-dense-union-field col-name))))]
-    (ScanCursor. allocator schema
+    (ScanCursor. schema
                  (VectorSchemaRoot/create schema allocator)
                  buffer-pool temporal-manager metadata-manager watermark
                  matching-chunks col-names col-preds

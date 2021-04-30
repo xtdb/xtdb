@@ -267,7 +267,7 @@
             (when metadata-buffer
               (let [res (promise)]
                 (try
-                  (with-open [chunk (util/->chunks metadata-buffer allocator)]
+                  (with-open [chunk (util/->chunks metadata-buffer)]
                     (.tryAdvance chunk
                                  (reify Consumer
                                    (accept [_ metadata-root]

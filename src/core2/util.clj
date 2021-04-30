@@ -438,11 +438,11 @@
       (try-close buf))))
 
 (defn ^core2.IChunkCursor ->chunks
-  ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator]
-   (->chunks ipc-file-format-buffer allocator {}))
-  ([^ArrowBuf ipc-file-format-buffer ^BufferAllocator allocator {:keys [^RoaringBitmap block-idxs close-buffer?]}]
+  ([^ArrowBuf ipc-file-format-buffer]
+   (->chunks ipc-file-format-buffer {}))
+  ([^ArrowBuf ipc-file-format-buffer {:keys [^RoaringBitmap block-idxs close-buffer?]}]
    (let [footer (read-arrow-footer ipc-file-format-buffer)
-         root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+         root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager ipc-file-format-buffer)))]
      (ChunkCursor. ipc-file-format-buffer
                    (LinkedList. (cond->> (.getRecordBatches footer)
                                   block-idxs (keep-indexed (fn [idx record-batch]

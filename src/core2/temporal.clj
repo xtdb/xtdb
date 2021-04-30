@@ -183,7 +183,7 @@
   TemporalManangerPrivate
   (reloadTemporalIndex [this chunk-idx]
     (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
-                temporal-chunks (util/->chunks temporal-buffer allocator)]
+                temporal-chunks (util/->chunks temporal-buffer)]
       (.tryAdvance temporal-chunks
                    (reify Consumer
                      (accept [_ temporal-root]
@@ -201,7 +201,7 @@
       @(CompletableFuture/allOf (into-array CompletableFuture futs))
       (doseq [chunk-idx known-chunks]
         (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                    id-chunks (util/->chunks id-buffer allocator)]
+                    id-chunks (util/->chunks id-buffer)]
           (.forEachRemaining id-chunks
                              (reify Consumer
                                (accept [_ id-root]
