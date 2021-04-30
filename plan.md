@@ -161,4 +161,3 @@ Misc functionality/ideas:
 - Schema-aware operators, currently requires queries to see schema.
 - Ingest and chunk dependency system. We want the query engine to avoid generating its dependent data.
 - Partitioning/sharding
-- Multiple DBs
