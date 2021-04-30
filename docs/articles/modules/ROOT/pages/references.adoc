@@ -209,7 +209,6 @@ of implementation details.
 * https://opencrux.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. opencrux.com. 2021.
 * https://opencrux.com/blog/crux-sql.html[Crux SQL: Query your Datalog database with SQL], Pither. Crux Weblog. 2020.
 * https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Weblog. 2019.
-* https://www.youtube.com/watch?v=Zn-J26PGugM[Introducing Crux: A Bitemporal Database], Taylor, Pither. Scala in the City (YouTube). October 2019.
 * https://www.youtube.com/watch?v=YjAVsvYGbuU[The Design and Implementation of a Bitemporal DBMS], Råberg. ClojuTRE (YouTube). September 2019.
 * https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.
 * https://www.youtube.com/watch?v=3Stja6YUB94[The Crux of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
