@@ -20,7 +20,10 @@
   (doseq [q tpch/queries]
     (bench/with-timing (str "query " (:name (meta q)))
       (try
-        (with-open [cursor (c2/open-q db @q)]
+        (with-open [cursor (c2/open-q {'$ db
+                                       'q16-psizes tpch/tpch-q16-psizes
+                                       'q22-cntrycodes tpch/tpch-q22-cntrycodes}
+                                      @q)]
           (.forEachRemaining cursor
                              (reify Consumer
                                (accept [_ root]))))

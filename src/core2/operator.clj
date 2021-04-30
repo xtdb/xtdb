@@ -67,22 +67,29 @@
                           (vals selects)))
         metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args})]
 
-    (fn [^BufferAllocator allocator, dbs]
-      (let [^IQueryDataSource db (or (get dbs (or source '$))
+    (fn [^BufferAllocator allocator, srcs]
+      (let [^IQueryDataSource db (or (get srcs (or source '$))
                                      (throw (err/illegal-arg :unknown-db
                                                              {::err/message "Query refers to unknown db"
                                                               :db source
-                                                              :dbs (keys dbs)})))]
+                                                              :srcs (keys srcs)})))]
         (.scan db allocator col-names metadata-pred col-preds nil nil)))))
 
-(defmethod emit-op :table [[_ {:keys [rows]}]]
-  (fn [^BufferAllocator allocator, dbs]
-    (table/->table-cursor allocator rows)))
+(defmethod emit-op :table [[_ {[table-type table-arg] :table}]]
+  (fn [^BufferAllocator allocator, srcs]
+    (table/->table-cursor allocator
+                          (case table-type
+                            :rows table-arg
+                            :source (or (get srcs table-arg)
+                                        (throw (err/illegal-arg :unknown-table
+                                                                {::err/message "Query refers to unknown table"
+                                                                 :table table-arg
+                                                                 :srcs (keys srcs)})))))))
 
 (defn- unary-op [relation f]
   (let [inner-f (emit-op relation)]
-    (fn [^BufferAllocator allocator, dbs]
-      (let [inner (inner-f allocator dbs)]
+    (fn [^BufferAllocator allocator, srcs]
+      (let [inner (inner-f allocator srcs)]
         (try
           (f allocator inner)
           (catch Exception e
@@ -92,10 +99,10 @@
 (defn- binary-op [left right f]
   (let [left-f (emit-op left)
         right-f (emit-op right)]
-    (fn [^BufferAllocator allocator, dbs]
-      (let [left (left-f allocator dbs)]
+    (fn [^BufferAllocator allocator, srcs]
+      (let [left (left-f allocator srcs)]
         (try
-          (let [right (right-f allocator dbs)]
+          (let [right (right-f allocator srcs)]
             (try
               (f allocator left right)
               (catch Exception e
@@ -197,7 +204,7 @@
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 
 (defmethod emit-op :relation [[_ relation-name]]
-  (fn [_allocator _dbs]
+  (fn [_allocator _srcs]
     (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation-name)]
       (assert cursor-factory)
       (.createCursor cursor-factory))))
@@ -205,32 +212,32 @@
 (defmethod emit-op :fixpoint [[_ {:keys [mu-variable base recursive]}]]
   (let [base-f (emit-op base)
         recursive-f (emit-op recursive)]
-    (fn [^BufferAllocator allocator, dbs]
+    (fn [^BufferAllocator allocator, srcs]
       (set-op/->fixpoint-cursor allocator
-                                (base-f allocator dbs)
+                                (base-f allocator srcs)
                                 (reify IFixpointCursorFactory
                                   (createCursor [_ cursor-factory]
                                     (binding [*relation-variable->cursor-factory* (assoc *relation-variable->cursor-factory* mu-variable cursor-factory)]
-                                      (recursive-f allocator dbs))))
+                                      (recursive-f allocator srcs))))
                  false))))
 
 (defmethod emit-op :assign [[_ {:keys [bindings relation]}]]
-  (fn [^BufferAllocator allocator, dbs]
+  (fn [^BufferAllocator allocator, srcs]
     (let [assignments (reduce
                        (fn [acc {:keys [variable value]}]
                          (assoc acc variable (let [value-f (emit-op value)]
                                                (reify ICursorFactory
                                                  (createCursor [_]
                                                    (binding [*relation-variable->cursor-factory* acc]
-                                                     (value-f allocator dbs)))))))
+                                                     (value-f allocator srcs)))))))
                        *relation-variable->cursor-factory*
                        bindings)]
       (with-bindings {#'*relation-variable->cursor-factory* assignments}
         (let [inner-f (emit-op relation)]
-          (inner-f allocator dbs))))))
+          (inner-f allocator srcs))))))
 
-(defn open-q ^core2.ICursor [allocator dbs lp]
+(defn open-q ^core2.ICursor [allocator srcs lp]
   (when-not (s/valid? ::lp/logical-plan lp)
     (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan lp))))
   (let [op-f (emit-op (s/conform ::lp/logical-plan lp))]
-    (op-f allocator dbs)))
+    (op-f allocator srcs)))

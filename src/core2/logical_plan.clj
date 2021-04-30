@@ -26,7 +26,8 @@
                                          :min-count 1)))
 
 (s/def ::table (s/cat :op #{:table}
-                      :rows (s/coll-of (s/map-of ::named any?))))
+                      :table (s/or :rows (s/coll-of (s/map-of ::named any?))
+                                   :source ::source)))
 
 (s/def ::project (s/cat :op #{:π :pi :project}
                         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)

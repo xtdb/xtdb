@@ -80,72 +80,70 @@
                    (query-ivan db))))))))
 
 (t/deftest test-fixpoint-operator
-  (let [node-dir (doto (util/->path "target/test-fixpoint-operator")
-                   util/delete-dir)]
-    (with-open [node (tu/->local-node {:node-dir node-dir})]
-      (t/testing "factorial"
-        (with-open [db (c2/open-db node)
-                    fixpoint-cursor (c2/open-q db '[:fixpoint Fact
-                                                    [:table [{:a 0 :b 1}]]
-                                                    [:select
-                                                     (<= a 8)
-                                                     [:project
-                                                      [{a (+ a 1)}
-                                                       {b (* (+ a 1) b)}]
-                                                      Fact]]])]
-          (t/is (= [[{:a 0, :b 1}
-                     {:a 1, :b 1}
-                     {:a 2, :b 2}
-                     {:a 3, :b 6}
-                     {:a 4, :b 24}
-                     {:a 5, :b 120}
-                     {:a 6, :b 720}
-                     {:a 7, :b 5040}
-                     {:a 8, :b 40320}]]
-                   (tu/<-cursor fixpoint-cursor)))))
+  (t/testing "factorial"
+    (with-open [fixpoint-cursor (c2/open-q {'table [{:a 0 :b 1}]}
+                                           '[:fixpoint Fact
+                                             [:table table]
+                                             [:select
+                                              (<= a 8)
+                                              [:project
+                                               [{a (+ a 1)}
+                                                {b (* (+ a 1) b)}]
+                                               Fact]]])]
+      (t/is (= [[{:a 0, :b 1}
+                 {:a 1, :b 1}
+                 {:a 2, :b 2}
+                 {:a 3, :b 6}
+                 {:a 4, :b 24}
+                 {:a 5, :b 120}
+                 {:a 6, :b 720}
+                 {:a 7, :b 5040}
+                 {:a 8, :b 40320}]]
+               (tu/<-cursor fixpoint-cursor)))))
 
-      (t/testing "transitive closure"
-        (with-open [db (c2/open-db node)
-                    fixpoint-cursor (c2/open-q db '[:fixpoint Path
-                                                    [:table [{:x "a" :y "b"}
-                                                             {:x "b" :y "c"}
-                                                             {:x "c" :y "d"}
-                                                             {:x "d" :y "a"}]]
-                                                    [:project [x y]
-                                                     [:join {z z}
-                                                      [:rename {y z} Path]
-                                                      [:rename {x z} Path]]]])]
+  (t/testing "transitive closure"
+    (with-open [fixpoint-cursor (c2/open-q {'table [{:x "a" :y "b"}
+                                                    {:x "b" :y "c"}
+                                                    {:x "c" :y "d"}
+                                                    {:x "d" :y "a"}]}
+                                           '[:fixpoint Path
+                                             [:table table]
+                                             [:project [x y]
+                                              [:join {z z}
+                                               [:rename {y z} Path]
+                                               [:rename {x z} Path]]]])]
 
-          (t/is (= [[{:x "a", :y "b"}
-                     {:x "b", :y "c"}
-                     {:x "c", :y "d"}
-                     {:x "d", :y "a"}
-                     {:x "d", :y "b"}
-                     {:x "a", :y "c"}
-                     {:x "b", :y "d"}
-                     {:x "c", :y "a"}
-                     {:x "c", :y "b"}
-                     {:x "d", :y "c"}
-                     {:x "a", :y "d"}
-                     {:x "b", :y "a"}
-                     {:x "b", :y "b"}
-                     {:x "c", :y "c"}
-                     {:x "d", :y "d"}
-                     {:x "a", :y "a"}]]
-                   (tu/<-cursor fixpoint-cursor))))))))
+      (t/is (= [[{:x "a", :y "b"}
+                 {:x "b", :y "c"}
+                 {:x "c", :y "d"}
+                 {:x "d", :y "a"}
+                 {:x "d", :y "b"}
+                 {:x "a", :y "c"}
+                 {:x "b", :y "d"}
+                 {:x "c", :y "a"}
+                 {:x "c", :y "b"}
+                 {:x "d", :y "c"}
+                 {:x "a", :y "d"}
+                 {:x "b", :y "a"}
+                 {:x "b", :y "b"}
+                 {:x "c", :y "c"}
+                 {:x "d", :y "d"}
+                 {:x "a", :y "a"}]]
+               (tu/<-cursor fixpoint-cursor))))))
 
 (t/deftest test-assignment-operator
-  (with-open [node (c2/start-node {})]
-    (with-open [db (c2/open-db node)
-                assignment-cursor (c2/open-q db '[:assign [X [:table [{:a 1}]]
-                                                           Y [:table [{:b 1}]]]
-                                                  [:join {a b} X Y]])]
-      (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
+  (with-open [assignment-cursor (c2/open-q '{x [{:a 1}]
+                                             y [{:b 1}]}
+                                           '[:assign [X [:table x]
+                                                      Y [:table y]]
+                                             [:join {a b} X Y]])]
+    (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
 
-    (t/testing "can see earlier assignments"
-      (with-open [db (c2/open-db node)
-                  assignment-cursor (c2/open-q db '[:assign [X [:table [{:a 1}]]
-                                                             Y [:join {a b} X [:table [{:b 1}]]]
-                                                             X Y]
-                                                    X])]
-        (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor)))))))
+  (t/testing "can see earlier assignments"
+    (with-open [assignment-cursor (c2/open-q '{x [{:a 1}]
+                                               y [{:b 1}]}
+                                             '[:assign [X [:table x]
+                                                        Y [:join {a b} X [:table y]]
+                                                        X Y]
+                                               X])]
+      (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))))

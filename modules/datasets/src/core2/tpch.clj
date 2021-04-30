@@ -341,6 +341,16 @@
        [:group-by [{max_total_revenue (max total_revenue)}]
         Revenue]]]]])
 
+(def tpch-q16-psizes
+  [{:p_size 49}
+   {:p_size 14}
+   {:p_size 23}
+   {:p_size 45}
+   {:p_size 19}
+   {:p_size 3}
+   {:p_size 36}
+   {:p_size 9}])
+
 (def tpch-q16-part-supplier-relationship
   '[:order-by [{supplier_cnt :desc} {p_brand :asc} {p_type :asc} {p_size :asc}]
     [:group-by [p_brand p_type p_size {supplier_cnt (count ps_suppkey)}]
@@ -349,14 +359,7 @@
        [:join {p_partkey ps_partkey}
         [:semi-join {p_size p_size}
          [:scan [p_partkey {p_brand (!= p_brand "Brand#45")} {p_type (not (like p_type "MEDIUM POLISHED%"))} p_size]]
-         [:table [{:p_size 49}
-                  {:p_size 14}
-                  {:p_size 23}
-                  {:p_size 45}
-                  {:p_size 19}
-                  {:p_size 3}
-                  {:p_size 36}
-                  {:p_size 9}]]]
+         [:table q16-psizes]]
         [:anti-join {ps_suppkey s_suppkey}
          [:scan [ps_partkey ps_suppkey]]
          [:scan [s_suppkey {s_comment (like s_comment "%Customer%Complaints%")}]]]]]]]])
@@ -468,17 +471,20 @@
              [:rename l3
               [:scan [l_orderkey l_suppkey l_receiptdate l_commitdate]]]]]]]]]]]]])
 
+(def tpch-q22-cntrycodes
+  [{:cntrycode "13"}
+   {:cntrycode "31"}
+   {:cntrycode "23"}
+   {:cntrycode "29"}
+   {:cntrycode "30"}
+   {:cntrycode "18"}
+   {:cntrycode "17"}])
+
 (def tpch-q22-global-sales-opportunity
   '[:assign [Customer [:semi-join {cntrycode cntrycode}
                        [:project [c_custkey {cntrycode (substr c_phone 1 2)} c_acctbal]
                         [:scan [c_custkey c_phone c_acctbal]]]
-                       [:table [{:cntrycode "13"}
-                                {:cntrycode "31"}
-                                {:cntrycode "23"}
-                                {:cntrycode "29"}
-                                {:cntrycode "30"}
-                                {:cntrycode "18"}
-                                {:cntrycode "17"}]]]]
+                       [:table q22-cntrycodes]]]
     [:order-by [{cntrycode :asc}]
      [:group-by [cntrycode {numcust (count c_custkey)} {totacctbal (sum c_acctbal)}]
       [:anti-join {c_custkey o_custkey}

@@ -46,9 +46,15 @@
             (t/is (Files/exists actual-path (make-array LinkOption 0)))
             (tu/check-json-file expected-path actual-path)))))))
 
-(defn run-query [q]
-  (with-open [res (c2/open-q *db* q)]
-    (into [] (mapcat seq) (tu/<-cursor res))))
+(defn run-query
+  ([q] (run-query q {}))
+  ([q args]
+   (with-open [res (c2/open-q (merge {'$ *db*
+                                      'q16-psizes tpch/tpch-q16-psizes
+                                      'q22-cntrycodes tpch/tpch-q22-cntrycodes}
+                                     args)
+                              q)]
+     (into [] (mapcat seq) (tu/<-cursor res)))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
   (test-tpch-ingest 0.01 68))
