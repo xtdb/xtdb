@@ -135,7 +135,8 @@
 
 (definterface TemporalManangerPrivate
   (^long getOrCreateInternalId [^Object id])
-  (^void populateKnownChunks []))
+  (^void populateKnownChunks [])
+  (^void reloadTemporalIndex [^int chunk-idx]))
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
@@ -180,6 +181,17 @@
                           ^:unsynchronized-mutable kd-tree-chunk-idx
                           ^:volatile-mutable kd-tree]
   TemporalManangerPrivate
+  (reloadTemporalIndex [this chunk-idx]
+    (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
+                temporal-chunks (util/->chunks temporal-buffer allocator)]
+      (.tryAdvance temporal-chunks
+                   (reify Consumer
+                     (accept [_ temporal-root]
+                       (set! (.kd-tree this) (kd/->merged-kd-tree (util/slice-root temporal-root 0)))
+                       (when kd-tree-chunk-idx
+                         (.evictBuffer buffer-pool(->temporal-obj-key kd-tree-chunk-idx)) )
+                       (set! (.kd-tree-chunk-idx this) chunk-idx))))))
+
   (populateKnownChunks [this]
     (let [known-chunks (.knownChunks metadata-manager)
           futs (->> (for [chunk-idx known-chunks]
@@ -198,13 +210,7 @@
                                    (dotimes [n (.getValueCount id-vec)]
                                      (.getOrCreateInternalId this (t/get-object id-vec n)))))))))
       (when-let [temporal-chunk-idx (last known-chunks)]
-        (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key temporal-chunk-idx))
-                    temporal-chunks (util/->chunks temporal-buffer allocator)]
-          (.tryAdvance temporal-chunks
-                       (reify Consumer
-                         (accept [_ temporal-root]
-                           (set! (.kd-tree this) (kd/->merged-kd-tree (util/slice-root temporal-root 0)))
-                           (set! (.kd-tree-chunk-idx this) temporal-chunk-idx))))))))
+        (.reloadTemporalIndex this temporal-chunk-idx))))
 
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
@@ -225,22 +231,14 @@
 
   (registerNewChunk [this chunk-idx]
     (when kd-tree
-      (let [prev-kd-tree-chunk-idx kd-tree-chunk-idx
-            path (util/->temp-file (->temporal-obj-key chunk-idx) "")]
+      (let [path (util/->temp-file (->temporal-obj-key chunk-idx) "")]
         (try
           (with-open [^Closeable old-kd-tree kd-tree]
             (let [temporal-buf (-> (kd/->disk-kd-tree allocator path old-kd-tree k)
                                    (util/->mmap-path))
                   new-temporal-obj-key (->temporal-obj-key chunk-idx)]
               @(.putObject object-store new-temporal-obj-key temporal-buf)
-              (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool new-temporal-obj-key)
-                          temporal-chunks (util/->chunks temporal-buffer allocator)]
-                (.tryAdvance temporal-chunks
-                             (reify Consumer
-                               (accept [_ temporal-root]
-                                 (set! (.kd-tree this) (kd/->merged-kd-tree (util/slice-root temporal-root 0)))))))))
-          (some->> prev-kd-tree-chunk-idx (->temporal-obj-key) (.evictBuffer buffer-pool))
-          (set! (.kd-tree-chunk-idx this) chunk-idx)
+              (.reloadTemporalIndex this chunk-idx)))
           (finally
             (util/delete-file path))))))
 
