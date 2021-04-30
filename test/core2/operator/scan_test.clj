@@ -1,26 +1,25 @@
 (ns core2.operator.scan-test
   (:require [clojure.test :as t]
             [core2.core :as c2]
-            [core2.operator.scan :as scan]
-            [core2.test-util :as tu]
-            [core2.expression :as expr]
-            [core2.expression.metadata :as expr.meta])
-  (:import org.apache.arrow.memory.RootAllocator))
+            [core2.test-util :as tu]))
 
 (t/use-fixtures :each tu/with-allocator)
 
-(t/deftest test-separate-query-allocator
-  (with-open [node (c2/start-node {})]
-    (let [{:core2/keys [metadata-manager temporal-manager buffer-pool]} @(:!system node)
-          tx @(c2/submit-tx node [{:op :put, :doc {:_id "foo"}}])]
-      (c2/await-tx node tx)
-      (tu/finish-chunk node)
-      (with-open [query-allocator (RootAllocator.)
-                  wm (c2/open-watermark node)
-                  res (scan/->scan-cursor query-allocator
-                                          metadata-manager temporal-manager buffer-pool
-                                          wm
-                                          ["_id"]
-                                          (expr.meta/->metadata-selector (expr/form->expr '_id))
-                                          {} nil nil)]
-        (t/is (= 1 (count (into [] (mapcat seq) (tu/<-cursor res)))))))))
+(t/deftest multiple-sources
+  (with-open [node1 (c2/start-node {})
+              node2 (c2/start-node {})]
+    (let [tx @(c2/submit-tx node1 [{:op :put, :doc {:_id "foo", :col1 "col1"}}])]
+      (c2/await-tx node1 tx)
+      (tu/finish-chunk node1))
+
+    (let [tx @(c2/submit-tx node2 [{:op :put, :doc {:_id "foo", :col2 "col2"}}])]
+      (c2/await-tx node2 tx))
+
+    (with-open [db1 (c2/open-db node1)
+                db2 (c2/open-db node2)
+                res (c2/open-q {:db1 db1, :db2 db2}
+                               '[:join {_id _id}
+                                 [:scan :db1 [_id col1]]
+                                 [:scan :db2 [_id col2]]])]
+      (t/is (= [{:_id "foo", :col1 "col1", :col2 "col2"}]
+               (into [] (mapcat seq) (tu/<-cursor res)))))))

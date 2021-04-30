@@ -17,7 +17,7 @@
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
-           core2.tx.TransactionInstant
+           [core2.tx TransactionInstant Watermark]
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -68,6 +68,9 @@
            :mem-free 7.20742332E8,
            :mem-used 2.79257668E8}}]])
 
+(defn open-watermark ^core2.tx.Watermark [node]
+  (.watermark (c2/open-db node)))
+
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
         last-tx-instant (tx/->TransactionInstant 6240 #inst "2020-01-02")
@@ -96,7 +99,7 @@
                  (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (with-open [watermark (c2/open-watermark node)]
+          (with-open [watermark (open-watermark node)]
             (let [column->root (.column->root watermark)
                   first-column (first column->root)
                   last-column (last column->root)]
@@ -114,12 +117,12 @@
                     "device-info-demo000001" -6688467811848818630
                     "reading-demo000001" -8292973307042192125}
                    (.id->internal-id tm)))
-          (with-open [watermark (c2/open-watermark node)]
+          (with-open [watermark (open-watermark node)]
             (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
         (tu/finish-chunk node)
 
-        (with-open [watermark (c2/open-watermark node)]
+        (with-open [watermark (open-watermark node)]
           (t/is (= 4 (.chunk-idx watermark)))
           (t/is (zero? (.row-count watermark)))
           (t/is (empty? (.column->root watermark))))
@@ -416,7 +419,7 @@
                               (.tx-id (c2/await-tx node first-half-tx-instant (Duration/ofSeconds 5)))
                               (.tx-id second-half-tx-instant)))
 
-                    (with-open [watermark (c2/open-watermark node)]
+                    (with-open [watermark (open-watermark node)]
                       (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark watermark))) 3500))
                       (t/is (>= (count (.id->internal-id tm)) 2000))))
 
