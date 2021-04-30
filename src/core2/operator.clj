@@ -68,7 +68,7 @@
         metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args})]
 
     (fn [^BufferAllocator allocator, dbs]
-      (let [^IQueryDataSource db (or (get dbs source)
+      (let [^IQueryDataSource db (or (get dbs (or source '$))
                                      (throw (err/illegal-arg :unknown-db
                                                              {::err/message "Query refers to unknown db"
                                                               :db source
