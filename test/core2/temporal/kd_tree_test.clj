@@ -405,7 +405,7 @@
                         ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
                                                                               new-tree-with-tombstone
                                                                               2)
-                        merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
+                        ^Node merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
                         rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
               (t/is (= 4 (kd/kd-tree-size old-tree-with-node-to-be-deleted)))
 

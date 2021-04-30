@@ -273,6 +273,8 @@
                    (juxt meta/latest-tx meta/latest-row-id)))
 
           (let [objs (.listObjects os)]
+            (t/is (= 4 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
+            (t/is (= 4 (count (filter #(re-matches #"temporal-snapshot-\p{XDigit}+.*" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"metadata-.*" %) objs))))
             (t/is (= 1 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs))))))))
@@ -350,6 +352,8 @@
             (Thread/sleep 1000) ;; TODO for now
 
             (let [objs (.listObjects os)]
+              (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
+              (t/is (= 11 (count (filter #(re-matches #"temporal-snapshot-\p{XDigit}+.*" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"metadata-.*" %) objs))))
               (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))))))))
@@ -434,6 +438,8 @@
                                 ^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
 
                     (let [objs (.listObjects os)]
+                      (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
+                      (t/is (= 11 (count (filter #(re-matches #"temporal-snapshot-\p{XDigit}+.*" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"metadata-.*" %) objs))))
                       (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
                       (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))

@@ -92,7 +92,8 @@
 
     (-> (:core2/node system)
         (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(.close ^AutoCloseable system)))))
+        (assoc :close-fn #(do (.close ^AutoCloseable system)
+                              #_(println (.toVerboseString ^RootAllocator (:core2/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
   PSubmitNode

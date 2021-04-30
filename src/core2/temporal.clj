@@ -11,7 +11,7 @@
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalCoordinates
-           core2.temporal.kd_tree.IKdTreePointAccess
+           [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
            java.nio.ByteBuffer
            [java.util Arrays Comparator Date HashMap Map Random]
@@ -136,7 +136,10 @@
 (definterface TemporalManangerPrivate
   (^long getOrCreateInternalId [^Object id])
   (^void populateKnownChunks [])
-  (^void reloadTemporalIndex [^int chunk-idx]))
+  (^Long latestTemporalSnapshotIndex [^int chunk-idx])
+  (^void reloadTemporalIndex [^int chunk-idx ^Long snapshot-idx])
+  (^void buildTemporalSnapshot [^int chunk-idx ^Long snapshot-idx])
+  (^java.io.Closeable buildDynamicTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
@@ -170,6 +173,12 @@
 (defn- ->temporal-obj-key [chunk-idx]
   (format "temporal-%08x.arrow" chunk-idx))
 
+(defn- ->temporal-snapshot-obj-key [chunk-idx]
+  (format "temporal-snapshot-%08x.arrow" chunk-idx))
+
+(defn- temporal-snapshot-obj-key->idx ^long [obj-key]
+  (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}+)\.arrow" obj-key)) 16))
+
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
@@ -178,26 +187,73 @@
                           ^Map id->internal-id
                           ^Roaring64Bitmap known-ids
                           ^Random rng
-                          ^:unsynchronized-mutable kd-tree-chunk-idx
-                          ^:volatile-mutable kd-tree]
+                          ^:unsynchronized-mutable snapshot-future
+                          ^:unsynchronized-mutable kd-tree-snapshot-idx
+                          ^:volatile-mutable kd-tree
+                          ^boolean async-snapshot?]
   TemporalManangerPrivate
-  (reloadTemporalIndex [this chunk-idx]
-    (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
-                temporal-chunks (util/->chunks temporal-buffer)]
-      (.tryAdvance temporal-chunks
-                   (reify Consumer
-                     (accept [_ temporal-root]
-                       (set! (.kd-tree this) (kd/->merged-kd-tree (util/slice-root temporal-root 0)))
-                       (when kd-tree-chunk-idx
-                         (.evictBuffer buffer-pool(->temporal-obj-key kd-tree-chunk-idx)) )
-                       (set! (.kd-tree-chunk-idx this) chunk-idx))))))
+  (latestTemporalSnapshotIndex [this chunk-idx]
+    (->> (.listObjects object-store "temporal-snapshot-")
+         (map temporal-snapshot-obj-key->idx)
+         (filter #(<= ^long % chunk-idx))
+         (last)))
+
+  (buildDynamicTree [this base-kd-tree chunk-idx snapshot-idx]
+    (let [kd-tree (atom base-kd-tree)]
+      (try
+        (let [snapshot-idx (long (or snapshot-idx -1))
+              known-chunk-idxs (for [^long idx (distinct (concat (.knownChunks metadata-manager) [chunk-idx]))
+                                     :when (> idx snapshot-idx)
+                                     :while (<= idx chunk-idx)]
+                                 idx)
+              futs (for [chunk-idx known-chunk-idxs]
+                     (-> (.getBuffer buffer-pool (->temporal-obj-key chunk-idx))
+                         (util/then-apply util/try-close)))]
+          @(CompletableFuture/allOf (into-array CompletableFuture futs))
+          (doseq [chunk-idx known-chunk-idxs
+                  :let [obj-key (->temporal-obj-key chunk-idx)]]
+            (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool obj-key)
+                        temporal-chunks (util/->chunks temporal-buffer allocator)]
+              (.tryAdvance temporal-chunks
+                           (reify Consumer
+                             (accept [_ temporal-root]
+                               (swap! kd-tree #(kd/merge-kd-trees allocator % temporal-root))))))
+            #_(.evictBuffer buffer-pool obj-key))
+          @kd-tree)
+        (catch Exception e
+          (util/try-close @kd-tree)
+          (throw e)))))
+
+  (reloadTemporalIndex [this chunk-idx snapshot-idx]
+    (if snapshot-idx
+      (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))
+                  temporal-chunks (util/->chunks temporal-buffer allocator)]
+        (.tryAdvance temporal-chunks
+                     (reify Consumer
+                       (accept [_ temporal-root]
+                         (let [^MergedKdTree kd-tree (.buildDynamicTree this
+                                                                        (kd/->merged-kd-tree (util/slice-root temporal-root))
+                                                                        chunk-idx
+                                                                        snapshot-idx)]
+                           (try
+                             (if-let [dynamic-kd-tree (.getDynamicTree kd-tree)]
+                               (with-open [^Closeable dynamic-kd-tree dynamic-kd-tree]
+                                 (set! (.kd-tree this) (kd/->merged-kd-tree (.static-kd-tree kd-tree)
+                                                                            (kd/rebuild-node-kd-tree allocator dynamic-kd-tree))))
+                               (set! (.kd-tree this) kd-tree))
+                             (catch Exception e
+                               (util/try-close kd-tree)
+                               (throw e))))
+                         (when kd-tree-snapshot-idx
+                           #_(.evictBuffer buffer-pool (->temporal-snapshot-obj-key kd-tree-snapshot-idx)))
+                         (set! (.kd-tree-snapshot-idx this) snapshot-idx)))))
+      (set! (.kd-tree this) (.buildDynamicTree this nil chunk-idx snapshot-idx))))
 
   (populateKnownChunks [this]
     (let [known-chunks (.knownChunks metadata-manager)
-          futs (->> (for [chunk-idx known-chunks]
-                      (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
-                          (util/then-apply util/try-close)))
-                    (into []))]
+          futs (for [chunk-idx known-chunks]
+                 (-> (.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
+                     (util/then-apply util/try-close)))]
       @(CompletableFuture/allOf (into-array CompletableFuture futs))
       (doseq [chunk-idx known-chunks]
         (with-open [^ArrowBuf id-buffer @(.getBuffer buffer-pool (meta/->chunk-obj-key chunk-idx "_id"))
@@ -210,7 +266,32 @@
                                    (dotimes [n (.getValueCount id-vec)]
                                      (.getOrCreateInternalId this (t/get-object id-vec n)))))))))
       (when-let [temporal-chunk-idx (last known-chunks)]
-        (.reloadTemporalIndex this temporal-chunk-idx))))
+        (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx)))))
+
+  (buildTemporalSnapshot [this chunk-idx snapshot-idx]
+    (let [new-snapshot-obj-key (->temporal-snapshot-obj-key chunk-idx)
+          path (util/->temp-file new-snapshot-obj-key "")]
+      (try
+        (if snapshot-idx
+          (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))
+                      temporal-chunks (util/->chunks temporal-buffer allocator)]
+            (.tryAdvance temporal-chunks
+                         (reify Consumer
+                           (accept [_ temporal-root]
+                             (with-open [merged-kd-tree (.buildDynamicTree this
+                                                                           (kd/->merged-kd-tree temporal-root)
+                                                                           chunk-idx
+                                                                           snapshot-idx)]
+                               (let [temporal-buf (-> (kd/->disk-kd-tree allocator path merged-kd-tree k)
+                                                      (util/->mmap-path))]
+                                 @(.putObject object-store new-snapshot-obj-key temporal-buf)))))))
+          (when-let [kd-tree (.buildDynamicTree this nil chunk-idx snapshot-idx)]
+            (with-open [^Closeable kd-tree kd-tree]
+              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree k)
+                                     (util/->mmap-path))]
+                @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
+        (finally
+          (util/delete-file path)))))
 
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
@@ -231,16 +312,22 @@
 
   (registerNewChunk [this chunk-idx]
     (when kd-tree
-      (let [path (util/->temp-file (->temporal-obj-key chunk-idx) "")]
-        (try
-          (with-open [^Closeable old-kd-tree kd-tree]
-            (let [temporal-buf (-> (kd/->disk-kd-tree allocator path old-kd-tree k)
-                                   (util/->mmap-path))
-                  new-temporal-obj-key (->temporal-obj-key chunk-idx)]
-              @(.putObject object-store new-temporal-obj-key temporal-buf)
-              (.reloadTemporalIndex this chunk-idx)))
-          (finally
-            (util/delete-file path))))))
+      (with-open [^Closeable old-kd-tree kd-tree
+                  ^Closeable rebuilt-dynamic-kd-tree (kd/rebuild-node-kd-tree allocator (if (instance? MergedKdTree kd-tree)
+                                                                                          (.getDynamicTree ^MergedKdTree kd-tree)
+                                                                                          kd-tree))
+                  ^VectorSchemaRoot new-chunk-kd-tree (kd/->column-kd-tree allocator rebuilt-dynamic-kd-tree k)]
+        (let [temporal-buf (util/root->arrow-ipc-byte-buffer new-chunk-kd-tree :file)
+              new-temporal-obj-key (->temporal-obj-key chunk-idx)]
+          @(.putObject object-store new-temporal-obj-key temporal-buf)
+          (let [snapshot-idx (.latestTemporalSnapshotIndex this chunk-idx)]
+            (when snapshot-future
+              @snapshot-future)
+            (set! (.snapshot-future this)
+                  (if async-snapshot?
+                    (future (.buildTemporalSnapshot this chunk-idx snapshot-idx))
+                    (CompletableFuture/completedFuture (.buildTemporalSnapshot this chunk-idx snapshot-idx))))
+            (.reloadTemporalIndex this chunk-idx snapshot-idx))))))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
     (let [id->long-id-fn (reify ToLongFunction
@@ -303,6 +390,8 @@
 
   Closeable
   (close [this]
+    (when snapshot-future
+      @snapshot-future)
     (util/try-close kd-tree)
     (set! (.kd-tree this) nil)
     (.clear id->internal-id)))
@@ -310,12 +399,14 @@
 (defn ->temporal-manager {::sys/deps {:allocator :core2/allocator
                                       :object-store :core2/object-store
                                       :buffer-pool :core2/buffer-pool
-                                      :metadata-manager :core2/metadata-manager}}
+                                      :metadata-manager :core2/metadata-manager}
+                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default false}}}
   [{:keys [^BufferAllocator allocator
            ^ObjectStore object-store
            ^IBufferPool buffer-pool
-           ^IMetadataManager metadata-manager]}]
-  (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0) nil nil)
+           ^IMetadataManager metadata-manager
+           async-snapshot?]}]
+  (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0) nil nil nil async-snapshot?)
     (.populateKnownChunks)))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]

@@ -777,7 +777,7 @@
     (when-let [split-stack (maybe-split-stack stack)]
       (ColumnRangeSearchSpliterator. axis-delete-flag-vec split-value-vec skip-pointer-vec point-vec coordinates-vec min-range max-range k split-stack))))
 
-(defn merge-kd-trees ^core2.temporal.kd_tree.Node [^BufferAllocator allocator ^Node kd-tree-to ^VectorSchemaRoot kd-tree-from]
+(defn merge-kd-trees [^BufferAllocator allocator kd-tree-to ^VectorSchemaRoot kd-tree-from]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree-from "axis-delete-flag")
         n (.getRowCount kd-tree-from)
         ^IKdTreePointAccess from-access (kd-tree-point-access kd-tree-from)]
@@ -1030,6 +1030,9 @@
       (.getCoordinate static-access idx axis)
       (.getCoordinate dynamic-access (- idx static-value-count) axis))))
 
+(definterface IMergedKdTreeAccess
+  (^Object getDynamicTree []))
+
 (deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size ^int static-value-count]
   KdTree
   (kd-tree-insert [this allocator point]
@@ -1085,6 +1088,10 @@
   (kd-tree-value-count [kd-tree]
     (+ (long (kd-tree-value-count static-kd-tree))
        (long (kd-tree-value-count dynamic-kd-tree))))
+
+  IMergedKdTreeAccess
+  (getDynamicTree [_]
+    dynamic-kd-tree)
 
   Closeable
   (close [_]
