@@ -72,7 +72,8 @@ and its architecture -- past, present, and very-near-future.
 ** http://people.cs.aau.dk/~csj/Glossary/[The Consensus Glossary of Temporal Database Concepts]
 * https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59490/file/ICDE15-bitemporal-timeline.pdf[Bi-temporal Timeline Index: A Data Structure forProcessing Queries on Bi-temporal Data], Kaufmann et al. 2015 IEEE 31st International Conference on Data Engineering, April 2015.
 * https://www2.cs.arizona.edu/~rts/pubs/ISDec94.pdf[Unifying Temporal Data Models via a Conceptual Model], Jensen, Snodgrass. Information Systems, Volume 19, Issue 7, October 1994, Pages 513-547.
-* https://www.marklogic.com/blog/bitemporal/[A Deep Dive into Bitemporal], Woolridge. 2016.
+* https://www.marklogic.com/blog/bitemporal/[A Deep Dive into Bitemporal], Woolridge. MarkLogic Weblog. 2016.
+* https://web.archive.org/web/20201001052833/https://kx.com/blog/kx-insights-powering-business-decisions-bitemporal-data/[Kx Insights: Powering Business Decisions with Bitemporal Data], Tomczak. Kx Weblog. 2017.
 * http://blog.podsnap.com/bitemp.html[Sign of the Times - Managing inhomogeneously bitemporal data with Datomic and Clojure], Fraenkel. May 2014.
 * https://standards.iso.org/ittf/PubliclyAvailableStandards/c060394_ISO_IEC_TR_19075-2_2015.zip[ISO/IEC JTC 1/SC 32: SQL Technical Reports — Part 2: SQL Support for Time-Related Information], ISO/IEC TR 19075-2:2015(E). 2015.
 * https://www2.cs.arizona.edu/~rts/pubs/ISDec04.pdf[Modification Semantics in Now-Relative Databases], Torp, Jensen, Snodgrass. Information Systems, Vol. 29, No. 8, Pages 653–683. 2004.
@@ -192,24 +193,24 @@ our overall philosophy, or simply be something we find interesting in the field.
 * https://arxiv.org/pdf/1610.09166.pdf[Push vs. Pull-Based Loop Fusion in Query Engines], Shaikhha, Dashti, Koch. Journal of Functional Programming, Vol. 28. 2018.
 * https://www.youtube.com/watch?v=BuE6JvQE_CY[Is Kafka a Database?], Kleppmann. Kafka Summit London (YouTube). 2019.
 
+[#courses]
+=== Courses
+
+* https://15445.courses.cs.cmu.edu/fall2020/schedule.html[CMU: Introduction to Database Systems (Fall 2020)]
+* https://15721.courses.cs.cmu.edu/spring2020/schedule.html[CMU: Advanced Database Systems (Spring 2020)]
+
 [#juxt]
-=== JUXT Resources
+== JUXT Resources
 
 Our own talks and articles are listed in reverse-chronological order. Although older resources are still
 relevant to the philosophy and design of Crux, newer resources will always provide a better undersatnding
 of implementation details.
 
 * https://opencrux.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. opencrux.com. 2021.
-* https://opencrux.com/blog/crux-sql.html[Crux SQL: Query your Datalog database with SQL], Pither. Crux Blog. 2020.
-* https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Blog. 2019.
+* https://opencrux.com/blog/crux-sql.html[Crux SQL: Query your Datalog database with SQL], Pither. Crux Weblog. 2020.
+* https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Weblog. 2019.
 * https://www.youtube.com/watch?v=Zn-J26PGugM[Introducing Crux: A Bitemporal Database], Taylor, Pither. Scala in the City (YouTube). October 2019.
 * https://www.youtube.com/watch?v=YjAVsvYGbuU[The Design and Implementation of a Bitemporal DBMS], Råberg. ClojuTRE (YouTube). September 2019.
 * https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.
 * https://www.youtube.com/watch?v=3Stja6YUB94[The Crux of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
 * https://soundcloud.com/defn-771544745/49-crux-with-jon-and-jeremy[defn Podcast #49: Crux with Jon and Jeremy], Pither, Taylor. Soundcloud. May 2019.
-
-[#courses]
-=== Courses
-
-* https://15445.courses.cs.cmu.edu/fall2020/schedule.html[CMU: Introduction to Database Systems (Fall 2020)]
-* https://15721.courses.cs.cmu.edu/spring2020/schedule.html[CMU: Advanced Database Systems (Spring 2020)]
