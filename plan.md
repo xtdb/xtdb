@@ -73,11 +73,7 @@ Two main extension points:
 
 ## Deliverables
 
-1. Short-term demo (next couple of weeks)
-   - DONE main method and configuration, logging
-   - DONE table-operator
-   - DONE bringing other operators into logical plan
-2. Go/No-Go for Storage/Compute + Arrow
+1. Go/No-Go for Storage/Compute + Arrow
    - Large TPC-H SF (1?), running remotely, hot/cold - performance numbers, billing, monitoring, bottlenecks
      - DONE Kafka, S3
      - Some level of deployment/monitoring
@@ -112,7 +108,7 @@ Two main extension points:
      - DONE Ability to query several temporal chunks (live and Arrow).
      - DONE Merging of temporal Arrow chunks?
      - Move merging of the snapshot temporal tree to the background.
-3. Core2 as a viable alternative to Crux
+2. Core2 as a viable alternative to Crux
    - Deployment, monitoring
      - multi-module (Kafka, S3)
    - Documentation, marketing
@@ -135,7 +131,6 @@ Two main extension points:
    - How much of Crux should Core2 pull in?
 
 Bugs:
-- TODO OOM on 0.1 queries (Fargate)
 - TODO chunk names have 2^32 numbers, row-ids are 2^64
 - TODO Exception during query, close node -> Arrow memory leak error
 
