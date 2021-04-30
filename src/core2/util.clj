@@ -9,10 +9,10 @@
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
-           [java.nio.file Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardOpenOption]
+           [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time LocalDateTime ZoneId]
-           [java.util ArrayList Date LinkedList List Queue]
+           [java.util ArrayList Date LinkedList List Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
            [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
@@ -84,6 +84,14 @@
               buf-ch (->seekable-byte-channel from-buffer)]
     (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
 
+(defn write-buffer-to-path-atomically [^ByteBuffer from-buffer ^Path to-path]
+  (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
+    (try
+      (write-buffer-to-path from-buffer to-path-temp)
+      (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
+      (finally
+        (Files/deleteIfExists to-path-temp)))))
+
 (def ^:private file-deletion-visitor
   (proxy [SimpleFileVisitor] []
     (visitFile [file _]
@@ -102,7 +110,7 @@
     (Files/walkFileTree dir file-deletion-visitor)))
 
 (defn delete-file [^Path file]
-  (Files/delete file))
+  (Files/deleteIfExists file))
 
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
