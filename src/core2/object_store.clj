@@ -5,7 +5,7 @@
   (:import java.io.Closeable
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
-           [java.nio.file CopyOption Files FileSystems Path StandardCopyOption]
+           [java.nio.file Files FileSystems Path]
            [java.util NavigableMap UUID]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]))
 
@@ -72,13 +72,7 @@
           (if (identical? (FileSystems/getDefault) (.getFileSystem to-path))
             (if (util/path-exists to-path)
               to-path
-
-              (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
-                (try
-                  (util/write-buffer-to-path buf to-path-temp)
-                  (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
-                  (finally
-                    (Files/deleteIfExists to-path-temp)))))
+              (util/write-buffer-to-path-atomically buf to-path))
 
             (util/write-buffer-to-path buf to-path))))))
 
@@ -93,7 +87,7 @@
 
   (deleteObject [_this k]
     (util/completable-future pool
-      (Files/deleteIfExists (.resolve root-path k))))
+      (util/delete-file (.resolve root-path k))))
 
   Closeable
   (close [_this]

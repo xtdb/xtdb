@@ -31,7 +31,7 @@
                       (util/then-apply (fn [buf]
                                          (if buffer-path
                                            (do
-                                             (util/write-buffer-to-path buf buffer-path)
+                                             (util/write-buffer-to-path-atomically buf buffer-path)
                                              (util/->mmap-path buffer-path))
                                            buf)))))
                 (util/then-apply
