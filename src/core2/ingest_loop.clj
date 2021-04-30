@@ -43,7 +43,8 @@
   (awaitTx [_this tx timeout]
     (if tx
       (let [poll-sleep-ms (.toMillis poll-sleep-duration)
-            end-ns (+ (System/nanoTime) (.toNanos timeout))
+            end-ns (when timeout
+                     (+ (System/nanoTime) (.toNanos timeout)))
             tx-id (.tx-id tx)]
         (loop []
           (let [latest-completed-tx (.latestCompletedTx indexer)]
