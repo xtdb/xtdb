@@ -4,8 +4,7 @@
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
             [core2.metadata :as meta]
-            [core2.test-util :as tu]
-            [core2.util :as util])
+            [core2.test-util :as tu])
   (:import core2.metadata.IMetadataManager
            org.roaringbitmap.RoaringBitmap))
 
@@ -25,30 +24,42 @@
 
     (tu/finish-chunk node)
 
-    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))
-          metadata-pred (expr.meta/->metadata-selector (expr/form->expr '(> name "Ivan")))]
-      (letfn [(query-ivan [db]
+    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
+      (letfn [(test-query-ivan [expected db]
                 (with-open [res (c2/open-q db '[:scan [{name (> name "Ivan")}]])]
-                  (into #{} (mapcat seq) (tu/<-cursor res))))]
+                  (t/is (= expected
+                           (into #{} (mapcat seq) (tu/<-cursor res)))))
+
+                (with-open [res (c2/open-q {'$ db, '?name "Ivan"}
+                                           '[:scan [{name (> name ?name)}]])]
+                  (t/is (= expected
+                           (into #{} (mapcat seq) (tu/<-cursor res))))))]
+
         (with-open [db (c2/open-db node)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
-          (t/is (= [(meta/map->ChunkMatch
-                     {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]
-                   (meta/matching-chunks metadata-mgr (.watermark db) metadata-pred))
-                "only needs to scan chunk 1, block 1")
+          (let [expected-match [(meta/map->ChunkMatch
+                                  {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
+            (t/is (= expected-match
+                     (meta/matching-chunks metadata-mgr (.watermark db)
+                                           (expr.meta/->metadata-selector (expr/form->expr '(> name "Ivan")) {})))
+                  "only needs to scan chunk 1, block 1")
+            (t/is (= expected-match
+                     (meta/matching-chunks metadata-mgr (.watermark db)
+                                           (expr.meta/->metadata-selector (expr/form->expr '(> name ?name)) {'?name "Ivan"})))
+                  "only needs to scan chunk 1, block 1"))
 
           @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 5}}])
                (tu/then-await-tx node))
 
-          (t/is (= #{{:name "James"}
-                     {:name "Jon"}}
-                   (query-ivan db))))
+          (test-query-ivan #{{:name "James"}
+                             {:name "Jon"}}
+                           db))
 
         (with-open [db (c2/open-db node)]
-          (t/is (= #{{:name "James"}
-                     {:name "Jon"}
-                     {:name "Jeremy"}}
-                   (query-ivan db))))))))
+          (test-query-ivan #{{:name "James"}
+                             {:name "Jon"}
+                             {:name "Jeremy"}}
+                           db))))))
 
 (t/deftest test-find-eq-ivan
   (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
@@ -64,20 +75,29 @@
          (tu/then-await-tx node))
 
     (tu/finish-chunk node)
-    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))
-          metadata-pred (expr.meta/->metadata-selector (expr/form->expr '(= name "Ivan")))]
-      (letfn [(query-ivan [db]
-                (with-open [res (c2/open-q db '[:scan [{name (= name "Ivan")}]])]
-                  (into #{} (mapcat seq) (tu/<-cursor res))))]
-        (with-open [db (c2/open-db node)]
-          (t/is (= #{0 3} (.knownChunks metadata-mgr)))
-          (t/is (= [(meta/map->ChunkMatch
-                     {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]
-                   (meta/matching-chunks metadata-mgr (.watermark db) metadata-pred))
-                "only needs to scan chunk 0")
+    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
+      (with-open [db (c2/open-db node)]
+        (t/is (= #{0 3} (.knownChunks metadata-mgr)))
+        (let [expected-match [(meta/map->ChunkMatch
+                               {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
+          (t/is (= expected-match
+                   (meta/matching-chunks metadata-mgr (.watermark db)
+                                         (expr.meta/->metadata-selector (expr/form->expr '(= name "Ivan")) {})))
+                "only needs to scan chunk 0, block 0")
 
+          (t/is (= expected-match
+                   (meta/matching-chunks metadata-mgr (.watermark db)
+                                         (expr.meta/->metadata-selector (expr/form->expr '(= name ?name)) {'?name "Ivan"})))
+                "only needs to scan chunk 0, block 0"))
+
+        (with-open [res (c2/open-q db '[:scan [{name (= name "Ivan")}]])]
           (t/is (= #{{:name "Ivan"}}
-                   (query-ivan db))))))))
+                   (into #{} (mapcat seq) (tu/<-cursor res)))))
+
+        (with-open [res (c2/open-q {'$ db, '?name "Ivan"}
+                                   '[:scan [{name (= name ?name)}]])]
+          (t/is (= #{{:name "Ivan"}}
+                   (into #{} (mapcat seq) (tu/<-cursor res)))))))))
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"

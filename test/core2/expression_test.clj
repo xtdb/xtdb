@@ -9,7 +9,6 @@
            org.apache.arrow.vector.complex.DenseUnionVector))
 
 (t/deftest can-compile-simple-expression
-
   (with-open [allocator (RootAllocator.)
               a (Float8Vector. "a" allocator)
               b (Float8Vector. "b" allocator)
@@ -137,4 +136,14 @@
           (let [expr (expr/form->expr '(>= e "0500"))
                 selector (expr/->expression-vector-selector expr)]
             (t/is (= '[e] (expr/variables expr)))
+            (t/is (= 500 (.getCardinality (.select selector e))))))
+
+        (t/testing "parameter"
+          (let [expr (expr/form->expr '(>= a ?a))
+                selector (expr/->expression-vector-selector expr {'?a 500})]
+            (t/is (= '[a] (expr/variables expr)))
+            (t/is (= 500 (.getCardinality (.select selector a)))))
+
+          (let [expr (expr/form->expr '(>= e ?e))
+                selector (expr/->expression-vector-selector expr {'?e "0500"})]
             (t/is (= 500 (.getCardinality (.select selector e))))))))))

@@ -3,8 +3,10 @@
             [clojure.walk :as w]
             core2.operator.project
             [core2.types :as types]
-            [core2.util :as util])
-  (:import core2.DenseUnionUtil
+            [core2.util :as util]
+            [core2.types :as ty])
+  (:import clojure.lang.MapEntry
+           core2.DenseUnionUtil
            core2.operator.project.ProjectionSpec
            [core2.select IVectorSchemaRootSelector IVectorSelector]
            java.lang.reflect.Method
@@ -47,7 +49,9 @@
 
 (defn form->expr [form]
   (cond
-    (symbol? form) {:op :variable, :variable form}
+    (symbol? form) (if (.startsWith (name form) "?")
+                     {:op :param, :param form}
+                     {:op :variable, :variable form})
 
     (sequential? form) (let [[f & args] form]
                          (case f
@@ -64,19 +68,23 @@
                            (-> {:op :call, :f f, :args (mapv form->expr args)}
                                expand-variadics)))
 
-    (string? form) (let [s (gensym "string-literal")]
-                     {:op :literal
-                      :literal form
-                      :init-variable (with-meta s {:literal form})
-                      :init-code `(ByteBuffer/wrap (.getBytes ~form StandardCharsets/UTF_8))})
-
     :else {:op :literal, :literal form}))
+
+(defmulti direct-child-exprs
+  (fn [{:keys [op] :as expr}]
+    op)
+  :default ::default)
+
+(defmethod direct-child-exprs ::default [_] #{})
+(defmethod direct-child-exprs :if [{:keys [pred then else]}] [pred then else])
+(defmethod direct-child-exprs :call [{:keys [args]}] args)
 
 (defmulti postwalk-expr
   (fn [f {:keys [op] :as expr}]
-    op))
+    op)
+  :default ::default)
 
-(defmethod postwalk-expr :default [f expr]
+(defmethod postwalk-expr ::default [f expr]
   (f expr))
 
 (defmethod postwalk-expr :if [f {:keys [pred then else]}]
@@ -90,12 +98,32 @@
       :f expr-f
       :args (mapv #(postwalk-expr f %) args)}))
 
-(defn expr-seq [{:keys [op] :as expr}]
+(defn lits->params [expr]
+  (->> expr
+       (postwalk-expr (fn [{:keys [op] :as expr}]
+                        (case op
+                          :literal (let [{:keys [literal]} expr
+                                         sym (gensym 'literal)]
+                                     (-> {:op :param, :param sym, :literal literal}
+                                         (vary-meta (fnil into {})
+                                                    {:literals {sym literal}
+                                                     :params #{sym}})))
+
+                          :param (-> expr
+                                     (vary-meta (fnil into {})
+                                                {:params #{(:param expr)}}))
+
+                          (let [child-exprs (direct-child-exprs expr)]
+                            (-> expr
+                                (vary-meta (fnil into {})
+                                           {:literals (->> child-exprs
+                                                           (into {} (mapcat (comp :literals meta))))
+                                            :params (->> child-exprs
+                                                         (into #{} (mapcat (comp :params meta))))}))))))))
+
+(defn expr-seq [expr]
   (lazy-seq
-   (case op
-     :if (cons expr (mapcat (comp expr-seq expr) [:pred :then :else]))
-     :call (cons expr (mapcat expr-seq (:args expr)))
-     [expr])))
+   (cons expr (mapcat expr-seq (direct-child-exprs expr)))))
 
 (defn with-tag [sym ^Class tag]
   (-> sym
@@ -130,10 +158,8 @@
       Double)))
 
 (defmulti codegen-expr
-  (fn [{:keys [op]} var->type]
+  (fn [{:keys [op]} {:keys [var->type]}]
     op))
-
-(def ^:dynamic *init-expressions*)
 
 (defn resolve-string ^String [x]
   (cond
@@ -144,10 +170,7 @@
     (String. ^bytes x StandardCharsets/UTF_8)
 
     (string? x)
-    x
-
-    :else
-    (:literal (meta x))))
+    x))
 
 (defmethod codegen-expr :literal [{:keys [literal init-variable]} _]
   (cond
@@ -161,6 +184,17 @@
     {:code nil :return-type Comparable}
     :else
     {:code literal :return-type (class literal)}))
+
+(defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param->type]}]
+  (let [return-type (get types/arrow-type->java-type
+                         (or (param->type param)
+                             (throw (IllegalArgumentException. (str "parameter not provided: " param))))
+                         Comparable)]
+    (into {:code (if-let [cast-fn (type->cast return-type)]
+                   (list cast-fn param)
+                   param)
+           :return-type return-type}
+          (select-keys expr #{:literal}))))
 
 (defn element->nio-buffer ^java.nio.ByteBuffer [^ValueVector vec ^long idx]
   (let [value-buffer (.getDataBuffer vec)
@@ -189,15 +223,17 @@
       diff)))
 
 (defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
-  (let [type (or (get var->type variable)
-                 (throw (IllegalArgumentException. (str "unknown variable: " variable))))]
-    {:code (condp = type
+  (let [var-type (get types/arrow-type->java-type
+                      (or (get var->type variable)
+                          (throw (IllegalArgumentException. (str "unknown variable: " variable))))
+                      Comparable)]
+    {:code (condp = var-type
              Boolean `(== 1 (.get ~variable ~idx-sym))
              String `(element->nio-buffer ~variable ~idx-sym)
              types/byte-array-class `(element->nio-buffer ~variable ~idx-sym)
              Comparable `(normalize-union-value (types/get-object ~variable ~idx-sym))
              `(.get ~variable ~idx-sym))
-     :return-type type}))
+     :return-type var-type}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} _]
   (let [{then-type :return-type} then
@@ -368,8 +404,8 @@
   {:code `(quot ~@emitted-args)
    :return-type Long})
 
-(defmethod codegen-call [:like Comparable String] [{[{x :code} {pattern :code}] :args}]
-  {:code `(boolean (re-find ~(re-pattern (str "^" (str/replace (resolve-string pattern) #"%" ".*") "$"))
+(defmethod codegen-call [:like Comparable String] [{[{x :code} {:keys [literal]}] :args}]
+  {:code `(boolean (re-find ~(re-pattern (str "^" (str/replace literal #"%" ".*") "$"))
                             (resolve-string ~x)))
    :return-type Boolean})
 
@@ -378,9 +414,9 @@
                                       StandardCharsets/UTF_8))
    :return-type String})
 
-(defmethod codegen-call [:extract String Date] [{[{field :code} {x :code}] :args}]
+(defmethod codegen-call [:extract String Date] [{[{field :literal} {x :code}] :args}]
   {:code `(.get (.atOffset (Instant/ofEpochMilli ~x) ZoneOffset/UTC)
-                ~(case (resolve-string field)
+                ~(case field
                    "YEAR" `ChronoField/YEAR
                    "MONTH" `ChronoField/MONTH_OF_YEAR
                    "DAY" `ChronoField/DAY_OF_MONTH
@@ -408,44 +444,31 @@
     :else
     v))
 
-;; TODO: cannot easily extend postwalk-expr, as metadata-var-lit-call
-;; assumes the literal to been untouched.
-(defn init-expressions [expr]
-  (let [acc (atom [])]
-    (w/postwalk (fn [expr]
-                  (when (map? expr)
-                    (let [{:keys [op init-variable init-code]} expr]
-                      (when (and (= :literal op) init-variable)
-                        (swap! acc concat [init-variable init-code]))))
-                  expr)
-                expr)
-    @acc))
-
-(defn- generate-code [arrow-types expr expression-type]
+(defn- generate-code [arrow-types param-types expr expression-type]
   (let [vars (variables expr)
-        var->type (zipmap vars (map #(get types/arrow-type->java-type % Comparable) arrow-types))
-        {:keys [code return-type]} (postwalk-expr #(codegen-expr % {:var->type var->type}) expr)
+        expr-params (map key param-types)
+        codegen-opts {:var->type (zipmap vars arrow-types)
+                      :param->type (into {} param-types)}
+        {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
         args (for [[k v] (map vector vars arrow-types)]
                (-> k (with-tag (get types/arrow-type->vector-type v DenseUnionVector))))]
     (case expression-type
       ::project
       (if (= Comparable return-type)
-        `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-           (let [~@(init-expressions expr)]
-             (dotimes [~idx-sym row-count#]
-               (let [value# ~code
-                     type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
-                     offset# (DenseUnionUtil/writeTypeId acc# ~idx-sym type-id#)]
-                 (types/set-safe! (.getVectorByType acc# type-id#) offset# value#))))
+        `(fn [[~@args] [~@expr-params] ^DenseUnionVector acc# ^long row-count#]
+           (dotimes [~idx-sym row-count#]
+             (let [value# ~code
+                   type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
+                   offset# (DenseUnionUtil/writeTypeId acc# ~idx-sym type-id#)]
+               (types/set-safe! (.getVectorByType acc# type-id#) offset# value#)))
            acc#)
         (let [arrow-return-type (types/->arrow-type return-type)
               ^Class vector-return-type (get types/arrow-type->vector-type arrow-return-type)
               return-type-id (types/arrow-type->type-id arrow-return-type)
               inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))
               offset-sym (gensym "offset")]
-          `(fn [[~@args] ^DenseUnionVector acc# ^long row-count#]
-             (let [~@(init-expressions expr)
-                   ~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
+          `(fn [[~@args] [~@expr-params] ^DenseUnionVector acc# ^long row-count#]
+             (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
                (dotimes [~idx-sym row-count#]
                  (let [~offset-sym (DenseUnionUtil/writeTypeId acc# ~idx-sym ~return-type-id)]
                    ~(if (.isAssignableFrom BaseVariableWidthVector vector-return-type)
@@ -458,13 +481,12 @@
 
       ::select
       (do (assert (= Boolean return-type))
-          `(fn [[~@args] ^RoaringBitmap acc# ^long row-count#]
-             (let [~@(init-expressions expr)]
-               (dotimes [~idx-sym row-count#]
-                 (try
-                   (when ~code
-                     (.add acc# ~idx-sym))
-                   (catch ClassCastException e#))))
+          `(fn [[~@args] [~@expr-params] ^RoaringBitmap acc# ^long row-count#]
+             (dotimes [~idx-sym row-count#]
+               (try
+                 (when ~code
+                   (.add acc# ~idx-sym))
+                 (catch ClassCastException e#)))
              acc#)))))
 
 (def ^:private memo-generate-code (memoize generate-code))
@@ -477,36 +499,66 @@
 (defn- vector->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [^ValueVector v]
   (.getType (.getFieldType (.getField v))))
 
-(defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name expr]
-  (reify ProjectionSpec
-    (getField [_ _in-schema]
-      (types/->primitive-dense-union-field col-name))
+(defn normalise-params [expr params]
+  (let [expr (lits->params expr)
+        {expr-params :params, lits :literals} (meta expr)
+        param-values (mapv (fn [param-k]
+                             (val (or (find params param-k)
+                                      (find lits param-k))))
+                           expr-params)]
+    {:expr expr
+     :param-types (mapv (fn [param-k param-v]
+                          (MapEntry/create param-k (-> param-v class types/->arrow-type)))
+                        expr-params
+                        param-values)
+     :params param-values
+     :emitted-params (map normalize-union-value param-values)}))
 
-    (project [_ in-root out-vec]
-      (let [in-vecs (expression-in-vectors in-root expr)
-            arrow-types (mapv vector->arrow-type in-vecs)
-            expr-code (memo-generate-code arrow-types expr ::project)
-            expr-fn (memo-eval expr-code)
-            ^DenseUnionVector out-vec out-vec]
-        (expr-fn in-vecs out-vec (.getRowCount in-root))))))
+(defn ->expression-projection-spec
+  (^core2.operator.project.ProjectionSpec [col-name expr]
+   (->expression-projection-spec col-name expr {}))
 
-(defn ->expression-root-selector ^core2.select.IVectorSchemaRootSelector [expr]
-  (reify IVectorSchemaRootSelector
-    (select [_ in]
-      (let [in-vecs (expression-in-vectors in expr)
-            arrow-types (mapv vector->arrow-type in-vecs)
-            expr-code (memo-generate-code arrow-types expr ::select)
-            expr-fn (memo-eval expr-code)
-            acc (RoaringBitmap.)]
-        (expr-fn in-vecs acc (.getRowCount in))))))
+  (^core2.operator.project.ProjectionSpec [col-name expr params]
+   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
+     (reify ProjectionSpec
+       (getField [_ _in-schema]
+         (types/->primitive-dense-union-field col-name))
 
-(defn ->expression-vector-selector ^core2.select.IVectorSelector [expr]
-  (assert (= 1 (count (variables expr))))
-  (reify IVectorSelector
-    (select [_ v]
-      (let [in-vecs [(util/maybe-single-child-dense-union v)]
-            arrow-types (mapv vector->arrow-type in-vecs)
-            expr-code (memo-generate-code arrow-types expr ::select)
-            expr-fn (memo-eval expr-code)
-            acc (RoaringBitmap.)]
-        (expr-fn in-vecs acc (.getValueCount v))))))
+       (project [_ in-root out-vec]
+         (let [in-vecs (expression-in-vectors in-root expr)
+               arrow-types (mapv vector->arrow-type in-vecs)
+               expr-code (memo-generate-code arrow-types param-types expr ::project)
+               expr-fn (memo-eval expr-code)
+               ^DenseUnionVector out-vec out-vec]
+           (expr-fn in-vecs emitted-params out-vec (.getRowCount in-root))))))))
+
+(defn ->expression-root-selector
+  (^core2.select.IVectorSchemaRootSelector [expr]
+   (->expression-root-selector expr {}))
+
+  (^core2.select.IVectorSchemaRootSelector [expr params]
+   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
+     (reify IVectorSchemaRootSelector
+       (select [_ in]
+         (let [in-vecs (expression-in-vectors in expr)
+               arrow-types (mapv vector->arrow-type in-vecs)
+               expr-code (memo-generate-code arrow-types param-types expr ::select)
+               expr-fn (memo-eval expr-code)
+               acc (RoaringBitmap.)]
+           (expr-fn in-vecs emitted-params acc (.getRowCount in))))))))
+
+(defn ->expression-vector-selector
+  (^core2.select.IVectorSelector [expr]
+   (->expression-vector-selector expr {}))
+
+  (^core2.select.IVectorSelector [expr params]
+   (assert (= 1 (count (variables expr))))
+   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
+     (reify IVectorSelector
+       (select [_ v]
+         (let [in-vecs [(util/maybe-single-child-dense-union v)]
+               arrow-types (mapv vector->arrow-type in-vecs)
+               expr-code (memo-generate-code arrow-types param-types expr ::select)
+               expr-fn (memo-eval expr-code)
+               acc (RoaringBitmap.)]
+           (expr-fn in-vecs emitted-params acc (.getValueCount v))))))))
