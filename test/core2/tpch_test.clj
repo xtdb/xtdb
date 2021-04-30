@@ -51,7 +51,7 @@
     (into [] (mapcat seq) (tu/<-cursor res))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
-  (test-tpch-ingest 0.01 67))
+  (test-tpch-ingest 0.01 68))
 
 (t/deftest can-submit-tpch-docs-0.001
-  (test-tpch-ingest 0.001 67))
+  (test-tpch-ingest 0.001 68))
