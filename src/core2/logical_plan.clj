@@ -10,6 +10,7 @@
 
 (s/def ::named (some-fn keyword? symbol?))
 (s/def ::relation (s/and ::named (complement namespace)))
+(s/def ::source (s/and ::named (complement namespace)))
 (s/def ::column ::named)
 
 (s/def ::expression (s/conformer expr/form->expr))
@@ -19,6 +20,7 @@
 ;; TODO be good to just specify a single expression here and have the interpreter split it
 ;; into metadata + col-preds - the former can accept more than just `(and ~@col-preds)
 (s/def ::scan (s/cat :op #{:scan}
+                     :source (s/? ::source)
                      :columns (s/coll-of (s/or :column ::column
                                                :select ::column-expression)
                                          :min-count 1)))

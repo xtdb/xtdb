@@ -63,10 +63,10 @@
   [deps]
   (map->Node (assoc deps :!system (atom nil))))
 
-(defn open-q ^core2.ICursor [db query]
+(defn open-q ^core2.ICursor [db-or-dbs query]
   (let [allocator (RootAllocator.)]
     (try
-      (-> (op/open-q allocator db query)
+      (-> (op/open-q allocator (if (map? db-or-dbs) db-or-dbs {nil db-or-dbs}) query)
           (util/and-also-close allocator))
       (catch Throwable t
         (util/try-close allocator)

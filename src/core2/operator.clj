@@ -13,7 +13,8 @@
             [core2.operator.select :as select]
             [core2.operator.rename :as rename]
             [core2.operator.set :as set-op]
-            [core2.operator.join :as join])
+            [core2.operator.join :as join]
+            [core2.error :as err])
   (:import clojure.lang.MapEntry
            core2.data_source.IQueryDataSource
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
@@ -47,7 +48,7 @@
 (defmethod ->aggregate-spec :count-not-null [_ from-name to-name]
   (group-by/->count-not-null-spec from-name to-name))
 
-(defmethod emit-op :scan [[_ {:keys [columns]}]]
+(defmethod emit-op :scan [[_ {:keys [source columns]}]]
   (let [col-names (for [[col-type arg] columns]
                     (str (case col-type
                            :column arg
@@ -66,17 +67,22 @@
                           (vals selects)))
         metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args})]
 
-    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
-      (.scan db allocator col-names metadata-pred col-preds nil nil))))
+    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+      (let [^IQueryDataSource db (or (get dbs source)
+                                     (throw (err/illegal-arg :unknown-db
+                                                             {::err/message "Query refers to unknown db"
+                                                              :db source
+                                                              :dbs (keys dbs)})))]
+        (.scan db allocator col-names metadata-pred col-preds nil nil)))))
 
 (defmethod emit-op :table [[_ {:keys [rows]}]]
-  (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+  (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
     (table/->table-cursor allocator rows)))
 
 (defn- unary-op [relation f]
   (let [inner-f (emit-op relation)]
-    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
-      (let [inner (inner-f allocator db)]
+    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+      (let [inner (inner-f allocator dbs)]
         (try
           (f allocator inner)
           (catch Exception e
@@ -86,10 +92,10 @@
 (defn- binary-op [left right f]
   (let [left-f (emit-op left)
         right-f (emit-op right)]
-    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
-      (let [left (left-f allocator db)]
+    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
+      (let [left (left-f allocator dbs)]
         (try
-          (let [right (right-f allocator db)]
+          (let [right (right-f allocator dbs)]
             (try
               (f allocator left right)
               (catch Exception e
@@ -191,7 +197,7 @@
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 
 (defmethod emit-op :relation [[_ relation-name]]
-  (fn [_allocator _db]
+  (fn [_allocator _dbs]
     (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation-name)]
       (assert cursor-factory)
       (.createCursor cursor-factory))))
@@ -199,32 +205,32 @@
 (defmethod emit-op :fixpoint [[_ {:keys [mu-variable base recursive]}]]
   (let [base-f (emit-op base)
         recursive-f (emit-op recursive)]
-    (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+    (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
       (set-op/->fixpoint-cursor allocator
-                                (base-f allocator db)
+                                (base-f allocator dbs)
                                 (reify IFixpointCursorFactory
                                   (createCursor [_ cursor-factory]
                                     (binding [*relation-variable->cursor-factory* (assoc *relation-variable->cursor-factory* mu-variable cursor-factory)]
-                                      (recursive-f allocator db))))
+                                      (recursive-f allocator dbs))))
                  false))))
 
 (defmethod emit-op :assign [[_ {:keys [bindings relation]}]]
-  (fn [^BufferAllocator allocator, ^IQueryDataSource db]
+  (fn [^BufferAllocator allocator, ^IQueryDataSource dbs]
     (let [assignments (reduce
                        (fn [acc {:keys [variable value]}]
                          (assoc acc variable (let [value-f (emit-op value)]
                                                (reify ICursorFactory
                                                  (createCursor [_]
                                                    (binding [*relation-variable->cursor-factory* acc]
-                                                     (value-f allocator db)))))))
+                                                     (value-f allocator dbs)))))))
                        *relation-variable->cursor-factory*
                        bindings)]
       (with-bindings {#'*relation-variable->cursor-factory* assignments}
         (let [inner-f (emit-op relation)]
-          (inner-f allocator db))))))
+          (inner-f allocator dbs))))))
 
-(defn open-q ^core2.ICursor [allocator db lp]
+(defn open-q ^core2.ICursor [allocator dbs lp]
   (when-not (s/valid? ::lp/logical-plan lp)
     (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan lp))))
   (let [op-f (emit-op (s/conform ::lp/logical-plan lp))]
-    (op-f allocator db)))
+    (op-f allocator dbs)))
