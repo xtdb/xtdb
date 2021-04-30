@@ -68,6 +68,47 @@
 
 ;; TODO:
 
+;; On registerNewChunk, Write a small temporal chunk of the current
+;; live node-kd-tree (like previously, before the in-place disk tree
+;; change).
+
+;; "Reboot" the kd tree from object store by reading the latest
+;; temporal snapshot (if one exists), and all later temporal chunks
+;; added after this and add them to a tree of merged-kd-trees, with a
+;; node-kd-tree for the dynamic live data. This is the same process
+;; that happens at start of the node. Evict buffers used by the
+;; previous tree from the buffer pool.
+
+;; Kick off a background job to build a new temporal snapshot of the
+;; latest temporal snapshot and all newer known temporal chunks as a
+;; disk-kd-tree and store it in the object store. This snapshot will
+;; be picked up and used at next "reboot" of the tree.
+
+;; Pros:
+
+;; This approach removes the merging of the large snapshot tree
+;; from the index path, while also avoids any complications by
+;; asynchronously merging trees, as while being built and stored in
+;; the object store, the snapshots are only accessed during the
+;; "reboot" which happens during the existing critical section in
+;; finishChunk.
+
+;; It also limits the change to be local to the temporal manager, and
+;; doesn't have to introduce any double buffering or complicated logic
+;; to the rest of the system.
+
+;; Incremental step from what we have. The cons below should be
+;; possible to solve later as separate pieces of work.
+
+;; Cons:
+
+;; Still has to merge the entire snapshot in one go, which should
+;; preferably happen within the time to ingest a chunk for it not to
+;; fall behind. If ingest slows down it will eventually catch up.
+
+;; This change doesn't address the one billion edits limitation or
+;; 128G size of the tree itself.
+
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.

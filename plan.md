@@ -111,8 +111,7 @@ Two main extension points:
      - Buffer pool eviction
      - DONE Ability to query several temporal chunks (live and Arrow).
      - DONE Merging of temporal Arrow chunks?
-     - Double buffering during ingest? Split into live-live and
-       live-indexing?
+     - Move merging of the snapshot temporal tree to the background.
 3. Core2 as a viable alternative to Crux
    - Deployment, monitoring
      - multi-module (Kafka, S3)
