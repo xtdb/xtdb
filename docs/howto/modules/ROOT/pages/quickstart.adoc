@@ -8,7 +8,13 @@
 
 
 This quickstart guide shows you how to set up Crux, ingest a document, and query it. In a few minutes, you will
-have a single Crux node that persists records to disk using an in-process RocksDB instance.
+have a single Crux node that persists records to disk using an in-process RocksDB instance. This means you do not
+need to install RocksDB separately -- it will just work out of the box.
+
+Examples are provided in Java and Clojure. Your data will be stored on the same computer your Java or Clojure
+process is running. This configuration is sufficient for fault-tolerant, low-load production services. It is an
+easy way to get familiar with Crux in a minimal production-like environment. The section "Advanced Crux
+Configuration" below contains more advanced configuration options.
 
 This guide was extracted from the "Crux-in-a-Box" guide, which has minimal (working) project examples for Clojure
 and Java you can see in the https://github.com/deobald/crux-in-a-box[crux-in-a-box] GitHub repo. If you prefer to
