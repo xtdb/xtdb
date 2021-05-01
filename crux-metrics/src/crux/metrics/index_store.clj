@@ -9,8 +9,9 @@
   (dropwizard/gauge registry
                     ["index-store" "tx-id-lag"]
                     #(when-let [completed (api/latest-completed-tx node)]
-                       (- (::tx/tx-id (api/latest-submitted-tx node))
-                          (::tx/tx-id completed)))))
+                       (when-let [submitted (api/latest-submitted-tx node)]
+                         (- (::tx/tx-id submitted)
+                            (::tx/tx-id completed))))))
 
 (defn assign-tx-latency-gauge [registry {:crux/keys [bus]}]
   (let [!last-tx-lag (atom 0)]
