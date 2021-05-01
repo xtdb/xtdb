@@ -206,6 +206,8 @@ Our own talks and articles are listed in reverse-chronological order. Although o
 relevant to the philosophy and design of Crux, newer resources will always provide a better undersatnding
 of implementation details.
 
+=== Talks and Articles
+
 * https://opencrux.com/articles/strength-of-the-record.html[The Strength of the Record], Deobald. opencrux.com. 2021.
 * https://opencrux.com/blog/crux-sql.html[Crux SQL: Query your Datalog database with SQL], Pither. Crux Weblog. 2020.
 * https://juxt.pro/blog/value-of-bitemporality[The Value of Bitemporality], Pither. JUXT Weblog. 2019.
@@ -213,3 +215,9 @@ of implementation details.
 * https://www.youtube.com/watch?v=ykbYNBE-V3k[Temporal Databases for Stream Architectures], Taylor, Pither. StrangeLoop (YouTube). September 2019.
 * https://www.youtube.com/watch?v=3Stja6YUB94[The Crux of Bitemporality], Pither. Clojure/north (YouTube). May 2019.
 * https://soundcloud.com/defn-771544745/49-crux-with-jon-and-jeremy[defn Podcast #49: Crux with Jon and Jeremy], Pither, Taylor. Soundcloud. May 2019.
+
+=== Prior Art
+
+* https://github.com/hraberg/datascript-mapdb[datascript-mapdb: Durable Datascript backed by MapDB], Råberg. GitHub (archived). 2016.
+* https://github.com/hraberg/eyvind[Eyvind: distributed rule engine], Råberg. GitHub (archived). 2016.
+* https://github.com/crux-labs/crux-datascript[crux-datascript: Replicate Crux data into DataScript], Taylor. Github.
