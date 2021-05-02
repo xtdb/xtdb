@@ -66,7 +66,7 @@
 ;; live-live-chunk, live-background-indexing-chunk-minus-one,
 ;; done-chunks
 
-;; TODO:
+;; Temporal Snapshots:
 
 ;; On registerNewChunk, Write a small temporal chunk of the current
 ;; live node-kd-tree (like previously, before the in-place disk tree
@@ -108,6 +108,8 @@
 
 ;; This change doesn't address the one billion edits limitation or
 ;; 128G size of the tree itself.
+
+;; TODO:
 
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
