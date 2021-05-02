@@ -234,6 +234,8 @@
                                                                   (kd/->merged-kd-tree (util/slice-root temporal-root))
                                                                   chunk-idx
                                                                   snapshot-idx))
+                         (when (and kd-tree-snapshot-idx (not= kd-tree-snapshot-idx snapshot-idx))
+                           (.evictBuffer buffer-pool (->temporal-snapshot-obj-key kd-tree-snapshot-idx)))
                          (set! (.kd-tree-snapshot-idx this) snapshot-idx)))))
       (set! (.kd-tree this) (.buildDynamicTree this nil chunk-idx snapshot-idx))))
 
