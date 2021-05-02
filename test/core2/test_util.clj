@@ -136,6 +136,7 @@
                   :core2/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
                   :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
                                        :root-path (.resolve node-dir "objects")}
+                  :core2/temporal-manager {:async-snapshot? false}
                   :core2/indexer (->> {:max-rows-per-block max-rows-per-block
                                        :max-rows-per-chunk max-rows-per-chunk}
                                       (into {} (filter val)))}))

@@ -386,7 +386,7 @@
                                       :object-store :core2/object-store
                                       :buffer-pool :core2/buffer-pool
                                       :metadata-manager :core2/metadata-manager}
-                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default false}}}
+                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}}}
   [{:keys [^BufferAllocator allocator
            ^ObjectStore object-store
            ^IBufferPool buffer-pool
