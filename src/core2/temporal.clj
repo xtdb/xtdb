@@ -133,11 +133,12 @@
                                                       ^longs temporal-max-range
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
-(definterface TemporalManangerPrivate
+(definterface TemporalManagerPrivate
   (^long getOrCreateInternalId [^Object id])
   (^void populateKnownChunks [])
   (^Long latestTemporalSnapshotIndex [^int chunk-idx])
   (^void reloadTemporalIndex [^int chunk-idx ^Long snapshot-idx])
+  (^void awaitSnapshotBuild [])
   (^void buildTemporalSnapshot [^int chunk-idx ^Long snapshot-idx])
   (^java.io.Closeable buildDynamicTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
 
@@ -188,10 +189,11 @@
                           ^Roaring64Bitmap known-ids
                           ^Random rng
                           ^ExecutorService snapshot-pool
+                          ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
                           ^:volatile-mutable kd-tree
                           ^boolean async-snapshot?]
-  TemporalManangerPrivate
+  TemporalManagerPrivate
   (latestTemporalSnapshotIndex [this chunk-idx]
     (->> (.listObjects object-store "temporal-snapshot-")
          (map temporal-snapshot-obj-key->idx)
@@ -258,6 +260,9 @@
       (when-let [temporal-chunk-idx (last known-chunks)]
         (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx)))))
 
+  (awaitSnapshotBuild [this]
+    (some-> snapshot-future (deref)))
+
   (buildTemporalSnapshot [this chunk-idx snapshot-idx]
     (let [new-snapshot-obj-key (->temporal-snapshot-obj-key chunk-idx)
           path (util/->temp-file new-snapshot-obj-key "")]
@@ -310,8 +315,10 @@
         (let [temporal-buf (util/root->arrow-ipc-byte-buffer new-chunk-kd-tree :file)
               new-temporal-obj-key (->temporal-obj-key chunk-idx)]
           @(.putObject object-store new-temporal-obj-key temporal-buf)))
+      (.awaitSnapshotBuild this)
       (let [snapshot-idx (.latestTemporalSnapshotIndex this chunk-idx)
             fut (.submit snapshot-pool ^Runnable #(.buildTemporalSnapshot this chunk-idx snapshot-idx))]
+        (set! (.snapshot-future this) fut)
         (when-not async-snapshot?
           @fut)
         (.reloadTemporalIndex this chunk-idx snapshot-idx))))
@@ -378,6 +385,7 @@
   Closeable
   (close [this]
     (util/shutdown-pool snapshot-pool)
+    (set! (.snapshot-future this) nil)
     (util/try-close kd-tree)
     (set! (.kd-tree this) nil)
     (.clear id->internal-id)))
@@ -393,7 +401,9 @@
            ^IMetadataManager metadata-manager
            async-snapshot?]}]
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
-    (doto (TemporalManager. allocator object-store buffer-pool metadata-manager (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0) pool nil nil async-snapshot?)
+    (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
+                            (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
+                            pool nil nil nil async-snapshot?)
       (.populateKnownChunks))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]

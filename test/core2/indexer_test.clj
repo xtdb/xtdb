@@ -350,6 +350,7 @@
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
+            (tu/await-temporal-snapshot-build node)
 
             (let [objs (.listObjects os)]
               (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))
@@ -431,7 +432,8 @@
                     (t/is (= second-half-tx-instant (c2/await-tx node second-half-tx-instant (Duration/ofSeconds 5))))
                     (t/is (= second-half-tx-instant (c2/latest-completed-tx node))))
 
-                  (Thread/sleep 1000) ;; for now
+                  (Thread/sleep 1000) ;; TODO for now
+                  (tu/await-temporal-snapshot-build node)
 
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (:core2/object-store @(:!system node))

@@ -60,8 +60,12 @@
           (.toInstant ^Date (.next times-iterator))
           (throw (IllegalStateException. "out of time")))))))
 
+(defn await-temporal-snapshot-build [^Node node]
+  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (:core2/temporal-manager @(:!system node))))
+
 (defn finish-chunk [^Node node]
-  (.finishChunk ^core2.indexer.Indexer (.indexer node)))
+  (.finishChunk ^core2.indexer.Indexer (.indexer node))
+  (await-temporal-snapshot-build node))
 
 (defn ->cursor ^core2.IChunkCursor [schema blocks]
   (let [blocks (LinkedList. blocks)
@@ -136,7 +140,6 @@
                   :core2/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
                   :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
                                        :root-path (.resolve node-dir "objects")}
-                  :core2/temporal-manager {:async-snapshot? false}
                   :core2/indexer (->> {:max-rows-per-block max-rows-per-block
                                        :max-rows-per-chunk max-rows-per-chunk}
                                       (into {} (filter val)))}))
