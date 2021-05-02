@@ -36,6 +36,22 @@ Ensure you are using Java 8 or higher:
 java -version
 ----
 
++++ <details><summary> +++
+All System Requirements
++++ </summary><div> +++
+
+* Java: JDK 8 or higher
+** JDK 16 requires https://github.com/juxt/crux/issues/1462#issuecomment-802739964[an extra JVM option] to access JVM internals due to  https://openjdk.java.net/jeps/396[JEP 396]. (See https://github.com/juxt/crux/issues/1462[crux#1462].)
+* Clojure: Clojure 1.10.3 or higher
+* macOS: 10.14.3 (Mojave) or higher
+** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[RocksDB#5064].)
+** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/juxt/crux/issues/894[crux#894].)
+* Linux: No known version constraints
+* Windows: No known version constraints
+
++++ </div></details> +++
+
+
 Add Crux to your Clojure or Java project:
 
 [tabs]
@@ -81,7 +97,7 @@ xref:reference::installation.adoc[Reference Docs: Installation] page.
 +++ </div></details> +++
 
 +++ <details><summary> +++
-A Note on Logging
+Advanced Logging
 +++ </summary><div> +++
 Ignore this note if you just want to get up and running quickly. It's completely optional, but nice to have.
 
@@ -216,8 +232,10 @@ Crux configuration has three components:
 . Document Store
 . Index Store
 
-If you are trying Crux for the first time, the details of each store are not important right now. For more advanced configuration, Crux allows you to choose the underlying data storage technology (for each of the three components) from a number of different modules. The Reference Docs contains a
-xref:reference::configuration.adoc#_modules[list of available modules], each with instructions on how to configure them.
+For more advanced configuration, Crux allows you to choose the underlying data storage technology
+(for each of the three components) from a number of different modules. The Reference Docs contain a
+xref:reference::configuration.adoc#_modules[list of available modules], each with instructions on
+how to configure them.
 +++ </div></details> +++
 
 

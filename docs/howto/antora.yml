@@ -1,7 +1,7 @@
 name: howto
 title: Crux How-To Guides
 version: master
-start_page: ROOT:command-line-crux.adoc
+start_page: ROOT:quickstart.adoc
 nav:
   - modules/ROOT/nav.adoc
 asciidoc:
