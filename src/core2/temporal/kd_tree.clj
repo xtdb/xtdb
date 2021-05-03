@@ -1042,12 +1042,15 @@
     this)
 
   (kd-tree-delete [this allocator point]
-    (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))
-    (.forEach ^IntStream (kd-tree-range-search static-kd-tree point point)
-              (reify IntConsumer
-                (accept [_ x]
-                  (.add static-delete-bitmap x))))
-    this)
+    (let [static-delete-count (.getCardinality static-delete-bitmap)]
+      (.forEach ^IntStream (kd-tree-range-search static-kd-tree point point)
+                (reify IntConsumer
+                  (accept [_ x]
+                    (.add static-delete-bitmap x))))
+      (when (and (= static-delete-count (.getCardinality static-delete-bitmap))
+                 (pos? (.count ^IntStream (kd-tree-range-search dynamic-kd-tree point point))))
+        (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point)))
+      this))
 
   (kd-tree-range-search [_ min-range max-range]
     (IntStream/concat (.filter ^IntStream (kd-tree-range-search static-kd-tree min-range max-range)
