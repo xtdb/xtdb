@@ -111,6 +111,9 @@
 
 ;; TODO:
 
+;; - Add back per-chunk tree for simplicity, as the current dynamic
+;; - tree might span several chunks and not be the same on all nodes.
+
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
