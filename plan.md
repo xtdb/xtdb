@@ -89,7 +89,7 @@ Two main extension points:
        - Predicate push-down
          - DONE for joins passing bloom filters
      - Add back Path-based getObject arity in ObjectStore
-     - Upgrade to Arrow 4.0.0
+     - DONE Upgrade to Arrow 4.0.0
        - Investigate Dataset API?
      - Check cold caches, possible solutions:
        - Tiered caching

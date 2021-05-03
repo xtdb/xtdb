@@ -10,9 +10,9 @@
                  [com.stuartsierra/dependency "0.2.0"]
                  [org.clojure/data.json "2.0.2"]
                  [org.clojure/tools.cli "1.0.206"]
-                 [org.apache.arrow/arrow-algorithm "3.0.0"]
-                 [org.apache.arrow/arrow-vector "3.0.0"]
-                 [org.apache.arrow/arrow-memory-netty "3.0.0"]
+                 [org.apache.arrow/arrow-algorithm "4.0.0"]
+                 [org.apache.arrow/arrow-vector "4.0.0"]
+                 [org.apache.arrow/arrow-memory-netty "4.0.0"]
                  [org.roaringbitmap/RoaringBitmap "0.9.10"]]
 
   :profiles {:dev [:datasets :s3 :kafka
