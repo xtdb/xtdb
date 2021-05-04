@@ -155,7 +155,8 @@
 (definterface IKdTreePointAccess
   (^java.util.List getPoint [^int idx])
   (^longs getArrayPoint [^int idx])
-  (^long getCoordinate [^int idx ^int axis]))
+  (^long getCoordinate [^int idx ^int axis])
+  (^void swapPoint [^int from-idx ^int to-idx]))
 
 (defprotocol KdTree
   (kd-tree-insert [_ allocator point])
@@ -218,7 +219,9 @@
   (getArrayPoint [_ _]
     (throw (IndexOutOfBoundsException.)))
   (getCoordinate [_ _ _]
-    (throw (IndexOutOfBoundsException.))))
+    (throw (IndexOutOfBoundsException.)))
+  (swapPoint [_ _ _]
+    (throw (UnsupportedOperationException.))))
 
 (extend-protocol KdTree
   nil
@@ -257,16 +260,6 @@
   (t/->field "point" (ArrowType$FixedSizeList. k) false
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 
-(defmacro ^:private swap-point [point-vec coordinates-vec n m]
-  `(let [n-idx# (.getElementStartIndex ~point-vec ~n)
-         m-idx# (.getElementStartIndex ~point-vec ~m)]
-     (dotimes [idx# (.getListSize ~point-vec)]
-       (let [n-idx# (+ n-idx# idx#)
-             m-idx# (+ m-idx# idx#)
-             tmp# (.get ~coordinates-vec n-idx#)]
-         (.set ~coordinates-vec n-idx# (.get ~coordinates-vec m-idx#))
-         (.set ~coordinates-vec m-idx# tmp#)))))
-
 (defn- upper-int ^long [^long x]
   (unsigned-bit-shift-right x Integer/SIZE))
 
@@ -276,35 +269,33 @@
 (defn- two-ints-as-long ^long [^long x ^long y]
   (bit-or (bit-shift-left x Integer/SIZE) y))
 
-(defn- three-way-partition ^long [^FixedSizeListVector point-vec ^long low ^long hi ^long axis]
-  (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-        pivot-idx (+ (.getElementStartIndex point-vec (quot (+ low hi) 2)) axis)
-        pivot (.get coordinates-vec pivot-idx)]
+(defn- three-way-partition ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
+  (let [pivot (.getCoordinate access (quot (+ low hi) 2) axis)]
     (loop [i (int low)
            j (int low)
            k (inc (int hi))]
       (if (< j k)
-        (let [diff (Long/compare (.get coordinates-vec (+ (.getElementStartIndex point-vec j) axis)) pivot)]
+        (let [diff (Long/compare (.getCoordinate access j axis) pivot)]
           (cond
             (neg? diff)
-            (do (swap-point point-vec coordinates-vec i j)
+            (do (.swapPoint access i j)
                 (recur (inc i) (inc j) k))
 
             (pos? diff)
             (let [k (dec k)]
-              (swap-point point-vec coordinates-vec j k)
+              (.swapPoint access j k)
               (recur i j k))
 
             :else
             (recur i (inc j) k)))
         (two-ints-as-long i (dec k))))))
 
-(defn- quick-select ^long [^FixedSizeListVector point-vec ^long low ^long hi ^long axis]
+(defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [k (quot (+ low hi) 2)]
     (loop [low low
            hi (dec hi)]
       (if (< low hi)
-        (let [left-right (three-way-partition point-vec low hi axis)
+        (let [left-right (three-way-partition access low hi axis)
               left (upper-int left-right)
               right (lower-int left-right)]
           (cond
@@ -318,19 +309,50 @@
             left))
         low))))
 
+(deftype KdTreeVectorPointAccess [^FixedSizeListVector point-vec]
+  IKdTreePointAccess
+  (getPoint [_ idx]
+    (.getObject point-vec idx))
+
+  (getArrayPoint [_ idx]
+    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)
+          point (long-array k)
+          element-start-idx (.getElementStartIndex point-vec idx)]
+      (dotimes [n k]
+        (aset point n (.get coordinates-vec (+ element-start-idx n))))
+      point))
+
+  (getCoordinate [_ idx axis]
+    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+          element-start-idx (.getElementStartIndex point-vec idx)]
+      (.get coordinates-vec (+ element-start-idx axis))))
+
+  (swapPoint [_ from-idx to-idx]
+    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+          from-idx (.getElementStartIndex point-vec from-idx)
+          to-idx (.getElementStartIndex point-vec to-idx)]
+      (dotimes [axis (.getListSize point-vec)]
+        (let [from-idx (+ from-idx axis)
+              to-idx (+ to-idx axis)
+              tmp (.get coordinates-vec from-idx)]
+          (.set coordinates-vec from-idx (.get coordinates-vec to-idx))
+          (.set coordinates-vec to-idx tmp))))))
+
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
   (when (not-empty points)
     (let [k (count (first points))
           ^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)
-          ^BigIntVector coordinates-vec (.getDataVector point-vec)]
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          access (KdTreeVectorPointAccess. point-vec)]
       (doseq [point points]
         (write-point point-vec point))
       (try
         ((fn step [^long start ^long end ^long axis]
-           (let [median (quick-select point-vec start end axis)
+           (let [median (quick-select access start end axis)
                  next-axis (next-axis axis k)]
              (when-not (= start median)
-               (swap-point point-vec coordinates-vec start median))
+               (.swapPoint access start median))
              (Node. point-vec
                     start
                     axis
@@ -529,25 +551,6 @@
                    (cons (fn [right]
                            (Node. point-vec (.point-idx node) (.axis node) (.left node) right (.deleted? node)))
                          build-path-fns))))))))
-
-(deftype KdTreeVectorPointAccess [^FixedSizeListVector point-vec]
-  IKdTreePointAccess
-  (getPoint [_ idx]
-    (.getObject point-vec idx))
-
-  (getArrayPoint [_ idx]
-    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)
-          point (long-array k)
-          element-start-idx (.getElementStartIndex point-vec idx)]
-      (dotimes [n k]
-        (aset point n (.get coordinates-vec (+ element-start-idx n))))
-      point))
-
-  (getCoordinate [_ idx axis]
-    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-          element-start-idx (.getElementStartIndex point-vec idx)]
-      (.get coordinates-vec (+ element-start-idx axis)))))
 
 (extend-protocol KdTree
   Node
@@ -968,16 +971,17 @@
         ^IntVector skip-pointer-vec (.getVector kd-tree "skip-pointer")
         ^FixedSizeListVector point-vec (.getVector kd-tree "point")
         ^BigIntVector coordinates-vec (.getDataVector point-vec)
-        k (.getListSize point-vec)]
+        k (.getListSize point-vec)
+        access (KdTreeVectorPointAccess. point-vec)]
 
     (write-points-in-place kd-tree points)
 
     ((fn step [^long start ^long end ^long axis]
-       (let [median (quick-select point-vec start end axis)
+       (let [median (quick-select access start end axis)
              next-axis (next-axis axis k)
              axis-delete-flag (inc axis)]
          (when-not (= start median)
-           (swap-point point-vec coordinates-vec start median))
+           (.swapPoint access start median))
          (.set axis-delete-flag-vec start axis-delete-flag)
          (.copyFrom split-value-vec (+ (.getElementStartIndex point-vec start) axis) start coordinates-vec)
          (when (< start median)
@@ -1030,7 +1034,10 @@
   (getCoordinate [_ idx axis]
     (if (< idx static-value-count)
       (.getCoordinate static-access idx axis)
-      (.getCoordinate dynamic-access (- idx static-value-count) axis))))
+      (.getCoordinate dynamic-access (- idx static-value-count) axis)))
+
+  (swapPoint [_ _ _]
+    (throw (UnsupportedOperationException.))))
 
 (deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size ^int static-value-count]
   KdTree
