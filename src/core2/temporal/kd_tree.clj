@@ -156,6 +156,7 @@
   (^java.util.List getPoint [^int idx])
   (^longs getArrayPoint [^int idx])
   (^long getCoordinate [^int idx ^int axis])
+  (^void setCoordinate [^int idx ^int axis ^long value])
   (^void swapPoint [^int from-idx ^int to-idx]))
 
 (defprotocol KdTree
@@ -167,7 +168,8 @@
   (kd-tree-retain [_ allocator])
   (kd-tree-point-access [_])
   (kd-tree-size [_])
-  (kd-tree-value-count [_]))
+  (kd-tree-value-count [_])
+  (kd-tree-dimensions [_]))
 
 (deftype Node [^FixedSizeListVector point-vec ^int point-idx ^byte axis left right ^boolean deleted?]
   Closeable
@@ -208,6 +210,8 @@
     (throw (IndexOutOfBoundsException.)))
   (getCoordinate [_ _ _]
     (throw (IndexOutOfBoundsException.)))
+  (setCoordinate [_ _ _ _]
+    (throw (UnsupportedOperationException.)))
   (swapPoint [_ _ _]
     (throw (UnsupportedOperationException.))))
 
@@ -227,20 +231,20 @@
   (kd-tree-point-access [_]
     (NilPointAccess.))
   (kd-tree-size [_] 0)
-  (kd-tree-value-count [_] 0))
+  (kd-tree-value-count [_] 0)
+  (kd-tree-dimensions [_] 0))
 
-(defn- write-coordinates [^BigIntVector coordinates-vec ^long list-idx point]
+(defn- write-coordinates [^IKdTreePointAccess access ^long idx point]
   (if (instance? longs-class point)
     (dotimes [n (alength ^longs point)]
-      (.setSafe coordinates-vec (+ list-idx n) (aget ^longs point n)))
+      (.setCoordinate access idx n (aget ^longs point n)))
     (dotimes [n (count point)]
-      (.setSafe coordinates-vec (+ list-idx n) (long (nth point n))))))
+      (.setCoordinate access idx n (long (nth point n))))))
 
-(defn- write-point ^long [^FixedSizeListVector point-vec point]
-  (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-        idx (.getValueCount point-vec)
+(defn- write-point ^long [^FixedSizeListVector point-vec ^IKdTreePointAccess access point]
+  (let [idx (.getValueCount point-vec)
         list-idx (.startNewValue point-vec idx)]
-    (write-coordinates coordinates-vec list-idx point)
+    (write-coordinates access idx point)
     (.setValueCount point-vec (inc idx))
     idx))
 
@@ -316,6 +320,11 @@
           element-start-idx (.getElementStartIndex point-vec idx)]
       (.get coordinates-vec (+ element-start-idx axis))))
 
+  (setCoordinate [_ idx axis value]
+    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+          element-start-idx (.getElementStartIndex point-vec idx)]
+      (.setSafe coordinates-vec (+ element-start-idx axis) value)))
+
   (swapPoint [_ from-idx to-idx]
     (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
           from-idx (.getElementStartIndex point-vec from-idx)
@@ -331,10 +340,9 @@
   (when (not-empty points)
     (let [k (count (first points))
           ^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)
-          ^BigIntVector coordinates-vec (.getDataVector point-vec)
           access (KdTreeVectorPointAccess. point-vec)]
       (doseq [point points]
-        (write-point point-vec point))
+        (write-point point-vec access point))
       (try
         ((fn step [^long start ^long end ^long axis]
            (let [median (quick-select access start end axis)
@@ -354,11 +362,11 @@
           (util/try-close point-vec)
           (throw t))))))
 
-(defmacro ^:private point-equals-list-element [point coordinates-vec element-start-idx k]
+(defmacro ^:private point-equals-list-element [point access idx k]
   `(loop [n# 0]
      (if (= n# ~k)
        true
-       (if (= (.get ~coordinates-vec (+ ~element-start-idx n#)) (aget ~point n#))
+       (if (= (.getCoordinate ~access ~idx n#) (aget ~point n#))
          (recur (inc n#))
          false))))
 
@@ -510,22 +518,21 @@
 (defn- node-kd-tree-edit [^Node kd-tree point deleted?]
   (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
-        ^BigIntVector coordinates-vec (.getDataVector point-vec)
-        k (.getListSize point-vec)]
+        ^IKdTreePointAccess access (kd-tree-point-access kd-tree)
+        k (kd-tree-dimensions kd-tree)]
     (loop [parent-axis (.axis kd-tree)
            node kd-tree
            build-path-fns ()]
       (if-not node
-        (let [point-idx (write-point point-vec point)]
+        (let [point-idx (write-point point-vec access point)]
           (node-kd-tree-build-path build-path-fns (Node. point-vec point-idx (next-axis parent-axis k) nil nil deleted?)))
         (let [axis (.axis node)
-              element-start-idx (.getElementStartIndex point-vec (.point-idx node))
-              point-axis (.get coordinates-vec (+ element-start-idx axis))]
+              idx (.point-idx node)]
           (cond
-            (point-equals-list-element point coordinates-vec element-start-idx k)
+            (point-equals-list-element point access idx k)
             (node-kd-tree-build-path build-path-fns (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node) deleted?))
 
-            (< (aget point axis) point-axis)
+            (< (aget point axis) (.getCoordinate access idx axis))
             (recur (.axis node)
                    (.left node)
                    (cons (fn [left]
@@ -594,7 +601,10 @@
     (.count ^IntStream (kd-tree-depth-first kd-tree)))
 
   (kd-tree-value-count [kd-tree]
-    (.getValueCount ^FixedSizeListVector (.point-vec kd-tree))))
+    (.getValueCount ^FixedSizeListVector (.point-vec kd-tree)))
+
+  (kd-tree-dimensions [kd-tree]
+    (.getListSize ^FixedSizeListVector (.point-vec kd-tree))))
 
 (defn kd-tree->seq
   ([kd-tree]
@@ -667,8 +677,11 @@
 
 (definterface IColumnKdTreeAccess
   (^byte getAxisDeleteFlag [^int idx])
+  (^void setAxisDeleteFlag [^int idx ^byte axis-delete-flag])
   (^long getSplitValue [^int idx])
-  (^int getSkipPointer [^int idx]))
+  (^void setSplitValue [^int idx ^long split-value])
+  (^int getSkipPointer [^int idx])
+  (^void setSkipPointer [^int idx ^int skip-pointer]))
 
 (deftype ColumnStackEntry [^int start ^int end])
 
@@ -793,11 +806,20 @@
   (getAxisDeleteFlag [_ idx]
     (.get axis-delete-flag-vec idx))
 
+  (setAxisDeleteFlag [_ idx axis-delete-flag]
+    (.set axis-delete-flag-vec idx axis-delete-flag))
+
   (getSplitValue [_ idx]
     (.get split-value-vec idx))
 
+  (setSplitValue [_ idx split-value]
+    (.set split-value-vec idx split-value))
+
   (getSkipPointer [_ idx]
-    (.get skip-pointer-vec idx)))
+    (.get skip-pointer-vec idx))
+
+  (setSkipPointer [_ idx skip-pointer]
+    (.set skip-pointer-vec idx skip-pointer)))
 
 (defn- ->root-column-kd-tree-access ^core2.temporal.kd_tree.IColumnKdTreeAccess [^VectorSchemaRoot root]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector root "axis-delete-flag")
@@ -861,7 +883,10 @@
     (.count ^IntStream (kd-tree-depth-first kd-tree)))
 
   (kd-tree-value-count [kd-tree]
-    (.getRowCount kd-tree)))
+    (.getRowCount kd-tree))
+
+  (kd-tree-dimensions [kd-tree]
+    (.getListSize ^FixedSizeListVector (.getVector kd-tree point-vec-idx))))
 
 (def ^:private ^java.lang.reflect.Field arrow-record-buffers-layout-field
   (doto (.getDeclaredField ArrowRecordBatch "buffersLayout")
@@ -945,37 +970,28 @@
     path))
 
 (defn- write-points-in-place [^VectorSchemaRoot kd-tree points]
-  (let [^FixedSizeListVector point-vec (.getVector kd-tree "point")
-        ^BigIntVector coordinates-vec (.getDataVector point-vec)
-        k (.getListSize point-vec)]
+  (let [^IKdTreePointAccess out-access (kd-tree-point-access kd-tree)
+        ^long k (kd-tree-dimensions kd-tree)]
     (if (satisfies? KdTree points)
       (let [^IKdTreePointAccess point-access (kd-tree-point-access points)]
         (.reduce ^IntStream (kd-tree-depth-first points)
                  0
                  (reify IntBinaryOperator
                    (applyAsInt [_ idx point-idx]
-                     (let [list-idx (.getElementStartIndex point-vec idx)]
-                       (dotimes [n k]
-                         (.set coordinates-vec (+ list-idx n) (.getCoordinate point-access point-idx n)))
-                       (inc idx))))))
+                     (dotimes [n k]
+                       (.setCoordinate out-access idx n (.getCoordinate point-access point-idx n)))
+                     (inc idx)))))
       (reduce
        (fn [^long idx point]
-         (let [list-idx (.getElementStartIndex point-vec idx)]
-           (write-coordinates coordinates-vec list-idx point)
-           (inc idx)))
+         (write-coordinates out-access idx point)
+         (inc idx))
        0
        points))))
 
-(defn- build-tree-in-place [^BufferAllocator allocator ^VectorSchemaRoot kd-tree points]
-  (let [^TinyIntVector axis-delete-flag-vec (.getVector kd-tree "axis-delete-flag")
-        ^BigIntVector split-value-vec (.getVector kd-tree "split-value")
-        ^IntVector skip-pointer-vec (.getVector kd-tree "skip-pointer")
-        ^FixedSizeListVector point-vec (.getVector kd-tree "point")
-        ^BigIntVector coordinates-vec (.getDataVector point-vec)
-        k (.getListSize point-vec)
-        access (KdTreeVectorPointAccess. point-vec)]
-
-    (write-points-in-place kd-tree points)
+(defn- build-tree-in-place [^VectorSchemaRoot kd-tree points]
+  (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
+        column-access (->root-column-kd-tree-access kd-tree)
+        k (kd-tree-dimensions kd-tree)]
 
     ((fn step [^long start ^long end ^long axis]
        (let [median (quick-select access start end axis)
@@ -983,16 +999,16 @@
              axis-delete-flag (inc axis)]
          (when-not (= start median)
            (.swapPoint access start median))
-         (.set axis-delete-flag-vec start axis-delete-flag)
-         (.copyFrom split-value-vec (+ (.getElementStartIndex point-vec start) axis) start coordinates-vec)
+         (.setAxisDeleteFlag column-access start (unchecked-byte axis-delete-flag))
+         (.setSplitValue column-access start (.getCoordinate access start axis))
          (when (< start median)
            (step (inc start) (inc median) next-axis))
          (if (< (inc median) end)
-           (do (.set skip-pointer-vec start (inc median))
+           (do (.setSkipPointer column-access start (inc median))
                (step (inc median) end next-axis))
-           (.set skip-pointer-vec start -1))
+           (.setSkipPointer column-access start -1))
          false))
-     0 (.getValueCount point-vec) 0)))
+     0 (kd-tree-value-count kd-tree) 0)))
 
 (defn ->disk-kd-tree
   (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k]
@@ -1006,7 +1022,8 @@
                  chunks (util/->chunks arrow-buf)]
        (.tryAdvance chunks (reify Consumer
                              (accept [_ root]
-                               (build-tree-in-place allocator root points))))
+                               (write-points-in-place root points)
+                               (build-tree-in-place root points))))
        (.force nio-buffer))
      path)))
 
@@ -1036,6 +1053,9 @@
     (if (< idx static-value-count)
       (.getCoordinate static-access idx axis)
       (.getCoordinate dynamic-access (- idx static-value-count) axis)))
+
+  (setCoordinate [_ _ _ _]
+    (throw (UnsupportedOperationException.)))
 
   (swapPoint [_ _ _]
     (throw (UnsupportedOperationException.))))
@@ -1099,6 +1119,9 @@
   (kd-tree-value-count [kd-tree]
     (+ (long (kd-tree-value-count static-kd-tree))
        (long (kd-tree-value-count dynamic-kd-tree))))
+
+  (kd-tree-dimensions [_]
+    (kd-tree-dimensions static-kd-tree))
 
   Closeable
   (close [_]
