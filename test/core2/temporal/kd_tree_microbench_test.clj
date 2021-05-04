@@ -9,6 +9,17 @@
            [org.apache.arrow.vector VectorSchemaRoot]
            core2.temporal.kd_tree.Node))
 
+(defmacro in-range? [min-range point max-range]
+  `(let [len# (alength ~point)]
+     (loop [n# (int 0)]
+       (if (= n# len#)
+         true
+         (let [x# (aget ~point n#)]
+           (if (and (<= (aget ~min-range n#) x#)
+                    (<= x# (aget ~max-range n#)))
+             (recur (inc n#))
+             false))))))
+
 ;; TODO: move to JMH.
 (t/deftest ^:integration kd-tree-micro-bench
   (with-open [allocator (RootAllocator.)]
@@ -41,7 +52,7 @@
            (.put query->count query-id (-> (.stream ^Collection points)
                                            (.filter (reify Predicate
                                                       (test [_ location]
-                                                        (kd/in-range? min-range ^longs location max-range))))
+                                                        (in-range? min-range ^longs location max-range))))
                                            (.count)))))
 
         (prn :build-node-kd-tree-insert ns)
