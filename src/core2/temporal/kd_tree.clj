@@ -1032,9 +1032,6 @@
       (.getCoordinate static-access idx axis)
       (.getCoordinate dynamic-access (- idx static-value-count) axis))))
 
-(definterface IMergedKdTreeAccess
-  (^Object getDynamicTree []))
-
 (deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size ^int static-value-count]
   KdTree
   (kd-tree-insert [this allocator point]
@@ -1094,10 +1091,6 @@
   (kd-tree-value-count [kd-tree]
     (+ (long (kd-tree-value-count static-kd-tree))
        (long (kd-tree-value-count dynamic-kd-tree))))
-
-  IMergedKdTreeAccess
-  (getDynamicTree [_]
-    dynamic-kd-tree)
 
   Closeable
   (close [_]
