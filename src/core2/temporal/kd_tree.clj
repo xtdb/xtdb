@@ -827,6 +827,41 @@
         ^IntVector skip-pointer-vec (.getVector root "skip-pointer")]
     (VectorSchemaRootColumnKdTreeAccess. axis-delete-flag-vec split-value-vec skip-pointer-vec)))
 
+(defn- column-kd-tree-depth-first [kd-tree ^IColumnKdTreeAccess column-access]
+  (.filter (IntStream/range 0 (kd-tree-value-count kd-tree))
+           (reify IntPredicate
+             (test [_ x]
+               (pos? (.getAxisDeleteFlag column-access x))))))
+
+(defn- column-kd-tree-range-search [kd-tree ^IColumnKdTreeAccess column-access min-range max-range]
+  (let [min-range (->longs min-range)
+        max-range (->longs max-range)
+        access (kd-tree-point-access kd-tree)
+        stack (doto (ArrayDeque.)
+                (.push (ColumnStackEntry. 0 (kd-tree-value-count kd-tree))))]
+      (StreamSupport/intStream
+       (ColumnRangeSearchSpliterator. column-access access min-range max-range stack)
+       false)))
+
+(defn- column-kd-tree-depth [kd-tree ^IColumnKdTreeAccess column-access]
+  ((fn step [^long idx ^long end-idx]
+     (if (< idx end-idx)
+       (let [left-idx (inc idx)
+             right-idx (.getSkipPointer column-access idx)
+             right-idx (if (neg? right-idx)
+                         end-idx
+                         right-idx)
+             visit-left? (not= left-idx right-idx)
+             visit-right? (not= right-idx end-idx)]
+
+         (inc (max (long (if visit-right?
+                           (step right-idx end-idx)
+                           0))
+                   (long (if visit-left?
+                           (step left-idx right-idx)
+                           0)))))
+       0)) 0 (kd-tree-value-count kd-tree)))
+
 (extend-protocol KdTree
   VectorSchemaRoot
   (kd-tree-insert [_ allocator point]
@@ -836,42 +871,13 @@
     (throw (UnsupportedOperationException.)))
 
   (kd-tree-range-search [kd-tree min-range max-range]
-    (let [min-range (->longs min-range)
-          max-range (->longs max-range)
-          column-access (->root-column-kd-tree-access kd-tree)
-          access (kd-tree-point-access kd-tree)
-          stack (doto (ArrayDeque.)
-                  (.push (ColumnStackEntry. 0 (kd-tree-value-count kd-tree))))]
-      (StreamSupport/intStream
-       (ColumnRangeSearchSpliterator. column-access access min-range max-range stack)
-       false)))
+    (column-kd-tree-range-search kd-tree (->root-column-kd-tree-access kd-tree) min-range max-range))
 
   (kd-tree-depth-first [kd-tree]
-    (let [column-access (->root-column-kd-tree-access kd-tree)]
-      (.filter (IntStream/range 0 (kd-tree-value-count kd-tree))
-               (reify IntPredicate
-                 (test [_ x]
-                   (pos? (.getAxisDeleteFlag column-access x)))))))
+    (column-kd-tree-depth-first kd-tree (->root-column-kd-tree-access kd-tree)))
 
   (kd-tree-depth [kd-tree]
-    (let [column-access (->root-column-kd-tree-access kd-tree)]
-      ((fn step [^long idx ^long end-idx]
-         (if (< idx end-idx)
-           (let [left-idx (inc idx)
-                 right-idx (.getSkipPointer column-access idx)
-                 right-idx (if (neg? right-idx)
-                             end-idx
-                             right-idx)
-                 visit-left? (not= left-idx right-idx)
-                 visit-right? (not= right-idx end-idx)]
-
-             (inc (max (long (if visit-right?
-                               (step right-idx end-idx)
-                               0))
-                       (long (if visit-left?
-                               (step left-idx right-idx)
-                               0)))))
-           0)) 0 (kd-tree-value-count kd-tree))))
+    (column-kd-tree-depth kd-tree (->root-column-kd-tree-access kd-tree)))
 
   (kd-tree-retain [this allocator]
     (util/slice-root this 0))
@@ -969,7 +975,7 @@
       (.write write-ch util/arrow-magic))
     path))
 
-(defn- write-points-in-place [^VectorSchemaRoot kd-tree points]
+(defn- write-points-in-place [kd-tree points]
   (let [^IKdTreePointAccess out-access (kd-tree-point-access kd-tree)
         ^long k (kd-tree-dimensions kd-tree)]
     (if (satisfies? KdTree points)
@@ -988,9 +994,8 @@
        0
        points))))
 
-(defn- build-tree-in-place [^VectorSchemaRoot kd-tree points]
+(defn- build-tree-in-place [kd-tree ^IColumnKdTreeAccess column-access points]
   (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
-        column-access (->root-column-kd-tree-access kd-tree)
         k (kd-tree-dimensions kd-tree)]
 
     ((fn step [^long start ^long end ^long axis]
@@ -1023,7 +1028,7 @@
        (.tryAdvance chunks (reify Consumer
                              (accept [_ root]
                                (write-points-in-place root points)
-                               (build-tree-in-place root points))))
+                               (build-tree-in-place root (->root-column-kd-tree-access root) points))))
        (.force nio-buffer))
      path)))
 
