@@ -601,7 +601,6 @@
               to-ch (->file-channel to write-new-file-opts)
               out (ArrowFileWriter. (slice-root (.getVectorSchemaRoot in)) nil to-ch)]
     (while (.loadNextBatch in)
-      (with-open [root (slice-root (.getVectorSchemaRoot in))]
-        (.set arrow-writer-unloader-field out (VectorUnloader. (slice-root (.getVectorSchemaRoot in)) true (ZstdCompressionCodec.) true))
-        (.writeBatch out)))
+      (.set arrow-writer-unloader-field out (VectorUnloader. (slice-root (.getVectorSchemaRoot in)) true (ZstdCompressionCodec.) true))
+      (.writeBatch out))
     to))
