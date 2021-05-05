@@ -9,7 +9,7 @@
            [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
            [org.apache.arrow.vector.complex FixedSizeListVector]
-           [core2.temporal.kd_tree MergedKdTree Node]))
+           [core2.temporal.kd_tree MergedKdTree MmapKdTree Node]))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
 ;; chapter 10 "Bitemporal Tables".
@@ -328,10 +328,10 @@
                                       nil
                                       points)
                 ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)
-                ^VectorSchemaRoot disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points 2)
-                                                                (kd/->mmap-kd-tree allocator))
-                ^VectorSchemaRoot disk-kd-tree-from-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_2.arrow") kd-tree 2)
-                                                              (kd/->mmap-kd-tree allocator))]
+                ^MmapKdTree disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points 2 2)
+                                                          (kd/->mmap-kd-tree allocator))
+                ^MmapKdTree disk-kd-tree-from-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_2.arrow") kd-tree 2 2)
+                                                        (kd/->mmap-kd-tree allocator))]
       (t/is (= [[7 2] [5 4] [2 3] [8 1]]
 
                (-> kd-tree
@@ -389,11 +389,6 @@
         (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
           (t/is (empty? (kd/kd-tree->seq kd-tree)))
           (t/is (zero? (kd/kd-tree-size kd-tree)))))
-
-      (t/testing "arrow"
-        (t/is (= (.contentToTSVString column-kd-tree)
-                 (.contentToTSVString disk-kd-tree-from-points)
-                 (.contentToTSVString disk-kd-tree-from-tree))))
 
       (t/testing "merge"
         (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]
@@ -453,36 +448,3 @@
                           (t/is (= 4 (kd/kd-tree-size static-tree)))
                           (t/is (= [node-to-insert]
                                    (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert)))))))))))))))))
-
-(t/deftest empty-record-batch
-  (with-open [allocator (RootAllocator.)
-              ^ArrowRecordBatch record-batch (@#'kd/->empty-record-batch allocator (@#'kd/->column-kd-tree-schema 3) 10)]
-
-    (t/is (= [{:length 10, :nullCount 0}
-              {:length 10, :nullCount 0}
-              {:length 10, :nullCount 0}
-              {:length 10, :nullCount 0}
-              {:length 30, :nullCount 0}]
-             (mapv (comp #(dissoc % :class) bean)
-                   (.getNodes record-batch))))
-
-    (t/is (= [{:offset 0,
-               :size 2}
-              {:offset 8,
-               :size 10}
-              {:offset 24,
-               :size 2}
-              {:offset 32,
-               :size 80}
-              {:offset 112,
-               :size 2}
-              {:offset 120,
-               :size 40}
-              {:offset 160,
-               :size 2}
-              {:offset 168,
-               :size 4}
-              {:offset 176,
-               :size 240}]
-             (mapv (comp #(dissoc % :class) bean)
-                   (.getBuffersLayout record-batch))))))

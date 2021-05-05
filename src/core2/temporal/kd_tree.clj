@@ -6,17 +6,16 @@
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
-            IdentityHashMap List Map Spliterator Spliterator$OfInt Spliterators]
+            IdentityHashMap LinkedHashMap List Map Map$Entry Spliterator Spliterator$OfInt Spliterators]
            [java.util.function Consumer Function IntBinaryOperator IntConsumer IntFunction IntPredicate IntUnaryOperator]
            [java.util.stream IntStream StreamSupport]
-           [org.apache.arrow.memory BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector TypeLayout VectorSchemaRoot VectorUnloader]
-           org.apache.arrow.vector.util.DataSizeRoundingUtil
+           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
+           [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector TypeLayout VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
            [org.apache.arrow.vector.types Types$MinorType]
-           [org.apache.arrow.vector.ipc WriteChannel]
-           [org.apache.arrow.vector.ipc.message ArrowBlock ArrowBuffer ArrowFieldNode ArrowFooter ArrowRecordBatch MessageSerializer]
+           org.apache.arrow.vector.ipc.ArrowFileWriter
+           [org.apache.arrow.vector.ipc.message ArrowBuffer ArrowFooter ArrowRecordBatch]
            org.roaringbitmap.RoaringBitmap))
 
 ;; NOTE:
@@ -626,6 +625,9 @@
                                                  (.getArrayPoint point-access x))))
                                   (.toArray)))))
 
+(def ^:private ^:const axis-delete-flag-vec-idx 0)
+(def ^:private ^:const split-value-vec-idx 1)
+(def ^:private ^:const skip-pointer-vec-idx 2)
 (def ^:private ^:const point-vec-idx 3)
 
 (defn- ->column-kd-tree-schema ^org.apache.arrow.vector.types.pojo.Schema [^long k]
@@ -807,19 +809,19 @@
     (.get axis-delete-flag-vec idx))
 
   (setAxisDeleteFlag [_ idx axis-delete-flag]
-    (.set axis-delete-flag-vec idx axis-delete-flag))
+    (.setSafe axis-delete-flag-vec idx axis-delete-flag))
 
   (getSplitValue [_ idx]
     (.get split-value-vec idx))
 
   (setSplitValue [_ idx split-value]
-    (.set split-value-vec idx split-value))
+    (.setSafe split-value-vec idx split-value))
 
   (getSkipPointer [_ idx]
     (.get skip-pointer-vec idx))
 
   (setSkipPointer [_ idx skip-pointer]
-    (.set skip-pointer-vec idx skip-pointer)))
+    (.setSafe skip-pointer-vec idx skip-pointer)))
 
 (defn- ->root-column-kd-tree-access ^core2.temporal.kd_tree.IColumnKdTreeAccess [^VectorSchemaRoot root]
   (let [^TinyIntVector axis-delete-flag-vec (.getVector root "axis-delete-flag")
@@ -894,107 +896,43 @@
   (kd-tree-dimensions [kd-tree]
     (.getListSize ^FixedSizeListVector (.getVector kd-tree point-vec-idx))))
 
-(def ^:private ^java.lang.reflect.Field arrow-record-buffers-layout-field
-  (doto (.getDeclaredField ArrowRecordBatch "buffersLayout")
-    (.setAccessible true)))
-
-(defn- ->empty-record-batch ^org.apache.arrow.vector.ipc.message.ArrowRecordBatch [^BufferAllocator allocator ^Schema schema ^long n]
-  (let [step-fn (fn step [^long multiplier ^Field f]
-                  (let [t (.getType f)]
-                    (cons {:field-node (ArrowFieldNode. multiplier 0)
-                           :sizes (vec (for [^BufferLayout bl (.getBufferLayouts (TypeLayout/getTypeLayout t))]
-                                         (long (Math/ceil (/ (* multiplier (.getTypeBitWidth bl)) Byte/SIZE)))))}
-                          (mapcat (partial step (if (instance? ArrowType$FixedSizeList t)
-                                                  (* multiplier (.getListSize ^ArrowType$FixedSizeList t))
-                                                  multiplier))
-                                  (.getChildren f)))))
-        field-nodes+sizes (mapcat (partial step-fn n) (.getFields schema))
-        field-nodes (mapv :field-node field-nodes+sizes)
-        sizes (mapcat :sizes field-nodes+sizes)
-        offsets (reductions
-                 (fn [^long offset ^long size]
-                   (DataSizeRoundingUtil/roundUpTo8Multiple (+ offset size)))
-                 0
-                 sizes)
-        buffers (vec (for [[offset size] (map vector offsets sizes)]
-                       (ArrowBuffer. offset size)))
-        ^ArrowBuffer last-buffer (last buffers)
-        buffer-length (DataSizeRoundingUtil/roundUpTo8Multiple (+ (.getOffset last-buffer)
-                                                                  (.getSize last-buffer)))
-        record-batch (proxy [ArrowRecordBatch] [n field-nodes (repeat (count buffers) (.getEmpty allocator))]
-                       (computeBodyLength []
-                         buffer-length))]
-    (.set arrow-record-buffers-layout-field record-batch buffers)
-    record-batch))
-
-(def ^:private ^java.lang.reflect.Field write-channel-current-position-field
-  (doto (.getDeclaredField WriteChannel "currentPosition")
-    (.setAccessible true)))
-
-(defn- ->empty-disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path n k]
-  (util/mkdirs (.getParent path))
-  (let [^Schema schema (->column-kd-tree-schema k)
-        ^long n n
-        ^long k k]
-    (with-open [ch (util/->file-channel path util/write-new-file-opts)
-                write-ch (WriteChannel. ch)]
-      (doto write-ch
-        (.write util/arrow-magic)
-        (.align))
-
-      (MessageSerializer/serialize write-ch schema)
-
-      (let [^ArrowRecordBatch record-batch (->empty-record-batch allocator schema n)
-            buffer-length (.computeBodyLength record-batch)
-            start (.getCurrentPosition write-ch)
-            metadata (MessageSerializer/serializeMetadata record-batch)
-            metadata-length (.remaining metadata)
-            prefix-size 8
-            padding (long (mod (+ start metadata-length prefix-size) 8))
-            metadata-length (long (if (zero? padding)
-                                    metadata-length
-                                    (+ metadata-length (- 8 padding))))]
-        (doto write-ch
-          (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
-          (.writeIntLittleEndian metadata-length)
-          (.write metadata)
-          (.align))
-
-        (.position ch (+ (.getCurrentPosition write-ch) buffer-length))
-        (.set write-channel-current-position-field write-ch (.position ch))
-
-        (doto write-ch
-          (.writeIntLittleEndian MessageSerializer/IPC_CONTINUATION_TOKEN)
-          (.writeIntLittleEndian 0))
-
-        (let [block (ArrowBlock. start (+ metadata-length prefix-size) buffer-length)
-              footer (ArrowFooter. schema [] [block])
-              footer-size (.write write-ch footer false)]
-          (.writeIntLittleEndian write-ch footer-size)))
-
-      (.write write-ch util/arrow-magic))
-    path))
-
-(defn- write-points-in-place [kd-tree points]
-  (let [^IKdTreePointAccess out-access (kd-tree-point-access kd-tree)
-        ^long k (kd-tree-dimensions kd-tree)]
+(defn- write-points-in-place [^VectorSchemaRoot root ^ArrowFileWriter out points ^long batch-size]
+  (let [^long k (kd-tree-dimensions root)
+        ^IKdTreePointAccess out-access (kd-tree-point-access root)
+        column-access (->root-column-kd-tree-access root)
+        ^FixedSizeListVector point-vec (.getVector root "point")]
     (if (satisfies? KdTree points)
       (let [^IKdTreePointAccess point-access (kd-tree-point-access points)]
-        (.reduce ^IntStream (kd-tree-depth-first points)
-                 0
-                 (reify IntBinaryOperator
-                   (applyAsInt [_ idx point-idx]
-                     (dotimes [n k]
-                       (.setCoordinate out-access idx n (.getCoordinate point-access point-idx n)))
-                     (inc idx)))))
-      (reduce
-       (fn [^long idx point]
-         (write-coordinates out-access idx point)
-         (inc idx))
-       0
-       points))))
+        (.forEach ^IntStream (kd-tree-depth-first points)
+                  (reify IntConsumer
+                    (accept [_ point-idx]
+                      (let [idx (.getRowCount root)]
+                        (.startNewValue point-vec idx)
+                        (dotimes [n k]
+                          (.setCoordinate out-access idx n (.getCoordinate point-access point-idx n)))
+                        (.setAxisDeleteFlag column-access idx 0)
+                        (.setSplitValue column-access idx 0)
+                        (.setSkipPointer column-access idx -1)
+                        (.setRowCount root (inc idx))
+                        (when (= (.getRowCount root) batch-size)
+                          (.writeBatch out)
+                          (.clear root)))))))
+      (doseq [point points
+              :let [idx (.getRowCount root)]]
+        (.startNewValue point-vec idx)
+        (write-coordinates out-access idx point)
+        (.setAxisDeleteFlag column-access idx 0)
+        (.setSplitValue column-access idx 0)
+        (.setSkipPointer column-access idx -1)
+        (.setRowCount root (inc idx))
+        (when (= (.getRowCount root) batch-size)
+          (.writeBatch out)
+          (.clear root))))
+    (when (pos? (.getRowCount root))
+      (.writeBatch out)
+      (.clear root))))
 
-(defn- build-tree-in-place [kd-tree ^IColumnKdTreeAccess column-access points]
+(defn- build-tree-in-place [kd-tree ^IColumnKdTreeAccess column-access]
   (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
         k (kd-tree-dimensions kd-tree)]
 
@@ -1015,32 +953,221 @@
          false))
      0 (kd-tree-value-count kd-tree) 0)))
 
+(def ^:private ^:const default-disk-kd-tree-batch-size 1024)
+
+(definterface IBlockManager
+  (^org.apache.arrow.vector.VectorSchemaRoot getRoot [^int block-idx]))
+
+(deftype MmapKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
+  IKdTreePointAccess
+  (getPoint [_ idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+      (.getObject point-vec idx)))
+
+  (getArrayPoint [_ idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          k (.getListSize point-vec)
+          point (long-array k)
+          element-start-idx (.getElementStartIndex point-vec idx)]
+      (dotimes [n k]
+        (aset point n (.get coordinates-vec (+ element-start-idx n))))
+      point))
+
+  (getCoordinate [_ idx axis]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+      (.get ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis))))
+
+  (setCoordinate [_ idx axis value]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+      (.setSafe ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis) value)))
+
+  (swapPoint [_ from-idx to-idx]
+    (let [from-block-idx (unsigned-bit-shift-right from-idx batch-shift)
+          from-idx (bit-and from-idx batch-mask)
+          to-block-idx (unsigned-bit-shift-right to-idx batch-shift)
+          to-idx (bit-and to-idx batch-mask)from-root (.getRoot kd-tree from-block-idx)
+          to-root (.getRoot kd-tree to-block-idx)
+          ^FixedSizeListVector from-point-vec (.getVector from-root point-vec-idx)
+          ^FixedSizeListVector to-point-vec (.getVector to-root point-vec-idx)
+          ^BigIntVector from-coordinates-vec (.getDataVector from-point-vec)
+          ^BigIntVector to-coordinates-vec (.getDataVector to-point-vec)
+          from-idx (.getElementStartIndex from-point-vec from-idx)
+          to-idx (.getElementStartIndex to-point-vec to-idx)]
+      (dotimes [axis (.getListSize from-point-vec)]
+        (let [from-idx (+ from-idx axis)
+              to-idx (+ to-idx axis)
+              tmp (.get from-coordinates-vec from-idx)]
+          (.set from-coordinates-vec from-idx (.get to-coordinates-vec to-idx))
+          (.set to-coordinates-vec to-idx tmp))))))
+
+(deftype MmapColumnKdTreeKdAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
+  IColumnKdTreeAccess
+  (getAxisDeleteFlag [_ idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)]
+      (.get ^TinyIntVector (.getVector root axis-delete-flag-vec-idx) idx)))
+
+  (setAxisDeleteFlag [_ idx axis-delete-flag]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)]
+      (.setSafe ^TinyIntVector (.getVector root axis-delete-flag-vec-idx) (int idx) axis-delete-flag)))
+
+  (getSplitValue [_ idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)]
+      (.get ^BigIntVector (.getVector root split-value-vec-idx) idx)))
+
+  (setSplitValue [_ idx split-value]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)]
+      (.setSafe ^BigIntVector (.getVector root split-value-vec-idx) (int idx) split-value)))
+
+  (getSkipPointer [_ idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)]
+      (.get ^IntVector (.getVector root skip-pointer-vec-idx) idx)))
+
+  (setSkipPointer [_ idx skip-pointer]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)]
+      (.setSafe ^IntVector (.getVector root skip-pointer-vec-idx) (int idx) skip-pointer))))
+
+(defn- ->block-cache [^long cache-size]
+  (proxy [LinkedHashMap] [cache-size 0.75 true]
+    (removeEldestEntry [entry]
+      (if (> (.size ^Map this) cache-size)
+        (do (util/try-close (.getValue ^Map$Entry entry))
+            true)
+        false))))
+
+(deftype MmapKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^int batch-mask ^int value-count ^int block-cache-size ^Map block-cache]
+  IBlockManager
+  (getRoot [_ block-idx]
+    (.computeIfAbsent block-cache
+                      block-idx
+                      (reify Function
+                        (apply [_ block-idx]
+                          (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)]
+                            (let [root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
+                              (.load (VectorLoader. root) arrow-record-batch)
+                              root))))))
+
+  KdTree
+  (kd-tree-insert [_ allocator point]
+    (throw (UnsupportedOperationException.)))
+
+  (kd-tree-delete [_ allocator point]
+    (throw (UnsupportedOperationException.)))
+
+  (kd-tree-range-search [kd-tree min-range max-range]
+    (column-kd-tree-range-search kd-tree (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask) min-range max-range))
+
+  (kd-tree-depth-first [kd-tree]
+    (column-kd-tree-depth-first kd-tree (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+
+  (kd-tree-depth [kd-tree]
+    (column-kd-tree-depth kd-tree (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+
+  (kd-tree-retain [this allocator]
+    (MmapKdTree. (doto arrow-buf
+                   (.retain))
+                 footer
+                 batch-shift
+                 batch-mask
+                 value-count
+                 block-cache-size
+                 (->block-cache block-cache-size)))
+
+  (kd-tree-point-access [kd-tree]
+    (MmapKdTreePointAccess. kd-tree batch-shift batch-mask))
+
+  (kd-tree-size [kd-tree]
+    value-count)
+
+  (kd-tree-value-count [kd-tree]
+    value-count)
+
+  (kd-tree-dimensions [kd-tree]
+    (.getListSize ^ArrowType$FixedSizeList (.getType (.findField (.getSchema footer) "point"))))
+
+  Closeable
+  (close [_]
+    (doseq [v (vals block-cache)]
+      (util/try-close v))
+    (.clear block-cache)
+    (util/try-close arrow-buf)))
+
+(defn- ->mmap-column-kd-tree-access [^MmapKdTree kd-tree ^long batch-size]
+  (let [batch-mask (dec batch-size)
+        batch-shift (Long/bitCount batch-mask)]
+    (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+
+(def ^:private ^:const default-block-cache-size 2)
+
+(defn ->mmap-kd-tree-internal ^core2.temporal.kd_tree.MmapKdTree [^ArrowBuf arrow-buf]
+  (let [footer (util/read-arrow-footer arrow-buf)
+        batch-sizes (reduce
+                     (fn [acc block]
+                       (with-open [arrow-record-batch (util/->arrow-record-batch-view block arrow-buf)
+                                   root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
+                         (.load (VectorLoader. root) arrow-record-batch)
+                         (conj acc (.getLength arrow-record-batch))))
+                     []
+                     (.getRecordBatches footer))
+        value-count (reduce + batch-sizes)
+        block-cache-size default-block-cache-size
+        block-cache (->block-cache block-cache-size)
+        batch-size (long (first batch-sizes))
+        batch-size (if (= 1 (Long/bitCount batch-size))
+                     batch-size
+                     (inc Integer/MAX_VALUE))
+        batch-mask (dec batch-size)
+        batch-shift (Long/bitCount batch-mask)]
+    (MmapKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache)))
+
+(defn ->mmap-kd-tree ^core2.temporal.kd_tree.MmapKdTree [^BufferAllocator allocator ^Path path]
+  (let [nio-buffer (util/->mmap-path path)
+        arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
+    (->mmap-kd-tree-internal arrow-buf)))
+
 (defn ->disk-kd-tree
   (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k]
+   (->disk-kd-tree allocator path points k default-disk-kd-tree-batch-size))
+  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k batch-size]
    (->disk-kd-tree allocator path points (if (satisfies? KdTree points)
                                            (kd-tree-size points)
-                                           (count points)) k))
-  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points n k]
-   (let [^Path path (->empty-disk-kd-tree allocator path n k)
-         nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
-     (with-open [arrow-buf (util/->arrow-buf-view allocator nio-buffer)
-                 chunks (util/->chunks arrow-buf)]
-       (.tryAdvance chunks (reify Consumer
-                             (accept [_ root]
-                               (write-points-in-place root points)
-                               (build-tree-in-place root (->root-column-kd-tree-access root) points))))
+                                           (count points)) k batch-size))
+  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points n k batch-size]
+   (assert (= 1 (Long/bitCount batch-size)))
+   (util/mkdirs (.getParent path))
+   (with-open [root (VectorSchemaRoot/create (->column-kd-tree-schema k) allocator)
+               ch (util/->file-channel path util/write-new-file-opts)
+               out (ArrowFileWriter. root nil ch)]
+     (write-points-in-place root out points batch-size))
+   (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
+     (with-open [mmap-kd-tree (->mmap-kd-tree-internal (util/->arrow-buf-view allocator nio-buffer))]
+       (build-tree-in-place mmap-kd-tree (->mmap-column-kd-tree-access mmap-kd-tree batch-size))
        (.force nio-buffer))
      path)))
-
-(defn ->mmap-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Path path]
-  (let [nio-buffer (util/->mmap-path path)
-        res (promise)]
-    (with-open [arrow-buf (util/->arrow-buf-view allocator nio-buffer)
-                chunks (util/->chunks arrow-buf)]
-      (.tryAdvance chunks (reify Consumer
-                            (accept [_ root]
-                              (deliver res (util/slice-root root 0))))))
-    @res))
 
 (deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^int static-value-count]
   IKdTreePointAccess
