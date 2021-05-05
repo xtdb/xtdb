@@ -112,6 +112,8 @@
 
 ;; TODO:
 
+;; - Change indexes to longs.
+
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
