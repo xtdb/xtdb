@@ -112,6 +112,7 @@
 
 ;; TODO:
 
+;; - Sanity check memory management in compress-arrow-ipc-file-blocks
 ;; - Change indexes to longs.
 
 ;; - Static/Dynamic tree node.
