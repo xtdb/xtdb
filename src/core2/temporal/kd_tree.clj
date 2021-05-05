@@ -9,13 +9,15 @@
             IdentityHashMap LinkedHashMap List Map Map$Entry Spliterator Spliterator$OfInt Spliterators]
            [java.util.function Consumer Function IntBinaryOperator IntConsumer IntFunction IntPredicate IntUnaryOperator]
            [java.util.stream IntStream StreamSupport]
-           [org.apache.arrow.memory ArrowBuf BufferAllocator RootAllocator]
-           [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector TypeLayout VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
+           [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector
+            VectorLoader VectorSchemaRoot]
            [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
            [org.apache.arrow.vector.types Types$MinorType]
            org.apache.arrow.vector.ipc.ArrowFileWriter
            [org.apache.arrow.vector.ipc.message ArrowBuffer ArrowFooter ArrowRecordBatch]
+           org.apache.arrow.compression.CommonsCompressionFactory
            org.roaringbitmap.RoaringBitmap))
 
 ;; NOTE:
@@ -1068,7 +1070,7 @@
                         (apply [_ block-idx]
                           (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)]
                             (let [root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
-                              (.load (VectorLoader. root) arrow-record-batch)
+                              (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
                               root))))))
 
   KdTree
@@ -1121,7 +1123,7 @@
         batch-shift (Long/bitCount batch-mask)]
     (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
 
-(def ^:private ^:const default-block-cache-size 2)
+(def ^:private ^:const default-block-cache-size 128)
 
 (defn ->mmap-kd-tree-internal ^core2.temporal.kd_tree.MmapKdTree [^ArrowBuf arrow-buf]
   (let [footer (util/read-arrow-footer arrow-buf)
@@ -1129,7 +1131,7 @@
                      (fn [acc block]
                        (with-open [arrow-record-batch (util/->arrow-record-batch-view block arrow-buf)
                                    root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
-                         (.load (VectorLoader. root) arrow-record-batch)
+                         (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
                          (conj acc (.getLength arrow-record-batch))))
                      []
                      (.getRecordBatches footer))
@@ -1149,25 +1151,24 @@
         arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
     (->mmap-kd-tree-internal arrow-buf)))
 
-(defn ->disk-kd-tree
-  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k]
-   (->disk-kd-tree allocator path points k default-disk-kd-tree-batch-size))
-  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points k batch-size]
-   (->disk-kd-tree allocator path points (if (satisfies? KdTree points)
-                                           (kd-tree-size points)
-                                           (count points)) k batch-size))
-  (^java.nio.file.Path [^BufferAllocator allocator ^Path path points n k batch-size]
-   (assert (= 1 (Long/bitCount batch-size)))
-   (util/mkdirs (.getParent path))
-   (with-open [root (VectorSchemaRoot/create (->column-kd-tree-schema k) allocator)
-               ch (util/->file-channel path util/write-new-file-opts)
-               out (ArrowFileWriter. root nil ch)]
-     (write-points-in-place root out points batch-size))
-   (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
-     (with-open [mmap-kd-tree (->mmap-kd-tree-internal (util/->arrow-buf-view allocator nio-buffer))]
-       (build-tree-in-place mmap-kd-tree (->mmap-column-kd-tree-access mmap-kd-tree batch-size))
-       (.force nio-buffer))
-     path)))
+(defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points {:keys [k batch-size compress-blocks?]
+                                                                                        :or {compress-blocks? false
+                                                                                             batch-size default-disk-kd-tree-batch-size}}]
+  (assert (= 1 (Long/bitCount batch-size)))
+  (util/mkdirs (.getParent path))
+  (with-open [root (VectorSchemaRoot/create (->column-kd-tree-schema k) allocator)
+              ch (util/->file-channel path util/write-new-file-opts)
+              out (ArrowFileWriter. root nil ch)]
+    (write-points-in-place root out points batch-size))
+  (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
+    (with-open [mmap-kd-tree (->mmap-kd-tree-internal (util/->arrow-buf-view allocator nio-buffer))]
+      (build-tree-in-place mmap-kd-tree (->mmap-column-kd-tree-access mmap-kd-tree batch-size))
+      (.force nio-buffer))
+    (when compress-blocks?
+      (let [compressed-path (.resolve (.getParent path) (str (.getFileName path) ".compressed"))]
+        (util/compress-arrow-ipc-file-blocks path compressed-path)
+        (util/atomic-move compressed-path path)))
+    path))
 
 (deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^int static-value-count]
   IKdTreePointAccess

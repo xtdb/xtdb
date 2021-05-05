@@ -80,7 +80,8 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
+                                       :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
+                                       :compress-snapshots? false})]
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (:core2/object-store system)
@@ -204,7 +205,7 @@
                 {:op :put, :doc {:_id #inst "2020-01-01"}}]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock :compress-snapshots? false})]
       (let [^ObjectStore os (:core2/object-store @(:!system node))]
 
         @(-> (c2/submit-tx node tx-ops)
@@ -279,7 +280,7 @@
             (t/is (= 1 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
             (t/is (= 4 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs))))))))
 
-    (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")))
+    (c2-json/write-arrow-json-files (.toFile (.resolve node-dir "objects")) #"chunk-.*")
 
     (t/testing "blocks are row-id aligned"
       (letfn [(row-id-ranges [^String file-name]

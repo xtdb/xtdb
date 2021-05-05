@@ -193,7 +193,8 @@
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
                           ^:unsynchronized-mutable chunk-kd-tree
                           ^:volatile-mutable kd-tree
-                          ^boolean async-snapshot?]
+                          ^boolean async-snapshot?
+                          ^boolean compress-snapshots?]
   TemporalManagerPrivate
   (latestTemporalSnapshotIndex [this chunk-idx]
     (->> (.listObjects object-store "temporal-snapshot-")
@@ -270,12 +271,12 @@
                                                           (kd/->merged-kd-tree (kd/->mmap-kd-tree-internal temporal-buffer))
                                                           chunk-idx
                                                           snapshot-idx)]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path merged-kd-tree k)
+              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path merged-kd-tree {:k k :compress-blocks? compress-snapshots?})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf))))
           (when-let [kd-tree (.buildDynamicTree this nil chunk-idx snapshot-idx)]
             (with-open [^Closeable kd-tree kd-tree]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree k)
+              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-snapshots?})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
         (finally
@@ -389,16 +390,18 @@
                                       :object-store :core2/object-store
                                       :buffer-pool :core2/buffer-pool
                                       :metadata-manager :core2/metadata-manager}
-                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}}}
+                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}
+                                      :compress-snapshots? {:spec ::sys/boolean :default true}}}
   [{:keys [^BufferAllocator allocator
            ^ObjectStore object-store
            ^IBufferPool buffer-pool
            ^IMetadataManager metadata-manager
-           async-snapshot?]}]
+           async-snapshot?
+           compress-snapshots?]}]
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
                             (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
-                            pool nil nil nil nil async-snapshot?)
+                            pool nil nil nil nil async-snapshot? compress-snapshots?)
       (.populateKnownChunks))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]

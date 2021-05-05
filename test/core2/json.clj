@@ -14,20 +14,22 @@
 (defn- file->json-file ^java.io.File [^File file]
   (io/file (.getParentFile file) (format "%s.json" (.getName file))))
 
-(defn write-arrow-json-files [^File arrow-dir]
-  (with-open [allocator (RootAllocator.)]
-    (doseq [^File
-            file (->> (.listFiles arrow-dir)
-                      (filter #(.endsWith (.getName ^File %) ".arrow")))]
-      (with-open [file-ch (FileChannel/open (.toPath file)
-                                            (into-array OpenOption #{StandardOpenOption/READ}))
-                  file-reader (ArrowFileReader. file-ch allocator)
-                  file-writer (JsonFileWriter. (file->json-file file)
-                                               (.. (JsonFileWriter/config) (pretty true)))]
-        (let [root (.getVectorSchemaRoot file-reader)]
-          (.start file-writer (.getSchema root) nil)
-          (while (.loadNextBatch file-reader)
-            (.write file-writer root)))))))
+(defn write-arrow-json-files
+  ([^File arrow-dir]
+   (write-arrow-json-files arrow-dir #".*"))
+  ([^File arrow-dir file-pattern]
+   (with-open [allocator (RootAllocator.)]
+     (doseq [^File file (.listFiles arrow-dir)
+             :when (and (.endsWith (.getName file) ".arrow") (re-matches file-pattern (.getName file)))]
+       (with-open [file-ch (FileChannel/open (.toPath file)
+                                             (into-array OpenOption #{StandardOpenOption/READ}))
+                   file-reader (ArrowFileReader. file-ch allocator)
+                   file-writer (JsonFileWriter. (file->json-file file)
+                                                (.. (JsonFileWriter/config) (pretty true)))]
+         (let [root (.getVectorSchemaRoot file-reader)]
+           (.start file-writer (.getSchema root) nil)
+           (while (.loadNextBatch file-reader)
+             (.write file-writer root))))))))
 
 (defn arrow-streaming->json ^String [^ByteBuffer buf]
   (let [json-file (File/createTempFile "arrow" "json")]

@@ -328,9 +328,13 @@
                                       nil
                                       points)
                 ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)
-                ^MmapKdTree disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points 2 2)
+                ^MmapKdTree disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points {:k 2
+                                                                                                                                     :batch-size 2
+                                                                                                                                     :compress-blocks? false})
                                                           (kd/->mmap-kd-tree allocator))
-                ^MmapKdTree disk-kd-tree-from-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_2.arrow") kd-tree 2 2)
+                ^MmapKdTree disk-kd-tree-from-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_2.arrow") kd-tree {:k 2
+                                                                                                                                    :batch-size 2
+                                                                                                                                    :compress-blocks? true})
                                                         (kd/->mmap-kd-tree allocator))]
       (t/is (= [[7 2] [5 4] [2 3] [8 1]]
 

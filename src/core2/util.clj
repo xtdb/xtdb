@@ -18,12 +18,13 @@
            [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
            java.util.stream.IntStream
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
-           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator]
+           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
-           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot]
+           [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
-           [org.apache.arrow.vector.ipc ArrowFileWriter ArrowStreamWriter ArrowWriter]
+           [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
+           org.apache.arrow.compression.ZstdCompressionCodec
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -84,11 +85,14 @@
               buf-ch (->seekable-byte-channel from-buffer)]
     (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
 
+(defn atomic-move [^Path from-path ^Path to-path]
+  (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE])))
+
 (defn write-buffer-to-path-atomically [^ByteBuffer from-buffer ^Path to-path]
   (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
     (try
       (write-buffer-to-path from-buffer to-path-temp)
-      (Files/move to-path-temp to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
+      (atomic-move to-path-temp to-path)
       (finally
         (Files/deleteIfExists to-path-temp)))))
 
@@ -553,3 +557,51 @@
 
         (dotimes [match-idx (alength idxs)]
           (.copyFromSafe out-vec (aget idxs match-idx) match-idx in-vec))))))
+
+(defn ->region-allocator
+  (^org.apache.arrow.memory.BufferAllocator []
+   (let [reference-managers (ArrayList.)]
+     (proxy [RootAllocator] []
+       (buffer
+         ([size]
+          (let [^RootAllocator this this
+                ^ArrowBuf buf (proxy-super buffer size)]
+            (.add reference-managers (.getReferenceManager buf))
+            buf))
+         ([size buffer-mananger]
+          (let [^RootAllocator this this
+                ^ArrowBuf buf (proxy-super buffer size buffer-mananger)]
+            (.add reference-managers (.getReferenceManager buf))
+            buf)))
+
+       (getEmpty []
+         (let [^RootAllocator this this
+                ^ArrowBuf buf (proxy-super getEmpty)]
+            (.add reference-managers (.getReferenceManager buf))
+            buf))
+
+       (close []
+         (let [^RootAllocator this this]
+           (doseq [^ReferenceManager reference-manager reference-managers
+                   :let [ref-count (.getRefCount reference-manager)]
+                   :when (and (pos? ref-count)
+                              (identical? this (.getAllocator reference-manager)))]
+               (.release reference-manager ref-count))
+           (.clear reference-managers)
+           (proxy-super close)))))))
+
+(def ^:private ^Field arrow-writer-unloader-field
+  (doto (.getDeclaredField ArrowWriter "unloader")
+    (.setAccessible true)))
+
+(defn compress-arrow-ipc-file-blocks ^java.nio.file.Path [^Path from ^Path to]
+  (with-open [allocator (->region-allocator)
+              from-ch (->file-channel from)
+              in (ArrowFileReader. from-ch allocator)
+              to-ch (->file-channel to write-new-file-opts)
+              out (ArrowFileWriter. (slice-root (.getVectorSchemaRoot in)) nil to-ch)]
+    (while (.loadNextBatch in)
+      (with-open [root (slice-root (.getVectorSchemaRoot in))]
+        (.set arrow-writer-unloader-field out (VectorUnloader. (slice-root (.getVectorSchemaRoot in)) true (ZstdCompressionCodec.) true))
+        (.writeBatch out)))
+    to))
