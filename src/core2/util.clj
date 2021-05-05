@@ -21,6 +21,7 @@
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
+           org.apache.arrow.vector.util.VectorSchemaRootAppender
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
@@ -560,34 +561,21 @@
 
 (defn ->region-allocator
   (^org.apache.arrow.memory.BufferAllocator []
-   (let [reference-managers (ArrayList.)]
+   (let [buffers (ArrayList.)]
      (proxy [RootAllocator] []
-       (buffer
-         ([size]
-          (let [^RootAllocator this this
-                ^ArrowBuf buf (proxy-super buffer size)]
-            (.add reference-managers (.getReferenceManager buf))
-            buf))
-         ([size buffer-mananger]
-          (let [^RootAllocator this this
-                ^ArrowBuf buf (proxy-super buffer size buffer-mananger)]
-            (.add reference-managers (.getReferenceManager buf))
-            buf)))
-
-       (getEmpty []
+       (buffer [size]
          (let [^RootAllocator this this
-                ^ArrowBuf buf (proxy-super getEmpty)]
-            (.add reference-managers (.getReferenceManager buf))
-            buf))
+               ^ArrowBuf buf (proxy-super buffer size)]
+           (.add buffers buf)
+           buf))
 
        (close []
          (let [^RootAllocator this this]
-           (doseq [^ReferenceManager reference-manager reference-managers
-                   :let [ref-count (.getRefCount reference-manager)]
-                   :when (and (pos? ref-count)
-                              (identical? this (.getAllocator reference-manager)))]
-               (.release reference-manager ref-count))
-           (.clear reference-managers)
+           (doseq [^ArrowBuf buf buffers
+                   :let [ref-count (.refCnt buf)]
+                   :when (pos? ref-count)]
+             (.release buf ref-count))
+           (.clear buffers)
            (proxy-super close)))))))
 
 (def ^:private ^Field arrow-writer-unloader-field
@@ -595,12 +583,16 @@
     (.setAccessible true)))
 
 (defn compress-arrow-ipc-file-blocks ^java.nio.file.Path [^Path from ^Path to]
-  (with-open [allocator (->region-allocator)
+  (with-open [allocator (RootAllocator.)
               from-ch (->file-channel from)
               in (ArrowFileReader. from-ch allocator)
               to-ch (->file-channel to write-new-file-opts)
-              out (ArrowFileWriter. (slice-root (.getVectorSchemaRoot in)) nil to-ch)]
+              out (ArrowFileWriter. (.getVectorSchemaRoot in) nil to-ch)]
     (while (.loadNextBatch in)
-      (.set arrow-writer-unloader-field out (VectorUnloader. (slice-root (.getVectorSchemaRoot in)) true (ZstdCompressionCodec.) true))
-      (.writeBatch out))
+      (let [root (.getVectorSchemaRoot in)]
+        (with-open [inner-allocator (->region-allocator)]
+          (let [out-root (VectorSchemaRoot/create (.getSchema root) inner-allocator)]
+            (VectorSchemaRootAppender/append out-root (into-array [root]))
+            (.set arrow-writer-unloader-field out (VectorUnloader. out-root true (ZstdCompressionCodec.) true))
+            (.writeBatch out)))))
     to))
