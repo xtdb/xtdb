@@ -999,7 +999,7 @@
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)
           ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
-      (.setSafe ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis) value)))
+      (.set ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis) value)))
 
   (swapPoint [_ from-idx to-idx]
     (let [from-block-idx (unsigned-bit-shift-right from-idx batch-shift)
@@ -1033,7 +1033,7 @@
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)]
-      (.setSafe ^TinyIntVector (.getVector root axis-delete-flag-vec-idx) (int idx) axis-delete-flag)))
+      (.set ^TinyIntVector (.getVector root axis-delete-flag-vec-idx) (int idx) axis-delete-flag)))
 
   (getSplitValue [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -1045,7 +1045,7 @@
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)]
-      (.setSafe ^BigIntVector (.getVector root split-value-vec-idx) (int idx) split-value)))
+      (.set ^BigIntVector (.getVector root split-value-vec-idx) (int idx) split-value)))
 
   (getSkipPointer [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -1057,7 +1057,7 @@
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)]
-      (.setSafe ^IntVector (.getVector root skip-pointer-vec-idx) (int idx) skip-pointer))))
+      (.set ^IntVector (.getVector root skip-pointer-vec-idx) (int idx) skip-pointer))))
 
 (defn- ->block-cache [^long cache-size]
   (proxy [LinkedHashMap] [cache-size 0.75 true]
