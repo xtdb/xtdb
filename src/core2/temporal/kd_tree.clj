@@ -113,9 +113,7 @@
 ;; TODO:
 
 ;; - Change indexes to longs.
-;; - Small field or array based cache in front of map?
 ;; - Possible to remove the single VSR-based tree?
-;; - Ability to merge from any column/mmap tree?
 
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
