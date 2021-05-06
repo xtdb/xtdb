@@ -1005,7 +1005,8 @@
     (let [from-block-idx (unsigned-bit-shift-right from-idx batch-shift)
           from-idx (bit-and from-idx batch-mask)
           to-block-idx (unsigned-bit-shift-right to-idx batch-shift)
-          to-idx (bit-and to-idx batch-mask)from-root (.getRoot kd-tree from-block-idx)
+          to-idx (bit-and to-idx batch-mask)
+          from-root (.getRoot kd-tree from-block-idx)
           to-root (.getRoot kd-tree to-block-idx)
           ^FixedSizeListVector from-point-vec (.getVector from-root point-vec-idx)
           ^FixedSizeListVector to-point-vec (.getVector to-root point-vec-idx)
@@ -1066,17 +1067,24 @@
             true)
         false))))
 
-(deftype MmapKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^int batch-mask ^int value-count ^int block-cache-size ^Map block-cache]
+(deftype MmapKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^int batch-mask ^int value-count ^int block-cache-size ^Map block-cache
+                     ^:unsynchronized-mutable ^int latest-block-idx
+                     ^:unsynchronized-mutable ^VectorSchemaRoot latest-block]
   IBlockManager
-  (getRoot [_ block-idx]
-    (.computeIfAbsent block-cache
-                      block-idx
-                      (reify Function
-                        (apply [_ block-idx]
-                          (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)]
-                            (let [root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
-                              (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
-                              root))))))
+  (getRoot [this block-idx]
+    (if (= block-idx latest-block-idx)
+      latest-block
+      (let [root (.computeIfAbsent block-cache
+                                   block-idx
+                                   (reify Function
+                                     (apply [_ block-idx]
+                                       (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)]
+                                         (let [root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
+                                           (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
+                                           root)))))]
+        (set! (.latest-block-idx this) block-idx)
+        (set! (.latest-block this) root)
+        root)))
 
   KdTree
   (kd-tree-insert [_ allocator point]
@@ -1102,7 +1110,9 @@
                  batch-mask
                  value-count
                  block-cache-size
-                 (->block-cache block-cache-size)))
+                 (->block-cache block-cache-size)
+                 -1
+                 nil))
 
   (kd-tree-point-access [kd-tree]
     (MmapKdTreePointAccess. kd-tree batch-shift batch-mask))
@@ -1149,7 +1159,7 @@
                      (inc Integer/MAX_VALUE))
         batch-mask (dec batch-size)
         batch-shift (Long/bitCount batch-mask)]
-    (MmapKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache)))
+    (MmapKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil)))
 
 (defn ->mmap-kd-tree ^core2.temporal.kd_tree.MmapKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
