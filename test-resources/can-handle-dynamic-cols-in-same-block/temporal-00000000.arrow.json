@@ -23,7 +23,7 @@
       "nullable" : false,
       "type" : {
         "name" : "int",
-        "bitWidth" : 32,
+        "bitWidth" : 64,
         "isSigned" : true
       },
       "children" : [ ]
@@ -62,7 +62,7 @@
       "name" : "skip-pointer",
       "count" : 6,
       "VALIDITY" : [1,1,1,1,1,1],
-      "DATA" : [4,2,3,-1,5,-1]
+      "DATA" : ["4","2","3","-1","5","-1"]
     },{
       "name" : "point",
       "count" : 6,

@@ -17,8 +17,8 @@
            [java.util Arrays Comparator Date HashMap Map Random]
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
-           [java.util.function Consumer Function IntFunction Predicate ToLongFunction]
-           [java.util.stream IntStream Stream]
+           [java.util.function Consumer Function LongFunction Predicate ToLongFunction]
+           [java.util.stream LongStream Stream]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -337,8 +337,8 @@
           ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
           coordinates (if (.isEmpty row-id-bitmap)
                         (Stream/empty)
-                        (-> ^IntStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range)
-                            (.mapToObj (reify IntFunction
+                        (-> ^LongStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range)
+                            (.mapToObj (reify LongFunction
                                          (apply [_ x]
                                            (.getArrayPoint point-access x))))))]
       (if (empty? columns)
@@ -420,11 +420,11 @@
                     (aset valid-time-start-idx (dec valid-time-end-ms))
                     (aset tx-time-end-idx end-of-time-ms))
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-        overlap (-> ^IntStream (kd/kd-tree-range-search
-                                kd-tree
-                                min-range
-                                max-range)
-                    (.mapToObj (reify IntFunction
+        overlap (-> ^LongStream (kd/kd-tree-range-search
+                                 kd-tree
+                                 min-range
+                                 max-range)
+                    (.mapToObj (reify LongFunction
                                  (apply [_ x]
                                    (.getArrayPoint point-access x))))
                     (.toArray))

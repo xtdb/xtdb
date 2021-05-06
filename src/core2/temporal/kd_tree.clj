@@ -6,9 +6,9 @@
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
-            IdentityHashMap LinkedHashMap List Map Map$Entry Spliterator Spliterator$OfInt Spliterators]
-           [java.util.function Consumer Function IntBinaryOperator IntConsumer IntFunction IntPredicate IntUnaryOperator]
-           [java.util.stream IntStream StreamSupport]
+            IdentityHashMap LinkedHashMap List Map Map$Entry Spliterator Spliterator$OfInt Spliterator$OfLong Spliterators]
+           [java.util.function Consumer Function LongConsumer LongFunction LongPredicate LongUnaryOperator]
+           [java.util.stream LongStream StreamSupport]
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector
             VectorLoader VectorSchemaRoot]
@@ -18,7 +18,7 @@
            org.apache.arrow.vector.ipc.ArrowFileWriter
            [org.apache.arrow.vector.ipc.message ArrowBuffer ArrowFooter ArrowRecordBatch]
            org.apache.arrow.compression.CommonsCompressionFactory
-           org.roaringbitmap.RoaringBitmap))
+           org.roaringbitmap.longlong.Roaring64Bitmap))
 
 ;; NOTE:
 
@@ -112,7 +112,6 @@
 
 ;; TODO:
 
-;; - Change indexes to longs.
 ;; - Possible to remove the single VSR-based tree?
 
 ;; - Static/Dynamic tree node.
@@ -157,12 +156,12 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IKdTreePointAccess
-  (^java.util.List getPoint [^int idx])
-  (^longs getArrayPoint [^int idx])
-  (^long getCoordinate [^int idx ^int axis])
-  (^void setCoordinate [^int idx ^int axis ^long value])
-  (^void swapPoint [^int from-idx ^int to-idx])
-  (^boolean isDeleted [^int idx]))
+  (^java.util.List getPoint [^long idx])
+  (^longs getArrayPoint [^long idx])
+  (^long getCoordinate [^long idx ^int axis])
+  (^void setCoordinate [^long idx ^int axis ^long value])
+  (^void swapPoint [^long from-idx ^long to-idx])
+  (^boolean isDeleted [^long idx]))
 
 (defprotocol KdTree
   (kd-tree-insert [_ allocator point])
@@ -230,9 +229,9 @@
     (-> (kd-tree-insert nil allocator point)
         (kd-tree-delete allocator point)))
   (kd-tree-range-search [_ _ _]
-    (IntStream/empty))
+    (LongStream/empty))
   (kd-tree-depth-first [_]
-    (IntStream/empty))
+    (LongStream/empty))
   (kd-tree-depth [_] 0)
   (kd-tree-retain [_ _])
   (kd-tree-point-access [_]
@@ -259,16 +258,7 @@
   (t/->field "point" (ArrowType$FixedSizeList. k) false
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 
-(defn- upper-int ^long [^long x]
-  (unsigned-bit-shift-right x Integer/SIZE))
-
-(defn- lower-int ^long [^long x]
-  (bit-and x (Integer/toUnsignedLong -1)))
-
-(defn- two-ints-as-long ^long [^long x ^long y]
-  (bit-or (bit-shift-left x Integer/SIZE) y))
-
-(defn- three-way-partition ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
+(defn- three-way-partition ^longs [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [pivot (.getCoordinate access (quot (+ low hi) 2) axis)]
     (loop [i (int low)
            j (int low)
@@ -287,16 +277,18 @@
 
             :else
             (recur i (inc j) k)))
-        (two-ints-as-long i (dec k))))))
+        (doto (long-array 2)
+          (aset 0 i)
+          (aset 1 (dec k)))))))
 
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [k (quot (+ low hi) 2)]
     (loop [low low
            hi (dec hi)]
       (if (< low hi)
-        (let [left-right (three-way-partition access low hi axis)
-              left (upper-int left-right)
-              right (lower-int left-right)]
+        (let [^longs left-right (three-way-partition access low hi axis)
+              left (aget left-right 0)
+              right (aget left-right 1)]
           (cond
             (< k left)
             (recur low (dec left))
@@ -394,8 +386,8 @@
                                      ^longs min-range
                                      ^longs max-range
                                      ^Deque stack]
-  Spliterator$OfInt
-  (^void forEachRemaining [_ ^IntConsumer c]
+  Spliterator$OfLong
+  (^void forEachRemaining [_ ^LongConsumer c]
     (loop []
       (when-let [^Node node (.poll stack)]
         (loop [node node]
@@ -431,7 +423,7 @@
                     (recur left))))))
         (recur))))
 
-  (^boolean tryAdvance [_ ^IntConsumer c]
+  (^boolean tryAdvance [_ ^LongConsumer c]
     (loop []
       (if-let [^Node node (.poll stack)]
         (let [axis (.axis node)
@@ -471,8 +463,8 @@
       (NodeRangeSearchSpliterator. access min-range max-range split-stack))))
 
 (deftype NodeDepthFirstSpliterator [^Deque stack]
-  Spliterator$OfInt
-  (^void forEachRemaining [_ ^IntConsumer c]
+  Spliterator$OfLong
+  (^void forEachRemaining [_ ^LongConsumer c]
    (loop []
      (when-let [^Node node (.poll stack)]
        (loop [node node]
@@ -496,7 +488,7 @@
                    (recur left))))))
        (recur))))
 
-  (^boolean tryAdvance [_ ^IntConsumer c]
+  (^boolean tryAdvance [_ ^LongConsumer c]
    (loop []
      (if-let [^Node node (.poll stack)]
        (do (when-let [right (.right node)]
@@ -572,12 +564,12 @@
           access (kd-tree-point-access kd-tree)
           stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (StreamSupport/intStream (NodeRangeSearchSpliterator. access min-range max-range stack) false)))
+      (StreamSupport/longStream (NodeRangeSearchSpliterator. access min-range max-range stack) false)))
 
   (kd-tree-depth-first [kd-tree]
     (let [stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (StreamSupport/intStream (NodeDepthFirstSpliterator. stack) false)))
+      (StreamSupport/longStream (NodeDepthFirstSpliterator. stack) false)))
 
   (kd-tree-depth [kd-tree]
     (let [stack (doto (ArrayDeque.)
@@ -610,7 +602,7 @@
     (KdTreeVectorPointAccess. (.point-vec kd-tree) nil))
 
   (kd-tree-size [kd-tree]
-    (.count ^IntStream (kd-tree-depth-first kd-tree)))
+    (.count ^LongStream (kd-tree-depth-first kd-tree)))
 
   (kd-tree-value-count [kd-tree]
     (.getValueCount ^FixedSizeListVector (.point-vec kd-tree)))
@@ -621,10 +613,10 @@
 (defn kd-tree->seq
   ([kd-tree]
    (kd-tree->seq kd-tree (kd-tree-depth-first kd-tree)))
-  ([kd-tree ^IntStream stream]
+  ([kd-tree ^LongStream stream]
    (let [^IKdTreePointAccess point-access (kd-tree-point-access kd-tree)]
      (-> stream
-         (.mapToObj (reify IntFunction
+         (.mapToObj (reify LongFunction
                       (apply [_ x]
                         (.getPoint point-access x))))
          (.iterator)
@@ -632,8 +624,8 @@
 
 (defn rebuild-node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator kd-tree]
   (let [^IKdTreePointAccess point-access (kd-tree-point-access kd-tree)]
-    (->node-kd-tree allocator (-> ^IntStream (kd-tree-depth-first kd-tree)
-                                  (.mapToObj (reify IntFunction
+    (->node-kd-tree allocator (-> ^LongStream (kd-tree-depth-first kd-tree)
+                                  (.mapToObj (reify LongFunction
                                                (apply [_ x]
                                                  (.getArrayPoint point-access x))))
                                   (.toArray)))))
@@ -646,14 +638,14 @@
 (defn- ->column-kd-tree-schema ^org.apache.arrow.vector.types.pojo.Schema [^long k]
   (Schema. [(t/->field "axis-delete-flag" (.getType Types$MinorType/TINYINT) false)
             (t/->field "split-value" (.getType Types$MinorType/BIGINT) false)
-            (t/->field "skip-pointer" (.getType Types$MinorType/INT) false)
+            (t/->field "skip-pointer" (.getType Types$MinorType/BIGINT) false)
             (->point-field k)]))
 
 (defn ->column-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^BufferAllocator allocator ^Node kd-tree ^long k]
   (let [out-root (VectorSchemaRoot/create (->column-kd-tree-schema k) allocator)
         ^TinyIntVector axis-delete-flag-vec (.getVector out-root "axis-delete-flag")
         ^BigIntVector split-value-vec (.getVector out-root "split-value")
-        ^IntVector skip-pointer-vec (.getVector out-root "skip-pointer")
+        ^BigIntVector skip-pointer-vec (.getVector out-root "skip-pointer")
         ^FixedSizeListVector point-vec (.getVector out-root "point")
         ^BigIntVector coordinates-vec (.getDataVector point-vec)
 
@@ -691,22 +683,22 @@
           (.setRowCount idx))))))
 
 (definterface IColumnKdTreeAccess
-  (^byte getAxisDeleteFlag [^int idx])
-  (^void setAxisDeleteFlag [^int idx ^byte axis-delete-flag])
-  (^long getSplitValue [^int idx])
-  (^void setSplitValue [^int idx ^long split-value])
-  (^int getSkipPointer [^int idx])
-  (^void setSkipPointer [^int idx ^int skip-pointer]))
+  (^byte getAxisDeleteFlag [^long idx])
+  (^void setAxisDeleteFlag [^long idx ^byte axis-delete-flag])
+  (^long getSplitValue [^long idx])
+  (^void setSplitValue [^long idx ^long split-value])
+  (^long getSkipPointer [^long idx])
+  (^void setSkipPointer [^long idx ^long skip-pointer]))
 
-(deftype ColumnStackEntry [^int start ^int end])
+(deftype ColumnStackEntry [^long start ^long end])
 
 (deftype ColumnRangeSearchSpliterator [^IColumnKdTreeAccess column-access
                                        ^IKdTreePointAccess access
                                        ^longs min-range
                                        ^longs max-range
                                        ^Deque stack]
-  Spliterator$OfInt
-  (^void forEachRemaining [this ^IntConsumer c]
+  Spliterator$OfLong
+  (^void forEachRemaining [this ^LongConsumer c]
     (loop []
       (when-let [^ColumnStackEntry stack-entry (.poll stack)]
         (loop [idx (.start stack-entry)
@@ -721,7 +713,7 @@
                   left-idx (inc idx)
                   right-idx (.getSkipPointer column-access idx)
                   right-idx (if (neg? right-idx)
-                              (int end-idx)
+                              end-idx
                               right-idx)
                   visit-left? (and (not= left-idx right-idx) min-match?)
                   visit-right? (and (not= right-idx end-idx) max-match?)]
@@ -745,7 +737,7 @@
                       (recur left-idx right-idx)))))))
         (recur))))
 
-  (^boolean tryAdvance [this ^IntConsumer c]
+  (^boolean tryAdvance [this ^LongConsumer c]
     (loop []
       (if-let [^ColumnStackEntry stack-entry (.poll stack)]
         (let [idx (.start stack-entry)
@@ -812,13 +804,13 @@
 
 (deftype VectorSchemaRootColumnKdTreeAccess [^TinyIntVector axis-delete-flag-vec
                                              ^BigIntVector split-value-vec
-                                             ^IntVector skip-pointer-vec]
+                                             ^BigIntVector skip-pointer-vec]
   IColumnKdTreeAccess
   (getAxisDeleteFlag [_ idx]
     (.get axis-delete-flag-vec idx))
 
   (setAxisDeleteFlag [_ idx axis-delete-flag]
-    (.setSafe axis-delete-flag-vec idx axis-delete-flag))
+    (.setSafe axis-delete-flag-vec (int idx) axis-delete-flag))
 
   (getSplitValue [_ idx]
     (.get split-value-vec idx))
@@ -833,14 +825,13 @@
     (.setSafe skip-pointer-vec idx skip-pointer)))
 
 (defn- ->root-column-kd-tree-access ^core2.temporal.kd_tree.IColumnKdTreeAccess [^VectorSchemaRoot root]
-  (let [^TinyIntVector axis-delete-flag-vec (.getVector root "axis-delete-flag")
-        ^BigIntVector split-value-vec (.getVector root "split-value")
-        ^IntVector skip-pointer-vec (.getVector root "skip-pointer")]
-    (VectorSchemaRootColumnKdTreeAccess. axis-delete-flag-vec split-value-vec skip-pointer-vec)))
+  (VectorSchemaRootColumnKdTreeAccess. (.getVector root "axis-delete-flag")
+                                       (.getVector root "split-value")
+                                       (.getVector root "skip-pointer")))
 
 (defn- column-kd-tree-depth-first [kd-tree ^IColumnKdTreeAccess column-access]
-  (.filter (IntStream/range 0 (kd-tree-value-count kd-tree))
-           (reify IntPredicate
+  (.filter (LongStream/range 0 (kd-tree-value-count kd-tree))
+           (reify LongPredicate
              (test [_ x]
                (pos? (.getAxisDeleteFlag column-access x))))))
 
@@ -850,7 +841,7 @@
         access (kd-tree-point-access kd-tree)
         stack (doto (ArrayDeque.)
                 (.push (ColumnStackEntry. 0 (kd-tree-value-count kd-tree))))]
-      (StreamSupport/intStream
+      (StreamSupport/longStream
        (ColumnRangeSearchSpliterator. column-access access min-range max-range stack)
        false)))
 
@@ -897,7 +888,7 @@
     (KdTreeVectorPointAccess. (.getVector kd-tree point-vec-idx) (.getVector kd-tree axis-delete-flag-vec-idx)))
 
   (kd-tree-size [kd-tree]
-    (.count ^IntStream (kd-tree-depth-first kd-tree)))
+    (.count ^LongStream (kd-tree-depth-first kd-tree)))
 
   (kd-tree-value-count [kd-tree]
     (.getRowCount kd-tree))
@@ -912,8 +903,8 @@
         ^FixedSizeListVector point-vec (.getVector root "point")]
     (if (satisfies? KdTree points)
       (let [^IKdTreePointAccess point-access (kd-tree-point-access points)]
-        (.forEach ^IntStream (kd-tree-depth-first points)
-                  (reify IntConsumer
+        (.forEach ^LongStream (kd-tree-depth-first points)
+                  (reify LongConsumer
                     (accept [_ point-idx]
                       (let [idx (.getRowCount root)]
                         (.startNewValue point-vec idx)
@@ -1064,14 +1055,14 @@
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)
-          ^IntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
+          ^BigIntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
       (.get skip-pointer-vec idx)))
 
   (setSkipPointer [_ idx skip-pointer]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)
-          ^IntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
+          ^BigIntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
       (.set skip-pointer-vec (int idx) skip-pointer))))
 
 (defn- ->block-cache [^long cache-size]
@@ -1082,7 +1073,7 @@
             true)
         false))))
 
-(deftype MmapKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^int batch-mask ^int value-count ^int block-cache-size ^Map block-cache
+(deftype MmapKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
                      ^:unsynchronized-mutable ^int latest-block-idx
                      ^:unsynchronized-mutable ^VectorSchemaRoot latest-block]
   IBlockManager
@@ -1200,7 +1191,7 @@
         (util/atomic-move compressed-path path)))
     path))
 
-(deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^int static-value-count]
+(deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^long static-value-count]
   IKdTreePointAccess
   (getPoint [_ idx]
     (if (< idx static-value-count)
@@ -1223,7 +1214,7 @@
   (swapPoint [_ _ _]
     (throw (UnsupportedOperationException.))))
 
-(deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^RoaringBitmap static-delete-bitmap ^int static-size ^int static-value-count]
+(deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^Roaring64Bitmap static-delete-bitmap ^long static-size ^long static-value-count]
   KdTree
   (kd-tree-insert [this allocator point]
     (set! (.dynamic-kd-tree this) (kd-tree-insert dynamic-kd-tree allocator point))
@@ -1231,35 +1222,35 @@
 
   (kd-tree-delete [this allocator point]
     (let [static-delete? (atom false)]
-      (.forEach ^IntStream (kd-tree-range-search static-kd-tree point point)
-                (reify IntConsumer
+      (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
+                (reify LongConsumer
                   (accept [_ x]
                     (reset! static-delete? true)
-                    (.add static-delete-bitmap x))))
+                    (.addLong static-delete-bitmap x))))
       (when (and (not @static-delete?)
-                 (pos? (.count ^IntStream (kd-tree-range-search dynamic-kd-tree point point))))
+                 (pos? (.count ^LongStream (kd-tree-range-search dynamic-kd-tree point point))))
         (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))))
     this)
 
   (kd-tree-range-search [_ min-range max-range]
-    (IntStream/concat (.filter ^IntStream (kd-tree-range-search static-kd-tree min-range max-range)
-                               (reify IntPredicate
-                                 (test [_ x]
-                                   (not (.contains static-delete-bitmap x)))))
-                      (.map ^IntStream (kd-tree-range-search dynamic-kd-tree min-range max-range)
-                            (reify IntUnaryOperator
-                              (applyAsInt [_ x]
-                                (+ static-value-count x))))))
+    (LongStream/concat (.filter ^LongStream (kd-tree-range-search static-kd-tree min-range max-range)
+                                (reify LongPredicate
+                                  (test [_ x]
+                                    (not (.contains static-delete-bitmap x)))))
+                       (.map ^LongStream (kd-tree-range-search dynamic-kd-tree min-range max-range)
+                             (reify LongUnaryOperator
+                               (applyAsLong [_ x]
+                                 (+ static-value-count x))))))
 
   (kd-tree-depth-first [_]
-    (IntStream/concat (.filter ^IntStream (kd-tree-depth-first static-kd-tree)
-                               (reify IntPredicate
-                                 (test [_ x]
-                                   (not (.contains static-delete-bitmap x)))))
-                      (.map ^IntStream (kd-tree-depth-first dynamic-kd-tree)
-                            (reify IntUnaryOperator
-                              (applyAsInt [_ x]
-                                (+ static-value-count x))))))
+    (LongStream/concat (.filter ^LongStream (kd-tree-depth-first static-kd-tree)
+                                (reify LongPredicate
+                                  (test [_ x]
+                                    (not (.contains static-delete-bitmap x)))))
+                       (.map ^LongStream (kd-tree-depth-first dynamic-kd-tree)
+                             (reify LongUnaryOperator
+                               (applyAsLong [_ x]
+                                 (+ static-value-count x))))))
 
   (kd-tree-depth [_]
     (max (long (kd-tree-depth static-kd-tree))
@@ -1268,7 +1259,7 @@
   (kd-tree-retain [kd-tree allocator]
     (MergedKdTree. (kd-tree-retain (.static-kd-tree kd-tree) allocator)
                    (kd-tree-retain (.dynamic-kd-tree kd-tree) allocator)
-                   (.clone ^RoaringBitmap (.static-delete-bitmap kd-tree))
+                   (.clone ^Roaring64Bitmap (.static-delete-bitmap kd-tree))
                    (.static-size kd-tree)
                    (.static-value-count kd-tree)))
 
@@ -1276,7 +1267,7 @@
     (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree) static-value-count))
 
   (kd-tree-size [kd-tree]
-    (+ (- static-size (.getCardinality static-delete-bitmap))
+    (+ (- static-size (.getLongCardinality static-delete-bitmap))
        (long (kd-tree-size dynamic-kd-tree))))
 
   (kd-tree-value-count [kd-tree]
@@ -1296,4 +1287,4 @@
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree]
    (->merged-kd-tree static-kd-tree nil))
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
-   (MergedKdTree. static-kd-tree dynamic-kd-tree (RoaringBitmap.) (kd-tree-size static-kd-tree) (kd-tree-value-count static-kd-tree))))
+   (MergedKdTree. static-kd-tree dynamic-kd-tree (Roaring64Bitmap.) (kd-tree-size static-kd-tree) (kd-tree-value-count static-kd-tree))))
