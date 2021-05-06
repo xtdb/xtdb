@@ -20,96 +20,6 @@
            org.apache.arrow.compression.CommonsCompressionFactory
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
-;; NOTE:
-
-;; Current design is limited to Integer/MAX_SIZE entries.
-
-;; As each insertion results in one insert, one delete of the
-;; potentially previous version, and an insert to cap the times of
-;; that previous version, we have 3 actual edits per insert. The
-;; deletes are dropped during the flushing to disk, so we can say 2
-;; edits. Corrections result in several more edits, depending on how
-;; many existing rectangles they overlap.
-
-;; This means this design support upto (/ Integer/MAX_SIZE 2) updates
-;; (without corrections), which is the same number as a gigabyte, so
-;; roughly a billion.
-
-;; Each entry in the tree currently takes 61 bytes (1 byte
-;; axis-delete-flag, 8 bytes split-value, 4 bytes skip-pointer, (* 6
-;; 8) bytes points), but we can round this up to 64 for simplicity, as
-;; each of the columns will also have a validity bit. This means that
-;; the maximum tree would be roughly (ignoring overhead) 128G of raw
-;; kd tree column data, and that each entity update takes 128 bytes.
-
-;; One could engineer away the axis-delete-flag column (to support
-;; deletes) and the split-value column (for performance, duplicates
-;; axis value from the point), which makes each entry 52 bytes, so it
-;; won't save that much.
-
-;; The first temporal tree from TPC-H SF 0.1 is 5M and compresses to
-;; about 1M with gzip, so say a factor of 5. But this doesn't help in
-;; practice as the compressed tree cannot be queried.
-
-;; The limitation of Integer/MAX_SIZE can be lifted as this is a per
-;; vector count limit in Arrow Java (but not Arrow), and one can split
-;; the tree into several record batches with some (solvable)
-;; complications to the in-place sorting and point access. It would
-;; remove the need to create an empty tree in place though, as one
-;; could first write down blocks of the raw data split in batches, and
-;; then sort that on disk.
-
-;; Currently we rebuild the full tree per chunk in a stop-the-world
-;; operation. This will keep slowing down ingest, as eventually this
-;; tree will become quite large - upto 128G as mentioned above. There
-;; are various ways of mitigating that, like introducing some form of
-;; double buffering to the ingest, where there are 3 states -
-;; live-live-chunk, live-background-indexing-chunk-minus-one,
-;; done-chunks
-
-;; Temporal Snapshots:
-
-;; On registerNewChunk, Write a small temporal chunk of the current
-;; live node-kd-tree (like previously, before the in-place disk tree
-;; change).
-
-;; "Reboot" the kd tree from object store by reading the latest
-;; temporal snapshot (if one exists), and all later temporal chunks
-;; added after this and add them to a tree of merged-kd-trees, with a
-;; node-kd-tree for the dynamic live data. This is the same process
-;; that happens at start of the node. Evict buffers used by the
-;; previous tree from the buffer pool.
-
-;; Kick off a background job to build a new temporal snapshot of the
-;; latest temporal snapshot and all newer known temporal chunks as a
-;; disk-kd-tree and store it in the object store. This snapshot will
-;; be picked up and used at next "reboot" of the tree.
-
-;; Pros:
-
-;; This approach removes the merging of the large snapshot tree
-;; from the index path, while also avoids any complications by
-;; asynchronously merging trees, as while being built and stored in
-;; the object store, the snapshots are only accessed during the
-;; "reboot" which happens during the existing critical section in
-;; finishChunk.
-
-;; It also limits the change to be local to the temporal manager, and
-;; doesn't have to introduce any double buffering or complicated logic
-;; to the rest of the system.
-
-;; Incremental step from what we have. The cons below should be
-;; possible to solve later as separate pieces of work.
-
-;; Cons:
-
-;; Still has to merge the entire snapshot in one go, which should
-;; preferably happen within the time to ingest a chunk for it not to
-;; fall behind. If ingest slows down it will eventually catch up.
-
-;; This change doesn't address the one billion edits limitation or
-;; 128G size of the tree itself.
-
 ;; TODO:
 
 ;; - Possible to remove the single VSR-based tree?
@@ -117,40 +27,6 @@
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
 ;;   - Revisit need for explicit axis.
-
-;; Step 2:
-
-;; Later, we can merge older chunks, either when registering new ones,
-;; or in the background. Needs to take the fact that there are
-;; multiple nodes into account. Different strategies, or a combination
-;; can be envisioned:
-
-;; 1. merging two neighbouring chunks into one larger chunk, combine.
-;; 2. merging towards larger chunks, old to newest, reduce.
-
-;; Merging chunks works like follows - assumes the intermediate chunk
-;; fits into memory:
-
-;; 1. find all deletions from newest chunk and add them to the deletion set.
-;; 2. scan older chunk, skip deletions in the deletion set, and remove them from the deletion set.
-;; 3. scan newer chunk, only keep deletions still in the deletion set.
-;; 4. store merged tree.
-
-;; Unless merging strictly in oldest-to-newest order, the combined
-;; chunk will still have deletions, referring to even older chunks.
-
-;; When building the current state on start-up, the combined chunks
-;; supersede the chunks they were combined from in the object store.
-
-;; Step 3:
-
-;; Add an implementation of KdTree that can delegate to both a set of
-;; existing Arrow chunks and the in-memory tree, avoiding having to
-;; keep the entire tree in memory. Modifications goes to the dynamic
-;; in-memory tree.
-
-;; Merge the chunks in a streaming fashion on disk instead of reading
-;; them into memory. Deletion set can still be stored in-memory.
 
 (set! *unchecked-math* :warn-on-boxed)
 
