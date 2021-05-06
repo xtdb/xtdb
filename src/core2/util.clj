@@ -25,7 +25,7 @@
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           org.apache.arrow.compression.ZstdCompressionCodec
+           [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -463,7 +463,7 @@
                                                              (when (.contains block-idxs ^int idx)
                                                                record-batch)))))
                    root
-                   (VectorLoader. root)
+                   (VectorLoader. root CommonsCompressionFactory/INSTANCE)
                    nil
                    (boolean close-buffer?)))))
 
