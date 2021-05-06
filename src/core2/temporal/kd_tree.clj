@@ -22,11 +22,10 @@
 
 ;; TODO:
 
-;; - Possible to remove the single VSR-based tree?
-;; - Static/Dynamic tree node.
-;;   - Revisit index and point access.
-;;   - Revisit deletion.
-;;   - Revisit need for explicit axis.
+;; Remove the single VSR-based tree? It's currently needed to store
+;; deletions which the in-place builder doesn't support. This can be
+;; fixed by supporting Node trees directly in write-points-in-place
+;; and store the sign in the axis-delete-flag.
 
 (set! *unchecked-math* :warn-on-boxed)
 
