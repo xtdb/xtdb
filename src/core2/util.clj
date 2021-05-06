@@ -87,7 +87,8 @@
     (.transferFrom file-ch buf-ch 0 (.size buf-ch))))
 
 (defn atomic-move [^Path from-path ^Path to-path]
-  (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE])))
+  (Files/move from-path to-path (into-array CopyOption [StandardCopyOption/ATOMIC_MOVE]))
+  to-path)
 
 (defn write-buffer-to-path-atomically [^ByteBuffer from-buffer ^Path to-path]
   (let [to-path-temp (.resolveSibling to-path (str "." (UUID/randomUUID)))]
@@ -582,17 +583,22 @@
   (doto (.getDeclaredField ArrowWriter "unloader")
     (.setAccessible true)))
 
-(defn compress-arrow-ipc-file-blocks ^java.nio.file.Path [^Path from ^Path to]
-  (with-open [allocator (RootAllocator.)
-              from-ch (->file-channel from)
-              in (ArrowFileReader. from-ch allocator)
-              to-ch (->file-channel to write-new-file-opts)
-              out (ArrowFileWriter. (.getVectorSchemaRoot in) nil to-ch)]
-    (while (.loadNextBatch in)
-      (let [root (.getVectorSchemaRoot in)]
-        (with-open [inner-allocator (->region-allocator)]
-          (let [out-root (VectorSchemaRoot/create (.getSchema root) inner-allocator)]
-            (VectorSchemaRootAppender/append out-root (into-array [root]))
-            (.set arrow-writer-unloader-field out (VectorUnloader. out-root true (ZstdCompressionCodec.) true))
-            (.writeBatch out)))))
-    to))
+(defn compress-arrow-ipc-file-blocks
+  (^java.nio.file.Path [^Path path]
+   (let [compressed-path (.resolve (.getParent path) (str (.getFileName path) ".compressed"))]
+     (compress-arrow-ipc-file-blocks path compressed-path)
+     (atomic-move compressed-path path)))
+  (^java.nio.file.Path [^Path from ^Path to]
+   (with-open [allocator (RootAllocator.)
+               from-ch (->file-channel from)
+               in (ArrowFileReader. from-ch allocator)
+               to-ch (->file-channel to write-new-file-opts)
+               out (ArrowFileWriter. (.getVectorSchemaRoot in) nil to-ch)]
+     (while (.loadNextBatch in)
+       (let [root (.getVectorSchemaRoot in)]
+         (with-open [inner-allocator (->region-allocator)]
+           (let [out-root (VectorSchemaRoot/create (.getSchema root) inner-allocator)]
+             (VectorSchemaRootAppender/append out-root (into-array [root]))
+             (.set arrow-writer-unloader-field out (VectorUnloader. out-root true (ZstdCompressionCodec.) true))
+             (.writeBatch out)))))
+     to)))

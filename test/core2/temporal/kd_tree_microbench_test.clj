@@ -7,7 +7,7 @@
            [java.util.stream LongStream]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
-           [core2.temporal.kd_tree MmapKdTree Node]))
+           [core2.temporal.kd_tree ArrowBufKdTree Node]))
 
 (defmacro in-range? [min-range point max-range]
   `(let [len# (alength ~point)]
@@ -93,9 +93,9 @@
                           (.count ^LongStream (kd/kd-tree-range-search column-kd-tree min-range max-range)))))))
 
             (prn :build-disk-kd-tree ns)
-            (with-open [^MmapKdTree disk-kd-tree (time
-                                                  (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k)) points {:k k})
-                                                       (kd/->mmap-kd-tree allocator)))]
+            (with-open [^ArrowBufKdTree disk-kd-tree (time
+                                                      (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k)) points {:k k})
+                                                           (kd/->mmap-kd-tree allocator)))]
               (prn :range-queries-disk-kd-tree qs)
               (dotimes [_ ts]
                 (time
@@ -104,10 +104,10 @@
                             (.count ^LongStream (kd/kd-tree-range-search disk-kd-tree min-range max-range)))))))
 
               (prn :build-compressed-disk-kd-tree ns)
-              (with-open [^MmapKdTree compressed-disk-kd-tree (time
-                                                               (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k))
-                                                                                       points {:k k :compress-blocks? true})
-                                                                    (kd/->mmap-kd-tree allocator)))]
+              (with-open [^ArrowBufKdTree compressed-disk-kd-tree (time
+                                                                   (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k))
+                                                                                           points {:k k :compress-blocks? true})
+                                                                        (kd/->mmap-kd-tree allocator)))]
                 (prn :range-queries-compressed-disk-kd-tree qs)
                 (dotimes [_ ts]
                   (time

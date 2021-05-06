@@ -113,7 +113,6 @@
 ;; TODO:
 
 ;; - Possible to remove the single VSR-based tree?
-
 ;; - Static/Dynamic tree node.
 ;;   - Revisit index and point access.
 ;;   - Revisit deletion.
@@ -958,7 +957,7 @@
 (definterface IBlockManager
   (^org.apache.arrow.vector.VectorSchemaRoot getRoot [^int block-idx]))
 
-(deftype MmapKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
+(deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
   IKdTreePointAccess
   (getPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -1021,7 +1020,7 @@
           ^TinyIntVector axis-delete-flag-vec (.getVector root axis-delete-flag-vec-idx)]
       (neg? (.get axis-delete-flag-vec idx)))))
 
-(deftype MmapColumnKdTreeKdAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
+(deftype ArrowBufColumnKdTreeKdAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
   IColumnKdTreeAccess
   (getAxisDeleteFlag [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -1073,9 +1072,9 @@
             true)
         false))))
 
-(deftype MmapKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
-                     ^:unsynchronized-mutable ^int latest-block-idx
-                     ^:unsynchronized-mutable ^VectorSchemaRoot latest-block]
+(deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
+                         ^:unsynchronized-mutable ^int latest-block-idx
+                         ^:unsynchronized-mutable ^VectorSchemaRoot latest-block]
   IBlockManager
   (getRoot [this block-idx]
     (if (= block-idx latest-block-idx)
@@ -1100,28 +1099,28 @@
     (throw (UnsupportedOperationException.)))
 
   (kd-tree-range-search [kd-tree min-range max-range]
-    (column-kd-tree-range-search kd-tree (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask) min-range max-range))
+    (column-kd-tree-range-search kd-tree (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask) min-range max-range))
 
   (kd-tree-depth-first [kd-tree]
-    (column-kd-tree-depth-first kd-tree (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+    (column-kd-tree-depth-first kd-tree (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
 
   (kd-tree-depth [kd-tree]
-    (column-kd-tree-depth kd-tree (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+    (column-kd-tree-depth kd-tree (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
 
   (kd-tree-retain [this allocator]
-    (MmapKdTree. (doto arrow-buf
-                   (.retain))
-                 footer
-                 batch-shift
-                 batch-mask
-                 value-count
-                 block-cache-size
-                 (->block-cache block-cache-size)
-                 -1
-                 nil))
+    (ArrowBufKdTree. (doto arrow-buf
+                       (.retain))
+                     footer
+                     batch-shift
+                     batch-mask
+                     value-count
+                     block-cache-size
+                     (->block-cache block-cache-size)
+                     -1
+                     nil))
 
   (kd-tree-point-access [kd-tree]
-    (MmapKdTreePointAccess. kd-tree batch-shift batch-mask))
+    (ArrowBufKdTreePointAccess. kd-tree batch-shift batch-mask))
 
   (kd-tree-size [kd-tree]
     value-count)
@@ -1139,18 +1138,18 @@
     (.clear block-cache)
     (util/try-close arrow-buf)))
 
-(defn- ->mmap-column-kd-tree-access [^MmapKdTree kd-tree ^long batch-size]
+(defn- ->arrow-buf-column-kd-tree-access [^ArrowBufKdTree kd-tree ^long batch-size]
   (let [batch-mask (dec batch-size)
         batch-shift (Long/bitCount batch-mask)]
-    (MmapColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+    (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
 
 (def ^:const default-block-cache-size 128)
 
-(defn ->mmap-kd-tree-buffer
-  (^core2.temporal.kd_tree.MmapKdTree [^ArrowBuf arrow-buf]
-   (->mmap-kd-tree-buffer arrow-buf {}))
-  (^core2.temporal.kd_tree.MmapKdTree [^ArrowBuf arrow-buf {:keys [block-cache-size]
-                                                            :or {block-cache-size default-block-cache-size}}]
+(defn ->arrow-buf-kd-tree
+  (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf]
+   (->arrow-buf-kd-tree arrow-buf {}))
+  (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf {:keys [block-cache-size]
+                                                                :or {block-cache-size default-block-cache-size}}]
    (let [footer (util/read-arrow-footer arrow-buf)
          batch-sizes (reduce
                       (fn [acc block]
@@ -1168,12 +1167,12 @@
                       (inc Integer/MAX_VALUE))
          batch-mask (dec batch-size)
          batch-shift (Long/bitCount batch-mask)]
-     (MmapKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil))))
+     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil))))
 
-(defn ->mmap-kd-tree ^core2.temporal.kd_tree.MmapKdTree [^BufferAllocator allocator ^Path path]
+(defn ->mmap-kd-tree ^core2.temporal.kd_tree.ArrowBufKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
         arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
-    (->mmap-kd-tree-buffer arrow-buf)))
+    (->arrow-buf-kd-tree arrow-buf)))
 
 (defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points {:keys [k batch-size compress-blocks?]
                                                                                         :or {compress-blocks? false
@@ -1185,13 +1184,11 @@
               out (ArrowFileWriter. root nil ch)]
     (write-points-in-place root out points batch-size))
   (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
-    (with-open [mmap-kd-tree (->mmap-kd-tree-buffer (util/->arrow-buf-view allocator nio-buffer))]
-      (build-tree-in-place mmap-kd-tree (->mmap-column-kd-tree-access mmap-kd-tree batch-size))
+    (with-open [kd-tree (->arrow-buf-kd-tree (util/->arrow-buf-view allocator nio-buffer))]
+      (build-tree-in-place kd-tree (->arrow-buf-column-kd-tree-access kd-tree batch-size))
       (.force nio-buffer))
     (when compress-blocks?
-      (let [compressed-path (.resolve (.getParent path) (str (.getFileName path) ".compressed"))]
-        (util/compress-arrow-ipc-file-blocks path compressed-path)
-        (util/atomic-move compressed-path path)))
+      (util/compress-arrow-ipc-file-blocks path))
     path))
 
 (deftype MergedKdTreePointAccess [^IKdTreePointAccess static-access ^IKdTreePointAccess dynamic-access ^long static-value-count]

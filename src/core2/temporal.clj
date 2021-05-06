@@ -194,7 +194,7 @@
                           ^:unsynchronized-mutable chunk-kd-tree
                           ^:volatile-mutable kd-tree
                           ^boolean async-snapshot?
-                          ^boolean compress-snapshots?
+                          ^boolean compress-temporal-index?
                           ^long block-cache-size]
   TemporalManagerPrivate
   (latestTemporalSnapshotIndex [this chunk-idx]
@@ -217,12 +217,8 @@
           @(CompletableFuture/allOf (into-array CompletableFuture futs))
           (doseq [chunk-idx new-chunk-idxs
                   :let [obj-key (->temporal-obj-key chunk-idx)]]
-            (with-open [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool obj-key)
-                        temporal-chunks (util/->chunks temporal-buffer allocator)]
-              (.tryAdvance temporal-chunks
-                           (reify Consumer
-                             (accept [_ temporal-root]
-                               (swap! kd-tree #(kd/merge-kd-trees allocator % temporal-root)))))))
+            (with-open [chunk-kd-tree (kd/->arrow-buf-kd-tree @(.getBuffer buffer-pool obj-key))]
+              (swap! kd-tree #(kd/merge-kd-trees allocator % chunk-kd-tree))))
           @kd-tree)
         (catch Exception e
           (util/try-close @kd-tree)
@@ -232,7 +228,7 @@
     (if snapshot-idx
       (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
         (set! (.kd-tree this) (.buildDynamicTree this
-                                                 (kd/->merged-kd-tree (kd/->mmap-kd-tree-buffer temporal-buffer {:block-cache-size block-cache-size}))
+                                                 (kd/->merged-kd-tree (kd/->arrow-buf-kd-tree temporal-buffer {:block-cache-size block-cache-size}))
                                                  chunk-idx
                                                  snapshot-idx))
         (when (and kd-tree-snapshot-idx (not= kd-tree-snapshot-idx snapshot-idx))
@@ -269,15 +265,15 @@
         (if snapshot-idx
           (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
             (with-open [merged-kd-tree (.buildDynamicTree this
-                                                          (kd/->merged-kd-tree (kd/->mmap-kd-tree-buffer temporal-buffer))
+                                                          (kd/->merged-kd-tree (kd/->arrow-buf-kd-tree temporal-buffer))
                                                           chunk-idx
                                                           snapshot-idx)]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path merged-kd-tree {:k k :compress-blocks? compress-snapshots?})
+              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path merged-kd-tree {:k k :compress-blocks? compress-temporal-index?})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf))))
           (when-let [kd-tree (.buildDynamicTree this nil chunk-idx snapshot-idx)]
             (with-open [^Closeable kd-tree kd-tree]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-snapshots?})
+              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-temporal-index?})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
         (finally
@@ -307,7 +303,15 @@
         (set! (.chunk-kd-tree this) nil)
         (let [temporal-buf (util/root->arrow-ipc-byte-buffer new-chunk-kd-tree :file)
               new-temporal-obj-key (->temporal-obj-key chunk-idx)]
-          @(.putObject object-store new-temporal-obj-key temporal-buf))))
+          (if compress-temporal-index?
+            (let [tmp-file (util/->temp-file new-temporal-obj-key "")]
+              (try
+                (util/write-buffer-to-path temporal-buf tmp-file)
+                (util/compress-arrow-ipc-file-blocks tmp-file)
+                @(.putObject object-store new-temporal-obj-key (util/->mmap-path tmp-file))
+                (finally
+                  (util/delete-file tmp-file))))
+            @(.putObject object-store new-temporal-obj-key temporal-buf)))))
     (.awaitSnapshotBuild this)
     (when kd-tree
       (with-open [^Closeable old-kd-tree kd-tree]
@@ -392,19 +396,19 @@
                                       :buffer-pool :core2/buffer-pool
                                       :metadata-manager :core2/metadata-manager}
                           ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}
-                                      :compress-snapshots? {:spec ::sys/boolean :default true}
+                                      :compress-temporal-index? {:spec ::sys/boolean :default true}
                                       :block-cache-size {:spec ::sys/int :default kd/default-block-cache-size}}}
   [{:keys [^BufferAllocator allocator
            ^ObjectStore object-store
            ^IBufferPool buffer-pool
            ^IMetadataManager metadata-manager
            async-snapshot?
-           compress-snapshots?
+           compress-temporal-index?
            block-cache-size]}]
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
                             (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
-                            pool nil nil nil nil async-snapshot? compress-snapshots? block-cache-size)
+                            pool nil nil nil nil async-snapshot? compress-temporal-index? block-cache-size)
       (.populateKnownChunks))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]

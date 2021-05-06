@@ -14,13 +14,13 @@
 
 ;; (slurp (io/resource (format "io/airlift/tpch/queries/q%d.sql" 1)))
 
-(defn with-tpch-data [{:keys [^Path node-dir scale-factor clock compress-snapshots?]
-                       :or {compress-snapshots? true}} f]
+(defn with-tpch-data [{:keys [^Path node-dir scale-factor clock compress-temporal-index?]
+                       :or {compress-temporal-index? true}} f]
   (util/delete-dir node-dir)
 
   (with-open [node (tu/->local-node {:node-dir node-dir,
                                      :clock clock
-                                     :compress-snapshots? compress-snapshots?})]
+                                     :compress-temporal-index? compress-temporal-index?})]
     (let [last-tx (tpch/submit-docs! node scale-factor)]
       (c2/await-tx node last-tx (Duration/ofMinutes 1))
 
@@ -36,7 +36,7 @@
         objects-dir (.resolve node-dir "objects")]
     (with-tpch-data {:node-dir node-dir
                      :scale-factor scale-factor
-                     :compress-snapshots? false
+                     :compress-temporal-index? false
                      :clock (Clock/fixed (.toInstant #inst "2021-04-01") (ZoneId/of "UTC"))}
       (fn []
         (t/is (= expected-objects

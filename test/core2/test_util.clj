@@ -132,14 +132,14 @@
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
 (defn ->local-node ^core2.core.Node [{:keys [^Path node-dir
-                                             clock max-rows-per-block max-rows-per-chunk buffers-dir compress-snapshots?]
+                                             clock max-rows-per-block max-rows-per-chunk buffers-dir compress-temporal-index?]
                                       :or {buffers-dir "buffers"
-                                           compress-snapshots? true}}]
+                                           compress-temporal-index? true}}]
   (c2/start-node {:core2/log (cond-> {:core2/module 'core2.log/->local-directory-log
                                       :root-path (.resolve node-dir "log")}
                                clock (assoc :clock clock))
                   :core2/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
-                  :core2/temporal-manager {:compress-snapshots? compress-snapshots?}
+                  :core2/temporal-manager {:compress-temporal-index? compress-temporal-index?}
                   :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
                                        :root-path (.resolve node-dir "objects")}
                   :core2/indexer (->> {:max-rows-per-block max-rows-per-block
