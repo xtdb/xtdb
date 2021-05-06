@@ -931,7 +931,7 @@
       (.writeBatch out)
       (.clear root))))
 
-(defn- build-tree-in-place [kd-tree ^IColumnKdTreeAccess column-access]
+(defn- build-tree-in-place [^IColumnKdTreeAccess kd-tree]
   (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
         k (kd-tree-dimensions kd-tree)]
 
@@ -941,18 +941,16 @@
              axis-delete-flag (inc axis)]
          (when-not (= start median)
            (.swapPoint access start median))
-         (.setAxisDeleteFlag column-access start (unchecked-byte axis-delete-flag))
-         (.setSplitValue column-access start (.getCoordinate access start axis))
+         (.setAxisDeleteFlag kd-tree start (unchecked-byte axis-delete-flag))
+         (.setSplitValue kd-tree start (.getCoordinate access start axis))
          (when (< start median)
            (step (inc start) (inc median) next-axis))
          (if (< (inc median) end)
-           (do (.setSkipPointer column-access start (inc median))
+           (do (.setSkipPointer kd-tree start (inc median))
                (step (inc median) end next-axis))
-           (.setSkipPointer column-access start -1))
+           (.setSkipPointer kd-tree start -1))
          false))
      0 (kd-tree-value-count kd-tree) 0)))
-
-(def ^:private ^:const default-disk-kd-tree-batch-size 1024)
 
 (definterface IBlockManager
   (^org.apache.arrow.vector.VectorSchemaRoot getRoot [^int block-idx]))
@@ -1020,50 +1018,6 @@
           ^TinyIntVector axis-delete-flag-vec (.getVector root axis-delete-flag-vec-idx)]
       (neg? (.get axis-delete-flag-vec idx)))))
 
-(deftype ArrowBufColumnKdTreeKdAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
-  IColumnKdTreeAccess
-  (getAxisDeleteFlag [_ idx]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^TinyIntVector axis-delete-flag-vec (.getVector root axis-delete-flag-vec-idx)]
-      (.get axis-delete-flag-vec idx)))
-
-  (setAxisDeleteFlag [_ idx axis-delete-flag]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^TinyIntVector axis-delete-flag-vec (.getVector root axis-delete-flag-vec-idx)]
-      (.set axis-delete-flag-vec (int idx) axis-delete-flag)))
-
-  (getSplitValue [_ idx]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^BigIntVector split-value-vec (.getVector root split-value-vec-idx)]
-      (.get split-value-vec idx)))
-
-  (setSplitValue [_ idx split-value]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^BigIntVector split-value-vec (.getVector root split-value-vec-idx)]
-      (.set split-value-vec (int idx) split-value)))
-
-  (getSkipPointer [_ idx]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^BigIntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
-      (.get skip-pointer-vec idx)))
-
-  (setSkipPointer [_ idx skip-pointer]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^BigIntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
-      (.set skip-pointer-vec (int idx) skip-pointer))))
-
 (defn- ->block-cache [^long cache-size]
   (proxy [LinkedHashMap] [cache-size 0.75 true]
     (removeEldestEntry [entry]
@@ -1075,6 +1029,49 @@
 (deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
                          ^:unsynchronized-mutable ^int latest-block-idx
                          ^:unsynchronized-mutable ^VectorSchemaRoot latest-block]
+  IColumnKdTreeAccess
+  (getAxisDeleteFlag [kd-tree idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^TinyIntVector axis-delete-flag-vec (.getVector root axis-delete-flag-vec-idx)]
+      (.get axis-delete-flag-vec idx)))
+
+  (setAxisDeleteFlag [kd-tree idx axis-delete-flag]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^TinyIntVector axis-delete-flag-vec (.getVector root axis-delete-flag-vec-idx)]
+      (.set axis-delete-flag-vec (int idx) axis-delete-flag)))
+
+  (getSplitValue [kd-tree idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^BigIntVector split-value-vec (.getVector root split-value-vec-idx)]
+      (.get split-value-vec idx)))
+
+  (setSplitValue [kd-tree idx split-value]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^BigIntVector split-value-vec (.getVector root split-value-vec-idx)]
+      (.set split-value-vec (int idx) split-value)))
+
+  (getSkipPointer [kd-tree idx]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^BigIntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
+      (.get skip-pointer-vec idx)))
+
+  (setSkipPointer [kd-tree idx skip-pointer]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^BigIntVector skip-pointer-vec (.getVector root skip-pointer-vec-idx)]
+      (.set skip-pointer-vec (int idx) skip-pointer)))
+
   IBlockManager
   (getRoot [this block-idx]
     (if (= block-idx latest-block-idx)
@@ -1099,13 +1096,13 @@
     (throw (UnsupportedOperationException.)))
 
   (kd-tree-range-search [kd-tree min-range max-range]
-    (column-kd-tree-range-search kd-tree (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask) min-range max-range))
+    (column-kd-tree-range-search kd-tree kd-tree min-range max-range))
 
   (kd-tree-depth-first [kd-tree]
-    (column-kd-tree-depth-first kd-tree (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+    (column-kd-tree-depth-first kd-tree kd-tree))
 
   (kd-tree-depth [kd-tree]
-    (column-kd-tree-depth kd-tree (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
+    (column-kd-tree-depth kd-tree kd-tree))
 
   (kd-tree-retain [this allocator]
     (ArrowBufKdTree. (doto arrow-buf
@@ -1133,15 +1130,12 @@
 
   Closeable
   (close [_]
+    (util/try-close latest-block)
+    (.remove block-cache latest-block-idx)
     (doseq [v (vals block-cache)]
       (util/try-close v))
     (.clear block-cache)
     (util/try-close arrow-buf)))
-
-(defn- ->arrow-buf-column-kd-tree-access [^ArrowBufKdTree kd-tree ^long batch-size]
-  (let [batch-mask (dec batch-size)
-        batch-shift (Long/bitCount batch-mask)]
-    (ArrowBufColumnKdTreeKdAccess. kd-tree batch-shift batch-mask)))
 
 (def ^:const default-block-cache-size 128)
 
@@ -1174,6 +1168,8 @@
         arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
     (->arrow-buf-kd-tree arrow-buf)))
 
+(def ^:private ^:const default-disk-kd-tree-batch-size 1024)
+
 (defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points {:keys [k batch-size compress-blocks?]
                                                                                         :or {compress-blocks? false
                                                                                              batch-size default-disk-kd-tree-batch-size}}]
@@ -1185,7 +1181,7 @@
     (write-points-in-place root out points batch-size))
   (let [nio-buffer (util/->mmap-path path FileChannel$MapMode/READ_WRITE)]
     (with-open [kd-tree (->arrow-buf-kd-tree (util/->arrow-buf-view allocator nio-buffer))]
-      (build-tree-in-place kd-tree (->arrow-buf-column-kd-tree-access kd-tree batch-size))
+      (build-tree-in-place kd-tree)
       (.force nio-buffer))
     (when compress-blocks?
       (util/compress-arrow-ipc-file-blocks path))
