@@ -102,15 +102,17 @@ like this:
    :user/dob       (java.time.Instant/parse "1975-04-05T00:00:00.00Z")}]]
 ----
 
-== Modeling Types
+=== Modeling Types
 
 Crux puts no constraints on "types" and, as a schemaless database, has no notion of
-"types" regarding the shapes of documents you save. However, some users to find it
+"types" regarding the shapes of documents you save. However, some users find it
 useful to track a `type` attribute for their own purposes. The following example is
 not necessarily a recommended approach unless it is needed and it may cause a
 performance bottleneck on Crux versions prior to `21.05-1.17.0`. In the example
 below, `:my.custom.ns` is an example namespace which would likely correspond to
-the name of the system using Crux:
+the name of the system using Crux. There is no relationship between the "type" of
+`:user` and the attribute `:user/name`. The type is only for the user's own
+convenience:
 
 [source,clojure]
 ----
@@ -137,12 +139,14 @@ not match, due to the `put` operation immediately preceding it:
     [[:crux.tx/put      {:crux.db/id :a, :a "a"}]])
   (crux/submit-tx
     node
-    ; This doesn't work. Either the match should come first or it should have :a "b"
+    ; This won't match. Either the match should come first or it should match :a "b"
     [[:crux.tx/put      {:crux.db/id :a, :a "b"}]
      [:crux.tx/match :a {:crux.db/id :a, :a "a"}]])
   (crux/sync node)
   (crux/entity (crux/db node) :a)) ; {:crux.db/id :a, :a "a"}
 ----
+
+Thank you to https://github.com/jacobobryant/[Jacob O'Bryant] for this example.
 
 
 [#comparisons]
