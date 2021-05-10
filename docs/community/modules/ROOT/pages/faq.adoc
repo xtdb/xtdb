@@ -6,11 +6,26 @@
 [#quickstart]
 == What is the smallest Crux configuration so I can start quickly?
 
-The smallest on-disk Crux configuration involves three RocksDB instances, one for each Crux store. The RocksDB Module documentation contains xref:reference::rocksdb.adoc#_using_rocksdb[an example of configuring a store to use RocksDB].
+If you want the smallest on-disk configuration, you can use the https://opencrux.com/howto/quickstart.html[Quickstart Guide] (5 minutes).
 
 If you just want to see Crux running in-memory without writing any code, try the https://opencrux.com/blog/crux-command-line.html[Command Line Crux Guide] (10 minutes).
 
 If you want a battle-ready on-disk setup with Kafka, try the https://opencrux.com/blog/crux-confluent-cloud.html[Crux on Confluent Cloud Guide] (5 minutes).
+
+
+[#bitemporality]
+== Do I need to think about bitemporality to make use of Crux?
+
+Not at all. Many users don't have an immediate use for business-level time
+travel queries, in which case transaction time is typically regarded as
+"enough". However, use of valid time also enables operational advantages such
+as backfilling and other simple methods for migrating data between live systems
+in ways that isn't _easy_ when relying on transaction time alone (i.e. where
+logs must be replayed, merged and truncated to achieve the same effect).
+Therefore, it is sensible to use valid time in case you have these operational
+needs in the future. Valid time is recorded by default whenever you submit
+transactions.
+
 
 [#observequeries]
 == How can I observe Crux queries?
@@ -28,10 +43,12 @@ If you want to see the gritty details, turn your log level up to "DEBUG" for the
   (.setLevel (ch.qos.logback.classic.Level/valueOf "debug")))
 ----
 
+
 [#testing]
 == What is the easiest way to write tests with Crux?
 
 If you are writing acceptance, integration, or end-to-end tests which require an active Crux node in the mix, you can rely on an in-memory node that you spin up in the tests themselves. There are examples of such tests in the https://github.com/juxt/crux/blob/224a3dc04b0b9d9d5336c54f0ea9ee0d0aeb003b/crux-test/test/crux/bitemporal_tale_test.clj#L6[tutorial source] and in the https://github.com/juxt/crux/blob/d8f251c2f9b3930453239681de1ed87e636ff2a3/crux-core/test/crux/codec_test.clj#L194-L202[crux-core tests themselves].
+
 
 [#uniqueconstraint]
 == How can I add the equivalent of a Unique Constraint?
@@ -42,18 +59,91 @@ A uniqueness constraint can be handled 3 ways:
 . Use :crux.tx/match, however this takes time to confirm successful assertions and when there is contention you need to implement retry logic at each client.
 . Use a xref:reference::transactions#transaction-functions[transaction function]. This is slower still, though at least avoids the need to worry about contention & retrying. You can also express very complex constraints in these functions.
 
-[#bitemporality]
-== Do I need to think about bitemporality to make use of Crux?
 
-Not at all. Many users don't have an immediate use for business-level time
-travel queries, in which case transaction time is typically regarded as
-"enough". However, use of valid time also enables operational advantages such
-as backfilling and other simple methods for migrating data between live systems
-in ways that isn't _easy_ when relying on transaction time alone (i.e. where
-logs must be replayed, merged and truncated to achieve the same effect).
-Therefore, it is sensible to use valid time in case you have these operational
-needs in the future. Valid time is recorded by default whenever you submit
-transactions.
+[#modeling]
+== How should I model my entities?
+
+Crux imposes very few constraints on the user. How different systems model entities is
+therefore very flexible -- including the option of "no modelling at all," in the case
+of ingesting unstructured data. Crux stores schemaless documents and queries them with
+EAV triples. The only strict constraint is that every document must contain a
+`:crux.db/id` key.
+
+=== Modeling Identifiers
+
+The only constraint Crux places on entity ids (`:crux.db/id`) is that they must be
+unique. They can be of any type.
+Care should be taken when deciding on the type and structure of an entity id.
+If you are building on top of a legacy system and/or legacy data, you may already
+have unique identifiers you can reuse. For new systems (or for old data with
+new identifiers), many users choose UUIDs, like so:
+
+[source,clojure]
+----
+[[:crux.tx/put
+  {:crux.db/id  (java.util.UUID/randomUUID)
+   :product/sku "KS93528TUT"}]]
+----
+
+=== Modeling Attributes
+
+Crux puts no constraints on how you name your attributes. However, many users do
+find they prefer to model their keys in a `:type/attr` format. In SQL
+database terms, the `type` namespace loosely corresponds to a table and the `attr`
+name loosely corresponds to a column. An example of this sort of modeling might look
+like this:
+
+[source,clojure]
+----
+[[:crux.tx/put
+  {:crux.db/id     (java.util.UUID/randomUUID)
+   :user/username  "satoshi"
+   :user/full-name "Satoshi Nakamoto"
+   :user/dob       (java.time.Instant/parse "1975-04-05T00:00:00.00Z")}]]
+----
+
+== Modeling Types
+
+Crux puts no constraints on "types" and, as a schemaless database, has no notion of
+"types" regarding the shapes of documents you save. However, some users to find it
+useful to track a `type` attribute for their own purposes. The following example is
+not necessarily a recommended approach unless it is needed and it may cause a
+performance bottleneck on Crux versions prior to `21.05-1.17.0`. In the example
+below, `:my.custom.ns` is an example namespace which would likely correspond to
+the name of the system using Crux:
+
+[source,clojure]
+----
+[[:crux.tx/put
+  {:crux.db/id        (java.util.UUID/randomUUID)
+   :my.custom.ns/type :user
+   :user/name         "satoshi"}]]
+----
+
+
+[#matchsemantics]
+== Does `:crux.tx/match` see other operations within its transaction?
+
+Yes. Just as one would expect from SQL transactions, operations performed within the
+scope of the transaction are seen by other operations within the transaction. What
+this means in practice is that the `match` operation in the following code does
+not match, due to the `put` operation immediately preceding it:
+
+[source,clojure,subs=attributes+]
+----
+(with-open [node (crux/start-node {})]
+  (crux/submit-tx
+    node
+    [[:crux.tx/put      {:crux.db/id :a, :a "a"}]])
+  (crux/submit-tx
+    node
+    ; This doesn't work. Either the match should come first or it should have :a "b"
+    [[:crux.tx/put      {:crux.db/id :a, :a "b"}]
+     [:crux.tx/match :a {:crux.db/id :a, :a "a"}]])
+  (crux/sync node)
+  (crux/entity (crux/db node) :a)) ; {:crux.db/id :a, :a "a"}
+----
+
 
 [#comparisons]
 == Comparisons
