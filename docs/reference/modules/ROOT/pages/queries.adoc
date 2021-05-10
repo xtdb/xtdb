@@ -140,6 +140,14 @@ include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-2,indent
 include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-2-r,indent=0]
 ----
 
+You can quickly grab the whole document by specifying `*` in the projection spec:
+
+[source,clojure]
+----
+include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-6]
+include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-6-r]
+----
+
 If you have the entity ID(s) in hand, you can call `pull` or `pull-many` directly:
 
 [source,clojure]
@@ -168,14 +176,6 @@ We can also navigate in the reverse direction, looking for entities that refer t
 ----
 include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-5,indent=0]
 include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-5-r,indent=0]
-----
-
-You can quickly grab the whole document by specifying `*` in the projection spec:
-
-[source,clojure]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-6]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-6-r]
 ----
 
 ==== Attribute parameters
