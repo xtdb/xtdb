@@ -30,6 +30,7 @@ and its architecture -- past, present, and very-near-future.
 * https://arxiv.org/pdf/2004.14471.pdf[Mainlining Databases: SupportingFast Transactional Workloads onUniversal Columnar Data File Format], Li, Butrovich, et al. April 2020.
 * https://db.in.tum.de/~muehlbau/papers/mvcc.pdf[Fast Serializable Multi-Version Concurrency Controlfor Main-Memory Database Systems], Neumann, Mühlbauer, Kemper. SIGMOD’15. 2015.
 * https://www.cs.cmu.edu/~pavlo/courses/fall2013/static/papers/p731-sikka.pdf[Efficient Transaction Processing in SAP HANA Database – The End of a Column Store Myth], Sikka, Färber, et al. SIGMOD ’12. 2012.
+* https://www.inf.ufpr.br/eduardo/ensino/ci809/papers/DSM-columns.pdf[A Decomposition Storage Model], Copeland, Khoshafian. ACM SIGMOD Record, Vol. 14, No. 4, Pages 268-279. May 1985.
 
 [#monetdb]
 === Columnar Stores: MonetDB / VectorWise
