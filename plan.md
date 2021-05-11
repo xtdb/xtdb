@@ -100,7 +100,10 @@ Two main extension points:
      - Temporal range predicates in logical plan scan
    - Scalable temporal indexing + querying
      - Exercise temporal side, TPC-BiH
-     - Interval algebra predicates in logical plan select
+     - SQL:2011 period predicates in logical plan expressions:
+       - overlaps, equals, contains, (immediately) precedes,
+         (immediately) succeeds.
+     - Add interval types and arithmetic?
      - How far does the current kd-tree take us? Need different
        approach or fixable as initial cut?
    - Bigger than local node databases
