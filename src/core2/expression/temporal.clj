@@ -41,43 +41,41 @@
 
 ;; SQL:2011 Operations involving datetimes and intervals
 
-;; TODO: no support for duration vectors yet.
+(defmethod expr/codegen-call [:- Date Date] [{:keys [emitted-args]}]
+  {:code `(- ~@emitted-args)
+   :return-type Duration})
 
-;; (defmethod expr/codegen-call [:- Date Date] [{:keys [emitted-args]}]
-;;   {:code `(- ~@emitted-args)
-;;    :return-type Duration})
+(defmethod expr/codegen-call [:- Date Duration] [{:keys [emitted-args]}]
+  {:code `(- ~@emitted-args)
+   :return-type Date})
 
-;; (defmethod expr/codegen-call [:- Date Duration] [{:keys [emitted-args]}]
-;;   {:code `(- ~@emitted-args)
-;;    :return-type Date})
+(defmethod expr/codegen-call [:+ Date Duration] [{:keys [emitted-args]}]
+  {:code `(+ ~@emitted-args)
+   :return-type Date})
 
-;; (defmethod expr/codegen-call [:+ Date Duration] [{:keys [emitted-args]}]
-;;   {:code `(+ ~@emitted-args)
-;;    :return-type Date})
+(defmethod expr/codegen-call [:- Duration Duration] [{:keys [emitted-args]}]
+  {:code `(+ ~@emitted-args)
+   :return-type Duration})
 
-;; (defmethod expr/codegen-call [:- Duration Duration] [{:keys [emitted-args]}]
-;;   {:code `(+ ~@emitted-args)
-;;    :return-type Duration})
+(defmethod expr/codegen-call [:+ Duration Date] [{:keys [emitted-args]}]
+  {:code `(+ ~@emitted-args)
+   :return-type Date})
 
-;; (defmethod expr/codegen-call [:+ Duration Date] [{:keys [emitted-args]}]
-;;   {:code `(+ ~@emitted-args)
-;;    :return-type Date})
+(defmethod expr/codegen-call [:+ Duration Duration] [{:keys [emitted-args]}]
+  {:code `(+ ~@emitted-args)
+   :return-type Duration})
 
-;; (defmethod expr/codegen-call [:+ Duration Duration] [{:keys [emitted-args]}]
-;;   {:code `(+ ~@emitted-args)
-;;    :return-type Duration})
+(defmethod expr/codegen-call [:* Duration Number] [{:keys [emitted-args]}]
+  {:code `(* ~@emitted-args)
+   :return-type Duration})
 
-;; (defmethod expr/codegen-call [:* Duration Number] [{:keys [emitted-args]}]
-;;   {:code `(* ~@emitted-args)
-;;    :return-type Duration})
+(defmethod expr/codegen-call [:* Number Duration] [{:keys [emitted-args]}]
+  {:code `(* ~@emitted-args)
+   :return-type Duration})
 
-;; (defmethod expr/codegen-call [:* Number Duration] [{:keys [emitted-args]}]
-;;   {:code `(* ~@emitted-args)
-;;    :return-type Duration})
-
-;; (defmethod expr/codegen-call [:/ Duration Number] [{:keys [emitted-args]}]
-;;   {:code `(quot ~@emitted-args)
-;;    :return-type Duration})
+(defmethod expr/codegen-call [:/ Duration Number] [{:keys [emitted-args]}]
+  {:code `(quot ~@emitted-args)
+   :return-type Duration})
 
 (defn ->temporal-min-max-range [selects srcs]
   (let [min-range (temporal/->min-range)

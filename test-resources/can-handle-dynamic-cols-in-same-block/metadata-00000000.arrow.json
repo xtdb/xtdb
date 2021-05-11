@@ -48,6 +48,15 @@
         },
         "children" : [ ]
       },{
+        "name" : "tinyint",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 8,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
         "name" : "bigint",
         "nullable" : true,
         "type" : {
@@ -79,6 +88,13 @@
         },
         "children" : [ ]
       },{
+        "name" : "bit",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
         "name" : "timestampmilli",
         "nullable" : true,
         "type" : {
@@ -88,19 +104,11 @@
         },
         "children" : [ ]
       },{
-        "name" : "tinyint",
+        "name" : "duration",
         "nullable" : true,
         "type" : {
-          "name" : "int",
-          "bitWidth" : 8,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
+          "name" : "duration",
+          "unit" : "MILLISECOND"
         },
         "children" : [ ]
       }]
@@ -118,6 +126,15 @@
         },
         "children" : [ ]
       },{
+        "name" : "tinyint",
+        "nullable" : true,
+        "type" : {
+          "name" : "int",
+          "bitWidth" : 8,
+          "isSigned" : true
+        },
+        "children" : [ ]
+      },{
         "name" : "bigint",
         "nullable" : true,
         "type" : {
@@ -149,6 +166,13 @@
         },
         "children" : [ ]
       },{
+        "name" : "bit",
+        "nullable" : true,
+        "type" : {
+          "name" : "bool"
+        },
+        "children" : [ ]
+      },{
         "name" : "timestampmilli",
         "nullable" : true,
         "type" : {
@@ -158,19 +182,11 @@
         },
         "children" : [ ]
       },{
-        "name" : "tinyint",
+        "name" : "duration",
         "nullable" : true,
         "type" : {
-          "name" : "int",
-          "bitWidth" : 8,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
-        "name" : "bit",
-        "nullable" : true,
-        "type" : {
-          "name" : "bool"
+          "name" : "duration",
+          "unit" : "MILLISECOND"
         },
         "children" : [ ]
       }]
@@ -207,6 +223,15 @@
             },
             "children" : [ ]
           },{
+            "name" : "tinyint",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 8,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
             "name" : "bigint",
             "nullable" : true,
             "type" : {
@@ -238,6 +263,13 @@
             },
             "children" : [ ]
           },{
+            "name" : "bit",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          },{
             "name" : "timestampmilli",
             "nullable" : true,
             "type" : {
@@ -247,19 +279,11 @@
             },
             "children" : [ ]
           },{
-            "name" : "tinyint",
+            "name" : "duration",
             "nullable" : true,
             "type" : {
-              "name" : "int",
-              "bitWidth" : 8,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
+              "name" : "duration",
+              "unit" : "MILLISECOND"
             },
             "children" : [ ]
           }]
@@ -277,6 +301,15 @@
             },
             "children" : [ ]
           },{
+            "name" : "tinyint",
+            "nullable" : true,
+            "type" : {
+              "name" : "int",
+              "bitWidth" : 8,
+              "isSigned" : true
+            },
+            "children" : [ ]
+          },{
             "name" : "bigint",
             "nullable" : true,
             "type" : {
@@ -308,6 +341,13 @@
             },
             "children" : [ ]
           },{
+            "name" : "bit",
+            "nullable" : true,
+            "type" : {
+              "name" : "bool"
+            },
+            "children" : [ ]
+          },{
             "name" : "timestampmilli",
             "nullable" : true,
             "type" : {
@@ -317,19 +357,11 @@
             },
             "children" : [ ]
           },{
-            "name" : "tinyint",
+            "name" : "duration",
             "nullable" : true,
             "type" : {
-              "name" : "int",
-              "bitWidth" : 8,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
-            "name" : "bit",
-            "nullable" : true,
-            "type" : {
-              "name" : "bool"
+              "name" : "duration",
+              "unit" : "MILLISECOND"
             },
             "children" : [ ]
           }]
@@ -375,6 +407,11 @@
         "name" : "null",
         "count" : 3
       },{
+        "name" : "tinyint",
+        "count" : 3,
+        "VALIDITY" : [0,0,0],
+        "DATA" : [0,0,0]
+      },{
         "name" : "bigint",
         "count" : 3,
         "VALIDITY" : [0,1,0],
@@ -397,17 +434,17 @@
         "OFFSET" : [0,3,3,3],
         "DATA" : ["bar","",""]
       },{
+        "name" : "bit",
+        "count" : 3,
+        "VALIDITY" : [0,0,0],
+        "DATA" : [0,0,0]
+      },{
         "name" : "timestampmilli",
         "count" : 3,
         "VALIDITY" : [1,0,1],
         "DATA" : [1577836800000,0,1577836800000]
       },{
-        "name" : "tinyint",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
-      },{
-        "name" : "bit",
+        "name" : "duration",
         "count" : 3,
         "VALIDITY" : [0,0,0],
         "DATA" : [0,0,0]
@@ -419,6 +456,11 @@
       "children" : [{
         "name" : "null",
         "count" : 3
+      },{
+        "name" : "tinyint",
+        "count" : 3,
+        "VALIDITY" : [0,0,0],
+        "DATA" : [0,0,0]
       },{
         "name" : "bigint",
         "count" : 3,
@@ -442,17 +484,17 @@
         "OFFSET" : [0,3,3,3],
         "DATA" : ["foo","",""]
       },{
+        "name" : "bit",
+        "count" : 3,
+        "VALIDITY" : [0,0,0],
+        "DATA" : [0,0,0]
+      },{
         "name" : "timestampmilli",
         "count" : 3,
         "VALIDITY" : [1,0,1],
         "DATA" : [1609459200000,0,1577836800000]
       },{
-        "name" : "tinyint",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
-      },{
-        "name" : "bit",
+        "name" : "duration",
         "count" : 3,
         "VALIDITY" : [0,0,0],
         "DATA" : [0,0,0]
@@ -480,6 +522,11 @@
             "name" : "null",
             "count" : 3
           },{
+            "name" : "tinyint",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          },{
             "name" : "bigint",
             "count" : 3,
             "VALIDITY" : [0,1,0],
@@ -502,17 +549,17 @@
             "OFFSET" : [0,3,3,3],
             "DATA" : ["bar","",""]
           },{
+            "name" : "bit",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          },{
             "name" : "timestampmilli",
             "count" : 3,
             "VALIDITY" : [1,0,1],
             "DATA" : [1577836800000,0,1577836800000]
           },{
-            "name" : "tinyint",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
-          },{
-            "name" : "bit",
+            "name" : "duration",
             "count" : 3,
             "VALIDITY" : [0,0,0],
             "DATA" : [0,0,0]
@@ -524,6 +571,11 @@
           "children" : [{
             "name" : "null",
             "count" : 3
+          },{
+            "name" : "tinyint",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
           },{
             "name" : "bigint",
             "count" : 3,
@@ -547,17 +599,17 @@
             "OFFSET" : [0,3,3,3],
             "DATA" : ["foo","",""]
           },{
+            "name" : "bit",
+            "count" : 3,
+            "VALIDITY" : [0,0,0],
+            "DATA" : [0,0,0]
+          },{
             "name" : "timestampmilli",
             "count" : 3,
             "VALIDITY" : [1,0,1],
             "DATA" : [1609459200000,0,1577836800000]
           },{
-            "name" : "tinyint",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
-          },{
-            "name" : "bit",
+            "name" : "duration",
             "count" : 3,
             "VALIDITY" : [0,0,0],
             "DATA" : [0,0,0]

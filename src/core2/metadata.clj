@@ -44,7 +44,7 @@
       (.toLowerCase)))
 
 (def ^:private type-meta-fields
-  (for [arrow-type (keys t/arrow-type->vector-type)]
+  (for [arrow-type (sort-by t/arrow-type->type-id (keys t/arrow-type->vector-type))]
     (t/->field (type->field-name arrow-type) arrow-type true)))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema

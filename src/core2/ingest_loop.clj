@@ -56,7 +56,7 @@
               (.isShutdown pool) (throw (IllegalStateException. "node closed"))
 
               (or (nil? timeout)
-                  (neg? (- (System/nanoTime) end-ns)))
+                  (neg? (- (System/nanoTime) (long end-ns))))
               (do
                 (Thread/sleep poll-sleep-ms)
                 (recur))
