@@ -1,6 +1,7 @@
 (ns core2.expression-test
   (:require [clojure.test :as t]
             [core2.expression :as expr]
+            [core2.expression.temporal :as expr.temp]
             [core2.test-util :as test-util]
             [core2.types :as ty]
             [core2.util :as util])
@@ -147,3 +148,53 @@
           (let [expr (expr/form->expr '(>= e ?e))
                 selector (expr/->expression-vector-selector expr {'?e "0500"})]
             (t/is (= 500 (.getCardinality (.select selector e))))))))))
+
+(t/deftest can-extract-min-max-range-from-expression
+  (t/is (= [[-9223372036854775808, -9223372036854775808, 1546300800000,
+             -9223372036854775808, -9223372036854775808, -9223372036854775808]
+            [9223372036854775807, 9223372036854775807, 9223372036854775807,
+             1546300799999, 9223372036854775807, 9223372036854775807]]
+           (map vec (expr.temp/->temporal-min-max-range
+                     {"_valid-time-start" (expr/form->expr '(<= _vt-time-start #inst "2019"))
+                      "_valid-time-end" (expr/form->expr '(> _vt-time-end  #inst "2019"))}
+                     {}))))
+
+  (t/is (= [[-9223372036854775808, -9223372036854775808, 1546300800000,
+             -9223372036854775808, -9223372036854775808, -9223372036854775808]
+            [9223372036854775807, 9223372036854775807, 1546300800000,
+             9223372036854775807, 9223372036854775807, 9223372036854775807]]
+           (map vec (expr.temp/->temporal-min-max-range
+                     {"_valid-time-start" (expr/form->expr '(= _vt-time-start #inst "2019"))}
+                     {}))))
+
+  (t/testing "conjunction"
+    (t/is (= [[-9223372036854775808, -9223372036854775808, 1577836800000
+               -9223372036854775808, -9223372036854775808, -9223372036854775808]
+              [9223372036854775807, 9223372036854775807, 9223372036854775807,
+               9223372036854775807, 9223372036854775807, 9223372036854775807]]
+             (map vec (expr.temp/->temporal-min-max-range
+                       {"_valid-time-start" (expr/form->expr '(and (>= #inst "2019" _vt-time-start)
+                                                                   (>= #inst "2020" _vt-time-start)))}
+                       {})))))
+
+  (t/testing "disjunction not supported"
+    (t/is (= [[-9223372036854775808, -9223372036854775808, -9223372036854775808,
+               -9223372036854775808, -9223372036854775808, -9223372036854775808]
+              [9223372036854775807, 9223372036854775807, 9223372036854775807,
+               9223372036854775807, 9223372036854775807, 9223372036854775807]]
+             (map vec (expr.temp/->temporal-min-max-range
+                       {"_valid-time-start" (expr/form->expr '(or (= _vt-time-start #inst "2019")
+                                                                  (= _vt-time-start #inst "2020")))}
+                       {})))))
+
+  (t/testing "parameters"
+    (t/is (= [[-9223372036854775808, -9223372036854775808, -9223372036854775808,
+               1514764800001, 1546300800000, -9223372036854775808]
+              [9223372036854775807, 9223372036854775807, 1514764800000
+               9223372036854775807, 9223372036854775807, 1546300799999]]
+             (map vec (expr.temp/->temporal-min-max-range
+                       {"_tx-time-start" (expr/form->expr '(>= ?tt _tx-time-start))
+                        "_tx-time-end" (expr/form->expr '(< ?tt _tx-time-end))
+                        "_valid-time-start" (expr/form->expr '(<= ?vt _vt-time-start))
+                        "_valid-time-end" (expr/form->expr '(> ?vt _vt-time-end))}
+                       '{?tt #inst "2019" ?vt #inst "2018"}))))))

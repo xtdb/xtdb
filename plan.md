@@ -97,7 +97,7 @@ Two main extension points:
      - WCOJ?
    - Dealing with updates over time - historical dataset (TS Devices)
      - DONE ingest bench
-     - Temporal range predicates in logical plan scan
+     - DONE Temporal range predicates in logical plan scan
    - Scalable temporal indexing + querying
      - Exercise temporal side, TPC-BiH
      - DONE SQL:2011 period predicates in logical plan expressions:

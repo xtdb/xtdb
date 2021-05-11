@@ -3,6 +3,7 @@
             core2.data-source
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
+            [core2.expression.temporal :as expr.temp]
             [core2.logical-plan :as lp]
             [core2.operator.group-by :as group-by]
             [core2.operator.order-by :as order-by]
@@ -74,7 +75,8 @@
                                                           :db source
                                                           :srcs (keys srcs)})))]
     (fn [allocator]
-      (.scan db allocator col-names metadata-pred col-preds nil nil))))
+      (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
+        (.scan db allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
 
 (defmethod emit-op :table [[_ {[table-type table-arg] :table}] srcs]
   (let [rows (case table-type
