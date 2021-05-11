@@ -100,7 +100,7 @@ Two main extension points:
      - Temporal range predicates in logical plan scan
    - Scalable temporal indexing + querying
      - Exercise temporal side, TPC-BiH
-     - SQL:2011 period predicates in logical plan expressions:
+     - DONE SQL:2011 period predicates in logical plan expressions:
        - overlaps, equals, contains, (immediately) precedes,
          (immediately) succeeds.
      - Add interval types and arithmetic?

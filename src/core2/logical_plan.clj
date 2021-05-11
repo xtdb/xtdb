@@ -1,6 +1,7 @@
 (ns core2.logical-plan
   (:require [clojure.spec.alpha :as s]
-            [core2.expression :as expr]))
+            [core2.expression :as expr]
+            [core2.expression.temporal]))
 
 ;; Partly based on
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
