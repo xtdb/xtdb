@@ -114,7 +114,7 @@
             (throw e)))))))
 
 (defmethod emit-op :select [[_ {:keys [predicate relation]}] srcs]
-  (let [selector (expr/->expression-root-selector predicate)]
+  (let [selector (expr/->expression-root-selector predicate srcs)]
     (unary-op relation srcs
               (fn [allocator inner]
                 (select/->select-cursor allocator inner selector)))))
@@ -124,7 +124,7 @@
                            (case p-type
                              :column (project/->identity-projection-spec (name arg))
                              :extend (let [[col-name expr] (first arg)]
-                                       (expr/->expression-projection-spec (name col-name) expr))))]
+                                       (expr/->expression-projection-spec (name col-name) expr srcs))))]
     (unary-op relation srcs
               (fn [allocator inner]
                 (project/->project-cursor allocator inner projection-specs)))))

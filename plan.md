@@ -147,6 +147,7 @@ Should have:
 - External sort in query engine
 - We don't currently coalesce small intermediate blocks in the query engine
 - DONE Parameters beyond table-operator - override values in expressions without recompiling.
+  - Change TPC-H queries to use parameters.
 - Support lists/cardinality-many?
 - Reconstructing the log - storage of incoming transactions in object store
 - Tx fns?
