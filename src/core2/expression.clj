@@ -125,9 +125,11 @@
   (lazy-seq
    (cons expr (mapcat expr-seq (direct-child-exprs expr)))))
 
-(defn with-tag [sym ^Class tag]
+(defn with-tag [sym tag]
   (-> sym
-      (vary-meta assoc :tag (symbol (.getName tag)))))
+      (vary-meta assoc :tag (if (symbol? tag)
+                              tag
+                              (symbol (.getName ^Class tag))))))
 
 (defn variables [expr]
   (->> (expr-seq expr)
@@ -172,27 +174,12 @@
     (string? x)
     x))
 
-(defmethod codegen-expr :literal [{:keys [literal init-variable]} _]
-  (cond
-    (instance? Date literal)
-    {:code (.getTime ^Date literal)
-     :return-type Date}
-    (string? literal)
-    {:code init-variable
-     :return-type String}
-    (nil? literal)
-    {:code nil :return-type Comparable}
-    :else
-    {:code literal :return-type (class literal)}))
-
 (defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param->type]}]
   (let [return-type (get types/arrow-type->java-type
                          (or (param->type param)
                              (throw (IllegalArgumentException. (str "parameter not provided: " param))))
                          Comparable)]
-    (into {:code (if-let [cast-fn (type->cast return-type)]
-                   (list cast-fn param)
-                   param)
+    (into {:code param
            :return-type return-type}
           (select-keys expr #{:literal}))))
 
@@ -508,7 +495,14 @@
                            expr-params)]
     {:expr expr
      :param-types (mapv (fn [param-k param-v]
-                          (MapEntry/create param-k (-> param-v class types/->arrow-type)))
+                          ;; TODO: Should be an arrow-type->expr-tag map somewhere?
+                          (let [arrow-type (types/->arrow-type (class param-v))
+                                normalized-expr-type (class (normalize-union-value param-v))
+                                primitive-tag (get type->cast normalized-expr-type)]
+                            (MapEntry/create (if primitive-tag
+                                               (with-tag param-k primitive-tag)
+                                               param-k)
+                                             arrow-type)))
                         expr-params
                         param-values)
      :params param-values
