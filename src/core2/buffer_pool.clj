@@ -17,11 +17,6 @@
   (^java.util.concurrent.CompletableFuture getBuffer [^String k])
   (^boolean evictBuffer [^String k]))
 
-(defn- evict-internal [^ArrowBuf buffer ^Path buffer-path]
-  (util/try-close buffer)
-  (when buffer-path
-    (util/delete-file buffer-path)))
-
 (deftype BufferPool [^BufferAllocator allocator ^ObjectStore object-store ^Map buffers ^StampedLock buffers-lock
                      ^Path cache-path]
   IBufferPool
@@ -34,7 +29,7 @@
                   (finally
                     (.unlock buffers-lock stamp))))]
         (if-not (= ::not-found v)
-          (CompletableFuture/completedFuture (doto ^ArrowBuf (first v)
+          (CompletableFuture/completedFuture (doto ^ArrowBuf v
                                                (.retain)))
           (-> (.getObject object-store k)
               (util/then-apply (fn [nio-buffer]
@@ -45,25 +40,27 @@
                                    (MapEntry/create nio-buffer nil))))
               (util/then-apply
                 (fn [[nio-buffer path]]
-                  (let [stamp (.writeLock buffers-lock)]
+                  (let [stamp (.writeLock buffers-lock)
+                        key-exists? (.containsKey ^Map buffers k)]
                     (try
-                      (let [[^ArrowBuf buf stored-path] (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                                                  (MapEntry/create
-                                                                                                   (util/->arrow-buf-view allocator nio-buffer) path))))]
-                        (when-not (= path stored-path)
-                          (util/delete-file path))
-                        (doto buf
-                          (.retain)))
+                      (doto ^ArrowBuf (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                                (util/->arrow-buf-view allocator
+                                                                                                       nio-buffer
+                                                                                                       (when path
+                                                                                                         #(util/delete-file path))))))
+                        (.retain))
                       (finally
-                        (.unlock buffers-lock stamp)))))))))))
+                        (.unlock buffers-lock stamp)
+                        (when (and key-exists? path)
+                          (util/delete-file path))))))))))))
 
   (evictBuffer [_ k]
-    (if-let [[buffer path] (let [stamp (.writeLock buffers-lock)]
-                             (try
-                               (.remove buffers k)
-                               (finally
-                                 (.unlock buffers-lock stamp))))]
-      (do (evict-internal buffer path)
+    (if-let [buffer (let [stamp (.writeLock buffers-lock)]
+                      (try
+                        (.remove buffers k)
+                        (finally
+                          (.unlock buffers-lock stamp))))]
+      (do (util/try-close buffer)
           true)
       false))
 
@@ -73,8 +70,7 @@
       (try
         (let [i (.iterator (.values buffers))]
           (while (.hasNext i)
-            (let [[buffer path] (.next i)]
-              (evict-internal buffer path))
+            (util/try-close (.next i))
             (.remove i)))
         (finally
           (.unlock buffers-lock stamp))))))
@@ -83,7 +79,7 @@
 (def default-buffer-cache-bytes-size (* 512 1024 1024))
 
 (defn- buffer-cache-bytes-size ^long [^Map buffers]
-  (long (reduce + (for [[^ArrowBuf buffer] (vals buffers)]
+  (long (reduce + (for [^ArrowBuf buffer (vals buffers)]
                     (.capacity buffer)))) )
 
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size ^Path cache-path]
@@ -92,9 +88,8 @@
       (let [entries-size (.size ^Map this)]
         (if (or (> entries-size cache-entries-size)
                 (and (> entries-size 1) (> (buffer-cache-bytes-size this) cache-bytes-size)))
-          (let [[k [buffer path]] entry]
-            (evict-internal buffer path)
-            true)
+          (do (util/try-close (.getValue ^Map$Entry entry))
+              true)
           false)))))
 
 (defn ->buffer-pool {::sys/deps {:allocator :core2/allocator
