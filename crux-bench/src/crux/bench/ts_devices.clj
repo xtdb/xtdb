@@ -61,21 +61,19 @@
 
 ;; Submits data from devices database into Crux node.
 (defn submit-ts-devices-data [node]
-  (bench/run-bench :ingest
-    (bench/with-additional-index-metrics node
-      (let [info-tx-ops (vec (for [info-doc @info-docs]
-                               [:crux.tx/put info-doc]))
-            _ (crux/submit-tx node info-tx-ops)
-            last-tx (with-readings-docs
-                      (fn [readings-docs]
-                        (->> readings-docs
-                             (partition-all readings-chunk-size)
-                             (reduce (fn [last-tx chunk]
-                                       (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
-                                                                   [:crux.tx/put reading-doc time]))))
-                                     nil))))]
-        (crux/await-tx node last-tx (Duration/ofMinutes 20))
-        {:success? true}))))
+  (let [info-tx-ops (vec (for [info-doc @info-docs]
+                           [:crux.tx/put info-doc]))
+        _ (crux/submit-tx node info-tx-ops)
+        last-tx (with-readings-docs
+                  (fn [readings-docs]
+                    (->> readings-docs
+                         (partition-all readings-chunk-size)
+                         (reduce (fn [last-tx chunk]
+                                   (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
+                                                               [:crux.tx/put reading-doc time]))))
+                                 nil))))]
+    (crux/await-tx node last-tx (Duration/ofMinutes 20))
+    {:success? true}))
 
 (defn test-battery-readings [node]
   ;; 10 most recent battery temperature readings for charging devices
@@ -258,7 +256,10 @@
 (defn run-devices-bench [node]
   (bench/with-bench-ns :ts-devices
     (bench/with-crux-dimensions
-      (submit-ts-devices-data node)
+      (bench/run-bench :ingest
+        (bench/with-additional-index-metrics node
+          (submit-ts-devices-data node)))
+
       (bench/compact-node node)
       (test-battery-readings node)
       (test-busiest-devices node)
