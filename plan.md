@@ -107,7 +107,7 @@ Two main extension points:
      - How far does the current kd-tree take us? Need different
        approach or fixable as initial cut?
    - Bigger than local node databases
-     - Buffer pool eviction
+     - DONE Buffer pool eviction and size limit.
      - DONE Ability to query several temporal chunks (live and Arrow).
      - DONE Merging of temporal Arrow chunks?
      - DONE Move merging of the snapshot temporal tree to the background.
