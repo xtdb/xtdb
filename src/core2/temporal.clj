@@ -148,14 +148,14 @@
        (into {})))
 
 (defn temporal-column? [col-name]
-  (contains? ->temporal-field col-name))
+  (contains? ->temporal-field (name col-name)))
 
 (def ^:private timestampmilli-type-id
   (-> (t/primitive-type->arrow-type :timestampmilli)
       (t/arrow-type->type-id)))
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]
-  (Schema. [t/row-id-field (get ->temporal-field col-name)]))
+  (Schema. [t/row-id-field (get ->temporal-field (name col-name))]))
 
 (def ^:const ^int id-idx 0)
 (def ^:const ^int row-id-idx 1)
@@ -168,6 +168,9 @@
                             "_valid-time-end" valid-time-end-idx
                             "_tx-time-start" tx-time-start-idx
                             "_tx-time-end" tx-time-end-idx})
+
+(defn ->temporal-column-idx ^long [col-name]
+  (long (get column->idx (name col-name))))
 
 (declare insert-coordinates)
 
@@ -361,7 +364,7 @@
                               (.toArray))
               value-count (count coordinates)]
           (doseq [col-name columns]
-            (let [col-idx (get column->idx col-name)
+            (let [col-idx (->temporal-column-idx col-name)
                   out-root (VectorSchemaRoot/create allocator (->temporal-root-schema col-name))
                   ^BigIntVector row-id-vec (.getVector out-root 0)
                   ^DenseUnionVector temporal-duv-vec (.getVector out-root 1)

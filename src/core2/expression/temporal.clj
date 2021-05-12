@@ -7,6 +7,8 @@
   (:import java.util.Date
            java.time.Duration))
 
+(set! *unchecked-math* :warn-on-boxed)
+
 ;; SQL:2011 Time-related-predicates
 
 (defmethod expr/codegen-call [:overlaps Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
@@ -82,11 +84,7 @@
         max-range (temporal/->max-range)]
     (doseq [[col-name select-expr] selects
             :when (temporal/temporal-column? col-name)
-            :let [range-idx (case col-name
-                              "_valid-time-start" temporal/valid-time-start-idx
-                              "_valid-time-end" temporal/valid-time-end-idx
-                              "_tx-time-start" temporal/tx-time-start-idx
-                              "_tx-time-end" temporal/tx-time-end-idx)
+            :let [range-idx (temporal/->temporal-column-idx col-name)
                   {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
                   vars (zipmap (map first param-types) params)
                   var->type (into {} param-types)
