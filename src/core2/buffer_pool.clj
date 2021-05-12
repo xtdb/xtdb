@@ -37,22 +37,22 @@
           (CompletableFuture/completedFuture (doto ^ArrowBuf (first v)
                                                (.retain)))
           (-> (.getObject object-store k)
-              (util/then-apply (fn [buf]
+              (util/then-apply (fn [nio-buffer]
                                  (if cache-path
                                    (let [buffer-path (.resolve cache-path (str (UUID/randomUUID)))]
-                                     (util/write-buffer-to-path-atomically buf buffer-path)
+                                     (util/write-buffer-to-path-atomically nio-buffer buffer-path)
                                      (MapEntry/create (util/->mmap-path buffer-path) buffer-path))
-                                   (MapEntry/create buf nil))))
+                                   (MapEntry/create nio-buffer nil))))
               (util/then-apply
-                (fn [[buf path]]
+                (fn [[nio-buffer path]]
                   (let [stamp (.writeLock buffers-lock)]
                     (try
-                      (let [[^ArrowBuf stored-buf stored-path] (.computeIfAbsent buffers k (util/->jfn (fn [_]
-                                                                                                         (MapEntry/create
-                                                                                                          (util/->arrow-buf-view allocator buf) path))))]
+                      (let [[^ArrowBuf buf stored-path] (.computeIfAbsent buffers k (util/->jfn (fn [_]
+                                                                                                  (MapEntry/create
+                                                                                                   (util/->arrow-buf-view allocator nio-buffer) path))))]
                         (when-not (= path stored-path)
-                          (evict-internal buf path))
-                        (doto stored-buf
+                          (util/delete-file path))
+                        (doto buf
                           (.retain)))
                       (finally
                         (.unlock buffers-lock stamp)))))))))))
