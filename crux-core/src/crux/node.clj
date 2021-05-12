@@ -182,7 +182,9 @@
   (attribute-stats [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (db/read-index-meta index-store :crux/attribute-stats)))
+      (with-open [snapshot (db/open-index-snapshot index-store)]
+        (->> (db/all-attrs snapshot)
+             (into {} (map (juxt identity #(db/doc-count snapshot %))))))))
 
   (active-queries [_]
     (map qs/->QueryState (vals (:in-progress @!running-queries))))

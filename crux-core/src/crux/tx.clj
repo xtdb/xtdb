@@ -1,5 +1,6 @@
 (ns ^:no-doc crux.tx
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.set :as set]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [crux.api :as api]
             [crux.bus :as bus]
@@ -10,8 +11,7 @@
             [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe]
-            [clojure.set :as set])
+            [crux.tx.event :as txe])
   (:import clojure.lang.MapEntry
            crux.codec.EntityTx
            java.io.Closeable
@@ -231,13 +231,6 @@
 (defmethod index-tx-event :default [[op & _] _tx _tx-ingester]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defn- update-stats [attribute-stats docs]
-  (merge-with +
-              attribute-stats
-              (for [doc docs
-                    [k v] doc]
-                (MapEntry/create k (count (c/vectorize-value v))))))
-
 (defn- tx-fn-doc? [doc]
   (some #{:crux.db.fn/args
           :crux.db.fn/tx-events
@@ -270,8 +263,7 @@
                    (-> tx
                        (update :av-count + av-count)
                        (update :bytes-indexed + bytes-indexed)
-                       (update :doc-ids into (map c/new-id) (keys indexed-docs))
-                       (update :attribute-stats update-stats (vals indexed-docs))))))))
+                       (update :doc-ids into (map c/new-id) (keys indexed-docs))))))))
 
 (defn- raise-ingester-error! [{:keys [!error bus]} e]
   (reset! !error e)
@@ -356,11 +348,10 @@
       (when fork-at
         (throw (IllegalStateException. "Can't commit from fork.")))
 
-      (let [{:keys [attribute-stats evicted-eids doc-ids tx-events]} @!tx]
+      (let [{:keys [evicted-eids doc-ids tx-events]} @!tx]
         ;; these two come before the committing tx bus message
         ;; because Lucene relies on both of them before indexing/evicting docs
         (fork/commit-doc-store-tx document-store-tx)
-        (db/store-index-meta index-store :crux/attribute-stats attribute-stats)
 
         (bus/send bus {:crux/event-type ::committing-tx,
                        :submitted-tx tx
@@ -415,8 +406,7 @@
             document-store-tx (fork/begin-document-store-tx document-store)]
         (->InFlightTx tx fork-at
                       (atom :open)
-                      (atom {:attribute-stats (db/read-index-meta index-store :crux/attribute-stats)
-                             :doc-ids #{}
+                      (atom {:doc-ids #{}
                              :evicted-eids #{}
                              :av-count 0
                              :bytes-indexed 0

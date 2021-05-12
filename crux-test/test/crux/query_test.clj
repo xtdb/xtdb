@@ -8,7 +8,7 @@
             [crux.index :as idx]
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import java.util.Arrays
+  (:import [java.util Arrays UUID]
            java.util.concurrent.TimeoutException))
 
 (t/use-fixtures :each fix/with-node)
@@ -3484,16 +3484,17 @@
                            {f nil, g true}]}))))
 
 (t/deftest test-binds-args-before-entities
-  (t/is (= ['m 'e]
-           (->> (q/query-plan-for {:find '[e]
-                                   :where '[[e :foo/type "type"]
-                                            [e :foo/id m]]
-                                   :args [{'m 1}]}
-                                  c/->value-buffer
-                                  {:foo/type 1
-                                   :foo/id 1})
-                :vars-in-join-order
-                (filter #{'m 'e})))))
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo/type "type", :foo/id 1}]])
+
+  (let [db (api/db *api*)]
+    (t/is (= ['m 'e]
+             (->> (q/query-plan-for db
+                                    {:find '[e]
+                                     :where '[[e :foo/type "type"]
+                                              [e :foo/id m]]
+                                     :args [{'m 1}]})
+                  :vars-in-join-order
+                  (filter #{'m 'e}))))))
 
 (t/deftest test-binds-against-false-arg-885
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :name "foo", :flag? false}]
@@ -3601,13 +3602,12 @@
   (t/testing "join order avoids cross product"
     (t/is (= '["Oleg" "Ivan" e1 n e2]
              (:vars-in-join-order
-              (q/query-plan-for '{:find [e1]
+              (q/query-plan-for (api/db *api*)
+                                '{:find [e1]
                                   :where [[e1 :my-name "Ivan"]
                                           [e2 :my-name "Oleg"]
                                           [e1 :my-number n]
-                                          [e2 :my-number n]]}
-                                c/->value-buffer
-                                (api/attribute-stats *api*))))))
+                                          [e2 :my-number n]]})))))
 
   ;; Kept low due to caches intervening between the runs, actual
   ;; failure is way beyond this limit.
@@ -3769,3 +3769,28 @@
            (api/q (api/db *api*)
                   '{:find [?e]
                     :where [[?e :foo #{}]]}))))
+
+(t/deftest picks-more-selective-join-order
+  (let [query '{:find [?e ?name]
+                :in [?name ?type]
+                :where [[?e :name ?name]
+                        [?e :type ?type]]}]
+    (fix/submit+await-tx (conj (for [idx (range 1000)]
+                                 [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                                :type :person
+                                                :name (str "person-" idx)}])
+                               [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                              :type "extra type"}]))
+
+    (t/is (= '[?name ?e ?type]
+             (-> (q/query-plan-for (api/db *api*) query)
+                 :vars-in-join-order)))
+
+    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                         :name "extra name"}]
+                          [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                         :name "another extra name"}]])
+
+    (t/is (= '[?name ?e ?type]
+             (-> (q/query-plan-for (api/db *api*) query)
+                 :vars-in-join-order)))))

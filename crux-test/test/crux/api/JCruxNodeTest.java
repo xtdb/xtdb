@@ -218,9 +218,9 @@ public class JCruxNodeTest {
         put();
         sync();
         Map<Keyword, ?> stats = node.attributeStats();
-        assertEquals(1, stats.get(DB_ID));
-        assertEquals(1, stats.get(versionId));
-        assertEquals(2, stats.size());
+        assertEquals(1L, stats.get(DB_ID));
+        assertEquals(1L, stats.get(versionId));
+        assertEquals(2L, stats.size());
     }
 
     @Test

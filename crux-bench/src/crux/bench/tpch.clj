@@ -30,19 +30,3 @@
 
         (bench/run-bench :queries-warm
           {:success? (run-tpch-queries node opts)})))))
-
-(comment
-  ;; SF 0.01
-  (tpch/load-docs! (dev/crux-node) 0.01 tpch/tpch-entity->pkey-doc)
-
-  ;; SQL:
-  (slurp (io/resource "io/airlift/tpch/queries/q1.sql"))
-  ;; Results:
-  (slurp (io/resource "io/airlift/tpch/queries/q1.result"))
-
-  (let [node (dev/crux-node)]
-    (time
-     (doseq [n (range 1 23)]
-       (time
-        (let [actual (run-tpch-query node n)]
-          (prn n (every? true? (tpch/validate-tpch-query actual (tpch/parse-tpch-result n))))))))))

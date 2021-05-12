@@ -196,18 +196,17 @@
                         (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES)))]]
       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
 
-  (evict! [this index-writer eids]
-    (let [attrs-id->attr (->> (db/read-index-meta index-store :crux/attribute-stats)
-                              keys
-                              (map #(vector (->hash-str %) %))
-                              (into {}))]
-      (with-open [index-snapshot (db/open-index-snapshot index-store)]
-        (let [qs (for [[a v] (db/exclusive-avs index-store eids)
-                       :let [a (attrs-id->attr (->hash-str a))
-                             v (db/decode-value index-snapshot v)]
-                       :when (not= :crux.db/id a)]
-                   (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
-          (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))))
+  (evict! [_ index-writer eids]
+    (with-open [index-snapshot (db/open-index-snapshot index-store)]
+      (let [attrs-id->attr (->> (db/all-attrs index-snapshot)
+                                (map #(vector (->hash-str %) %))
+                                (into {}))
+            qs (for [[a v] (db/exclusive-avs index-store eids)
+                     :let [a (attrs-id->attr (->hash-str a))
+                           v (db/decode-value index-snapshot v)]
+                     :when (not= :crux.db/id a)]
+                 (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
+        (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn ->indexer
   {::sys/deps {:index-store :crux/index-store}}

@@ -41,6 +41,12 @@
 (defprotocol IndexSnapshotFactory
   (open-index-snapshot ^java.io.Closeable [this]))
 
+(defprotocol AttributeStats
+  (all-attrs [this])
+  (doc-count [this attr])
+  (^double value-cardinality [this attr])
+  (^double eid-cardinality [this attr]))
+
 ;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot
   (av [this a min-v])
