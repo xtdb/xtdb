@@ -98,5 +98,6 @@
                                  :cache-bytes-size {:spec ::sys/int :default default-buffer-cache-bytes-size}}}
   [{:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-bytes-size]}]
   (when cache-path
+    (util/delete-dir cache-path)
     (util/mkdirs cache-path))
   (->BufferPool allocator object-store (->buffer-cache cache-bytes-size cache-path) (StampedLock.) cache-path))
