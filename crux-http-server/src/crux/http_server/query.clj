@@ -33,15 +33,34 @@
     :description "EDN formatted Datalog query"
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 
+(s/def ::in-args
+  (st/spec
+   {:spec (s/coll-of any? :kind vector?)
+    :swagger/example ["foo" 123]
+    :description ":in binding arguments"}))
+
+(s/def ::in-args-edn
+  (st/spec
+   {:spec ::in-args
+    :swagger/example (pr-str '["foo" 123])
+    :description "EDN formatted :in binding arguments"
+    :decode/string (fn [_ a] (util/try-decode-edn a))}))
+
+(s/def ::in-args-json
+  (st/spec
+   {:spec ::in-args
+    :swagger/example (http-json/write-str '["foo" 123])
+    :description "JSON formatted :in binding arguments"
+    :decode/string (fn [_ a] (http-json/try-decode-json a))}))
+
 ;; TODO: Need to ensure all query clauses are present + coerced properly
 (s/def ::query-params
-  (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/link-entities? ::query-edn]))
-
-(s/def ::args (s/coll-of any? :kind vector?))
+  (s/keys :opt-un [::util/valid-time ::util/tx-time ::util/link-entities?
+                   ::query-edn ::in-args-edn ::in-args-json]))
 
 (s/def ::body-params
   (s/keys :req-un [::query]
-          :opt-un [::args]))
+          :opt-un [::in-args]))
 
 (defn with-entity-refs
   [results db]
@@ -55,16 +74,16 @@
                              (cond-> el
                                (get entity-links el) (entity-ref/->EntityRef))))))))))
 
-(defn run-query [{:keys [link-entities? query]} {:keys [crux-node valid-time tx-time]}]
+(defn run-query [{:keys [link-entities? query]} in-args {:keys [crux-node valid-time tx-time]}]
   (let [db (util/db-for-request crux-node {:valid-time valid-time
                                            :tx-time tx-time})]
     {:query query
      :valid-time (crux/valid-time db)
      :tx-time (crux/transaction-time db)
      :results (if link-entities?
-                (let [results (crux/q db query)]
+                (let [results (apply crux/q db query in-args)]
                   (cio/->cursor (fn []) (with-entity-refs results db)))
-                (crux/open-q db query))}))
+                (apply crux/open-q db query in-args))}))
 
 (defn- ->*sv-encoder [{:keys [sep]}]
   (reify mfc/EncodeToOutputStream
@@ -174,11 +193,13 @@
 (defn data-browser-query [options]
   (fn [req]
     (let [{query-params :query body-params :body} (get-in req [:parameters])
-          {:keys [valid-time tx-time query-edn]} query-params
-          query (or query-edn (get body-params :query))]
+          {:keys [valid-time tx-time query-edn in-args-edn in-args-json]} query-params
+          query (or query-edn (get body-params :query))
+          in-args (or in-args-edn in-args-json (get body-params :in-args))]
       (-> (if (nil? query)
             (assoc options :no-query? true)
             (run-query (transform-req query req)
+                       in-args
                        (assoc options
                               :valid-time valid-time
                               :tx-time tx-time)))

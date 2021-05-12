@@ -100,6 +100,18 @@
                           '{:find [e]
                             :where [[e :name "Ivan"]]})))
 
+      (t/testing "query :in args"
+        (t/is (= #{[:ivan]} (api/q (api/db *api*)
+                                   '{:find [e]
+                                     :in [n]
+                                     :where [[e :name n]]}
+                                   "Ivan"))))
+      (t/testing "query ?pull [*]"
+        (t/is (= #{[{:crux.db/id :ivan :name "Ivan"}]}
+                 (api/q (api/db *api*)
+                        '{:find [(pull e [*])]
+                          :where [[e :name "Ivan"]]}))))
+
       (t/testing "query string"
         (t/is (= #{[:ivan]} (api/q db "{:find [e] :where [[e :name \"Ivan\"]]}"))))
 

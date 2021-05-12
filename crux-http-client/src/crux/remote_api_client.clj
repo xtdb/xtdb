@@ -91,7 +91,8 @@
                                            (= :stream (:as http-opts)) slurp))]
          (throw (case (::err/error-type error-data)
                   :illegal-argument (err/illegal-arg (::err/error-key error-data) error-data)
-                  :node-out-of-sync (err/node-out-of-sync error-data))))
+                  :node-out-of-sync (err/node-out-of-sync error-data)
+                  (ex-info "Generic remote client error" error-data))))
 
        (and (<= 200 status) (< status 400))
        (if (string? body)
@@ -130,20 +131,20 @@
                                                         {:eid-edn (pr-str eid)})}
                        :->jwt-token ->jwt-token}))
 
-  (q* [this query args]
-    (with-open [res (api/open-q* this query args)]
+  (q* [this query in-args]
+    (with-open [res (api/open-q* this query in-args)]
       (if (:order-by query)
         (vec (iterator-seq res))
         (set (iterator-seq res)))))
 
-  (open-q* [this query args]
+  (open-q* [this query in-args]
     (let [in (api-request-sync (str url "/_crux/query")
                                {:->jwt-token ->jwt-token
                                 :http-opts {:as :stream
                                             :method :post
                                             :query-params (temporal-qps this)}
                                 :body {:query (pr-str query)
-                                       :args (vec args)}})]
+                                       :in-args (vec in-args)}})]
       (cio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
 
   (pull [this projection eid]
