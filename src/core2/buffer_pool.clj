@@ -40,7 +40,7 @@
               (util/then-apply (fn [nio-buffer]
                                  (if cache-path
                                    (let [buffer-path (.resolve cache-path (str (UUID/randomUUID)))]
-                                     (util/write-buffer-to-path-atomically nio-buffer buffer-path)
+                                     (util/write-buffer-to-path nio-buffer buffer-path)
                                      (MapEntry/create (util/->mmap-path buffer-path) buffer-path))
                                    (MapEntry/create nio-buffer nil))))
               (util/then-apply
