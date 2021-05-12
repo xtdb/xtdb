@@ -41,6 +41,12 @@
 (defprotocol IndexSnapshotFactory
   (open-index-snapshot ^java.io.Closeable [this]))
 
+(defprotocol AttributeStats
+  (all-attrs [this])
+  (doc-count [this attr])
+  (^double value-cardinality [this attr])
+  (^double eid-cardinality [this attr]))
+
 ;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot
   (av [this a min-v])
@@ -53,11 +59,7 @@
   (decode-value [this value-buffer])
   (encode-value [this value])
   (resolve-tx [this tx])
-  (open-nested-index-snapshot ^java.io.Closeable [this])
-  (all-attrs [this])
-  (doc-count [this attr])
-  (^double value-cardinality [this attr])
-  (^double eid-cardinality [this attr]))
+  (open-nested-index-snapshot ^java.io.Closeable [this]))
 ;; end::IndexSnapshot[]
 
 ;; tag::TxLog[]

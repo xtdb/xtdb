@@ -77,6 +77,7 @@
                            capped-valid-time
                            capped-tx-id))
 
+  db/AttributeStats
   (all-attrs [_] (db/all-attrs index-snapshot))
   (doc-count [_ attr] (db/doc-count index-snapshot attr))
   (value-cardinality [_ attr] (db/value-cardinality index-snapshot attr))
@@ -155,6 +156,7 @@
                            (db/open-nested-index-snapshot transient-index-snapshot)
                            evicted-eids))
 
+  db/AttributeStats
   (all-attrs [_]
     (set/union (db/all-attrs persistent-index-snapshot)
                (db/all-attrs transient-index-snapshot)))

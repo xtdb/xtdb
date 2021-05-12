@@ -814,6 +814,12 @@
 
           :else latest-tx))))
 
+  (open-nested-index-snapshot [_]
+    (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
+      (swap! nested-index-snapshot-state conj nested-index-snapshot)
+      nested-index-snapshot))
+
+  db/AttributeStats
   (all-attrs [_]
     (with-open [i (kv/new-iterator snapshot)]
       (->> (for [stats-k (all-keys-in-prefix i (encode-stats-key-to nil))]
@@ -836,11 +842,6 @@
                 decode-stats-value->eid-hll-buffer-from
                 hll/estimate)
         0.0))
-
-  (open-nested-index-snapshot [_]
-    (let [nested-index-snapshot (new-kv-index-snapshot snapshot false nil cav-cache canonical-buffer-cache temp-hash-cache)]
-      (swap! nested-index-snapshot-state conj nested-index-snapshot)
-      nested-index-snapshot))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]

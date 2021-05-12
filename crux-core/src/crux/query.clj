@@ -590,7 +590,7 @@
                       pred-clauses :pred
                       :as type->clauses}
                      in-vars
-                     {:keys [index-snapshot]}]
+                     stats]
   (let [collected-vars (collect-vars type->clauses)
         pred-var-frequencies (frequencies
                               (for [{:keys [pred return]} pred-clauses
@@ -625,7 +625,7 @@
                                 (Math/pow (/ 0.5 (double (get range-var-frequencies var))))))
         update-cardinality (fn [acc {:keys [e a v] :as clause}]
                              (let [{:keys [self-join? ignore-v?]} (meta clause)
-                                   es (double (cardinality-for-var e (cond->> (double (db/eid-cardinality index-snapshot a))
+                                   es (double (cardinality-for-var e (cond->> (double (db/eid-cardinality stats a))
                                                                        (literal? v) (/ 1.0))))
                                    vs (cond
                                         ignore-v?
@@ -633,7 +633,7 @@
                                         self-join?
                                         (Math/nextUp es)
                                         :else
-                                        (cardinality-for-var v (cond->> (double (db/value-cardinality index-snapshot a))
+                                        (cardinality-for-var v (cond->> (double (db/value-cardinality stats a))
                                                                  (literal? e) (/ 1.0))))]
                                (-> acc
                                    (update v (fnil min Double/MAX_VALUE) vs)
@@ -1367,7 +1367,14 @@
 
 (def ^:private ^:dynamic *broken-cycles* #{})
 
-(defn- compile-sub-query [encode-value-fn {:keys [fn-allow-list pred-ctx] :as db} where in rule-name->rules]
+(defn ->stats [index-snapshot]
+  (reify db/AttributeStats
+    (all-attrs [_] (db/all-attrs index-snapshot))
+    (doc-count [_ a] (db/doc-count index-snapshot a))
+    (eid-cardinality [_ a] (db/eid-cardinality index-snapshot a))
+    (value-cardinality [_ a] (db/value-cardinality index-snapshot a))))
+
+(defn- compile-sub-query [encode-value-fn stats {:keys [fn-allow-list pred-ctx] :as db} where in rule-name->rules]
   (try
     (let [where (-> (expand-rules where rule-name->rules {})
                     (build-pred-fns fn-allow-list))
@@ -1387,7 +1394,7 @@
                                                                        var->joins
                                                                        type->clauses
                                                                        in-vars
-                                                                       db)
+                                                                       stats)
           [in-idx-ids var->joins] (in-joins (:bindings in) var->joins)
           [pred-clause+idx-ids var->joins] (pred-joins pred-clauses var->joins)
           known-vars (set/union e-vars v-vars in-vars)
@@ -1460,7 +1467,7 @@
         (if (and (= ::dep/circular-dependency reason)
                  (not (contains? *broken-cycles* cycle)))
           (binding [*broken-cycles* (conj *broken-cycles* cycle)]
-            (compile-sub-query encode-value-fn db (break-cycle where cycle) in rule-name->rules))
+            (compile-sub-query encode-value-fn stats db (break-cycle where cycle) in rule-name->rules))
           (throw e))))))
 
 (defn- build-idx-id->idx [db index-snapshot {:keys [var->joins] :as compiled-query}]
@@ -1507,7 +1514,7 @@
                                   [where in rule-name->rules]
                                   identity
                                   (fn [_]
-                                    (compile-sub-query encode-value-fn db where in rule-name->rules)))
+                                    (compile-sub-query encode-value-fn (->stats index-snapshot) db where in rule-name->rules)))
                                  (add-logic-var-constraints))
         idx-id->idx (build-idx-id->idx db index-snapshot compiled-query)
         unary-join-indexes (for [v vars-in-join-order]
@@ -1662,7 +1669,7 @@
     (let [db (assoc db :index-snapshot index-snapshot)
           {:keys [where rules] :as conformed-q} (s/conform ::query q)
           [in _in-args] (add-legacy-args conformed-q [])]
-      (compile-sub-query (partial db/encode-value index-snapshot) db where in (rule-name->rules rules)))))
+      (compile-sub-query (partial db/encode-value index-snapshot) (->stats index-snapshot) db where in (rule-name->rules rules)))))
 
 (defn- ->return-maps [{:keys [keys syms strs]}]
   (let [ks (or (some->> keys (mapv keyword))
