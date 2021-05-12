@@ -79,14 +79,19 @@
         (finally
           (.unlock buffers-lock stamp))))))
 
+(def default-buffer-cache-entries-size 1024)
 (def default-buffer-cache-bytes-size (* 512 1024 1024))
 
-(defn- ->buffer-cache [^long cache-bytes-size ^Path cache-path]
+(defn- buffer-cache-bytes-size ^long [^Map buffers]
+  (long (reduce + (for [[^ArrowBuf buffer] (vals buffers)]
+                    (.capacity buffer)))) )
+
+(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size ^Path cache-path]
   (proxy [LinkedHashMap] [16 0.75 true]
     (removeEldestEntry [entry]
-      (let [size (long (reduce + (for [[^ArrowBuf buffer] (vals this)]
-                                   (.capacity buffer))))]
-        (if (and (> size cache-bytes-size) (> (.size ^Map this) 1))
+      (let [entries-size (.size ^Map this)]
+        (if (or (> entries-size cache-entries-size)
+                (and (> entries-size 1) (> (buffer-cache-bytes-size this) cache-bytes-size)))
           (let [[k [buffer path]] entry]
             (evict-internal buffer path)
             true)
@@ -95,9 +100,10 @@
 (defn ->buffer-pool {::sys/deps {:allocator :core2/allocator
                                  :object-store :core2/object-store}
                      ::sys/args {:cache-path {:spec ::sys/path, :required? false}
+                                 :cache-entries-size {:spec ::sys/int :default default-buffer-cache-entries-size}
                                  :cache-bytes-size {:spec ::sys/int :default default-buffer-cache-bytes-size}}}
-  [{:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-bytes-size]}]
+  [{:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
   (when cache-path
     (util/delete-dir cache-path)
     (util/mkdirs cache-path))
-  (->BufferPool allocator object-store (->buffer-cache cache-bytes-size cache-path) (StampedLock.) cache-path))
+  (->BufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size cache-path) (StampedLock.) cache-path))
