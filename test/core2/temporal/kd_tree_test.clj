@@ -466,7 +466,15 @@
 
       (t/is (= 12 (quot 25 2)))
       (t/is (= 13 (@#'kd/left-balanced-median 21)))
-      (t/is (= 13 (@#'kd/left-balanced-median-alternative 21))))
+      (t/is (= 13 (@#'kd/left-balanced-median-alternative 21)))
+
+      (t/is (= 6 (quot 13 2)))
+      (t/is (= 7 (@#'kd/left-balanced-median 13)))
+      (t/is (= 7 (@#'kd/left-balanced-median-alternative 13)))
+
+      (t/is (= 3 (quot 7 2)))
+      (t/is (= 3 (@#'kd/left-balanced-median 7)))
+      (t/is (= 3 (@#'kd/left-balanced-median-alternative 7))))
 
     (t/testing "one-based index navigation"
       (t/is (= 3 (@#'kd/balanced-parent 6)))
