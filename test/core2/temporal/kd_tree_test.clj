@@ -408,9 +408,9 @@
                         rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
               (t/is (= 4 (kd/kd-tree-size old-tree-with-node-to-be-deleted)))
 
-              (t/is (= (kd/kd-tree->seq kd-tree)
-                       (kd/kd-tree->seq merged-tree)
-                       (kd/kd-tree->seq rebuilt-tree)))
+              (t/is (= (set (kd/kd-tree->seq kd-tree))
+                       (set (kd/kd-tree->seq merged-tree))
+                       (set (kd/kd-tree->seq rebuilt-tree))))
 
               (t/is (= (kd/kd-tree-size kd-tree)
                        (kd/kd-tree-size merged-tree)
