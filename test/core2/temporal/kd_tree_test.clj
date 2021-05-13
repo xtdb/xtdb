@@ -457,6 +457,35 @@
   (let [xs [2 3 7 9 11]]
     (t/is (= 7 (nth xs (quot (count xs) 2))))
     (t/is (= 9 (nth xs (@#'kd/left-balanced-median (count xs)))))
+    (t/is (= 9 (nth xs (@#'kd/left-balanced-median-alternative (count xs)))))
 
     (t/is (= 10 (quot 21 2)))
-    (t/is (= 13 (@#'kd/left-balanced-median 21)))))
+    (t/is (= 13 (@#'kd/left-balanced-median 21)))
+    (t/is (= 13 (@#'kd/left-balanced-median-alternative 21)))
+
+    (t/is (= 12 (quot 25 2)))
+    (t/is (= 13 (@#'kd/left-balanced-median 21)))
+    (t/is (= 13 (@#'kd/left-balanced-median-alternative 21)))
+
+    (t/is (@#'kd/balanced-root? 1))
+    (t/is (= 3 (@#'kd/balanced-parent 6)))
+
+    (t/is (= 6 (@#'kd/balanced-left 3)))
+    (t/is (= 7 (@#'kd/balanced-right 3)))
+
+    (t/is (= 12 (@#'kd/balanced-left 6)))
+    (t/is (= 13 (@#'kd/balanced-right 6)))
+
+    (t/is (= 6 (@#'kd/balanced-parent 12)))
+    (t/is (= 6 (@#'kd/balanced-parent 13)))
+
+    (t/is (true? (@#'kd/balanced-invalid? 21 32)))
+    (t/is (false? (@#'kd/balanced-invalid? 21 14)))
+
+    (t/is (false? (@#'kd/balanced-leaf? 21 1)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 1)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 3)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 7)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 10)))
+    (t/is (true? (@#'kd/balanced-leaf? 21 11)))
+    (t/is (true? (@#'kd/balanced-leaf? 21 16)))))
