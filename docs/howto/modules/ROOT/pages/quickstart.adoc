@@ -44,8 +44,9 @@ All System Requirements
 ** JDK 16 requires https://github.com/juxt/crux/issues/1462#issuecomment-802739964[an extra JVM option] to access JVM internals due to  https://openjdk.java.net/jeps/396[JEP 396]. (See https://github.com/juxt/crux/issues/1462[crux#1462].)
 * Clojure: Clojure 1.10.3 or higher
 * macOS: 10.14.3 (Mojave) or higher
-** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[RocksDB#5064].)
+** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[rocksdb#5064].)
 ** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/juxt/crux/issues/894[crux#894].)
+** Apple M1 processors are currently unsupported due to a RocksDB issue. (See https://github.com/facebook/rocksdb/issues/7720[rocksdb#7720].)
 * Linux: No known version constraints
 * Windows: No known version constraints
 
