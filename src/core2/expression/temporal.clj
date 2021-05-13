@@ -27,7 +27,7 @@
   {:code `(<= x-end y-start)
    :return-type Boolean})
 
-(defmethod expr/codegen-call [:succeedes Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:succeeds Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
   {:code `(>= x-start y-end)
    :return-type Boolean})
 
@@ -35,7 +35,7 @@
   {:code `(= x-end y-start)
    :return-type Boolean})
 
-(defmethod expr/codegen-call [:immediately-succeedes Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
+(defmethod expr/codegen-call [:immediately-succeeds Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
   {:code `(= x-start y-end)
    :return-type Boolean})
 
