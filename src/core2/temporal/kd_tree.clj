@@ -161,17 +161,17 @@
     (inc (- (dec Long/SIZE) (Long/numberOfLeadingZeros (dec n))))))
 
 (defn- left-balanced-median ^long [^long n]
-  (case n
-    1 1
-    2 2
-    3 2
-    (let [h (log2-ceil (inc n))
-          half (bit-shift-left 1 (- h 2))
-          last-row (inc (- n (* 2 half)))]
-      (+ half (min half last-row)))))
+  (dec (case n
+         1 1
+         2 2
+         3 2
+         (let [h (log2-ceil (inc n))
+               half (bit-shift-left 1 (- h 2))
+               last-row (inc (- n (* 2 half)))]
+           (+ half (min half last-row))))))
 
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
-  (let [k (+ low (dec (left-balanced-median (- hi low))))]
+  (let [k (+ low (left-balanced-median (- hi low)))]
     (loop [low low
            hi (dec hi)]
       (if (< low hi)

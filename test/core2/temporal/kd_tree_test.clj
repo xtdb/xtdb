@@ -452,3 +452,11 @@
                           (t/is (= 4 (kd/kd-tree-size static-tree)))
                           (t/is (= [node-to-insert]
                                    (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert)))))))))))))))))
+
+(t/deftest test-left-balanced-median
+  (let [xs [2 3 7 9 11]]
+    (t/is (= 7 (nth xs (quot (count xs) 2))))
+    (t/is (= 9 (nth xs (@#'kd/left-balanced-median (count xs)))))
+
+    (t/is (= 10 (quot 21 2)))
+    (t/is (= 13 (@#'kd/left-balanced-median 21)))))
