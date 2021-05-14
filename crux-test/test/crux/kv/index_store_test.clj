@@ -274,3 +274,17 @@
       (t/is (= {:crux.db/id {:doc-count 3675, :values 3554, :eids 3554}
                 :sub-idx {:doc-count 3675, :values 50, :eids 3554}}
                (->stats *index-store*))))))
+
+(t/deftest test-entity
+  (with-fresh-index-store
+    (let [doc {:crux.db/id :foo
+               :normal-val "value"
+               :set-val #{1 3 2 5}
+               :vec-val [1 4 6 2 6 1]}
+          doc-id (c/new-id doc)]
+      (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)
+        (db/index-docs {doc-id doc})
+        (db/commit-index-tx))
+
+      (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
+        (t/is (= doc (db/entity index-snapshot :foo doc-id)))))))

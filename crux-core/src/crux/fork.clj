@@ -45,6 +45,7 @@
   (ave [_ a v min-e entity-resolver-fn] (db/ave index-snapshot a v min-e entity-resolver-fn))
   (ae [_ a min-e] (db/ae index-snapshot a min-e))
   (aev [_ a e min-v entity-resolver-fn] (db/aev index-snapshot a e min-v entity-resolver-fn))
+  (entity [_ e c] (db/entity index-snapshot e c))
 
   (entity-as-of-resolver [this eid valid-time tx-id]
     (some-> ^EntityTx (db/entity-as-of this eid valid-time tx-id)
@@ -107,6 +108,10 @@
   (aev [_ a e min-v entity-resolver-fn]
     (merge-seqs (db/aev persistent-index-snapshot a e min-v entity-resolver-fn)
                 (db/aev transient-index-snapshot a e min-v entity-resolver-fn)))
+
+  (entity [_ e c]
+    (or (db/entity transient-index-snapshot e c)
+        (db/entity persistent-index-snapshot e c)))
 
   (entity-as-of-resolver [this eid valid-time tx-id]
     (let [eid (if (instance? DirectBuffer eid)

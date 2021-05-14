@@ -20,10 +20,10 @@
            [crux.codec EntityTx Id]
            java.io.Closeable
            java.nio.ByteOrder
-           [java.util Date HashMap Map NavigableSet TreeSet]
+           [java.util ArrayList Date HashMap List Map NavigableSet TreeSet]
            [java.util.concurrent Semaphore TimeUnit]
            java.util.concurrent.atomic.AtomicBoolean
-           java.util.function.Supplier
+           [java.util.function BiFunction Supplier]
            [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -84,7 +84,7 @@
                 (kv/prev i))
               (kv/seek i seek-k)))))))
 
-(defn- buffer-or-value-buffer [v]
+(defn- buffer-or-value-buffer ^org.agrona.DirectBuffer [v]
   (cond
     (instance? DirectBuffer v)
     v
@@ -192,6 +192,17 @@
             attr (Id. (mem/slice-buffer k (+ c/index-id-size eid-size c/id-size) c/id-size) 0)
             value (key-suffix k (+ c/index-id-size eid-size c/id-size c/id-size))]
         (->Quad attr entity content-hash value)))))
+
+(defn- decode-ecav-value-from ^ints [^DirectBuffer v]
+  (let [v-size (.capacity v)]
+    (when-not (zero? v-size)
+      (let [len (/ v-size Integer/BYTES)
+            out (int-array len)]
+        (dotimes [idx len]
+          (aset out idx (.getInt v (* idx Integer/BYTES))))
+        out))))
+
+(defrecord ECAVEntry [a v idx])
 
 (defn- encode-hash-cache-key-to
   (^org.agrona.MutableDirectBuffer [b value]
@@ -701,6 +712,37 @@
                                         eid-value-buffer content-hash-buffer attr-buffer)]
           (.tailSet vs (buffer-or-value-buffer min-v))))))
 
+  (entity [this eid content-hash]
+    (let [eid-value-buffer (if (instance? Id eid)
+                             (c/->value-buffer (db/decode-value this (.buffer ^Id eid)))
+                             (buffer-or-value-buffer eid))
+          eid-size (.capacity eid-value-buffer)
+          ecav-k-prefix (encode-ecav-key-to nil
+                                            eid-value-buffer
+                                            (c/->id-buffer content-hash))]
+
+      (when-let [ecav-kvs (seq (all-keys-in-prefix @level-1-iterator-delay
+                                                   ecav-k-prefix (.capacity ecav-k-prefix)
+                                                   {:entries? true}))]
+        (->> (for [[k idxs] ecav-kvs
+                   :let [^Quad quad (decode-ecav-key-from k eid-size)
+                         a (db/decode-value this (.buffer ^Id (.attr quad)))
+                         v (db/decode-value this (.value quad))]
+                   idx (or (decode-ecav-value-from idxs) [nil])]
+               (->ECAVEntry a v idx))
+             (group-by #(.a ^ECAVEntry %))
+             (into {}
+                   (map (fn [[a entries]]
+                          (let [^ECAVEntry first-entry (first entries)
+                                first-idx (.idx first-entry)
+                                v (cond
+                                    (nil? first-idx) (:v first-entry)
+                                    (= -1 first-idx) (into #{} (map :v) entries)
+                                    :else (->> entries
+                                               (sort-by #(.idx ^ECAVEntry %))
+                                               (mapv #(.v ^ECAVEntry %))))]
+                            (MapEntry/create a v)))))))))
+
   (entity-as-of-resolver [this eid valid-time tx-id]
     (assert tx-id)
     (let [i @entity-as-of-iterator-delay
@@ -867,25 +909,58 @@
 
 ;;;; IndexStore
 
+(defn- val-idxs [v]
+  (let [val->idxs (HashMap.)]
+    (cond
+      (vector? v) (dorun
+                   (map-indexed (fn [idx el]
+                                  (.compute val->idxs el
+                                            (reify BiFunction
+                                              (apply [_ _ acc]
+                                                (let [^List acc (or acc (ArrayList.))]
+                                                  (doto acc (.add idx)))))))
+                                v))
+      (set? v) (doseq [el v]
+                 (.put val->idxs el [-1]))
+      :else (.put val->idxs v nil))
+    val->idxs))
+
+(defn- encode-ecav-value [idxs]
+  (if idxs
+    (let [^MutableDirectBuffer buf (mem/allocate-buffer (* (count idxs) Integer/BYTES))]
+      (dotimes [idx (count idxs)]
+        (.putInt buf (* Integer/BYTES idx) (nth idxs idx)))
+      buf)
+    mem/empty-buffer))
+
 (defn- ->content-idx-kvs [docs]
   (let [attr-bufs (->> (into #{} (mapcat keys) (vals docs))
                        (into {} (map (juxt identity c/->id-buffer))))]
-    (->> (for [[content-hash doc] docs
-               :let [id (:crux.db/id doc)
-                     eid-value-buffer (c/->value-buffer id)
-                     content-hash (c/->id-buffer content-hash)]
-               [a v] doc
-               :let [a (get attr-bufs a)]
-               v (c/vectorize-value v)
-               :let [value-buffer (c/->value-buffer v)]
-               :when (pos? (.capacity value-buffer))]
-           (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
-                    (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer) mem/empty-buffer)]
-             (not (c/can-decode-value-buffer? value-buffer))
-             (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer) (mem/->nippy-buffer v)))))
-         (apply concat))))
+    (into (vec (for [[a a-buf] attr-bufs]
+                 (MapEntry/create (encode-hash-cache-key-to nil a-buf) (mem/->nippy-buffer a))))
+
+          (mapcat seq)
+
+          (for [[content-hash doc] docs
+                :let [id (:crux.db/id doc)
+                      eid-value-buffer (c/->value-buffer id)
+                      content-hash (c/->id-buffer content-hash)]]
+            (into [(MapEntry/create (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
+                                    (mem/->nippy-buffer id))]
+                  (mapcat seq)
+                  (for [[a v] doc
+                        :let [a (get attr-bufs a)]
+                        [v idxs] (val-idxs v)
+                        :let [value-buffer (c/->value-buffer v)]
+                        :when (pos? (.capacity value-buffer))]
+                    (cond-> [(MapEntry/create (encode-av-key-to nil a value-buffer) mem/empty-buffer)
+                             (MapEntry/create (encode-ave-key-to nil a value-buffer eid-value-buffer) mem/empty-buffer)
+                             (MapEntry/create (encode-ae-key-to nil a eid-value-buffer) mem/empty-buffer)
+                             (MapEntry/create (encode-ecav-key-to nil eid-value-buffer content-hash a value-buffer)
+                                              (encode-ecav-value idxs))]
+                      (not (c/can-decode-value-buffer? value-buffer))
+                      (conj (MapEntry/create (encode-hash-cache-key-to nil value-buffer eid-value-buffer)
+                                             (mem/->nippy-buffer v))))))))))
 
 (defrecord KvIndexStoreTx [persistent-kv-store transient-kv-store tx fork-at !evicted-eids thread-mgr cav-cache canonical-buffer-cache temp-hash-cache]
   db/IndexStoreTx
