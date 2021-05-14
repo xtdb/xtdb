@@ -1732,12 +1732,10 @@
     (some-> (db/entity-as-of index-snapshot eid valid-time tx-id)
             (c/entity-tx->edn))))
 
-(defn- entity [{:keys [document-store] :as db} index-snapshot eid]
+(defn- entity [db index-snapshot eid]
   (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
                                   :crux.db/content-hash)]
-    (-> (db/fetch-docs document-store #{content-hash})
-        (get content-hash)
-        (c/keep-non-evicted-doc))))
+    (db/entity index-snapshot eid content-hash)))
 
 (defn- with-history-bounds [{:keys [sort-order start-tx end-tx] :as opts}
                             {:keys [^long tx-id ^Date valid-time]}
