@@ -2,7 +2,6 @@
   (:require [clojure.test :as t]
             [crux.api :as crux]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.pull :as pull]
             [clojure.java.io :as io]))
 
 (t/use-fixtures :each fix/with-node)
@@ -11,13 +10,6 @@
   (fix/submit+await-tx (for [doc (read-string (slurp (io/resource "data/james-bond.edn")))]
                          [:crux.tx/put doc]))
   (crux/db *api*))
-
-(def ->lookup-docs
-  (let [f @#'pull/lookup-docs]
-    (fn [!lookup-counts]
-      (fn [v db]
-        (swap! !lookup-counts conj (count (::pull/hashes (meta v))))
-        (f v db)))))
 
 (t/deftest test-pull
   (let [db (submit-bond)]
@@ -33,20 +25,14 @@
                        [{:vehicle/brand "Aston Martin", :vehicle/model "DBS V12"}]
                        [{:vehicle/brand "Aston Martin", :vehicle/model "V8 Vantage Volante"}]
                        [{:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}]}]
-        (let [!lookup-counts (atom [])]
-          (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
-            (t/is (= expected
-                     (crux/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
-                                  :where [[?v :vehicle/brand "Aston Martin"]]})))
-            (t/is (= [6] @!lookup-counts) "batching lookups")))
+        (t/is (= expected
+                 (crux/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
+                              :where [[?v :vehicle/brand "Aston Martin"]]})))
 
-        (let [!lookup-counts (atom [])]
-          (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
-            (t/is (= expected
-                     (crux/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
-                                  :where [[?v :vehicle/brand "Aston Martin"]]
-                                  :batch-size 3})))
-            (t/is (= [3 3] @!lookup-counts) "batching lookups")))))
+        (t/is (= expected
+                 (crux/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
+                              :where [[?v :vehicle/brand "Aston Martin"]]
+                              :batch-size 3})))))
 
     (t/testing "renames"
       (t/is (= #{[{:brand "Aston Martin", :model "DB5"}]
@@ -61,35 +47,29 @@
                             :where [[?v :vehicle/brand "Aston Martin"]]}))))
 
     (t/testing "forward joins"
-      (let [!lookup-counts (atom [])]
-        (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
-          (t/is (= #{[{:film/year "2002",
-                       :film/name "Die Another Day"
-                       :film/bond {:person/name "Pierce Brosnan"},
-                       :film/director {:person/name "Lee Tamahori"},
-                       :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
-                                        {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
-                                        {:vehicle/brand "Ford", :vehicle/model "Thunderbird"}
-                                        {:vehicle/brand "Ford", :vehicle/model "Fairlane"}}}]}
-                   (crux/q db '{:find [(pull ?f [{:film/bond [:person/name]}
-                                                        {:film/director [:person/name]}
-                                                        {(:film/vehicles {:into #{}}) [:vehicle/brand :vehicle/model]}
-                                                        :film/name :film/year])]
-                                :where [[?f :film/name "Die Another Day"]]})))
-          (t/is (= [1 6] @!lookup-counts) "batching lookups"))))
+      (t/is (= #{[{:film/year "2002",
+                   :film/name "Die Another Day"
+                   :film/bond {:person/name "Pierce Brosnan"},
+                   :film/director {:person/name "Lee Tamahori"},
+                   :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
+                                    {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
+                                    {:vehicle/brand "Ford", :vehicle/model "Thunderbird"}
+                                    {:vehicle/brand "Ford", :vehicle/model "Fairlane"}}}]}
+               (crux/q db '{:find [(pull ?f [{:film/bond [:person/name]}
+                                             {:film/director [:person/name]}
+                                             {(:film/vehicles {:into #{}}) [:vehicle/brand :vehicle/model]}
+                                             :film/name :film/year])]
+                            :where [[?f :film/name "Die Another Day"]]}))))
 
     (t/testing "reverse joins"
-      (let [!lookup-counts (atom [])]
-        (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
-          (t/is (= #{[{:person/name "Daniel Craig",
-                       :film/_bond #{#:film{:name "Skyfall", :year "2012"}
-                                     #:film{:name "Spectre", :year "2015"}
-                                     #:film{:name "Casino Royale", :year "2006"}
-                                     #:film{:name "Quantum of Solace", :year "2008"}}}]}
-                   (crux/q db '{:find [(pull ?dc [:person/name
-                                                         {(:film/_bond {:into #{}}) [:film/name :film/year]}])]
-                                :where [[?dc :person/name "Daniel Craig"]]})))
-          (t/is (= [5] @!lookup-counts) "batching lookups"))))
+      (t/is (= #{[{:person/name "Daniel Craig",
+                   :film/_bond #{#:film{:name "Skyfall", :year "2012"}
+                                 #:film{:name "Spectre", :year "2015"}
+                                 #:film{:name "Casino Royale", :year "2006"}
+                                 #:film{:name "Quantum of Solace", :year "2008"}}}]}
+               (crux/q db '{:find [(pull ?dc [:person/name
+                                              {(:film/_bond {:into #{}}) [:film/name :film/year]}])]
+                            :where [[?dc :person/name "Daniel Craig"]]}))))
 
     (t/testing "reverse joins, rename"
       (t/is (= #{[{:person/name "Daniel Craig",
@@ -132,31 +112,25 @@
                             :where [[?f :film/name "Die Another Day"]]}))))
 
     (t/testing "forward joins"
-      (let [!lookup-counts (atom [])]
-        (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
-          (t/is (= #{[{:film/year "2002",
-                       :film/name "Die Another Day"
-                       :film/bond {:person/name "Pierce Brosnan"},
-                       :film/director {:person/name "Lee Tamahori"},
-                       :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
-                                        {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}}}]}
-                   (crux/q db '{:find [(pull ?f [{:film/bond [:person/name]}
-                                                        {:film/director [:person/name]}
-                                                        {(:film/vehicles {:into #{}, :limit 2}) [:vehicle/brand :vehicle/model]}
-                                                        :film/name :film/year])]
-                                :where [[?f :film/name "Die Another Day"]]})))
-          (t/is (= [1 4] @!lookup-counts) "batching lookups"))))
+      (t/is (= #{[{:film/year "2002",
+                   :film/name "Die Another Day"
+                   :film/bond {:person/name "Pierce Brosnan"},
+                   :film/director {:person/name "Lee Tamahori"},
+                   :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
+                                    {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}}}]}
+               (crux/q db '{:find [(pull ?f [{:film/bond [:person/name]}
+                                             {:film/director [:person/name]}
+                                             {(:film/vehicles {:into #{}, :limit 2}) [:vehicle/brand :vehicle/model]}
+                                             :film/name :film/year])]
+                            :where [[?f :film/name "Die Another Day"]]}))))
 
     (t/testing "reverse joins"
-      (let [!lookup-counts (atom [])]
-        (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
-          (t/is (= #{[{:person/name "Daniel Craig",
-                       :film/_bond #{#:film{:name "Skyfall", :year "2012"}
-                                     #:film{:name "Spectre", :year "2015"}}}]}
-                   (crux/q db '{:find [(pull ?dc [:person/name
-                                                         {(:film/_bond {:into #{}, :limit 2}) [:film/name :film/year]}])]
-                                :where [[?dc :person/name "Daniel Craig"]]})))
-          (t/is (= [3] @!lookup-counts) "batching lookups"))))))
+      (t/is (= #{[{:person/name "Daniel Craig",
+                   :film/_bond #{#:film{:name "Skyfall", :year "2012"}
+                                 #:film{:name "Spectre", :year "2015"}}}]}
+               (crux/q db '{:find [(pull ?dc [:person/name
+                                              {(:film/_bond {:into #{}, :limit 2}) [:film/name :film/year]}])]
+                            :where [[?dc :person/name "Daniel Craig"]]}))))))
 
 (t/deftest test-union
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo
