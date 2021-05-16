@@ -1,5 +1,84 @@
 = Benchmarks
 
+Rigourous benchmarking supports development by providing direct feedback on complex changes and a regular benchmark process allows the team to discover and address performance regressions during day-to-day development, well in advance of any releases.
+
+The https://github.com/juxt/crux/tree/master/crux-bench[`crux-bench`] sub-project contains a number of benchmarking suites which are being run nightly on standard AWS infrastrure to support regression testing of new development and validate all performance improvement changes.
+
+These suites cover a wide range of analysis at a variety of scale factors, including: graph query performance, bitemporal query performance, ingestion performance (throughput & latency), and disk usage.
+
+[#tpch]
+== TPC-H
+
+.Decision Support Benchmark
+****
+[%hardbreaks]
+http://www.tpc.org/tpch/
+The TPC-H is a decision support benchmark. It consists of a suite of business oriented ad-hoc queries and concurrent data modifications. The queries and the data populating the database have been chosen to have broad industry-wide relevance. This benchmark illustrates decision support systems that examine large volumes of data, execute queries with a high degree of complexity, and give answers to critical business questions.
+****
+
+See https://github.com/juxt/crux/blob/master/crux-test/src/crux/fixtures/tpch.clj[TPC-H].
+
+[#watdiv]
+== WatDiv SPARQL Tests
+
+****
+[%hardbreaks]
+Waterloo SPARQL Diversity Test Suite
+https://dsg.uwaterloo.ca/watdiv/
+****
+
+WatDiv has been developed to measure how an RDF data management system performs across a wide spectrum of SPARQL queries with varying structural characteristics and selectivity classes.
+
+Benchmarking is performed nightly against the WatDiv test suite. These tests demonstrate comprehensive RDF subgraph matching. Note that Crux does not natively implement the RDF specification and only a simplified subset of the RDF tests have been translated for use in Crux. See the Crux tests for details.
+
+Subgraph matching is a fundamental kind of graph query and is a common mechanism for computing query results in SPARQL: RDF triples in both the queried RDF data and the query pattern are interpreted as nodes and edges of directed graphs, and the resulting query graph is matched to the data graph using variables as wildcards. Crux generates Datalog, which shares many of the same properties as SPARQL, directly from the SPARQL definitions.
+
+The degree and scale of subgraph matching in the WatDiv tests provides a particularly helpful measure of end-to-end performance across many dimensions.
+
+.An example of a subgraph matching query in SPARQL from the WatDiv test suite
+[source,sparql]
+--
+SELECT ?v0 ?v3 ?v4 ?v8 WHERE {
+	?v0	sorg:legalName	?v1 .
+	?v0	gr:offers	?v2 .
+	?v2	sorg:eligibleRegion	wsdbm:Country5 .
+	?v2	gr:includes	?v3 .
+	?v4	sorg:jobTitle	?v5 .
+	?v4	foaf:homepage	?v6 .
+	?v4	wsdbm:makesPurchase	?v7 .
+	?v7	wsdbm:purchaseFor	?v3 .
+	?v3	rev:hasReview	?v8 .
+	?v8	rev:totalVotes	?v9 .
+}
+--
+
+.A diagram of the graph of the same query
+
+image::wd.png?sanitize=true[WatDiv query visualisation,align="center"]
+
+== DataScript
+
+Crux's test suite incorporates a large number of https://github.com/tonsky/datascript[DataScript]'s query tests, demonstrating extensive functional coverage of DataScript's Datalog implementation.
+
+[#lubm]
+== LUBM Web Ontology Language (OWL) Tests
+
+****
+[%hardbreaks]
+Lehigh University Benchmark
+http://swat.cse.lehigh.edu/projects/lubm/
+****
+
+The Lehigh University Benchmark is developed to facilitate the evaluation of
+Semantic Web repositories in a standard and systematic way. The benchmark is
+intended to evaluate the performance of those repositories with respect to
+extensional queries over a large data set that commits to a single realistic
+ontology. It consists of a university domain ontology, customizable and
+repeatable synthetic data, a set of test queries, and several performance
+metrics.
+
+See the Crux tests for more details.
+
 == Racket Datalog
 
 Several Datalog tests from the Racket Datalog examples have been translated and
@@ -31,42 +110,3 @@ Specifically:
 
 - "sgc"
 - 3 examples of "stratified Datalog"
-
-[#watdiv]
-== WatDiv SPARQL Tests
-
-****
-[%hardbreaks]
-Waterloo SPARQL Diversity Test Suite
-https://dsg.uwaterloo.ca/watdiv/
-****
-
-WatDiv has been developed to measure how an RDF data management system performs
-across a wide spectrum of SPARQL queries with varying structural
-characteristics and selectivity classes.
-
-Benchmarking has been performed against the WatDiv test suite. These tests
-demonstrate comprehensive RDF subgraph matching. Note that Crux does not
-natively implement the RDF specification and only a simplified subset of the
-RDF tests have been translated for use in Crux. See the Crux tests for details.
-
-[#lubm]
-== LUBM Web Ontology Language (OWL) Tests
-
-****
-[%hardbreaks]
-Lehigh University Benchmark
-http://swat.cse.lehigh.edu/projects/lubm/
-****
-
-The Lehigh University Benchmark is developed to facilitate the evaluation of
-Semantic Web repositories in a standard and systematic way. The benchmark is
-intended to evaluate the performance of those repositories with respect to
-extensional queries over a large data set that commits to a single realistic
-ontology. It consists of a university domain ontology, customizable and
-repeatable synthetic data, a set of test queries, and several performance
-metrics.
-
-Benchmarking has been performed against the LUBM test suite. These tests
-demonstrate extreme stress testing for subgraph matching. See the Crux tests
-for details.

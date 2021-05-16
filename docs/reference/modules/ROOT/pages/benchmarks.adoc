@@ -1,3 +1,0 @@
-= Benchmarks
-
-Crux has been developed with careful consideration to performance. Repeated analysis has been carried out which compares Crux to several other databases that are able to run the Lehigh University Benchmark (LUBM). Whilst Crux is not the fastest database tested during these benchmarks, it is the only database tested which also maintains bitemporal indexes. Additional performance enhancements have already been identified and are under consideration for the development roadmap.
