@@ -336,6 +336,8 @@ A document is a map from keywords to values.
 ----
 
 All documents must contain the `:crux.db/id` key.
+
+Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to Crux, to avoid potential equality checking issues (see https://github.com/juxt/crux/issues/1510[here] for more details).
 --
 ====
 
@@ -343,7 +345,7 @@ For operations containing documents, the id and the document are
 hashed, and the operation and hash is submitted to the `tx-topic` in
 the event log. The document itself is submitted to the `doc-topic`,
 using its content hash as key. In Kafka, the `doc-topic` is compacted,
-which enables later deletion of documents.
+which enables later eviction of documents.
 
 [#valid-ids]
 === Valid IDs
