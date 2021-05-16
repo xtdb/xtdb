@@ -1,7 +1,7 @@
 = Kafka Nodes
 
-When using Crux at scale it is recommended to use multiple Crux nodes connected via a Kafka cluster.
-Kafka can be used for both the Crux transaction log and the document store.
+When using Crux at scale it is recommended to use multiple Crux nodes connected via a Kafka cluster. Use of multiple nodes provides availability and Kafka itself provides strong fault-tolerance guarantees.
+Kafka can be used for Crux's transaction log and document store components.
 
 image::local-cluster-mode.svg?sanitize=true[Local Cluster Mode,450,150,align="center"]
 

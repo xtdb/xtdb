@@ -573,7 +573,7 @@ include::example$test/crux/docs/examples/query_test.clj[tags=order-and-paginatio
 
 Use of `:order-by` will typically require that results are fully-realised by the
 query engine, however this happens transparently and it will automatically spill
-to disk when sorting large numbers results. Ordered results are returned as
+to disk when sorting large numbers of results. Ordered results are returned as
 bags, not sets, so you may wish to deduplicate consecutive identical result
 tuples (e.g. using `clojure.core/dedupe` or similar).
 
