@@ -2,152 +2,88 @@
   (:require [clojure.test :as t]
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]
-            [core2.test-util :as test-util]
+            [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.util :as util])
-  (:import org.apache.arrow.memory.RootAllocator
-           [org.apache.arrow.vector BigIntVector BitVector FieldVector Float8Vector ValueVector VarCharVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector))
+  (:import org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.types.Types$MinorType))
+
+(t/use-fixtures :each tu/with-allocator)
+
+(def a-field (ty/->field "a" (.getType Types$MinorType/FLOAT8) false))
+(def b-field (ty/->field "b" (.getType Types$MinorType/FLOAT8) false))
+(def d-field (ty/->field "d" (.getType Types$MinorType/BIGINT) false))
+(def e-field (ty/->field "e" (.getType Types$MinorType/VARCHAR) false))
+
+(def data
+  (for [n (range 1000)]
+    {:a (double n), :b (double n), :d n, :e (format "%04d" n)}))
+
+(t/deftest test-simple-projection
+  (let [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
+    (try
+      (letfn [(project [form]
+                (let [project-col (.project (expr/->expression-projection-spec "c" (expr/form->expr form))
+                                            tu/*allocator* in-rel)]
+                  (try
+                    (tu/<-column project-col)
+                    (finally
+                      (util/try-close project-col)))))]
+
+        (t/is (= (mapv (comp double +) (range 1000) (range 1000))
+                 (project '(+ a b))))
+
+        (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
+                 (project '(- a (* 2.0 b)))))
+
+        (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
+                 (project '[:+ a [:+ b 2]]))
+              "support keyword and vectors")
+
+        (t/is (= (mapv + (repeat 2) (range 1000))
+                 (project '(+ 2 d)))
+              "mixing types")
+
+        (t/is (= (repeat 1000 true)
+                 (project '(= a d)))
+              "predicate")
+
+        (t/is (= (mapv #(Math/sin ^double %) (range 1000))
+                 (project '(sin a)))
+              "math")
+
+        (t/is (= (repeat 1000 0.0)
+                 (project '(if false a 0)))
+              "if")
+
+        (t/is (thrown? IllegalArgumentException (project '(vec a)))
+              "cannot call arbitrary functions"))
+      (finally
+        (util/try-close in-rel)))))
 
 (t/deftest can-compile-simple-expression
-  (with-open [allocator (RootAllocator.)
-              a (Float8Vector. "a" allocator)
-              b (Float8Vector. "b" allocator)
-              d (BigIntVector. "d" allocator)
-              e (VarCharVector. "e" allocator)]
-    (letfn [(->acc []
-              (.createVector (ty/->primitive-dense-union-field "c") allocator))]
+  (let [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
+    (try
+      (letfn [(select-relation [form params]
+                (-> (.select (expr/->expression-relation-selector (expr/form->expr form) params)
+                             in-rel)
+                    (.getCardinality)))
 
-      (let [rows 1000]
-        (.setValueCount a rows)
-        (.setValueCount b rows)
-        (.setValueCount d rows)
-        (.setValueCount e rows)
-        (dotimes [n rows]
-          (.set a n (double n))
-          (.set b n (double n))
-          (.set d n n)
-          (ty/set-safe! e n (format "%04d" n))))
-
-      (with-open [in (VectorSchemaRoot/of (into-array FieldVector [a b d]))]
-        (let [expr (expr/form->expr '(+ a b))
-              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-          (t/is (= '[a b] (expr/variables expr)))
-          (with-open [^DenseUnionVector acc (->acc)]
-            (.project expr-projection-spec in acc)
-            (let [v (util/maybe-single-child-dense-union acc)
-                  xs (test-util/->list v)]
-              (t/is (instance? Float8Vector v))
-              (t/is (= (mapv (comp double +) (range 1000) (range 1000))
-                       xs)))))
-
-        (let [expr (expr/form->expr '(- a (* 2.0 b)))
-              expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-          (t/is (= '[a b] (expr/variables expr)))
-          (with-open [^DenseUnionVector acc (->acc)]
-            (.project expr-projection-spec in acc)
-            (let [xs (test-util/->list (util/maybe-single-child-dense-union acc))]
-              (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
-                       xs)))))
-
-        (t/testing "support keyword and vectors"
-          (let [expr (expr/form->expr '[:+ a [:+ b 2]])
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (t/is (= '[a b] (expr/variables expr)))
-            (with-open [^DenseUnionVector acc (->acc)]
-              (.project expr-projection-spec in acc)
-              (let [xs (test-util/->list (util/maybe-single-child-dense-union acc))]
-                (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
-                         xs))))))
-
-        (t/testing "mixing types"
-          (let [expr (expr/form->expr '(+ 2 d))
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (t/is (= '[d] (expr/variables expr)))
-            (with-open [^DenseUnionVector acc (->acc)]
-              (.project expr-projection-spec in acc)
-              (let [v (util/maybe-single-child-dense-union acc)
-                    xs (test-util/->list (util/maybe-single-child-dense-union acc))]
-                (t/is (instance? BigIntVector v))
-                (t/is (= (mapv + (repeat 2) (range 1000))
-                         xs)))))
-
-          (let [expr (expr/form->expr '(+ 2.0 d))
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (t/is (= '[d] (expr/variables expr)))
-            (with-open [^ValueVector acc (->acc)]
-              (.project expr-projection-spec in acc)
-              (let [v (util/maybe-single-child-dense-union acc)
-                    xs (test-util/->list (util/maybe-single-child-dense-union acc))]
-                (t/is (instance? Float8Vector v))
-                (t/is (= (mapv (comp double +) (repeat 2) (range 1000))
-                         xs))))))
-
-        (t/testing "predicate"
-          (let [expr (expr/form->expr '(= a d))
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (t/is (= '[a d] (expr/variables expr)))
-            (with-open [^ValueVector acc (->acc)]
-              (.project expr-projection-spec in acc)
-              (let [v (util/maybe-single-child-dense-union acc)
-                    xs (test-util/->list v)]
-                (t/is (instance? BitVector v))
-                (t/is (= (repeat 1000 true) xs))))))
-
-        (t/testing "math"
-          (let [expr (expr/form->expr '(sin a))
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (t/is (= '[a] (expr/variables expr)))
-            (with-open [^ValueVector acc (->acc)]
-              (.project expr-projection-spec in acc)
-              (let [v (util/maybe-single-child-dense-union acc)
-                    xs (test-util/->list v)]
-                (t/is (instance? Float8Vector v))
-                (t/is (= (mapv #(Math/sin ^double %) (range 1000)) xs))))))
-
-        (t/testing "if"
-          (let [expr (expr/form->expr '(if false a 0))
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (t/is (= '[a] (expr/variables expr)))
-            (with-open [^ValueVector acc (->acc)]
-              (.project expr-projection-spec in acc)
-              (let [v (util/maybe-single-child-dense-union acc)
-                    xs (test-util/->list v)]
-                (t/is (instance? Float8Vector v))
-                (t/is (= (repeat 1000 0.0) xs))))))
-
-        (t/testing "cannot call arbitrary functions"
-          (let [expr (expr/form->expr '(vec a))
-                expr-projection-spec (expr/->expression-projection-spec "c" expr)]
-            (with-open [^DenseUnionVector acc (->acc)]
-              (t/is (thrown? IllegalArgumentException
-                             (.project expr-projection-spec in acc))))))
+              (select-column [form ^String col-name params]
+                (-> (.select (expr/->expression-column-selector (expr/form->expr form) params)
+                             (.readColumn in-rel col-name))
+                    (.getCardinality)))]
 
         (t/testing "selector"
-          (let [expr (expr/form->expr '(>= a 500))
-                selector (expr/->expression-root-selector expr)]
-            (t/is (= '[a] (expr/variables expr)))
-            (t/is (= 500 (.getCardinality (.select selector in)))))
-
-          (let [expr (expr/form->expr '(>= a 500))
-                selector (expr/->expression-vector-selector expr)]
-            (t/is (= '[a] (expr/variables expr)))
-            (t/is (= 500 (.getCardinality (.select selector a)))))
-
-          (let [expr (expr/form->expr '(>= e "0500"))
-                selector (expr/->expression-vector-selector expr)]
-            (t/is (= '[e] (expr/variables expr)))
-            (t/is (= 500 (.getCardinality (.select selector e))))))
+          (t/is (= 500 (select-relation '(>= a 500) {})))
+          (t/is (= 500 (select-column '(>= a 500) "a" {})))
+          (t/is (= 500 (select-column '(>= e "0500") "e" {}))))
 
         (t/testing "parameter"
-          (let [expr (expr/form->expr '(>= a ?a))
-                selector (expr/->expression-vector-selector expr {'?a 500})]
-            (t/is (= '[a] (expr/variables expr)))
-            (t/is (= 500 (.getCardinality (.select selector a)))))
-
-          (let [expr (expr/form->expr '(>= e ?e))
-                selector (expr/->expression-vector-selector expr {'?e "0500"})]
-            (t/is (= 500 (.getCardinality (.select selector e))))))))))
+          (t/is (= 500 (select-column '(>= a ?a) "a" {'?a 500})))
+          (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))
+      (finally
+        (util/try-close in-rel)))))
 
 (t/deftest can-extract-min-max-range-from-expression
   (t/is (= [[-9223372036854775808, -9223372036854775808, 1546300800000,

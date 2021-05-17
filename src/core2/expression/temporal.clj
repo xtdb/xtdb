@@ -86,14 +86,12 @@
             :when (temporal/temporal-column? col-name)
             :let [range-idx (temporal/->temporal-column-idx col-name)
                   {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
-                  vars (zipmap (map first param-types) params)
-                  var->type (into {} param-types)
-                  meta-expr (@#'expr.meta/meta-expr expr var->type)]]
+                  meta-expr (@#'expr.meta/meta-expr expr param-types)]]
       (w/prewalk (fn [x]
                    (when-not (and (map? x) (= 'or (:f x)))
                      (when (and (map? x) (= :metadata-vp-call (:op x)))
                        (let [{:keys [f param]} x
-                             time-ms (.getTime ^Date (get vars param))]
+                             time-ms (.getTime ^Date (get params param))]
                          (case f
                            < (aset min-range range-idx (max (inc time-ms)
                                                             (aget min-range range-idx)))

@@ -1,7 +1,8 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
-  (:import [core2 DenseUnionUtil IChunkCursor]
+  (:import clojure.lang.MapEntry
+           [core2 DenseUnionUtil IChunkCursor]
            java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
@@ -12,20 +13,19 @@
            [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time LocalDateTime ZoneId]
-           [java.util ArrayList Date LinkedList List Queue UUID]
+           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.util.function BiFunction Function IntConsumer IntUnaryOperator Supplier]
-           java.util.stream.IntStream
+           [java.util.function BiFunction Function IntUnaryOperator Supplier]
+           [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
-           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator ReferenceManager RootAllocator]
+           [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator RootAllocator]
            [org.apache.arrow.memory.util ArrowBufPointer ByteFunctionHelpers MemoryUtil]
            [org.apache.arrow.vector BitVector ElementAddressableVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
-           org.apache.arrow.vector.util.VectorSchemaRootAppender
            [org.apache.arrow.vector.complex DenseUnionVector NonNullableStructVector]
            [org.apache.arrow.vector.ipc ArrowFileReader ArrowFileWriter ArrowStreamWriter ArrowWriter]
            [org.apache.arrow.vector.ipc.message ArrowBlock ArrowFooter ArrowRecordBatch MessageSerializer]
-           [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
+           org.apache.arrow.vector.util.VectorSchemaRootAppender
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -487,20 +487,6 @@
       (try-close cursor)
       (try-close closeable))))
 
-(defn project-vec ^org.apache.arrow.vector.ValueVector [^ValueVector in-vec ^IntStream idxs ^long size ^ValueVector out-vec]
-  (if (instance? DenseUnionVector in-vec)
-    (.forEach idxs (reify IntConsumer
-                     (accept [_ idx]
-                       (DenseUnionUtil/copyIdxSafe in-vec idx out-vec (.getValueCount out-vec)))))
-    (do (.setInitialCapacity out-vec size)
-        (.allocateNew out-vec)
-        (.forEach idxs (reify IntConsumer
-                         (accept [_ idx]
-                           (let [out-idx (.getValueCount out-vec)]
-                             (set-value-count out-vec (inc out-idx))
-                             (.copyFrom out-vec idx out-idx in-vec)))))))
-  out-vec)
-
 (defn maybe-single-child-dense-union ^org.apache.arrow.vector.ValueVector [^ValueVector v]
   (or (when (instance? DenseUnionVector v)
         (let [children-with-elements (for [^ValueVector child (.getChildrenFromFields ^DenseUnionVector v)
@@ -553,18 +539,6 @@
         (DenseUnionUtil/copyIdxSafe in-vec idx out-vec out-idx)
         (.copyFromSafe out-vec idx out-idx in-vec)))))
 
-(defn copy-tuples [^VectorSchemaRoot in-root ^ints idxs ^VectorSchemaRoot out-root]
-  (dotimes [n (root-field-count in-root)]
-    (let [in-vec (.getVector in-root n)
-          out-vec (.getVector out-root (.getName in-vec))]
-      (if (and (instance? DenseUnionVector in-vec)
-               (instance? DenseUnionVector out-vec))
-        (dotimes [match-idx (alength idxs)]
-          (DenseUnionUtil/copyIdxSafe in-vec (aget idxs match-idx) out-vec match-idx))
-
-        (dotimes [match-idx (alength idxs)]
-          (.copyFromSafe out-vec (aget idxs match-idx) match-idx in-vec))))))
-
 (defn ->region-allocator
   (^org.apache.arrow.memory.BufferAllocator []
    (let [buffers (ArrayList.)]
@@ -607,3 +581,28 @@
              (.set arrow-writer-unloader-field out (VectorUnloader. out-root true (ZstdCompressionCodec.) true))
              (.writeBatch out)))))
      to)))
+
+(defn into-linked-map
+  ([coll]
+   (let [res (LinkedHashMap.)]
+     (doseq [^Map$Entry entry coll]
+       (.put res (.getKey entry) (.getValue entry)))))
+
+  ([xform coll]
+   (transduce xform
+              (completing (fn [^LinkedHashMap lhm ^Map$Entry el]
+                            (doto lhm (.put (.getKey el) (.getValue el)))))
+              (LinkedHashMap.)
+              coll)))
+
+(defn map-entries [f]
+  (map (fn [^Map$Entry entry]
+         (f (.getKey entry) (.getValue entry)))))
+
+(defn map-values [f]
+  (map (fn [^Map$Entry entry]
+         (let [k (.getKey entry)]
+           (MapEntry/create k (f k (.getValue entry)))))))
+
+(defn ->identity-set []
+  (Collections/newSetFromMap (IdentityHashMap.)))

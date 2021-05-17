@@ -1,14 +1,15 @@
 (ns core2.operator.order-by
-  (:require [core2.util :as util])
+  (:require [core2.expression.comparator :as expr.comp]
+            [core2.util :as util]
+            [core2.vector :as vec])
   (:import clojure.lang.Keyword
-           [core2 DenseUnionUtil IChunkCursor]
-           [java.util ArrayList Collections Comparator List]
-           java.util.function.Consumer
-           [org.apache.arrow.algorithm.sort DefaultVectorComparators VectorValueComparator]
+           core2.ICursor
+           [core2.vector IAppendRelation IReadColumn IReadRelation]
+           [java.util Comparator EnumSet List]
+           [java.util.function Consumer ToIntFunction]
+           java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector TimeStampMilliVector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.types.pojo.Field))
+           org.apache.arrow.vector.types.Types$MinorType))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -17,96 +18,62 @@
 (defn ->order-spec [col-name direction]
   (OrderSpec. col-name direction))
 
-(defn- accumulate-roots ^org.apache.arrow.vector.VectorSchemaRoot [^IChunkCursor in-cursor, ^BufferAllocator allocator]
-  (let [!acc-root (atom nil)]
+(defn- accumulate-relations ^core2.vector.IReadRelation [allocator ^ICursor in-cursor]
+  (let [append-rel (vec/->fresh-append-relation allocator)]
     (.forEachRemaining in-cursor
                        (reify Consumer
-                         (accept [_ in-root]
-                           (let [^VectorSchemaRoot in-root in-root
-                                 ^VectorSchemaRoot
-                                 acc-root (swap! !acc-root (fn [^VectorSchemaRoot acc-root]
-                                                             (if acc-root
-                                                               (do
-                                                                 (assert (= (.getSchema acc-root) (.getSchema in-root)))
-                                                                 acc-root)
-                                                               (VectorSchemaRoot/create (.getSchema in-root) allocator))))
-                                 schema (.getSchema acc-root)
-                                 acc-row-count (.getRowCount acc-root)
-                                 in-row-count (.getRowCount in-root)]
+                         (accept [_ read-rel]
+                           (vec/copy-rel-from append-rel read-rel))))
+    (.read append-rel)))
 
-                             (doseq [^Field field (.getFields schema)]
-                               (let [acc-vec (.getVector acc-root field)
-                                     in-vec (.getVector in-root field)]
-                                 (dotimes [idx in-row-count]
-                                   (if (and (instance? DenseUnionVector acc-vec)
-                                            (instance? DenseUnionVector in-vec))
-                                     (DenseUnionUtil/copyIdxSafe in-vec idx acc-vec (+ acc-row-count idx))
-                                     (.copyFromSafe acc-vec idx (+ acc-row-count idx) in-vec)))))
+(defn- sorted-idxs ^ints [^IReadRelation read-rel, ^List #_<OrderSpec> order-specs]
+  (-> (IntStream/range 0 (.rowCount read-rel))
+      (.boxed)
+      (.sorted (reduce (fn [^Comparator acc ^OrderSpec order-spec]
+                         (let [^String col-name (.col-name order-spec)
+                               read-col (.readColumn read-rel col-name)
+                               minor-types (.minorTypes read-col)
+                               ^Types$MinorType minor-type (if (= 1 (.size minor-types))
+                                                             (first minor-types)
+                                                             (throw (UnsupportedOperationException.)))
+                               col-comparator (expr.comp/->comparator minor-type)
 
-                             (util/set-vector-schema-root-row-count acc-root (+ acc-row-count in-row-count))))))
-    @!acc-root))
-
-(defn- ->arrow-comparator ^org.apache.arrow.algorithm.sort.VectorValueComparator [^ValueVector v]
-  (if (instance? TimeStampMilliVector v)
-    (proxy [VectorValueComparator] []
-      (compareNotNull [idx]
-        (Long/compare (.get ^TimeStampMilliVector v idx)
-                      (.get ^TimeStampMilliVector v idx))))
-    (doto (DefaultVectorComparators/createDefaultComparator v)
-      (.attachVector v))))
-
-(defn order-root ^java.util.List [^VectorSchemaRoot root, ^List #_<OrderSpec> order-specs]
-  (let [idxs (ArrayList. ^List (range (.getRowCount root)))
-        comparator (reduce (fn [^Comparator acc ^OrderSpec order-spec]
-                             (let [^String column-name (.col-name order-spec)
-                                   direction (.direction order-spec)
-                                   in-vec (util/maybe-single-child-dense-union (.getVector root column-name))
-                                   arrow-comparator (->arrow-comparator in-vec)
-                                   ^Comparator comparator (cond-> (reify Comparator
-                                                                    (compare [_ left-idx right-idx]
-                                                                      (.compare arrow-comparator left-idx right-idx)))
-                                                            (= :desc direction) (.reversed))]
-                               (if acc
-                                 (.thenComparing acc comparator)
-                                 comparator)))
-                           nil
-                           order-specs)]
-    (Collections/sort idxs comparator)
-    idxs))
+                               ^Comparator
+                               comparator (cond-> (reify Comparator
+                                                    (compare [_ left right]
+                                                      (.compareIdx col-comparator
+                                                                   read-col left
+                                                                   read-col right)))
+                                            (= :desc (.direction order-spec)) (.reversed))]
+                           (if acc
+                             (.thenComparing acc comparator)
+                             comparator)))
+                       nil
+                       order-specs))
+      (.mapToInt (reify ToIntFunction
+                   (applyAsInt [_ x] x)))
+      (.toArray)))
 
 (deftype OrderByCursor [^BufferAllocator allocator
-                        ^VectorSchemaRoot out-root
-                        ^IChunkCursor in-cursor
+                        ^ICursor in-cursor
                         ^List #_<OrderSpec> order-specs]
-  IChunkCursor
-  (getSchema [_] (.getSchema in-cursor))
-
+  ICursor
   (tryAdvance [_ c]
-    (.clear out-root)
-
-    (if-let [acc-root (accumulate-roots in-cursor allocator)]
-      (with-open [acc-root acc-root]
-        (let [sorted-idxs (order-root acc-root order-specs)]
-          (if (pos? (.getRowCount acc-root))
-            (do (dotimes [n (util/root-field-count acc-root)]
-                  (let [in-vec (.getVector acc-root n)
-                        out-vec (.getVector out-root n)]
-                    (util/set-value-count out-vec (.getValueCount in-vec))
-                    (dotimes [idx (.size sorted-idxs)]
-                      (if (and (instance? DenseUnionVector in-vec)
-                               (instance? DenseUnionVector out-vec))
-                        (DenseUnionUtil/copyIdxSafe in-vec (.get sorted-idxs idx) out-vec idx)
-                        (.copyFrom out-vec (.get sorted-idxs idx) idx in-vec)))))
-                (util/set-vector-schema-root-row-count out-root (.getRowCount acc-root))
-                (.accept c out-root)
-                true)
-            false)))
-      false))
+    (let [read-rel (accumulate-relations allocator in-cursor)]
+      (try
+        (if (pos? (.rowCount read-rel))
+          (let [out-rel (vec/select read-rel (sorted-idxs read-rel order-specs))]
+            (try
+              (.accept c out-rel)
+              true
+              (finally
+                (util/try-close out-rel))))
+          false)
+        (finally
+          (util/try-close read-rel)))))
 
   (close [_]
-    (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->order-by-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^List #_<OrderSpec> order-specs]
-  (OrderByCursor. allocator (VectorSchemaRoot/create (.getSchema in-cursor) allocator)
-                  in-cursor order-specs))
+(defn ->order-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List #_<OrderSpec> order-specs]
+  (OrderByCursor. allocator in-cursor order-specs))

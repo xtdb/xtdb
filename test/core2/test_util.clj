@@ -4,10 +4,12 @@
             [core2.core :as c2]
             [core2.json :as c2-json]
             [core2.types :as ty]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector :as vec])
   (:import core2.core.Node
-           [core2 IChunkCursor ICursor]
+           core2.ICursor
            core2.object_store.FileSystemObjectStore
+           [core2.vector IReadRelation IReadColumn]
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
@@ -25,13 +27,6 @@
   (with-open [allocator (RootAllocator.)]
     (binding [*allocator* allocator]
       (f))))
-
-(defn root->rows [^VectorSchemaRoot root]
-  (let [field-vecs (.getFieldVectors root)]
-    (mapv (fn [idx]
-            (vec (for [^FieldVector field-vec field-vecs]
-                   (ty/get-object field-vec idx))))
-          (range (.getRowCount root)))))
 
 (defn ->list ^java.util.List [^ValueVector v]
   (let [acc (ArrayList.)]
@@ -67,38 +62,59 @@
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
   (await-temporal-snapshot-build node))
 
-(defn ->cursor ^core2.IChunkCursor [schema blocks]
+(defn populate-root ^core2.vector.IReadRelation [^VectorSchemaRoot root rows]
+  (.clear root)
+
+  (let [field-vecs (.getFieldVectors root)
+        row-count (count rows)]
+    (.setRowCount root row-count)
+    (doseq [^FieldVector field-vec field-vecs]
+      (dotimes [idx row-count]
+        (ty/set-safe! field-vec idx (-> (nth rows idx)
+                                        (get (keyword (.getName (.getField field-vec))))))))
+    root))
+
+(defn ->relation ^core2.vector.IReadRelation [schema rows]
+  (let [root (VectorSchemaRoot/create schema *allocator*)]
+    (populate-root root rows)
+    (vec/<-root root)))
+
+(defn ->cursor ^core2.ICursor [schema blocks]
   (let [blocks (LinkedList. blocks)
         root (VectorSchemaRoot/create schema *allocator*)]
-    (reify IChunkCursor
-      (getSchema [_] schema)
-
+    (reify ICursor
       (tryAdvance [_ c]
         (if-let [block (some-> (.poll blocks) vec)]
           (do
-            (.clear root)
-            (let [field-vecs (.getFieldVectors root)
-                  row-count (count block)]
-              (.setRowCount root row-count)
-              (doseq [^FieldVector field-vec field-vecs]
-                (dotimes [idx row-count]
-                  (ty/set-safe! field-vec idx (-> (nth block idx)
-                                                  (get (keyword (.getName (.getField field-vec))))))))
-              (.accept c root)
-              true))
+            (populate-root root block)
+            (.accept c (vec/<-root root))
+            true)
           false))
 
       (close [_]
         (.close root)))))
 
+(defn rel->rows [^IReadRelation rel]
+  (let [cols (.readColumns rel)
+        ks (for [^IReadColumn col cols]
+             (keyword (.getName col)))]
+    (mapv (fn [idx]
+            (zipmap ks
+                    (for [^IReadColumn col cols]
+                      (.getObject col idx))))
+          (range (.rowCount rel)))))
+
+(defn <-column [^IReadColumn col]
+  (mapv (fn [idx]
+          (.getObject col idx))
+        (range (.valueCount col))))
+
 (defn <-cursor [^ICursor cursor]
   (let [!res (volatile! (transient []))]
     (.forEachRemaining cursor
                        (reify Consumer
-                         (accept [_ root]
-                           (let [ks (->> (.getFields (.getSchema ^VectorSchemaRoot root))
-                                         (into [] (map (comp keyword #(.getName ^Field %)))))]
-                             (vswap! !res conj! (mapv (fn [row] (zipmap ks row)) (root->rows root)))))))
+                         (accept [_ rel]
+                           (vswap! !res conj! (rel->rows rel)))))
     (persistent! @!res)))
 
 (t/deftest round-trip-cursor
@@ -111,7 +127,7 @@
                                                (ty/->field "age" (.getType Types$MinorType/BIGINT) false)])
                                      blocks)]
 
-          (t/is (= (<-cursor cursor) blocks)))))))
+          (t/is (= blocks (<-cursor cursor))))))))
 
 (defn check-json-file [^Path expected, ^Path actual]
   (t/is (= (json/parse-string (Files/readString expected))

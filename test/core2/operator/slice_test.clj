@@ -32,7 +32,7 @@
     (t/is (= [0 10] (slice/offset+length 18 30 20 10)))
     (t/is (= [0 10] (slice/offset+length 20 30 20 10))))
 
-  (t/testing "not using all of root"
+  (t/testing "not using all of rel"
     (t/is (= [0 3] (slice/offset+length 0 3 0 10)))
     (t/is (= [0 3] (slice/offset+length 0 15 12 10)))
     (t/is (= [0 3] (slice/offset+length 10 5 12 10)))
@@ -52,7 +52,7 @@
     (letfn [(slice [offset length]
               (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (.getType Types$MinorType/BIGINT) false)])
                                               blocks)
-                          slice-cursor (slice/->slice-cursor tu/*allocator* cursor offset length)]
+                          slice-cursor (slice/->slice-cursor cursor offset length)]
                 (tu/<-cursor slice-cursor)))]
       (t/is (= blocks (slice nil nil)))
 
@@ -64,7 +64,7 @@
                 [{:idx 2}]]
                (slice 1 2)))
 
-      (t/testing "doesn't yield empty roots"
+      (t/testing "doesn't yield empty rels"
         (t/is (= [[{:idx 0}, {:idx 1}]]
                  (slice nil 2)))
 

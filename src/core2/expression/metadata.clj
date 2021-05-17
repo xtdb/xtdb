@@ -2,12 +2,16 @@
   (:require [core2.bloom :as bloom]
             [core2.expression :as expr]
             [core2.metadata :as meta]
-            [core2.types :as types])
+            [core2.types :as types]
+            [core2.vector :as vec]
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataIndices
+           core2.vector.IReadColumn
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
+           org.apache.arrow.vector.types.Types
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -104,14 +108,9 @@
                      simplify-and-or-expr)]}
      :call (call-meta-expr expr param-types))))
 
-(defn- ->bloom-hashes [expr param-types params]
+(defn- ->bloom-hashes [expr params]
   (with-open [allocator (RootAllocator.)]
-    (let [params (->> (map (fn [[k] v]
-                             (MapEntry/create k v))
-                           param-types params)
-                      (into {}))
-
-          bloom-hashes (for [{:keys [bloom-hash-sym param]} (expr/expr-seq expr)
+    (let [bloom-hashes (for [{:keys [bloom-hash-sym param]} (expr/expr-seq expr)
                              :when bloom-hash-sym]
                          (MapEntry/create bloom-hash-sym
                                           (bloom/literal-hashes allocator
@@ -146,23 +145,26 @@
                   `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
 
                   (let [arrow-type (types/->arrow-type field-type)
+                        minor-type (Types/getMinorTypeForArrowType arrow-type)
                         vec-sym (get metadata-vec-syms meta-value)
+                        col-sym (gensym 'meta-col)
                         variable-code (expr/codegen-expr
-                                       {:op :variable, :variable vec-sym}
-                                       {:var->type {vec-sym arrow-type}})]
+                                       {:op :variable, :variable col-sym}
+                                       {:var->types {col-sym #{minor-type}}})]
                     `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                           (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
+                           (.getChild ~vec-sym ~(meta/type->field-name minor-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                         ~(:code (expr/codegen-expr
-                                  {:op :call
-                                   :f f
-                                   :args [(if-let [cast (expr/type->cast field-type)]
-                                            {:code (list cast (:code variable-code)),
-                                             :return-type field-type}
-                                            variable-code)
-                                          (expr/codegen-expr {:op :param, :param param}
-                                                             opts)]}
-                                  opts))))))))
+                         (let [~(-> col-sym (expr/with-tag IReadColumn)) (vec/<-vector ~vec-sym)]
+                           ~(:code (expr/codegen-expr
+                                    {:op :call
+                                     :f f
+                                     :args [(if-let [cast (expr/type->cast field-type)]
+                                              {:code (list cast (:code variable-code)),
+                                               :return-type field-type}
+                                              variable-code)
+                                            (expr/codegen-expr {:op :param, :param param}
+                                                               opts)]}
+                                    opts)))))))))
      :return-type Boolean}))
 
 (defn check-meta [chunk-idx ^VectorSchemaRoot metadata-root ^IMetadataIndices metadata-idxs check-meta-f]
@@ -198,17 +200,15 @@
                                     ~block-idx-sym]
                      ~(:code (expr/postwalk-expr #(expr/codegen-expr % {:param->type param-types}) expr)))))))
 
-(def memo-meta-expr->code
-  (memoize meta-expr->code))
-
+(def ^:private memo-meta-expr->code (memoize meta-expr->code))
 (def ^:private memo-eval (memoize eval))
 
 (defn ->metadata-selector [expr params]
   (let [{:keys [expr param-types params emitted-params]} (expr/normalise-params expr params)
         meta-expr (meta-expr expr (into {} param-types))
-        {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr param-types params)
+        {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr params)
         f (-> meta-expr
               (memo-meta-expr->code (into {} param-types) bloom-hash-syms)
               (memo-eval))]
     (fn [chunk-idx metadata-root]
-      (f chunk-idx metadata-root emitted-params bloom-hashes))))
+      (f chunk-idx metadata-root (vals emitted-params) bloom-hashes))))

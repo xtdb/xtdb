@@ -38,15 +38,19 @@
    (.getType Types$MinorType/TINYINT) TinyIntVector
    (.getType Types$MinorType/BIT) BitVector})
 
+(def minor-type->java-type
+  {Types$MinorType/NULL nil
+   Types$MinorType/BIGINT Long
+   Types$MinorType/FLOAT8 Double
+   Types$MinorType/VARBINARY byte-array-class
+   Types$MinorType/VARCHAR String
+   Types$MinorType/TIMESTAMPMILLI Date
+   Types$MinorType/TINYINT Byte
+   Types$MinorType/BIT Boolean})
+
 (def arrow-type->java-type
-  {(.getType Types$MinorType/NULL) nil
-   (.getType Types$MinorType/BIGINT) Long
-   (.getType Types$MinorType/FLOAT8) Double
-   (.getType Types$MinorType/VARBINARY) byte-array-class
-   (.getType Types$MinorType/VARCHAR) String
-   (.getType Types$MinorType/TIMESTAMPMILLI) Date
-   (.getType Types$MinorType/TINYINT) Byte
-   (.getType Types$MinorType/BIT) Boolean})
+  (->> minor-type->java-type
+       (into {} (map (juxt (comp #(.getType ^Types$MinorType %) key) val)))))
 
 (defn arrow-type->type-id ^long [^ArrowType arrow-type]
   (long (.getFlatbufID (.getTypeID arrow-type))))

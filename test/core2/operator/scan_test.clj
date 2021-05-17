@@ -5,6 +5,19 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
+(t/deftest test-simple-scan
+  (with-open [node (c2/start-node {})]
+    (let [tx @(c2/submit-tx node [{:op :put, :doc {:_id "foo", :col1 "foo1"}}
+                                  {:op :put, :doc {:_id "bar", :col1 "bar1", :col2 "bar2"}}
+                                  {:op :put, :doc {:_id "foo", :col2 "baz2"}}])]
+      (c2/await-tx node tx)
+      (tu/finish-chunk node))
+
+    (with-open [db (c2/open-db node)
+                res (c2/open-q db '[:scan [_id col1 col2]])]
+      (t/is (= [{:_id "bar", :col1 "bar1", :col2 "bar2"}]
+               (into [] (mapcat seq) (tu/<-cursor res)))))))
+
 (t/deftest multiple-sources
   (with-open [node1 (c2/start-node {})
               node2 (c2/start-node {})]

@@ -5,20 +5,19 @@
   (:import java.io.Closeable))
 
 (definterface IQueryDataSource
-  (^core2.IChunkCursor scan [^org.apache.arrow.memory.BufferAllocator allocator
-                             ^java.util.List #_<String> colNames,
-                             metadataPred
-                             ^java.util.Map #_#_<String, IVectorPredicate> colPreds
-                             ^longs temporalMinRange
-                             ^longs temporalMaxRange]))
+  (^core2.ICursor scan [^java.util.List #_<String> colNames,
+                        metadataPred
+                        ^java.util.Map #_#_<String, IColumnSelector> colPreds
+                        ^longs temporalMinRange
+                        ^longs temporalMaxRange]))
 
 (definterface IDataSourceFactory
   (^core2.data_source.IQueryDataSource openDataSource [^core2.tx.Watermark watermark]))
 
 (deftype QueryDataSource [metadata-mgr temporal-mgr buffer-pool watermark]
   IQueryDataSource
-  (scan [_ allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range]
-    (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
+  (scan [_ col-names metadata-pred col-preds temporal-min-range temporal-max-range]
+    (scan/->scan-cursor metadata-mgr temporal-mgr buffer-pool
                         watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range))
 
   Closeable

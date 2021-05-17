@@ -1,57 +1,47 @@
 (ns core2.operator.slice
-  (:import core2.IChunkCursor
-           java.util.function.Consumer
-           [org.apache.arrow.vector ValueVector VectorSchemaRoot])
-  (:require [core2.util :as util]))
+  (:require [core2.util :as util]
+            [core2.vector :as vec])
+  (:import core2.ICursor
+           core2.vector.IReadRelation
+           java.util.function.Consumer))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn offset+length [^long offset, ^long limit,
                      ^long idx, ^long row-count]
-  (let [root-offset (max (- offset idx) 0)
+  (let [rel-offset (max (- offset idx) 0)
         consumed (max (- idx offset) 0)
-        root-length (min (- limit consumed)
-                         (- row-count root-offset))]
-    (when (pos? root-length)
-      [root-offset root-length])))
+        rel-length (min (- limit consumed)
+                         (- row-count rel-offset))]
+    (when (pos? rel-length)
+      [rel-offset rel-length])))
 
-(deftype SliceCursor [^VectorSchemaRoot out-root
-                      ^IChunkCursor in-cursor
+(deftype SliceCursor [^ICursor in-cursor
                       ^long offset
                       ^long limit
                       ^:unsynchronized-mutable ^long idx]
-  IChunkCursor
-  (getSchema [_] (.getSchema in-cursor))
-
+  ICursor
   (tryAdvance [this c]
-    (.clear out-root)
+    (let [!advanced? (atom false)]
+      (while (and (not @!advanced?)
+                  (< (- idx offset) limit)
+                  (.tryAdvance in-cursor
+                               (reify Consumer
+                                 (accept [_ in-rel]
+                                   (let [^IReadRelation in-rel in-rel
+                                         row-count (.rowCount in-rel)
+                                         old-idx (.idx this)]
 
-    (while (and (zero? (.getRowCount out-root))
-                (< (- idx offset) limit)
-                (.tryAdvance in-cursor
-                             (reify Consumer
-                               (accept [_ in-root]
-                                 (let [^VectorSchemaRoot in-root in-root
-                                       row-count (.getRowCount in-root)
-                                       old-idx (.idx this)]
+                                     (set! (.-idx this) (+ old-idx row-count))
 
-                                   (set! (.-idx this) (+ old-idx row-count))
-
-                                   (when-let [[root-offset root-length] (offset+length offset limit old-idx row-count)]
-                                     (util/slice-root-to in-root root-offset root-length out-root))))))))
-
-    (if (pos? (.getRowCount out-root))
-      (do
-        (.accept c out-root)
-        true)
-      false))
+                                     (when-let [[rel-offset rel-length] (offset+length offset limit old-idx row-count)]
+                                       (.accept c (.read (doto (vec/->indirect-append-relation)
+                                                           (vec/copy-rel-from in-rel rel-offset rel-length))))
+                                       (reset! !advanced? true))))))))
+      @!advanced?))
 
   (close [_]
-    (when out-root
-      (.close out-root))
-
     (.close in-cursor)))
 
-(defn ->slice-cursor ^core2.IChunkCursor [allocator ^IChunkCursor in-cursor offset limit]
-  (SliceCursor. (VectorSchemaRoot/create (.getSchema in-cursor) allocator)
-                in-cursor (or offset 0) (or limit Long/MAX_VALUE) 0))
+(defn ->slice-cursor ^core2.ICursor [^ICursor in-cursor offset limit]
+  (SliceCursor. in-cursor (or offset 0) (or limit Long/MAX_VALUE) 0))

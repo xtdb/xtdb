@@ -1,139 +1,111 @@
 (ns core2.operator.join
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
-            [core2.util :as util])
-  (:import [core2 DenseUnionUtil IChunkCursor ICursor]
+            [core2.util :as util]
+            [core2.vector :as vec])
+  (:import core2.ICursor
+           [core2.vector IReadColumn IReadRelation]
            [java.util ArrayList HashMap List Map]
            [java.util.function Consumer Function]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo Field Schema]
-           org.apache.arrow.vector.util.VectorBatchAppender
            org.roaringbitmap.buffer.MutableRoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- ->join-schema
-  (^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema]
-   (->join-schema left-schema right-schema #{}))
-  (^org.apache.arrow.vector.types.pojo.Schema [^Schema left-schema ^Schema right-schema skip-left-column?]
-   (let [fields (concat (for [^Field f (.getFields left-schema)
-                              :when (not (skip-left-column? (.getName f)))]
-                          f)
-                        (.getFields right-schema))]
-     (try
-       (assert (apply distinct? fields))
-       (catch Throwable t
-         (clojure.pprint/pprint {:left left-schema
-                                 :right right-schema
-                                 :skip-left-column? skip-left-column?})
-         (throw t)))
-     (Schema. fields))))
+(defn- cross-product [^List left-rels, ^long left-row-count, ^IReadRelation right-rel]
+  (let [out-rel (vec/->indirect-append-relation)
+        right-row-count (.rowCount right-rel)]
 
-(defn- cross-product [^VectorSchemaRoot left-root ^long left-idx ^VectorSchemaRoot right-root ^VectorSchemaRoot out-root]
-  (let [out-idx (.getRowCount out-root)
-        row-count (.getRowCount right-root)]
-    (dotimes [n (util/root-field-count right-root)]
-      (let [^ValueVector right-vec (.getVector right-root n)
-            out-vec (.getVector out-root (.getName right-vec))]
-        (VectorBatchAppender/batchAppend out-vec (into-array ValueVector [right-vec]))))
-    (dotimes [n (util/root-field-count left-root)]
-      (let [^ValueVector left-vec (.getVector left-root n)
-            out-vec (.getVector out-root (.getName left-vec))]
-        (util/set-value-count out-vec (+ out-idx row-count))
-        (if (and (instance? DenseUnionVector left-vec)
-                 (instance? DenseUnionVector out-vec))
-          (dotimes [m row-count]
-            (DenseUnionUtil/copyIdxSafe left-vec left-idx out-vec (+ out-idx m)))
-          (dotimes [m row-count]
-            (.copyFrom out-vec left-idx (+ out-idx m) left-vec)))))
-    (util/set-vector-schema-root-row-count out-root (+ out-idx row-count))))
+    (doseq [^IReadRelation left-rel left-rels
+            :let [left-row-count (.rowCount left-rel)]
+            ^IReadColumn in-col (.readColumns left-rel)
+            :let [out-col (.appendColumn out-rel (.getName in-col))]]
+      (dotimes [left-idx left-row-count]
+        (dotimes [_right-idx right-row-count]
+          (.appendFrom out-col in-col left-idx))))
+
+    (doseq [^IReadColumn in-col (.readColumns right-rel)
+            :let [out-col (.appendColumn out-rel (.getName in-col))]]
+      (dotimes [_left-idx left-row-count]
+        (dotimes [right-idx right-row-count]
+          (.appendFrom out-col in-col right-idx))))
+
+    (.read out-rel)))
 
 (deftype CrossJoinCursor [^BufferAllocator allocator
-                          ^Schema out-schema
-                          ^VectorSchemaRoot out-root
-                          ^IChunkCursor left-cursor
-                          ^IChunkCursor right-cursor
-                          ^List left-roots]
-  IChunkCursor
-  (getSchema [_] out-schema)
-
-  (tryAdvance [this c]
-    (.clear out-root)
-
+                          ^ICursor left-cursor
+                          ^ICursor right-cursor
+                          ^List left-rels]
+  ICursor
+  (tryAdvance [_ c]
     (.forEachRemaining left-cursor
                        (reify Consumer
-                         (accept [_ in-root]
-                           (.add left-roots (util/slice-root in-root)))))
+                         (accept [_ in-rel]
+                           (.add left-rels (.read (doto (vec/->fresh-append-relation allocator)
+                                                    (vec/copy-rel-from in-rel)))))))
 
-    (while (and (not (.isEmpty left-roots))
-                (zero? (.getRowCount out-root))
-                (.tryAdvance right-cursor
-                             (reify Consumer
-                               (accept [_ in-root]
-                                 (let [^VectorSchemaRoot right-root in-root]
-                                   (when (pos? (.getRowCount right-root))
-                                     (doseq [^VectorSchemaRoot left-root left-roots]
-                                       (dotimes [left-idx (.getRowCount left-root)]
-                                         (cross-product left-root left-idx right-root out-root))))))))))
-    (if (pos? (.getRowCount out-root))
-      (do
-        (.accept c out-root)
-        true)
-      false))
+    (boolean
+     (when-not (.isEmpty left-rels)
+       (let [left-row-count (transduce (map #(.rowCount ^IReadRelation %)) + left-rels)]
+         (.tryAdvance right-cursor
+                      (reify Consumer
+                        (accept [_ right-rel]
+                          (let [out-rel (cross-product left-rels left-row-count right-rel)]
+                            (try
+                              (.accept c out-rel)
+                              (finally
+                                (util/try-close out-rel)))))))))))
 
   (close [_]
-    (util/try-close out-root)
-    (when left-roots
-      (doseq [root left-roots]
-        (util/try-close root))
-      (.clear left-roots))
+    (when left-rels
+      (run! util/try-close left-rels)
+      (.clear left-rels))
     (util/try-close left-cursor)
     (util/try-close right-cursor)))
 
-(defn ->cross-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor left-cursor, ^IChunkCursor right-cursor]
-  (let [schema (->join-schema (.getSchema left-cursor) (.getSchema right-cursor))]
-    (CrossJoinCursor. allocator schema
-                      (VectorSchemaRoot/create schema allocator)
-                      left-cursor right-cursor
-                      (ArrayList.))))
+(defn ->cross-join-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor left-cursor, ^ICursor right-cursor]
+  (CrossJoinCursor. allocator left-cursor right-cursor (ArrayList.)))
 
-(deftype BuildPointer [^VectorSchemaRoot root, ^int idx, pointer-or-object])
+(deftype BuildPointer [^IReadRelation rel, ^int idx, pointer-or-object])
 
-(defn- build-phase [^VectorSchemaRoot build-root
-                    ^List build-roots
+(defn- build-phase [^BufferAllocator allocator
+                    ^IReadRelation build-rel
+                    ^List build-rels
                     ^Map join-key->build-pointers
                     ^String build-column-name
                     ^MutableRoaringBitmap pushdown-bloom]
-  (let [^VectorSchemaRoot build-root (util/slice-root build-root)
-        build-vec (util/maybe-single-child-dense-union (.getVector build-root build-column-name))]
-    (.add build-roots build-root)
-    (dotimes [build-idx (.getValueCount build-vec)]
-      (.add pushdown-bloom ^ints (bloom/bloom-hashes build-vec build-idx))
-      (doto ^List (.computeIfAbsent join-key->build-pointers
-                                    (.hashCode build-vec build-idx)
-                                    (reify Function
-                                      (apply [_ x]
-                                        (ArrayList.))))
-        (.add (BuildPointer. build-root build-idx
-                             (util/pointer-or-object build-vec build-idx)))))))
+  (let [^IReadRelation build-rel (.read (doto (vec/->fresh-append-relation allocator)
+                                          (vec/copy-rel-from build-rel)))
+        build-col (.readColumn build-rel build-column-name)]
+    (.add build-rels build-rel)
+    (dotimes [build-idx (.valueCount build-col)]
+      (let [internal-vec (._getInternalVector build-col build-idx)
+            internal-idx (._getInternalIndex build-col build-idx)]
+        (.add pushdown-bloom ^ints (bloom/bloom-hashes internal-vec internal-idx))
+        (doto ^List (.computeIfAbsent join-key->build-pointers
+                                      (.hashCode internal-vec internal-idx)
+                                      (reify Function
+                                        (apply [_ x]
+                                          (ArrayList.))))
+          (.add (BuildPointer. build-rel build-idx
+                               (util/pointer-or-object internal-vec internal-idx))))))))
 
-(defn- probe-phase ^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot out-root
-                                                              ^VectorSchemaRoot probe-root
-                                                              ^Map join-key->build-pointers
-                                                              ^String probe-column-name
-                                                              semi-join? anti-join?]
-  (when (pos? (.getRowCount probe-root))
-    (let [probe-vec (util/maybe-single-child-dense-union (.getVector probe-root probe-column-name))
+(defn- probe-phase ^core2.vector.IReadRelation [^IReadRelation probe-rel
+                                                ^Map join-key->build-pointers
+                                                ^String probe-column-name
+                                                semi-join? anti-join?]
+  (when (pos? (.rowCount probe-rel))
+    (let [probe-col (.readColumn probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
           matching-build-pointers (ArrayList.)
           matching-probe-idxs (IntStream/builder)]
-      (dotimes [probe-idx (.getValueCount probe-vec)]
-        (let [match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode probe-vec probe-idx))]
-                       (let [probe-pointer-or-object (util/pointer-or-object probe-vec probe-idx probe-pointer)
+      (dotimes [probe-idx (.valueCount probe-col)]
+        (let [internal-vec (._getInternalVector probe-col probe-idx)
+              internal-idx (._getInternalIndex probe-col probe-idx)
+              match? (when-let [^List build-pointers (.get join-key->build-pointers (.hashCode internal-vec internal-idx))]
+                       (let [probe-pointer-or-object (util/pointer-or-object internal-vec internal-idx probe-pointer)
                              build-pointer-it (.iterator build-pointers)]
                          (loop [match? false]
                            (if-let [^BuildPointer build-pointer (when (.hasNext build-pointer-it)
@@ -146,111 +118,104 @@
 
                                :else (do
                                        (.add matching-build-pointers build-pointer)
-                                       (.accept matching-probe-idxs probe-idx)
+                                       (.add matching-probe-idxs probe-idx)
                                        (recur true)))
                              match?))))]
           (cond
             anti-join? (when-not match?
-                         (.accept matching-probe-idxs probe-idx))
+                         (.add matching-probe-idxs probe-idx))
             semi-join? (when match?
-                         (.accept matching-probe-idxs probe-idx)))))
+                         (.add matching-probe-idxs probe-idx)))))
 
-      (let [probe-idxs (.toArray (.build matching-probe-idxs))
-            match-count (alength probe-idxs)]
+      (let [out-rel (vec/->indirect-append-relation)]
         (when-not semi-join?
-          (dotimes [match-idx match-count]
-            (let [^BuildPointer build-pointer (nth matching-build-pointers match-idx)]
-              (util/copy-tuple (.root build-pointer) (.idx build-pointer)
-                               out-root match-idx))))
+          ;; this one jumps around a bit between build-rels,
+          ;; particularly needing to re-read cols and re-gen append-cols for each build-ptr -
+          ;; maybe some scope for optimisation
+          (doseq [^BuildPointer build-pointer matching-build-pointers
+                  :let [^IReadRelation build-rel (.rel build-pointer)]
+                  ^IReadColumn in-col (.readColumns build-rel)
+                  :when (not= (.getName in-col) probe-column-name)
+                  :let [out-col (.appendColumn out-rel (.getName in-col))]]
+            (.appendFrom out-col in-col (.idx build-pointer))))
 
-        (util/copy-tuples probe-root probe-idxs out-root)
+        (let [probe-idxs (.toArray (.build matching-probe-idxs))]
+          (doseq [^IReadColumn in-col (.readColumns probe-rel)
+                  :let [out-col (.appendColumn out-rel (.getName in-col))]]
+            (dotimes [idx (alength probe-idxs)]
+              (.appendFrom out-col in-col (aget probe-idxs idx)))))
 
-        (util/set-vector-schema-root-row-count out-root match-count))
-
-      out-root)))
+        (.read out-rel)))))
 
 (deftype JoinCursor [^BufferAllocator allocator
-                     ^Schema out-schema
-                     ^VectorSchemaRoot out-root
                      ^ICursor build-cursor, ^String build-column-name
                      ^ICursor probe-cursor, ^String probe-column-name
-                     ^List build-roots
+                     ^List build-rels
                      ^Map join-key->build-pointers
                      ^MutableRoaringBitmap pushdown-bloom
                      semi-join? anti-join?]
 
-  IChunkCursor
-  (getSchema [_] out-schema)
-
+  ICursor
   (tryAdvance [_ c]
-    (.clear out-root)
-
     (.forEachRemaining build-cursor
                        (reify Consumer
-                         (accept [_ in-root]
-                           (build-phase in-root build-roots join-key->build-pointers build-column-name pushdown-bloom))))
+                         (accept [_ in-rel]
+                           (build-phase allocator in-rel build-rels join-key->build-pointers build-column-name pushdown-bloom))))
 
-    (while (and (or (not (.isEmpty join-key->build-pointers))
-                    anti-join?)
-                (zero? (.getRowCount out-root))
-                (binding [scan/*column->pushdown-bloom* (if anti-join?
-                                                          scan/*column->pushdown-bloom*
-                                                          (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
-                  (.tryAdvance probe-cursor
-                               (reify Consumer
-                                 (accept [_ in-root]
-                                   (probe-phase out-root in-root join-key->build-pointers
-                                                probe-column-name semi-join? anti-join?)))))))
-
-    (if (pos? (.getRowCount out-root))
-      (do
-        (.accept c out-root)
-        true)
-      false))
+    (boolean
+     (when (or (not (.isEmpty join-key->build-pointers))
+               anti-join?)
+       (let [!advanced (atom false)]
+         (binding [scan/*column->pushdown-bloom* (if anti-join?
+                                                   scan/*column->pushdown-bloom*
+                                                   (assoc scan/*column->pushdown-bloom* probe-column-name pushdown-bloom))]
+           (while (and (not @!advanced)
+                       (.tryAdvance probe-cursor
+                                    (reify Consumer
+                                      (accept [_ in-rel]
+                                        (when-let [out-rel (probe-phase in-rel join-key->build-pointers
+                                                                        probe-column-name semi-join? anti-join?)]
+                                          (when (pos? (.rowCount out-rel))
+                                            (reset! !advanced true)
+                                            (try
+                                              (.accept c out-rel)
+                                              (finally
+                                                (util/try-close out-rel)))))))))))
+         @!advanced))))
 
   (close [_]
-    (util/try-close out-root)
     (.clear pushdown-bloom)
-    (run! util/try-close build-roots)
-    (.clear build-roots)
+    (run! util/try-close build-rels)
+    (.clear build-rels)
     (util/try-close build-cursor)
     (util/try-close probe-cursor)))
 
-(defn ->equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
-                                              ^IChunkCursor left-cursor,
+(defn ->equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                         ^ICursor left-cursor,
+                                         ^String left-column-name,
+                                         ^ICursor right-cursor,
+                                         ^String right-column-name]
+  (JoinCursor. allocator
+               left-cursor left-column-name right-cursor right-column-name
+               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               false false))
+
+(defn ->semi-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                              ^ICursor left-cursor,
                                               ^String left-column-name,
-                                              ^IChunkCursor right-cursor,
+                                              ^ICursor right-cursor,
                                               ^String right-column-name]
-  (let [schema (->join-schema (.getSchema left-cursor) (.getSchema right-cursor)
-                              (if (= left-column-name right-column-name)
-                                #{left-column-name}
-                                #{}))]
-    (JoinCursor. allocator schema
-                 (VectorSchemaRoot/create schema allocator)
-                 left-cursor left-column-name right-cursor right-column-name
-                 (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
-                 false false)))
+  (JoinCursor. allocator
+               right-cursor right-column-name left-cursor left-column-name
+               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               true false))
 
-(defn ->semi-equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
-                                                   ^IChunkCursor left-cursor,
-                                                   ^String left-column-name,
-                                                   ^IChunkCursor right-cursor,
-                                                   ^String right-column-name]
-  (let [schema (.getSchema left-cursor)]
-    (JoinCursor. allocator schema
-                 (VectorSchemaRoot/create schema allocator)
-                 right-cursor right-column-name left-cursor left-column-name
-                 (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
-                 true false)))
-
-(defn ->anti-equi-join-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
-                                                   ^IChunkCursor left-cursor,
-                                                   ^String left-column-name,
-                                                   ^IChunkCursor right-cursor,
-                                                   ^String right-column-name]
-  (let [schema (.getSchema left-cursor)]
-    (JoinCursor. allocator schema
-                 (VectorSchemaRoot/create schema allocator)
-                 right-cursor right-column-name left-cursor left-column-name
-                 (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
-                 true true)))
+(defn ->anti-equi-join-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                              ^ICursor left-cursor,
+                                              ^String left-column-name,
+                                              ^ICursor right-cursor,
+                                              ^String right-column-name]
+  (JoinCursor. allocator
+               right-cursor right-column-name left-cursor left-column-name
+               (ArrayList.) (HashMap.) (MutableRoaringBitmap.)
+               true true))

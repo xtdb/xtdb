@@ -4,20 +4,13 @@
             [core2.test-util :as tu]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.expression :as expr])
+            [core2.expression :as expr]
+            [core2.vector :as vec])
   (:import java.util.List
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector))
 
 (t/use-fixtures :each tu/with-allocator)
-
-(def ^:private ^long bigint-type-id
-  (-> (ty/primitive-type->arrow-type :bigint)
-      (ty/arrow-type->type-id)))
-
-(def ^:private ^long varchar-type-id
-  (-> (ty/primitive-type->arrow-type :varchar)
-      (ty/arrow-type->type-id)))
 
 (t/deftest test-align
   (with-open [age-vec (doto ^DenseUnionVector (.createVector (ty/->primitive-dense-union-field "age" #{:bigint}) tu/*allocator*)
@@ -56,14 +49,13 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-vector-selector (expr/form->expr '(<= age 30))) age-vec)
+    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector (expr/form->expr '(<= age 30)))
+                                                        (vec/<-vector age-vec))
                                                age-row-id-vec)
-                    (.and (align/->row-id-bitmap (.select (expr/->expression-vector-selector (expr/form->expr '(<= name "Frank"))) name-vec)
+                    (.and (align/->row-id-bitmap (.select (expr/->expression-column-selector (expr/form->expr '(<= name "Frank")))
+                                                          (vec/<-vector name-vec))
                                                  name-row-id-vec)))
           roots [name-root age-root]]
-      (with-open [out-root (VectorSchemaRoot/create (align/align-schemas [(.getSchema name-root) (.getSchema age-root)])
-                                                    tu/*allocator*)]
-        (align/align-vectors roots row-ids nil out-root)
-        (t/is (= [["Dave" 12]
-                  ["Bob" 15]]
-                 (tu/root->rows out-root)))))))
+      (t/is (= [{:name "Dave", :age 12}
+                {:name "Bob", :age 15}]
+               (tu/rel->rows (align/align-vectors roots row-ids nil)))))))

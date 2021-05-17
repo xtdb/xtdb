@@ -2,36 +2,32 @@
   (:require [clojure.test :as t]
             [core2.operator.project :as project]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as ty]
+            [core2.vector :as vec])
   (:import core2.operator.project.ProjectionSpec
-           org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-project
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
-        out-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
-    (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
-                                    [[{:a 12, :b 10}
-                                      {:a 0, :b 15}]
-                                     [{:a 100, :b 83}]])
-                project-cursor (project/->project-cursor tu/*allocator* cursor
-                                                         [(project/->identity-projection-spec "a")
+  (with-open [cursor (tu/->cursor (Schema. [(ty/->field "a" (.getType Types$MinorType/BIGINT) false)
+                                            (ty/->field "b" (.getType Types$MinorType/BIGINT) false)])
+                                  [[{:a 12, :b 10}
+                                    {:a 0, :b 15}]
+                                   [{:a 100, :b 83}]])
+              project-cursor (project/->project-cursor tu/*allocator* cursor
+                                                       [(project/->identity-projection-spec "a")
 
-                                                          (reify ProjectionSpec
-                                                            (getField [_ _in-schema] out-field)
-
-                                                            (project [_ in-root out-vec]
-                                                              (let [row-count (.getRowCount in-root)
-                                                                    ^BigIntVector a-vec (.getVector in-root a-field)
-                                                                    ^BigIntVector b-vec (.getVector in-root b-field)
-                                                                    ^BigIntVector out-vec out-vec]
-                                                                (.setValueCount out-vec row-count)
-                                                                (dotimes [idx row-count]
-                                                                  (.setSafe out-vec idx (+ (.get a-vec idx) (.get b-vec idx)))))))])]
-      (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
-                [{:a 100, :c 183}]]
-               (tu/<-cursor project-cursor))))))
+                                                        (reify ProjectionSpec
+                                                          (project [_ allocator in-rel]
+                                                            (let [row-count (.rowCount in-rel)
+                                                                  a-col (.readColumn in-rel "a")
+                                                                  b-col (.readColumn in-rel "b")
+                                                                  out-col (vec/->fresh-append-column allocator "c")]
+                                                              (dotimes [idx row-count]
+                                                                (.appendLong out-col (+ (.getLong a-col idx) (.getLong b-col idx))))
+                                                              (.read out-col))))])]
+    (t/is (= [[{:a 12, :c 22}, {:a 0, :c 15}]
+              [{:a 100, :c 183}]]
+             (tu/<-cursor project-cursor)))))

@@ -3,24 +3,23 @@
             [core2.bloom :as bloom]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
+            core2.operator.select
             [core2.temporal :as temporal]
             core2.tx
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector :as vec])
   (:import clojure.lang.MapEntry
+           core2.ICursor
            core2.buffer_pool.IBufferPool
-           core2.IChunkCursor
            core2.metadata.IMetadataManager
-           core2.select.IVectorSelector
+           core2.operator.select.IColumnSelector
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
-           core2.IChunkCursor
            [java.util HashMap LinkedList List Map Queue]
            java.util.function.Consumer
-           org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
-           org.apache.arrow.vector.types.pojo.Schema
            [org.roaringbitmap IntConsumer RoaringBitmap]
            org.roaringbitmap.buffer.MutableRoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
@@ -33,7 +32,7 @@
   (when (= (count col-names) (count chunks))
     (let [in-roots (HashMap.)]
       (when (every? true? (for [col-name col-names
-                                :let [^IChunkCursor chunk (get chunks col-name)]
+                                :let [^ICursor chunk (get chunks col-name)]
                                 :when chunk]
                             (.tryAdvance chunk
                                          (reify Consumer
@@ -76,13 +75,16 @@
             (.put res idx (inc ^long (.getOrDefault res idx 0)))))
         res))))
 
-(defn- align-roots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots ^VectorSchemaRoot out-root]
+(defn- align-roots
+  ^core2.vector.IReadRelation
+  [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots]
+
   (let [row-id-bitmaps (for [^String col-name col-names
                              :when (not (temporal/temporal-column? col-name))
-                             :let [^IVectorSelector vec-pred (.get col-preds col-name)
+                             :let [^IColumnSelector col-pred (.get col-preds col-name)
                                    ^VectorSchemaRoot in-root (.get in-roots col-name)]]
-                         (align/->row-id-bitmap (when vec-pred
-                                                  (.select vec-pred (.getVector in-root col-name)))
+                         (align/->row-id-bitmap (when col-pred
+                                                  (.select col-pred (vec/<-vector (.getVector in-root col-name))))
                                                 (.getVector in-root t/row-id-field)))
         row-id-bitmap (reduce roaring64-and row-id-bitmaps)
         temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range row-id-bitmap)
@@ -101,16 +103,15 @@
                       (.get in-roots col-name)))
             temporal-row-id-bitmaps (for [col-name col-names
                                           :when (temporal/temporal-column? col-name)]
-                                      (.select ^IVectorSelector (.get col-preds col-name)
+                                      (.select ^IColumnSelector (.get col-preds col-name)
                                                (.get ^Map (.roots temporal-roots) col-name)))
             row-id-bitmap (reduce roaring64-and
                                   row-id-bitmap
                                   temporal-row-id-bitmaps)
             row-id->repeat-count (->row-id->repeat-count temporal-roots row-id-bitmap)]
-        (align/align-vectors roots row-id-bitmap row-id->repeat-count out-root))
+        (align/align-vectors roots row-id-bitmap row-id->repeat-count))
       (finally
-        (util/try-close temporal-roots)))
-    out-root))
+        (util/try-close temporal-roots)))))
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* col-name)]
@@ -137,9 +138,7 @@
                  filtered-block-idxs))))))
     block-idxs))
 
-(deftype ScanCursor [^Schema out-schema
-                     ^VectorSchemaRoot out-root
-                     ^IBufferPool buffer-pool
+(deftype ScanCursor [^IBufferPool buffer-pool
                      ^ITemporalManager temporal-manager
                      ^IMetadataManager metadata-manager
                      ^Watermark watermark
@@ -148,30 +147,25 @@
                      ^Map col-preds
                      ^longs temporal-min-range
                      ^longs temporal-max-range
-                     ^:unsynchronized-mutable ^Map #_#_<String, IChunkCursor> chunks
+                     ^:unsynchronized-mutable ^Map #_#_<String, ICursor> chunks
                      ^:unsynchronized-mutable ^boolean live-chunk-done?]
-  IChunkCursor
-  (getSchema [_] out-schema)
-
+  ICursor
   (tryAdvance [this c]
     (let [real-col-names (remove temporal/temporal-column? col-names)]
       (letfn [(next-block [chunks]
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
-                    (do
-                      (align-roots temporal-manager watermark col-names col-preds temporal-min-range temporal-max-range in-roots out-root)
-                      (if (pos? (.getRowCount out-root))
+                    (let [read-rel (align-roots temporal-manager watermark col-names col-preds temporal-min-range temporal-max-range in-roots)]
+                      (if (and read-rel (pos? (.rowCount read-rel)))
                         (do
-                          (.accept c out-root)
+                          (.accept c read-rel)
                           true)
                         (recur)))
 
                     (do
-                      (doseq [^IChunkCursor chunk (vals chunks)]
+                      (doseq [^ICursor chunk (vals chunks)]
                         (.close chunk))
                       (set! (.chunks this) nil)
-
-                      (.clear out-root)
 
                       false))))
 
@@ -215,28 +209,19 @@
             false))))
 
   (close [_]
-    (doseq [^IChunkCursor chunk (vals chunks)]
-      (util/try-close chunk))
-    (util/try-close out-root)))
+    (doseq [^ICursor chunk (vals chunks)]
+      (util/try-close chunk))))
 
-(defn ^core2.operator.scan.ScanCursor ->scan-cursor
-  [^BufferAllocator allocator
-   ^IMetadataManager metadata-manager
-   ^ITemporalManager temporal-manager
-   ^IBufferPool buffer-pool
-   ^Watermark watermark
-   ^List col-names
-   metadata-pred ;; TODO derive this from col-preds
-   ^Map col-preds
-   ^longs temporal-min-range, ^longs temporal-max-range]
-
-  (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))
-        schema (Schema. (for [^String col-name col-names]
-                          (or (temporal/->temporal-field col-name)
-                              (t/->primitive-dense-union-field col-name))))]
-    (ScanCursor. schema
-                 (VectorSchemaRoot/create schema allocator)
-                 buffer-pool temporal-manager metadata-manager watermark
+(defn ->scan-cursor ^core2.operator.scan.ScanCursor [^IMetadataManager metadata-manager
+                                                     ^ITemporalManager temporal-manager
+                                                     ^IBufferPool buffer-pool
+                                                     ^Watermark watermark
+                                                     ^List col-names
+                                                     metadata-pred ;; TODO derive this from col-preds
+                                                     ^Map col-preds
+                                                     ^longs temporal-min-range, ^longs temporal-max-range]
+  (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
+    (ScanCursor. buffer-pool temporal-manager metadata-manager watermark
                  matching-chunks col-names col-preds
                  temporal-min-range temporal-max-range
                  #_chunks nil #_live-chunk-done? false)))

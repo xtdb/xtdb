@@ -7,7 +7,8 @@
             [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.vector :as vec])
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
@@ -38,14 +39,12 @@
 
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
-(defn type->field-name [^ArrowType arrow-type]
-  (-> (Types/getMinorTypeForArrowType arrow-type)
-      (.toString)
-      (.toLowerCase)))
+(defn type->field-name [^Types$MinorType minor-type]
+  (.toLowerCase (.toString minor-type)))
 
 (def ^:private type-meta-fields
-  (for [arrow-type (keys t/arrow-type->vector-type)]
-    (t/->field (type->field-name arrow-type) arrow-type true)))
+  (for [^Types$MinorType minor-type (keys t/minor-type->java-type)]
+    (t/->field (type->field-name minor-type) (.getType minor-type) true)))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "column" (.getType Types$MinorType/VARCHAR) false)
@@ -86,26 +85,29 @@
                       ^StructVector min-meta-vec, ^StructVector max-meta-vec,
                       ^long meta-idx]
   (when (pos? (.getValueCount field-vec))
-    (let [arrow-type (.getType (.getField field-vec))
-          type-name (type->field-name arrow-type)
-          vec-comparator (expr.comp/->comparator arrow-type)
+    (let [minor-type (.getMinorType field-vec)
+          type-name (type->field-name minor-type)
+          col-comparator (expr.comp/->comparator minor-type)
 
+          field-col (vec/<-vector field-vec)
           min-vec (.getChild min-meta-vec type-name)
-          max-vec (.getChild max-meta-vec type-name)]
+          min-col (vec/<-vector min-vec)
+          max-vec (.getChild max-meta-vec type-name)
+          max-col (vec/<-vector max-vec)]
 
       (.setIndexDefined min-meta-vec meta-idx)
       (.setIndexDefined max-meta-vec meta-idx)
 
-      (dotimes [field-vec-idx (.getValueCount field-vec)]
+      (dotimes [field-idx (.getValueCount field-vec)]
         (when (or (.isNull min-vec meta-idx)
-                  (and (not (.isNull field-vec field-vec-idx))
-                       (neg? (.compareIdx vec-comparator field-vec field-vec-idx min-vec meta-idx))))
-          (.copyFromSafe min-vec field-vec-idx meta-idx field-vec))
+                  (and (not (.isNull field-vec field-idx))
+                       (neg? (.compareIdx col-comparator field-col field-idx min-col meta-idx))))
+          (.copyFromSafe min-vec field-idx meta-idx field-vec))
 
         (when (or (.isNull max-vec meta-idx)
-                  (and (not (.isNull field-vec field-vec-idx))
-                       (pos? (.compareIdx vec-comparator field-vec field-vec-idx max-vec meta-idx))))
-          (.copyFromSafe max-vec field-vec-idx meta-idx field-vec))))))
+                  (and (not (.isNull field-vec field-idx))
+                       (pos? (.compareIdx col-comparator field-col field-idx max-col meta-idx))))
+          (.copyFromSafe max-vec field-idx meta-idx field-vec))))))
 
 (defn write-meta [^VectorSchemaRoot metadata-root, live-roots, ^long chunk-idx, ^long max-rows-per-block]
   (let [col-count (count live-roots)
@@ -224,11 +226,11 @@
         ^StructVector max-vec (.getVector metadata-root "max")]
     (tx/->TransactionInstant (-> max-vec
                                  ^BigIntVector
-                                 (.getChild (type->field-name (.getType Types$MinorType/BIGINT)))
+                                 (.getChild (type->field-name Types$MinorType/BIGINT))
                                  (.get (.columnIndex metadata-idxs "_tx-id")))
                              (Date. (-> max-vec
                                         ^TimeStampMilliVector
-                                        (.getChild (type->field-name (.getType Types$MinorType/TIMESTAMPMILLI)))
+                                        (.getChild (type->field-name Types$MinorType/TIMESTAMPMILLI))
                                         (.get (.columnIndex metadata-idxs "_tx-time")))))))
 
 (defn latest-row-id [_chunk-idx ^VectorSchemaRoot metadata-root]

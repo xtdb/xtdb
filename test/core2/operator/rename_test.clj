@@ -14,9 +14,7 @@
     (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                     [[{:a 12, :b 10}, {:a 0, :b 15}]
                                      [{:a 100, :b 83}]])
-                rename-cursor (rename/->rename-cursor tu/*allocator* cursor
-                                                      {"a" "c"}
-                                                      nil)]
+                rename-cursor (rename/->rename-cursor cursor {"a" "c"} nil)]
       (t/is (= [[{:c 12, :b 10}, {:c 0, :b 15}]
                 [{:c 100, :b 83}]]
                (tu/<-cursor rename-cursor))))
@@ -25,9 +23,7 @@
       (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                       [[{:a 12, :b 10}, {:a 0, :b 15}]
                                        [{:a 100, :b 83}]])
-                  rename-cursor (rename/->rename-cursor tu/*allocator* cursor
-                                                        {"a" "c"}
-                                                        "R")]
+                  rename-cursor (rename/->rename-cursor cursor {"a" "c"} "R")]
         (t/is (= [[{:R_c 12, :R_b 10}, {:R_c 0, :R_b 15}]
                   [{:R_c 100, :R_b 83}]]
                  (tu/<-cursor rename-cursor)))))
@@ -36,9 +32,7 @@
       (with-open [cursor (tu/->cursor (Schema. [a-field b-field])
                                       [[{:a 12, :b 10}, {:a 0, :b 15}]
                                        [{:a 100, :b 83}]])
-                  rename-cursor (rename/->rename-cursor tu/*allocator* cursor
-                                                        {}
-                                                        "R")]
+                  rename-cursor (rename/->rename-cursor cursor {} "R")]
         (t/is (= [[{:R_a 12, :R_b 10}, {:R_a 0, :R_b 15}]
                   [{:R_a 100, :R_b 83}]]
                  (tu/<-cursor rename-cursor)))))))

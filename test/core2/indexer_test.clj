@@ -183,7 +183,7 @@
             (t/is (= 2 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 
             (let [size (.getSize (.getReferenceManager ^ArrowBuf buffer))]
-              (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer)))
+              (t/is (= size (.getAccountedSize (.getReferenceManager ^ArrowBuf buffer))))
               (.close buffer)
               (t/is (= 1 (.getRefCount (.getReferenceManager ^ArrowBuf buffer))))
 

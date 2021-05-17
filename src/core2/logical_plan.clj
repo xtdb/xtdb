@@ -68,9 +68,9 @@
                           :left ::ra-expression
                           :right ::ra-expression))
 
-(s/def ::union (s/cat :op #{:∪ :union}
-                      :left ::ra-expression
-                      :right ::ra-expression))
+(s/def ::union-all (s/cat :op #{:∪ :union-all}
+                          :left ::ra-expression
+                          :right ::ra-expression))
 
 (s/def ::difference (s/cat :op #{:− :except :difference}
                            :left ::ra-expression
@@ -117,7 +117,7 @@
                              :slice ::slice
                              :distinct ::distinct
                              :intersect ::intersect
-                             :union ::union
+                             :union-all ::union-all
                              :difference ::difference
                              :cross-join ::cross-join
                              :join ::join
@@ -144,7 +144,7 @@
 
   ;; left-outer-join
   (s/conform ::logical-plan
-             '[:union
+             '[:union-all
                [:join {x y} R S]
                [:cross-join
                 [:anti-join {x y} R S]

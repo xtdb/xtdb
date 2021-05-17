@@ -1,23 +1,22 @@
 (ns core2.expression
   (:require [clojure.string :as str]
-            [clojure.walk :as w]
             core2.operator.project
+            core2.operator.select
             [core2.types :as types]
             [core2.util :as util]
-            [core2.types :as ty])
+            [core2.vector :as vec])
   (:import clojure.lang.MapEntry
-           core2.DenseUnionUtil
            core2.operator.project.ProjectionSpec
-           [core2.select IVectorSchemaRootSelector IVectorSelector]
+           [core2.operator.select IColumnSelector IRelationSelector]
+           [core2.vector IReadColumn IReadRelation]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            [java.time Instant ZoneOffset]
            java.time.temporal.ChronoField
-           java.util.Date
-           [org.apache.arrow.vector BaseVariableWidthVector BitVector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           org.roaringbitmap.RoaringBitmap))
+           [java.util Date LinkedHashMap]
+           org.roaringbitmap.RoaringBitmap
+           org.apache.arrow.vector.types.Types$MinorType))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -160,7 +159,7 @@
       Double)))
 
 (defmulti codegen-expr
-  (fn [{:keys [op]} {:keys [var->type]}]
+  (fn [{:keys [op]} {:keys [var->types]}]
     op))
 
 (defn resolve-string ^String [x]
@@ -176,20 +175,12 @@
 
 (defmethod codegen-expr :param [{:keys [param] :as expr} {:keys [param->type]}]
   (let [return-type (get types/arrow-type->java-type
-                         (or (param->type param)
+                         (or (get param->type param)
                              (throw (IllegalArgumentException. (str "parameter not provided: " param))))
                          Comparable)]
     (into {:code param
            :return-type return-type}
           (select-keys expr #{:literal}))))
-
-(defn element->nio-buffer ^java.nio.ByteBuffer [^ValueVector vec ^long idx]
-  (let [value-buffer (.getDataBuffer vec)
-        offset-buffer (.getOffsetBuffer vec)
-        offset-idx (* idx BaseVariableWidthVector/OFFSET_WIDTH)
-        offset (.getInt offset-buffer offset-idx)
-        end-offset (.getInt offset-buffer (+ offset-idx BaseVariableWidthVector/OFFSET_WIDTH))]
-    (.nioBuffer value-buffer offset (- end-offset offset))))
 
 (defn compare-nio-buffers-unsigned ^long [^ByteBuffer x ^ByteBuffer y]
   (let [rem-x (.remaining x)
@@ -209,17 +200,21 @@
               (Byte/compareUnsigned x-byte y-byte)))))
       diff)))
 
-(defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->type]}]
-  (let [var-type (get types/arrow-type->java-type
-                      (or (get var->type variable)
-                          (throw (IllegalArgumentException. (str "unknown variable: " variable))))
-                      Comparable)]
+(defmethod codegen-expr :variable [{:keys [variable]} {:keys [var->types]}]
+  (let [var-types (or (get var->types variable)
+                      (throw (IllegalArgumentException. (str "unknown variable: " variable))))
+        var-type (or (when (= 1 (count var-types))
+                       (get types/minor-type->java-type (first var-types)))
+                     Comparable)]
     {:code (condp = var-type
-             Boolean `(== 1 (.get ~variable ~idx-sym))
-             String `(element->nio-buffer ~variable ~idx-sym)
-             types/byte-array-class `(element->nio-buffer ~variable ~idx-sym)
-             Comparable `(normalize-union-value (types/get-object ~variable ~idx-sym))
-             `(.get ~variable ~idx-sym))
+             Boolean `(.getBool ~variable ~idx-sym)
+             Byte `(.getByte ~variable ~idx-sym)
+             Long `(.getLong ~variable ~idx-sym)
+             Double `(.getDouble ~variable ~idx-sym)
+             String `(.getBuffer ~variable ~idx-sym)
+             types/byte-array-class `(.getBuffer ~variable ~idx-sym)
+             Date `(.getDate ~variable ~idx-sym)
+             `(normalize-union-value (.getObject ~variable ~idx-sym)))
      :return-type var-type}))
 
 (defmethod codegen-expr :if [{:keys [pred then else]} _]
@@ -431,82 +426,77 @@
     :else
     v))
 
-(defn- generate-code [arrow-types param-types expr expression-type]
-  (let [vars (variables expr)
-        expr-params (map key param-types)
-        codegen-opts {:var->type (zipmap vars arrow-types)
-                      :param->type (into {} param-types)}
-        {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
-        args (for [[k v] (map vector vars arrow-types)]
-               (-> k (with-tag (get types/arrow-type->vector-type v DenseUnionVector))))]
-    (case expression-type
-      ::project
-      (if (= Comparable return-type)
-        `(fn [[~@args] [~@expr-params] ^DenseUnionVector acc# ^long row-count#]
-           (dotimes [~idx-sym row-count#]
-             (let [value# ~code
-                   type-id# (types/arrow-type->type-id (types/->arrow-type (class value#)))
-                   offset# (DenseUnionUtil/writeTypeId acc# ~idx-sym type-id#)]
-               (types/set-safe! (.getVectorByType acc# type-id#) offset# value#)))
-           acc#)
-        (let [arrow-return-type (types/->arrow-type return-type)
-              ^Class vector-return-type (get types/arrow-type->vector-type arrow-return-type)
-              return-type-id (types/arrow-type->type-id arrow-return-type)
-              inner-acc-sym (-> (gensym "inner-acc") (with-tag vector-return-type))
-              offset-sym (gensym "offset")]
-          `(fn [[~@args] [~@expr-params] ^DenseUnionVector acc# ^long row-count#]
-             (let [~inner-acc-sym (.getVectorByType acc# ~return-type-id)]
-               (dotimes [~idx-sym row-count#]
-                 (let [~offset-sym (DenseUnionUtil/writeTypeId acc# ~idx-sym ~return-type-id)]
-                   ~(if (.isAssignableFrom BaseVariableWidthVector vector-return-type)
-                      `(let [bb# ~code]
-                         (.set ~inner-acc-sym ~offset-sym bb# (.position bb#) (.remaining bb#)))
-                      `(.set ~inner-acc-sym ~offset-sym ~(if (= BitVector vector-return-type)
-                                                           `(if ~code 1 0)
-                                                           code)))))
-               acc#))))
-
-      ::select
-      (do (assert (= Boolean return-type))
-          `(fn [[~@args] [~@expr-params] ^RoaringBitmap acc# ^long row-count#]
-             (dotimes [~idx-sym row-count#]
-               (try
-                 (when ~code
-                   (.add acc# ~idx-sym))
-                 (catch ClassCastException e#)))
-             acc#)))))
-
-(def ^:private memo-generate-code (memoize generate-code))
-(def ^:private memo-eval (memoize eval))
-
-(defn- expression-in-vectors [^VectorSchemaRoot in expr]
-  (vec (for [var (variables expr)]
-         (util/maybe-single-child-dense-union (.getVector in (name var))))))
-
-(defn- vector->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [^ValueVector v]
-  (.getType (.getFieldType (.getField v))))
-
 (defn normalise-params [expr params]
   (let [expr (lits->params expr)
         {expr-params :params, lits :literals} (meta expr)
-        param-values (mapv (fn [param-k]
-                             (val (or (find params param-k)
-                                      (find lits param-k))))
-                           expr-params)]
+        params (->> expr-params
+                    (util/into-linked-map
+                     (map (fn [param-k]
+                            (MapEntry/create param-k
+                                             (val (or (find params param-k)
+                                                      (find lits param-k))))))))]
     {:expr expr
-     :param-types (mapv (fn [param-k param-v]
-                          ;; TODO: Should be an arrow-type->expr-tag map somewhere?
-                          (let [arrow-type (types/->arrow-type (class param-v))
-                                normalized-expr-type (class (normalize-union-value param-v))
-                                primitive-tag (get type->cast normalized-expr-type)]
-                            (MapEntry/create (if primitive-tag
-                                               (with-tag param-k primitive-tag)
-                                               param-k)
-                                             arrow-type)))
-                        expr-params
-                        param-values)
-     :params param-values
-     :emitted-params (map normalize-union-value param-values)}))
+     :params params
+     :param-types (->> params
+                       (util/into-linked-map
+                        (util/map-entries (fn [param-k param-v]
+                                            (let [arrow-type (types/->arrow-type (class param-v))
+                                                  normalized-expr-type (class (normalize-union-value param-v))
+                                                  primitive-tag (get type->cast normalized-expr-type)]
+                                              (MapEntry/create (cond-> param-k
+                                                                 primitive-tag (with-tag primitive-tag))
+                                                               arrow-type))))))
+
+     :emitted-params (->> params
+                          (util/into-linked-map
+                           (util/map-values (fn [_param-k param-v]
+                                              (normalize-union-value param-v)))))}))
+
+(defn- expression-in-cols [^IReadRelation in-rel expr]
+  (->> (variables expr)
+       (util/into-linked-map
+        (map (fn [variable]
+               (MapEntry/create variable (.readColumn in-rel (name variable))))))))
+
+(def ^:private return-type->append-sym
+  {Boolean '.appendBool
+   Byte '.appendByte
+   Long '.appendLong
+   Double '.appendDouble
+   String '.appendStringBuffer
+   types/byte-array-class '.appendBuffer
+   Date '.appendDate})
+
+(def ^:private return-type->minor-type-sym
+  {Boolean `Types$MinorType/BIT
+   Byte `Types$MinorType/TINYINT
+   Long `Types$MinorType/BIGINT
+   Double `Types$MinorType/FLOAT8
+   String `Types$MinorType/VARCHAR
+   types/byte-array-class `Types$MinorType/VARBINARY
+   Date `Types$MinorType/TIMESTAMPMILLI})
+
+(defn- generate-projection [col-name expr var-types param-types]
+  (let [codegen-opts {:var->types var-types, :param->type param-types}
+        {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
+        variables (->> (keys var-types)
+                       (map #(with-tag % IReadColumn)))
+
+        allocator-sym (gensym 'allocator)
+        out-col-sym (gensym 'out-vec)]
+
+    `(fn [~allocator-sym [~@variables] [~@(keys param-types)] ^long row-count#]
+       (let [~out-col-sym ~(if-let [minor-type-sym (return-type->minor-type-sym return-type)]
+                             `(vec/->vector-append-column ~allocator-sym ~col-name ~minor-type-sym)
+                             `(vec/->fresh-append-column ~allocator-sym ~col-name))]
+         (dotimes [~idx-sym row-count#]
+           (~(get return-type->append-sym return-type '.appendObject)
+            ~out-col-sym
+            ~code))
+         (.read ~out-col-sym)))))
+
+(def ^:private memo-generate-projection (memoize generate-projection))
+(def ^:private memo-eval (memoize eval))
 
 (defn ->expression-projection-spec
   (^core2.operator.project.ProjectionSpec [col-name expr]
@@ -515,44 +505,66 @@
   (^core2.operator.project.ProjectionSpec [col-name expr params]
    (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
      (reify ProjectionSpec
-       (getField [_ _in-schema]
-         (types/->primitive-dense-union-field col-name))
+       (project [_ allocator in-rel]
+         (let [in-cols (expression-in-cols in-rel expr)
+               var-types (->> in-cols
+                              (util/into-linked-map
+                               (util/map-values (fn [_variable ^IReadColumn read-col]
+                                                  (.minorTypes read-col)))))
+               expr-fn (-> (memo-generate-projection col-name expr var-types param-types)
+                           (memo-eval))]
+           (expr-fn allocator (vals in-cols) (vals emitted-params) (.rowCount in-rel))))))))
 
-       (project [_ in-root out-vec]
-         (let [in-vecs (expression-in-vectors in-root expr)
-               arrow-types (mapv vector->arrow-type in-vecs)
-               expr-code (memo-generate-code arrow-types param-types expr ::project)
-               expr-fn (memo-eval expr-code)
-               ^DenseUnionVector out-vec out-vec]
-           (expr-fn in-vecs emitted-params out-vec (.getRowCount in-root))))))))
+(defn- generate-selection [expr var-types param-types]
+  (let [codegen-opts {:var->types var-types, :param->type param-types}
+        {:keys [code return-type]} (postwalk-expr #(codegen-expr % codegen-opts) expr)
+        variables (->> (keys var-types)
+                       (map #(with-tag % IReadColumn)))]
 
-(defn ->expression-root-selector
-  (^core2.select.IVectorSchemaRootSelector [expr]
-   (->expression-root-selector expr {}))
+    (assert (= Boolean return-type))
+    `(fn [[~@variables] [~@(keys param-types)] ^long row-count#]
+       (let [acc# (RoaringBitmap.)]
+         (dotimes [~idx-sym row-count#]
+           (try
+             (when ~code
+               (.add acc# ~idx-sym))
+             (catch ClassCastException e#)))
+         acc#))))
 
-  (^core2.select.IVectorSchemaRootSelector [expr params]
+(def ^:private memo-generate-selection (memoize generate-selection))
+
+(defn ->expression-relation-selector
+  (^core2.operator.select.IRelationSelector [expr]
+   (->expression-relation-selector expr {}))
+
+  (^core2.operator.select.IRelationSelector [expr params]
    (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
-     (reify IVectorSchemaRootSelector
+     (reify IRelationSelector
        (select [_ in]
-         (let [in-vecs (expression-in-vectors in expr)
-               arrow-types (mapv vector->arrow-type in-vecs)
-               expr-code (memo-generate-code arrow-types param-types expr ::select)
-               expr-fn (memo-eval expr-code)
-               acc (RoaringBitmap.)]
-           (expr-fn in-vecs emitted-params acc (.getRowCount in))))))))
+         (let [in-cols (expression-in-cols in expr)
+               var-types (->> in-cols
+                              (util/into-linked-map
+                               (util/map-values (fn [_variable ^IReadColumn read-col]
+                                                  (.minorTypes read-col)))))
+               expr-code (memo-generate-selection expr var-types param-types)
+               expr-fn (memo-eval expr-code)]
+           (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in))))))))
 
-(defn ->expression-vector-selector
-  (^core2.select.IVectorSelector [expr]
-   (->expression-vector-selector expr {}))
+(defn ->expression-column-selector
+  (^core2.operator.select.IColumnSelector [expr]
+   (->expression-column-selector expr {}))
 
-  (^core2.select.IVectorSelector [expr params]
-   (assert (= 1 (count (variables expr))))
-   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
-     (reify IVectorSelector
-       (select [_ v]
-         (let [in-vecs [(util/maybe-single-child-dense-union v)]
-               arrow-types (mapv vector->arrow-type in-vecs)
-               expr-code (memo-generate-code arrow-types param-types expr ::select)
-               expr-fn (memo-eval expr-code)
-               acc (RoaringBitmap.)]
-           (expr-fn in-vecs emitted-params acc (.getValueCount v))))))))
+  (^core2.operator.select.IColumnSelector [expr params]
+   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)
+         vars (variables expr)
+         _ (assert (= 1 (count vars)))
+         variable (first vars)]
+     (reify IColumnSelector
+       (select [_ in-col]
+         (let [in-cols (doto (LinkedHashMap.)
+                         (.put variable in-col))
+               var-types (doto (LinkedHashMap.)
+                           (.put variable (.minorTypes in-col)))
+               expr-code (memo-generate-selection expr var-types param-types)
+               expr-fn (memo-eval expr-code)]
+           (expr-fn (vals in-cols) (vals emitted-params) (.valueCount in-col))))))))

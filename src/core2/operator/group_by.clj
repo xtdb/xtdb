@@ -1,55 +1,49 @@
 (ns core2.operator.group-by
-  (:require [core2.types :as t]
-            [core2.util :as util])
-  (:import [core2 DenseUnionUtil IChunkCursor]
-           [java.util ArrayList Comparator DoubleSummaryStatistics HashMap List LongSummaryStatistics Map Optional Spliterator]
+  (:require [core2.util :as util]
+            [core2.vector :as vec])
+  (:import [core2 IChunkCursor ICursor]
+           core2.vector.IReadRelation
+           [java.util ArrayList Comparator DoubleSummaryStatistics EnumSet HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector BaseIntVector FloatingPointVector VectorSchemaRoot]
-           org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType Field Schema]
+           org.apache.arrow.vector.types.Types$MinorType
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface AggregateSpec
-  (^org.apache.arrow.vector.types.pojo.Field getToField [^org.apache.arrow.vector.types.pojo.Schema inSchema])
-  (^org.apache.arrow.vector.ValueVector getFromVector [^org.apache.arrow.vector.VectorSchemaRoot inRoot])
-  (^Object aggregate [^org.apache.arrow.vector.VectorSchemaRoot inRoot ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
+  (^String columnName [])
+  (^Object aggregate [^core2.vector.IReadRelation inRelation ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object container]))
 
-(deftype GroupSpec [^String name]
+(deftype GroupSpec [^String col-name]
   AggregateSpec
-  (getToField [_this in-schema]
-    (.findField in-schema name))
+  (columnName [_] col-name)
 
-  (getFromVector [_ in-root]
-    (.getVector in-root name))
-
-  (aggregate [this in-root container idx-bitmap]
-    (or container (t/get-object (.getFromVector this in-root) (.first idx-bitmap))))
+  (aggregate [_ in-rel container idx-bitmap]
+    (or container
+        (.getObject (.readColumn in-rel col-name)
+                    (.first idx-bitmap))))
 
   (finish [_ container]
     container))
 
-(defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String name]
-  (GroupSpec. name))
+(defn ->group-spec ^core2.operator.group_by.AggregateSpec [^String col-name]
+  (GroupSpec. col-name))
 
-(defn- finish-maybe-optional [^Function finisher container]
-  (let [result (.apply finisher container)]
-    (if (instance? Optional result)
-      (.orElse ^Optional result nil)
-      result)))
+(defn- <-optional [result]
+  (if (instance? Optional result)
+    (.orElse ^Optional result nil)
+    result))
 
-(deftype FunctionSpec [^String from-name ^Field field ^Collector collector]
+(deftype FunctionSpec [^String from-name ^String to-name ^Collector collector]
   AggregateSpec
-  (getToField [_ _in-schema] field)
-  (getFromVector [_ in-root] (.getVector in-root from-name))
+  (columnName [_] to-name)
 
-  (aggregate [this in-root container idx-bitmap]
-    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
+  (aggregate [_ in-rel container idx-bitmap]
+    (let [from-col (.readColumn in-rel from-name)
           accumulator (.accumulator collector)]
       (.collect ^IntStream (.stream idx-bitmap)
                 (if (some? container)
@@ -58,48 +52,46 @@
                   (.supplier collector))
                 (reify ObjIntConsumer
                   (accept [_ acc idx]
-                    (.accept accumulator acc (t/get-object from-vec idx))))
+                    (.accept accumulator acc (.getObject from-col idx))))
                 accumulator)))
 
   (finish [_ container]
-    (finish-maybe-optional (.finisher collector) container)))
+    (-> (.apply (.finisher collector) container)
+        (<-optional))))
 
 (defn ->function-spec ^core2.operator.group_by.AggregateSpec [^String from-name ^String to-name ^Collector collector]
-  (FunctionSpec. from-name (t/->primitive-dense-union-field to-name) collector))
+  (FunctionSpec. from-name to-name collector))
 
 (deftype NumberFunctionSpec [^String from-name
-                             ^Field field
+                             ^String to-name
                              ^Supplier supplier
-                             accumulator ;; <ObjLongConsumer|ObjDoubleConsumer>
+                             accumulator ;; <ObjLongConsumer & ObjDoubleConsumer>
                              ^Function finisher]
   AggregateSpec
-  (getToField [_ _in-schema] field)
+  (columnName [_] to-name)
 
-  (getFromVector [_ in-root]
-    (.getVector in-root from-name))
-
-  (aggregate [this in-root container idx-bitmap]
-    (let [from-vec (util/maybe-single-child-dense-union (.getFromVector this in-root))
+  (aggregate [_ in-rel container idx-bitmap]
+    (let [from-col (.readColumn in-rel from-name)
           acc (if (some? container)
                 container
                 (.get supplier))
           consumer (cond
-                     (instance? BaseIntVector from-vec)
-                     (let [^BaseIntVector from-vec from-vec]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept ^ObjLongConsumer accumulator acc (.getValueAsLong from-vec idx)))))
+                     (= (EnumSet/of Types$MinorType/BIGINT) (.minorTypes from-col))
+                     (reify IntConsumer
+                       (accept [_ idx]
+                         (.accept ^ObjLongConsumer accumulator acc
+                                  (.getLong from-col idx))))
 
-                     (instance? FloatingPointVector from-vec)
-                     (let [^FloatingPointVector from-vec from-vec]
-                       (reify IntConsumer
-                         (accept [_ idx]
-                           (.accept ^ObjDoubleConsumer accumulator acc (.getValueAsDouble from-vec idx)))))
+                     (= (EnumSet/of Types$MinorType/FLOAT8) (.minorTypes from-col))
+                     (reify IntConsumer
+                       (accept [_ idx]
+                         (.accept ^ObjDoubleConsumer accumulator acc
+                                  (.getDouble from-col idx))))
 
                      :else
                      (reify IntConsumer
                        (accept [_ idx]
-                         (let [v (t/get-object from-vec idx)]
+                         (let [v (.getObject from-col idx)]
                            (if (integer? v)
                              (.accept ^ObjLongConsumer accumulator acc v)
                              (.accept ^ObjDoubleConsumer accumulator acc v))))))]
@@ -107,73 +99,83 @@
       acc))
 
   (finish [_ container]
-    (finish-maybe-optional finisher container)))
+    (-> (.apply finisher container)
+        (<-optional))))
 
-(defn ->number-function-spec ^core2.operator.group_by.AggregateSpec [^String from-name
-                                                                     ^String to-name
-                                                                     ^Supplier supplier
-                                                                     accumulator
-                                                                     ^Function finisher]
-  (NumberFunctionSpec. from-name (t/->primitive-dense-union-field to-name) supplier accumulator finisher))
+(defn ->number-function-spec
+  ^core2.operator.group_by.AggregateSpec
+  [^String from-name, ^String to-name, ^Supplier supplier, accumulator, ^Function finisher]
+  (NumberFunctionSpec. from-name to-name supplier accumulator finisher))
 
 (deftype NumberSummaryStatistics [^LongSummaryStatistics long-summary
                                   ^DoubleSummaryStatistics double-summary])
 
-(def number-summary-supplier (reify Supplier
-                               (get [_]
-                                 (NumberSummaryStatistics. (LongSummaryStatistics.) (DoubleSummaryStatistics.)))))
-(def number-summary-accumulator (reify
-                                  ObjLongConsumer
-                                  (^void accept [_ acc ^long x]
-                                   (.accept ^LongSummaryStatistics (.long-summary ^NumberSummaryStatistics acc) x))
+(def number-summary-supplier
+  (reify Supplier
+    (get [_]
+      (NumberSummaryStatistics. (LongSummaryStatistics.) (DoubleSummaryStatistics.)))))
 
-                                  ObjDoubleConsumer
-                                  (^void accept [_ acc ^double x]
-                                   (.accept ^DoubleSummaryStatistics (.double-summary ^NumberSummaryStatistics acc) x))))
-(def number-sum-finisher (reify Function
-                           (apply [_ acc]
-                             (let [^NumberSummaryStatistics acc acc
-                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
-                                   ^LongSummaryStatistics long-summary (.long-summary acc)]
-                               (if (zero? (.getCount double-summary))
-                                 (if (zero? (.getCount long-summary))
-                                   (.getSum double-summary)
-                                   (.getSum long-summary))
-                                 (+ (.getSum long-summary)
-                                    (.getSum double-summary)))))))
-(def number-avg-finisher (reify Function
-                           (apply [_ acc]
-                             (let [^NumberSummaryStatistics acc acc
-                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
-                                   ^LongSummaryStatistics long-summary (.long-summary acc)
-                                   cnt (+ (.getCount long-summary)
-                                          (.getCount double-summary))]
-                               (if (zero? cnt)
-                                 (.getAverage double-summary)
-                                 (/ (+ (.getSum long-summary)
-                                       (.getSum double-summary)) cnt))))))
-(def number-min-finisher (reify Function
-                           (apply [_ acc]
-                             (let [^NumberSummaryStatistics acc acc
-                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
-                                   ^LongSummaryStatistics long-summary (.long-summary acc)]
-                               (if (zero? (.getCount double-summary))
-                                 (if (zero? (.getCount long-summary))
-                                   (.getMin double-summary)
-                                   (.getMin long-summary))
-                                 (min (.getMin ^LongSummaryStatistics long-summary)
-                                      (.getMin ^DoubleSummaryStatistics double-summary)))))))
-(def number-max-finisher (reify Function
-                           (apply [_ acc]
-                             (let [^NumberSummaryStatistics acc acc
-                                   ^DoubleSummaryStatistics double-summary (.double-summary acc)
-                                   ^LongSummaryStatistics long-summary (.long-summary acc)]
-                               (if (zero? (.getCount double-summary))
-                                 (if (zero? (.getCount long-summary))
-                                   (.getMax double-summary)
-                                   (.getMax long-summary))
-                                 (max (.getMax ^LongSummaryStatistics long-summary)
-                                      (.getMax ^DoubleSummaryStatistics double-summary)))))))
+(def number-summary-accumulator
+  (reify
+    ObjLongConsumer
+    (^void accept [_ acc ^long x]
+     (.accept ^LongSummaryStatistics (.long-summary ^NumberSummaryStatistics acc) x))
+
+    ObjDoubleConsumer
+    (^void accept [_ acc ^double x]
+     (.accept ^DoubleSummaryStatistics (.double-summary ^NumberSummaryStatistics acc) x))))
+
+(def number-sum-finisher
+  (reify Function
+    (apply [_ acc]
+      (let [^NumberSummaryStatistics acc acc
+            ^DoubleSummaryStatistics double-summary (.double-summary acc)
+            ^LongSummaryStatistics long-summary (.long-summary acc)]
+        (if (zero? (.getCount double-summary))
+          (if (zero? (.getCount long-summary))
+            (.getSum double-summary)
+            (.getSum long-summary))
+          (+ (.getSum long-summary)
+             (.getSum double-summary)))))))
+
+(def number-avg-finisher
+  (reify Function
+    (apply [_ acc]
+      (let [^NumberSummaryStatistics acc acc
+            ^DoubleSummaryStatistics double-summary (.double-summary acc)
+            ^LongSummaryStatistics long-summary (.long-summary acc)
+            cnt (+ (.getCount long-summary)
+                   (.getCount double-summary))]
+        (if (zero? cnt)
+          (.getAverage double-summary)
+          (/ (+ (.getSum long-summary)
+                (.getSum double-summary)) cnt))))))
+
+(def number-min-finisher
+  (reify Function
+    (apply [_ acc]
+      (let [^NumberSummaryStatistics acc acc
+            ^DoubleSummaryStatistics double-summary (.double-summary acc)
+            ^LongSummaryStatistics long-summary (.long-summary acc)]
+        (if (zero? (.getCount double-summary))
+          (if (zero? (.getCount long-summary))
+            (.getMin double-summary)
+            (.getMin long-summary))
+          (min (.getMin ^LongSummaryStatistics long-summary)
+               (.getMin ^DoubleSummaryStatistics double-summary)))))))
+
+(def number-max-finisher
+  (reify Function
+    (apply [_ acc]
+      (let [^NumberSummaryStatistics acc acc
+            ^DoubleSummaryStatistics double-summary (.double-summary acc)
+            ^LongSummaryStatistics long-summary (.long-summary acc)]
+        (if (zero? (.getCount double-summary))
+          (if (zero? (.getCount long-summary))
+            (.getMax double-summary)
+            (.getMax long-summary))
+          (max (.getMax ^LongSummaryStatistics long-summary)
+               (.getMax ^DoubleSummaryStatistics double-summary)))))))
 
 (defn ->avg-number-spec [^String from-name ^String to-name]
   (->number-function-spec from-name to-name
@@ -234,90 +236,82 @@
     (util/try-close (.getBuf ^ArrowBufPointer x)))
   k)
 
-(defn- ->group-key [^VectorSchemaRoot in-root ^List group-specs ^long idx]
-  (reduce
-   (fn [^List acc ^GroupSpec group-spec]
-     (let [from-vec (.getFromVector group-spec in-root)
-           k (util/pointer-or-object from-vec idx)]
-       (doto acc
-         (.add k))))
-   (ArrayList. (.size group-specs))
-   group-specs))
+(defn- ->group-key [^IReadRelation in-rel ^List group-specs ^long idx]
+  (let [ks (ArrayList. (.size group-specs))]
+    (doseq [^GroupSpec group-spec group-specs]
+      (let [from-col (.readColumn in-rel (.col-name group-spec))]
+        (.add ks (util/pointer-or-object (._getInternalVector from-col idx)
+                                         (._getInternalIndex from-col idx)))))
+    ks))
 
-(defn- aggregate-groups [^BufferAllocator allocator ^VectorSchemaRoot in-root ^List aggregate-specs ^Map group->accs]
+(defn- aggregate-groups [^BufferAllocator allocator ^IReadRelation in-rel ^List aggregate-specs ^Map group->accs]
   (let [group->idx-bitmap (HashMap.)
         ^List group-specs (vec (filter #(instance? GroupSpec %) aggregate-specs))]
 
-    (dotimes [idx (.getRowCount in-root)]
-      (let [group-key (->group-key in-root group-specs idx)
-            ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key (reify Function
-                                                                                      (apply [_ _]
-                                                                                        (RoaringBitmap.))))]
+    (dotimes [idx (.rowCount in-rel)]
+      (let [group-key (->group-key in-rel group-specs idx)
+            ^RoaringBitmap idx-bitmap (.computeIfAbsent group->idx-bitmap group-key
+                                                        (reify Function
+                                                          (apply [_ _]
+                                                            (RoaringBitmap.))))]
         (.add idx-bitmap idx)))
 
     (doseq [[group-key ^RoaringBitmap idx-bitmap] group->idx-bitmap
-            :let [^List accs (if-let [accs (.get group->accs group-key)]
-                               accs
-                               (doto (ArrayList. ^List (repeat (.size aggregate-specs) nil))
-                                 (->> (.put group->accs (copy-group-key allocator group-key)))))]]
+            :let [^objects accs (if-let [accs (.get group->accs group-key)]
+                                  accs
+                                  (let [accs (object-array (.size aggregate-specs))]
+                                    (.put group->accs (copy-group-key allocator group-key) accs)
+                                    accs))]]
       (dotimes [n (.size aggregate-specs)]
-        (.set accs n (.aggregate ^AggregateSpec (.get aggregate-specs n) in-root (.get accs n) idx-bitmap))))))
+        (aset accs n (.aggregate ^AggregateSpec (.get aggregate-specs n)
+                                 in-rel
+                                 (aget accs n)
+                                 idx-bitmap))))))
 
-(defn- finish-groups ^org.apache.arrow.vector.VectorSchemaRoot [^List aggregate-specs ^Map group->accs ^VectorSchemaRoot out-root]
+(defn- finish-groups ^core2.vector.IReadRelation [^BufferAllocator allocator
+                                                  ^List aggregate-specs
+                                                  ^Map group->accs]
   (let [^List all-accs (ArrayList. ^List (vals group->accs))
+        ^Map out-cols (LinkedHashMap.)
         row-count (.size all-accs)]
     (dotimes [n (.size aggregate-specs)]
-      (let [out-vec (.getVector out-root n)]
-        (dotimes [out-idx row-count]
-          (let [^List accs (.get all-accs out-idx)
-                v (.finish ^AggregateSpec (.get aggregate-specs n) (.get accs n))]
-            (if (instance? DenseUnionVector out-vec)
-              (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
-                    value-offset (DenseUnionUtil/writeTypeId out-vec out-idx type-id)]
-                (t/set-safe! (.getVectorByType ^DenseUnionVector out-vec type-id) value-offset v))
-              (t/set-safe! out-vec out-idx v))))))
-    (util/set-vector-schema-root-row-count out-root row-count)
-    out-root))
+      (let [^AggregateSpec aggregate-spec (.get aggregate-specs n)
+            col-name (.columnName aggregate-spec)
+            append-col (vec/->fresh-append-column allocator col-name)]
+        (dotimes [idx row-count]
+          (let [^objects accs (.get all-accs idx)]
+            (.appendObject append-col
+                           (.finish aggregate-spec (aget accs n)))))
+
+        (.put out-cols col-name append-col)))
+    (vec/->read-relation (vec/append->read-cols out-cols))))
 
 (deftype GroupByCursor [^BufferAllocator allocator
-                        ^Schema out-schema
-                        ^VectorSchemaRoot out-root
                         ^IChunkCursor in-cursor
                         ^List aggregate-specs]
-  IChunkCursor
-  (getSchema [_] out-schema)
-
-  (tryAdvance [this c]
-    (.clear out-root)
-
+  ICursor
+  (tryAdvance [_ c]
     (let [group->accs (HashMap.)]
-      (try
-        (.forEachRemaining in-cursor
-                           (reify Consumer
-                             (accept [_ in-root]
-                               (when-not (.out-root this)
-                                 (set! (.out-root this) (VectorSchemaRoot/create out-schema allocator)))
-                               (aggregate-groups allocator in-root aggregate-specs group->accs))))
+      (.forEachRemaining in-cursor
+                         (reify Consumer
+                           (accept [_ in-rel]
+                             (aggregate-groups allocator in-rel aggregate-specs group->accs))))
 
-        (if-not (.isEmpty group->accs)
-          (do (.accept c (finish-groups aggregate-specs group->accs out-root))
-              true)
-          false)
-        (finally
-          (doseq [k (keys group->accs)]
-            (release-group-key k))))))
+      (if-not (.isEmpty group->accs)
+        (let [out-rel (finish-groups allocator aggregate-specs group->accs)]
+          (try
+            (.accept c out-rel)
+            true
+            (finally
+              (util/try-close out-rel)
+              (run! release-group-key (keys group->accs)))))
+        false)))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE))
 
   (close [_]
-    (util/try-close out-root)
     (util/try-close in-cursor)))
 
-(defn ->group-by-cursor ^core2.IChunkCursor [^BufferAllocator allocator, ^IChunkCursor in-cursor, ^List aggregate-specs]
-  (let [in-schema (.getSchema in-cursor)
-        out-schema (Schema. (for [^AggregateSpec spec aggregate-specs]
-                              (.getToField spec in-schema)))]
-    (GroupByCursor. allocator out-schema
-                    (VectorSchemaRoot/create out-schema allocator)
-                    in-cursor aggregate-specs)))
+(defn ->group-by-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^List aggregate-specs]
+  (GroupByCursor. allocator in-cursor aggregate-specs))

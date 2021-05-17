@@ -61,7 +61,7 @@
                      (into {}))
         col-preds (->> (for [[col-name select-expr] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-vector-selector select-expr srcs)))
+                                          (expr/->expression-column-selector select-expr srcs)))
                        (into {}))
         args (vec (concat (for [col-name col-names
                                 :when (not (contains? selects col-name))]
@@ -74,9 +74,9 @@
                                                          {::err/message "Query refers to unknown db"
                                                           :db source
                                                           :srcs (keys srcs)})))]
-    (fn [allocator]
+    (fn [_allocator]
       (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
-        (.scan db allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
+        (.scan db col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
 
 (defmethod emit-op :table [[_ {[table-type table-arg] :table}] srcs]
   (let [rows (case table-type
@@ -116,10 +116,10 @@
             (throw e)))))))
 
 (defmethod emit-op :select [[_ {:keys [predicate relation]}] srcs]
-  (let [selector (expr/->expression-root-selector predicate srcs)]
+  (let [selector (expr/->expression-relation-selector predicate srcs)]
     (unary-op relation srcs
-              (fn [allocator inner]
-                (select/->select-cursor allocator inner selector)))))
+              (fn [_allocator inner]
+                (select/->select-cursor inner selector)))))
 
 (defmethod emit-op :project [[_ {:keys [projections relation]}] srcs]
   (let [projection-specs (for [[p-type arg] projections]
@@ -136,18 +136,18 @@
                         (into {} (map (juxt (comp name key)
                                             (comp name val)))))]
     (unary-op relation srcs
-              (fn [allocator inner]
-                (rename/->rename-cursor allocator inner rename-map (some-> prefix (name)))))))
+              (fn [_allocator inner]
+                (rename/->rename-cursor inner rename-map (some-> prefix (name)))))))
 
 (defmethod emit-op :distinct [[_ {:keys [relation]}] srcs]
   (unary-op relation srcs
             (fn [allocator inner]
               (set-op/->distinct-cursor allocator inner))))
 
-(defmethod emit-op :union [[_ {:keys [left right]}] srcs]
+(defmethod emit-op :union-all [[_ {:keys [left right]}] srcs]
   (binary-op left right srcs
              (fn [_allocator left right]
-               (set-op/->union-cursor left right))))
+               (set-op/->union-all-cursor left right))))
 
 (defmethod emit-op :intersection [[_ {:keys [left right]}] srcs]
   (binary-op left right srcs
@@ -215,8 +215,8 @@
 
 (defmethod emit-op :slice [[_ {:keys [relation], {:keys [offset limit]} :slice}] srcs]
   (unary-op relation srcs
-            (fn [allocator inner]
-              (slice/->slice-cursor allocator inner offset limit))))
+            (fn [_allocator inner]
+              (slice/->slice-cursor inner offset limit))))
 
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 

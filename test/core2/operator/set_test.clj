@@ -3,11 +3,11 @@
             [core2.operator.project :as project]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
-            [core2.expression :as expr]
             [core2.test-util :as tu]
-            [core2.types :as ty])
-  (:import core2.select.IVectorSchemaRootSelector
-           core2.operator.project.ProjectionSpec
+            [core2.types :as ty]
+            [core2.vector :as vec])
+  (:import core2.operator.project.ProjectionSpec
+           core2.operator.select.IRelationSelector
            org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType
@@ -15,7 +15,7 @@
 
 (t/use-fixtures :each tu/with-allocator)
 
-(t/deftest test-union
+(t/deftest test-union-all
   (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
         b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
@@ -24,7 +24,7 @@
                 right-cursor (tu/->cursor (Schema. [a-field b-field])
                                           [[{:a 10 :b 1}, {:a 15 :b 2}]
                                            [{:a 83 :b 3}]])
-                union-cursor (set-op/->union-cursor left-cursor right-cursor)]
+                union-cursor (set-op/->union-all-cursor left-cursor right-cursor)]
 
       (t/is (= [#{{:a 0, :b 15}
                   {:a 12, :b 10}}
@@ -39,7 +39,7 @@
                                            [])
                   right-cursor (tu/->cursor (Schema. [a-field])
                                             [])
-                  union-cursor (set-op/->union-cursor left-cursor right-cursor)]
+                  union-cursor (set-op/->union-all-cursor left-cursor right-cursor)]
 
         (t/is (empty? (tu/<-cursor union-cursor)))))))
 
@@ -165,63 +165,53 @@
         (t/is (empty? (tu/<-cursor distinct-cursor)))))))
 
 (t/deftest test-fixpoint
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+  (with-open [in-cursor (tu/->cursor (Schema. [(ty/->field "a" (.getType Types$MinorType/BIGINT) false)
+                                               (ty/->field "b" (.getType Types$MinorType/BIGINT) false)])
+                                     [[{:a 0 :b 1}]])
+              factorial-cursor (set-op/->fixpoint-cursor
+                                tu/*allocator* in-cursor
+                                (reify core2.operator.set.IFixpointCursorFactory
+                                  (createCursor [_ cursor-factory]
+                                    (select/->select-cursor
+                                     (project/->project-cursor
+                                      tu/*allocator*
+                                      (.createCursor cursor-factory)
+                                      [(reify ProjectionSpec
+                                         (project [_ allocator in-rel]
+                                           (let [a-col (.readColumn in-rel "a")
+                                                 out-col (vec/->fresh-append-column allocator "a")]
+                                             (dotimes [idx (.rowCount in-rel)]
+                                               (.appendLong out-col (inc (.getLong a-col idx))))
+                                             (.read out-col))))
 
-    (with-open [factorial-cursor (set-op/->fixpoint-cursor
-                                  tu/*allocator*
-                                  (tu/->cursor (Schema. [a-field b-field])
-                                               [[{:a 0 :b 1}]])
-                                  (reify core2.operator.set.IFixpointCursorFactory
-                                    (createCursor [_ cursor-factory]
-                                      (select/->select-cursor
-                                       tu/*allocator*
-                                       (project/->project-cursor
-                                        tu/*allocator*
-                                        (.createCursor cursor-factory)
-                                        [(reify ProjectionSpec
-                                           (getField [_ _in-schema] a-field)
+                                       (reify ProjectionSpec
+                                         (project [_ allocator in-rel]
+                                           (let [a-col (.readColumn in-rel "a")
+                                                 b-col (.readColumn in-rel "b")
+                                                 out-col (vec/->fresh-append-column allocator "b")]
+                                             (dotimes [idx (.rowCount in-rel)]
+                                               (.appendLong out-col (* (inc (.getLong a-col idx))
+                                                                       (.getLong b-col idx))))
+                                             (.read out-col))))])
 
-                                           (project [_ in-root out-vec]
-                                             (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                   ^BigIntVector out-vec out-vec
-                                                   row-count (.getRowCount in-root)]
-                                               (.setValueCount out-vec row-count)
-                                               (dotimes [idx row-count]
-                                                 (.set out-vec idx (+ (.get a-vec idx) 1)))
-                                               out-vec)))
+                                     (reify IRelationSelector
+                                       (select [_ in-rel]
+                                         (let [idx-bitmap (RoaringBitmap.)
+                                               a-col (.readColumn in-rel "a")]
+                                           (dotimes [idx (.rowCount in-rel)]
+                                             (when (<= (.getLong a-col idx) 8)
+                                               (.add idx-bitmap idx)))
 
-                                         (reify ProjectionSpec
-                                           (getField [_ _in-schema] b-field)
+                                           idx-bitmap))))))
+                                true)]
 
-                                           (project [_ in-root out-vec]
-                                             (let [^BigIntVector a-vec (.getVector in-root a-field)
-                                                   ^BigIntVector b-vec (.getVector in-root b-field)
-                                                   ^BigIntVector out-vec out-vec
-                                                   row-count (.getRowCount in-root)]
-                                               (.setValueCount out-vec row-count)
-                                               (dotimes [idx row-count]
-                                                 (.set out-vec idx (* (+ (.get a-vec idx) 1) (.get b-vec idx))))
-                                               out-vec)))])
-
-                                       (reify IVectorSchemaRootSelector
-                                         (select [_ in-root]
-                                           (let [idx-bitmap (RoaringBitmap.)]
-
-                                             (dotimes [idx (.getRowCount in-root)]
-                                               (when (<= (.get ^BigIntVector (.getVector in-root a-field) idx) 8)
-                                                 (.add idx-bitmap idx)))
-
-                                             idx-bitmap))))))
-                                  true)]
-
-      (t/is (= [[{:a 0, :b 1}
-                 {:a 1, :b 1}
-                 {:a 2, :b 2}
-                 {:a 3, :b 6}
-                 {:a 4, :b 24}
-                 {:a 5, :b 120}
-                 {:a 6, :b 720}
-                 {:a 7, :b 5040}
-                 {:a 8, :b 40320}]]
-               (tu/<-cursor factorial-cursor))))))
+    (t/is (= [[{:a 0, :b 1}]
+              [{:a 1, :b 1}]
+              [{:a 2, :b 2}]
+              [{:a 3, :b 6}]
+              [{:a 4, :b 24}]
+              [{:a 5, :b 120}]
+              [{:a 6, :b 720}]
+              [{:a 7, :b 5040}]
+              [{:a 8, :b 40320}]]
+             (tu/<-cursor factorial-cursor)))))

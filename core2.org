@@ -721,3 +721,24 @@ seems a ~5-10% improvement on Q5 and Q9
 "Elapsed time: 2409.118736 msecs"
 #'core2.tpch/tpch-q9-product-type-profit-measure
 "Elapsed time: 1749.365797 msecs"
+
+** lazy mat
+*** pre
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 3763.514114 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 5349.604988 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 5286.252525 msecs"
+
+regression?
+
+*** post
+
+#'core2.tpch/tpch-q1-pricing-summary-report
+"Elapsed time: 3469.062123 msecs"
+#'core2.tpch/tpch-q5-local-supplier-volume
+"Elapsed time: 4836.539507 msecs"
+#'core2.tpch/tpch-q9-product-type-profit-measure
+"Elapsed time: 4885.72125 msecs"
