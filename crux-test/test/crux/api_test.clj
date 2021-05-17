@@ -81,10 +81,7 @@
         submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
     (api/await-tx *api* submitted-tx nil)
 
-    #_ ; TODO (#1513) local-kafka-transit doesn't return the same `:crux.db/id`
-    (t/is (= doc (api/entity (api/db *api*) id)))
-
-    (t/is (api/entity (api/db *api*) id))))
+    (t/is (= doc (api/entity (api/db *api*) id)))))
 
 (t/deftest test-query
   (let [valid-time (Date.)
