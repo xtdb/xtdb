@@ -459,3 +459,23 @@
                (api/await-tx *api* tx (Duration/ofMillis 5000))
                (catch Exception e
                  (throw (.getCause e)))))))))
+
+(t/deftest round-trips-clobs
+  ;; ensure that anyone changing this also checks this test
+  (t/is (= 224 @#'c/max-value-index-length))
+
+  (let [clob (pr-str (range 1000))
+        clob-doc {:crux.db/id :clob, :clob clob}]
+    (fix/submit+await-tx [[:crux.tx/put clob-doc]])
+
+    (let [db (api/db *api*)]
+      (t/is (= #{[clob]}
+               (api/q db '{:find [?clob]
+                           :where [[?e :clob ?clob]]})))
+
+      (t/is (= #{[clob-doc]}
+               (api/q db '{:find [(pull ?e [*])]
+                           :where [[?e :clob]]})))
+
+      (t/is (= clob-doc
+               (api/entity db :clob))))))
