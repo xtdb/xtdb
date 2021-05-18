@@ -79,33 +79,32 @@ Two main extension points:
      - Some level of deployment/monitoring
        - DONE create uberjar
      - DONE Full TPC-H
-     - Larger TPC-H scale factors - check ingest + query
+     - Larger TPC-H scale factors (SF10) - check ingest + query
        - linear growth in aggregate queries, sub-linear in accesses
      - Concurrency - check running ingest + multiple queries in parallel
-       - Running multiple TPC-H nodes in the cloud - check everything works same as locally
+       - TODO Running multiple TPC-H nodes in the cloud - check everything works same as locally
      - Check queries too slow, possible solutions
        - DONE Bloom filters
        - DONE Block-level metadata
        - Predicate push-down
          - DONE for joins passing bloom filters
-     - Add back Path-based getObject arity in ObjectStore
      - DONE Upgrade to Arrow 4.0.0
        - Investigate Dataset API?
      - Check cold caches, possible solutions:
        - Tiered caching
    - Join order benchmarking - WatDiv, graph
-     - WCOJ?
+     - WCOJ? see worst-case optimal hash join paper.
+       - constructing/storing hash indices?
    - Dealing with updates over time - historical dataset (TS Devices)
      - DONE ingest bench
      - DONE Temporal range predicates in logical plan scan
+     - TODO test the queries using our logical plan
    - Scalable temporal indexing + querying
      - Exercise temporal side, TPC-BiH
      - DONE SQL:2011 period predicates in logical plan expressions:
-       - overlaps, equals, contains, (immediately) precedes,
-         (immediately) succeeds.
+       - overlaps, equals, contains, (immediately) precedes, (immediately) succeeds.
      - Add interval types and arithmetic?
-     - How far does the current kd-tree take us? Need different
-       approach or fixable as initial cut?
+     - How far does the current kd-tree take us? Need different approach or fixable as initial cut?
    - Bigger than local node databases
      - DONE Buffer pool eviction and size limit.
      - DONE Ability to query several temporal chunks (live and Arrow).
@@ -135,14 +134,15 @@ Two main extension points:
 
 Bugs:
 - TODO chunk names have 2^32 numbers, row-ids are 2^64
-- TODO Exception during query, close node -> Arrow memory leak error
+- TODO Add additional Path-based getObject arity in ObjectStore - the temporal snapshot may well be too big to fit in memory
 
 Clean up:
+- TODO remaining late-mat optimisations
 - DUV completeness (removal of some DUV hacks/pain)
 - Clean up data model: Java/Clojure types, Java Arrow types, representation of types (keywords, ArrowType, class etc.), conversion between types.
-- Clean up Spliterator operators.
-- Consider VectorSchemaRoot and Roaring selection forwarding and avoid copies?
-- Avoid copies during joins via join-index-vectors? Sorting via sort-vectors?
+- DONE Clean up Spliterator operators.
+- DONE Consider VectorSchemaRoot and Roaring selection forwarding and avoid copies?
+- DONE Avoid copies during joins via join-index-vectors? Sorting via sort-vectors?
 - Review memory-management.
 - JMH - how to leverage, still needed?
 
@@ -151,7 +151,9 @@ Should have:
 - We don't currently coalesce small intermediate blocks in the query engine
 - DONE Parameters beyond table-operator - override values in expressions without recompiling.
   - Change TPC-H queries to use parameters.
-- Support lists/cardinality-many?
+- Bringing external CSV/Arrow into Core2?
+  - Will need to remove assumptions around type-ids in the logical plan/query engine
+- Support lists/cardinality-many? Requires discussion
 - Reconstructing the log - storage of incoming transactions in object store
 - Tx fns?
 - Speculative transactions?

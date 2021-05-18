@@ -121,6 +121,7 @@ papers:
 - [[http://citeseerx.ist.psu.edu/viewdoc/download;jsessionid=CFD3DCD1A3AECA50776F3A913BF541B4?doi=10.1.1.498.5779&rep=rep1&type=pdf][Execution Strategies for SQL Subqueries]]
 - [[https://cs.ulb.ac.be/public/_media/teaching/infoh417/sql2alg_eng.pdf][Translating SQL into the Relational Algebra]]
 - [[https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf][Unnesting Arbitrary Queries]]
+- [[http://db.in.tum.de/~freitag/papers/p1891-freitag.pdf][Adopting Worst-Case Optimal Joins in Relational Database Systems]]
 
 ** Misc
 - [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
