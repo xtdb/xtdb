@@ -541,12 +541,11 @@
         (t/is (= [[7 2] [5 4] [9 6] [2 3] [4 7] [8 1]]
                  (mapv vec (.points kd-tree))))
 
-        ;; TODO: builds broken trees for larger ns.
-        (let [ns 7
-              rng (Random. 0)
-              k 2
-              points (vec (for [n (range ns)]
-                            (long-array (repeatedly k #(.nextLong rng)))))
-              ^ArrayKdTree kd-tree (->array-kd-tree points k)]
-          (@#'kd/build-breadth-first-tree-in-place kd-tree true)
-          (t/is true))))))
+        (let [rng (Random. 0)]
+          (doseq [k (range 2 10)]
+            (let [ns 1000
+                  points (vec (for [n (range ns)]
+                                (long-array (repeatedly k #(.nextLong rng)))))
+                  ^ArrayKdTree kd-tree (->array-kd-tree points k)]
+              (@#'kd/build-breadth-first-tree-in-place kd-tree true)
+              (t/is true))))))))

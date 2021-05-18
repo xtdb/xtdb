@@ -216,6 +216,10 @@
                              ^:unsynchronized-mutable ^long max-in-level
                              ^:unsynchronized-mutable ^long current
                              ^long n]
+  Object
+  (clone [_]
+    (SubtreeSpliterator. current-in-level max-in-level current n))
+
   Spliterator$OfLong
   (^boolean tryAdvance [this ^LongConsumer consumer]
    (if (balanced-valid? n current)
@@ -935,8 +939,8 @@
                 (.swapPoint access node-idx left-child-idx)))
             (loop [^SubtreeSpliterator l (->subtree-spliterator n (balanced-left-child node-idx))
                    ^SubtreeSpliterator r (->subtree-spliterator n (balanced-right-child node-idx))
-                   ^SubtreeSpliterator l0 (->subtree-spliterator n (balanced-left-child node-idx))
-                   ^SubtreeSpliterator r0 (->subtree-spliterator n (balanced-right-child node-idx))
+                   ^SubtreeSpliterator l0 (.clone l)
+                   ^SubtreeSpliterator r0 (.clone r)
                    root-pos (.getCoordinate access node-idx axis)]
 
               (while (and (balanced-valid? n (.getAsLong l))
@@ -959,29 +963,29 @@
                            root-pos))
 
                 (balanced-valid? n (.getAsLong l))
-                (let [^SubtreeSpliterator l0 (->subtree-spliterator n (.getAsLong l))]
+                (let [^SubtreeSpliterator l0 (.clone l)]
                   (while (.tryAdvance l nop)
                     (when (<= (.getCoordinate access (.getAsLong l) axis) root-pos)
                       (.swapPoint access (.getAsLong l) (.getAsLong l0))
                       (.tryAdvance l0 nop)))
                   (.swapPoint access node-idx (.getAsLong l0))
                   (.tryAdvance l0 nop)
-                  (recur (->subtree-spliterator n (.getAsLong l0))
-                         (->subtree-spliterator n (.getAsLong r0))
+                  (recur (.clone l0)
+                         (.clone r0)
                          l0
                          r0
                          (.getCoordinate access node-idx axis)))
 
                 (balanced-valid? n (.getAsLong r))
-                (let [^SubtreeSpliterator r0 (->subtree-spliterator n (.getAsLong r))]
+                (let [^SubtreeSpliterator r0 (.clone r)]
                   (while (.tryAdvance r nop)
                     (when (>= (.getCoordinate access (.getAsLong r) axis) root-pos)
                       (.swapPoint access (.getAsLong r) (.getAsLong r0))
                       (.tryAdvance r0 nop)))
                   (.swapPoint access node-idx (.getAsLong r0))
                   (.tryAdvance r0 nop)
-                  (recur (->subtree-spliterator n (.getAsLong l0))
-                         (->subtree-spliterator n (.getAsLong r0))
+                  (recur (.clone l0)
+                         (.clone r0)
                          l0
                          r0
                          (.getCoordinate access node-idx axis))))))
