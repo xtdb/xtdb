@@ -360,10 +360,10 @@
             "wikipedia-test")
 
       (t/testing "seq"
-        (t/is (= (kd/kd-tree->seq kd-tree)
-                 (kd/kd-tree->seq column-kd-tree)
-                 (kd/kd-tree->seq disk-kd-tree-from-points)
-                 (kd/kd-tree->seq disk-kd-tree-from-tree))))
+        (t/is (= (set (kd/kd-tree->seq kd-tree))
+                 (set (kd/kd-tree->seq column-kd-tree))
+                 (set (kd/kd-tree->seq disk-kd-tree-from-points))
+                 (set (kd/kd-tree->seq disk-kd-tree-from-tree)))))
 
       (t/testing "depth"
         (t/is (= 3
@@ -406,6 +406,8 @@
                                                                               2)
                         ^Node merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
                         rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
+              (t/is (= 3 (kd/kd-tree-size column-kd-tree)))
+              (t/is (= 4 (kd/kd-tree-value-count column-kd-tree)))
               (t/is (= 4 (kd/kd-tree-size old-tree-with-node-to-be-deleted)))
 
               (t/is (= (set (kd/kd-tree->seq kd-tree))
@@ -474,28 +476,6 @@
   (iterator-seq (Spliterators/iterator ^Spliterator$OfLong (kd/->subtree-spliterator n root))))
 
 (t/deftest test-breadth-first-kd-tree
-  (t/testing "zero-based left balanced median"
-    (let [xs [2 3 7 9 11]]
-      (t/is (= 7 (nth xs (quot (count xs) 2))))
-      (t/is (= 9 (nth xs (@#'kd/left-balanced-median (count xs)))))
-      (t/is (= 9 (nth xs (@#'kd/left-balanced-median-alternative (count xs)))))
-
-      (t/is (= 10 (quot 21 2)))
-      (t/is (= 13 (@#'kd/left-balanced-median 21)))
-      (t/is (= 13 (@#'kd/left-balanced-median-alternative 21)))
-
-      (t/is (= 12 (quot 25 2)))
-      (t/is (= 13 (@#'kd/left-balanced-median 21)))
-      (t/is (= 13 (@#'kd/left-balanced-median-alternative 21)))
-
-      (t/is (= 6 (quot 13 2)))
-      (t/is (= 7 (@#'kd/left-balanced-median 13)))
-      (t/is (= 7 (@#'kd/left-balanced-median-alternative 13)))
-
-      (t/is (= 3 (quot 7 2)))
-      (t/is (= 3 (@#'kd/left-balanced-median 7)))
-      (t/is (= 3 (@#'kd/left-balanced-median-alternative 7)))))
-
   (t/testing "zero-based index navigation"
     (t/is (= 3 (@#'kd/balanced-parent 6)))
 

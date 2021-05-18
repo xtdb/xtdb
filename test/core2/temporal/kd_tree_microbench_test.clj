@@ -116,12 +116,12 @@
                               (.count ^LongStream (kd/kd-tree-range-search compressed-disk-kd-tree min-range max-range)))))))
 
                 (let [_ (prn :node-kd-tree->seq)
-                      kd-tree-seq (time (vec (kd/kd-tree->seq kd-tree)))
+                      kd-tree-seq (time (set (kd/kd-tree->seq kd-tree)))
                       _ (prn :column-tree->seq)
-                      col-tree-seq (time (vec (kd/kd-tree->seq column-kd-tree)))
+                      col-tree-seq (time (set (kd/kd-tree->seq column-kd-tree)))
                       _ (prn :disk-tree->seq)
-                      disk-tree-seq (time (vec (kd/kd-tree->seq disk-kd-tree)))
+                      disk-tree-seq (time (set (kd/kd-tree->seq disk-kd-tree)))
                       _ (prn :compressed-disk-tree->seq)
-                      compressed-disk-tree-seq (time (vec (kd/kd-tree->seq compressed-disk-kd-tree)))]
+                      compressed-disk-tree-seq (time (set (kd/kd-tree->seq compressed-disk-kd-tree)))]
 
                   (t/is (= kd-tree-seq col-tree-seq disk-tree-seq compressed-disk-tree-seq)))))))))))
