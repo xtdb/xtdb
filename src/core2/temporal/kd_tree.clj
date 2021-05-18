@@ -239,9 +239,6 @@
 (defn ->subtree-spliterator ^core2.temporal.kd_tree.SubtreeSpliterator [^long n ^long root]
   (SubtreeSpliterator. 0 1 root n))
 
-(defn ->subtree-iterator ^java.util.PrimitiveIterator$OfLong [^long n ^long root]
-  (Spliterators/iterator ^Spliterator$OfLong (->subtree-spliterator n root)))
-
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [k (+ low (left-balanced-median (- hi low)))]
     (loop [low low
@@ -991,8 +988,8 @@
                          (.getCoordinate access node-idx axis))))))
 
           (when check?
-            (let [^PrimitiveIterator$OfLong l (->subtree-iterator n (balanced-left-child node-idx))
-                  ^PrimitiveIterator$OfLong r (->subtree-iterator n (balanced-right-child node-idx))
+            (let [l (Spliterators/iterator ^Spliterator$OfLong (->subtree-spliterator n (balanced-left-child node-idx)))
+                  r (Spliterators/iterator ^Spliterator$OfLong (->subtree-spliterator n (balanced-right-child node-idx)))
                   root-pos (.getCoordinate access node-idx axis)]
               (while (.hasNext l)
                 (let [l-pos (.getCoordinate access (.nextLong l) axis)]

@@ -3,7 +3,7 @@
             [core2.util :as util]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
-  (:import [java.util Collection Date HashMap List Random]
+  (:import [java.util Collection Date HashMap List Spliterator$OfLong Spliterators Random]
            [java.util.function Predicate ToLongFunction]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
@@ -470,7 +470,10 @@
 (defn ->array-kd-tree [points k]
   (ArrayKdTree. (object-array (map long-array points)) k))
 
-(t/deftest test-left-balanced-median
+(defn ->subtree-seq [^long n ^long root]
+  (iterator-seq (Spliterators/iterator ^Spliterator$OfLong (kd/->subtree-spliterator n root))))
+
+(t/deftest test-breadth-first-kd-tree
   (t/testing "zero-based left balanced median"
     (let [xs [2 3 7 9 11]]
       (t/is (= 7 (nth xs (quot (count xs) 2))))
@@ -491,61 +494,61 @@
 
       (t/is (= 3 (quot 7 2)))
       (t/is (= 3 (@#'kd/left-balanced-median 7)))
-      (t/is (= 3 (@#'kd/left-balanced-median-alternative 7))))
+      (t/is (= 3 (@#'kd/left-balanced-median-alternative 7)))))
 
-    (t/testing "zero-based index navigation"
-      (t/is (= 3 (@#'kd/balanced-parent 6)))
+  (t/testing "zero-based index navigation"
+    (t/is (= 3 (@#'kd/balanced-parent 6)))
 
-      (t/is (= 5 (@#'kd/balanced-left-child 2)))
-      (t/is (= 6 (@#'kd/balanced-right-child 2)))
+    (t/is (= 5 (@#'kd/balanced-left-child 2)))
+    (t/is (= 6 (@#'kd/balanced-right-child 2)))
 
-      (t/is (= 11 (@#'kd/balanced-left-child 5)))
-      (t/is (= 12 (@#'kd/balanced-right-child 5)))
+    (t/is (= 11 (@#'kd/balanced-left-child 5)))
+    (t/is (= 12 (@#'kd/balanced-right-child 5)))
 
-      (t/is (= 6 (@#'kd/balanced-parent 12)))
-      (t/is (= 6 (@#'kd/balanced-parent 13))))
+    (t/is (= 6 (@#'kd/balanced-parent 12)))
+    (t/is (= 6 (@#'kd/balanced-parent 13))))
 
-    (t/testing "zero-based index predicates"
-      (t/is (@#'kd/balanced-root? 0))
+  (t/testing "zero-based index predicates"
+    (t/is (@#'kd/balanced-root? 0))
 
-      (t/is (true? (@#'kd/balanced-invalid? 21 31)))
-      (t/is (false? (@#'kd/balanced-invalid? 21 13)))
+    (t/is (true? (@#'kd/balanced-invalid? 21 31)))
+    (t/is (false? (@#'kd/balanced-invalid? 21 13)))
 
-      (t/is (false? (@#'kd/balanced-leaf? 21 0)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 2)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 6)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 9)))
-      (t/is (true? (@#'kd/balanced-leaf? 21 10)))
-      (t/is (true? (@#'kd/balanced-leaf? 21 15))))
+    (t/is (false? (@#'kd/balanced-leaf? 21 0)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 2)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 6)))
+    (t/is (false? (@#'kd/balanced-leaf? 21 9)))
+    (t/is (true? (@#'kd/balanced-leaf? 21 10)))
+    (t/is (true? (@#'kd/balanced-leaf? 21 15))))
 
-    (t/testing "subtree iterator"
-      (t/is (empty? (iterator-seq (kd/->subtree-iterator 0 0))))
+  (t/testing "subtree iterator"
+    (t/is (empty? (->subtree-seq 0 0)))
 
-      (t/is (= (range 1) (iterator-seq (kd/->subtree-iterator 1 0))))
-      (t/is (= (range 2) (iterator-seq (kd/->subtree-iterator 2 0))))
-      (t/is (= (range 3) (iterator-seq (kd/->subtree-iterator 3 0))))
-      (t/is (= (range 15) (iterator-seq (kd/->subtree-iterator 15 0))))
-      (t/is (= [1 3 4] (iterator-seq (kd/->subtree-iterator 7 1))))
-      (t/is (= [1 3 4 7 8 9 10] (iterator-seq (kd/->subtree-iterator 15 1))))
-      (t/is (= [3 7 8] (iterator-seq (kd/->subtree-iterator 15 3))))
-      (t/is (= [4 9 10] (iterator-seq (kd/->subtree-iterator 15 4))))
-      (t/is (= [2 5 6] (iterator-seq (kd/->subtree-iterator 7 2))))
-      (t/is (= [2 5 6 11 12 13 14] (iterator-seq (kd/->subtree-iterator 15 2))))
-      (t/is (= [5 11 12] (iterator-seq (kd/->subtree-iterator 15 5))))
-      (t/is (= [6 13 14] (iterator-seq (kd/->subtree-iterator 15 6)))))
+    (t/is (= (range 1) (->subtree-seq 1 0)))
+    (t/is (= (range 2) (->subtree-seq 2 0)))
+    (t/is (= (range 3) (->subtree-seq 3 0)))
+    (t/is (= (range 15) (->subtree-seq 15 0)))
+    (t/is (= [1 3 4] (->subtree-seq 7 1)))
+    (t/is (= [1 3 4 7 8 9 10] (->subtree-seq 15 1)))
+    (t/is (= [3 7 8] (->subtree-seq 15 3)))
+    (t/is (= [4 9 10] (->subtree-seq 15 4)))
+    (t/is (= [2 5 6] (->subtree-seq 7 2)))
+    (t/is (= [2 5 6 11 12 13 14] (->subtree-seq 15 2)))
+    (t/is (= [5 11 12] (->subtree-seq 15 5)))
+    (t/is (= [6 13 14] (->subtree-seq 15 6))))
 
-    (t/testing "breadth first tree"
-      (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]
-            ^ArrayKdTree kd-tree (->array-kd-tree points 2)]
-        (@#'kd/build-breadth-first-tree-in-place kd-tree true)
-        (t/is (= [[7 2] [5 4] [9 6] [2 3] [4 7] [8 1]]
-                 (mapv vec (.points kd-tree))))
+  (t/testing "breadth first tree"
+    (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]
+          ^ArrayKdTree kd-tree (->array-kd-tree points 2)]
+      (@#'kd/build-breadth-first-tree-in-place kd-tree true)
+      (t/is (= [[7 2] [5 4] [9 6] [2 3] [4 7] [8 1]]
+               (mapv vec (.points kd-tree))))
 
-        (let [rng (Random. 0)]
-          (doseq [k (range 2 10)]
-            (let [ns 1000
-                  points (vec (for [n (range ns)]
-                                (long-array (repeatedly k #(.nextLong rng)))))
-                  ^ArrayKdTree kd-tree (->array-kd-tree points k)]
-              (@#'kd/build-breadth-first-tree-in-place kd-tree true)
-              (t/is true))))))))
+      (let [rng (Random. 0)]
+        (doseq [k (range 2 10)]
+          (let [ns 1000
+                points (vec (for [n (range ns)]
+                              (long-array (repeatedly k #(.nextLong rng)))))
+                ^ArrayKdTree kd-tree (->array-kd-tree points k)]
+            (@#'kd/build-breadth-first-tree-in-place kd-tree true)
+            (t/is true)))))))
