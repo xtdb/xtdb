@@ -476,29 +476,28 @@
       (t/is (= 3 (@#'kd/left-balanced-median 7)))
       (t/is (= 3 (@#'kd/left-balanced-median-alternative 7))))
 
-    (t/testing "one-based index navigation"
+    (t/testing "zero-based index navigation"
       (t/is (= 3 (@#'kd/balanced-parent 6)))
 
-      (t/is (= 6 (@#'kd/balanced-left 3)))
-      (t/is (= 7 (@#'kd/balanced-right 3)))
+      (t/is (= 5 (@#'kd/balanced-left 2)))
+      (t/is (= 6 (@#'kd/balanced-right 2)))
 
-      (t/is (= 12 (@#'kd/balanced-left 6)))
-      (t/is (= 13 (@#'kd/balanced-right 6)))
+      (t/is (= 11 (@#'kd/balanced-left 5)))
+      (t/is (= 12 (@#'kd/balanced-right 5)))
 
       (t/is (= 6 (@#'kd/balanced-parent 12)))
       (t/is (= 6 (@#'kd/balanced-parent 13))))
 
 
-    (t/testing "one-based index predicates"
-      (t/is (@#'kd/balanced-root? 1))
+    (t/testing "zero-based index predicates"
+      (t/is (@#'kd/balanced-root? 0))
 
-      (t/is (true? (@#'kd/balanced-invalid? 21 32)))
-      (t/is (false? (@#'kd/balanced-invalid? 21 14)))
+      (t/is (true? (@#'kd/balanced-invalid? 21 31)))
+      (t/is (false? (@#'kd/balanced-invalid? 21 13)))
 
-      (t/is (false? (@#'kd/balanced-leaf? 21 1)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 1)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 3)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 7)))
-      (t/is (false? (@#'kd/balanced-leaf? 21 10)))
-      (t/is (true? (@#'kd/balanced-leaf? 21 11)))
-      (t/is (true? (@#'kd/balanced-leaf? 21 16))))))
+      (t/is (false? (@#'kd/balanced-leaf? 21 0)))
+      (t/is (false? (@#'kd/balanced-leaf? 21 2)))
+      (t/is (false? (@#'kd/balanced-leaf? 21 6)))
+      (t/is (false? (@#'kd/balanced-leaf? 21 9)))
+      (t/is (true? (@#'kd/balanced-leaf? 21 10)))
+      (t/is (true? (@#'kd/balanced-leaf? 21 15))))))

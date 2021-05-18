@@ -185,19 +185,31 @@
   (bit-shift-right idx 1))
 
 (defn- balanced-left ^long [^long idx]
-  (bit-shift-left idx 1))
-
-(defn- balanced-right ^long [^long idx]
   (inc (bit-shift-left idx 1)))
 
+(defn- balanced-right ^long [^long idx]
+  (+ (bit-shift-left idx 1) 2))
+
 (defn- balanced-root? [^long idx]
-  (= 1 idx))
+  (zero? idx))
+
+(defn- balanced-valid? [^long n ^long idx]
+  (< idx n))
 
 (defn- balanced-invalid? [^long n ^long idx]
-  (> idx n))
+  (not (balanced-valid? n idx)))
+
+(defn- balanced-left-child? [^long n ^long idx]
+  (balanced-valid? n (balanced-left n idx)))
+
+(defn- balanced-right-child? [^long n ^long idx]
+  (balanced-valid? n (balanced-right n idx)))
 
 (defn- balanced-leaf? [^long n ^long idx]
-  (> (* idx 2) n))
+  (>= idx (bit-shift-right n 1)))
+
+(defn- balanced-inner? [^long n ^long idx]
+  (< idx (bit-shift-right n 1)))
 
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [k (+ low (left-balanced-median (- hi low)))]
