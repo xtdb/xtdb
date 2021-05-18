@@ -3794,3 +3794,100 @@
     (t/is (= '[?name ?e ?type]
              (-> (q/query-plan-for (api/db *api*) query)
                  :vars-in-join-order)))))
+
+(defn- date->inverted-long [d]
+  (* -1 (.getTime d)))
+
+(defn- inverted-long->date [l]
+  (Date. (* -1 l)))
+
+(t/deftest range-constraint-ordering-behaviours
+  (fix/transact!
+   *api*
+   [{:crux.db/id :a :i -7 :j 30 :t #inst "2021-05-17" :t2 (date->inverted-long #inst "2021-05-17")}
+    {:crux.db/id :b :i 14 :j 25 :t #inst "2021-05-19" :t2 (date->inverted-long #inst "2021-05-19")}
+    {:crux.db/id :c :i 14 :j 14 :t #inst "2021-05-19" :t2 (date->inverted-long #inst "2021-05-19")}
+    {:crux.db/id :d :i 25 :j 14 :t #inst "2021-05-21" :t2 (date->inverted-long #inst "2021-05-21")}
+    {:crux.db/id :e :i 30 :j -7 :t #inst "2021-05-22" :t2 (date->inverted-long #inst "2021-05-22")}])
+
+  (let [db (api/db *api*)]
+    (t/testing "eager query returns an unsorted set"
+      (t/is (= #{[:a] [:b] [:c] [:d] [:e]}
+               (api/q db '{:find [e]
+                           :where [[e :i i]
+                                   [(> i -10)]]}))))
+
+    (t/testing "lazy query with range constraint predicate returns the stored index order"
+      (with-open [res (api/open-q db '{:find [e]
+                                       :where [[e :i i]
+                                               [(> i -10)]]})]
+        (t/is (= '([:a] [:b] [:c] [:d] [:e])
+                 (iterator-seq res)))))
+
+    (t/testing "eager query with range constraint predicate and :limit returns a vector with the stored index order"
+      (t/is (= [[:a] [:b] [:c]]
+               (api/q db '{:find [e]
+                           :limit 3
+                           :where [[e :i i]
+                                   [(> i -10)]]}))))
+
+    (t/testing "eager query without :limit always returns a (deduplicated) set"
+      (t/is (= #{[-7] [14] [25] [30]}
+               (api/q db '{:find [i]
+                           :where [[e :i i]
+                                   [(> i -10)]]}))))
+
+    (t/testing "lazy query returns duplicates as they exist in the index"
+      (with-open [res (api/open-q db '{:find [i]
+                                       :where [[e :i i]
+                                               [(> i -10)]]})]
+        (t/is (= '([-7] [14] [14] [25] [30])
+                 (iterator-seq res)))))
+
+    (t/testing "eager query with :limit returns a vector with duplicates (i.e. a bag)"
+      (t/is (= [[-7] [14] [14] [25] [30]]
+               (api/q db '{:find [i]
+                           :limit 5
+                           :where [[e :i i]
+                                   [(> i -10)]]}))))
+
+    (t/testing "all range constraint predicates produces the ascending order from the index"
+      (with-open [res (api/open-q db '{:find [e]
+                                       :where [[e :i i]
+                                               [(< i 100)]]})]
+        (t/is (= '([:a] [:b] [:c] [:d] [:e])
+                 (iterator-seq res)))))
+
+    (t/testing "ordering of tuples based on duplicates from the index will rely on highly unpredictable aspects of the join order (e.g. ~arbitrary sorting of entity ID) as the tie-break"
+      (with-open [res (api/open-q db '{:find [j e]
+                                       :where [[e :j j]
+                                               [(> j -10)]]})]
+        (t/is (= '([-7 :e] [14 :c] [14 :d] [25 :b] [30 :a])
+                 (iterator-seq res)))))
+
+    (t/testing "range constraint predicates combine sensibly"
+      (with-open [res (api/open-q db '{:find [e]
+                                       :where [[e :i i]
+                                               [(> i -6)]
+                                               [(> i -10)]
+                                               [(< i 24)]]})]
+        (t/is (= '([:b] [:c])
+                 (iterator-seq res)))))
+
+    (t/testing "range constraint predicates work exactly the same with Dates and other first-class sorted value types (see crux.codec)"
+      (with-open [res (api/open-q db '{:find [e]
+                                       :where [[e :t t]
+                                               [(> t #inst "2021-05-08")]]})]
+        (t/is (= '([:a] [:b] [:c] [:d] [:e])
+                 (iterator-seq res)))))
+
+    (t/testing "range constraints only ever consume values in the stored ascending order, invert the original values to achieve the descending order"
+      (with-open [res (api/open-q db {:find '[t2]
+                                      :where ['[e :t2 t2]
+                                              [(list '> 't2 (date->inverted-long #inst "2021-05-23"))]]})]
+        (t/is (= '(#inst "2021-05-22T00:00:00.000-00:00"
+                   #inst "2021-05-21T00:00:00.000-00:00"
+                   #inst "2021-05-19T00:00:00.000-00:00"
+                   #inst "2021-05-19T00:00:00.000-00:00"
+                   #inst "2021-05-17T00:00:00.000-00:00")
+                 (map (comp inverted-long->date first) (iterator-seq res))))))))
