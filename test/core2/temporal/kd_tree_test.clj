@@ -479,15 +479,14 @@
     (t/testing "zero-based index navigation"
       (t/is (= 3 (@#'kd/balanced-parent 6)))
 
-      (t/is (= 5 (@#'kd/balanced-left 2)))
-      (t/is (= 6 (@#'kd/balanced-right 2)))
+      (t/is (= 5 (@#'kd/balanced-left-child 2)))
+      (t/is (= 6 (@#'kd/balanced-right-child 2)))
 
-      (t/is (= 11 (@#'kd/balanced-left 5)))
-      (t/is (= 12 (@#'kd/balanced-right 5)))
+      (t/is (= 11 (@#'kd/balanced-left-child 5)))
+      (t/is (= 12 (@#'kd/balanced-right-child 5)))
 
       (t/is (= 6 (@#'kd/balanced-parent 12)))
       (t/is (= 6 (@#'kd/balanced-parent 13))))
-
 
     (t/testing "zero-based index predicates"
       (t/is (@#'kd/balanced-root? 0))
@@ -500,4 +499,20 @@
       (t/is (false? (@#'kd/balanced-leaf? 21 6)))
       (t/is (false? (@#'kd/balanced-leaf? 21 9)))
       (t/is (true? (@#'kd/balanced-leaf? 21 10)))
-      (t/is (true? (@#'kd/balanced-leaf? 21 15))))))
+      (t/is (true? (@#'kd/balanced-leaf? 21 15))))
+
+    (t/testing "subtree iterator"
+      (t/is (empty? (iterator-seq (kd/->subtree-iterator 0 0))))
+
+      (t/is (= (range 1) (iterator-seq (kd/->subtree-iterator 1 0))))
+      (t/is (= (range 2) (iterator-seq (kd/->subtree-iterator 2 0))))
+      (t/is (= (range 3) (iterator-seq (kd/->subtree-iterator 3 0))))
+      (t/is (= (range 15) (iterator-seq (kd/->subtree-iterator 15 0))))
+      (t/is (= [1 3 4] (iterator-seq (kd/->subtree-iterator 7 1))))
+      (t/is (= [1 3 4 7 8 9 10] (iterator-seq (kd/->subtree-iterator 15 1))))
+      (t/is (= [3 7 8] (iterator-seq (kd/->subtree-iterator 15 3))))
+      (t/is (= [4 9 10] (iterator-seq (kd/->subtree-iterator 15 4))))
+      (t/is (= [2 5 6] (iterator-seq (kd/->subtree-iterator 7 2))))
+      (t/is (= [2 5 6 11 12 13 14] (iterator-seq (kd/->subtree-iterator 15 2))))
+      (t/is (= [5 11 12] (iterator-seq (kd/->subtree-iterator 15 5))))
+      (t/is (= [6 13 14] (iterator-seq (kd/->subtree-iterator 15 6)))))))

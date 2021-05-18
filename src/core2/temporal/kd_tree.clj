@@ -6,8 +6,9 @@
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
-            IdentityHashMap LinkedHashMap List Map Map$Entry Spliterator Spliterator$OfInt Spliterator$OfLong Spliterators]
-           [java.util.function Consumer Function LongConsumer LongFunction LongPredicate LongUnaryOperator]
+            IdentityHashMap LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
+            Spliterator Spliterator$OfInt Spliterator$OfLong Spliterators]
+           [java.util.function Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector
@@ -184,10 +185,10 @@
 (defn- balanced-parent ^long [^long idx]
   (bit-shift-right idx 1))
 
-(defn- balanced-left ^long [^long idx]
+(defn- balanced-left-child ^long [^long idx]
   (inc (bit-shift-left idx 1)))
 
-(defn- balanced-right ^long [^long idx]
+(defn- balanced-right-child ^long [^long idx]
   (+ (bit-shift-left idx 1) 2))
 
 (defn- balanced-root? [^long idx]
@@ -200,16 +201,50 @@
   (not (balanced-valid? n idx)))
 
 (defn- balanced-left-child? [^long n ^long idx]
-  (balanced-valid? n (balanced-left n idx)))
+  (balanced-valid? n (balanced-left-child n idx)))
 
 (defn- balanced-right-child? [^long n ^long idx]
-  (balanced-valid? n (balanced-right n idx)))
+  (balanced-valid? n (balanced-right-child n idx)))
 
 (defn- balanced-leaf? [^long n ^long idx]
   (>= idx (bit-shift-right n 1)))
 
 (defn- balanced-inner? [^long n ^long idx]
   (< idx (bit-shift-right n 1)))
+
+(deftype SubtreeSpliterator [^:unsynchronized-mutable ^long current-in-level
+                             ^:unsynchronized-mutable ^long max-in-level
+                             ^:unsynchronized-mutable ^long current
+                             ^long n]
+  Spliterator$OfLong
+  (^boolean tryAdvance [this ^LongConsumer consumer]
+   (if (balanced-valid? n current)
+     (do (.accept consumer current)
+         (set! (.current this) (inc current))
+         (set! (.current-in-level this) (inc current-in-level))
+         (when (= current-in-level max-in-level)
+           (set! (.current this) (balanced-left-child (- current max-in-level)))
+           (set! (.max-in-level this) (+ max-in-level max-in-level))
+           (set! (.current-in-level this) 0))
+         true)
+     false)))
+
+(deftype SubtreeIterator [^PrimitiveIterator$OfLong iterator
+                          ^:unsynchronized-mutable ^long current]
+  PrimitiveIterator$OfLong
+  (hasNext [this]
+    (.hasNext iterator))
+
+  (nextLong [this]
+    (let [x (.nextLong iterator)]
+      (set! (.current this) x)
+      x))
+
+  LongSupplier
+  (getAsLong [_] current))
+
+(defn ->subtree-iterator [^long n ^long root]
+  (SubtreeIterator. (Spliterators/iterator (SubtreeSpliterator. 0 1 root n)) root))
 
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [k (+ low (left-balanced-median (- hi low)))]
