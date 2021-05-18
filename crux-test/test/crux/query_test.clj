@@ -10,6 +10,8 @@
             [taoensso.nippy :as nippy])
   (:import [java.util Arrays UUID]
            java.util.concurrent.TimeoutException))
+           java.util.concurrent.TimeoutException
+           java.util.Date))
 
 (t/use-fixtures :each fix/with-node)
 
