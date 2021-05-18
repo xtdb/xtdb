@@ -3,7 +3,7 @@
             [core2.util :as util]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
-  (:import [java.util Collection Date HashMap List]
+  (:import [java.util Collection Date HashMap List Random]
            [java.util.function Predicate ToLongFunction]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
@@ -453,6 +453,23 @@
                           (t/is (= [node-to-insert]
                                    (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert)))))))))))))))))
 
+(deftype ArrayKdTree [^objects points ^long k]
+  kd/KdTree
+  (kd-tree-point-access [_]
+    (reify core2.temporal.kd_tree.IKdTreePointAccess
+      (getCoordinate [_ idx axis]
+        (aget ^longs (aget points idx) axis))
+      (swapPoint [_ from-idx to-idx]
+        (let [tmp (aget points from-idx)]
+          (doto points
+            (aset from-idx (aget points to-idx))
+            (aset to-idx tmp))))))
+  (kd-tree-dimensions [_] k)
+  (kd-tree-value-count [_] (alength points)))
+
+(defn ->array-kd-tree [points k]
+  (ArrayKdTree. (object-array (map long-array points)) k))
+
 (t/deftest test-left-balanced-median
   (t/testing "zero-based left balanced median"
     (let [xs [2 3 7 9 11]]
@@ -515,4 +532,21 @@
       (t/is (= [2 5 6] (iterator-seq (kd/->subtree-iterator 7 2))))
       (t/is (= [2 5 6 11 12 13 14] (iterator-seq (kd/->subtree-iterator 15 2))))
       (t/is (= [5 11 12] (iterator-seq (kd/->subtree-iterator 15 5))))
-      (t/is (= [6 13 14] (iterator-seq (kd/->subtree-iterator 15 6)))))))
+      (t/is (= [6 13 14] (iterator-seq (kd/->subtree-iterator 15 6)))))
+
+    (t/testing "breadth first tree"
+      (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]
+            ^ArrayKdTree kd-tree (->array-kd-tree points 2)]
+        (@#'kd/build-breadth-first-tree-in-place kd-tree true)
+        (t/is (= [[7 2] [5 4] [9 6] [2 3] [4 7] [8 1]]
+                 (mapv vec (.points kd-tree))))
+
+        #_(let [ns 5
+                rng (Random. 0)
+                k 2
+                points (vec (for [n (range ns)]
+                              (long-array (repeatedly k #(.nextLong rng)))))
+                _ (prn (mapv vec points))
+                ^ArrayKdTree kd-tree (->array-kd-tree points k)]
+            (@#'kd/build-breadth-first-tree-in-place kd-tree true)
+            (t/is true))))))
