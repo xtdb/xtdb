@@ -226,25 +226,17 @@
            (set! (.current this) (balanced-left-child (- current max-in-level)))
            (set! (.max-in-level this) (+ max-in-level max-in-level))
            (set! (.current-in-level this) 0))
-         true)
-     false)))
-
-(deftype SubtreeIterator [^PrimitiveIterator$OfLong iterator
-                          ^:unsynchronized-mutable ^long current]
-  PrimitiveIterator$OfLong
-  (hasNext [this]
-    (.hasNext iterator))
-
-  (nextLong [this]
-    (let [x (.nextLong iterator)]
-      (set! (.current this) x)
-      x))
+         (balanced-valid? n current))
+     false))
 
   LongSupplier
   (getAsLong [_] current))
 
-(defn ->subtree-iterator ^core2.temporal.kd_tree.SubtreeIterator [^long n ^long root]
-  (SubtreeIterator. (Spliterators/iterator (SubtreeSpliterator. 0 1 root n)) root))
+(defn ->subtree-spliterator ^core2.temporal.kd_tree.SubtreeSpliterator [^long n ^long root]
+  (SubtreeSpliterator. 0 1 root n))
+
+(defn ->subtree-iterator ^java.util.PrimitiveIterator$OfLong [^long n ^long root]
+  (Spliterators/iterator ^Spliterator$OfLong (->subtree-spliterator n root)))
 
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [k (+ low (left-balanced-median (- hi low)))]
@@ -930,7 +922,9 @@
   ([kd-tree check?]
    (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
          k (kd-tree-dimensions kd-tree)
-         n (kd-tree-value-count kd-tree)]
+         n (kd-tree-value-count kd-tree)
+         nop (reify LongConsumer
+               (accept [_ x]))]
 
      ((fn step [^long node-idx ^long axis]
         (when (balanced-left-child? n node-idx)
@@ -939,57 +933,62 @@
               (when (> (.getCoordinate access left-child-idx axis)
                        (.getCoordinate access node-idx axis))
                 (.swapPoint access node-idx left-child-idx)))
-            (loop [^SubtreeIterator l (->subtree-iterator n (balanced-left-child node-idx))
-                   ^SubtreeIterator r (->subtree-iterator n (balanced-right-child node-idx))
-                   ^SubtreeIterator l0 (->subtree-iterator n (balanced-left-child node-idx))
-                   ^SubtreeIterator r0 (->subtree-iterator n (balanced-right-child node-idx))]
+            (loop [^SubtreeSpliterator l (->subtree-spliterator n (balanced-left-child node-idx))
+                   ^SubtreeSpliterator r (->subtree-spliterator n (balanced-right-child node-idx))
+                   ^SubtreeSpliterator l0 (->subtree-spliterator n (balanced-left-child node-idx))
+                   ^SubtreeSpliterator r0 (->subtree-spliterator n (balanced-right-child node-idx))
+                   root-pos (.getCoordinate access node-idx axis)]
 
-              (let [root-pos (.getCoordinate access node-idx axis)]
+              (while (and (balanced-valid? n (.getAsLong l))
+                          (<= (.getCoordinate access (.getAsLong l) axis) root-pos)
+                          (.tryAdvance l nop)))
+              (while (and (balanced-valid? n (.getAsLong r))
+                          (>= (.getCoordinate access (.getAsLong r) axis) root-pos)
+                          (.tryAdvance r nop)))
 
-                (while (and (.hasNext l) (<= (.getCoordinate access (.nextLong l) axis) root-pos)))
-                (while (and (.hasNext r) (>= (.getCoordinate access (.nextLong r) axis) root-pos)))
-
-                (cond
-                  (and (balanced-valid? n (.getAsLong l))
-                       (balanced-valid? n (.getAsLong r)))
-                  (do (.swapPoint access (.getAsLong l) (.getAsLong r))
-                      (when (and (.hasNext l) (.hasNext r))
-                        (recur l
-                               r
-                               l0
-                               r0)))
-
-                  (balanced-valid? n (.getAsLong l))
-                  (let [^SubtreeIterator l0 (->subtree-iterator n (.getAsLong l))]
-                    (while (.hasNext l)
-                      (when (<= (.getCoordinate access (.nextLong l) axis) root-pos)
-                        (.swapPoint access (.getAsLong l) (.getAsLong l0))
-                        (doto l0
-                          (.hasNext)
-                          (.nextLong))))
-                    (.swapPoint access node-idx (.getAsLong l0))
-                    (recur (->subtree-iterator n (.getAsLong l0))
-                           (->subtree-iterator n (.getAsLong r0))
+              (cond
+                (and (balanced-valid? n (.getAsLong l))
+                     (balanced-valid? n (.getAsLong r)))
+                (do (.swapPoint access (.getAsLong l) (.getAsLong r))
+                    (.tryAdvance l nop)
+                    (.tryAdvance r nop)
+                    (recur l
+                           r
                            l0
-                           r0))
+                           r0
+                           root-pos))
 
-                  (balanced-valid? n (.getAsLong r))
-                  (let [^SubtreeIterator r0 (->subtree-iterator n (.getAsLong r))]
-                    (while (.hasNext r)
-                      (when (>= (.getCoordinate access (.nextLong r) axis) root-pos)
-                        (.swapPoint access (.getAsLong r) (.getAsLong r0))
-                        (doto r0
-                          (.hasNext)
-                          (.nextLong))))
-                    (.swapPoint access node-idx (.getAsLong r0))
-                    (recur (->subtree-iterator n (.getAsLong l0))
-                           (->subtree-iterator n (.getAsLong r0))
-                           l0
-                           r0))))))
+                (balanced-valid? n (.getAsLong l))
+                (let [^SubtreeSpliterator l0 (->subtree-spliterator n (.getAsLong l))]
+                  (while (.tryAdvance l nop)
+                    (when (<= (.getCoordinate access (.getAsLong l) axis) root-pos)
+                      (.swapPoint access (.getAsLong l) (.getAsLong l0))
+                      (.tryAdvance l0 nop)))
+                  (.swapPoint access node-idx (.getAsLong l0))
+                  (.tryAdvance l0 nop)
+                  (recur (->subtree-spliterator n (.getAsLong l0))
+                         (->subtree-spliterator n (.getAsLong r0))
+                         l0
+                         r0
+                         (.getCoordinate access node-idx axis)))
+
+                (balanced-valid? n (.getAsLong r))
+                (let [^SubtreeSpliterator r0 (->subtree-spliterator n (.getAsLong r))]
+                  (while (.tryAdvance r nop)
+                    (when (>= (.getCoordinate access (.getAsLong r) axis) root-pos)
+                      (.swapPoint access (.getAsLong r) (.getAsLong r0))
+                      (.tryAdvance r0 nop)))
+                  (.swapPoint access node-idx (.getAsLong r0))
+                  (.tryAdvance r0 nop)
+                  (recur (->subtree-spliterator n (.getAsLong l0))
+                         (->subtree-spliterator n (.getAsLong r0))
+                         l0
+                         r0
+                         (.getCoordinate access node-idx axis))))))
 
           (when check?
-            (let [^SubtreeIterator l (->subtree-iterator n (balanced-left-child node-idx))
-                  ^SubtreeIterator r (->subtree-iterator n (balanced-right-child node-idx))
+            (let [^PrimitiveIterator$OfLong l (->subtree-iterator n (balanced-left-child node-idx))
+                  ^PrimitiveIterator$OfLong r (->subtree-iterator n (balanced-right-child node-idx))
                   root-pos (.getCoordinate access node-idx axis)]
               (while (.hasNext l)
                 (let [l-pos (.getCoordinate access (.nextLong l) axis)]
