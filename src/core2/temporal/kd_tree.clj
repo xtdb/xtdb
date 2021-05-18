@@ -243,7 +243,7 @@
   LongSupplier
   (getAsLong [_] current))
 
-(defn ->subtree-iterator [^long n ^long root]
+(defn ->subtree-iterator ^core2.temporal.kd_tree.SubtreeIterator [^long n ^long root]
   (SubtreeIterator. (Spliterators/iterator (SubtreeSpliterator. 0 1 root n)) root))
 
 (defn- quick-select ^long [^IKdTreePointAccess access ^long low ^long hi ^long axis]
@@ -917,6 +917,65 @@
            (.setSkipPointer kd-tree start -1))
          false))
      0 (kd-tree-value-count kd-tree) 0)))
+
+
+;; Breadth first kd-tree in-place build based on:
+
+;; "CPU Ray Tracing Large Particle Data using Particle K-D Trees"
+;; http://www.sci.utah.edu/publications/Wal2015a/ospParticle.pdf
+;; https://github.com/ingowald/ospray-module-pkd
+
+(defn- build-breadth-first-tree-in-place [kd-tree]
+  (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
+        k (kd-tree-dimensions kd-tree)
+        n (kd-tree-value-count kd-tree)]
+
+    ((fn step [^long node-idx ^long axis]
+       (when (balanced-inner? node-idx)
+         (if-not (balanced-right-child? node-idx)
+           (let [left-child-idx (balanced-left-child node-idx)]
+             (when (> (.getCoordinate access left-child-idx axis)
+                      (.getCoordinate access node-idx axis))
+               (.swapPoint access node-idx left-child-idx)))
+           (loop [^SubtreeIterator l (->subtree-iterator n (balanced-left-child node-idx))
+                  ^SubtreeIterator r (->subtree-iterator n (balanced-right-child node-idx))]
+             (let [root-pos (.getCoordinate access node-idx axis)]
+
+               (while (and (.hasNext l) (<= (.getCoordinate access (.nextLong l) axis) root-pos)))
+               (while (and (.hasNext r) (>= (.getCoordinate access (.nextLong r) axis) root-pos)))
+
+               (cond
+                 (and (balanced-valid? n (.getAsLong l))
+                      (balanced-valid? n (.getAsLong r)))
+                 (do (.swapPoint access (.getAsLong l) (.getAsLong r))
+                     (recur l r))
+
+                 (balanced-valid? n (.getAsLong l))
+                 (let [^SubtreeIterator l0 (->subtree-iterator n (.getAsLong l))]
+                   (while (.hasNext l)
+                     (when (<= (.getCoordinate access (.nextLong l) axis) root-pos)
+                       (.swapPoint access (.getAsLong l) (.getAsLong l0))
+                       (doto l0
+                         (.hasNext)
+                         (.nextLong))))
+                   (.swapPoint access node-idx (.getAsLong l0))
+                   (recur l0 r))
+
+                 (balanced-valid? n (.getAsLong r))
+                 (let [^SubtreeIterator r0 (->subtree-iterator n (.getAsLong r))]
+                   (while (.hasNext r)
+                     (when (>= (.getCoordinate access (.nextLong r) axis) root-pos)
+                       (.swapPoint access (.getAsLong r) (.getAsLong r0))
+                       (doto r0
+                         (.hasNext)
+                         (.nextLong))))
+                   (.swapPoint access node-idx (.getAsLong r0))
+                   (recur l r0))))))
+
+         (let [next-axis (next-axis axis k)]
+           (step (balanced-left-child node-idx) next-axis)
+           (step (balanced-right-child node-idx) next-axis))))
+     0 0)))
 
 (definterface IBlockManager
   (^org.apache.arrow.vector.VectorSchemaRoot getRoot [^int block-idx]))
