@@ -134,7 +134,6 @@ Two main extension points:
 
 Bugs:
 - TODO chunk names have 2^32 numbers, row-ids are 2^64
-- TODO Add additional Path-based getObject arity in ObjectStore - the temporal snapshot may well be too big to fit in memory
 
 Clean up:
 - TODO remaining late-mat optimisations

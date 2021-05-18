@@ -5,6 +5,8 @@
   (:import core2.object_store.ObjectStore
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
+           java.nio.file.attribute.FileAttribute
+           java.nio.file.Files
            java.util.concurrent.ExecutionException))
 
 (defn- get-object [^ObjectStore obj-store, k]
@@ -29,6 +31,12 @@
     (t/testing "doesn't override if present"
       (put-object obj-store :alice {:_id :alice, :name "Alice", :version 2})
       (t/is (= alice (get-object obj-store :alice))))
+
+    (let [temp-path @(.getObject obj-store (name :alice)
+                                 (doto (Files/createTempFile "alice" ".edn"
+                                                             (make-array FileAttribute 0))
+                                   Files/delete))]
+      (t/is (= alice (read-string (Files/readString temp-path)))))
 
     @(.deleteObject obj-store (name :alice))
 

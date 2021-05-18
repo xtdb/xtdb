@@ -11,9 +11,7 @@
 
 (t/use-fixtures :each
   (fn [f]
-    (if-not bucket
-      (t/is true)
-
+    (when bucket
       (with-open [sys (-> (sys/prep-system {::obj-store {:core2/module `s3/->object-store
                                                          :bucket bucket
                                                          :prefix (str "core2.s3-test." (UUID/randomUUID))}})

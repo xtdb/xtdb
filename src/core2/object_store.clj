@@ -4,16 +4,20 @@
             [core2.util :as util])
   (:import java.io.Closeable
            java.nio.ByteBuffer
-           java.nio.charset.StandardCharsets
-           [java.nio.file Files FileSystems Path]
-           [java.util NavigableMap UUID]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]))
+           [java.nio.file CopyOption Files FileSystems OpenOption Path StandardOpenOption]
+           [java.util.concurrent CompletableFuture ConcurrentSkipListMap Executors ExecutorService]
+           java.util.function.Supplier
+           java.util.NavigableMap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ObjectStore
   (^java.util.concurrent.CompletableFuture #_<ByteBuffer> getObject [^String k]
-   "Writes the object to the given path.
+   "Asynchonously returns the given object in a ByteBuffer
+    If the object doesn't exist, the CF completes with an IllegalStateException.")
+
+  (^java.util.concurrent.CompletableFuture #_<Path> getObject [^String k, ^java.nio.file.Path out-path]
+   "Asynchronously writes the object to the given path.
     If the object doesn't exist, the CF completes with an IllegalStateException.")
 
   (^java.util.concurrent.CompletableFuture #_<?> putObject [^String k, ^java.nio.ByteBuffer buf])
@@ -31,6 +35,19 @@
      (let [^ByteBuffer buf (or (.get os k)
                                (throw (obj-missing-exception k)))]
        (.slice buf))))
+
+  (getObject [_this k out-path]
+
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [buf (or (.get os k)
+                       (throw (obj-missing-exception k)))]
+           (with-open [ch (Files/newByteChannel out-path (into-array OpenOption #{StandardOpenOption/WRITE
+                                                                                  StandardOpenOption/CREATE
+                                                                                  StandardOpenOption/TRUNCATE_EXISTING}))]
+             (.write ch buf)
+             out-path))))))
 
   (putObject [_this k buf]
     (.putIfAbsent os k (.slice buf))
@@ -63,6 +80,18 @@
          (throw (obj-missing-exception k)))
 
        (util/->mmap-path from-path))))
+
+  (getObject [_this k out-path]
+    (CompletableFuture/supplyAsync
+     (reify Supplier
+       (get [_]
+         (let [from-path (.resolve root-path k)]
+           (when-not (util/path-exists from-path)
+             (throw (obj-missing-exception k)))
+
+           (Files/copy from-path out-path
+                       ^"[Ljava.nio.file.CopyOption;" (make-array CopyOption 0))
+           out-path)))))
 
   (putObject [_this k buf]
     (let [buf (.duplicate buf)]

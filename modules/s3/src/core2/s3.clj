@@ -14,25 +14,38 @@
            [software.amazon.awssdk.services.s3.model DeleteObjectRequest GetObjectRequest HeadObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
+(defn- get-obj-req
+  ^GetObjectRequest [{:keys [^S3Configurator configurator bucket prefix]} k]
+
+  (-> (GetObjectRequest/builder)
+      (.bucket bucket)
+      (.key (str prefix k))
+      (->> (.configureGet configurator))
+      ^GetObjectRequest (.build)))
+
+(defn- with-exception-handler [^CompletableFuture fut k]
+  (.exceptionally fut (reify Function
+                        (apply [_ e]
+                          (try
+                            (throw (.getCause ^Exception e))
+                            (catch NoSuchKeyException _
+                              (throw (os/obj-missing-exception k))))))))
+
 (defrecord S3ObjectStore [^S3Configurator configurator ^S3AsyncClient client bucket prefix]
   ObjectStore
-  (getObject [_ k]
-    (-> (.getObject client
-                    (-> (GetObjectRequest/builder)
-                        (.bucket bucket)
-                        (.key (str prefix k))
-                        (->> (.configureGet configurator))
-                        ^GetObjectRequest (.build))
-                    (AsyncResponseTransformer/toBytes))
+  (getObject [this k]
+    (-> (.getObject client (get-obj-req this k) (AsyncResponseTransformer/toBytes))
         (.thenApply (reify Function
                       (apply [_ bs]
                         (.asByteBuffer ^ResponseBytes bs))))
-        (.exceptionally (reify Function
-                          (apply [_ e]
-                            (try
-                              (throw (.getCause ^Exception e))
-                              (catch NoSuchKeyException _
-                                (throw (os/obj-missing-exception k)))))))))
+        (with-exception-handler k)))
+
+  (getObject [this k out-path]
+    (-> (.getObject client (get-obj-req this k) out-path)
+        (.thenApply (reify Function
+                      (apply [_ _]
+                        out-path)))
+        (with-exception-handler k)))
 
   (putObject [_ k buf]
     (-> (.headObject client

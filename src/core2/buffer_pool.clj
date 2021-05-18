@@ -31,13 +31,15 @@
         (if-not (= ::not-found v)
           (CompletableFuture/completedFuture (doto ^ArrowBuf v
                                                (.retain)))
-          (-> (.getObject object-store k)
-              (util/then-apply (fn [nio-buffer]
-                                 (if cache-path
-                                   (let [buffer-path (.resolve cache-path (str (UUID/randomUUID)))]
-                                     (util/write-buffer-to-path nio-buffer buffer-path)
-                                     (MapEntry/create (util/->mmap-path buffer-path) buffer-path))
-                                   (MapEntry/create nio-buffer nil))))
+          (-> (if cache-path
+                (-> (.getObject object-store k (.resolve cache-path (str (UUID/randomUUID))))
+                    (util/then-apply (fn [buffer-path]
+                                       (MapEntry/create (util/->mmap-path buffer-path) buffer-path))))
+
+                (-> (.getObject object-store k)
+                    (util/then-apply (fn [nio-buffer]
+                                       (MapEntry/create nio-buffer nil)))))
+
               (util/then-apply
                 (fn [[nio-buffer path]]
                   (let [stamp (.writeLock buffers-lock)
