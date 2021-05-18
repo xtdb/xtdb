@@ -1,15 +1,6 @@
 {
   "schema" : {
     "fields" : [{
-      "name" : "axis-delete-flag",
-      "nullable" : false,
-      "type" : {
-        "name" : "int",
-        "bitWidth" : 8,
-        "isSigned" : true
-      },
-      "children" : [ ]
-    },{
       "name" : "split-value",
       "nullable" : false,
       "type" : {
@@ -49,11 +40,6 @@
   "batches" : [{
     "count" : 4,
     "columns" : [{
-      "name" : "axis-delete-flag",
-      "count" : 4,
-      "VALIDITY" : [1,1,1,1],
-      "DATA" : [1,2,3,2]
-    },{
       "name" : "split-value",
       "count" : 4,
       "VALIDITY" : [1,1,1,1],
