@@ -8,10 +8,8 @@
             [crux.index :as idx]
             [crux.query :as q]
             [taoensso.nippy :as nippy])
-  (:import [java.util Arrays UUID]
+  (:import [java.util Arrays Date UUID]
            java.util.concurrent.TimeoutException))
-           java.util.concurrent.TimeoutException
-           java.util.Date))
 
 (t/use-fixtures :each fix/with-node)
 
