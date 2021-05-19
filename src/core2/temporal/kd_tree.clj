@@ -5,6 +5,7 @@
   (:import [java.io Closeable]
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
+           [clojure.lang IFn$LLO IFn$LL]
            [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
             IdentityHashMap LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
             Spliterator Spliterator$OfInt Spliterator$OfLong Spliterators]
@@ -262,8 +263,8 @@
                   (assert (>= r-pos root-pos) (pr-str '>= r-pos root-pos))))))
 
           (let [next-axis (next-axis axis k)]
-            (step (balanced-left-child node-idx) next-axis)
-            (step (balanced-right-child node-idx) next-axis))))
+            (.invokePrim ^IFn$LLO step (balanced-left-child node-idx) next-axis)
+            (.invokePrim ^IFn$LLO step (balanced-right-child node-idx) next-axis))))
       0 0))))
 
 (deftype KdTreeVectorPointAccess [^FixedSizeListVector point-vec]
@@ -335,9 +336,9 @@
                 idx
                 axis
                 (when (balanced-valid? n left-idx)
-                  (step left-idx (next-axis axis k)))
+                  (.invokePrim ^IFn$LLO step left-idx (next-axis axis k)))
                 (when (balanced-valid? n right-idx)
-                  (step right-idx (next-axis axis k))))))
+                  (.invokePrim ^IFn$LLO step right-idx (next-axis axis k))))))
      0 0)))
 
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
@@ -777,18 +778,18 @@
 
 (defn- column-kd-tree-depth [kd-tree]
   (let [n (kd-tree-value-count kd-tree)]
-    ((fn step [^long idx]
+    ((fn step ^long [^long idx]
        (let [left-idx (balanced-left-child idx)
              right-idx (balanced-right-child idx)
              visit-left? (balanced-valid? n left-idx)
              visit-right? (balanced-valid? n right-idx)]
 
-         (inc (max (long (if visit-right?
-                           (step right-idx)
-                           0))
-                   (long (if visit-left?
-                           (step left-idx)
-                           0)))))) 0)))
+         (inc (max (if visit-right?
+                     (.invokePrim ^IFn$LL step right-idx)
+                     0)
+                   (if visit-left?
+                     (.invokePrim ^IFn$LL step left-idx)
+                     0))))) 0)))
 
 (extend-protocol KdTree
   VectorSchemaRoot
