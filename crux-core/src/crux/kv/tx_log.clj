@@ -8,7 +8,8 @@
             [crux.memory :as mem]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [clojure.java.io :as io])
   (:import java.io.Closeable
            java.nio.ByteOrder
            [java.util.concurrent ExecutorService LinkedBlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
@@ -164,3 +165,22 @@
                                           (select-keys tx [::tx/tx-id ::tx/tx-time])
                                           (::txe/tx-events tx)))))))
     tx-log))
+
+(defn -main [kv-store-config-file out-file]
+  (with-open [sys (-> (sys/prep-system {:kv-store (read-string (slurp (io/file kv-store-config-file)))})
+                      (sys/start-system))
+              snapshot (kv/new-snapshot (:kv-store sys))
+              iterator (kv/new-iterator snapshot)
+              w (io/writer (io/file out-file))]
+    (letfn [(tx-log [k]
+              (lazy-seq
+               (when (some-> k (tx-event-key?))
+                 (cons (assoc (decode-tx-event-key-from k)
+                              :crux.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
+                       (tx-log (kv/next iterator))))))]
+      (doseq [e (tx-log (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id 0})))]
+        (.write w (prn-str e))))))
+
+(comment
+  (-main "/home/james/src/juxt/crux/crux-core/src/crux/kv/kv-tx-log.edn"
+         "/tmp/rocks-tx-log.edn"))

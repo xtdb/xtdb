@@ -6,7 +6,8 @@
             [crux.memory :as mem]
             [crux.kv :as kv]
             [crux.cache :as cache]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [clojure.java.io :as io])
   (:import java.util.function.Supplier
            org.agrona.ExpandableDirectByteBuffer
            crux.codec.Id
@@ -21,13 +22,12 @@
        (ExpandableDirectByteBuffer.)))))
 
 (defn encode-doc-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b ^DirectBuffer content-hash]
-  (assert (= c/id-size (.capacity content-hash)) (mem/buffer->hex content-hash))
-  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size c/id-size)))]
+  (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size (.capacity content-hash))))]
     (mem/limit-buffer
      (doto b
        (.putByte 0 c/content-hash->doc-index-id)
-       (.putBytes c/index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash)))
-     (+ c/index-id-size c/id-size))))
+       (cond-> content-hash (.putBytes c/index-id-size (mem/as-buffer content-hash) 0 (.capacity content-hash))))
+     (+ c/index-id-size (.capacity content-hash)))))
 
 (defn decode-doc-key-from ^crux.codec.Id [^MutableDirectBuffer k]
   (assert (= (+ c/index-id-size c/id-size) (.capacity k)) (mem/buffer->hex k))
@@ -69,3 +69,23 @@
    (assoc opts
           :document-cache document-cache
           :document-store (->KvDocumentStore kv-store fsync?))))
+
+(defn -main [kv-store-config-file out-file]
+  (with-open [sys (-> (sys/prep-system {:kv-store (read-string (slurp (io/file kv-store-config-file)))})
+                      (sys/start-system))
+              snapshot (kv/new-snapshot (:kv-store sys))
+              iterator (kv/new-iterator snapshot)
+              w (io/writer (io/file out-file))]
+    (cio/with-nippy-thaw-all
+      (letfn [(docs [^DirectBuffer k]
+                (lazy-seq
+                 (when (and k (= c/content-hash->doc-index-id (.getByte k 0)))
+                   (cons [(decode-doc-key-from k)
+                          (mem/<-nippy-buffer (kv/value iterator))]
+                         (docs (kv/next iterator))))))]
+        (doseq [e (docs (kv/seek iterator (encode-doc-key-to nil mem/empty-buffer)))]
+          (.write w (prn-str e)))))))
+
+(comment
+  (-main "/home/james/src/juxt/crux/crux-core/src/crux/kv/kv-docs.edn"
+         "/tmp/rocks-docs.edn"))
