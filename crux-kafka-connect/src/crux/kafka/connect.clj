@@ -83,38 +83,31 @@
       (throw (err/illegal-arg :unknown-message-type
                               {::err/message (str "Unknown message type: " record)})))))
 
-(defn- coerce-eid [id]
-  (cond
-    (and (some? id) (c/valid-id? id))
-    (c/id-edn-reader id)
-
-    (string? id)
-    (keyword id)))
-
 (defn- find-eid [props ^SinkRecord record doc]
   (let [id (or (get doc :crux.db/id)
                (some->> (get props CruxSinkConnector/ID_KEY_CONFIG)
                         (keyword)
                         (get doc))
                (.key record))]
-    (or (coerce-eid id)
-        (UUID/randomUUID))))
+    (if (and (some? id) (c/valid-id? id))
+      id
+      (UUID/randomUUID))))
 
 (defn transform-sink-record [props ^SinkRecord record]
-  (log/info "sink record:" record)
+  (log/debug "sink record:" record)
   (let [tx-op (if (and (nil? (.value record))
                        (.key record))
-                [:crux.tx/delete (coerce-eid (.key record))]
+                [:crux.tx/delete (.key record)]
                 (let [doc (record->edn record)
                       id (find-eid props record doc)]
                   [:crux.tx/put (assoc doc :crux.db/id id)]))]
-    (log/info "tx op:" tx-op)
+    (log/debug "tx op:" tx-op)
     tx-op))
 
 (defn submit-sink-records [api props records]
   (when (seq records)
     (api/submit-tx api (vec (for [record records]
-                               (transform-sink-record props record))))))
+                              (transform-sink-record props record))))))
 
 (defn- write-transit [x]
   (with-open [out (ByteArrayOutputStream.)]
