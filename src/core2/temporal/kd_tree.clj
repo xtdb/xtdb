@@ -356,14 +356,6 @@
           (util/try-close point-vec)
           (throw t))))))
 
-(defmacro ^:private point-equals-list-element [point access idx k]
-  `(loop [n# 0]
-     (if (= n# ~k)
-       true
-       (if (= (.getCoordinate ~access ~idx n#) (aget ~point n#))
-         (recur (inc n#))
-         false))))
-
 (defn- maybe-split-stack ^java.util.Deque [^Deque stack]
   (let [split-size (quot (.size stack) 2)]
     (when (pos? split-size)
@@ -525,7 +517,7 @@
         (let [axis (.axis node)
               idx (.point-idx node)]
           (cond
-            (point-equals-list-element point access idx k)
+            (.isInRange access idx point point)
             (if (= (.isDeleted access idx) deleted?)
               (node-kd-tree-build-path build-path-fns (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node)))
               (let [point-idx (write-point point-vec access point)]
