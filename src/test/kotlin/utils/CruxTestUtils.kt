@@ -50,9 +50,6 @@ fun ICruxAPI.assertDocument(document: CruxDocument) =
 fun ICruxAPI.assertDocument(document: CruxDocument, validTime: Date) =
     db(validTime).assertDocument(document)
 
-fun ICruxAPI.assertDocument(document: CruxDocument, validTime: Date, transactionTime: Date) =
-    db(validTime, transactionTime).assertDocument(document)
-
 private fun ICruxDatasource.assertNoDocument(id: Any) =
     assertNull(entity(id))
 
@@ -61,6 +58,3 @@ fun ICruxAPI.assertNoDocument(id: Any) =
 
 fun ICruxAPI.assertNoDocument(id: Any, validTime: Date) =
     db(validTime).assertNoDocument(id)
-
-fun ICruxAPI.assertNoDocument(id: Any, validTime: Date, transactionTime: Date) =
-    db(validTime, transactionTime).assertNoDocument(id)

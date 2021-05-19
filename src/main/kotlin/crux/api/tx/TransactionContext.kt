@@ -2,6 +2,7 @@ package crux.api.tx
 
 import crux.api.CruxDocument
 import crux.api.ICruxIngestAPI
+import crux.api.TransactionInstant
 import java.util.*
 
 class TransactionContext private constructor() {
@@ -32,7 +33,7 @@ class TransactionContext private constructor() {
             hangingOperation = PutOperation.create(document, validTime)
         }
 
-    infix fun DocumentToPutWithValidTime.to(endValidTime: Date) {
+    infix fun DocumentToPutWithValidTime.until(endValidTime: Date) {
         hangingOperation = PutOperation.create(document, validTime, endValidTime)
     }
 
@@ -47,7 +48,7 @@ class TransactionContext private constructor() {
             hangingOperation = DeleteOperation.create(id, validTime)
         }
 
-    infix fun IdToDeleteWithValidTime.to(endValidTime: Date) {
+    infix fun IdToDeleteWithValidTime.until(endValidTime: Date) {
         hangingOperation = DeleteOperation.create(id, validTime, endValidTime)
     }
 
@@ -76,13 +77,25 @@ class TransactionContext private constructor() {
         hangingOperation = MatchOperation.create(id, validTime)
     }
 
-    private fun clear() {
-        hangingOperation = null
+    inner class FromValidTimeContext(private val validTime: Date) {
+        operator fun CruxDocument.unaryPlus() =
+            DocumentToPutWithValidTime(this, validTime).also {
+                lockIn()
+                hangingOperation = PutOperation.create(this, validTime)
+            }
+
+        operator fun Any.unaryMinus() =
+            IdToDeleteWithValidTime(this, validTime).also {
+                lockIn()
+                hangingOperation = DeleteOperation.create(this, validTime)
+            }
     }
+
+    fun from(validTime: Date, block: FromValidTimeContext.() -> Unit) = FromValidTimeContext(validTime).apply(block)
 
     private fun lockIn() {
         hangingOperation?.let(builder::add)
-        clear()
+        hangingOperation = null
     }
 
     private fun build(): Transaction {
@@ -91,5 +104,5 @@ class TransactionContext private constructor() {
     }
 }
 
-fun ICruxIngestAPI.submitTx(block: TransactionContext.() -> Unit) =
+fun ICruxIngestAPI.submitTx(block: TransactionContext.() -> Unit): TransactionInstant =
     submitTx(TransactionContext.build(block))

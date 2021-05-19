@@ -259,7 +259,7 @@ class TransactionTest {
             val document = aDocument()
 
             crux.submitTx{
-                + document from dates[1] to dates[2]
+                + document from dates[1] until dates[2]
             }.await()
 
             crux.assertNoDocument(document.id, dates[0])
@@ -298,7 +298,7 @@ class TransactionTest {
             crux.putAndWait(document, dates[0])
 
             crux.submitTx {
-                - document.id from dates[1] to dates[2]
+                - document.id from dates[1] until dates[2]
             }.await()
 
             crux.assertDocument(document, dates[0])
@@ -404,6 +404,47 @@ class TransactionTest {
             }.await()
 
             crux.assertDocument(document)
+        }
+    }
+
+    @Nested
+    inner class TransactionDslGroupings {
+        @Test
+        fun `valid time groupings`() {
+            val document1 = aDocument()
+            val document2 = aDocument()
+            val document3 = aDocument()
+
+            crux.submitTx {
+                + document1 from dates[0]
+
+                from(dates[1]) {
+                    + document2
+                    + document3 until dates[2]
+                }
+            }.await()
+
+            crux.assertDocument(document1, dates[0])
+            crux.assertNoDocument(document2.id, dates[0])
+            crux.assertNoDocument(document3.id, dates[0])
+            crux.assertDocument(document2, dates[1])
+            crux.assertDocument(document3, dates[1])
+            crux.assertDocument(document2, dates[2])
+            crux.assertNoDocument(document3.id, dates[2])
+
+            crux.submitTx {
+                from(dates[3]) {
+                    - document1.id
+                    - document2.id until dates[4]
+                }
+            }.await()
+
+            crux.assertDocument(document1, dates[2])
+            crux.assertDocument(document2, dates[2])
+            crux.assertNoDocument(document1.id, dates[3])
+            crux.assertNoDocument(document2.id, dates[3])
+            crux.assertNoDocument(document1.id, dates[4])
+            crux.assertDocument(document2, dates[4])
         }
     }
 }
