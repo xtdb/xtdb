@@ -29,7 +29,8 @@
   (^long getCoordinate [^long idx ^int axis])
   (^void setCoordinate [^long idx ^int axis ^long value])
   (^void swapPoint [^long from-idx ^long to-idx])
-  (^boolean isDeleted [^long idx]))
+  (^boolean isDeleted [^long idx])
+  (^boolean isInRange [^long idx ^longs min-range ^longs max-range]))
 
 (defprotocol KdTree
   (kd-tree-insert [_ allocator point])
@@ -54,17 +55,6 @@
       0
       next-axis)))
 
-(defmacro ^:private in-range-access? [min-range access idx max-range]
-  `(let [k# (alength ~min-range)]
-     (loop [n# (int 0)]
-       (if (= n# k#)
-         true
-         (let [x# (.getCoordinate ~access ~idx n#)]
-           (if (and (<= (aget ~min-range n#) x#)
-                    (<= x# (aget ~max-range n#)))
-             (recur (inc n#))
-             false))))))
-
 (def ^:private ^Class longs-class (Class/forName "[J"))
 
 (defn- ->longs ^longs [xs]
@@ -87,6 +77,8 @@
   (swapPoint [_ _ _]
     (throw (UnsupportedOperationException.)))
   (isDeleted [_ _]
+    (throw (IndexOutOfBoundsException.)))
+  (isInRange [_ _ _ _]
     (throw (IndexOutOfBoundsException.))))
 
 (extend-protocol KdTree
@@ -318,7 +310,20 @@
           (.set coordinates-vec to-idx tmp)))))
 
   (isDeleted [_ idx]
-    (.isNull point-vec idx)))
+    (.isNull point-vec idx))
+
+  (isInRange [_ idx min-range max-range]
+    (let [k (.getListSize point-vec)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          element-start-idx (.getElementStartIndex point-vec idx)]
+      (loop [n (int 0)]
+        (if (= n k)
+          true
+          (let [x (.get coordinates-vec (+ element-start-idx n))]
+            (if (and (<= (aget min-range n) x)
+                     (<= x (aget max-range n)))
+              (recur (inc n))
+              false)))))))
 
 (defn- reconstruct-node-kd-tree-from-breadth-first-points [^FixedSizeListVector point-vec]
   (let [k (.getListSize point-vec)
@@ -389,7 +394,7 @@
 
             (when (and (or min-match? max-match?)
                        (not (.isDeleted access point-idx))
-                       (in-range-access? min-range access point-idx max-range))
+                       (.isInRange access point-idx min-range max-range))
               (.accept c point-idx))
 
             (cond
@@ -430,7 +435,7 @@
 
           (if (and (or min-match? max-match?)
                    (not (.isDeleted access point-idx))
-                   (in-range-access? min-range access point-idx max-range))
+                   (.isInRange access point-idx min-range max-range))
             (do (.accept c point-idx)
                 true)
             (recur)))
@@ -677,7 +682,7 @@
 
             (when (and (or min-match? max-match?)
                        (not (.isDeleted access idx))
-                       (in-range-access? min-range access idx max-range))
+                       (.isInRange access idx min-range max-range))
               (.accept c idx))
 
             (cond
@@ -722,7 +727,7 @@
 
             (if (and (or min-match? max-match?)
                      (not (.isDeleted access idx))
-                     (in-range-access? min-range access idx max-range))
+                     (.isInRange access idx min-range max-range))
               (do (.accept c idx)
                   true)
               (recur))))
@@ -917,7 +922,24 @@
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)
           ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
-      (.isNull point-vec idx))))
+      (.isNull point-vec idx)))
+
+  (isInRange [_ idx min-range max-range]
+    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+          idx (bit-and idx batch-mask)
+          root (.getRoot kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)
+          k (.getListSize point-vec)
+          ^BigIntVector coordinates-vec (.getDataVector point-vec)
+          element-start-idx (.getElementStartIndex point-vec idx)]
+      (loop [n (int 0)]
+        (if (= n k)
+          true
+          (let [x (.get coordinates-vec (+ element-start-idx n))]
+            (if (and (<= (aget min-range n) x)
+                     (<= x (aget max-range n)))
+              (recur (inc n))
+              false)))))))
 
 (defn- ->block-cache [^long cache-size]
   (proxy [LinkedHashMap] [cache-size 0.75 true]
