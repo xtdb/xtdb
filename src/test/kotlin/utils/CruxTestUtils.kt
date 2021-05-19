@@ -38,5 +38,7 @@ fun ICruxAPI.putAndWait(document: CruxDocument, validTime: Date) =
         }
     )
 
-fun MutableCollection<MutableList<*>>.singleResults() = map { it[0] }.toSet()
-fun MutableCollection<MutableList<*>>.simplify() = map { it.toList() }.toSet()
+fun MutableCollection<MutableList<*>>.singleResultSet() = map { it[0] }.toSet()
+fun MutableCollection<MutableList<*>>.simplifiedResultSet() = map { it.toList() }.toSet()
+fun MutableCollection<MutableList<*>>.singleResultList() = map { it[0] }
+fun MutableCollection<MutableList<*>>.simplifiedResultList() = map { it.toList() }

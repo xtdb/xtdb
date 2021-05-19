@@ -9,7 +9,7 @@ import crux.api.sym
 import crux.api.tx.submitTx
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import utils.singleResults
+import utils.singleResultSet
 import java.time.Duration
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -59,7 +59,7 @@ class PredicateQueryTest {
                     p has age eq a
                     a gt 28
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("petr")
             )
@@ -79,7 +79,7 @@ class PredicateQueryTest {
                     p2 has age eq a2
                     a1 gt a2
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("petr")
             )
@@ -97,7 +97,7 @@ class PredicateQueryTest {
                     p has age eq a
                     a gte 28
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("petr", "ivana")
             )
@@ -117,7 +117,7 @@ class PredicateQueryTest {
                     p2 has name eq "Ivana"
                     a1 gte a2
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("petr", "ivana")
             )
@@ -135,7 +135,7 @@ class PredicateQueryTest {
                     p has age eq a
                     a lt 28
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan")
             )
@@ -155,7 +155,7 @@ class PredicateQueryTest {
                     p2 has name eq "Ivana"
                     a1 lt a2
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan")
             )
@@ -173,7 +173,7 @@ class PredicateQueryTest {
                     p has age eq a
                     a lte 28
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan", "ivana")
             )
@@ -193,7 +193,7 @@ class PredicateQueryTest {
                     p2 has name eq "Ivana"
                     a1 lte a2
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan", "ivana")
             )
@@ -211,7 +211,7 @@ class PredicateQueryTest {
                     p has age eq a
                     a eq 28
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivana")
             )
@@ -229,7 +229,7 @@ class PredicateQueryTest {
                     p has name eq n
                     n eq "Ivana"
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivana")
             )
@@ -249,7 +249,7 @@ class PredicateQueryTest {
                     p2 has name eq "Ivana"
                     a1 eq a2
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivana")
             )
@@ -267,7 +267,7 @@ class PredicateQueryTest {
                     p has age eq a
                     a neq 28
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan", "petr")
             )
@@ -285,7 +285,7 @@ class PredicateQueryTest {
                     p has name eq n
                     n neq "Ivana"
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan", "petr")
             )
@@ -305,7 +305,7 @@ class PredicateQueryTest {
                     p2 has name eq "Ivana"
                     a1 neq a2
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan", "petr")
             )

@@ -19,11 +19,16 @@ class QueryContext {
     private val map = mutableMapOf<Keyword, Any>()
 
     fun find(block: FindContext.() -> Unit) {
+        //TODO: Move to companion
         map[FIND] = FindContext().also(block).build()
     }
 
     fun where(block: WhereContext.() -> Unit) {
         map[WHERE] = WhereContext.build(block)
+    }
+
+    fun order(block: OrderContext.() -> Unit) {
+        map[ORDER] = OrderContext.build(block)
     }
 
     fun build() = map.pam

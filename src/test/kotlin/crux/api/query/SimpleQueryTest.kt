@@ -9,8 +9,8 @@ import crux.api.sym
 import crux.api.tx.submitTx
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import utils.simplify
-import utils.singleResults
+import utils.simplifiedResultSet
+import utils.singleResultSet
 import java.time.Duration
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -64,7 +64,7 @@ class SimpleQueryTest {
                 where {
                     p has forename
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf(
                     "ivan",
@@ -86,7 +86,7 @@ class SimpleQueryTest {
                 where {
                     p has forename eq "Ivan"
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan")
             )
@@ -104,7 +104,7 @@ class SimpleQueryTest {
                 where {
                     p has forename eq n
                 }
-            }.simplify(),
+            }.simplifiedResultSet(),
             equalTo(
                 setOf(
                     listOf("ivan", "Ivan"),
@@ -127,7 +127,7 @@ class SimpleQueryTest {
                     p has forename eq n
                     p has surname eq n
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("mirror")
             )
@@ -148,7 +148,7 @@ class SimpleQueryTest {
                         p has forename eq "Ivan"
                     }
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivana")
             )
@@ -168,7 +168,7 @@ class SimpleQueryTest {
                         p has forename eq "Petr"
                     }
                 }
-            }.singleResults(),
+            }.singleResultSet(),
             equalTo(
                 setOf("ivan", "petr")
             )
