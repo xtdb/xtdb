@@ -24,6 +24,5 @@ class ModuleConfigurationContext private constructor() {
         builder.with(this, build(block))
     }
 
-
     private fun build() = builder.build()
 }

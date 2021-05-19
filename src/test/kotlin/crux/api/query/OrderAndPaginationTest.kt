@@ -22,7 +22,7 @@ class OrderAndPaginationTest {
             .map {
                 CruxDocument.build(it) { b ->
                     b.put("temperature", it)
-                    b.put("humidity", it/2 + (it%2)*50)
+                    b.put("humidity", it/2 + (it%2)*50) // Bijective to (0 until 100) but in a different order
                 }
             }
 
@@ -120,4 +120,86 @@ class OrderAndPaginationTest {
             )
         )
 
+    @Test
+    fun `offset works as expected`() {
+        assertThat(
+            db.q {
+                find {
+                    + t
+                }
+
+                where {
+                    d has temperature eq t
+                }
+
+                order {
+                    + t
+                }
+
+                offset = 15
+            }.singleResultList(),
+            equalTo(
+                documents
+                    .map { it.get("temperature") as Long }
+                    .sorted()
+                    .drop(15)
+            )
+        )
+    }
+
+    @Test
+    fun `limit works as expected`() {
+        assertThat(
+            db.q {
+                find {
+                    + t
+                }
+
+                where {
+                    d has temperature eq t
+                }
+
+                order {
+                    + t
+                }
+
+                limit = 15
+            }.singleResultList(),
+            equalTo(
+                documents
+                    .map { it.get("temperature") as Long }
+                    .sorted()
+                    .take(15)
+            )
+        )
+    }
+
+    @Test
+    fun `offset and limit work together`() {
+        assertThat(
+            db.q {
+                find {
+                    + t
+                }
+
+                where {
+                    d has temperature eq t
+                }
+
+                order {
+                    + t
+                }
+
+                offset = 10
+                limit = 15
+            }.singleResultList(),
+            equalTo(
+                documents
+                    .map { it.get("temperature") as Long }
+                    .sorted()
+                    .drop(10)
+                    .take(15)
+            )
+        )
+    }
 }

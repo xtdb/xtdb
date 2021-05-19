@@ -4,6 +4,8 @@ import clojure.lang.Keyword
 import crux.api.ICruxDatasource
 import crux.api.kw
 import crux.api.pam
+import jdk.dynalink.Operation
+import javax.naming.OperationNotSupportedException
 
 class QueryContext private constructor() {
     companion object {
@@ -31,6 +33,18 @@ class QueryContext private constructor() {
     fun order(block: OrderContext.() -> Unit) {
         map[ORDER] = OrderContext.build(block)
     }
+
+    var offset: Int
+        get() = throw OperationNotSupportedException()
+        set(value) {
+            map[OFFSET] = value
+        }
+
+    var limit: Int
+        get() = throw OperationNotSupportedException()
+        set(value) {
+            map[LIMIT] = value
+        }
 
     private fun build() = map.pam
 }
