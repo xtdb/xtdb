@@ -4,6 +4,7 @@ import crux.api.CruxK
 import crux.api.TransactionInstant
 import crux.api.tx.Transaction.*
 import crux.api.tx.TransactionContext.Companion.build
+import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
@@ -24,6 +25,11 @@ class TransactionTest {
     // Provides 10 distinct dates in ascending order
     private val dates = List(10) { Date.from(Instant.now().plusSeconds(it.toLong())) }
 
+    @AfterAll
+    fun afterAll() {
+        crux.close()
+    }
+
     @Nested
     inner class BaseJavaCrux {
         /**
@@ -31,47 +37,47 @@ class TransactionTest {
          */
 
         @Test
-        fun `can put a document`() {
+        fun `can put a document`() = crux.run {
             val document = aDocument()
 
-            crux.submitTx(
+            submitTx(
                 buildTx {
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can put a document at time`() {
+        fun `can put a document at time`() = crux.run {
             val document = aDocument()
 
-            crux.submitTx(
+            submitTx(
                 buildTx {
                     it.put(document, dates[1])
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 document notAt dates[0]
                 document at dates[1]
             }
         }
 
         @Test
-        fun `can put a document with end valid time`() {
+        fun `can put a document with end valid time`() = crux.run {
             val document = aDocument()
 
-            crux.submitTx(
+            submitTx(
                 buildTx {
                     it.put(document, dates[1], dates[2])
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 document notAt dates[0]
                 document at dates[1]
                 document notAt dates[2]
@@ -79,50 +85,53 @@ class TransactionTest {
         }
 
         @Test
-        fun `can delete a document`() {
+        fun `can delete a document`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document)
+            
+            putAndWait(document)
 
-            crux.submitTx(
+            submitTx(
                 buildTx {
                     it.delete(document.id)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 - document
             }
         }
 
         @Test
-        fun `can delete a document at valid time`() {
+        fun `can delete a document at valid time`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document, dates[0])
+            
+            putAndWait(document, dates[0])
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.delete(document.id, dates[1])
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 document at dates[0]
                 document notAt dates[1]
             }
         }
 
         @Test
-        fun `can delete a document with end valid time`() {
+        fun `can delete a document with end valid time`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document, dates[0])
+            
+            putAndWait(document, dates[0])
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.delete(document.id, dates[1], dates[2])
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 document at dates[0]
                 document notAt dates[1]
                 document at dates[2]
@@ -130,137 +139,138 @@ class TransactionTest {
         }
 
         @Test
-        fun `can evict a document`() {
+        fun `can evict a document`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document)
+            
+            putAndWait(document)
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.evict(document.id)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 - document
             }
         }
 
         @Test
-        fun `can match a document`() {
+        fun `can match a document`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.match(matchDoc)
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.putAndWait(matchDoc)
+            putAndWait(matchDoc)
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.match(matchDoc)
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can match a document at a valid time`() {
+        fun `can match a document at a valid time`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.putAndWait(matchDoc, dates[1])
+            putAndWait(matchDoc, dates[1])
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.match(matchDoc, dates[0])
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.match(matchDoc, dates[1])
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can match against no document`() {
+        fun `can match against no document`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.putAndWait(matchDoc)
+            putAndWait(matchDoc)
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.matchNotExists(matchDoc.id)
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.submitTx (
+            submitTx (
                 buildTx {
                     it.matchNotExists(UUID.randomUUID().toString())
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can match against a no document at valid time`() {
+        fun `can match against a no document at valid time`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.putAndWait(matchDoc, dates[1])
+            putAndWait(matchDoc, dates[1])
 
-            crux.submitTx(
+            submitTx(
                 buildTx {
                     it.matchNotExists(matchDoc.id, dates[1])
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.submitTx(
+            submitTx(
                 buildTx {
                     it.matchNotExists(matchDoc.id, dates[0])
                     it.put(document)
                 }
             ).await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
@@ -269,40 +279,40 @@ class TransactionTest {
     @Nested
     inner class KotlinDSL {
         @Test
-        fun `can put a document`() {
+        fun `can put a document`() = crux.run {
             val document = aDocument()
 
-            crux.submitTx {
+            submitTx {
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can put a document at time`() {
+        fun `can put a document at time`() = crux.run {
             val document = aDocument()
-            crux.submitTx {
+            submitTx {
                 + document from dates[1]
             }.await()
 
-            crux.assert {
+            assert {
                 document notAt dates[0]
                 document at dates[1]
             }
         }
 
         @Test
-        fun `can put a document with end valid time`() {
+        fun `can put a document with end valid time`() = crux.run {
             val document = aDocument()
 
-            crux.submitTx{
+            submitTx{
                 + document from dates[1] until dates[2]
             }.await()
 
-            crux.assert {
+            assert {
                 document notAt dates[0]
                 document at dates[1]
                 document notAt dates[2]
@@ -310,44 +320,46 @@ class TransactionTest {
         }
 
         @Test
-        fun `can delete a document`() {
+        fun `can delete a document`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document)
+            putAndWait(document)
 
-            crux.submitTx {
+            submitTx {
                 - document.id
             }.await()
 
-            crux.assert {
+            assert {
                 - document
             }
         }
 
         @Test
-        fun `can delete a document at valid time`() {
+        fun `can delete a document at valid time`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document, dates[0])
 
-            crux.submitTx {
+            putAndWait(document, dates[0])
+
+            submitTx {
                 - document.id from dates[1]
             }.await()
 
-            crux.assert {
+            assert {
                 document at dates[0]
                 document notAt dates[1]
             }
         }
 
         @Test
-        fun `can delete a document with end valid time`() {
+        fun `can delete a document with end valid time`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document, dates[0])
 
-            crux.submitTx {
+            putAndWait(document, dates[0])
+
+            submitTx {
                 -document.id from dates[1] until dates[2]
             }.await()
 
-            crux.assert {
+            assert {
                 document at dates[0]
                 document notAt dates[1]
                 document at dates[2]
@@ -355,119 +367,120 @@ class TransactionTest {
         }
 
         @Test
-        fun `can evict a document`() {
+        fun `can evict a document`() = crux.run {
             val document = aDocument()
-            crux.putAndWait(document)
 
-            crux.submitTx {
+            putAndWait(document)
+
+            submitTx {
                 evict(document.id)
             }.await()
 
-            crux.assert {
+            assert {
                 - document
             }
         }
 
         @Test
-        fun `can match a document`() {
+        fun `can match a document`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.submitTx {
+            submitTx {
                 match(matchDoc)
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.putAndWait(matchDoc)
+            putAndWait(matchDoc)
 
-            crux.submitTx {
+            submitTx {
                 match(matchDoc)
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can match a document at a valid time`() {
+        fun `can match a document at a valid time`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.putAndWait(matchDoc, dates[1])
+            putAndWait(matchDoc, dates[1])
 
-            crux.submitTx {
+            submitTx {
                 match(matchDoc) at dates[0]
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.submitTx {
+            submitTx {
                 match(matchDoc) at dates[1]
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can match against no document`() {
+        fun `can match against no document`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.putAndWait(matchDoc)
+            putAndWait(matchDoc)
 
-            crux.submitTx {
+            submitTx {
                 notExists(matchDoc.id)
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.submitTx {
+            submitTx {
                 notExists(UUID.randomUUID().toString())
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
 
         @Test
-        fun `can match against a no document at valid time`() {
+        fun `can match against a no document at valid time`() = crux.run {
             val matchDoc = aDocument()
             val document = aDocument()
 
-            crux.putAndWait(matchDoc, dates[1])
+            putAndWait(matchDoc, dates[1])
 
-            crux.submitTx {
+            submitTx {
                 notExists(matchDoc.id) at dates[1]
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 - document
             }
 
-            crux.submitTx {
+            submitTx {
                 notExists(matchDoc.id) at dates[0]
                 + document
             }.await()
 
-            crux.assert {
+            assert {
                 + document
             }
         }
@@ -476,12 +489,12 @@ class TransactionTest {
     @Nested
     inner class TransactionDslGroupings {
         @Test
-        fun `valid time groupings`() {
+        fun `valid time groupings`() = crux.run {
             val document1 = aDocument()
             val document2 = aDocument()
             val document3 = aDocument()
 
-            crux.submitTx {
+            submitTx {
                 + document1 from dates[0]
 
                 from(dates[1]) {
@@ -490,7 +503,7 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assert {
+            assert {
                 at(dates[0]) {
                     + document1
                     - document2
@@ -508,14 +521,14 @@ class TransactionTest {
                 }
             }
 
-            crux.submitTx {
+            submitTx {
                 from(dates[3]) {
                     - document1.id
                     - document2.id until dates[4]
                 }
             }.await()
 
-            crux.assert {
+            assert {
                 at(dates[2]) {
                     + document1
                     + document2
@@ -534,12 +547,12 @@ class TransactionTest {
         }
 
         @Test
-        fun `between times groupings`() {
+        fun `between times groupings`() = crux.run {
             val document1 = aDocument()
             val document2 = aDocument()
             val document3 = aDocument()
 
-            crux.submitTx {
+            submitTx {
                 + document1 from dates[0]
 
                 between(dates[1], dates[5]) {
@@ -548,7 +561,7 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assert {
+            assert {
                 at(dates[0]) {
                     + document1
                     - document2
@@ -571,7 +584,7 @@ class TransactionTest {
                 }
             }
 
-            crux.submitTx {
+            submitTx {
                 - document1.id from dates[1]
 
                 between(dates[2], dates[3]) {
@@ -580,7 +593,7 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assert {
+            assert {
                 document1 notAt dates[1]
 
                 at(dates[2]) {
@@ -773,6 +786,5 @@ class TransactionTest {
                     }
                 }
             )
-
     }
 }
