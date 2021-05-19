@@ -18,6 +18,8 @@ class SimpleQueryTest {
     companion object {
         private val person = "person".sym
         private val name = "name".sym
+        private val forename = "forename".sym
+        private val surname = "surname".sym
 
         private val forenameKey = "forename".kw
         private val surnameKey = "surname".kw
@@ -154,7 +156,7 @@ class SimpleQueryTest {
 
     @Test
     fun `using an or block`() =
-        assertThat (
+        assertThat(
             db.q {
                 find {
                     +person
@@ -165,6 +167,97 @@ class SimpleQueryTest {
                         person has forenameKey eq "Ivan"
                         person has forenameKey eq "Petr"
                     }
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf("ivan", "petr")
+            )
+        )
+
+    @Test
+    fun `simple binding`() =
+        assertThat(
+            db.q("Ivan") {
+                find {
+                    +person
+                }
+
+                bind {
+                    +name
+                }
+
+                where {
+                    person has forenameKey eq name
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf("ivan")
+            )
+        )
+
+    @Test
+    fun `collection binding`() =
+        assertThat(
+            db.q(listOf("Ivan", "Petr")) {
+                find {
+                    +person
+                }
+
+                bind {
+                    col(name)
+                }
+
+                where {
+                    person has forenameKey eq name
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf("ivan", "petr")
+            )
+        )
+
+    @Test
+    fun `multiple bindings`() =
+        assertThat(
+            db.q("Ivan", "Ivanov") {
+                find {
+                    +person
+                }
+
+                bind {
+                    +forename
+                    +surname
+                }
+
+                where {
+                    person has forenameKey eq forename
+                    person has surnameKey eq surname
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf("ivan")
+            )
+        )
+
+    @Test
+    fun `multiple collection bindings`() =
+        assertThat(
+            db.q(
+                listOf("Ivan", "Petr"),
+                listOf("Ivanov", "Petrov")
+            ) {
+                find {
+                    +person
+                }
+
+                bind {
+                    col(forename)
+                    col(surname)
+                }
+
+                where {
+                    person has forenameKey eq forename
+                    person has surnameKey eq surname
                 }
             }.singleResultSet(),
             equalTo(

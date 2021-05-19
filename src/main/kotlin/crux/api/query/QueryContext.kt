@@ -38,6 +38,10 @@ class QueryContext private constructor() {
         map[RULES] = RulesContext.build(block)
     }
 
+    fun bind(block: BindContext.() -> Unit) {
+        map[IN] = BindContext.build(block)
+    }
+
     var offset: Int
         get() = throw OperationNotSupportedException()
         set(value) {
@@ -53,4 +57,4 @@ class QueryContext private constructor() {
     private fun build() = map.pam
 }
 
-fun ICruxDatasource.q(block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext.build(block))
+fun ICruxDatasource.q(vararg params: Any, block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext.build(block), *params)
