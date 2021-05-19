@@ -42,6 +42,7 @@ class PredicateQueryTest {
     private val a = "a".sym
     private val a1 = "a1".sym
     private val a2 = "a2".sym
+    private val n = "n".sym
 
     private val name = "name".kw
     private val age = "age".kw
@@ -195,6 +196,118 @@ class PredicateQueryTest {
             }.singleResults(),
             equalTo(
                 setOf("ivan", "ivana")
+            )
+        )
+
+    @Test
+    fun `equality to hardcoded number`() =
+        assertThat(
+            db.q {
+                find {
+                    + p
+                }
+
+                where {
+                    p has age eq a
+                    a eq 28
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivana")
+            )
+        )
+
+    @Test
+    fun `equality to hardcoded string`() =
+        assertThat(
+            db.q {
+                find {
+                    + p
+                }
+
+                where {
+                    p has name eq n
+                    n eq "Ivana"
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivana")
+            )
+        )
+
+    @Test
+    fun `equality to symbol`() =
+        assertThat(
+            db.q {
+                find {
+                    + p1
+                }
+
+                where {
+                    p1 has age eq a1
+                    p2 has age eq a2
+                    p2 has name eq "Ivana"
+                    a1 eq a2
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivana")
+            )
+        )
+
+    @Test
+    fun `inequality to hardcoded number`() =
+        assertThat(
+            db.q {
+                find {
+                    + p
+                }
+
+                where {
+                    p has age eq a
+                    a neq 28
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivan", "petr")
+            )
+        )
+
+    @Test
+    fun `inequality to hardcoded string`() =
+        assertThat(
+            db.q {
+                find {
+                    + p
+                }
+
+                where {
+                    p has name eq n
+                    n neq "Ivana"
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivan", "petr")
+            )
+        )
+
+    @Test
+    fun `inequality to symbol`() =
+        assertThat(
+            db.q {
+                find {
+                    + p1
+                }
+
+                where {
+                    p1 has age eq a1
+                    p2 has age eq a2
+                    p2 has name eq "Ivana"
+                    a1 neq a2
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivan", "petr")
             )
         )
 }

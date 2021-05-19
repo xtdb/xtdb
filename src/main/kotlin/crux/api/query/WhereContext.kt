@@ -50,6 +50,8 @@ class WhereContext {
     infix fun Symbol.lt(other: Any) = pred("<", this, other)
     infix fun Symbol.gte(other: Any) = pred(">=", this, other)
     infix fun Symbol.lte(other: Any) = pred("<=", this, other)
+    infix fun Symbol.eq(other: Any) = pred("==", this, other)
+    infix fun Symbol.neq(other: Any) = pred("!=", this, other)
 
     private fun lockIn() {
         hangingClause?.run(clauses::add)
