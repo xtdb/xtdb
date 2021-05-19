@@ -47,7 +47,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -97,7 +97,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                - document
+                -document
             }
         }
 
@@ -151,7 +151,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                - document
+                -document
             }
         }
 
@@ -168,7 +168,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                - document
+                -document
             }
 
             putAndWait(matchDoc)
@@ -181,7 +181,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -200,7 +200,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                - document
+                -document
             }
 
             submitTx (
@@ -211,7 +211,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -230,7 +230,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                - document
+                -document
             }
 
             submitTx (
@@ -241,7 +241,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -260,7 +260,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                - document
+                -document
             }
 
             submitTx(
@@ -271,7 +271,7 @@ class TransactionTest {
             ).await()
 
             assert {
-                + document
+                +document
             }
         }
     }
@@ -283,11 +283,11 @@ class TransactionTest {
             val document = aDocument()
 
             submitTx {
-                + document
+                +document
             }.await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -295,7 +295,7 @@ class TransactionTest {
         fun `can put a document at time`() = crux.run {
             val document = aDocument()
             submitTx {
-                + document from dates[1]
+                +document from dates[1]
             }.await()
 
             assert {
@@ -309,7 +309,7 @@ class TransactionTest {
             val document = aDocument()
 
             submitTx{
-                + document from dates[1] until dates[2]
+                +document from dates[1] until dates[2]
             }.await()
 
             assert {
@@ -325,11 +325,11 @@ class TransactionTest {
             putAndWait(document)
 
             submitTx {
-                - document.id
+                -document.id
             }.await()
 
             assert {
-                - document
+                -document
             }
         }
 
@@ -340,7 +340,7 @@ class TransactionTest {
             putAndWait(document, dates[0])
 
             submitTx {
-                - document.id from dates[1]
+                -document.id from dates[1]
             }.await()
 
             assert {
@@ -377,7 +377,7 @@ class TransactionTest {
             }.await()
 
             assert {
-                - document
+                -document
             }
         }
 
@@ -388,22 +388,22 @@ class TransactionTest {
 
             submitTx {
                 match(matchDoc)
-                + document
+                +document
             }.await()
 
             assert {
-                - document
+                -document
             }
 
             putAndWait(matchDoc)
 
             submitTx {
                 match(matchDoc)
-                + document
+                +document
             }.await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -416,20 +416,20 @@ class TransactionTest {
 
             submitTx {
                 match(matchDoc) at dates[0]
-                + document
+                +document
             }.await()
 
             assert {
-                - document
+                -document
             }
 
             submitTx {
                 match(matchDoc) at dates[1]
-                + document
+                +document
             }.await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -442,20 +442,20 @@ class TransactionTest {
 
             submitTx {
                 notExists(matchDoc.id)
-                + document
+                +document
             }.await()
 
             assert {
-                - document
+                -document
             }
 
             submitTx {
                 notExists(UUID.randomUUID().toString())
-                + document
+                +document
             }.await()
 
             assert {
-                + document
+                +document
             }
         }
 
@@ -468,20 +468,20 @@ class TransactionTest {
 
             submitTx {
                 notExists(matchDoc.id) at dates[1]
-                + document
+                +document
             }.await()
 
             assert {
-                - document
+                -document
             }
 
             submitTx {
                 notExists(matchDoc.id) at dates[0]
-                + document
+                +document
             }.await()
 
             assert {
-                + document
+                +document
             }
         }
     }
@@ -495,53 +495,53 @@ class TransactionTest {
             val document3 = aDocument()
 
             submitTx {
-                + document1 from dates[0]
+                +document1 from dates[0]
 
                 from(dates[1]) {
-                    + document2
-                    + document3 until dates[2]
+                    +document2
+                    +document3 until dates[2]
                 }
             }.await()
 
             assert {
                 at(dates[0]) {
-                    + document1
-                    - document2
-                    - document3
+                    +document1
+                    -document2
+                    -document3
                 }
 
                 at(dates[1]) {
-                    + document2
-                    + document3
+                    +document2
+                    +document3
                 }
 
                 at(dates[2]) {
-                    + document2
-                    - document3
+                    +document2
+                    -document3
                 }
             }
 
             submitTx {
                 from(dates[3]) {
-                    - document1.id
-                    - document2.id until dates[4]
+                    -document1.id
+                    -document2.id until dates[4]
                 }
             }.await()
 
             assert {
                 at(dates[2]) {
-                    + document1
-                    + document2
+                    +document1
+                    +document2
                 }
 
                 at(dates[3]) {
-                    - document1
-                    - document2
+                    -document1
+                    -document2
                 }
 
                 at(dates[4]) {
-                    - document1
-                    + document2
+                    -document1
+                    +document2
                 }
             }
         }
@@ -553,43 +553,43 @@ class TransactionTest {
             val document3 = aDocument()
 
             submitTx {
-                + document1 from dates[0]
+                +document1 from dates[0]
 
                 between(dates[1], dates[5]) {
-                    + document2
-                    + document3
+                    +document2
+                    +document3
                 }
             }.await()
 
             assert {
                 at(dates[0]) {
-                    + document1
-                    - document2
-                    - document3
+                    +document1
+                    -document2
+                    -document3
                 }
 
                 at(dates[1]) {
-                    + document2
-                    + document3
+                    +document2
+                    +document3
                 }
 
                 at(dates[4]) {
-                    + document2
-                    + document3
+                    +document2
+                    +document3
                 }
 
                 at(dates[5]) {
-                    - document2
-                    - document3
+                    -document2
+                    -document3
                 }
             }
 
             submitTx {
-                - document1.id from dates[1]
+                -document1.id from dates[1]
 
                 between(dates[2], dates[3]) {
-                    - document2.id
-                    - document3.id
+                    -document2.id
+                    -document3.id
                 }
             }.await()
 
@@ -597,14 +597,14 @@ class TransactionTest {
                 document1 notAt dates[1]
 
                 at(dates[2]) {
-                    - document2
-                    - document3
+                    -document2
+                    -document3
                 }
 
                 at(dates[3]) {
-                    - document1
-                    + document2
-                    + document3
+                    -document1
+                    +document2
+                    +document3
                 }
             }
         }
@@ -629,7 +629,7 @@ class TransactionTest {
                     it.put(document)
                 },
                 build {
-                    + document
+                    +document
                 }
             )
 
@@ -640,7 +640,7 @@ class TransactionTest {
                     it.put(document, dates[1])
                 },
                 build {
-                    + document from dates[1]
+                    +document from dates[1]
                 }
             )
 
@@ -651,7 +651,7 @@ class TransactionTest {
                     it.put(document, dates[1], dates[2])
                 },
                 build {
-                    + document from dates[1] until dates[2]
+                    +document from dates[1] until dates[2]
                 }
             )
 
@@ -662,7 +662,7 @@ class TransactionTest {
                     it.delete(document.id)
                 },
                 build {
-                    - document.id
+                    -document.id
                 }
             )
 
@@ -673,7 +673,7 @@ class TransactionTest {
                     it.delete(document.id, dates[1])
                 },
                 build {
-                    - document.id from dates[1]
+                    -document.id from dates[1]
                 }
             )
 
@@ -684,7 +684,7 @@ class TransactionTest {
                     it.delete(document.id, dates[1], dates[2])
                 },
                 build {
-                    - document.id from dates[1] until dates[2]
+                    -document.id from dates[1] until dates[2]
                 }
             )
 
@@ -708,7 +708,7 @@ class TransactionTest {
                 },
                 build {
                     match(document1)
-                    + document2
+                    +document2
                 }
             )
 
@@ -721,7 +721,7 @@ class TransactionTest {
                 },
                 build {
                     match(document1) at dates[0]
-                    + document2
+                    +document2
                 }
             )
 
@@ -734,7 +734,7 @@ class TransactionTest {
                 },
                 build {
                     notExists(document1.id)
-                    + document2
+                    +document2
                 }
             )
 
@@ -747,7 +747,7 @@ class TransactionTest {
                 },
                 build {
                     notExists(document1.id) at dates[1]
-                    + document
+                    +document
                 }
             )
 
@@ -767,12 +767,12 @@ class TransactionTest {
                     it.delete(document2.id, dates[3], dates[6])
                 },
                 build {
-                    + document1 from dates[3]
+                    +document1 from dates[3]
 
                     from(dates[2]) {
-                        + document2
-                        + document3 until dates[4]
-                        - document4.id
+                        +document2
+                        +document3 until dates[4]
+                        -document4.id
                     }
 
                     match(document2)
@@ -781,8 +781,8 @@ class TransactionTest {
                     match(document4) at dates[7]
 
                     between(dates[3], dates[6]) {
-                        + document5
-                        - document2.id
+                        +document5
+                        -document2.id
                     }
                 }
             )

@@ -15,6 +15,14 @@ import java.time.Duration
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class OrderAndPaginationTest {
+    companion object {
+        private val entry = "entry".sym
+        private val temperature = "temperature".sym
+        private val humidity = "humidity".sym
+
+        private val temperatureKey = "temperature".kw
+        private val humidityKey = "humidity".kw
+    }
 
     private val documents =
         (0 until 100)
@@ -22,7 +30,7 @@ class OrderAndPaginationTest {
             .map {
                 CruxDocument.build(it) { b ->
                     b.put("temperature", it)
-                    b.put("humidity", it/2 + (it%2)*50) // Bijective to (0 until 100) but in a different order
+                    b.put("humidity", it/2 +(it%2)*50) // Bijective to (0 until 100) but in a different order
                 }
             }
 
@@ -35,27 +43,20 @@ class OrderAndPaginationTest {
         }
     }.db()
 
-    private val d = "d".sym
-    private val t = "t".sym
-    private val h = "h".sym
-
-    private val temperature = "temperature".kw
-    private val humidity = "humidity".kw
-
     @Test
     fun `ordering by ascending works`() =
         assertThat(
             db.q {
                 find {
-                    + t
+                    +temperature
                 }
 
                 where {
-                    d has temperature eq t
+                    entry has temperatureKey eq temperature
                 }
 
                 order {
-                    + t
+                    +temperature
                 }
             }.singleResultList(),
             equalTo(
@@ -70,15 +71,15 @@ class OrderAndPaginationTest {
         assertThat(
             db.q {
                 find {
-                    + t
+                    +temperature
                 }
 
                 where {
-                    d has temperature eq t
+                    entry has temperatureKey eq temperature
                 }
 
                 order {
-                    - t
+                    -temperature
                 }
             }.singleResultList(),
             equalTo(
@@ -93,18 +94,18 @@ class OrderAndPaginationTest {
         assertThat(
             db.q {
                 find {
-                    + t
-                    + h
+                    +temperature
+                    +humidity
                 }
 
                 where {
-                    d has temperature eq t
-                    d has humidity eq h
+                    entry has temperatureKey eq temperature
+                    entry has humidityKey eq humidity
                 }
 
                 order {
-                    + t
-                    - h
+                    +temperature
+                    -humidity
                 }
             }.simplifiedResultList(),
             equalTo(
@@ -125,15 +126,15 @@ class OrderAndPaginationTest {
         assertThat(
             db.q {
                 find {
-                    + t
+                    +temperature
                 }
 
                 where {
-                    d has temperature eq t
+                    entry has temperatureKey eq temperature
                 }
 
                 order {
-                    + t
+                    +temperature
                 }
 
                 offset = 15
@@ -152,15 +153,15 @@ class OrderAndPaginationTest {
         assertThat(
             db.q {
                 find {
-                    + t
+                    +temperature
                 }
 
                 where {
-                    d has temperature eq t
+                    entry has temperatureKey eq temperature
                 }
 
                 order {
-                    + t
+                    +temperature
                 }
 
                 limit = 15
@@ -179,15 +180,15 @@ class OrderAndPaginationTest {
         assertThat(
             db.q {
                 find {
-                    + t
+                    +temperature
                 }
 
                 where {
-                    d has temperature eq t
+                    entry has temperatureKey eq temperature
                 }
 
                 order {
-                    + t
+                    +temperature
                 }
 
                 offset = 10

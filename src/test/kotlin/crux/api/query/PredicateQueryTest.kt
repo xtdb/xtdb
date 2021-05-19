@@ -15,6 +15,17 @@ import java.time.Duration
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PredicateQueryTest {
     companion object {
+        private val person = "person".sym
+        private val person1 = "person1".sym
+        private val person2 = "person2".sym
+        private val age = "age".sym
+        private val age1 = "age1".sym
+        private val age2 = "age2".sym
+        private val name = "name".sym
+
+        private val nameKey = "name".kw
+        private val ageKey = "age".kw
+
         private fun createPerson(key: String, name: String, age: Int) =
             CruxDocument.build(key) {
                 it.put("name", name)
@@ -28,36 +39,25 @@ class PredicateQueryTest {
 
     private val db = CruxK.startNode().apply {
         submitTx {
-            + ivan
-            + ivana
-            + petr
+            +ivan
+            +ivana
+            +petr
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
         }
     }.db()
-
-    private val p = "p".sym
-    private val p1 = "p1".sym
-    private val p2 = "p2".sym
-    private val a = "a".sym
-    private val a1 = "a1".sym
-    private val a2 = "a2".sym
-    private val n = "n".sym
-
-    private val name = "name".kw
-    private val age = "age".kw
 
     @Test
     fun `greater than hardcoded`() =
         assertThat (
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has age eq a
-                    a gt 28
+                    person has ageKey eq age
+                    age gt 28
                 }
             }.singleResultSet(),
             equalTo(
@@ -70,14 +70,14 @@ class PredicateQueryTest {
         assertThat (
             db.q {
                 find {
-                    + p1
+                    +person1
                 }
 
                 where {
-                    p1 has age eq a1
-                    p2 has name eq "Ivana"
-                    p2 has age eq a2
-                    a1 gt a2
+                    person1 has ageKey eq age1
+                    person2 has nameKey eq "Ivana"
+                    person2 has ageKey eq age2
+                    age1 gt age2
                 }
             }.singleResultSet(),
             equalTo(
@@ -90,12 +90,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has age eq a
-                    a gte 28
+                    person has ageKey eq age
+                    age gte 28
                 }
             }.singleResultSet(),
             equalTo(
@@ -108,14 +108,14 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p1
+                    +person1
                 }
 
                 where {
-                    p1 has age eq a1
-                    p2 has age eq a2
-                    p2 has name eq "Ivana"
-                    a1 gte a2
+                    person1 has ageKey eq age1
+                    person2 has ageKey eq age2
+                    person2 has nameKey eq "Ivana"
+                    age1 gte age2
                 }
             }.singleResultSet(),
             equalTo(
@@ -128,12 +128,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has age eq a
-                    a lt 28
+                    person has ageKey eq age
+                    age lt 28
                 }
             }.singleResultSet(),
             equalTo(
@@ -146,14 +146,14 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p1
+                    +person1
                 }
 
                 where {
-                    p1 has age eq a1
-                    p2 has age eq a2
-                    p2 has name eq "Ivana"
-                    a1 lt a2
+                    person1 has ageKey eq age1
+                    person2 has ageKey eq age2
+                    person2 has nameKey eq "Ivana"
+                    age1 lt age2
                 }
             }.singleResultSet(),
             equalTo(
@@ -166,12 +166,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has age eq a
-                    a lte 28
+                    person has ageKey eq age
+                    age lte 28
                 }
             }.singleResultSet(),
             equalTo(
@@ -184,14 +184,14 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p1
+                    +person1
                 }
 
                 where {
-                    p1 has age eq a1
-                    p2 has age eq a2
-                    p2 has name eq "Ivana"
-                    a1 lte a2
+                    person1 has ageKey eq age1
+                    person2 has ageKey eq age2
+                    person2 has nameKey eq "Ivana"
+                    age1 lte age2
                 }
             }.singleResultSet(),
             equalTo(
@@ -204,12 +204,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has age eq a
-                    a eq 28
+                    person has ageKey eq age
+                    age eq 28
                 }
             }.singleResultSet(),
             equalTo(
@@ -222,12 +222,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has name eq n
-                    n eq "Ivana"
+                    person has nameKey eq name
+                    name eq "Ivana"
                 }
             }.singleResultSet(),
             equalTo(
@@ -240,14 +240,14 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p1
+                    +person1
                 }
 
                 where {
-                    p1 has age eq a1
-                    p2 has age eq a2
-                    p2 has name eq "Ivana"
-                    a1 eq a2
+                    person1 has ageKey eq age1
+                    person2 has ageKey eq age2
+                    person2 has nameKey eq "Ivana"
+                    age1 eq age2
                 }
             }.singleResultSet(),
             equalTo(
@@ -260,12 +260,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has age eq a
-                    a neq 28
+                    person has ageKey eq age
+                    age neq 28
                 }
             }.singleResultSet(),
             equalTo(
@@ -278,12 +278,12 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has name eq n
-                    n neq "Ivana"
+                    person has nameKey eq name
+                    name neq "Ivana"
                 }
             }.singleResultSet(),
             equalTo(
@@ -296,14 +296,14 @@ class PredicateQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p1
+                    +person1
                 }
 
                 where {
-                    p1 has age eq a1
-                    p2 has age eq a2
-                    p2 has name eq "Ivana"
-                    a1 neq a2
+                    person1 has ageKey eq age1
+                    person2 has ageKey eq age2
+                    person2 has nameKey eq "Ivana"
+                    age1 neq age2
                 }
             }.singleResultSet(),
             equalTo(

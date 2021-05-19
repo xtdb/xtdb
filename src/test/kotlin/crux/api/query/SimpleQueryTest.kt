@@ -16,6 +16,12 @@ import java.time.Duration
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SimpleQueryTest {
     companion object {
+        private val person = "person".sym
+        private val name = "name".sym
+
+        private val forenameKey = "forename".kw
+        private val surnameKey = "surname".kw
+
         private fun createPerson(key: String, forename: String, surname: String) =
             CruxDocument.build(key) {
                 it.put("forename", forename)
@@ -35,34 +41,26 @@ class SimpleQueryTest {
 
     private val db = CruxK.startNode().apply {
         submitTx {
-            + ivan
-            + ivana
-            + petr
-            + mirror
-            + clint
+            +ivan
+            +ivana
+            +petr
+            +mirror
+            +clint
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
         }
     }.db()
-
-    private val p = "p".sym
-    private val n = "n".sym
-
-    private val forename = "forename".kw
-    private val surname = "surname".kw
-
-
 
     @Test
     fun `existence of fields`() =
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has forename
+                    person has forenameKey
                 }
             }.singleResultSet(),
             equalTo(
@@ -80,11 +78,11 @@ class SimpleQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has forename eq "Ivan"
+                    person has forenameKey eq "Ivan"
                 }
             }.singleResultSet(),
             equalTo(
@@ -97,12 +95,12 @@ class SimpleQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
-                    + n
+                    +person
+                    +name
                 }
 
                 where {
-                    p has forename eq n
+                    person has forenameKey eq name
                 }
             }.simplifiedResultSet(),
             equalTo(
@@ -120,12 +118,12 @@ class SimpleQueryTest {
         assertThat(
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has forename eq n
-                    p has surname eq n
+                    person has forenameKey eq name
+                    person has surnameKey eq name
                 }
             }.singleResultSet(),
             equalTo(
@@ -138,14 +136,14 @@ class SimpleQueryTest {
         assertThat (
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
-                    p has surname eq "Ivanov"
+                    person has surnameKey eq "Ivanov"
 
                     not {
-                        p has forename eq "Ivan"
+                        person has forenameKey eq "Ivan"
                     }
                 }
             }.singleResultSet(),
@@ -159,13 +157,13 @@ class SimpleQueryTest {
         assertThat (
             db.q {
                 find {
-                    + p
+                    +person
                 }
 
                 where {
                     or {
-                        p has forename eq "Ivan"
-                        p has forename eq "Petr"
+                        person has forenameKey eq "Ivan"
+                        person has forenameKey eq "Petr"
                     }
                 }
             }.singleResultSet(),
