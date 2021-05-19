@@ -110,16 +110,18 @@ Two main extension points:
      - DONE Ability to query several temporal chunks (live and Arrow).
      - DONE Merging of temporal Arrow chunks?
      - DONE Move merging of the snapshot temporal tree to the background.
-2. Core2 as a viable alternative to Crux
+2. Core2 as something keen users can play with
+   - Features, functionality
+     - Higher-level queries
+       - Multi-way WCOJ hash joins?
+       - EDN Datalog.
+       - SQL.
+   - Documentation
+3. Core2 as a viable alternative to Crux
    - Deployment, monitoring
      - multi-module (Kafka, S3)
    - Documentation, marketing
    - Features, functionality
-     - Higher-level queries
-       - Multi-way WCOJ hash joins?
-       - GHD-based planner?
-       - EDN Datalog.
-       - SQL.
      - Bitemporal features, interval algebra.
      - Eviction
      - More logs/object-stores
@@ -142,9 +144,6 @@ Clean up:
   - reduce footprint of LinkedHashMap implementation detail
 - DUV completeness (removal of some DUV hacks/pain)
 - Clean up data model: Java/Clojure types, Java Arrow types, representation of types (keywords, ArrowType, class etc.), conversion between types.
-- DONE Clean up Spliterator operators.
-- DONE Consider VectorSchemaRoot and Roaring selection forwarding and avoid copies?
-- DONE Avoid copies during joins via join-index-vectors? Sorting via sort-vectors?
 - Review memory-management.
 - JMH - how to leverage, still needed?
 
@@ -161,6 +160,7 @@ Should have:
 - Speculative transactions?
 
 Misc functionality/ideas:
+- GHD-based planner?
 - Option C content - inspiration from Truffle's DynamicObjects/Shapes
 - Graphy? Some kind of 'aggregate join' so that your query can return a tree?
 - Event Sourcing, Data Mesh story
