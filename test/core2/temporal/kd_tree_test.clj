@@ -444,6 +444,24 @@
                         (t/is (= 6 (kd/kd-tree-size merged-tree)))
                         (t/is (= expected-nodes (set (map vec (kd/kd-tree->seq merged-tree))))))))
 
+
+                  (t/testing "layered merged tree"
+                    (let [node-to-insert [10 10]
+                          expected-nodes (set (map vec (kd/kd-tree->seq static-tree)))]
+                      (with-open [^Node delta-tree (-> nil
+                                                       (kd/kd-tree-insert allocator node-to-insert)
+                                                       (kd/kd-tree-delete allocator node-to-delete))
+                                  ^VectorSchemaRoot static-delta-tree (kd/->column-kd-tree allocator delta-tree 2)
+                                  merged-tree (kd/->merged-kd-tree (util/slice-root static-tree) static-delta-tree)]
+                        (t/is (= 1 (kd/kd-tree-size static-delta-tree)))
+                        (t/is (= 2 (kd/kd-tree-value-count static-delta-tree)))
+
+                        (t/is (= 4 (kd/kd-tree-size merged-tree)))
+                        (t/is (= 6 (kd/kd-tree-value-count merged-tree)))
+
+                        (t/is (= (-> expected-nodes (conj node-to-insert) (disj node-to-delete))
+                                 (set (map vec (kd/kd-tree->seq merged-tree))))))))
+
                   (t/testing "empty dynamic tree"
                     (let [node-to-insert [10 10]]
                       (with-open [merged-tree (kd/->merged-kd-tree static-tree)]

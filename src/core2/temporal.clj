@@ -140,7 +140,7 @@
   (^void reloadTemporalIndex [^int chunk-idx ^Long snapshot-idx])
   (^void awaitSnapshotBuild [])
   (^void buildTemporalSnapshot [^int chunk-idx ^Long snapshot-idx])
-  (^java.io.Closeable buildDynamicTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
+  (^java.io.Closeable buildStaticTree [^Object base-kd-tree ^int chunk-idx ^Long snapshot-idx]))
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
@@ -206,7 +206,7 @@
          (filter #(<= ^long % chunk-idx))
          (last)))
 
-  (buildDynamicTree [this base-kd-tree chunk-idx snapshot-idx]
+  (buildStaticTree [this base-kd-tree chunk-idx snapshot-idx]
     (let [kd-tree (atom base-kd-tree)]
       (try
         (let [snapshot-idx (long (or snapshot-idx -1))
@@ -219,9 +219,11 @@
                          (util/then-apply util/try-close)))]
           @(CompletableFuture/allOf (into-array CompletableFuture futs))
           (doseq [chunk-idx new-chunk-idxs
-                  :let [obj-key (->temporal-obj-key chunk-idx)]]
-            (with-open [chunk-kd-tree (kd/->arrow-buf-kd-tree @(.getBuffer buffer-pool obj-key))]
-              (swap! kd-tree #(kd/merge-kd-trees allocator % chunk-kd-tree))))
+                  :let [obj-key (->temporal-obj-key chunk-idx)
+                        chunk-kd-tree (kd/->arrow-buf-kd-tree @(.getBuffer buffer-pool obj-key))]]
+            (swap! kd-tree #(if %
+                              (kd/->merged-kd-tree % chunk-kd-tree)
+                              chunk-kd-tree)))
           @kd-tree)
         (catch Exception e
           (util/try-close @kd-tree)
@@ -230,14 +232,17 @@
   (reloadTemporalIndex [this chunk-idx snapshot-idx]
     (if snapshot-idx
       (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
-        (set! (.kd-tree this) (.buildDynamicTree this
-                                                 (kd/->merged-kd-tree (kd/->arrow-buf-kd-tree temporal-buffer {:block-cache-size block-cache-size}))
+        (set! (.kd-tree this) (kd/->merged-kd-tree
+                               (.buildStaticTree this
+                                                 (kd/->arrow-buf-kd-tree temporal-buffer {:block-cache-size block-cache-size})
                                                  chunk-idx
-                                                 snapshot-idx))
+                                                 snapshot-idx)
+                               nil))
         (when (and kd-tree-snapshot-idx (not= kd-tree-snapshot-idx snapshot-idx))
           (.evictBuffer buffer-pool (->temporal-snapshot-obj-key kd-tree-snapshot-idx)))
         (set! (.kd-tree-snapshot-idx this) snapshot-idx))
-      (set! (.kd-tree this) (.buildDynamicTree this nil chunk-idx snapshot-idx))))
+      (set! (.kd-tree this) (some-> (.buildStaticTree this nil chunk-idx snapshot-idx)
+                                    (kd/->merged-kd-tree nil)))))
 
   (populateKnownChunks [this]
     (let [known-chunks (.knownChunks metadata-manager)
@@ -267,14 +272,14 @@
       (try
         (if snapshot-idx
           (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
-            (with-open [merged-kd-tree (.buildDynamicTree this
-                                                          (kd/->merged-kd-tree (kd/->arrow-buf-kd-tree temporal-buffer))
-                                                          chunk-idx
-                                                          snapshot-idx)]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path merged-kd-tree {:k k :compress-blocks? compress-temporal-index?})
+            (with-open [kd-tree (.buildStaticTree this
+                                                  (kd/->arrow-buf-kd-tree temporal-buffer)
+                                                  chunk-idx
+                                                  snapshot-idx)]
+              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-temporal-index?})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf))))
-          (when-let [kd-tree (.buildDynamicTree this nil chunk-idx snapshot-idx)]
+          (when-let [kd-tree (.buildStaticTree this nil chunk-idx snapshot-idx)]
             (with-open [^Closeable kd-tree kd-tree]
               (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-temporal-index?})
                                      (util/->mmap-path))]

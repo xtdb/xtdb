@@ -1116,11 +1116,11 @@
          (long (kd-tree-depth dynamic-kd-tree))))
 
   (kd-tree-retain [kd-tree allocator]
-    (MergedKdTree. (kd-tree-retain (.static-kd-tree kd-tree) allocator)
-                   (kd-tree-retain (.dynamic-kd-tree kd-tree) allocator)
-                   (.clone ^Roaring64Bitmap (.static-delete-bitmap kd-tree))
-                   (.static-size kd-tree)
-                   (.static-value-count kd-tree)))
+    (MergedKdTree. (kd-tree-retain static-kd-tree allocator)
+                   (kd-tree-retain dynamic-kd-tree allocator)
+                   (.clone ^Roaring64Bitmap static-delete-bitmap)
+                   static-size
+                   static-value-count))
 
   (kd-tree-point-access [kd-tree]
     (MergedKdTreePointAccess. (kd-tree-point-access static-kd-tree) (kd-tree-point-access dynamic-kd-tree) static-value-count))
@@ -1146,4 +1146,13 @@
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree]
    (->merged-kd-tree static-kd-tree nil))
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
-   (MergedKdTree. static-kd-tree dynamic-kd-tree (Roaring64Bitmap.) (kd-tree-size static-kd-tree) (kd-tree-value-count static-kd-tree))))
+   (let [static-delete-bitmap (Roaring64Bitmap.)
+         ^IKdTreePointAccess access (kd-tree-point-access dynamic-kd-tree)]
+     (dotimes [n (kd-tree-value-count dynamic-kd-tree)]
+       (when (.isDeleted access n)
+         (let [point (.getArrayPoint access n)]
+           (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
+                     (reify LongConsumer
+                       (accept [_ x]
+                         (.addLong static-delete-bitmap x)))))))
+     (MergedKdTree. static-kd-tree dynamic-kd-tree static-delete-bitmap (kd-tree-size static-kd-tree) (kd-tree-value-count static-kd-tree)))))
