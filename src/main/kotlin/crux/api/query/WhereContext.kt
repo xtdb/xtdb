@@ -4,12 +4,16 @@ import clojure.lang.Keyword
 import clojure.lang.PersistentVector
 import clojure.lang.Symbol
 import crux.api.pl
+import crux.api.prefix
 import crux.api.pv
 import crux.api.sym
 
 class WhereContext private constructor() {
     companion object {
-        fun build(block: WhereContext.() -> Unit) = WhereContext().also(block).build()
+        internal fun clauses(block: WhereContext.() -> Unit) =
+            WhereContext().also(block).apply(WhereContext::lockIn).clauses
+
+        fun build(block: WhereContext.() -> Unit) = clauses(block).pv
 
         private val NOT = "not".sym
         private val OR = "or".sym
@@ -21,7 +25,7 @@ class WhereContext private constructor() {
         private val LTE = "<=".sym
     }
 
-    private val clauses = mutableListOf<Any>()
+    internal val clauses = mutableListOf<Any>()
 
     private var hangingClause: Any? = null
 
@@ -39,12 +43,7 @@ class WhereContext private constructor() {
 
     private fun join(type: Symbol, block: WhereContext.() -> Unit) {
         lockIn()
-        hangingClause =
-            (listOf(type) +
-                    WhereContext()
-                        .also(block)
-                        .apply(WhereContext::lockIn)
-                        .clauses).pl
+        hangingClause = clauses(block).prefix(type).pl
     }
 
     fun not(block: WhereContext.() -> Unit) = join(NOT, block)
@@ -64,13 +63,16 @@ class WhereContext private constructor() {
     infix fun Symbol.eq(other: Any) = pred(EQ, this, other)
     infix fun Symbol.neq(other: Any) = pred(NEQ, this, other)
 
-    private fun lockIn() {
-        hangingClause?.run(clauses::add)
-        hangingClause = null
+    data class RuleInvocation(val name: Symbol)
+    fun rule(name: Symbol) = RuleInvocation(name).also { lockIn() }
+
+    operator fun RuleInvocation.invoke(vararg params: Any) {
+
+        hangingClause = params.toList().prefix(name).pl
     }
 
-    private fun build(): PersistentVector {
-        lockIn()
-        return clauses.pv
+    internal fun lockIn() {
+        hangingClause?.run(clauses::add)
+        hangingClause = null
     }
 }

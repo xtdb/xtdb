@@ -34,6 +34,10 @@ class QueryContext private constructor() {
         map[ORDER] = OrderContext.build(block)
     }
 
+    fun rules(block: RulesContext.() -> Unit) {
+        map[RULES] = RulesContext.build(block)
+    }
+
     var offset: Int
         get() = throw OperationNotSupportedException()
         set(value) {
