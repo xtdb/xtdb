@@ -11,7 +11,8 @@
             [next.jdbc.connection :as jdbcc]
             [next.jdbc.result-set :as jdbcr]
             [taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [clojure.java.io :as io])
   (:import (com.zaxxer.hikari HikariDataSource HikariConfig)
            java.util.Date
            java.io.Closeable
@@ -170,3 +171,34 @@
         (assoc :tx-consumer (tx/->polling-tx-consumer opts
                                                       (fn [after-tx-id]
                                                         (db/open-tx-log tx-log after-tx-id)))))))
+
+(defn -main [jdbc-config-file tx-log-file doc-store-file]
+  (with-open [sys (-> (sys/prep-system {::connection-pool (read-string (slurp (io/file jdbc-config-file)))})
+                      (sys/start-system))]
+    (let [pool (:pool (::connection-pool sys))]
+      (println "importing txs...")
+      (with-open [rdr (io/reader (io/file tx-log-file))]
+        (doseq [{:crux.tx/keys [^java.util.Date tx-time tx-id], :crux.tx.event/keys [tx-events]}
+                (map c/read-edn-string-with-readers (line-seq rdr))]
+          (jdbc/execute-one! pool ["INSERT INTO tx_events (EVENT_OFFSET, V, TX_TIME, TOPIC, COMPACTED) VALUES (?,?,?,'txs',0)"
+                                   (inc tx-id),
+                                   (nippy/freeze tx-events)
+                                   (java.sql.Timestamp. (.getTime tx-time))]
+                             {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
+        (jdbc/execute-one! pool ["SELECT setval('tx_events_event_offset_seq', (SELECT MAX(event_offset) FROM tx_events));"]))
+
+      (println "importing docs...")
+      (with-open [rdr (io/reader (io/file doc-store-file))]
+        (jdbc/with-transaction [tx pool]
+          (doseq [[id doc] (map c/read-edn-string-with-readers (line-seq rdr))
+                  :let [id (str id)]]
+            (if (c/evicted-doc? doc)
+              (do
+                (insert-event! tx id doc "docs")
+                (evict-doc! tx id doc))
+              (if-not (doc-exists? tx id)
+                (insert-event! tx id doc "docs")
+                (update-doc! tx id doc)))))))))
+
+(comment
+  (-main "/home/james/src/juxt/crux/crux-jdbc/src/crux/jdbc.edn" "/tmp/rocks-tx-log.edn" "/tmp/rocks-docs.edn"))

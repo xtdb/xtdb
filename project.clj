@@ -26,6 +26,7 @@
 
   :dependencies
   [[org.clojure/clojure "1.10.3"]
+   [org.clojure/tools.namespace "1.1.0"]
    [juxt/crux-core "crux-git-version-beta"]
    [juxt/crux-rocksdb "crux-git-version-beta"]
    #_[juxt/crux-lmdb "crux-git-version-alpha"]
@@ -33,6 +34,7 @@
    #_[juxt/crux-kafka-connect "crux-git-version-beta"]
    #_[juxt/crux-kafka-embedded "crux-git-version-beta"]
    [juxt/crux-jdbc "crux-git-version-beta"]
+   [org.postgresql/postgresql "42.2.18"]
    #_[juxt/crux-metrics "crux-git-version-alpha"]
    #_[juxt/crux-http-server "crux-git-version-alpha"]
    #_[juxt/crux-rdf "crux-git-version-alpha"]
