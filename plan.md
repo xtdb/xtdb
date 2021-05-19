@@ -103,7 +103,7 @@ Two main extension points:
      - Exercise temporal side, TPC-BiH
      - DONE SQL:2011 period predicates in logical plan expressions:
        - overlaps, equals, contains, (immediately) precedes, (immediately) succeeds.
-     - Add interval types and arithmetic?
+     - DONE Add interval types and arithmetic?
      - How far does the current kd-tree take us? Need different approach or fixable as initial cut?
    - Bigger than local node databases
      - DONE Buffer pool eviction and size limit.

@@ -12,7 +12,7 @@
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
-           [java.time Instant ZoneOffset]
+           [java.time Duration Instant ZoneOffset]
            java.time.temporal.ChronoField
            [java.util Date LinkedHashMap]
            org.roaringbitmap.RoaringBitmap
@@ -140,6 +140,7 @@
   {Long 'long
    Double 'double
    Date 'long
+   Duration 'long
    Boolean 'boolean})
 
 (def ^:private type->boxed-type {Double/TYPE Double
@@ -214,6 +215,7 @@
              String `(.getBuffer ~variable ~idx-sym)
              types/byte-array-class `(.getBuffer ~variable ~idx-sym)
              Date `(.getDate ~variable ~idx-sym)
+             Duration `(.getDuration ~variable ~idx-sym)
              `(normalize-union-value (.getObject ~variable ~idx-sym)))
      :return-type var-type}))
 
@@ -258,6 +260,10 @@
   {:code `(< ~@emitted-args)
    :return-type Boolean})
 
+(defmethod codegen-call [:< Duration Duration] [{:keys [emitted-args]}]
+  {:code `(< ~@emitted-args)
+   :return-type Boolean})
+
 (defmethod codegen-call [:< Comparable Comparable] [{:keys [emitted-args]}]
   {:code `(neg? (compare ~@emitted-args))
    :return-type Boolean})
@@ -272,6 +278,7 @@
 
 (prefer-method codegen-call [:< Number Number] [:< Comparable Comparable])
 (prefer-method codegen-call [:< Date Date] [:< Comparable Comparable])
+(prefer-method codegen-call [:< Duration Duration] [:< Comparable Comparable])
 (prefer-method codegen-call [:< String String] [:< Comparable Comparable])
 
 (defmethod codegen-call [:<= Number Number] [{:keys [emitted-args]}]
@@ -279,6 +286,10 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:<= Date Date] [{:keys [emitted-args]}]
+  {:code `(<= ~@emitted-args)
+   :return-type Boolean})
+
+(defmethod codegen-call [:<= Duration Duration] [{:keys [emitted-args]}]
   {:code `(<= ~@emitted-args)
    :return-type Boolean})
 
@@ -296,6 +307,7 @@
 
 (prefer-method codegen-call [:<= Number Number] [:<= Comparable Comparable])
 (prefer-method codegen-call [:<= Date Date] [:<= Comparable Comparable])
+(prefer-method codegen-call [:<= Duration Duration] [:<= Comparable Comparable])
 (prefer-method codegen-call [:<= String String] [:<= Comparable Comparable])
 
 (defmethod codegen-call [:> Number Number] [{:keys [emitted-args]}]
@@ -303,6 +315,10 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:> Date Date] [{:keys [emitted-args]}]
+  {:code `(> ~@emitted-args)
+   :return-type Boolean})
+
+(defmethod codegen-call [:> Duration Duration] [{:keys [emitted-args]}]
   {:code `(> ~@emitted-args)
    :return-type Boolean})
 
@@ -320,6 +336,7 @@
 
 (prefer-method codegen-call [:> Number Number] [:> Comparable Comparable])
 (prefer-method codegen-call [:> Date Date] [:> Comparable Comparable])
+(prefer-method codegen-call [:> Duration Duration] [:> Comparable Comparable])
 (prefer-method codegen-call [:> String String] [:> Comparable Comparable])
 
 (defmethod codegen-call [:>= Number Number] [{:keys [emitted-args]}]
@@ -327,6 +344,10 @@
    :return-type Boolean})
 
 (defmethod codegen-call [:>= Date Date] [{:keys [emitted-args]}]
+  {:code `(>= ~@emitted-args)
+   :return-type Boolean})
+
+(defmethod codegen-call [:>= Duration Duration] [{:keys [emitted-args]}]
   {:code `(>= ~@emitted-args)
    :return-type Boolean})
 
@@ -344,6 +365,7 @@
 
 (prefer-method codegen-call [:>= Number Number] [:>= Comparable Comparable])
 (prefer-method codegen-call [:>= Date Date] [:>= Comparable Comparable])
+(prefer-method codegen-call [:>= Duration Duration] [:>= Comparable Comparable])
 (prefer-method codegen-call [:>= String String] [:>= Comparable Comparable])
 
 (defmethod codegen-call [:and Boolean Boolean] [{:keys [emitted-args]}]
@@ -419,6 +441,8 @@
   (cond
     (instance? Date v)
     (.getTime ^Date v)
+    (instance? Duration v)
+    (.toMillis ^Duration v)
     (string? v)
     (ByteBuffer/wrap (.getBytes ^String v StandardCharsets/UTF_8))
     (bytes? v)
@@ -465,7 +489,8 @@
    Double '.appendDouble
    String '.appendStringBuffer
    types/byte-array-class '.appendBuffer
-   Date '.appendDate})
+   Date '.appendDate
+   Duration '.appendDuration})
 
 (def ^:private return-type->minor-type-sym
   {Boolean `Types$MinorType/BIT
@@ -474,7 +499,8 @@
    Double `Types$MinorType/FLOAT8
    String `Types$MinorType/VARCHAR
    types/byte-array-class `Types$MinorType/VARBINARY
-   Date `Types$MinorType/TIMESTAMPMILLI})
+   Date `Types$MinorType/TIMESTAMPMILLI
+   Duration `Types$MinorType/DURATION})
 
 (defn- generate-projection [col-name expr var-types param-types]
   (let [codegen-opts {:var->types var-types, :param->type param-types}

@@ -15,7 +15,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [1,2,3,4,5,6,10]
+        "typeIds" : [1,2,3,4,5,6,10,18]
       },
       "children" : [{
         "name" : "$data$",
@@ -71,6 +71,14 @@
           "timezone" : null
         },
         "children" : [ ]
+      },{
+        "name" : "durationmilli",
+        "nullable" : false,
+        "type" : {
+          "name" : "duration",
+          "unit" : "MILLISECOND"
+        },
+        "children" : [ ]
       }]
     }]
   },
@@ -121,6 +129,11 @@
         "count" : 2,
         "VALIDITY" : [1,1],
         "DATA" : [1479211200000,1479211200000]
+      },{
+        "name" : "durationmilli",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "DATA" : [ ]
       }]
     }]
   }]

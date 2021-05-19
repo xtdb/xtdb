@@ -43,8 +43,8 @@
   (.toLowerCase (.toString minor-type)))
 
 (def ^:private type-meta-fields
-  (for [^Types$MinorType minor-type (keys t/minor-type->java-type)]
-    (t/->field (type->field-name minor-type) (.getType minor-type) true)))
+  (for [^Types$MinorType minor-type (sort-by (comp t/arrow-type->type-id t/minor-type->arrow-type) (keys t/minor-type->java-type))]
+    (t/->field (type->field-name minor-type) (t/minor-type->arrow-type minor-type) true)))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
   (Schema. [(t/->field "column" (.getType Types$MinorType/VARCHAR) false)

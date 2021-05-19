@@ -6,7 +6,8 @@
            java.util.function.Function
            [java.util.stream IntStream IntStream$Builder]
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector Float8Vector NullVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector DurationVector
+            Float8Vector NullVector TimeStampMilliVector TinyIntVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
            org.apache.arrow.vector.types.pojo.FieldType
            org.apache.arrow.vector.types.Types$MinorType
@@ -22,6 +23,7 @@
   (^byte getByte [^int idx])
   (^long getLong [^int idx])
   (^long getDate [^int idx])
+  (^long getDuration [^int idx])
   (^double getDouble [^int idx])
   (^java.nio.ByteBuffer getBuffer [^int idx])
   (^Object getObject [^int idx])
@@ -49,6 +51,7 @@
   (^void appendStringBuffer [^java.nio.ByteBuffer stringBuffer])
   (^void appendBytes [^java.nio.ByteBuffer buffer])
   (^void appendDate [^java.util.Date date])
+  (^void appendDuration [^java.time.Duration date])
   (^void appendObject [^Object obj])
 
   (^org.apache.arrow.vector.ValueVector _getAppendVector [^org.apache.arrow.vector.types.Types$MinorType minorType])
@@ -84,6 +87,7 @@
   (getDouble [_ idx] (.get ^Float8Vector (aget vecs idx) (aget idxs idx)))
   (getLong [_ idx] (.get ^BigIntVector (aget vecs idx) (aget idxs idx)))
   (getDate [_ idx] (.get ^TimeStampMilliVector (aget vecs idx) (aget idxs idx)))
+  (getDuration [_ idx] (DurationVector/get (.getDataBuffer ^DurationVector (aget vecs idx)) (aget idxs idx)))
   (getBuffer [_ idx] (element->nio-buffer (aget vecs idx) (aget idxs idx)))
   (getObject [_ idx] (types/get-object (aget vecs idx) (aget idxs idx)))
 
@@ -112,6 +116,7 @@
   (getDouble [_ idx] (.get ^Float8Vector in-vec idx))
   (getLong [_ idx] (.get ^BigIntVector in-vec idx))
   (getDate [_ idx] (.get ^TimeStampMilliVector in-vec idx))
+  (getDuration [_ idx] (DurationVector/get (.getDataBuffer ^DurationVector in-vec) idx))
   (getBuffer [_ idx] (element->nio-buffer in-vec idx))
   (getObject [_ idx] (types/get-object in-vec idx))
 
@@ -154,6 +159,11 @@
     (-> ^TimeStampMilliVector (._getInternalVector this idx)
         (.get (._getInternalIndex this idx))))
 
+  (getDuration [this idx]
+    (-> ^DurationVector (._getInternalVector this idx)
+        (.getDataBuffer)
+        (DurationVector/get (._getInternalIndex this idx))))
+
   (getBuffer [this idx]
     (-> (._getInternalVector this idx)
         (element->nio-buffer (._getInternalIndex this idx))))
@@ -179,6 +189,7 @@
   (getDouble [_ idx] (.get ^Float8Vector in-vec (aget idxs idx)))
   (getLong [_ idx] (.get ^BigIntVector in-vec (aget idxs idx)))
   (getDate [_ idx] (.get ^TimeStampMilliVector in-vec (aget idxs idx)))
+  (getDuration [_ idx] (DurationVector/get (.getDataBuffer ^DurationVector in-vec) (aget idxs idx)))
   (getBuffer [_ idx] (element->nio-buffer in-vec (aget idxs idx)))
   (getObject [_ idx] (types/get-object in-vec (aget idxs idx)))
 
@@ -221,6 +232,11 @@
   (getDate [this idx]
     (-> ^TimeStampMilliVector (._getInternalVector this idx)
         (.get (._getInternalIndex this idx))))
+
+  (getDuration [this idx]
+    (-> ^DurationVector (._getInternalVector this idx)
+        (.getDataBuffer)
+        (DurationVector/get (._getInternalIndex this idx))))
 
   (getBuffer [this idx]
     (-> (._getInternalVector this idx)
@@ -331,6 +347,7 @@
     5 (.appendString col obj)
     6 (.appendBool col obj)
     10 (.appendDate col obj)
+    18 (.appendDuration col obj)
     (throw (ex-info "can't append this" {:obj obj,
                                          :type (class obj),
                                          :arrow-type (types/->arrow-type (class obj))
@@ -375,6 +392,9 @@
   (appendDate [this date]
     (.set ^TimeStampMilliVector out-vec (._getAppendIndex this out-vec) (.getTime date)))
 
+  (appendDuration [this duration]
+    (.set ^DurationVector out-vec (._getAppendIndex this out-vec) (.toMillis duration)))
+
   (appendObject [this obj]
     (append-object this obj))
 
@@ -387,7 +407,7 @@
   (VectorBackedAppendColumn.
    (.getNewVector minor-type
                   col-name
-                  (FieldType/nullable (.getType minor-type))
+                  (FieldType/nullable (types/minor-type->arrow-type minor-type))
                   allocator nil)))
 
 (deftype FreshAppendColumn [^BufferAllocator allocator
@@ -430,8 +450,12 @@
       (.setSafe out-vec (._getAppendIndex this out-vec) buf (.position buf) (.remaining buf))))
 
   (appendDate [this date]
-    (let [^VarCharVector out-vec (._getAppendVector this Types$MinorType/TIMESTAMPMILLI)]
-      (.set ^TimeStampMilliVector out-vec (._getAppendIndex this out-vec) (.getTime date))))
+    (let [^TimeStampMilliVector out-vec (._getAppendVector this Types$MinorType/TIMESTAMPMILLI)]
+      (.set out-vec (._getAppendIndex this out-vec) (.getTime date))))
+
+  (appendDuration [this duration]
+    (let [^DurationVector out-vec (._getAppendVector this Types$MinorType/DURATION)]
+      (.set out-vec (._getAppendIndex this out-vec) (.toMillis duration))))
 
   (appendObject [this obj]
     (append-object this obj))
@@ -445,7 +469,7 @@
                                         (let [^Types$MinorType minor-type minor-type]
                                           (.getNewVector minor-type
                                                          col-name
-                                                         (FieldType/nullable (.getType minor-type))
+                                                         (FieldType/nullable (types/minor-type->arrow-type minor-type))
                                                          allocator nil)))))]
       (.add vecs out-vec)
       out-vec))
