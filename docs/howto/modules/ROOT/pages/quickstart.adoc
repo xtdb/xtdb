@@ -46,7 +46,7 @@ All System Requirements
 * macOS: 10.14.3 (Mojave) or higher
 ** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[rocksdb#5064].)
 ** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/juxt/crux/issues/894[crux#894].)
-** Apple M1 processors are currently unsupported due to a RocksDB issue. (See https://github.com/facebook/rocksdb/issues/7720[rocksdb#7720].)
+** Native Arm64 RocksDB Java is currently unspported on Apple M1 processors, causing an `UnsatisfiedLinkError`. M1 users can still run an x86 JVM on Rosetta, however. (See https://github.com/facebook/rocksdb/issues/7720[rocksdb#7720].)
 * Linux: No known version constraints
 * Windows: No known version constraints
 
