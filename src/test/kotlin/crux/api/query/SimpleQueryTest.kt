@@ -153,4 +153,24 @@ class SimpleQueryTest {
                 setOf("ivana")
             )
         )
+
+    @Test
+    fun `using an or block`() =
+        assertThat (
+            db.q {
+                find {
+                    + p
+                }
+
+                where {
+                    or {
+                        p has forename eq "Ivan"
+                        p has forename eq "Petr"
+                    }
+                }
+            }.singleResults(),
+            equalTo(
+                setOf("ivan", "petr")
+            )
+        )
 }

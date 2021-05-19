@@ -33,9 +33,20 @@ class WhereContext {
         clauses.add(
             (listOf("not".sym) +
                     WhereContext()
-                    .also(block)
-                    .apply(WhereContext::lockIn)
-                    .clauses).pl
+                        .also(block)
+                        .apply(WhereContext::lockIn)
+                        .clauses).pl
+        )
+    }
+
+    fun or(block: WhereContext.() -> Unit) {
+        lockIn()
+        clauses.add(
+            (listOf("or".sym) +
+                    WhereContext()
+                        .also(block)
+                        .apply(WhereContext::lockIn)
+                        .clauses).pl
         )
     }
 
