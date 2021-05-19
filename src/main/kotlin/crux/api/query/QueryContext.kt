@@ -29,4 +29,4 @@ class QueryContext {
     fun build() = map.pam
 }
 
-fun ICruxDatasource.q(block: QueryContext.() -> Unit) = query(QueryContext().also(block).build())
+fun ICruxDatasource.q(block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext().also(block).build())
