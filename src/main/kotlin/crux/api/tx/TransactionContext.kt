@@ -93,6 +93,21 @@ class TransactionContext private constructor() {
 
     fun from(validTime: Date, block: FromValidTimeContext.() -> Unit) = FromValidTimeContext(validTime).apply(block)
 
+    inner class BetweenTimesContext(private val validTime: Date, private val endValidTime: Date) {
+        operator fun CruxDocument.unaryPlus() {
+            lockIn()
+            hangingOperation = PutOperation.create(this, validTime, endValidTime)
+        }
+
+        operator fun Any.unaryMinus() {
+            lockIn()
+            hangingOperation = DeleteOperation.create(this, validTime, endValidTime)
+        }
+    }
+
+    fun between(validTime: Date, endValidTime: Date, block: BetweenTimesContext.() -> Unit) =
+        BetweenTimesContext(validTime, endValidTime).apply(block)
+
     private fun lockIn() {
         hangingOperation?.let(builder::add)
         hangingOperation = null
