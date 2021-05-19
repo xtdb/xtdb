@@ -4,6 +4,7 @@ import com.natpryce.hamkrest.assertion.assertThat
 import com.natpryce.hamkrest.equalTo
 import crux.api.CruxDocument
 import crux.api.CruxK
+import crux.api.kw
 import crux.api.sym
 import crux.api.tx.submitTx
 import org.junit.jupiter.api.Nested
@@ -51,6 +52,9 @@ class QueryTest {
     private val p2 = "p2".sym
     private val n = "n".sym
 
+    private val forename = "forename".kw
+    private val surname = "surname".kw
+
     @Nested
     inner class SimpleQueries {
 
@@ -63,7 +67,7 @@ class QueryTest {
                     }
 
                     where {
-                        p has "forename"
+                        p has forename
                     }
                 }.singleResults(),
                 equalTo(
@@ -85,7 +89,7 @@ class QueryTest {
                     }
 
                     where {
-                        p has "forename" eq "Ivan"
+                        p has forename eq "Ivan"
                     }
                 }.singleResults(),
                 equalTo(
@@ -103,7 +107,7 @@ class QueryTest {
                     }
 
                     where {
-                        p has "forename" eq n
+                        p has forename eq n
                     }
                 }.simplify(),
                 equalTo(
@@ -125,8 +129,8 @@ class QueryTest {
                     }
 
                     where {
-                        p has "forename" eq n
-                        p has "surname" eq n
+                        p has forename eq n
+                        p has surname eq n
                     }
                 }.singleResults(),
                 equalTo(
@@ -143,10 +147,10 @@ class QueryTest {
                     }
 
                     where {
-                        p has "surname" eq "Ivanov"
+                        p has surname eq "Ivanov"
 
                         not {
-                            p has "forename" eq "Ivan"
+                            p has forename eq "Ivan"
                         }
                     }
                 }.singleResults(),

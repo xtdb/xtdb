@@ -25,10 +25,7 @@ class WhereContext {
             hangingClause = listOf(this, key).pv
         }
 
-    infix fun Symbol.has(key: String) = has(key.kw)
     infix fun String.has(key: Keyword) = sym.has(key)
-    infix fun String.has(key: String) = has(key.kw)
-
 
     infix fun SymbolAndKey.eq(value: Any) {
         hangingClause = listOf(symbol, key, value).pv
