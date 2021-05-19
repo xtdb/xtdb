@@ -57,12 +57,12 @@
         vecs (.toArray vecs ^"[Lorg.apache.arrow.vector.ValueVector;" (make-array ValueVector value-count))]
     (ReadColumn. col-name (EnumSet/copyOf minor-types) close-vecs vecs idxs value-count)))
 
-(deftype DirectVectorBackedColumn [^ValueVector in-vec, ^String col-name]
+(deftype DirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^EnumSet minor-types]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (DirectVectorBackedColumn. in-vec col-name))
+  (rename [_ col-name] (DirectVectorBackedColumn. in-vec col-name minor-types))
   (valueCount [_] (.getValueCount in-vec))
-  (minorTypes [_] (EnumSet/of (.getMinorType in-vec)))
+  (minorTypes [_] minor-types)
 
   (getBool [_ idx] (= 1 (.get ^BitVector in-vec idx)))
   (getDouble [_ idx] (.get ^Float8Vector in-vec idx))
@@ -78,17 +78,12 @@
   (close [_]
     (util/try-close in-vec)))
 
-(deftype DenseUnionColumn [^DenseUnionVector in-vec, ^String col-name]
+(deftype DenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^EnumSet minor-types]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (DenseUnionColumn. in-vec col-name))
+  (rename [_ col-name] (DenseUnionColumn. in-vec col-name minor-types))
   (valueCount [_] (.getValueCount in-vec))
-
-  (minorTypes [_]
-    (let [^Collection minor-types (for [^ValueVector vv (.getChildrenFromFields in-vec)
-                                        :when (pos? (.getValueCount vv))]
-                                    (.getMinorType vv))]
-      (EnumSet/copyOf minor-types)))
+  (minorTypes [_] minor-types)
 
   (getBool [this idx]
     (= 1 (.get ^BitVector (._getInternalVector this idx)
@@ -123,12 +118,12 @@
   (close [_]
     (util/try-close in-vec)))
 
-(deftype IndirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^ints idxs]
+(deftype IndirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^EnumSet minor-types, ^ints idxs]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (IndirectVectorBackedColumn. in-vec col-name idxs))
+  (rename [_ col-name] (IndirectVectorBackedColumn. in-vec col-name minor-types idxs))
   (valueCount [_] (alength idxs))
-  (minorTypes [_] (EnumSet/of (.getMinorType in-vec)))
+  (minorTypes [_] minor-types)
 
   (getBool [_ idx] (= 1 (.get ^BitVector in-vec (aget idxs idx))))
   (getDouble [_ idx] (.get ^Float8Vector in-vec (aget idxs idx)))
@@ -144,17 +139,11 @@
   (close [_]
     (util/try-close in-vec)))
 
-(deftype IndirectDenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^ints idxs]
+(deftype IndirectDenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^EnumSet minor-types, ^ints idxs]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (IndirectDenseUnionColumn. in-vec col-name idxs))
-
-  (minorTypes [_]
-    (let [^Collection minor-types (for [^ValueVector vv (.getChildrenFromFields in-vec)
-                                        :when (pos? (.getValueCount vv))]
-                                    (.getMinorType vv))]
-      (EnumSet/copyOf minor-types)))
-
+  (rename [_ col-name] (IndirectDenseUnionColumn. in-vec col-name minor-types idxs))
+  (minorTypes [_] minor-types)
   (valueCount [_] (alength idxs))
 
   (getBool [this idx]
@@ -190,16 +179,25 @@
   (close [_]
     (util/try-close in-vec)))
 
+(defn- vector-minor-types [^ValueVector v]
+  (EnumSet/of (.getMinorType v)))
+
+(defn- dense-union-minor-types [^DenseUnionVector duv]
+  (let [^Collection minor-types (for [^ValueVector vv (.getChildrenFromFields duv)
+                                      :when (pos? (.getValueCount vv))]
+                                  (.getMinorType vv))]
+    (EnumSet/copyOf minor-types)))
+
 (defn ^core2.relation.IReadColumn <-vector
   ([^ValueVector in-vec]
    (if (instance? DenseUnionVector in-vec)
-     (DenseUnionColumn. in-vec (.getName in-vec))
-     (DirectVectorBackedColumn. in-vec (.getName in-vec))))
+     (DenseUnionColumn. in-vec (.getName in-vec) (dense-union-minor-types in-vec))
+     (DirectVectorBackedColumn. in-vec (.getName in-vec) (vector-minor-types in-vec))))
 
   ([^ValueVector in-vec, ^ints idxs]
    (if (instance? DenseUnionVector in-vec)
-     (IndirectDenseUnionColumn. in-vec (.getName in-vec) idxs)
-     (IndirectVectorBackedColumn. in-vec (.getName in-vec) idxs))))
+     (IndirectDenseUnionColumn. in-vec (.getName in-vec) (dense-union-minor-types in-vec) idxs)
+     (IndirectVectorBackedColumn. in-vec (.getName in-vec) (vector-minor-types in-vec) idxs))))
 
 (deftype ReadRelation [^Map cols, ^int row-count]
   IReadRelation
