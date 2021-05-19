@@ -5,11 +5,11 @@
             [core2.json :as c2-json]
             [core2.types :as ty]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import core2.core.Node
            core2.ICursor
            core2.object_store.FileSystemObjectStore
-           [core2.vector IReadRelation IReadColumn]
+           [core2.relation IReadRelation IReadColumn]
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
@@ -62,7 +62,7 @@
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
   (await-temporal-snapshot-build node))
 
-(defn populate-root ^core2.vector.IReadRelation [^VectorSchemaRoot root rows]
+(defn populate-root ^core2.relation.IReadRelation [^VectorSchemaRoot root rows]
   (.clear root)
 
   (let [field-vecs (.getFieldVectors root)
@@ -74,10 +74,10 @@
                                         (get (keyword (.getName (.getField field-vec))))))))
     root))
 
-(defn ->relation ^core2.vector.IReadRelation [schema rows]
+(defn ->relation ^core2.relation.IReadRelation [schema rows]
   (let [root (VectorSchemaRoot/create schema *allocator*)]
     (populate-root root rows)
-    (vec/<-root root)))
+    (rel/<-root root)))
 
 (defn ->cursor ^core2.ICursor [schema blocks]
   (let [blocks (LinkedList. blocks)
@@ -87,7 +87,7 @@
         (if-let [block (some-> (.poll blocks) vec)]
           (do
             (populate-root root block)
-            (.accept c (vec/<-root root))
+            (.accept c (rel/<-root root))
             true)
           false))
 

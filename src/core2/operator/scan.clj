@@ -8,7 +8,7 @@
             core2.tx
             [core2.types :as t]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import clojure.lang.MapEntry
            core2.ICursor
            core2.buffer_pool.IBufferPool
@@ -76,7 +76,7 @@
         res))))
 
 (defn- align-roots
-  ^core2.vector.IReadRelation
+  ^core2.relation.IReadRelation
   [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots]
 
   (let [row-id-bitmaps (for [^String col-name col-names
@@ -84,7 +84,7 @@
                              :let [^IColumnSelector col-pred (.get col-preds col-name)
                                    ^VectorSchemaRoot in-root (.get in-roots col-name)]]
                          (align/->row-id-bitmap (when col-pred
-                                                  (.select col-pred (vec/<-vector (.getVector in-root col-name))))
+                                                  (.select col-pred (rel/<-vector (.getVector in-root col-name))))
                                                 (.getVector in-root t/row-id-field)))
         row-id-bitmap (reduce roaring64-and row-id-bitmaps)
         temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range row-id-bitmap)

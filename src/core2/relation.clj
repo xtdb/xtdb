@@ -1,8 +1,8 @@
-(ns core2.vector
+(ns core2.relation
   (:require [core2.types :as types]
             [core2.util :as util])
-  (:import java.io.Closeable
-           [java.util ArrayList Collection Date EnumSet HashMap LinkedHashMap List Map Map$Entry Set]
+  (:import [core2.relation IReadColumn IReadRelation IAppendColumn IAppendRelation]
+           [java.util ArrayList Collection EnumSet HashMap LinkedHashMap List Map Map$Entry Set]
            java.util.function.Function
            [java.util.stream IntStream IntStream$Builder]
            org.apache.arrow.memory.BufferAllocator
@@ -13,52 +13,9 @@
            org.apache.arrow.vector.types.Types$MinorType
            org.apache.arrow.vector.util.Text))
 
-(definterface IReadColumn
-  (^String getName [])
-  (^core2.vector.IReadColumn rename [^String colName])
-  (^int valueCount [])
-  (^java.util.EnumSet minorTypes [])
-
-  (^boolean getBool [^int idx])
-  (^long getLong [^int idx])
-  (^long getDate [^int idx])
-  (^long getDuration [^int idx])
-  (^double getDouble [^int idx])
-  (^java.nio.ByteBuffer getBuffer [^int idx])
-  (^Object getObject [^int idx])
-
-  (^org.apache.arrow.vector.ValueVector _getInternalVector [^int idx])
-  (^int _getInternalIndex [^int idx]))
-
-(definterface IReadRelation
-  (^Iterable readColumns [])
-  (^core2.vector.IReadColumn readColumn [^String colName])
-  (^int rowCount []))
-
-(definterface IAppendColumn
-  (^void appendFrom [^core2.vector.IReadColumn src, ^int idx])
-  (^core2.vector.IReadColumn read [])
-
-  ;; optional
-
-  (^void appendNull [])
-  (^void appendBool [^boolean bool])
-  (^void appendDouble [^double dbl])
-  (^void appendLong [^long lng])
-  (^void appendString [^String string])
-  (^void appendStringBuffer [^java.nio.ByteBuffer stringBuffer])
-  (^void appendBytes [^java.nio.ByteBuffer buffer])
-  (^void appendDate [^java.util.Date date])
-  (^void appendDuration [^java.time.Duration date])
-  (^void appendObject [^Object obj])
-
+(definterface IAppendColumnPrivate
   (^org.apache.arrow.vector.ValueVector _getAppendVector [^org.apache.arrow.vector.types.Types$MinorType minorType])
   (^int _getAppendIndex [^org.apache.arrow.vector.ValueVector appendVector]))
-
-(definterface IAppendRelation
-  (^core2.vector.IAppendColumn appendColumn [^String colName])
-  (^core2.vector.IReadRelation read [])
-  (^void clear []))
 
 (defn- element->nio-buffer ^java.nio.ByteBuffer [^BaseVariableWidthVector vec ^long idx]
   (let [value-buffer (.getDataBuffer vec)
@@ -91,7 +48,6 @@
   (_getInternalVector [_ idx] (aget vecs idx))
   (_getInternalIndex [_ idx] (aget idxs idx))
 
-  Closeable
   (close [_]
     (run! util/try-close close-vecs)))
 
@@ -119,7 +75,6 @@
   (_getInternalVector [_ _idx] in-vec)
   (_getInternalIndex [_ idx] idx)
 
-  Closeable
   (close [_]
     (util/try-close in-vec)))
 
@@ -165,7 +120,6 @@
   (_getInternalVector [_ idx] (.getVectorByType in-vec (.getTypeId in-vec idx)))
   (_getInternalIndex [_ idx] (.getOffset in-vec idx))
 
-  Closeable
   (close [_]
     (util/try-close in-vec)))
 
@@ -187,7 +141,6 @@
   (_getInternalVector [_ _idx] in-vec)
   (_getInternalIndex [_ idx] (aget idxs idx))
 
-  Closeable
   (close [_]
     (util/try-close in-vec)))
 
@@ -234,11 +187,10 @@
   (_getInternalVector [_ idx] (.getVectorByType in-vec (.getTypeId in-vec (aget idxs idx))))
   (_getInternalIndex [_ idx] (.getOffset in-vec (aget idxs idx)))
 
-  Closeable
   (close [_]
     (util/try-close in-vec)))
 
-(defn ^core2.vector.IReadColumn <-vector
+(defn ^core2.relation.IReadColumn <-vector
   ([^ValueVector in-vec]
    (if (instance? DenseUnionVector in-vec)
      (DenseUnionColumn. in-vec (.getName in-vec))
@@ -255,7 +207,6 @@
   (readColumn [_ col-name] (.get cols col-name))
   (rowCount [_] row-count)
 
-  Closeable
   (close [_]
     (run! util/try-close (.values cols))))
 
@@ -298,7 +249,6 @@
   (read [_]
     (->read-column col-name minor-types #{} vecs idxs))
 
-  Closeable
   (close [_]
     (.clear vecSet)
     (.clear vecs)))
@@ -314,11 +264,10 @@
   (read [_]
     (->read-relation (append->read-cols append-cols)))
 
-  Closeable
   (close [_]
     (run! util/try-close (.values append-cols))))
 
-(defn ->indirect-append-relation ^core2.vector.IAppendRelation []
+(defn ->indirect-append-relation ^core2.relation.IAppendRelation []
   (AppendRelation. (LinkedHashMap.)
                    (reify Function
                      (apply [_ col-name]
@@ -382,6 +331,7 @@
   (appendObject [this obj]
     (append-object this obj))
 
+  IAppendColumnPrivate
   (_getAppendIndex [_ out-vec]
     (let [idx (.getValueCount out-vec)]
       (.setValueCount out-vec (inc idx))
@@ -444,6 +394,7 @@
   (appendObject [this obj]
     (append-object this obj))
 
+  IAppendColumnPrivate
   (_getAppendVector [_ minor-type]
     (.add minor-types minor-type)
     (let [out-vec (.computeIfAbsent type->vecs
@@ -464,20 +415,19 @@
       (.add idxs idx)
       idx))
 
-  Closeable
   (close [_]
     (run! util/try-close (.values type->vecs))))
 
-(defn ->fresh-append-column ^core2.vector.IAppendColumn [allocator col-name]
+(defn ->fresh-append-column ^core2.relation.IAppendColumn [allocator col-name]
   (FreshAppendColumn. allocator col-name (EnumSet/noneOf Types$MinorType) (HashMap.) (ArrayList.) (IntStream/builder)))
 
-(defn ->fresh-append-relation ^core2.vector.IAppendRelation [allocator]
+(defn ->fresh-append-relation ^core2.relation.IAppendRelation [allocator]
   (AppendRelation. (LinkedHashMap.)
                    (reify Function
                      (apply [_ col-name]
                        (->fresh-append-column allocator col-name)))))
 
-(defn select [^IReadRelation in-rel ^ints idxs]
+(defn select ^core2.relation.IReadRelation [^IReadRelation in-rel ^ints idxs]
   (let [append-rel (->indirect-append-relation)]
     (doseq [^IReadColumn read-col (.readColumns in-rel)
             :let [append-col (.appendColumn append-rel (.getName read-col))]]
@@ -511,7 +461,7 @@
             (.appendFrom out-col in-col idx))
           out-cols in-cols))))
 
-(defn row-copier ^core2.vector.IRowCopier [^IAppendRelation out-rel, ^IReadRelation in-rel]
+(defn row-copier ^core2.relation.IRowCopier [^IAppendRelation out-rel, ^IReadRelation in-rel]
   (let [in-cols (.readColumns in-rel)]
     (RowCopier. in-cols
                 (mapv (fn [^IReadColumn col]

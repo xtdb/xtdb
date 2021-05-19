@@ -8,8 +8,8 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface ColumnComparator
-  (^int compareIdx [^core2.vector.IReadColumn left-col, ^int left-idx
-                    ^core2.vector.IReadColumn right-col, ^int right-idx]))
+  (^int compareIdx [^core2.relation.IReadColumn left-col, ^int left-idx
+                    ^core2.relation.IReadColumn right-col, ^int right-idx]))
 
 (defmethod expr/codegen-call [:compare Long Long] [{:keys [emitted-args]}]
   {:code `(Long/compare ~@emitted-args)

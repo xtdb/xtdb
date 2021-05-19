@@ -3,11 +3,11 @@
             [core2.expression :as expr]
             [core2.metadata :as meta]
             [core2.types :as types]
-            [core2.vector :as vec]
+            [core2.relation :as rel]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.metadata.IMetadataIndices
-           core2.vector.IReadColumn
+           core2.relation.IReadColumn
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
@@ -154,7 +154,7 @@
                     `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
                            (.getChild ~vec-sym ~(meta/type->field-name minor-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
-                         (let [~(-> col-sym (expr/with-tag IReadColumn)) (vec/<-vector ~vec-sym)]
+                         (let [~(-> col-sym (expr/with-tag IReadColumn)) (rel/<-vector ~vec-sym)]
                            ~(:code (expr/codegen-expr
                                     {:op :call
                                      :f f

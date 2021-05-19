@@ -5,7 +5,7 @@
             [core2.types :as ty]
             [core2.util :as util]
             [core2.expression :as expr]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import java.util.List
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector))
@@ -50,10 +50,10 @@
                           (VectorSchemaRoot. vecs))]
 
     (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector (expr/form->expr '(<= age 30)))
-                                                        (vec/<-vector age-vec))
+                                                        (rel/<-vector age-vec))
                                                age-row-id-vec)
                     (.and (align/->row-id-bitmap (.select (expr/->expression-column-selector (expr/form->expr '(<= name "Frank")))
-                                                          (vec/<-vector name-vec))
+                                                          (rel/<-vector name-vec))
                                                  name-row-id-vec)))
           roots [name-root age-root]]
       (t/is (= [{:name "Dave", :age 12}

@@ -1,7 +1,6 @@
 (ns core2.operator.table
   (:require [core2.error :as err]
-            [core2.vector :as vec]
-            [core2.util :as util])
+            [core2.relation :as rel])
   (:import core2.ICursor
            [java.util ArrayList List]
            org.apache.arrow.memory.BufferAllocator))
@@ -16,15 +15,12 @@
     (if (or done? (.isEmpty rows))
       false
       (do (set! (.done? this) true)
-          (let [out-rel (vec/->fresh-append-relation allocator)]
-            (try
-              (doseq [k (keys (first rows))
-                      :let [out-col (.appendColumn out-rel (name k))]
-                      v (map k rows)]
-                (.appendObject out-col v))
-              (.accept c (.read out-rel))
-              (finally
-                (util/try-close out-rel))))
+          (with-open [out-rel (rel/->fresh-append-relation allocator)]
+            (doseq [k (keys (first rows))
+                    :let [out-col (.appendColumn out-rel (name k))]
+                    v (map k rows)]
+              (.appendObject out-col v))
+            (.accept c (.read out-rel)))
           true)))
 
   (close [_]))

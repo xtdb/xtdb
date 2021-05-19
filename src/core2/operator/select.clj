@@ -1,17 +1,17 @@
 (ns core2.operator.select
   (:require [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import [core2 IChunkCursor ICursor]
-           core2.vector.IReadRelation
+           core2.relation.IReadRelation
            java.util.function.Consumer))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IRelationSelector
-  (^org.roaringbitmap.RoaringBitmap select [^core2.vector.IReadRelation in-rel]))
+  (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IReadRelation in-rel]))
 
 (definterface IColumnSelector
-  (^org.roaringbitmap.RoaringBitmap select [^core2.vector.IReadColumn in-col]))
+  (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IReadColumn in-col]))
 
 (deftype SelectCursor [^IChunkCursor in-cursor
                        ^IRelationSelector selector]
@@ -24,7 +24,7 @@
                                    (let [^IReadRelation in-rel in-rel]
                                      (when-let [idxs (.select selector in-rel)]
                                        (when-not (.isEmpty idxs)
-                                         (.accept c (vec/select in-rel (.toArray idxs)))
+                                         (.accept c (rel/select in-rel (.toArray idxs)))
                                          (reset! !advanced true)))))))
                   (not @!advanced)))
       @!advanced))

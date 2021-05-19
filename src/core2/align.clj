@@ -1,5 +1,5 @@
 (ns core2.align
-  (:require [core2.vector :as vec])
+  (:require [core2.relation :as rel])
   (:import [java.util ArrayList LinkedHashMap List Map]
            java.util.function.IntConsumer
            java.util.stream.IntStream
@@ -38,16 +38,16 @@
             (.add res idx)))))
     (int-array res)))
 
-(defn align-vectors ^core2.vector.IReadRelation [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
+(defn align-vectors ^core2.relation.IReadRelation [^List roots, ^Roaring64Bitmap row-id-bitmap ^Map row-id->repeat-count]
   (let [read-cols (LinkedHashMap.)]
     (doseq [^VectorSchemaRoot root roots
             :let [row-id-vec (.getVector root 0)
                   in-vec (.getVector root 1)]]
       (.put read-cols
             (.getName in-vec)
-            (vec/<-vector in-vec
+            (rel/<-vector in-vec
                           (if row-id->repeat-count
                             (<-row-id-bitmap-with-repetitions row-id->repeat-count row-id-vec)
                             (<-row-id-bitmap row-id-bitmap row-id-vec)))))
 
-    (vec/->read-relation read-cols)))
+    (rel/->read-relation read-cols)))

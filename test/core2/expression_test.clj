@@ -20,70 +20,61 @@
     {:a (double n), :b (double n), :d n, :e (format "%04d" n)}))
 
 (t/deftest test-simple-projection
-  (let [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
-    (try
-      (letfn [(project [form]
-                (let [project-col (.project (expr/->expression-projection-spec "c" (expr/form->expr form))
-                                            tu/*allocator* in-rel)]
-                  (try
-                    (tu/<-column project-col)
-                    (finally
-                      (util/try-close project-col)))))]
+  (with-open [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
+    (letfn [(project [form]
+              (with-open [project-col (.project (expr/->expression-projection-spec "c" (expr/form->expr form))
+                                                tu/*allocator* in-rel)]
+                (tu/<-column project-col)))]
 
-        (t/is (= (mapv (comp double +) (range 1000) (range 1000))
-                 (project '(+ a b))))
+      (t/is (= (mapv (comp double +) (range 1000) (range 1000))
+               (project '(+ a b))))
 
-        (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
-                 (project '(- a (* 2.0 b)))))
+      (t/is (= (mapv (comp double -) (range 1000) (map (partial * 2) (range 1000)))
+               (project '(- a (* 2.0 b)))))
 
-        (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
-                 (project '[:+ a [:+ b 2]]))
-              "support keyword and vectors")
+      (t/is (= (mapv (comp double +) (range 1000) (range 1000) (repeat 2))
+               (project '[:+ a [:+ b 2]]))
+            "support keyword and vectors")
 
-        (t/is (= (mapv + (repeat 2) (range 1000))
-                 (project '(+ 2 d)))
-              "mixing types")
+      (t/is (= (mapv + (repeat 2) (range 1000))
+               (project '(+ 2 d)))
+            "mixing types")
 
-        (t/is (= (repeat 1000 true)
-                 (project '(= a d)))
-              "predicate")
+      (t/is (= (repeat 1000 true)
+               (project '(= a d)))
+            "predicate")
 
-        (t/is (= (mapv #(Math/sin ^double %) (range 1000))
-                 (project '(sin a)))
-              "math")
+      (t/is (= (mapv #(Math/sin ^double %) (range 1000))
+               (project '(sin a)))
+            "math")
 
-        (t/is (= (repeat 1000 0.0)
-                 (project '(if false a 0)))
-              "if")
+      (t/is (= (repeat 1000 0.0)
+               (project '(if false a 0)))
+            "if")
 
-        (t/is (thrown? IllegalArgumentException (project '(vec a)))
-              "cannot call arbitrary functions"))
-      (finally
-        (util/try-close in-rel)))))
+      (t/is (thrown? IllegalArgumentException (project '(vec a)))
+            "cannot call arbitrary functions"))))
 
 (t/deftest can-compile-simple-expression
-  (let [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
-    (try
-      (letfn [(select-relation [form params]
-                (-> (.select (expr/->expression-relation-selector (expr/form->expr form) params)
-                             in-rel)
-                    (.getCardinality)))
+  (with-open [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
+    (letfn [(select-relation [form params]
+              (-> (.select (expr/->expression-relation-selector (expr/form->expr form) params)
+                           in-rel)
+                  (.getCardinality)))
 
-              (select-column [form ^String col-name params]
-                (-> (.select (expr/->expression-column-selector (expr/form->expr form) params)
-                             (.readColumn in-rel col-name))
-                    (.getCardinality)))]
+            (select-column [form ^String col-name params]
+              (-> (.select (expr/->expression-column-selector (expr/form->expr form) params)
+                           (.readColumn in-rel col-name))
+                  (.getCardinality)))]
 
-        (t/testing "selector"
-          (t/is (= 500 (select-relation '(>= a 500) {})))
-          (t/is (= 500 (select-column '(>= a 500) "a" {})))
-          (t/is (= 500 (select-column '(>= e "0500") "e" {}))))
+      (t/testing "selector"
+        (t/is (= 500 (select-relation '(>= a 500) {})))
+        (t/is (= 500 (select-column '(>= a 500) "a" {})))
+        (t/is (= 500 (select-column '(>= e "0500") "e" {}))))
 
-        (t/testing "parameter"
-          (t/is (= 500 (select-column '(>= a ?a) "a" {'?a 500})))
-          (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))
-      (finally
-        (util/try-close in-rel)))))
+      (t/testing "parameter"
+        (t/is (= 500 (select-column '(>= a ?a) "a" {'?a 500})))
+        (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))))
 
 (t/deftest can-extract-min-max-range-from-expression
   (t/is (= [[-9223372036854775808, -9223372036854775808, 1546300800000,

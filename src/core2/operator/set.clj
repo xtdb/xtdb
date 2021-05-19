@@ -2,9 +2,9 @@
   (:require [core2.error :as err]
             [core2.types :as t]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import [core2 IChunkCursor ICursor]
-           [core2.vector IReadColumn IReadRelation]
+           [core2.relation IReadColumn IReadRelation]
            java.io.Closeable
            [java.util ArrayList HashSet LinkedList List Queue Set]
            java.util.function.Consumer
@@ -114,8 +114,8 @@
 
                                         (when (pos? row-count)
                                           (let [in-cols (.readColumns in-rel)
-                                                out-rel (vec/->indirect-append-relation)
-                                                row-copier (vec/row-copier out-rel in-rel)]
+                                                out-rel (rel/->indirect-append-relation)
+                                                row-copier (rel/row-copier out-rel in-rel)]
                                             (dotimes [idx row-count]
                                               (when (cond-> (.contains intersection-set (->set-key in-cols idx))
                                                       difference? not)
@@ -146,8 +146,8 @@
                                          row-count (.rowCount in-rel)]
                                      (when (pos? row-count)
                                        (let [cols (.readColumns in-rel)
-                                             out-rel (vec/->indirect-append-relation)
-                                             row-copier (vec/row-copier out-rel in-rel)]
+                                             out-rel (rel/->indirect-append-relation)
+                                             row-copier (rel/row-copier out-rel in-rel)]
                                          (dotimes [idx row-count]
                                            (let [k (->set-key cols idx)]
                                              (when-not (.contains seen-set k)
@@ -209,8 +209,8 @@
                         (let [^IReadRelation in-rel in-rel]
                           (when (pos? (.rowCount in-rel))
                             (let [cols (.readColumns in-rel)
-                                  out-rel (vec/->fresh-append-relation allocator)
-                                  row-copier (vec/row-copier out-rel in-rel)]
+                                  out-rel (rel/->fresh-append-relation allocator)
+                                  row-copier (rel/row-copier out-rel in-rel)]
                               (dotimes [idx (.rowCount in-rel)]
                                 (let [k (->set-key cols idx)]
                                   (when-not (.contains fixpoint-set k)

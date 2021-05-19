@@ -3,12 +3,11 @@
             [core2.operator.project :as project]
             [core2.operator.select :as select]
             [core2.operator.set :as set-op]
+            [core2.relation :as rel]
             [core2.test-util :as tu]
-            [core2.types :as ty]
-            [core2.vector :as vec])
+            [core2.types :as ty])
   (:import core2.operator.project.ProjectionSpec
            core2.operator.select.IRelationSelector
-           org.apache.arrow.vector.BigIntVector
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType
            org.roaringbitmap.RoaringBitmap))
@@ -179,7 +178,7 @@
                                       [(reify ProjectionSpec
                                          (project [_ allocator in-rel]
                                            (let [a-col (.readColumn in-rel "a")
-                                                 out-col (vec/->fresh-append-column allocator "a")]
+                                                 out-col (rel/->fresh-append-column allocator "a")]
                                              (dotimes [idx (.rowCount in-rel)]
                                                (.appendLong out-col (inc (.getLong a-col idx))))
                                              (.read out-col))))
@@ -188,7 +187,7 @@
                                          (project [_ allocator in-rel]
                                            (let [a-col (.readColumn in-rel "a")
                                                  b-col (.readColumn in-rel "b")
-                                                 out-col (vec/->fresh-append-column allocator "b")]
+                                                 out-col (rel/->fresh-append-column allocator "b")]
                                              (dotimes [idx (.rowCount in-rel)]
                                                (.appendLong out-col (* (inc (.getLong a-col idx))
                                                                        (.getLong b-col idx))))

@@ -1,8 +1,8 @@
 (ns core2.operator.group-by
   (:require [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import [core2 IChunkCursor ICursor]
-           core2.vector.IReadRelation
+           core2.relation.IReadRelation
            [java.util ArrayList Comparator DoubleSummaryStatistics EnumSet HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
@@ -15,7 +15,7 @@
 
 (definterface AggregateSpec
   (^String columnName [])
-  (^Object aggregate [^core2.vector.IReadRelation inRelation ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
+  (^Object aggregate [^core2.relation.IReadRelation inRelation ^Object container ^org.roaringbitmap.RoaringBitmap idx-bitmap])
   (^Object finish [^Object container]))
 
 (deftype GroupSpec [^String col-name]
@@ -268,7 +268,7 @@
                                  (aget accs n)
                                  idx-bitmap))))))
 
-(defn- finish-groups ^core2.vector.IReadRelation [^BufferAllocator allocator
+(defn- finish-groups ^core2.relation.IReadRelation [^BufferAllocator allocator
                                                   ^List aggregate-specs
                                                   ^Map group->accs]
   (let [^List all-accs (ArrayList. ^List (vals group->accs))
@@ -277,14 +277,14 @@
     (dotimes [n (.size aggregate-specs)]
       (let [^AggregateSpec aggregate-spec (.get aggregate-specs n)
             col-name (.columnName aggregate-spec)
-            append-col (vec/->fresh-append-column allocator col-name)]
+            append-col (rel/->fresh-append-column allocator col-name)]
         (dotimes [idx row-count]
           (let [^objects accs (.get all-accs idx)]
             (.appendObject append-col
                            (.finish aggregate-spec (aget accs n)))))
 
         (.put out-cols col-name append-col)))
-    (vec/->read-relation (vec/append->read-cols out-cols))))
+    (rel/->read-relation (rel/append->read-cols out-cols))))
 
 (deftype GroupByCursor [^BufferAllocator allocator
                         ^IChunkCursor in-cursor
@@ -292,20 +292,20 @@
   ICursor
   (tryAdvance [_ c]
     (let [group->accs (HashMap.)]
-      (.forEachRemaining in-cursor
-                         (reify Consumer
-                           (accept [_ in-rel]
-                             (aggregate-groups allocator in-rel aggregate-specs group->accs))))
+      (try
+        (.forEachRemaining in-cursor
+                           (reify Consumer
+                             (accept [_ in-rel]
+                               (aggregate-groups allocator in-rel aggregate-specs group->accs))))
 
-      (if-not (.isEmpty group->accs)
-        (let [out-rel (finish-groups allocator aggregate-specs group->accs)]
-          (try
+        (if-not (.isEmpty group->accs)
+          (with-open [out-rel (finish-groups allocator aggregate-specs group->accs)]
             (.accept c out-rel)
-            true
-            (finally
-              (util/try-close out-rel)
-              (run! release-group-key (keys group->accs)))))
-        false)))
+            true)
+          false)
+
+        (finally
+          (run! release-group-key (keys group->accs))))))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE))

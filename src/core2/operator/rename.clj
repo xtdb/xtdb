@@ -3,9 +3,9 @@
             [clojure.string :as str]
             [core2.operator.scan :as scan]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import [core2 IChunkCursor ICursor]
-           [core2.vector IReadColumn IReadRelation]
+           [core2.relation IReadColumn IReadRelation]
            [java.util LinkedHashMap Map]
            java.util.function.Consumer))
 
@@ -37,7 +37,7 @@
                                                   prefix (str prefix relation-prefix-delimiter))]]
                            (.put out-cols col-name (.rename in-col col-name)))
 
-                         (.accept c (vec/->read-relation out-cols (.rowCount in-rel)))))))))
+                         (.accept c (rel/->read-relation out-cols (.rowCount in-rel)))))))))
 
   (close [_]
     (util/try-close in-cursor)))

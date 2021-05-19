@@ -1,10 +1,10 @@
 (ns core2.operator.order-by
   (:require [core2.expression.comparator :as expr.comp]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import clojure.lang.Keyword
            core2.ICursor
-           [core2.vector IAppendRelation IReadColumn IReadRelation]
+           [core2.relation IAppendRelation IReadColumn IReadRelation]
            [java.util Comparator EnumSet List]
            [java.util.function Consumer ToIntFunction]
            java.util.stream.IntStream
@@ -18,12 +18,12 @@
 (defn ->order-spec [col-name direction]
   (OrderSpec. col-name direction))
 
-(defn- accumulate-relations ^core2.vector.IReadRelation [allocator ^ICursor in-cursor]
-  (let [append-rel (vec/->fresh-append-relation allocator)]
+(defn- accumulate-relations ^core2.relation.IReadRelation [allocator ^ICursor in-cursor]
+  (let [append-rel (rel/->fresh-append-relation allocator)]
     (.forEachRemaining in-cursor
                        (reify Consumer
                          (accept [_ read-rel]
-                           (vec/copy-rel-from append-rel read-rel))))
+                           (rel/copy-rel-from append-rel read-rel))))
     (.read append-rel)))
 
 (defn- sorted-idxs ^ints [^IReadRelation read-rel, ^List #_<OrderSpec> order-specs]
@@ -59,18 +59,12 @@
                         ^List #_<OrderSpec> order-specs]
   ICursor
   (tryAdvance [_ c]
-    (let [read-rel (accumulate-relations allocator in-cursor)]
-      (try
-        (if (pos? (.rowCount read-rel))
-          (let [out-rel (vec/select read-rel (sorted-idxs read-rel order-specs))]
-            (try
-              (.accept c out-rel)
-              true
-              (finally
-                (util/try-close out-rel))))
-          false)
-        (finally
-          (util/try-close read-rel)))))
+    (with-open [read-rel (accumulate-relations allocator in-cursor)]
+      (if (pos? (.rowCount read-rel))
+        (with-open [out-rel (rel/select read-rel (sorted-idxs read-rel order-specs))]
+          (.accept c out-rel)
+          true)
+        false)))
 
   (close [_]
     (util/try-close in-cursor)))

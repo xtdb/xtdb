@@ -3,7 +3,7 @@
             [core2.operator.project :as project]
             [core2.test-util :as tu]
             [core2.types :as ty]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import core2.operator.project.ProjectionSpec
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType))
@@ -24,7 +24,7 @@
                                                             (let [row-count (.rowCount in-rel)
                                                                   a-col (.readColumn in-rel "a")
                                                                   b-col (.readColumn in-rel "b")
-                                                                  out-col (vec/->fresh-append-column allocator "c")]
+                                                                  out-col (rel/->fresh-append-column allocator "c")]
                                                               (dotimes [idx row-count]
                                                                 (.appendLong out-col (+ (.getLong a-col idx) (.getLong b-col idx))))
                                                               (.read out-col))))])]

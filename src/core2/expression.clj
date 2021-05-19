@@ -4,11 +4,11 @@
             core2.operator.select
             [core2.types :as types]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import clojure.lang.MapEntry
            core2.operator.project.ProjectionSpec
            [core2.operator.select IColumnSelector IRelationSelector]
-           [core2.vector IReadColumn IReadRelation]
+           [core2.relation IReadColumn IReadRelation]
            java.lang.reflect.Method
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
@@ -510,8 +510,8 @@
 
     `(fn [~allocator-sym [~@variables] [~@(keys param-types)] ^long row-count#]
        (let [~out-col-sym ~(if-let [minor-type-sym (return-type->minor-type-sym return-type)]
-                             `(vec/->vector-append-column ~allocator-sym ~col-name ~minor-type-sym)
-                             `(vec/->fresh-append-column ~allocator-sym ~col-name))]
+                             `(rel/->vector-append-column ~allocator-sym ~col-name ~minor-type-sym)
+                             `(rel/->fresh-append-column ~allocator-sym ~col-name))]
          (dotimes [~idx-sym row-count#]
            (~(get return-type->append-sym return-type '.appendObject)
             ~out-col-sym

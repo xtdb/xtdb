@@ -8,7 +8,7 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
@@ -89,11 +89,11 @@
           type-name (type->field-name minor-type)
           col-comparator (expr.comp/->comparator minor-type)
 
-          field-col (vec/<-vector field-vec)
+          field-col (rel/<-vector field-vec)
           min-vec (.getChild min-meta-vec type-name)
-          min-col (vec/<-vector min-vec)
+          min-col (rel/<-vector min-vec)
           max-vec (.getChild max-meta-vec type-name)
-          max-col (vec/<-vector max-vec)]
+          max-col (rel/<-vector max-vec)]
 
       (.setIndexDefined min-meta-vec meta-idx)
       (.setIndexDefined max-meta-vec meta-idx)

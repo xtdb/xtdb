@@ -2,9 +2,9 @@
   (:require [core2.bloom :as bloom]
             [core2.operator.scan :as scan]
             [core2.util :as util]
-            [core2.vector :as vec])
+            [core2.relation :as rel])
   (:import core2.ICursor
-           [core2.vector IReadColumn IReadRelation]
+           [core2.relation IReadColumn IReadRelation]
            [java.util ArrayList HashMap List Map]
            [java.util.function Consumer Function]
            java.util.stream.IntStream
@@ -15,7 +15,7 @@
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- cross-product [^List left-rels, ^long left-row-count, ^IReadRelation right-rel]
-  (let [out-rel (vec/->indirect-append-relation)
+  (let [out-rel (rel/->indirect-append-relation)
         right-row-count (.rowCount right-rel)]
 
     (doseq [^IReadRelation left-rel left-rels
@@ -43,8 +43,8 @@
     (.forEachRemaining left-cursor
                        (reify Consumer
                          (accept [_ in-rel]
-                           (.add left-rels (.read (doto (vec/->fresh-append-relation allocator)
-                                                    (vec/copy-rel-from in-rel)))))))
+                           (.add left-rels (.read (doto (rel/->fresh-append-relation allocator)
+                                                    (rel/copy-rel-from in-rel)))))))
 
     (boolean
      (when-not (.isEmpty left-rels)
@@ -52,11 +52,8 @@
          (.tryAdvance right-cursor
                       (reify Consumer
                         (accept [_ right-rel]
-                          (let [out-rel (cross-product left-rels left-row-count right-rel)]
-                            (try
-                              (.accept c out-rel)
-                              (finally
-                                (util/try-close out-rel)))))))))))
+                          (with-open [out-rel (cross-product left-rels left-row-count right-rel)]
+                            (.accept c out-rel)))))))))
 
   (close [_]
     (when left-rels
@@ -76,8 +73,8 @@
                     ^Map join-key->build-pointers
                     ^String build-column-name
                     ^MutableRoaringBitmap pushdown-bloom]
-  (let [^IReadRelation build-rel (.read (doto (vec/->fresh-append-relation allocator)
-                                          (vec/copy-rel-from build-rel)))
+  (let [^IReadRelation build-rel (.read (doto (rel/->fresh-append-relation allocator)
+                                          (rel/copy-rel-from build-rel)))
         build-col (.readColumn build-rel build-column-name)]
     (.add build-rels build-rel)
     (dotimes [build-idx (.valueCount build-col)]
@@ -92,7 +89,7 @@
           (.add (BuildPointer. build-rel build-idx
                                (util/pointer-or-object internal-vec internal-idx))))))))
 
-(defn- probe-phase ^core2.vector.IReadRelation [^IReadRelation probe-rel
+(defn- probe-phase ^core2.relation.IReadRelation [^IReadRelation probe-rel
                                                 ^Map join-key->build-pointers
                                                 ^String probe-column-name
                                                 semi-join? anti-join?]
@@ -127,7 +124,7 @@
             semi-join? (when match?
                          (.add matching-probe-idxs probe-idx)))))
 
-      (let [out-rel (vec/->indirect-append-relation)]
+      (let [out-rel (rel/->indirect-append-relation)]
         (when-not semi-join?
           ;; this one jumps around a bit between build-rels,
           ;; particularly needing to re-read cols and re-gen append-cols for each build-ptr -
@@ -175,12 +172,12 @@
                                       (accept [_ in-rel]
                                         (when-let [out-rel (probe-phase in-rel join-key->build-pointers
                                                                         probe-column-name semi-join? anti-join?)]
-                                          (when (pos? (.rowCount out-rel))
-                                            (reset! !advanced true)
-                                            (try
-                                              (.accept c out-rel)
-                                              (finally
-                                                (util/try-close out-rel)))))))))))
+                                          (try
+                                            (when (pos? (.rowCount out-rel))
+                                              (reset! !advanced true)
+                                              (.accept c out-rel))
+                                            (finally
+                                              (util/try-close out-rel))))))))))
          @!advanced))))
 
   (close [_]
