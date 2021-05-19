@@ -50,7 +50,6 @@
    Types$MinorType/VARCHAR String
    Types$MinorType/TIMESTAMPMILLI Date
    Types$MinorType/DURATION Duration
-   Types$MinorType/TINYINT Byte
    Types$MinorType/BIT Boolean})
 
 (def arrow-type->java-type

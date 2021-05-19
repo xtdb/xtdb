@@ -48,15 +48,6 @@
         },
         "children" : [ ]
       },{
-        "name" : "tinyint",
-        "nullable" : true,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 8,
-          "isSigned" : true
-        },
-        "children" : [ ]
-      },{
         "name" : "bigint",
         "nullable" : true,
         "type" : {
@@ -123,15 +114,6 @@
         "nullable" : true,
         "type" : {
           "name" : "null"
-        },
-        "children" : [ ]
-      },{
-        "name" : "tinyint",
-        "nullable" : true,
-        "type" : {
-          "name" : "int",
-          "bitWidth" : 8,
-          "isSigned" : true
         },
         "children" : [ ]
       },{
@@ -223,15 +205,6 @@
             },
             "children" : [ ]
           },{
-            "name" : "tinyint",
-            "nullable" : true,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 8,
-              "isSigned" : true
-            },
-            "children" : [ ]
-          },{
             "name" : "bigint",
             "nullable" : true,
             "type" : {
@@ -298,15 +271,6 @@
             "nullable" : true,
             "type" : {
               "name" : "null"
-            },
-            "children" : [ ]
-          },{
-            "name" : "tinyint",
-            "nullable" : true,
-            "type" : {
-              "name" : "int",
-              "bitWidth" : 8,
-              "isSigned" : true
             },
             "children" : [ ]
           },{
@@ -407,11 +371,6 @@
         "name" : "null",
         "count" : 3
       },{
-        "name" : "tinyint",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
-      },{
         "name" : "bigint",
         "count" : 3,
         "VALIDITY" : [0,1,0],
@@ -456,11 +415,6 @@
       "children" : [{
         "name" : "null",
         "count" : 3
-      },{
-        "name" : "tinyint",
-        "count" : 3,
-        "VALIDITY" : [0,0,0],
-        "DATA" : [0,0,0]
       },{
         "name" : "bigint",
         "count" : 3,
@@ -522,11 +476,6 @@
             "name" : "null",
             "count" : 3
           },{
-            "name" : "tinyint",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
-          },{
             "name" : "bigint",
             "count" : 3,
             "VALIDITY" : [0,1,0],
@@ -571,11 +520,6 @@
           "children" : [{
             "name" : "null",
             "count" : 3
-          },{
-            "name" : "tinyint",
-            "count" : 3,
-            "VALIDITY" : [0,0,0],
-            "DATA" : [0,0,0]
           },{
             "name" : "bigint",
             "count" : 3,

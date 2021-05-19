@@ -20,7 +20,6 @@
   (^java.util.EnumSet minorTypes [])
 
   (^boolean getBool [^int idx])
-  (^byte getByte [^int idx])
   (^long getLong [^int idx])
   (^long getDate [^int idx])
   (^long getDuration [^int idx])
@@ -44,7 +43,6 @@
 
   (^void appendNull [])
   (^void appendBool [^boolean bool])
-  (^void appendByte [^byte b])
   (^void appendDouble [^double dbl])
   (^void appendLong [^long lng])
   (^void appendString [^String string])
@@ -83,7 +81,6 @@
   (minorTypes [_] minor-types)
 
   (getBool [_ idx] (= 1 (.get ^BitVector (aget vecs idx) (aget idxs idx))))
-  (getByte [_ idx] (.get ^TinyIntVector (aget vecs idx) (aget idxs idx)))
   (getDouble [_ idx] (.get ^Float8Vector (aget vecs idx) (aget idxs idx)))
   (getLong [_ idx] (.get ^BigIntVector (aget vecs idx) (aget idxs idx)))
   (getDate [_ idx] (.get ^TimeStampMilliVector (aget vecs idx) (aget idxs idx)))
@@ -112,7 +109,6 @@
   (minorTypes [_] (EnumSet/of (.getMinorType in-vec)))
 
   (getBool [_ idx] (= 1 (.get ^BitVector in-vec idx)))
-  (getByte [_ idx] (.get ^TinyIntVector in-vec idx))
   (getDouble [_ idx] (.get ^Float8Vector in-vec idx))
   (getLong [_ idx] (.get ^BigIntVector in-vec idx))
   (getDate [_ idx] (.get ^TimeStampMilliVector in-vec idx))
@@ -142,10 +138,6 @@
   (getBool [this idx]
     (= 1 (.get ^BitVector (._getInternalVector this idx)
                (._getInternalIndex this idx))))
-
-  (getByte [this idx]
-    (-> ^TinyIntVector (._getInternalVector this idx)
-        (.get (._getInternalIndex this idx))))
 
   (getDouble [this idx]
     (-> ^Float8Vector (._getInternalVector this idx)
@@ -185,7 +177,6 @@
   (minorTypes [_] (EnumSet/of (.getMinorType in-vec)))
 
   (getBool [_ idx] (= 1 (.get ^BitVector in-vec (aget idxs idx))))
-  (getByte [_ idx] (.get ^TinyIntVector in-vec (aget idxs idx)))
   (getDouble [_ idx] (.get ^Float8Vector in-vec (aget idxs idx)))
   (getLong [_ idx] (.get ^BigIntVector in-vec (aget idxs idx)))
   (getDate [_ idx] (.get ^TimeStampMilliVector in-vec (aget idxs idx)))
@@ -216,10 +207,6 @@
   (getBool [this idx]
     (= 1 (.get ^BitVector (._getInternalVector this idx)
                (._getInternalIndex this idx))))
-
-  (getByte [this idx]
-    (-> ^TinyIntVector (._getInternalVector this idx)
-        (.get (._getInternalIndex this idx))))
 
   (getDouble [this idx]
     (-> ^Float8Vector (._getInternalVector this idx)
@@ -370,9 +357,6 @@
 
   (appendBool [this bool]
     (.set ^BitVector out-vec (._getAppendIndex this out-vec) (if bool 1 0)))
-
-  (appendByte [this b]
-    (.set ^TinyIntVector out-vec (._getAppendIndex this out-vec) b))
 
   (appendDouble [this dbl]
     (.set ^Float8Vector out-vec (._getAppendIndex this out-vec) dbl))

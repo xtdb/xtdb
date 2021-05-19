@@ -209,7 +209,6 @@
                      Comparable)]
     {:code (condp = var-type
              Boolean `(.getBool ~variable ~idx-sym)
-             Byte `(.getByte ~variable ~idx-sym)
              Long `(.getLong ~variable ~idx-sym)
              Double `(.getDouble ~variable ~idx-sym)
              String `(.getBuffer ~variable ~idx-sym)
@@ -484,7 +483,6 @@
 
 (def ^:private return-type->append-sym
   {Boolean '.appendBool
-   Byte '.appendByte
    Long '.appendLong
    Double '.appendDouble
    String '.appendStringBuffer
@@ -494,7 +492,6 @@
 
 (def ^:private return-type->minor-type-sym
   {Boolean `Types$MinorType/BIT
-   Byte `Types$MinorType/TINYINT
    Long `Types$MinorType/BIGINT
    Double `Types$MinorType/FLOAT8
    String `Types$MinorType/VARCHAR
