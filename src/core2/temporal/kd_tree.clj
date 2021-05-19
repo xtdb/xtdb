@@ -320,6 +320,21 @@
   (isDeleted [_ idx]
     (.isNull point-vec idx)))
 
+(defn- reconstruct-node-kd-tree-from-breadth-first-points [^FixedSizeListVector point-vec]
+  (let [k (.getListSize point-vec)
+        n (.getValueCount point-vec)]
+    ((fn step [^long idx ^long axis]
+       (let [left-idx (balanced-left-child idx)
+             right-idx (balanced-right-child idx)]
+         (Node. point-vec
+                idx
+                axis
+                (when (balanced-valid? n left-idx)
+                  (step left-idx (next-axis axis k)))
+                (when (balanced-valid? n right-idx)
+                  (step right-idx (next-axis axis k))))))
+     0 0)))
+
 (defn ->node-kd-tree ^core2.temporal.kd_tree.Node [^BufferAllocator allocator points]
   (when (not-empty points)
     (let [k (count (first points))
@@ -328,20 +343,9 @@
       (doseq [point points]
         (write-point point-vec access point))
       (try
-        (let [n (.getValueCount point-vec)
-              root (VectorSchemaRoot/of (into-array [point-vec]))]
+        (let [root (VectorSchemaRoot/of (into-array [point-vec]))]
           (build-breadth-first-tree-in-place root)
-          ((fn step [^long idx ^long axis]
-             (let [left-idx (balanced-left-child idx)
-                   right-idx (balanced-right-child idx)]
-               (Node. point-vec
-                      idx
-                      axis
-                      (when (balanced-valid? n left-idx)
-                        (step left-idx (next-axis axis k)))
-                      (when (balanced-valid? n right-idx)
-                        (step right-idx (next-axis axis k))))))
-           0 0))
+          (reconstruct-node-kd-tree-from-breadth-first-points point-vec))
         (catch Throwable t
           (util/try-close point-vec)
           (throw t))))))
@@ -826,8 +830,6 @@
                         (.startNewValue point-vec idx)
                         (dotimes [n k]
                           (.setCoordinate out-access idx n (.getCoordinate point-access point-idx n)))
-                        (when (.isDeleted point-access point-idx)
-                          (.setNull point-vec idx))
                         (.setRowCount root (inc idx))
                         (when (= (.getRowCount root) batch-size)
                           (.writeBatch out)
