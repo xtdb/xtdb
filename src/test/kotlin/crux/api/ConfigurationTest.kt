@@ -8,7 +8,7 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
 import utils.aDocument
-import utils.assertDocument
+import utils.assert
 import utils.putAndWait
 import java.nio.file.Path
 
@@ -33,7 +33,9 @@ class ConfigurationTest {
             startNode().use { node ->
                 val document = aDocument()
                 node.putAndWait(document)
-                node.assertDocument(document)
+                node.assert {
+                    + document
+                }
             }
 
         @Test
@@ -84,7 +86,9 @@ class ConfigurationTest {
                     })
                 }
             }.use {
-                it.assertDocument(document)
+                it.assert {
+                    + document
+                }
             }
         }
     }
@@ -96,7 +100,9 @@ class ConfigurationTest {
             CruxK.startNode().use { node ->
                 val document = aDocument()
                 node.putAndWait(document)
-                node.assertDocument(document)
+                node.assert {
+                    + document
+                }
             }
 
         @Test
@@ -147,7 +153,9 @@ class ConfigurationTest {
                     }
                 }
             }.use {
-                it.assertDocument(document)
+                it.assert {
+                    + document
+                }
             }
         }
     }

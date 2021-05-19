@@ -8,9 +8,8 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import utils.aDocument
-import utils.assertDocument
-import utils.assertNoDocument
 import utils.putAndWait
+import utils.assert
 import java.time.Duration
 import java.time.Instant
 import java.util.*
@@ -34,24 +33,32 @@ class TransactionTest {
         @Test
         fun `can put a document`() {
             val document = aDocument()
+
             crux.submitTx(
                 buildTx {
                     it.put(document)
                 }
             ).await()
-            crux.assertDocument(document)
+
+            crux.assert {
+                + document
+            }
         }
 
         @Test
         fun `can put a document at time`() {
             val document = aDocument()
+
             crux.submitTx(
                 buildTx {
                     it.put(document, dates[1])
                 }
             ).await()
-            crux.assertNoDocument(document.id, dates[0])
-            crux.assertDocument(document, dates[1])
+
+            crux.assert {
+                document notAt dates[0]
+                document at dates[1]
+            }
         }
 
         @Test
@@ -64,9 +71,11 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id, dates[0])
-            crux.assertDocument(document, dates[1])
-            crux.assertNoDocument(document.id, dates[2])
+            crux.assert {
+                document notAt dates[0]
+                document at dates[1]
+                document notAt dates[2]
+            }
         }
 
         @Test
@@ -80,7 +89,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
         }
 
         @Test
@@ -94,8 +105,10 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertDocument(document, dates[0])
-            crux.assertNoDocument(document.id, dates[1])
+            crux.assert {
+                document at dates[0]
+                document notAt dates[1]
+            }
         }
 
         @Test
@@ -109,9 +122,11 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertDocument(document, dates[0])
-            crux.assertNoDocument(document.id, dates[1])
-            crux.assertDocument(document, dates[2])
+            crux.assert {
+                document at dates[0]
+                document notAt dates[1]
+                document at dates[2]
+            }
         }
 
         @Test
@@ -125,7 +140,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
         }
 
         @Test
@@ -140,7 +157,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.putAndWait(matchDoc)
 
@@ -151,7 +170,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -168,7 +189,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.submitTx (
                 buildTx {
@@ -177,7 +200,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -194,7 +219,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.submitTx (
                 buildTx {
@@ -203,7 +230,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -220,7 +249,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.submitTx(
                 buildTx {
@@ -229,7 +260,9 @@ class TransactionTest {
                 }
             ).await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
     }
 
@@ -243,7 +276,9 @@ class TransactionTest {
                 + document
             }.await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -252,8 +287,11 @@ class TransactionTest {
             crux.submitTx {
                 + document from dates[1]
             }.await()
-            crux.assertNoDocument(document.id, dates[0])
-            crux.assertDocument(document, dates[1])
+
+            crux.assert {
+                document notAt dates[0]
+                document at dates[1]
+            }
         }
 
         @Test
@@ -264,9 +302,11 @@ class TransactionTest {
                 + document from dates[1] until dates[2]
             }.await()
 
-            crux.assertNoDocument(document.id, dates[0])
-            crux.assertDocument(document, dates[1])
-            crux.assertNoDocument(document.id, dates[2])
+            crux.assert {
+                document notAt dates[0]
+                document at dates[1]
+                document notAt dates[2]
+            }
         }
 
         @Test
@@ -278,7 +318,9 @@ class TransactionTest {
                 - document.id
             }.await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
         }
 
         @Test
@@ -290,8 +332,10 @@ class TransactionTest {
                 - document.id from dates[1]
             }.await()
 
-            crux.assertDocument(document, dates[0])
-            crux.assertNoDocument(document.id, dates[1])
+            crux.assert {
+                document at dates[0]
+                document notAt dates[1]
+            }
         }
 
         @Test
@@ -300,12 +344,14 @@ class TransactionTest {
             crux.putAndWait(document, dates[0])
 
             crux.submitTx {
-                - document.id from dates[1] until dates[2]
+                -document.id from dates[1] until dates[2]
             }.await()
 
-            crux.assertDocument(document, dates[0])
-            crux.assertNoDocument(document.id, dates[1])
-            crux.assertDocument(document, dates[2])
+            crux.assert {
+                document at dates[0]
+                document notAt dates[1]
+                document at dates[2]
+            }
         }
 
         @Test
@@ -317,7 +363,9 @@ class TransactionTest {
                 evict(document.id)
             }.await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
         }
 
         @Test
@@ -330,7 +378,9 @@ class TransactionTest {
                 + document
             }.await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.putAndWait(matchDoc)
 
@@ -339,7 +389,9 @@ class TransactionTest {
                 + document
             }.await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -354,14 +406,18 @@ class TransactionTest {
                 + document
             }.await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.submitTx {
                 match(matchDoc) at dates[1]
                 + document
             }.await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -376,14 +432,18 @@ class TransactionTest {
                 + document
             }.await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.submitTx {
                 notExists(UUID.randomUUID().toString())
                 + document
             }.await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
 
         @Test
@@ -398,14 +458,18 @@ class TransactionTest {
                 + document
             }.await()
 
-            crux.assertNoDocument(document.id)
+            crux.assert {
+                - document
+            }
 
             crux.submitTx {
                 notExists(matchDoc.id) at dates[0]
                 + document
             }.await()
 
-            crux.assertDocument(document)
+            crux.assert {
+                + document
+            }
         }
     }
 
@@ -426,13 +490,23 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assertDocument(document1, dates[0])
-            crux.assertNoDocument(document2.id, dates[0])
-            crux.assertNoDocument(document3.id, dates[0])
-            crux.assertDocument(document2, dates[1])
-            crux.assertDocument(document3, dates[1])
-            crux.assertDocument(document2, dates[2])
-            crux.assertNoDocument(document3.id, dates[2])
+            crux.assert {
+                at(dates[0]) {
+                    + document1
+                    - document2
+                    - document3
+                }
+
+                at(dates[1]) {
+                    + document2
+                    + document3
+                }
+
+                at(dates[2]) {
+                    + document2
+                    - document3
+                }
+            }
 
             crux.submitTx {
                 from(dates[3]) {
@@ -441,12 +515,22 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assertDocument(document1, dates[2])
-            crux.assertDocument(document2, dates[2])
-            crux.assertNoDocument(document1.id, dates[3])
-            crux.assertNoDocument(document2.id, dates[3])
-            crux.assertNoDocument(document1.id, dates[4])
-            crux.assertDocument(document2, dates[4])
+            crux.assert {
+                at(dates[2]) {
+                    + document1
+                    + document2
+                }
+
+                at(dates[3]) {
+                    - document1
+                    - document2
+                }
+
+                at(dates[4]) {
+                    - document1
+                    + document2
+                }
+            }
         }
 
         @Test
@@ -464,15 +548,28 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assertDocument(document1, dates[0])
-            crux.assertNoDocument(document2.id, dates[0])
-            crux.assertNoDocument(document3.id, dates[0])
-            crux.assertDocument(document2, dates[1])
-            crux.assertDocument(document3, dates[1])
-            crux.assertDocument(document2, dates[4])
-            crux.assertDocument(document3, dates[4])
-            crux.assertNoDocument(document2.id, dates[5])
-            crux.assertNoDocument(document3.id, dates[5])
+            crux.assert {
+                at(dates[0]) {
+                    + document1
+                    - document2
+                    - document3
+                }
+
+                at(dates[1]) {
+                    + document2
+                    + document3
+                }
+
+                at(dates[4]) {
+                    + document2
+                    + document3
+                }
+
+                at(dates[5]) {
+                    - document2
+                    - document3
+                }
+            }
 
             crux.submitTx {
                 - document1.id from dates[1]
@@ -483,12 +580,20 @@ class TransactionTest {
                 }
             }.await()
 
-            crux.assertNoDocument(document1.id, dates[1])
-            crux.assertNoDocument(document2.id, dates[2])
-            crux.assertNoDocument(document3.id, dates[2])
-            crux.assertDocument(document2, dates[3])
-            crux.assertDocument(document3, dates[3])
-            crux.assertNoDocument(document1.id, dates[3])
+            crux.assert {
+                document1 notAt dates[1]
+
+                at(dates[2]) {
+                    - document2
+                    - document3
+                }
+
+                at(dates[3]) {
+                    - document1
+                    + document2
+                    + document3
+                }
+            }
         }
     }
 

@@ -37,24 +37,3 @@ fun ICruxAPI.putAndWait(document: CruxDocument, validTime: Date) =
             it.put(document, validTime)
         }
     )
-
-private fun ICruxDatasource.assertDocument(document: CruxDocument) =
-    assertThat(
-        entity(document.id),
-        equalTo(document)
-    )
-
-fun ICruxAPI.assertDocument(document: CruxDocument) =
-    db().assertDocument(document)
-
-fun ICruxAPI.assertDocument(document: CruxDocument, validTime: Date) =
-    db(validTime).assertDocument(document)
-
-private fun ICruxDatasource.assertNoDocument(id: Any) =
-    assertNull(entity(id))
-
-fun ICruxAPI.assertNoDocument(id: Any) =
-    db().assertNoDocument(id)
-
-fun ICruxAPI.assertNoDocument(id: Any, validTime: Date) =
-    db(validTime).assertNoDocument(id)
