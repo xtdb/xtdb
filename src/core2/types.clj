@@ -6,7 +6,7 @@
            java.nio.charset.StandardCharsets
            [java.time Duration LocalDateTime]
            java.util.Date
-           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector TinyIntVector VarBinaryVector VarCharVector]
+           [org.apache.arrow.vector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector VarBinaryVector VarCharVector]
            org.apache.arrow.vector.complex.DenseUnionVector
            [org.apache.arrow.vector.types Types$MinorType TimeUnit UnionMode]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Duration ArrowType$Union Field FieldType]
@@ -39,7 +39,6 @@
    (.getType Types$MinorType/VARCHAR) VarCharVector
    (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
    duration-milli-arrow-type DurationVector
-   (.getType Types$MinorType/TINYINT) TinyIntVector
    (.getType Types$MinorType/BIT) BitVector})
 
 (def minor-type->java-type
