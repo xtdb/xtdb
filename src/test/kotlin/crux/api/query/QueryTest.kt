@@ -24,6 +24,9 @@ class QueryTest {
         private val ivana = createPerson("ivana", "Ivana", "Ivanov")
         private val petr = createPerson("petr", "Petr", "Petrov")
 
+        // For testing equality predicate
+        private val mirror = createPerson("mirror", "Mirror", "Mirror")
+
         // The man with no name
         private val clint = CruxDocument.build("clint") {}
     }
@@ -33,6 +36,7 @@ class QueryTest {
             + ivan
             + ivana
             + petr
+            + mirror
             + clint
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
@@ -66,7 +70,8 @@ class QueryTest {
                     setOf(
                         "ivan",
                         "ivana",
-                        "petr"
+                        "petr",
+                        "mirror"
                     )
                 )
             )
@@ -105,8 +110,48 @@ class QueryTest {
                     setOf(
                         listOf("ivan", "Ivan"),
                         listOf("ivana", "Ivana"),
-                        listOf("petr", "Petr")
+                        listOf("petr", "Petr"),
+                        listOf("mirror", "Mirror")
                     )
+                )
+            )
+
+        @Test
+        fun `joining on fields`() =
+            assertThat(
+                db.q {
+                    find {
+                        + p
+                    }
+
+                    where {
+                        p has "forename" eq n
+                        p has "surname" eq n
+                    }
+                }.singleResults(),
+                equalTo(
+                    setOf("mirror")
+                )
+            )
+
+        @Test
+        fun `negating where clauses`() =
+            assertThat (
+                db.q {
+                    find {
+                        + p
+                    }
+
+                    where {
+                        p has "surname" eq "Ivanov"
+
+                        not {
+                            p has "forename" eq "Ivan"
+                        }
+                    }
+                }.singleResults(),
+                equalTo(
+                    setOf("ivana")
                 )
             )
     }

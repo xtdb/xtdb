@@ -23,7 +23,7 @@ class QueryContext {
     }
 
     fun where(block: WhereContext.() -> Unit) {
-        map[WHERE] = WhereContext().also(block).build()
+        map[WHERE] = WhereContext.build(block)
     }
 
     fun build() = map.pam

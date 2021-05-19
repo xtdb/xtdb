@@ -9,6 +9,10 @@ import crux.api.pv
 import crux.api.sym
 
 class WhereContext {
+    companion object {
+        fun build(block: WhereContext.() -> Unit) = WhereContext().also(block).build()
+    }
+
     private val clauses = mutableListOf<Any>()
 
     private var hangingClause: Any? = null
@@ -28,6 +32,17 @@ class WhereContext {
 
     infix fun SymbolAndKey.eq(value: Any) {
         hangingClause = listOf(symbol, key, value).pv
+    }
+
+    fun not(block: WhereContext.() -> Unit) {
+        lockIn()
+        clauses.add(
+            (listOf("not".sym) +
+                    WhereContext()
+                    .also(block)
+                    .apply(WhereContext::lockIn)
+                    .clauses).pl
+        )
     }
 
     private fun lockIn() {
