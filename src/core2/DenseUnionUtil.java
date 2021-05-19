@@ -1,6 +1,8 @@
 package core2;
 
+import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.complex.DenseUnionVector;
+import org.apache.arrow.vector.complex.NonNullableStructVector;
 
 import java.lang.reflect.Field;
 
@@ -23,6 +25,24 @@ public class DenseUnionUtil {
             DUV_COUNT_FIELD.setInt(duv, valueCount);
         } catch (IllegalAccessException e) {
             throw new RuntimeException("Can't access DUV 'valueCount' field.", e);
+        }
+    }
+
+    public static void setValueCount(NonNullableStructVector vec, int valueCount) {
+        for (ValueVector childVec : vec.getChildrenFromFields()) {
+            setValueCount(childVec, valueCount);
+        }
+
+        vec.valueCount = valueCount;
+    }
+
+    public static void setValueCount(ValueVector vec, int valueCount) {
+        if (vec instanceof DenseUnionVector) {
+            setValueCount(((DenseUnionVector) vec), valueCount);
+        } else if(vec instanceof NonNullableStructVector && vec.getNullCount() == 0) {
+            setValueCount(((NonNullableStructVector) vec), valueCount);
+        } else {
+            vec.setValueCount(valueCount);
         }
     }
 
