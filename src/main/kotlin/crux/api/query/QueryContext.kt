@@ -5,7 +5,7 @@ import crux.api.ICruxDatasource
 import crux.api.kw
 import crux.api.pam
 
-class QueryContext {
+class QueryContext private constructor() {
     companion object {
         val FIND = "find".kw
         val WHERE = "where".kw
@@ -14,13 +14,14 @@ class QueryContext {
         val OFFSET = "offset".kw
         val LIMIT = "limit".kw
         val RULES = "rules".kw
+
+        fun build(block: QueryContext.() -> Unit) = QueryContext().also(block).build()
     }
 
     private val map = mutableMapOf<Keyword, Any>()
 
     fun find(block: FindContext.() -> Unit) {
-        //TODO: Move to companion
-        map[FIND] = FindContext().also(block).build()
+        map[FIND] = FindContext.build(block)
     }
 
     fun where(block: WhereContext.() -> Unit) {
@@ -31,7 +32,7 @@ class QueryContext {
         map[ORDER] = OrderContext.build(block)
     }
 
-    fun build() = map.pam
+    private fun build() = map.pam
 }
 
-fun ICruxDatasource.q(block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext().also(block).build())
+fun ICruxDatasource.q(block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext.build(block))

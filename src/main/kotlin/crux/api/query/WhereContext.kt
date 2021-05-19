@@ -7,7 +7,7 @@ import crux.api.pl
 import crux.api.pv
 import crux.api.sym
 
-class WhereContext {
+class WhereContext private constructor() {
     companion object {
         fun build(block: WhereContext.() -> Unit) = WhereContext().also(block).build()
 
@@ -69,7 +69,7 @@ class WhereContext {
         hangingClause = null
     }
 
-    fun build(): PersistentVector {
+    private fun build(): PersistentVector {
         lockIn()
         return clauses.pv
     }
