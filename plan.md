@@ -137,6 +137,10 @@ Bugs:
 
 Clean up:
 - TODO remaining late-mat optimisations
+  - asymmetry of Dates?
+  - confirm effect of using extra heap - can we reduce this?
+  - reduce footprint of LinkedHashMap implementation detail
+  - core vector interfaces -> Java, extend Closeable, use with-open
 - DUV completeness (removal of some DUV hacks/pain)
 - Clean up data model: Java/Clojure types, Java Arrow types, representation of types (keywords, ArrowType, class etc.), conversion between types.
 - DONE Clean up Spliterator operators.
