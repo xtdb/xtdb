@@ -513,10 +513,10 @@
   (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
         ^IKdTreePointAccess access (kd-tree-point-access kd-tree)
-        k (kd-tree-dimensions kd-tree)]
+        k (kd-tree-dimensions kd-tree)
+        build-path-fns (ArrayDeque.)]
     (loop [parent-axis (.axis kd-tree)
-           node kd-tree
-           build-path-fns ()]
+           node kd-tree]
       (if-not node
         (let [point-idx (write-point point-vec access point)]
           (when deleted?
@@ -534,18 +534,18 @@
                 (node-kd-tree-build-path build-path-fns (Node. point-vec point-idx (next-axis parent-axis k) (.left node) (.right node)))))
 
             (< (aget point axis) (.getCoordinate access idx axis))
-            (recur (.axis node)
-                   (.left node)
-                   (cons (fn [left]
-                           (Node. point-vec (.point-idx node) (.axis node) left (.right node)))
-                         build-path-fns))
+            (do (.push build-path-fns
+                       (fn [left]
+                         (Node. point-vec (.point-idx node) (.axis node) left (.right node))))
+                (recur (.axis node)
+                       (.left node)))
 
             :else
-            (recur (.axis node)
-                   (.right node)
-                   (cons (fn [right]
-                           (Node. point-vec (.point-idx node) (.axis node) (.left node) right))
-                         build-path-fns))))))))
+            (do (.push build-path-fns
+                       (fn [right]
+                         (Node. point-vec (.point-idx node) (.axis node) (.left node) right)))
+                (recur (.axis node)
+                       (.right node)))))))))
 
 (extend-protocol KdTree
   Node
