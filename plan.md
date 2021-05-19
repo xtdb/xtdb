@@ -134,9 +134,6 @@ Two main extension points:
    - Migration from Classic
    - How much of Crux should Core2 pull in?
 
-Bugs:
-- TODO chunk names have 2^32 numbers, row-ids are 2^64
-
 Clean up:
 - TODO remaining late-mat optimisations
   - asymmetry of Dates?

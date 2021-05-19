@@ -114,9 +114,6 @@
                                                     (.max-rows-per-block watermark))))))
         col-names))
 
-(defn- chunk-object-key [^long chunk-idx col-name]
-  (format "chunk-%08x-%s.arrow" chunk-idx col-name))
-
 (defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant temporal-watermark ^long max-rows-per-block]
   (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant temporal-watermark (AtomicInteger. 1) max-rows-per-block))
 
@@ -274,7 +271,7 @@
       (try
         (let [chunk-idx (.chunk-idx watermark)]
           @(CompletableFuture/allOf (->> (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                                           (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root)))
+                                           (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-root)))
                                          (into-array CompletableFuture)))
           (.registerNewChunk temporal-mgr chunk-idx)
           (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)

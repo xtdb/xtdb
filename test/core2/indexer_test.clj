@@ -134,12 +134,12 @@
 
         (let [objects-list (.listObjects os "metadata-")]
           (t/is (= 1 (count objects-list)))
-          (t/is (= "metadata-00000000.arrow" (first objects-list))))
+          (t/is (= "metadata-0000000000000000.arrow" (first objects-list))))
 
         (tu/check-json (.toPath (io/as-file (io/resource "can-build-chunk-as-arrow-ipc-file-format"))) os)
 
         (t/testing "buffer pool"
-          (let [buffer-name "metadata-00000000.arrow"
+          (let [buffer-name "metadata-0000000000000000.arrow"
                 ^ArrowBuf buffer @(.getBuffer bp buffer-name)
                 footer (util/read-arrow-footer buffer)]
             (t/is (= 2 (count (.buffers ^BufferPool bp))))
@@ -298,26 +298,26 @@
         (t/is (= [[0 299 300] [300 599 300] [600 899 300] [900 1199 300]
                   [1200 1499 300] [1500 1799 300] [1800 2099 300]
                   [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-00000000-_tx-id.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000000-_tx-id.arrow.json")))
 
         (t/is (= [[0 298 150] [300 598 150] [600 898 150] [900 1198 150]
                   [1200 1498 150] [1500 1798 150] [1800 1998 100]]
-                 (row-id-ranges "chunk-00000000-api-version.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000000-api-version.arrow.json")))
 
         (t/is (= [[1 299 150] [301 599 150] [601 899 150] [901 1199 150]
                   [1201 1499 150] [1501 1799 150] [1801 2099 200]
                   [2100 2399 300] [2400 2699 300] [2700 2999 300]]
-                 (row-id-ranges "chunk-00000000-battery-level.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000000-battery-level.arrow.json")))
 
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-00000bb8-_tx-id.arrow.json")))
+                 (row-id-ranges "chunk-0000000000000bb8-_tx-id.arrow.json")))
 
         (t/is (= [[3000 3299 300] [3300 3599 300] [3600 3899 300] [3900 4199 300]
                   [4200 4499 300] [4500 4799 300] [4800 5099 300]
                   [5100 5399 300] [5400 5699 300] [5700 5999 300]]
-                 (row-id-ranges "chunk-00000bb8-battery-level.arrow.json")))))))
+                 (row-id-ranges "chunk-0000000000000bb8-battery-level.arrow.json")))))))
 
 (t/deftest can-ingest-ts-devices-mini-into-multiple-nodes
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-into-multiple-nodes")
@@ -347,7 +347,7 @@
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (:core2/object-store @(:!system node))]]
-            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 10))))
+            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 15))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now

@@ -72,13 +72,13 @@
                                   (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
-  (format "metadata-%08x.arrow" chunk-idx))
+  (format "metadata-%016x.arrow" chunk-idx))
 
 (defn ->chunk-obj-key [chunk-idx column-name]
-  (format "chunk-%08x-%s.arrow" chunk-idx column-name))
+  (format "chunk-%016x-%s.arrow" chunk-idx column-name))
 
 (defn- obj-key->chunk-idx [obj-key]
-  (some-> (second (re-matches #"metadata-(\p{XDigit}{8}).arrow" obj-key))
+  (some-> (second (re-matches #"metadata-(\p{XDigit}{16}).arrow" obj-key))
           (Long/parseLong 16)))
 
 (defn- write-min-max [^FieldVector field-vec,

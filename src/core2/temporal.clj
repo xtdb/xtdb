@@ -175,13 +175,13 @@
 (declare insert-coordinates)
 
 (defn- ->temporal-obj-key [chunk-idx]
-  (format "temporal-%08x.arrow" chunk-idx))
+  (format "temporal-%016x.arrow" chunk-idx))
 
 (defn- ->temporal-snapshot-obj-key [chunk-idx]
-  (format "temporal-snapshot-%08x.arrow" chunk-idx))
+  (format "temporal-snapshot-%016x.arrow" chunk-idx))
 
-(defn- temporal-snapshot-obj-key->idx ^long [obj-key]
-  (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}+)\.arrow" obj-key)) 16))
+(defn- temporal-snapshot-obj-key->chunk-idx ^long [obj-key]
+  (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}{16})\.arrow" obj-key)) 16))
 
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
@@ -201,7 +201,7 @@
   TemporalManagerPrivate
   (latestTemporalSnapshotIndex [this chunk-idx]
     (->> (.listObjects object-store "temporal-snapshot-")
-         (map temporal-snapshot-obj-key->idx)
+         (map temporal-snapshot-obj-key->chunk-idx)
          (filter #(<= ^long % chunk-idx))
          (last)))
 
