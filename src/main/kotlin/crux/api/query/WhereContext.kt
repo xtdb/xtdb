@@ -3,7 +3,6 @@ package crux.api.query
 import clojure.lang.Keyword
 import clojure.lang.PersistentVector
 import clojure.lang.Symbol
-import crux.api.kw
 import crux.api.pl
 import crux.api.pv
 import crux.api.sym
@@ -24,8 +23,6 @@ class WhereContext {
             lockIn()
             hangingClause = listOf(this, key).pv
         }
-
-    infix fun String.has(key: Keyword) = sym.has(key)
 
     infix fun SymbolAndKey.eq(value: Any) {
         hangingClause = listOf(symbol, key, value).pv
