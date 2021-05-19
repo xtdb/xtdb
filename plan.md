@@ -142,6 +142,9 @@ Clean up:
   - asymmetry of Dates?
   - confirm effect of using extra heap - can we reduce this?
   - reduce footprint of LinkedHashMap implementation detail
+- Parameterisation
+  - TODO Ensure metadata can use calculated literals (e.g. `?date + INTERVAL "3 months")`)
+  - TODO Ensure `like` can accept dynamic values in the needle argument
 - DUV completeness (removal of some DUV hacks/pain)
 - Clean up data model: Java/Clojure types, Java Arrow types, representation of types (keywords, ArrowType, class etc.), conversion between types.
 - Review memory-management.
@@ -151,7 +154,7 @@ Should have:
 - External sort in query engine
 - We don't currently coalesce small intermediate blocks in the query engine
 - DONE Parameters beyond table-operator - override values in expressions without recompiling.
-  - Change TPC-H queries to use parameters.
+  - DONE Change TPC-H queries to use parameters.
 - Bringing external CSV/Arrow into Core2?
   - Will need to remove assumptions around type-ids in the logical plan/query engine
 - Support lists/cardinality-many? Requires discussion

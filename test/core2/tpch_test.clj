@@ -52,9 +52,8 @@
 (defn run-query
   ([q] (run-query q {}))
   ([q args]
-   (with-open [res (c2/open-q (merge {'$ *db*
-                                      'q16-psizes tpch/tpch-q16-psizes
-                                      'q22-cntrycodes tpch/tpch-q22-cntrycodes}
+   (with-open [res (c2/open-q (merge {'$ *db*}
+                                     (::tpch/params (meta q))
                                      args)
                               q)]
      (into [] (mapcat seq) (tu/<-cursor res)))))
