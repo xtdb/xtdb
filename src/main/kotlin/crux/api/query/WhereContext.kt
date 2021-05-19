@@ -39,6 +39,18 @@ class WhereContext {
         )
     }
 
+    private fun pred(symbol: String, i: Symbol, j: Any) {
+        lockIn()
+        hangingClause = listOf(
+            listOf(symbol.sym, i, j).pl
+        ).pv
+    }
+
+    infix fun Symbol.gt(other: Any) = pred(">", this, other)
+    infix fun Symbol.lt(other: Any) = pred("<", this, other)
+    infix fun Symbol.gte(other: Any) = pred(">=", this, other)
+    infix fun Symbol.lte(other: Any) = pred("<=", this, other)
+
     private fun lockIn() {
         hangingClause?.run(clauses::add)
         hangingClause = null

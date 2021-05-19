@@ -7,9 +7,10 @@ import crux.api.CruxK
 import crux.api.kw
 import crux.api.sym
 import crux.api.tx.submitTx
-import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import utils.simplify
+import utils.singleResults
 import java.time.Duration
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -43,9 +44,6 @@ class SimpleQueryTest {
             awaitTx(it, Duration.ofSeconds(10))
         }
     }.db()
-
-    private fun MutableCollection<MutableList<*>>.singleResults() = map { it[0] }.toSet()
-    private fun MutableCollection<MutableList<*>>.simplify() = map { it.toList() }.toSet()
 
     private val p = "p".sym
     private val n = "n".sym
