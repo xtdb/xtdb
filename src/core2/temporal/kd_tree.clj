@@ -855,7 +855,7 @@
 (definterface IBlockManager
   (^org.apache.arrow.vector.VectorSchemaRoot getRoot [^int block-idx]))
 
-(deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask]
+(deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask ^boolean deletes?]
   IKdTreePointAccess
   (getPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -900,13 +900,14 @@
           to-root (.getRoot kd-tree to-block-idx)
           ^FixedSizeListVector from-point-vec (.getVector from-root point-vec-idx)
           ^FixedSizeListVector to-point-vec (.getVector to-root point-vec-idx)
-          tmp (.isNull to-point-vec to-idx)
-          _ (if (.isNull from-point-vec from-idx)
-              (.setNull to-point-vec to-idx)
-              (.setNotNull to-point-vec to-idx))
-          _ (if tmp
-              (.setNull from-point-vec from-idx)
-              (.setNotNull from-point-vec from-idx))
+          _ (when deletes?
+              (let [tmp (.isNull to-point-vec to-idx)]
+                (if (.isNull from-point-vec from-idx)
+                  (.setNull to-point-vec to-idx)
+                  (.setNotNull to-point-vec to-idx))
+                (if tmp
+                  (.setNull from-point-vec from-idx)
+                  (.setNotNull from-point-vec from-idx))))
           ^BigIntVector from-coordinates-vec (.getDataVector from-point-vec)
           ^BigIntVector to-coordinates-vec (.getDataVector to-point-vec)
           from-idx (.getElementStartIndex from-point-vec from-idx)
@@ -919,11 +920,13 @@
           (.set to-coordinates-vec to-idx tmp)))))
 
   (isDeleted [_ idx]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
-      (.isNull point-vec idx)))
+    (if deletes?
+      (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+            idx (bit-and idx batch-mask)
+            root (.getRoot kd-tree block-idx)
+            ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+        (.isNull point-vec idx))
+      false))
 
   (isInRange [_ idx min-range max-range]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -952,7 +955,8 @@
 
 (deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
                          ^:unsynchronized-mutable ^int latest-block-idx
-                         ^:unsynchronized-mutable ^VectorSchemaRoot latest-block]
+                         ^:unsynchronized-mutable ^VectorSchemaRoot latest-block
+                         ^boolean deletes?]
   IBlockManager
   (getRoot [this block-idx]
     (if (= block-idx latest-block-idx)
@@ -995,10 +999,11 @@
                      block-cache-size
                      (->block-cache block-cache-size)
                      -1
-                     nil))
+                     nil
+                     deletes?))
 
   (kd-tree-point-access [kd-tree]
-    (ArrowBufKdTreePointAccess. kd-tree batch-shift batch-mask))
+    (ArrowBufKdTreePointAccess. kd-tree batch-shift batch-mask deletes?))
 
   (kd-tree-size [kd-tree]
     value-count)
@@ -1023,8 +1028,9 @@
 (defn ->arrow-buf-kd-tree
   (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf]
    (->arrow-buf-kd-tree arrow-buf {}))
-  (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf {:keys [block-cache-size]
-                                                                :or {block-cache-size default-block-cache-size}}]
+  (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf {:keys [block-cache-size deletes?]
+                                                                :or {block-cache-size default-block-cache-size
+                                                                     deletes? true}}]
    (let [footer (util/read-arrow-footer arrow-buf)
          batch-sizes (reduce
                       (fn [acc block]
@@ -1042,7 +1048,7 @@
                       (inc Integer/MAX_VALUE))
          batch-mask (dec batch-size)
          batch-shift (Long/bitCount batch-mask)]
-     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil))))
+     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil deletes?))))
 
 (defn ->mmap-kd-tree ^core2.temporal.kd_tree.ArrowBufKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)

@@ -234,7 +234,8 @@
       (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
         (set! (.kd-tree this) (kd/->merged-kd-tree
                                (.buildStaticTree this
-                                                 (kd/->arrow-buf-kd-tree temporal-buffer {:block-cache-size block-cache-size})
+                                                 (kd/->arrow-buf-kd-tree temporal-buffer {:block-cache-size block-cache-size
+                                                                                          :deletes? false})
                                                  chunk-idx
                                                  snapshot-idx)
                                nil))
@@ -273,7 +274,7 @@
         (if snapshot-idx
           (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
             (with-open [kd-tree (.buildStaticTree this
-                                                  (kd/->arrow-buf-kd-tree temporal-buffer)
+                                                  (kd/->arrow-buf-kd-tree temporal-buffer {:deletes? false})
                                                   chunk-idx
                                                   snapshot-idx)]
               (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-temporal-index?})
