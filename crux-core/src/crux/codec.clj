@@ -110,20 +110,27 @@
   (hash/id-hash (mem/slice-buffer to value-type-id-size hash/id-hash-size) (mem/as-buffer bs))
   (mem/limit-buffer to id-size))
 
-(def ^:dynamic ^:private *sort-unordered-colls* false)
+(def ^:dynamic ^:private *consistent-ids?* false)
+(def ^:dynamic ^:private *consistent-values?* false)
+
+(defn- sort-set [coll]
+  (try
+    (sort coll)
+    (catch ClassCastException _
+      (->> coll
+           (sort-by (fn [el]
+                      (doto (mem/allocate-buffer id-size)
+                        (id-function (nippy/fast-freeze el))))
+                    mem/buffer-comparator)))))
 
 (defn- freeze-set [out coll]
-  (if *sort-unordered-colls*
-    (#'nippy/write-counted-coll out @#'nippy/id-sorted-set
-                                (try
-                                  (sort coll)
-                                  (catch ClassCastException e
-                                    (->> coll
-                                         (sort-by (fn [el]
-                                                    (doto (mem/allocate-buffer id-size)
-                                                      (id-function (nippy/fast-freeze el))))
-                                                  mem/buffer-comparator)))))
-    (#'nippy/write-set out coll)))
+  ;; have to maintain id-sorted-set here because it's on tx-logs,
+  ;; but we can't thaw this because nippy thaws it straight to PersistentTreeSet
+  ;; which doesn't allow incomparable keys
+  (cond
+    *consistent-ids?* (#'nippy/write-coll out @#'nippy/id-sorted-set (sort-set coll))
+    *consistent-values?* (#'nippy/write-set out (sort-set coll))
+    :else (#'nippy/write-set out coll)))
 
 (defn- ->kv-reduce [kvs]
   (reify
@@ -139,18 +146,24 @@
           res
           (recur more-kvs (f res k v)))))))
 
+(defn- sort-map [m]
+  (->kv-reduce (try
+                 (sort-by key m)
+                 (catch ClassCastException _
+                   (->> m
+                        (sort-by (fn [[k _]]
+                                   (doto (mem/allocate-buffer id-size)
+                                     (id-function (nippy/fast-freeze k))))
+                                 mem/buffer-comparator))))))
+
 (defn- freeze-map [out m]
-  (if *sort-unordered-colls*
-    (let [kvs (try
-                (sort-by key m)
-                (catch ClassCastException e
-                  (->> m
-                       (sort-by (fn [[k _]]
-                                  (doto (mem/allocate-buffer id-size)
-                                    (id-function (nippy/fast-freeze k))))
-                                mem/buffer-comparator))))]
-      (#'nippy/write-kvs out @#'nippy/id-sorted-map (->kv-reduce kvs)))
-    (#'nippy/write-map out m)))
+  (cond
+    ;; have to maintain id-sorted-map here because it's on tx-logs,
+    ;; but we can't thaw this because nippy thaws it straight to PersistentTreeMap
+    ;; which doesn't allow incomparable keys
+    *consistent-ids?* (#'nippy/write-kvs out @#'nippy/id-sorted-map (sort-map m))
+    *consistent-values?* (#'nippy/write-map out (sort-map m))
+    :else (#'nippy/write-map out m)))
 
 (extend-protocol nippy/IFreezable1
   Set
@@ -344,7 +357,7 @@
   Object
   (value->buffer [this ^MutableDirectBuffer to]
     (let [^DirectBuffer nippy-buffer (if (coll? this)
-                                       (binding [*sort-unordered-colls* true]
+                                       (binding [*consistent-values?* true]
                                          (mem/->nippy-buffer this))
                                        (mem/->nippy-buffer this))]
       (if (or (< max-value-index-length (.capacity nippy-buffer))
@@ -583,7 +596,7 @@
 
   Map
   (id->buffer [this to]
-    (id-function to (binding [*sort-unordered-colls* true]
+    (id-function to (binding [*consistent-ids?* true]
                       (nippy/fast-freeze this))))
 
   nil
