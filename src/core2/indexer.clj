@@ -273,13 +273,11 @@
     (when-not (.isEmpty live-roots)
       (try
         (let [chunk-idx (.chunk-idx watermark)]
-          @(-> (CompletableFuture/allOf (->> (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                                               (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root)))
-                                             (into-array CompletableFuture)))
-               (util/then-apply
-                 (fn [_]
-                   (.registerNewChunk temporal-mgr chunk-idx)
-                   (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block))))
+          @(CompletableFuture/allOf (->> (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                                           (.putObject object-store (chunk-object-key chunk-idx col-name) (.writeColumn this live-root)))
+                                         (into-array CompletableFuture)))
+          (.registerNewChunk temporal-mgr chunk-idx)
+          (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
 
           (with-open [old-watermark watermark]
             (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)
