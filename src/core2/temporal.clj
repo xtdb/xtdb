@@ -194,7 +194,6 @@
                           ^ExecutorService snapshot-pool
                           ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
-                          ^:unsynchronized-mutable chunk-kd-tree
                           ^:volatile-mutable kd-tree
                           ^boolean async-snapshot?
                           ^boolean compress-temporal-index?
@@ -306,10 +305,10 @@
     (some-> kd-tree (kd/kd-tree-retain allocator)))
 
   (registerNewChunk [this chunk-idx]
-    (when chunk-kd-tree
-      (with-open [^Closeable old-chunk-kd-tree chunk-kd-tree
-                  ^VectorSchemaRoot new-chunk-kd-tree (kd/->column-kd-tree allocator old-chunk-kd-tree k)]
-        (set! (.chunk-kd-tree this) nil)
+    (when kd-tree
+      (with-open [^VectorSchemaRoot new-chunk-kd-tree (kd/->column-kd-tree allocator (if (instance? MergedKdTree kd-tree)
+                                                                                       (.getDynamicKdTree ^MergedKdTree kd-tree)
+                                                                                       kd-tree) k)]
         (let [temporal-buf (util/root->arrow-ipc-byte-buffer new-chunk-kd-tree :file)
               new-temporal-obj-key (->temporal-obj-key chunk-idx)]
           (if compress-temporal-index?
@@ -341,8 +340,7 @@
                                  (insert-coordinates kd-tree allocator id->long-id-fn coordinates))
                                kd-tree
                                (vals row-id->temporal-coordinates)))]
-      (set! (.kd-tree this) (update-kd-tree-fn kd-tree))
-      (set! (.chunk-kd-tree this) (update-kd-tree-fn chunk-kd-tree))))
+      (set! (.kd-tree this) (update-kd-tree-fn kd-tree))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
@@ -395,7 +393,6 @@
   (close [this]
     (util/shutdown-pool snapshot-pool)
     (set! (.snapshot-future this) nil)
-    (util/try-close chunk-kd-tree)
     (util/try-close kd-tree)
     (set! (.kd-tree this) nil)
     (.clear id->internal-id)))
@@ -417,7 +414,7 @@
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
                             (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
-                            pool nil nil nil nil async-snapshot? compress-temporal-index? block-cache-size)
+                            pool nil nil nil async-snapshot? compress-temporal-index? block-cache-size)
       (.populateKnownChunks))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]

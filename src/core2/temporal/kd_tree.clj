@@ -1102,7 +1102,14 @@
       (.isDeleted static-access idx)
       (.isDeleted dynamic-access (- idx static-value-count)))))
 
+(definterface IDynamicKdTreeAccess
+  (^Object getDynamicKdTree []))
+
 (deftype MergedKdTree [static-kd-tree ^:unsynchronized-mutable dynamic-kd-tree ^Roaring64Bitmap static-delete-bitmap ^long static-size ^long static-value-count]
+  IDynamicKdTreeAccess
+  (getDynamicKdTree [_]
+    dynamic-kd-tree)
+
   KdTree
   (kd-tree-insert [this allocator point]
     (set! (.dynamic-kd-tree this) (kd-tree-insert dynamic-kd-tree allocator point))
