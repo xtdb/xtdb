@@ -14,7 +14,7 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- cross-product [^List left-rels, ^long left-row-count, ^IReadRelation right-rel]
+(defn- cross-product ^core2.relation.IReadRelation [^List left-rels, ^long left-row-count, ^IReadRelation right-rel]
   (let [out-rel (rel/->indirect-append-relation)
         right-row-count (.rowCount right-rel)]
 
@@ -52,7 +52,7 @@
          (.tryAdvance right-cursor
                       (reify Consumer
                         (accept [_ right-rel]
-                          (with-open [out-rel (cross-product left-rels left-row-count right-rel)]
+                          (with-open [^IReadRelation out-rel (cross-product left-rels left-row-count right-rel)]
                             (.accept c out-rel)))))))))
 
   (close [_]
