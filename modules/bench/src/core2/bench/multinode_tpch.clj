@@ -36,12 +36,11 @@
                           (log/info "awaiting" k "node")
                           (c2/await-tx node last-tx (Duration/ofHours 1))
 
-                          (with-open [db (c2/open-db node)
-                                      q (c2/open-q (merge {'$ db} (::tpch/params (meta query))) query)]
-                            (.forEachRemaining q
-                                               (reify Consumer
-                                                 (accept [_ read-rel]
-                                                   (log/info "rows:" (.rowCount ^IReadRelation read-rel)))))))]
+                          (with-open [db (c2/open-db node)]
+                            (log/info "rows:"
+                                      (->> (c2/plan-q (merge {'$ db} (::tpch/params (meta query))) query)
+                                           (sequence)
+                                           (count)))))]
                   (doseq [[k node] {:primary primary-node
                                     :secondary1 secondary-node1
                                     :secondary2 secondary-node2

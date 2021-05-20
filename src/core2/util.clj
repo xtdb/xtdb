@@ -13,10 +13,10 @@
            [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time LocalDateTime ZoneId]
-           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue UUID]
+           [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue Spliterator UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
-           [java.util.function BiFunction Function IntUnaryOperator Supplier]
+           [java.util.function BiFunction Consumer Function IntUnaryOperator Supplier]
            [org.apache.arrow.compression CommonsCompressionFactory ZstdCompressionCodec]
            [org.apache.arrow.flatbuf Footer Message RecordBatch]
            [org.apache.arrow.memory AllocationManager ArrowBuf BufferAllocator RootAllocator]
@@ -606,3 +606,14 @@
 
 (defn ->identity-set []
   (Collections/newSetFromMap (IdentityHashMap.)))
+
+(defn reduce-cursor [f init ^Spliterator cursor]
+  (let [!acc (volatile! init)]
+    (while (and (.tryAdvance cursor
+                             (reify Consumer
+                               (accept [_ rel]
+                                 (vswap! !acc f rel))))
+                (not (reduced? @!acc))))
+    (let [acc @!acc]
+      (cond-> acc
+        (reduced? acc) deref))))

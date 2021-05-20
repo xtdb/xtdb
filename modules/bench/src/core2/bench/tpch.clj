@@ -21,10 +21,7 @@
     (bench/with-timing (str "query " (:name (meta q)))
       (let [q @q]
         (try
-          (with-open [cursor (c2/open-q (merge {'$ db} (::tpch/params (meta q))) q)]
-            (.forEachRemaining cursor
-                               (reify Consumer
-                                 (accept [_ root]))))
+          (count (sequence (c2/plan-q (merge {'$ db} (::tpch/params (meta q))) q)))
           (catch Exception e
             (.printStackTrace e)))))))
 

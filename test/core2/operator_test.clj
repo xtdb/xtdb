@@ -26,14 +26,12 @@
 
     (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
       (letfn [(test-query-ivan [expected db]
-                (with-open [res (c2/open-q db '[:scan [{name (> name "Ivan")}]])]
-                  (t/is (= expected
-                           (into #{} (mapcat seq) (tu/<-cursor res)))))
+                (t/is (= expected
+                         (into #{} (c2/plan-q db '[:scan [{name (> name "Ivan")}]]))))
 
-                (with-open [res (c2/open-q {'$ db, '?name "Ivan"}
-                                           '[:scan [{name (> name ?name)}]])]
-                  (t/is (= expected
-                           (into #{} (mapcat seq) (tu/<-cursor res))))))]
+                (t/is (= expected
+                         (into #{} (c2/plan-q {'$ db, '?name "Ivan"}
+                                              '[:scan [{name (> name ?name)}]])))))]
 
         (with-open [db (c2/open-db node)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
@@ -90,14 +88,12 @@
                                          (expr.meta/->metadata-selector (expr/form->expr '(= name ?name)) {'?name "Ivan"})))
                 "only needs to scan chunk 0, block 0"))
 
-        (with-open [res (c2/open-q db '[:scan [{name (= name "Ivan")}]])]
-          (t/is (= #{{:name "Ivan"}}
-                   (into #{} (mapcat seq) (tu/<-cursor res)))))
+        (t/is (= #{{:name "Ivan"}}
+                 (into #{} (c2/plan-q db '[:scan [{name (= name "Ivan")}]]))))
 
-        (with-open [res (c2/open-q {'$ db, '?name "Ivan"}
-                                   '[:scan [{name (= name ?name)}]])]
-          (t/is (= #{{:name "Ivan"}}
-                   (into #{} (mapcat seq) (tu/<-cursor res)))))))))
+        (t/is (= #{{:name "Ivan"}}
+                 (into #{} (c2/plan-q {'$ db, '?name "Ivan"}
+                                      '[:scan [{name (= name ?name)}]]))))))))
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"
@@ -152,18 +148,18 @@
                (tu/<-cursor fixpoint-cursor))))))
 
 (t/deftest test-assignment-operator
-  (with-open [assignment-cursor (c2/open-q '{x [{:a 1}]
-                                             y [{:b 1}]}
-                                           '[:assign [X [:table x]
-                                                      Y [:table y]]
-                                             [:join {a b} X Y]])]
-    (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))
+  (t/is (= [{:a 1 :b 1}]
+           (into [] (c2/plan-q '{x [{:a 1}]
+                                 y [{:b 1}]}
+                               '[:assign [X [:table x]
+                                          Y [:table y]]
+                                 [:join {a b} X Y]]))))
 
   (t/testing "can see earlier assignments"
-    (with-open [assignment-cursor (c2/open-q '{x [{:a 1}]
-                                               y [{:b 1}]}
-                                             '[:assign [X [:table x]
-                                                        Y [:join {a b} X [:table y]]
-                                                        X Y]
-                                               X])]
-      (t/is (= [[{:a 1 :b 1}]] (tu/<-cursor assignment-cursor))))))
+    (t/is (= [{:a 1 :b 1}]
+             (into [] (c2/plan-q '{x [{:a 1}]
+                                   y [{:b 1}]}
+                                 '[:assign [X [:table x]
+                                            Y [:join {a b} X [:table y]]
+                                            X Y]
+                                   X]))))))

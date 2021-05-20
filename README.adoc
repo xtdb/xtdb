@@ -21,15 +21,15 @@ Transactions are slightly different to Classic:
 
 Core2 has the concept of 'db's, similar to `crux/open-db` but (as yet) without the ability to specify VT/TT.
 
-At the moment, the main query function is on the node itself, `open-q` taking a 'db' and a relational-algebra query plan.
+At the moment, the main query function is on the node itself, `plan-q` taking a 'db' and a relational-algebra query plan.
 Have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
 
 [source,clojure]
 ----
 (with-open [node (c2/start-node {})
             db (c2/open-db node)
-            res (c2/open-q db '[:scan [{name (> name "Ivan")}]])]
-  ...)
+            res ]
+  (into [] (c2/plan-q db '[:scan [{name (> name "Ivan")}]])))
 ----
 
 == Plan

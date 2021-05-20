@@ -52,11 +52,10 @@
 (defn run-query
   ([q] (run-query q {}))
   ([q args]
-   (with-open [res (c2/open-q (merge {'$ *db*}
-                                     (::tpch/params (meta q))
-                                     args)
-                              q)]
-     (into [] (mapcat seq) (tu/<-cursor res)))))
+   (into [] (c2/plan-q (merge {'$ *db*}
+                              (::tpch/params (meta q))
+                              args)
+                       q))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
   (test-tpch-ingest 0.01 68))

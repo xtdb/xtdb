@@ -69,7 +69,5 @@
                 #'tpch/tpch-q5-local-supplier-volume
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
-      (with-open [db (c2/open-db node)
-                  res (c2/open-q db @!q)]
-        (time
-         (prn (count (into [] (mapcat seq (tu/<-cursor res))))))))))
+      (with-open [db (c2/open-db node)]
+        (time (into [] (c2/plan-q db @!q)))))))

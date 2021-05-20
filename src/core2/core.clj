@@ -3,15 +3,18 @@
             [core2.indexer :as indexer]
             core2.ingest-loop
             [core2.operator :as op]
+            [core2.relation :as rel]
             [core2.system :as sys]
             core2.tx-producer
             [core2.util :as util])
-  (:import core2.data_source.IDataSourceFactory
+  (:import clojure.lang.IReduceInit
+           core2.data_source.IDataSourceFactory
            [core2.indexer IChunkManager TransactionIndexer]
            core2.ingest_loop.IIngestLoop
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
+           java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -71,6 +74,15 @@
       (catch Throwable t
         (util/try-close allocator)
         (throw t)))))
+
+(defn plan-q [db-or-dbs query]
+  (reify IReduceInit
+    (reduce [_ f init]
+      (with-open [res (open-q db-or-dbs query)]
+        (util/reduce-cursor (fn [acc rel]
+                              (reduce f acc (rel/rel->rows rel)))
+                            init
+                            res)))))
 
 (defn ->allocator [_]
   (RootAllocator.))

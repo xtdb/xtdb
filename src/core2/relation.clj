@@ -467,3 +467,13 @@
                 (mapv (fn [^IReadColumn col]
                         (.appendColumn out-rel (.getName col)))
                       in-cols))))
+
+(defn rel->rows [^IReadRelation rel]
+  (let [cols (.readColumns rel)
+        ks (for [^IReadColumn col cols]
+             (keyword (.getName col)))]
+    (map (fn [idx]
+           (zipmap ks
+                   (for [^IReadColumn col cols]
+                     (.getObject col idx))))
+          (range (.rowCount rel)))))
