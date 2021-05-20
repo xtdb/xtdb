@@ -509,8 +509,8 @@
   (t/testing "zero-based index predicates"
     (t/is (@#'kd/balanced-root? 0))
 
-    (t/is (true? (@#'kd/balanced-invalid? 21 31)))
-    (t/is (false? (@#'kd/balanced-invalid? 21 13)))
+    (t/is (false? (@#'kd/balanced-valid? 21 31)))
+    (t/is (true? (@#'kd/balanced-valid? 21 13)))
 
     (t/is (false? (@#'kd/balanced-leaf? 21 0)))
     (t/is (false? (@#'kd/balanced-leaf? 21 2)))

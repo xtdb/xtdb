@@ -50,7 +50,13 @@
   (close [_]
     (util/try-close point-vec)))
 
-(defn next-axis ^long [^long axis ^long k]
+(defn next-axis
+  {:inline (fn [axis k]
+             `(let [next-axis# (inc ~axis)]
+                (if (= ~k next-axis#)
+                  0
+                  next-axis#)))}
+  ^long [^long axis ^long k]
   (let [next-axis (inc axis)]
     (if (= k next-axis)
       0
@@ -119,35 +125,50 @@
   (t/->field "point" (ArrowType$FixedSizeList. k) false
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 
-(defn- balanced-parent ^long [^long idx]
+(defn- balanced-parent
+  {:inline (fn [idx]
+             `(unsigned-bit-shift-right ~idx 1))}
+  ^long [^long idx]
   (unsigned-bit-shift-right idx 1))
 
-(defn- balanced-left-child ^long [^long idx]
+(defn- balanced-left-child
+  {:inline (fn [idx]
+             `(inc (bit-shift-left ~idx 1)))}
+  ^long [^long idx]
   (inc (bit-shift-left idx 1)))
 
-(defn- balanced-right-child ^long [^long idx]
+(defn- balanced-right-child
+  {:inline (fn [idx]
+             `(+ (bit-shift-left ~idx 1) 2))}
+  ^long [^long idx]
   (+ (bit-shift-left idx 1) 2))
 
 (defn- balanced-root? [^long idx]
   (zero? idx))
-
-(defn- balanced-valid? [^long n ^long idx]
-  (< idx n))
-
-(defn- balanced-invalid? [^long n ^long idx]
-  (not (balanced-valid? n idx)))
-
-(defn- balanced-left-child? [^long n ^long idx]
-  (balanced-valid? n (balanced-left-child idx)))
-
-(defn- balanced-right-child? [^long n ^long idx]
-  (balanced-valid? n (balanced-right-child idx)))
 
 (defn- balanced-leaf? [^long n ^long idx]
   (>= idx (unsigned-bit-shift-right n 1)))
 
 (defn- balanced-inner? [^long n ^long idx]
   (< idx (unsigned-bit-shift-right n 1)))
+
+(defn- balanced-valid?
+  {:inline (fn [n idx]
+             `(< ~idx ~n))}
+  [^long n ^long idx]
+  (< idx n))
+
+(defn- balanced-left-child?
+  {:inline (fn [n idx]
+             `(balanced-valid? ~n (balanced-left-child ~idx)))}
+  [^long n ^long idx]
+  (balanced-valid? n (balanced-left-child idx)))
+
+(defn- balanced-right-child?
+  {:inline (fn [n idx]
+             `(balanced-valid? ~n (balanced-right-child ~idx)))}
+  [^long n ^long idx]
+  (balanced-valid? n (balanced-right-child idx)))
 
 (deftype SubtreeSpliterator [^:unsynchronized-mutable ^long current-in-level
                              ^:unsynchronized-mutable ^long max-in-level
@@ -186,8 +207,8 @@
   ([kd-tree] (build-breadth-first-tree-in-place kd-tree false))
   ([kd-tree check?]
    (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
-         k (kd-tree-dimensions kd-tree)
-         n (kd-tree-value-count kd-tree)
+         ^long k (kd-tree-dimensions kd-tree)
+         ^long n (kd-tree-value-count kd-tree)
          nop (reify LongConsumer
                (accept [_ x]))]
 
@@ -505,7 +526,7 @@
   (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
         ^IKdTreePointAccess access (kd-tree-point-access kd-tree)
-        k (kd-tree-dimensions kd-tree)
+        ^long k (kd-tree-dimensions kd-tree)
         build-path-fns (ArrayDeque.)]
     (loop [parent-axis (.axis kd-tree)
            node kd-tree]
@@ -737,7 +758,7 @@
       (ColumnRangeSearchSpliterator. access min-range max-range k n split-stack))))
 
 (defn merge-kd-trees [^BufferAllocator allocator kd-tree-to kd-tree-from]
-  (let [n (kd-tree-value-count kd-tree-from)
+  (let [^long n (kd-tree-value-count kd-tree-from)
         ^IKdTreePointAccess from-access (kd-tree-point-access kd-tree-from)]
     (loop [idx 0
            acc kd-tree-to]
@@ -751,7 +772,7 @@
 
 (defn- column-kd-tree-points [kd-tree]
   (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)]
-    (.filter (LongStream/range 0 (kd-tree-value-count kd-tree))
+    (.filter (LongStream/range 0 (long (kd-tree-value-count kd-tree)))
              (reify LongPredicate
                (test [_ x]
                  (not (.isDeleted access x)))))))
@@ -760,8 +781,8 @@
   (let [min-range (->longs min-range)
         max-range (->longs max-range)
         access (kd-tree-point-access kd-tree)
-        k (kd-tree-dimensions kd-tree)
-        n (kd-tree-value-count kd-tree)
+        ^long k (kd-tree-dimensions kd-tree)
+        ^long n (kd-tree-value-count kd-tree)
         stack (doto (ArrayDeque.)
                 (.push (ColumnStackEntry. 0 0)))]
       (StreamSupport/longStream
@@ -769,7 +790,7 @@
        false)))
 
 (defn- column-kd-tree-depth [kd-tree]
-  (let [n (kd-tree-value-count kd-tree)]
+  (let [^long n (kd-tree-value-count kd-tree)]
     ((fn step ^long [^long idx]
        (let [left-idx (balanced-left-child idx)
              right-idx (balanced-right-child idx)
@@ -1176,7 +1197,7 @@
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
    (let [static-delete-bitmap (Roaring64Bitmap.)
          ^IKdTreePointAccess access (kd-tree-point-access dynamic-kd-tree)]
-     (dotimes [n (kd-tree-value-count dynamic-kd-tree)]
+     (dotimes [n (long (kd-tree-value-count dynamic-kd-tree))]
        (when (.isDeleted access n)
          (let [point (.getArrayPoint access n)]
            (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
