@@ -3,17 +3,11 @@ package crux.api.query.context
 import clojure.lang.Symbol
 import crux.api.query.domain.QuerySection.RulesSection
 import crux.api.query.domain.RuleDefinition
-import crux.api.underware.BuilderContext
 import crux.api.underware.BuilderContextCompanion
+import crux.api.underware.SimpleBuilderContext
 
-class RulesContext private constructor(): BuilderContext<RulesSection> {
+class RulesContext private constructor(): SimpleBuilderContext<RuleDefinition, RulesSection>(::RulesSection) {
     companion object: BuilderContextCompanion<RulesSection, RulesContext>(::RulesContext)
-
-    private val definitions = mutableListOf<RuleDefinition>()
-
-    private fun add(definition: RuleDefinition) {
-        definitions.add(definition)
-    }
 
     operator fun RuleDefinition.unaryPlus() = add(this)
 
@@ -27,6 +21,4 @@ class RulesContext private constructor(): BuilderContext<RulesSection> {
             params.toList(),
             WhereContext.build(block)
         )
-
-    override fun build() = RulesSection(definitions)
 }

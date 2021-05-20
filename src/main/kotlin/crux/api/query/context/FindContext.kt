@@ -7,15 +7,10 @@ import crux.api.query.domain.FindClause.AggregateType.*
 import crux.api.query.domain.QuerySection.FindSection
 import crux.api.underware.BuilderContext
 import crux.api.underware.BuilderContextCompanion
+import crux.api.underware.SimpleBuilderContext
 
-class FindContext private constructor(): BuilderContext<FindSection> {
+class FindContext private constructor(): SimpleBuilderContext<FindClause, FindSection>(::FindSection) {
     companion object: BuilderContextCompanion<FindSection, FindContext>(::FindContext)
-
-    private val clauses = mutableListOf<FindClause>()
-
-    private fun add(clause: FindClause) {
-        clauses.add(clause)
-    }
 
     operator fun FindClause.unaryPlus() = add(this)
 
@@ -38,6 +33,4 @@ class FindContext private constructor(): BuilderContext<FindSection> {
     fun rand(n: Int, symbol: Symbol) = aggregate(RAND, n, symbol)
     fun sample(n: Int, symbol: Symbol) = aggregate(SAMPLE, n, symbol)
     fun distinct(symbol: Symbol) = aggregate(DISTINCT, symbol)
-
-    override fun build() = FindSection(clauses)
 }

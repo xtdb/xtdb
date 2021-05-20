@@ -4,18 +4,12 @@ import crux.api.query.domain.Query
 import crux.api.query.domain.QuerySection
 import crux.api.query.domain.QuerySection.LimitSection
 import crux.api.query.domain.QuerySection.OffsetSection
-import crux.api.underware.BuilderContext
 import crux.api.underware.BuilderContextCompanion
+import crux.api.underware.SimpleBuilderContext
 import javax.naming.OperationNotSupportedException
 
-class QueryContext private constructor(): BuilderContext<Query> {
+class QueryContext private constructor(): SimpleBuilderContext<QuerySection, Query>(::Query) {
     companion object: BuilderContextCompanion<Query, QueryContext>(::QueryContext)
-
-    private val sections = mutableListOf<QuerySection>()
-
-    private fun add(section: QuerySection) {
-        sections.add(section)
-    }
 
     operator fun QuerySection.unaryPlus() = add(this)
     fun find(block: FindContext.() -> Unit) = +FindContext.build(block)
@@ -35,6 +29,4 @@ class QueryContext private constructor(): BuilderContext<Query> {
         set(value) {
             +LimitSection(value)
         }
-
-    override fun build() = Query(sections)
 }
