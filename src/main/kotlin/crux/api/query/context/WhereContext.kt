@@ -11,9 +11,7 @@ import crux.api.query.domain.WhereClause.Predicate.Type.*
 import crux.api.underware.*
 
 class WhereContext private constructor(): BuilderContext<WhereSection> {
-    companion object {
-        fun build(block: WhereContext.() -> Unit) = WhereContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<WhereSection, WhereContext>(::WhereContext)
 
     private val clauses = mutableListOf<WhereClause>()
 

@@ -2,13 +2,11 @@ package crux.api.tx
 
 import crux.api.CruxDocument
 import crux.api.underware.BuilderContext
+import crux.api.underware.BuilderContextCompanion
 import java.util.*
 
 class TransactionContext private constructor(): BuilderContext<Transaction> {
-    companion object {
-        fun build(block: TransactionContext.() -> Unit): Transaction =
-            TransactionContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<Transaction, TransactionContext>(::TransactionContext)
 
     private val builder = Transaction.builder()
 

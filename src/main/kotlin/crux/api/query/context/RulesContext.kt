@@ -4,11 +4,10 @@ import clojure.lang.Symbol
 import crux.api.query.domain.QuerySection.RulesSection
 import crux.api.query.domain.RuleDefinition
 import crux.api.underware.BuilderContext
+import crux.api.underware.BuilderContextCompanion
 
 class RulesContext private constructor(): BuilderContext<RulesSection> {
-    companion object {
-        fun build(block: RulesContext.() -> Unit) = RulesContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<RulesSection, RulesContext>(::RulesContext)
 
     private val definitions = mutableListOf<RuleDefinition>()
 

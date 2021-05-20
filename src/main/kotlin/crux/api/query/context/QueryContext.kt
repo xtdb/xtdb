@@ -5,12 +5,11 @@ import crux.api.query.domain.QuerySection
 import crux.api.query.domain.QuerySection.LimitSection
 import crux.api.query.domain.QuerySection.OffsetSection
 import crux.api.underware.BuilderContext
+import crux.api.underware.BuilderContextCompanion
 import javax.naming.OperationNotSupportedException
 
 class QueryContext private constructor(): BuilderContext<Query> {
-    companion object {
-        fun build(block: QueryContext.() -> Unit) = QueryContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<Query, QueryContext>(::QueryContext)
 
     private val sections = mutableListOf<QuerySection>()
 

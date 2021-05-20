@@ -4,11 +4,10 @@ import clojure.lang.Symbol
 import crux.api.query.domain.BindClause
 import crux.api.query.domain.QuerySection.BindSection
 import crux.api.underware.BuilderContext
+import crux.api.underware.BuilderContextCompanion
 
 class BindContext private constructor(): BuilderContext<BindSection> {
-    companion object {
-        fun build(block: BindContext.() -> Unit) = BindContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<BindSection, BindContext>(::BindContext)
 
     private val clauses = mutableListOf<BindClause>()
 

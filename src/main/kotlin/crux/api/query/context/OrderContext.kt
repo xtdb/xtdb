@@ -6,11 +6,10 @@ import crux.api.query.domain.OrderClause.Direction
 import crux.api.query.domain.OrderClause.Direction.*
 import crux.api.query.domain.QuerySection.OrderSection
 import crux.api.underware.BuilderContext
+import crux.api.underware.BuilderContextCompanion
 
 class OrderContext private constructor(): BuilderContext<OrderSection> {
-    companion object {
-        fun build(block: OrderContext.() -> Unit) = OrderContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<OrderSection, OrderContext>(::OrderContext)
 
     private val clauses = mutableListOf<OrderClause>()
 

@@ -6,11 +6,10 @@ import crux.api.query.domain.FindClause.AggregateType
 import crux.api.query.domain.FindClause.AggregateType.*
 import crux.api.query.domain.QuerySection.FindSection
 import crux.api.underware.BuilderContext
+import crux.api.underware.BuilderContextCompanion
 
 class FindContext private constructor(): BuilderContext<FindSection> {
-    companion object {
-        fun build(block: FindContext.() -> Unit) = FindContext().also(block).build()
-    }
+    companion object: BuilderContextCompanion<FindSection, FindContext>(::FindContext)
 
     private val clauses = mutableListOf<FindClause>()
 
