@@ -1,7 +1,6 @@
 package crux.api.query.domain
 
 import clojure.lang.Symbol
-import crux.api.underware.pl
 import crux.api.underware.sym
 
 sealed class FindClause {

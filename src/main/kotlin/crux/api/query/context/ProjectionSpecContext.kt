@@ -19,5 +19,5 @@ class ProjectionSpecContext private constructor(): ComplexBuilderContext<Item, P
     fun join(keyword: Keyword, block: ProjectionSpecContext.() -> Unit) =
         add(Join(keyword, build(block)))
 
-    fun joinAll(keyword: Keyword) = add(Join(keyword, ProjectionSpec(listOf(all))))
+    fun joinAll(keyword: Keyword) = add(Join(keyword, ProjectionSpec(listOf(ALL))))
 }

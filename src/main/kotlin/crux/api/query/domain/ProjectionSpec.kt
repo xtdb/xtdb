@@ -5,7 +5,7 @@ import clojure.lang.Keyword
 data class ProjectionSpec(val items: List<Item>) {
 
     sealed class Item {
-        object all: Item()
+        object ALL: Item()
 
         data class Field(val keyword: Keyword, val attributes: Attributes): Item() {
             data class Attributes(val attributes: List<Attribute>) {

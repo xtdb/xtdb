@@ -5,7 +5,7 @@ import crux.api.query.domain.FindClause
 import crux.api.query.domain.FindClause.*
 import crux.api.query.domain.FindClause.AggregateType.*
 import crux.api.query.domain.ProjectionSpec
-import crux.api.query.domain.ProjectionSpec.Item.all
+import crux.api.query.domain.ProjectionSpec.Item.ALL
 import crux.api.query.domain.QuerySection.FindSection
 import crux.api.underware.BuilderContext
 import crux.api.underware.SimpleBuilderContext
@@ -36,5 +36,5 @@ class FindContext private constructor(): SimpleBuilderContext<FindClause, FindSe
     fun distinct(symbol: Symbol) = aggregate(DISTINCT, symbol)
 
     fun pull(symbol: Symbol, block: ProjectionSpecContext.() -> Unit) = +Pull(symbol, ProjectionSpecContext.build(block))
-    fun pullAll(symbol: Symbol) = +Pull(symbol, ProjectionSpec(listOf(all)))
+    fun pullAll(symbol: Symbol) = +Pull(symbol, ProjectionSpec(listOf(ALL)))
 }

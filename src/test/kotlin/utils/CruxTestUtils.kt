@@ -1,14 +1,10 @@
 package utils
 
-import com.natpryce.hamkrest.assertion.assertThat
-import com.natpryce.hamkrest.equalTo
 import crux.api.CruxDocument
 import crux.api.ICruxAPI
-import crux.api.ICruxDatasource
 import crux.api.TransactionInstant
 import crux.api.tx.Transaction
 import crux.api.tx.Transaction.buildTx
-import org.junit.jupiter.api.Assertions.assertNull
 import java.time.Duration
 import java.util.*
 
