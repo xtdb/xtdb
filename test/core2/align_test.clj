@@ -58,4 +58,4 @@
           roots [name-root age-root]]
       (t/is (= [{:name "Dave", :age 12}
                 {:name "Bob", :age 15}]
-               (tu/rel->rows (align/align-vectors roots row-ids nil)))))))
+               (rel/rel->rows (align/align-vectors roots row-ids nil)))))))
