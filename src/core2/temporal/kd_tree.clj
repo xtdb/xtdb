@@ -406,7 +406,8 @@
                 visit-left? (and left min-match?)
                 visit-right? (and right max-match?)]
 
-            (when (and (or min-match? max-match?)
+            (when (and min-match?
+                       max-match?
                        (.isInRange access point-idx min-range max-range)
                        (not (.isDeleted access point-idx)))
               (.accept c point-idx))
@@ -447,7 +448,8 @@
           (when visit-left?
             (.push stack left))
 
-          (if (and (or min-match? max-match?)
+          (if (and min-match?
+                   max-match?
                    (.isInRange access point-idx min-range max-range)
                    (not (.isDeleted access point-idx)))
             (do (.accept c point-idx)
@@ -694,7 +696,8 @@
                 visit-left? (and min-match? (balanced-valid? n left-idx))
                 visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-            (when (and (or min-match? max-match?)
+            (when (and min-match?
+                       max-match?
                        (.isInRange access idx min-range max-range)
                        (not (.isDeleted access idx)))
               (.accept c idx))
@@ -739,7 +742,8 @@
                   (when visit-left?
                     (.push stack (ColumnStackEntry. left-idx (next-axis axis k))))))
 
-            (if (and (or min-match? max-match?)
+            (if (and min-match?
+                     max-match?
                      (.isInRange access idx min-range max-range)
                      (not (.isDeleted access idx)))
               (do (.accept c idx)
