@@ -9,19 +9,18 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           core2.DenseUnionUtil
+           [core2 DenseUnionUtil IChunkCursor]
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal ITemporalManager TemporalCoordinates]
            [core2.tx TransactionInstant Watermark]
-           core2.IChunkCursor
            java.io.Closeable
            [java.util Collections Date Map Map$Entry TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector TimeStampVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector BigIntVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
            [org.apache.arrow.vector.types.pojo Field Schema]))
@@ -42,19 +41,28 @@
   (^void closeCols [])
   (^void finishChunk []))
 
-(defn- copy-safe! [^VectorSchemaRoot content-root ^DenseUnionVector src-vec src-idx row-id]
+(defn- copy-safe! [^VectorSchemaRoot content-root ^ValueVector src-vec src-idx row-id]
   (let [^BigIntVector row-id-vec (.getVector content-root 0)
         ^DenseUnionVector field-vec (.getVector content-root 1)
-        value-count (.getRowCount content-root)
-        type-id (.getTypeId src-vec src-idx)
-        offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
+        value-count (.getRowCount content-root)]
 
     (.setSafe row-id-vec value-count ^int row-id)
 
-    (.copyFromSafe (.getVectorByType field-vec type-id)
-                   (.getOffset src-vec src-idx)
-                   offset
-                   (.getVectorByType src-vec type-id))
+    (if (instance? DenseUnionVector src-vec)
+      (let [^DenseUnionVector src-vec src-vec
+            type-id (.getTypeId ^DenseUnionVector src-vec src-idx)
+            offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
+        (.copyFromSafe (.getVectorByType field-vec type-id)
+                       (.getOffset src-vec src-idx)
+                       offset
+                       (.getVectorByType ^DenseUnionVector src-vec type-id)))
+
+      (let [type-id (t/arrow-type->type-id (.getType (.getMinorType src-vec)))
+            offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
+        (.copyFromSafe (.getVectorByType field-vec type-id)
+                       src-idx
+                       offset
+                       src-vec)))
 
     (util/set-vector-schema-root-row-count content-root (inc value-count))))
 
@@ -208,7 +216,6 @@
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
-
                        (when (= "_id" (.getName value-vec))
                          (set! (.id temporal-coordinates) (t/get-object value-vec per-op-offset)))
 
@@ -231,12 +238,12 @@
             (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
                         tx-id-vec 0 row-id)
 
-            (when (not (.isNull valid-time-start-vec per-op-offset))
+            (when-not (.isNull valid-time-start-vec per-op-offset)
               (set! (.validTimeStart temporal-coordinates) (.get valid-time-start-vec per-op-offset))
               (copy-safe! (.getLiveRoot this (.getName valid-time-start-vec))
                           valid-time-start-vec per-op-offset row-id))
 
-            (when (not (.isNull valid-time-end-vec per-op-offset))
+            (when-not (.isNull valid-time-end-vec per-op-offset)
               (set! (.validTimeEnd temporal-coordinates) (.get valid-time-end-vec per-op-offset))
               (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
                           valid-time-end-vec per-op-offset row-id))))
