@@ -545,29 +545,6 @@
               :limit 10
               :offset 90})
            ;; end::order-and-pagination-2[]
-           ))
-
-    (t/is (=
-           (->> data
-                (sort-by :condition/device-id <)
-                (drop 150)
-                (take 10)
-                conv)
-
-           ;; tag::order-and-pagination-3[]
-           (crux/q
-            (crux/db node)
-            '{:find [time device-id temperature humidity]
-              :in [my-offset]
-              :where [[c :condition/time time]
-                      [c :condition/device-id device-id]
-                      [(>= device-id my-offset)]
-                      [c :condition/temperature temperature]
-                      [c :condition/humidity humidity]]
-              :order-by [[device-id :asc]]
-              :limit 10}
-            150)
-           ;; end::order-and-pagination-3[]
            ))))
 
 (t/deftest test-rules

@@ -560,8 +560,8 @@ include::example$test/crux/docs/examples/query_test.clj[tags=query-with-argument
 
 A Datalog query naturally returns a result set of tuples, however, the tuples
 can also be consumed as a sequence and therefore you will always have an
-implicit order available. Ordinarily this implicit order is not meaningful
-because the join order and result order are unlikely to correlate.
+implicit order available. Ordinarily this implicit order is undefined (i.e. not
+meaningful), because the join order and result order are unlikely to correlate.
 
 The `:order-by` option is available for use in the query map to explicitly
 control the result order.
@@ -571,11 +571,9 @@ control the result order.
 include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-1,indent=0]
 ----
 
-Use of `:order-by` will typically require that results are fully-realised by the
-query engine, however this happens transparently and it will automatically spill
-to disk when sorting large numbers of results. Ordered results are returned as
-bags, not sets, so you may wish to deduplicate consecutive identical result
-tuples (e.g. using `clojure.core/dedupe` or similar).
+Use of `:order-by` will require that results are fully-realised by the query
+engine, however this happens transparently and it will automatically spill to
+disk when sorting large numbers of results.
 
 Basic `:offset` and `:limit` options are supported however typical pagination
 use-cases will need a more comprehensive approach because `:offset` will
@@ -586,22 +584,16 @@ naively scroll through the initial result set each time.
 include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-2,indent=0]
 ----
 
-Pagination relies on efficient retrieval of explicitly ordered documents and
-this may be achieved using a user-defined attribute with values that get sorted
-in the desired order. You can then use this attribute within your Datalog
-queries to apply range filters using predicates.
+Ordered results are returned as bags, not sets, so you may want to deduplicate
+consecutive identical result tuples (e.g. using `clojure.core/dedupe` or
+similar).
 
-[source,clj]
-----
-include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-3,indent=0]
-----
-
-Additionally, since Crux stores documents and can traverse arbitrary keys as
-document references, you can model the ordering of document IDs with vector
-values, e.g. `{:crux.db/id :zoe :closest-friends [:amy :ben :chris]}`
+`:limit` may be used in isolation, without `:order-by`, and will also return a
+bag of results that can contain duplicates.
 
 More powerful ordering and pagination features may be provided in the future.
-Feel free to open an issue or get in touch to discuss your requirements.
+Feel free to open an issue or get in touch to discuss your ordering
+requirements, e.g. see https://github.com/juxt/crux/discussions/1514[#1514]
 
 [#rules]
 == Rules

@@ -78,7 +78,7 @@ See the [https://github.com/juxt/crux/tree/master/dev](dev) directory README for
 ## Copyright & License
 The MIT License (MIT)
 
-Copyright © 2018-2020 JUXT LTD.
+Copyright © 2018-2021 JUXT LTD.
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of
 this software and associated documentation files (the "Software"), to deal in
