@@ -14,10 +14,10 @@
            [core2.temporal.kd_tree IKdTreePointAccess MergedKdTree]
            java.io.Closeable
            java.nio.ByteBuffer
-           [java.util Arrays Comparator Date HashMap Map Random]
+           [java.util Arrays Collections Comparator Date HashMap Map Random]
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
-           [java.util.function Consumer Function LongFunction Predicate ToLongFunction]
+           [java.util.function Consumer Function LongConsumer LongFunction Predicate ToLongFunction]
            [java.util.stream LongStream Stream]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector VectorSchemaRoot]
@@ -345,20 +345,23 @@
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
           row-id-bitmap-out (Roaring64Bitmap.)
-          roots (HashMap.)
           ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-          coordinates (if (.isEmpty row-id-bitmap)
-                        (Stream/empty)
-                        (-> ^LongStream (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range)
-                            (.mapToObj (reify LongFunction
-                                         (apply [_ x]
-                                           (.getArrayPoint point-access x))))))]
+          ^LongStream  kd-tree-idxs (if (.isEmpty row-id-bitmap)
+                                      (LongStream/empty)
+                                      (kd/kd-tree-range-search kd-tree temporal-min-range temporal-max-range))]
       (if (empty? columns)
-        (.forEach coordinates
-                  (reify Consumer
-                    (accept [_ x]
-                      (.addLong row-id-bitmap-out (aget ^longs x row-id-idx)))))
-        (let [coordinates (-> coordinates
+        (do (.forEach kd-tree-idxs
+                      (reify LongConsumer
+                        (accept [_ x]
+                          (.addLong row-id-bitmap-out (.getCoordinate point-access x row-id-idx)))))
+            (->TemporalRoots (doto row-id-bitmap-out
+                               (.and row-id-bitmap))
+                             (Collections/emptyMap)))
+        (let [roots (HashMap.)
+              coordinates (-> kd-tree-idxs
+                              (.mapToObj (reify LongFunction
+                                           (apply [_ x]
+                                             (.getArrayPoint point-access x))))
                               (.filter (reify Predicate
                                          (test [_ x]
                                            (.contains row-id-bitmap (aget ^longs x row-id-idx)))))
@@ -366,7 +369,7 @@
                                                                    (applyAsLong [_ x]
                                                                      (aget ^longs x row-id-idx)))))
                               (.toArray))
-              value-count (count coordinates)]
+              value-count (alength coordinates)]
           (doseq [col-name columns]
             (let [col-idx (->temporal-column-idx col-name)
                   out-root (VectorSchemaRoot/create allocator (->temporal-root-schema col-name))
@@ -384,10 +387,10 @@
                   (.set row-id-vec n row-id)
                   (.set temporal-vec n (aget coordinate col-idx))))
               (util/set-vector-schema-root-row-count out-root value-count)
-              (.put roots col-name out-root)))))
-      (->TemporalRoots (doto row-id-bitmap-out
-                         (.and row-id-bitmap))
-                       roots)))
+              (.put roots col-name out-root)))
+          (->TemporalRoots (doto row-id-bitmap-out
+                             (.and row-id-bitmap))
+                           roots)))))
 
   Closeable
   (close [this]
