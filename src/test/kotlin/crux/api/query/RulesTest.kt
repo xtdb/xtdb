@@ -4,8 +4,8 @@ import com.natpryce.hamkrest.assertion.assertThat
 import com.natpryce.hamkrest.equalTo
 import crux.api.CruxDocument
 import crux.api.CruxK
-import crux.api.kw
-import crux.api.sym
+import crux.api.underware.kw
+import crux.api.underware.sym
 import crux.api.tx.submitTx
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance

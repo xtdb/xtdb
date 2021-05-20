@@ -1,13 +1,18 @@
 package crux.api.query
 
-import clojure.lang.Keyword
 import crux.api.ICruxDatasource
-import crux.api.kw
-import crux.api.pam
-import jdk.dynalink.Operation
+import crux.api.query.bind.BindContext
+import crux.api.query.find.FindContext
+import crux.api.query.limit.LimitSection
+import crux.api.query.offset.OffsetSection
+import crux.api.query.order.OrderContext
+import crux.api.underware.kw
+import crux.api.query.rules.RulesContext
+import crux.api.query.where.WhereContext
+import crux.api.underware.BuilderContext
 import javax.naming.OperationNotSupportedException
 
-class QueryContext private constructor() {
+class QueryContext private constructor(): BuilderContext<Query> {
     companion object {
         val FIND = "find".kw
         val WHERE = "where".kw
@@ -20,41 +25,41 @@ class QueryContext private constructor() {
         fun build(block: QueryContext.() -> Unit) = QueryContext().also(block).build()
     }
 
-    private val map = mutableMapOf<Keyword, Any>()
+    private val sections = mutableListOf<QuerySection>()
 
     fun find(block: FindContext.() -> Unit) {
-        map[FIND] = FindContext.build(block)
+        sections.add(FindContext.build(block))
     }
 
     fun where(block: WhereContext.() -> Unit) {
-        map[WHERE] = WhereContext.build(block)
+        sections.add(WhereContext.build(block))
     }
 
     fun order(block: OrderContext.() -> Unit) {
-        map[ORDER] = OrderContext.build(block)
+        sections.add(OrderContext.build(block))
     }
 
     fun rules(block: RulesContext.() -> Unit) {
-        map[RULES] = RulesContext.build(block)
+        sections.add(RulesContext.build(block))
     }
 
     fun bind(block: BindContext.() -> Unit) {
-        map[IN] = BindContext.build(block)
+        sections.add(BindContext.build(block))
     }
 
     var offset: Int
         get() = throw OperationNotSupportedException()
         set(value) {
-            map[OFFSET] = value
+            sections.add(OffsetSection(value))
         }
 
     var limit: Int
         get() = throw OperationNotSupportedException()
         set(value) {
-            map[LIMIT] = value
+            sections.add(LimitSection(value))
         }
 
-    private fun build() = map.pam
+    override fun build() = Query(sections)
 }
 
-fun ICruxDatasource.q(vararg params: Any, block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext.build(block), *params)
+fun ICruxDatasource.q(vararg params: Any, block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext.build(block).toEdn(), *params)
