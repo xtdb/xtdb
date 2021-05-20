@@ -1,11 +1,10 @@
 package crux.api.tx
 
 import crux.api.CruxDocument
-import crux.api.ICruxIngestAPI
-import crux.api.TransactionInstant
+import crux.api.underware.BuilderContext
 import java.util.*
 
-class TransactionContext private constructor() {
+class TransactionContext private constructor(): BuilderContext<Transaction> {
     companion object {
         fun build(block: TransactionContext.() -> Unit): Transaction =
             TransactionContext().also(block).build()
@@ -13,6 +12,9 @@ class TransactionContext private constructor() {
 
     private val builder = Transaction.builder()
 
+    /*
+     * These are used as halfway houses for the first portion of an infix chain
+     */
     data class DocumentToPut(val document: CruxDocument)
     data class DocumentToPutWithValidTime(val document: CruxDocument, val validTime: Date)
     data class IdToDelete(val id: Any)
@@ -113,11 +115,8 @@ class TransactionContext private constructor() {
         hangingOperation = null
     }
 
-    private fun build(): Transaction {
+    override fun build(): Transaction {
         lockIn()
         return builder.build()
     }
 }
-
-fun ICruxIngestAPI.submitTx(block: TransactionContext.() -> Unit): TransactionInstant =
-    submitTx(TransactionContext.build(block))
