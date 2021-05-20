@@ -186,7 +186,9 @@
   (let [^Collection minor-types (for [^ValueVector vv (.getChildrenFromFields duv)
                                       :when (pos? (.getValueCount vv))]
                                   (.getMinorType vv))]
-    (EnumSet/copyOf minor-types)))
+    (if (.isEmpty minor-types)
+      (EnumSet/noneOf Types$MinorType)
+      (EnumSet/copyOf minor-types))))
 
 (defn ^core2.relation.IReadColumn <-vector
   ([^ValueVector in-vec]
