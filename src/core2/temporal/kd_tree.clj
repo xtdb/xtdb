@@ -120,7 +120,7 @@
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 
 (defn- balanced-parent ^long [^long idx]
-  (bit-shift-right idx 1))
+  (unsigned-bit-shift-right idx 1))
 
 (defn- balanced-left-child ^long [^long idx]
   (inc (bit-shift-left idx 1)))
@@ -144,10 +144,10 @@
   (balanced-valid? n (balanced-right-child idx)))
 
 (defn- balanced-leaf? [^long n ^long idx]
-  (>= idx (bit-shift-right n 1)))
+  (>= idx (unsigned-bit-shift-right n 1)))
 
 (defn- balanced-inner? [^long n ^long idx]
-  (< idx (bit-shift-right n 1)))
+  (< idx (unsigned-bit-shift-right n 1)))
 
 (deftype SubtreeSpliterator [^:unsynchronized-mutable ^long current-in-level
                              ^:unsynchronized-mutable ^long max-in-level
