@@ -672,7 +672,7 @@
           (.setRowCount idx)
           (build-breadth-first-tree-in-place true))))))
 
-(deftype ColumnStackEntry [^long idx ^long axis])
+(deftype ColumnStackEntry [^long idx ^int axis])
 
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
                                        ^longs min-range
