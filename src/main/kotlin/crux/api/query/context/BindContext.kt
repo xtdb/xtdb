@@ -1,9 +1,9 @@
-package crux.api.query.bind
+package crux.api.query.context
 
 import clojure.lang.Symbol
+import crux.api.query.domain.BindClause
+import crux.api.query.domain.BindSection
 import crux.api.underware.BuilderContext
-import crux.api.underware.clj
-import crux.api.underware.pv
 
 class BindContext private constructor(): BuilderContext<BindSection> {
     companion object {

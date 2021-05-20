@@ -1,10 +1,7 @@
-package crux.api.query.rules
+package crux.api.query.domain
 
 import clojure.lang.Symbol
-import crux.api.query.QueryContext
-import crux.api.query.QuerySection
-import crux.api.query.where.WhereClause
-import crux.api.query.where.WhereSection
+import crux.api.query.context.QueryContext
 import crux.api.underware.pl
 import crux.api.underware.prefix
 import crux.api.underware.pv

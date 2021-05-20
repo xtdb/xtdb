@@ -1,7 +1,10 @@
-package crux.api.query.order
+package crux.api.query.context
 
 import clojure.lang.Symbol
-import crux.api.query.order.OrderDirection.*
+import crux.api.query.domain.OrderClause
+import crux.api.query.domain.OrderDirection
+import crux.api.query.domain.OrderDirection.*
+import crux.api.query.domain.OrderSection
 import crux.api.underware.BuilderContext
 
 class OrderContext private constructor(): BuilderContext<OrderSection> {

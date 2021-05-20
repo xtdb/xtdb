@@ -1,4 +1,4 @@
-package crux.api.query
+package crux.api.query.domain
 
 import clojure.lang.Keyword
 import crux.api.underware.pam
@@ -13,3 +13,4 @@ interface QuerySection {
     val key: Keyword
     fun toEdn(): Any
 }
+

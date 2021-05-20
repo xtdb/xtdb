@@ -1,7 +1,6 @@
-package crux.api.query.offset
+package crux.api.query.domain
 
-import crux.api.query.QueryContext
-import crux.api.query.QuerySection
+import crux.api.query.context.QueryContext
 
 data class OffsetSection(val offset: Int): QuerySection {
     override val key = QueryContext.OFFSET

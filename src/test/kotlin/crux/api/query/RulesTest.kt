@@ -4,6 +4,7 @@ import com.natpryce.hamkrest.assertion.assertThat
 import com.natpryce.hamkrest.equalTo
 import crux.api.CruxDocument
 import crux.api.CruxK
+import crux.api.query.context.q
 import crux.api.underware.kw
 import crux.api.underware.sym
 import crux.api.tx.submitTx

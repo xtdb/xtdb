@@ -1,14 +1,11 @@
-package crux.api.query
+package crux.api.query.context
 
 import crux.api.ICruxDatasource
-import crux.api.query.bind.BindContext
-import crux.api.query.find.FindContext
-import crux.api.query.limit.LimitSection
-import crux.api.query.offset.OffsetSection
-import crux.api.query.order.OrderContext
+import crux.api.query.domain.Query
+import crux.api.query.domain.LimitSection
+import crux.api.query.domain.OffsetSection
+import crux.api.query.domain.QuerySection
 import crux.api.underware.kw
-import crux.api.query.rules.RulesContext
-import crux.api.query.where.WhereContext
 import crux.api.underware.BuilderContext
 import javax.naming.OperationNotSupportedException
 

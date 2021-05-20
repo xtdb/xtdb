@@ -1,9 +1,13 @@
-package crux.api.query.where
+package crux.api.query.context
 
 import clojure.lang.Keyword
 import clojure.lang.Symbol
-import crux.api.query.where.JoinType.*
-import crux.api.query.where.PredicateType.*
+import crux.api.query.domain.JoinType
+import crux.api.query.domain.JoinType.*
+import crux.api.query.domain.PredicateType
+import crux.api.query.domain.PredicateType.*
+import crux.api.query.domain.WhereClause
+import crux.api.query.domain.WhereSection
 import crux.api.underware.*
 
 class WhereContext private constructor(): BuilderContext<WhereSection> {
