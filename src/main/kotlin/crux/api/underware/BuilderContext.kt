@@ -5,7 +5,7 @@ interface BuilderContext<T> {
 }
 
 abstract class SimpleBuilderContext<C, T>(
-    val constructor: (List<C>) -> T
+    private val constructor: (List<C>) -> T
 ): BuilderContext<T> {
     private val clauses = mutableListOf<C>()
 
@@ -14,6 +14,32 @@ abstract class SimpleBuilderContext<C, T>(
     }
 
     override fun build() = constructor(clauses)
+}
+
+abstract class ComplexBuilderContext<C, T>(
+    private val constructor: (List<C>) -> T
+): BuilderContext<T> {
+    private val clauses = mutableListOf<C>()
+    private var hangingClause: C? = null
+
+    protected fun add(clause: C) {
+        lockIn()
+        hangingClause = clause
+    }
+
+    protected fun replace(clause: C) {
+        hangingClause = clause
+    }
+
+    private fun lockIn() {
+        hangingClause?.run(clauses::add)
+        hangingClause = null
+    }
+
+    override fun build(): T {
+        lockIn()
+        return constructor(clauses)
+    }
 }
 
 abstract class BuilderContextCompanion<T, B: BuilderContext<T>>(val constructor: () -> B) {
