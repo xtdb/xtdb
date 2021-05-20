@@ -1,8 +1,8 @@
 package crux.api.query.context
 
 import clojure.lang.Symbol
+import crux.api.query.domain.QuerySection.RulesSection
 import crux.api.query.domain.RuleDefinition
-import crux.api.query.domain.RulesSection
 import crux.api.underware.BuilderContext
 
 class RulesContext private constructor(): BuilderContext<RulesSection> {

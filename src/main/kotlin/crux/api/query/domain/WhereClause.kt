@@ -2,19 +2,13 @@ package crux.api.query.domain
 
 import clojure.lang.Keyword
 import clojure.lang.Symbol
-import crux.api.query.context.QueryContext
+import crux.api.query.domain.QuerySection.WhereSection
 import crux.api.underware.pl
 import crux.api.underware.prefix
 import crux.api.underware.pv
 import crux.api.underware.sym
 
-data class WhereSection(val clauses: List<WhereClause>): QuerySection {
-    override val key = QueryContext.WHERE
-    override fun toEdn() = clauses.map(WhereClause::toEdn).pv
-}
-
 sealed class WhereClause {
-
     data class HasKey(val symbol: Symbol, val key: Keyword): WhereClause() {
         override fun toEdn() = listOf(symbol, key).pv
     }
@@ -23,13 +17,27 @@ sealed class WhereClause {
         override fun toEdn() = listOf(document, key, value).pv
     }
 
-    data class Join(val joinType: JoinType, val body: WhereSection): WhereClause() {
-        override fun toEdn() = body.clauses.map(WhereClause::toEdn).prefix(joinType.symbol).pl
+    data class Join(val type: Type, val body: WhereSection): WhereClause() {
+        enum class Type(val symbol: Symbol) {
+            NOT("not".sym),
+            OR("or".sym)
+        }
+
+        override fun toEdn() = body.clauses.map(WhereClause::toEdn).prefix(type.symbol).pl
     }
 
-    data class Predicate(val predicateType: PredicateType, val i: Symbol, val j: Any): WhereClause() {
+    data class Predicate(val type: Type, val i: Symbol, val j: Any): WhereClause() {
+        enum class Type(val symbol: Symbol) {
+            EQ("==".sym),
+            NEQ("!=".sym),
+            GT(">".sym),
+            GTE(">=".sym),
+            LT("<".sym),
+            LTE("<=".sym)
+        }
+
         override fun toEdn() = listOf(
-            listOf(predicateType.symbol, i, j).pl
+            listOf(type.symbol, i, j).pl
         ).pv
     }
 
@@ -39,20 +47,3 @@ sealed class WhereClause {
 
     abstract fun toEdn(): Any
 }
-
-enum class JoinType(val symbol: Symbol) {
-    NOT("not".sym),
-    OR("or".sym)
-}
-
-enum class PredicateType(val symbol: Symbol) {
-    EQ("==".sym),
-    NEQ("!=".sym),
-    GT(">".sym),
-    GTE(">=".sym),
-    LT("<".sym),
-    LTE("<=".sym)
-}
-
-
-

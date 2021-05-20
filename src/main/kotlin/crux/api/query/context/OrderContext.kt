@@ -2,9 +2,9 @@ package crux.api.query.context
 
 import clojure.lang.Symbol
 import crux.api.query.domain.OrderClause
-import crux.api.query.domain.OrderDirection
-import crux.api.query.domain.OrderDirection.*
-import crux.api.query.domain.OrderSection
+import crux.api.query.domain.OrderClause.Direction
+import crux.api.query.domain.OrderClause.Direction.*
+import crux.api.query.domain.QuerySection.OrderSection
 import crux.api.underware.BuilderContext
 
 class OrderContext private constructor(): BuilderContext<OrderSection> {
@@ -14,7 +14,7 @@ class OrderContext private constructor(): BuilderContext<OrderSection> {
 
     private val data = mutableListOf<OrderClause>()
 
-    private fun add(symbol: Symbol, direction: OrderDirection) {
+    private fun add(symbol: Symbol, direction: Direction) {
         data.add(OrderClause(symbol, direction))
     }
 

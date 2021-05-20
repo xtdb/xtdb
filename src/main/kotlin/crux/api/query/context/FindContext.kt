@@ -1,10 +1,10 @@
 package crux.api.query.context
 
 import clojure.lang.Symbol
-import crux.api.query.domain.AggregateType
-import crux.api.query.domain.AggregateType.*
 import crux.api.query.domain.FindClause
-import crux.api.query.domain.FindSection
+import crux.api.query.domain.FindClause.AggregateType
+import crux.api.query.domain.FindClause.AggregateType.*
+import crux.api.query.domain.QuerySection.FindSection
 import crux.api.underware.BuilderContext
 
 class FindContext private constructor(): BuilderContext<FindSection> {

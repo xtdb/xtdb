@@ -1,15 +1,8 @@
 package crux.api.query.domain
 
 import clojure.lang.Symbol
-import crux.api.query.context.QueryContext
 import crux.api.underware.clj
 import crux.api.underware.pv
-
-data class BindSection(val clauses: List<BindClause>): QuerySection {
-    override val key = QueryContext.IN
-
-    override fun toEdn() = clauses.map(BindClause::toEdn).pv
-}
 
 sealed class BindClause {
     data class SimpleBind(val symbol: Symbol): BindClause() {

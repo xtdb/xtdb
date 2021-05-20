@@ -1,24 +1,14 @@
 package crux.api.query.context
 
-import crux.api.ICruxDatasource
 import crux.api.query.domain.Query
-import crux.api.query.domain.LimitSection
-import crux.api.query.domain.OffsetSection
 import crux.api.query.domain.QuerySection
-import crux.api.underware.kw
+import crux.api.query.domain.QuerySection.LimitSection
+import crux.api.query.domain.QuerySection.OffsetSection
 import crux.api.underware.BuilderContext
 import javax.naming.OperationNotSupportedException
 
 class QueryContext private constructor(): BuilderContext<Query> {
     companion object {
-        val FIND = "find".kw
-        val WHERE = "where".kw
-        val IN = "in".kw
-        val ORDER = "order-by".kw
-        val OFFSET = "offset".kw
-        val LIMIT = "limit".kw
-        val RULES = "rules".kw
-
         fun build(block: QueryContext.() -> Unit) = QueryContext().also(block).build()
     }
 
@@ -58,5 +48,3 @@ class QueryContext private constructor(): BuilderContext<Query> {
 
     override fun build() = Query(sections)
 }
-
-fun ICruxDatasource.q(vararg params: Any, block: QueryContext.() -> Unit): MutableCollection<MutableList<*>> = query(QueryContext.build(block).toEdn(), *params)

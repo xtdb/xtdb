@@ -1,16 +1,8 @@
 package crux.api.query.domain
 
-import clojure.lang.Keyword
-import crux.api.underware.pam
+import crux.api.query.context.QueryContext
+import crux.api.underware.pv
 
-data class Query(val sections: List<QuerySection>) {
-    fun toEdn() = sections.map {
-        it.key to it.toEdn()
-    }.toMap().pam
-}
 
-interface QuerySection {
-    val key: Keyword
-    fun toEdn(): Any
-}
+data class Query(val sections: List<QuerySection>)
 

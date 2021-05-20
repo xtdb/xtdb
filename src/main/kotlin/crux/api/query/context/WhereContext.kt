@@ -2,12 +2,12 @@ package crux.api.query.context
 
 import clojure.lang.Keyword
 import clojure.lang.Symbol
-import crux.api.query.domain.JoinType
-import crux.api.query.domain.JoinType.*
-import crux.api.query.domain.PredicateType
-import crux.api.query.domain.PredicateType.*
+import crux.api.query.domain.QuerySection.WhereSection
 import crux.api.query.domain.WhereClause
-import crux.api.query.domain.WhereSection
+import crux.api.query.domain.WhereClause.Join
+import crux.api.query.domain.WhereClause.Join.Type.*
+import crux.api.query.domain.WhereClause.Predicate
+import crux.api.query.domain.WhereClause.Predicate.Type.*
 import crux.api.underware.*
 
 class WhereContext private constructor(): BuilderContext<WhereSection> {
@@ -31,17 +31,17 @@ class WhereContext private constructor(): BuilderContext<WhereSection> {
         hangingClause = WhereClause.HasKeyEqualTo(symbol, key, value)
     }
 
-    private fun join(type: JoinType, block: WhereContext.() -> Unit) {
+    private fun join(type: Join.Type, block: WhereContext.() -> Unit) {
         lockIn()
-        hangingClause = WhereClause.Join(type, build(block))
+        hangingClause = Join(type, build(block))
     }
 
     fun not(block: WhereContext.() -> Unit) = join(NOT, block)
     fun or(block: WhereContext.() -> Unit) = join(OR, block)
 
-    private fun pred(predicateType: PredicateType, i: Symbol, j: Any) {
+    private fun pred(predicateType: Predicate.Type, i: Symbol, j: Any) {
         lockIn()
-        hangingClause = WhereClause.Predicate(predicateType, i, j)
+        hangingClause = Predicate(predicateType, i, j)
     }
 
     infix fun Symbol.gt(other: Any) = pred(GT, this, other)

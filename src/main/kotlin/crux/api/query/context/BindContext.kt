@@ -2,7 +2,7 @@ package crux.api.query.context
 
 import clojure.lang.Symbol
 import crux.api.query.domain.BindClause
-import crux.api.query.domain.BindSection
+import crux.api.query.domain.QuerySection.BindSection
 import crux.api.underware.BuilderContext
 
 class BindContext private constructor(): BuilderContext<BindSection> {
