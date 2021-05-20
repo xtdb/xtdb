@@ -82,7 +82,8 @@ Two main extension points:
      - Larger TPC-H scale factors (SF10) - check ingest + query
        - linear growth in aggregate queries, sub-linear in accesses
      - Concurrency - check running ingest + multiple queries in parallel
-       - TODO Running multiple TPC-H nodes in the cloud - check everything works same as locally
+       - DONE Running multiple TPC-H nodes in the cloud - check everything works same as locally
+         works with SF0.01, super-linear ingest issues currently prevent SF0.1
      - Check queries too slow, possible solutions
        - DONE Bloom filters
        - DONE Block-level metadata
