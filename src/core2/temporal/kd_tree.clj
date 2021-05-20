@@ -690,7 +690,7 @@
                 min-match? (<= (aget min-range axis) axis-value)
                 max-match? (<= axis-value (aget max-range axis))
                 left-idx (balanced-left-child idx)
-                right-idx (balanced-right-child idx)
+                right-idx (inc left-idx)
                 visit-left? (and min-match? (balanced-valid? n left-idx))
                 visit-right? (and max-match? (balanced-valid? n right-idx))]
 
@@ -722,7 +722,7 @@
                 min-match? (<= (aget min-range axis) axis-value)
                 max-match? (<= axis-value (aget max-range axis))
                 left-idx (balanced-left-child idx)
-                right-idx (balanced-right-child idx)
+                right-idx (inc left-idx)
                 visit-left? (and min-match? (balanced-valid? n left-idx))
                 visit-right? (and max-match? (balanced-valid? n right-idx))]
 
