@@ -4,14 +4,14 @@
             [core2.indexer :as idx]
             [core2.metadata :as meta]
             core2.operator.select
+            [core2.relation :as rel]
             [core2.temporal :as temporal]
             core2.tx
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
-           core2.ICursor
            core2.buffer_pool.IBufferPool
+           core2.ICursor
            core2.metadata.IMetadataManager
            core2.operator.select.IColumnSelector
            [core2.temporal ITemporalManager TemporalRoots]
@@ -47,6 +47,16 @@
    (doto x
      (.and y))))
 
+(defn- ->atemporal-row-id-bitmap [^List col-names ^Map col-preds ^Map in-roots]
+  (->> (for [^String col-name col-names
+                     :when (not (temporal/temporal-column? col-name))
+                     :let [^IColumnSelector col-pred (.get col-preds col-name)
+                           ^VectorSchemaRoot in-root (.get in-roots col-name)]]
+                 (align/->row-id-bitmap (when col-pred
+                                          (.select col-pred (rel/<-vector (.getVector in-root col-name))))
+                                        (.getVector in-root t/row-id-field)))
+       (reduce roaring64-and)))
+
 (defn- adjust-temporal-min-range-to-row-id-range ^longs [^longs temporal-min-range ^Roaring64Bitmap row-id-bitmap]
   (let [temporal-min-range (or (temporal/->copy-range temporal-min-range) (temporal/->min-range))]
     (if (.isEmpty row-id-bitmap)
@@ -75,43 +85,34 @@
             (.put res idx (inc ^long (.getOrDefault res idx 0)))))
         res))))
 
-(defn- align-roots
-  ^core2.relation.IReadRelation
-  [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^Map col-preds ^longs temporal-min-range ^longs temporal-max-range ^Map in-roots]
+(defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
+  (let [temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range atemporal-row-id-bitmap)
+        temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range atemporal-row-id-bitmap)]
+    (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
+                          temporal-min-range
+                          temporal-max-range
+                          atemporal-row-id-bitmap)))
 
-  (let [row-id-bitmaps (for [^String col-name col-names
-                             :when (not (temporal/temporal-column? col-name))
-                             :let [^IColumnSelector col-pred (.get col-preds col-name)
-                                   ^VectorSchemaRoot in-root (.get in-roots col-name)]]
-                         (align/->row-id-bitmap (when col-pred
-                                                  (.select col-pred (rel/<-vector (.getVector in-root col-name))))
-                                                (.getVector in-root t/row-id-field)))
-        row-id-bitmap (reduce roaring64-and row-id-bitmaps)
-        temporal-min-range (adjust-temporal-min-range-to-row-id-range temporal-min-range row-id-bitmap)
-        temporal-max-range (adjust-temporal-max-range-to-row-id-range temporal-max-range row-id-bitmap)
-        temporal-roots (.createTemporalRoots temporal-manager watermark (filterv temporal/temporal-column? col-names)
-                                             temporal-min-range
-                                             temporal-max-range
-                                             row-id-bitmap)]
-    (try
-      (let [row-id-bitmap (if temporal-roots
-                            (.row-id-bitmap temporal-roots)
-                            row-id-bitmap)
-            roots (for [col-name col-names]
-                    (if (temporal/temporal-column? col-name)
-                      (.get ^Map (.roots temporal-roots) col-name)
-                      (.get in-roots col-name)))
-            temporal-row-id-bitmaps (for [col-name col-names
-                                          :when (temporal/temporal-column? col-name)]
-                                      (.select ^IColumnSelector (.get col-preds col-name)
-                                               (.get ^Map (.roots temporal-roots) col-name)))
-            row-id-bitmap (reduce roaring64-and
-                                  row-id-bitmap
-                                  temporal-row-id-bitmaps)
-            row-id->repeat-count (->row-id->repeat-count temporal-roots row-id-bitmap)]
-        (align/align-vectors roots row-id-bitmap row-id->repeat-count))
-      (finally
-        (util/try-close temporal-roots)))))
+(defn- ->temporal-row-id-bitmap [col-names ^Map col-preds ^TemporalRoots temporal-roots atemporal-row-id-bitmap]
+  (reduce roaring64-and
+          (if temporal-roots
+            (.row-id-bitmap temporal-roots)
+            atemporal-row-id-bitmap)
+          (for [^String col-name col-names
+                :when (temporal/temporal-column? col-name)
+                :let [^IColumnSelector col-pred (.get col-preds col-name)
+                      ^VectorSchemaRoot in-root (.get ^Map (.roots temporal-roots) col-name)]]
+            (align/->row-id-bitmap (when col-pred
+                                     (.select col-pred (rel/<-vector (.getVector in-root col-name))))
+                                   (.getVector in-root t/row-id-field)))))
+
+(defn- align-roots ^core2.relation.IReadRelation [^List col-names ^Map in-roots ^TemporalRoots temporal-roots row-id-bitmap]
+  (let [roots (for [col-name col-names]
+                (if (temporal/temporal-column? col-name)
+                  (.get ^Map (.roots temporal-roots) col-name)
+                  (.get in-roots col-name)))
+        row-id->repeat-count (->row-id->repeat-count temporal-roots row-id-bitmap)]
+    (align/align-vectors roots row-id-bitmap row-id->repeat-count)))
 
 (defn- filter-pushdown-bloom-block-idxs [^IMetadataManager metadata-manager ^long chunk-idx ^String col-name ^RoaringBitmap block-idxs]
   (if-let [^MutableRoaringBitmap pushdown-bloom (get *column->pushdown-bloom* col-name)]
@@ -155,12 +156,19 @@
       (letfn [(next-block [chunks]
                 (loop []
                   (if-let [in-roots (next-roots real-col-names chunks)]
-                    (let [read-rel (align-roots temporal-manager watermark col-names col-preds temporal-min-range temporal-max-range in-roots)]
-                      (if (and read-rel (pos? (.rowCount read-rel)))
-                        (do
-                          (.accept c read-rel)
-                          true)
-                        (recur)))
+                    (let [atemporal-row-id-bitmap (->atemporal-row-id-bitmap col-names col-preds in-roots)
+                          temporal-roots (->temporal-roots temporal-manager watermark col-names temporal-min-range temporal-max-range atemporal-row-id-bitmap)]
+                      (or (try
+                            (let [row-id-bitmap (->temporal-row-id-bitmap col-names col-preds temporal-roots atemporal-row-id-bitmap)
+                                  read-rel (align-roots col-names in-roots temporal-roots row-id-bitmap)]
+                              (if (and read-rel (pos? (.rowCount read-rel)))
+                                (do
+                                  (.accept c read-rel)
+                                  true)
+                                false))
+                            (finally
+                              (util/try-close temporal-roots)))
+                          (recur)))
 
                     (do
                       (doseq [^ICursor chunk (vals chunks)]
