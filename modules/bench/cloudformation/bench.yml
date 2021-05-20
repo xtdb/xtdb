@@ -174,10 +174,18 @@ Resources:
               Value: '2181'
             - Name: 'ZOOKEEPER_TICK_TIME'
               Value: '2000'
+            - Name: 'ZOOKEEPER_LOG4J_ROOT_LOGLEVEL'
+              Value: 'WARN'
           PortMappings:
             - ContainerPort: 2181
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-1'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: core2
         - Name: 'kafka'
-          Image: confluentinc/cp-server:6.1.1
+          Image: confluentinc/cp-kafka:6.1.1
           DependsOn:
             - Condition: 'START'
               ContainerName: 'zookeeper'
@@ -191,8 +199,16 @@ Resources:
               Value: '1'
             - Name: 'KAFKA_ADVERTISED_LISTENERS'
               Value: 'PLAINTEXT://localhost:9092'
+            - Name: 'KAFKA_LOG4J_ROOT_LOGLEVEL'
+              Value: 'WARN'
           PortMappings:
             - ContainerPort: 9092
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: 'eu-west-1'
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: core2
         - Name: 'core2-bench'
           Cpu: 2048
           Memory: 8192
@@ -203,7 +219,7 @@ Resources:
             Options:
               awslogs-region: 'eu-west-1'
               awslogs-group: !Ref LogGroup
-              awslogs-stream-prefix: ecs
+              awslogs-stream-prefix: core2
 
 Outputs:
   ClusterName:
