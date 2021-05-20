@@ -19,18 +19,10 @@ sealed class FindClause {
         DISTINCT("distinct".sym)
     }
 
-    data class SimpleFind(val symbol: Symbol): FindClause() {
-        override fun toEdn() = symbol
-    }
+    data class SimpleFind(val symbol: Symbol): FindClause()
 
-    data class Aggregate(val type: AggregateType, val symbol: Symbol): FindClause() {
-        override fun toEdn() = listOf(type.symbol, symbol).pl
-    }
+    data class Aggregate(val type: AggregateType, val symbol: Symbol): FindClause()
 
-    data class AggregateWithNumber(val type: AggregateType, val n: Int, val symbol: Symbol): FindClause() {
-        override fun toEdn() = listOf(type, n, symbol).pl
-    }
-
-    abstract fun toEdn(): Any
+    data class AggregateWithNumber(val type: AggregateType, val n: Int, val symbol: Symbol): FindClause()
 }
 
