@@ -40,9 +40,9 @@ class PredicateQueryTest {
 
     private val db = CruxK.startNode().apply {
         submitTx {
-            +ivan
-            +ivana
-            +petr
+            put(ivan)
+            put(ivana)
+            put(petr)
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
         }

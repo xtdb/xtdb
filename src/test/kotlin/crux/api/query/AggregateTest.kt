@@ -39,7 +39,7 @@ class AggregateTest {
     private val db = CruxK.startNode().apply {
         submitTx {
             monsters.forEach {
-                + it.toDocument()
+                put(it.toDocument())
             }
         }.also {
             awaitTx(it, Duration.ofSeconds(10))

@@ -59,7 +59,7 @@ class RulesTest {
     private val db = CruxK.startNode().apply {
         submitTx {
             dwarves.forEach {
-                +it
+                put(it)
             }
         }.also {
             awaitTx(it, Duration.ofSeconds(10))

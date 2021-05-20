@@ -38,7 +38,7 @@ class OrderAndPaginationTest {
     private val db = CruxK.startNode().apply {
         submitTx {
             // Insert documents shuffled to avoid passing tests by internal ordering convenience
-            documents.shuffled().forEach { +it }
+            documents.shuffled().forEach { put(it) }
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
         }

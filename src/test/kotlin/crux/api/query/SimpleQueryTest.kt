@@ -44,11 +44,11 @@ class SimpleQueryTest {
 
     private val db = CruxK.startNode().apply {
         submitTx {
-            +ivan
-            +ivana
-            +petr
-            +mirror
-            +clint
+            put(ivan)
+            put(ivana)
+            put(petr)
+            put(mirror)
+            put(clint)
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
         }
