@@ -12,19 +12,21 @@ class FindContext private constructor(): BuilderContext<FindSection> {
         fun build(block: FindContext.() -> Unit) = FindContext().also(block).build()
     }
 
-    private val args = mutableListOf<FindClause>()
+    private val clauses = mutableListOf<FindClause>()
 
-    operator fun Symbol.unaryPlus() {
-        args.add(FindClause.SimpleFind(this))
+    private fun add(clause: FindClause) {
+        clauses.add(clause)
     }
 
-    private fun aggregate(type: AggregateType, symbol: Symbol) {
-        args.add(FindClause.Aggregate(type, symbol))
-    }
+    operator fun FindClause.unaryPlus() = add(this)
 
-    private fun aggregate(type: AggregateType, n: Int, symbol: Symbol) {
-        args.add(FindClause.AggregateWithNumber(type, n, symbol))
-    }
+    operator fun Symbol.unaryPlus() = +FindClause.SimpleFind(this)
+
+    private fun aggregate(type: AggregateType, symbol: Symbol) =
+        +FindClause.Aggregate(type, symbol)
+
+    private fun aggregate(type: AggregateType, n: Int, symbol: Symbol) =
+        +FindClause.AggregateWithNumber(type, n, symbol)
 
     fun sum(symbol: Symbol) = aggregate(SUM, symbol)
     fun min(symbol: Symbol) = aggregate(MIN, symbol)
@@ -38,5 +40,5 @@ class FindContext private constructor(): BuilderContext<FindSection> {
     fun sample(n: Int, symbol: Symbol) = aggregate(SAMPLE, n, symbol)
     fun distinct(symbol: Symbol) = aggregate(DISTINCT, symbol)
 
-    override fun build() = FindSection(args)
+    override fun build() = FindSection(clauses)
 }

@@ -14,36 +14,27 @@ class QueryContext private constructor(): BuilderContext<Query> {
 
     private val sections = mutableListOf<QuerySection>()
 
-    fun find(block: FindContext.() -> Unit) {
-        sections.add(FindContext.build(block))
+    private fun add(section: QuerySection) {
+        sections.add(section)
     }
 
-    fun where(block: WhereContext.() -> Unit) {
-        sections.add(WhereContext.build(block))
-    }
-
-    fun order(block: OrderContext.() -> Unit) {
-        sections.add(OrderContext.build(block))
-    }
-
-    fun rules(block: RulesContext.() -> Unit) {
-        sections.add(RulesContext.build(block))
-    }
-
-    fun bind(block: BindContext.() -> Unit) {
-        sections.add(BindContext.build(block))
-    }
+    operator fun QuerySection.unaryPlus() = add(this)
+    fun find(block: FindContext.() -> Unit) = +FindContext.build(block)
+    fun where(block: WhereContext.() -> Unit) = +WhereContext.build(block)
+    fun order(block: OrderContext.() -> Unit) = +OrderContext.build(block)
+    fun rules(block: RulesContext.() -> Unit) = +RulesContext.build(block)
+    fun bind(block: BindContext.() -> Unit) = +BindContext.build(block)
 
     var offset: Int
         get() = throw OperationNotSupportedException()
         set(value) {
-            sections.add(OffsetSection(value))
+            +OffsetSection(value)
         }
 
     var limit: Int
         get() = throw OperationNotSupportedException()
         set(value) {
-            sections.add(LimitSection(value))
+            +LimitSection(value)
         }
 
     override fun build() = Query(sections)

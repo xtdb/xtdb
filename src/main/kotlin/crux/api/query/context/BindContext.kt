@@ -10,15 +10,17 @@ class BindContext private constructor(): BuilderContext<BindSection> {
         fun build(block: BindContext.() -> Unit) = BindContext().also(block).build()
     }
 
-    private val bindings = mutableListOf<BindClause>()
+    private val clauses = mutableListOf<BindClause>()
 
-    operator fun Symbol.unaryPlus() {
-        bindings.add(BindClause.SimpleBind(this))
+    private fun add(clause: BindClause) {
+        clauses.add(clause)
     }
 
-    fun col(symbol: Symbol) {
-        bindings.add(BindClause.CollectionBind(symbol))
-    }
+    operator fun BindClause.unaryPlus() = add(this)
 
-    override fun build() = BindSection(bindings)
+    operator fun Symbol.unaryPlus() = +BindClause.SimpleBind(this)
+
+    fun col(symbol: Symbol) = +BindClause.CollectionBind(symbol)
+
+    override fun build() = BindSection(clauses)
 }

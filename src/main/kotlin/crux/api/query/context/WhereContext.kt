@@ -19,6 +19,12 @@ class WhereContext private constructor(): BuilderContext<WhereSection> {
 
     private var hangingClause: WhereClause? = null
 
+    private fun add(clause: WhereClause) {
+        clauses.add(clause)
+    }
+
+    operator fun WhereClause.unaryPlus() = add(this)
+
     data class SymbolAndKey(val symbol: Symbol, val key: Keyword)
 
     infix fun Symbol.has(key: Keyword) =

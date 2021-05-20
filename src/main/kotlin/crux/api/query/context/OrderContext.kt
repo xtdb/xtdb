@@ -12,14 +12,17 @@ class OrderContext private constructor(): BuilderContext<OrderSection> {
         fun build(block: OrderContext.() -> Unit) = OrderContext().also(block).build()
     }
 
-    private val data = mutableListOf<OrderClause>()
+    private val clauses = mutableListOf<OrderClause>()
 
-    private fun add(symbol: Symbol, direction: Direction) {
-        data.add(OrderClause(symbol, direction))
+    private fun add(clause: OrderClause) {
+        clauses.add(clause)
     }
 
+    private fun add(symbol: Symbol, direction: Direction) = +OrderClause(symbol, direction)
+
+    operator fun OrderClause.unaryPlus() = add(this)
     operator fun Symbol.unaryPlus() = add(this, ASC)
     operator fun Symbol.unaryMinus() = add(this, DESC)
 
-    override fun build() = OrderSection(data)
+    override fun build() = OrderSection(clauses)
 }
