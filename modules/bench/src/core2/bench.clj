@@ -29,12 +29,14 @@
 (defn finish-chunk [^Node node]
   (.finishChunk ^core2.indexer.Indexer (.indexer node)))
 
-(defn start-node ^core2.core.Node []
-  (let [node-id (str (UUID/randomUUID))]
-    (log/info "Starting node, id:" node-id)
-    (c2/start-node {:core2/log {:core2/module 'core2.kafka/->log
-                                :bootstrap-servers "localhost:9092"
-                                :topic-name (str "bench-log-" node-id)}
-                    :core2/object-store {:core2/module 'core2.s3/->object-store
-                                         :bucket "core2-bench"
-                                         :prefix (str "node." node-id)}})))
+(defn ^core2.core.Node start-node
+  ([] (start-node (str (UUID/randomUUID))))
+
+  ([node-id]
+   (log/info "Starting node, id:" node-id)
+   (c2/start-node {:core2/log {:core2/module 'core2.kafka/->log
+                               :bootstrap-servers "localhost:9092"
+                               :topic-name (str "bench-log-" node-id)}
+                   :core2/object-store {:core2/module 'core2.s3/->object-store
+                                        :bucket "core2-bench"
+                                        :prefix (str "node." node-id)}})))
