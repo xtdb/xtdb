@@ -18,8 +18,8 @@ public class JCruxDatasourceTest {
     private static final Keyword pullId1 = Keyword.intern("pull1");
     private static final Keyword pullId2 = Keyword.intern("pull2");
 
-    private static final CruxDocument pullDocument1 = CruxDocument.create(pullId1).plus("foo", "foo").plus("bar", 1);
-    private static final CruxDocument pullDocument2 = CruxDocument.create(pullId2).plus("foo", "bar").plus("bar", 2);
+    private static final CruxDocument pullDocument1 = CruxDocument.create(pullId1).plus("foo", "foo").plus("bar", 1L);
+    private static final CruxDocument pullDocument2 = CruxDocument.create(pullId2).plus("foo", "bar").plus("bar", 2L);
 
     private static ICruxAPI node;
 

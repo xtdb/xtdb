@@ -63,8 +63,8 @@ public class DocumentTest {
         data.put("foo", "bar");
         compare.put(foo, "bar");
 
-        data.put("bar", 0);
-        compare.put(bar, 0);
+        data.put("bar", 0L);
+        compare.put(bar, 0L);
 
         CruxDocument document = CruxDocument.create(documentId, data);
 
@@ -99,8 +99,8 @@ public class DocumentTest {
 
         compare.put(foo, "bar");
         data.put("foo", "bar");
-        compare.put(bar, 0);
-        data.put("bar", 0);
+        compare.put(bar, 0L);
+        data.put("bar", 0L);
 
         CruxDocument document = CruxDocument.create(documentId).plusAll(data);
         CruxDocument builtDocument = build(documentId, doc -> {

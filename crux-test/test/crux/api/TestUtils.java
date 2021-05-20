@@ -34,7 +34,7 @@ public class TestUtils {
     static final String documentId = "myDoc";
     static final String versionId = "version";
 
-    static CruxDocument testDocument(int version) {
+    static CruxDocument testDocument(long version) {
         CruxDocument document = CruxDocument.create(documentId);
         return document.plus(versionId, version);
     }

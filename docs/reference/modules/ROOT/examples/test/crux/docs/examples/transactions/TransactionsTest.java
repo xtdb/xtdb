@@ -40,7 +40,7 @@ public class TransactionsTest {
 
     private final ICruxAPI node = Crux.startNode();
 
-    private static CruxDocument createDocument(int version) {
+    private static CruxDocument createDocument(long version) {
         return CruxDocument.create(documentId).plus("version", version);
     }
 
