@@ -38,6 +38,9 @@
         id->internal-id (reify ToLongFunction
                           (applyAsLong [_ x]
                             (.get id->internal-id-map x)))
+        id-exists? (reify Predicate
+                     (test [_ x]
+                       (.containsKey id->internal-id-map x)))
         row-id->row (HashMap.)]
     ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
@@ -46,6 +49,7 @@
                 ^Node kd-tree (temporal/insert-coordinates kd-tree
                                                            allocator
                                                            id->internal-id
+                                                           id-exists?
                                                            (temporal/->coordinates {:id 7797
                                                                                     :row-id 1
                                                                                     :tx-time-start #inst "1998-01-10"}))]
@@ -64,6 +68,7 @@
       (let [kd-tree (temporal/insert-coordinates kd-tree
                                                  allocator
                                                  id->internal-id
+                                                 id-exists?
                                                  (temporal/->coordinates {:id 7797
                                                                           :row-id 2
                                                                           :tx-time-start #inst "1998-01-15"}))]
@@ -96,6 +101,7 @@
         (let [kd-tree (temporal/insert-coordinates kd-tree
                                                    allocator
                                                    id->internal-id
+                                                   id-exists?
                                                    (temporal/->coordinates {:id 7797
                                                                             :row-id 3
                                                                             :tx-time-start #inst "1998-01-20"
@@ -136,6 +142,7 @@
           (let [kd-tree (temporal/insert-coordinates kd-tree
                                                      allocator
                                                      id->internal-id
+                                                     id-exists?
                                                      (temporal/->coordinates {:id 7797
                                                                               :row-id 4
                                                                               :tx-time-start #inst "1998-01-23"
@@ -185,6 +192,7 @@
             (let [kd-tree (temporal/insert-coordinates kd-tree
                                                        allocator
                                                        id->internal-id
+                                                       id-exists?
                                                        (temporal/->coordinates {:id 7797
                                                                                 :row-id 5
                                                                                 :tx-time-start #inst "1998-01-26"
@@ -242,6 +250,7 @@
               (let [kd-tree (temporal/insert-coordinates kd-tree
                                                          allocator
                                                          id->internal-id
+                                                         id-exists?
                                                          (temporal/->coordinates {:id 7797
                                                                                   :row-id 6
                                                                                   :tx-time-start #inst "1998-01-28"

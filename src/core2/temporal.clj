@@ -183,6 +183,11 @@
 (defn- temporal-snapshot-obj-key->chunk-idx ^long [obj-key]
   (Long/parseLong (second (re-find #"temporal-snapshot-(\p{XDigit}{16})\.arrow" obj-key)) 16))
 
+(defn- normalize-id [id]
+  (if (bytes? id)
+    (ByteBuffer/wrap id)
+    id))
+
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
@@ -289,9 +294,7 @@
 
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
-                      (if (bytes? id)
-                        (ByteBuffer/wrap id)
-                        id)
+                      (normalize-id id)
                       (reify Function
                         (apply [_ x]
                           (loop [id (.nextLong rng)]
@@ -334,13 +337,15 @@
     (let [id->long-id-fn (reify ToLongFunction
                            (applyAsLong [_ id]
                              (.getOrCreateInternalId this id)))
-          update-kd-tree-fn (fn [kd-tree]
-                              (reduce
-                               (fn [kd-tree coordinates]
-                                 (insert-coordinates kd-tree allocator id->long-id-fn coordinates))
-                               kd-tree
-                               (vals row-id->temporal-coordinates)))]
-      (set! (.kd-tree this) (update-kd-tree-fn kd-tree))))
+          id-exists? (reify Predicate
+                       (test [_ id]
+                         (.containsKey id->internal-id (normalize-id id))))]
+
+      (set! (.kd-tree this) (reduce
+                             (fn [kd-tree coordinates]
+                               (insert-coordinates kd-tree allocator id->long-id-fn id-exists? coordinates))
+                             kd-tree
+                             (.values row-id->temporal-coordinates)))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
@@ -420,8 +425,9 @@
                             pool nil nil nil async-snapshot? compress-temporal-index? block-cache-size)
       (.populateKnownChunks))))
 
-(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^TemporalCoordinates coordinates]
-  (let [id (.applyAsLong id->internal-id (.id coordinates))
+(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^Predicate id-exists? ^TemporalCoordinates coordinates]
+  (let [new-id? (not (.test id-exists? (.id coordinates)))
+        id (.applyAsLong id->internal-id (.id coordinates))
         row-id (.rowId coordinates)
         tx-time-start-ms (.txTimeStart coordinates)
         valid-time-start-ms (.validTimeStart coordinates)
@@ -436,14 +442,15 @@
                     (aset valid-time-start-idx (dec valid-time-end-ms))
                     (aset tx-time-end-idx end-of-time-ms))
         ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-        overlap (-> ^LongStream (kd/kd-tree-range-search
-                                 kd-tree
-                                 min-range
-                                 max-range)
-                    (.mapToObj (reify LongFunction
-                                 (apply [_ x]
-                                   (.getArrayPoint point-access x))))
-                    (.toArray))
+        overlap (when-not new-id?
+                  (-> ^LongStream (kd/kd-tree-range-search
+                                   kd-tree
+                                   min-range
+                                   max-range)
+                      (.mapToObj (reify LongFunction
+                                   (apply [_ x]
+                                     (.getArrayPoint point-access x))))
+                      (.toArray)))
         kd-tree (reduce
                  (fn [kd-tree ^longs point]
                    (kd/kd-tree-delete kd-tree allocator (->copy-range point)))
