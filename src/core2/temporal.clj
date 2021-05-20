@@ -377,20 +377,18 @@
               value-count (alength coordinates)]
           (doseq [col-name columns]
             (let [col-idx (->temporal-column-idx col-name)
-                  out-root (VectorSchemaRoot/create allocator (->temporal-root-schema col-name))
+                  out-root (VectorSchemaRoot/create (->temporal-root-schema col-name) allocator)
                   ^BigIntVector row-id-vec (.getVector out-root 0)
                   ^DenseUnionVector temporal-duv-vec (.getVector out-root 1)
                   ^TimeStampMilliVector temporal-vec (.getVectorByType temporal-duv-vec timestampmilli-type-id)]
               (util/set-value-count row-id-vec value-count)
-              (util/set-value-count temporal-duv-vec value-count)
-              (util/set-value-count temporal-vec value-count)
               (dotimes [n value-count]
                 (let [offset (DenseUnionUtil/writeTypeId temporal-duv-vec n timestampmilli-type-id)
                       ^longs coordinate (aget coordinates n)
                       row-id (aget coordinate row-id-idx)]
                   (.addLong row-id-bitmap-out row-id)
                   (.set row-id-vec n row-id)
-                  (.set temporal-vec n (aget coordinate col-idx))))
+                  (.set temporal-vec offset (aget coordinate col-idx))))
               (util/set-vector-schema-root-row-count out-root value-count)
               (.put roots col-name out-root)))
           (->TemporalRoots (doto row-id-bitmap-out
