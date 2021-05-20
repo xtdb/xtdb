@@ -20,5 +20,7 @@ data class ProjectionSpec(val items: List<Item>) {
                 data class Default(val value: Any): Attribute()
             }
         }
+
+        data class Join(val keyword: Keyword, val spec: ProjectionSpec): Item()
     }
 }

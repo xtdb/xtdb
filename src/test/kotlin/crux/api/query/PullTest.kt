@@ -187,4 +187,87 @@ class PullTest {
                 )
             )
         )
+
+    @Test
+    fun `can join with pull`() =
+        assertThat(
+            db.q {
+                find {
+                    pull(person) {
+                        +nameKey
+                        join(professionKey) {
+                            +nameKey
+                        }
+                    }
+                }
+
+                where {
+                    person has professionKey
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf(
+                    mapOf(
+                        nameKey to "Ivan",
+                        professionKey to mapOf(
+                            nameKey to "Doctor"
+                        )
+                    ),
+                    mapOf(
+                        nameKey to "Petr",
+                        professionKey to mapOf(
+                            nameKey to "Doctor"
+                        )
+                    ),
+                    mapOf(
+                        nameKey to "Sergei",
+                        professionKey to mapOf(
+                            nameKey to "Lawyer"
+                        )
+                    )
+                )
+            )
+        )
+
+    @Test
+    fun `can join all with pull`() =
+        assertThat(
+            db.q {
+                find {
+                    pull(person) {
+                        +nameKey
+                        joinAll(professionKey)
+                    }
+                }
+
+                where {
+                    person has professionKey
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf(
+                    mapOf(
+                        nameKey to "Ivan",
+                        professionKey to mapOf(
+                            cruxId to "doctor",
+                            nameKey to "Doctor"
+                        )
+                    ),
+                    mapOf(
+                        nameKey to "Petr",
+                        professionKey to mapOf(
+                            cruxId to "doctor",
+                            nameKey to "Doctor"
+                        )
+                    ),
+                    mapOf(
+                        nameKey to "Sergei",
+                        professionKey to mapOf(
+                            cruxId to "lawyer",
+                            nameKey to "Lawyer"
+                        )
+                    )
+                )
+            )
+        )
 }

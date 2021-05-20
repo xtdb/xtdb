@@ -10,9 +10,10 @@ fun ProjectionSpec.toEdn() = items.map(Item::toEdn).pv
 
 private val ALL = "*".sym
 
-fun Item.toEdn() = when(this) {
+fun Item.toEdn(): Any = when(this) {
     Item.all -> ALL
     is Item.Field -> listOf(keyword, attributes.toEdn()).pl
+    is Item.Join -> mapOf(keyword to spec.toEdn()).pam
 }
 
 fun Attributes.toEdn() = attributes.map(Attribute::toEdn).toMap().pam
