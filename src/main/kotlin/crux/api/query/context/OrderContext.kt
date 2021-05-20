@@ -6,11 +6,10 @@ import crux.api.query.domain.OrderClause.Direction
 import crux.api.query.domain.OrderClause.Direction.*
 import crux.api.query.domain.QuerySection.OrderSection
 import crux.api.underware.BuilderContext
-import crux.api.underware.BuilderContextCompanion
 import crux.api.underware.SimpleBuilderContext
 
 class OrderContext private constructor(): SimpleBuilderContext<OrderClause, OrderSection>(::OrderSection) {
-    companion object: BuilderContextCompanion<OrderSection, OrderContext>(::OrderContext)
+    companion object: BuilderContext.Companion<OrderSection, OrderContext>(::OrderContext)
 
     private fun add(symbol: Symbol, direction: Direction) = +OrderClause(symbol, direction)
 

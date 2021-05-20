@@ -6,11 +6,10 @@ import crux.api.query.domain.FindClause.AggregateType
 import crux.api.query.domain.FindClause.AggregateType.*
 import crux.api.query.domain.QuerySection.FindSection
 import crux.api.underware.BuilderContext
-import crux.api.underware.BuilderContextCompanion
 import crux.api.underware.SimpleBuilderContext
 
 class FindContext private constructor(): SimpleBuilderContext<FindClause, FindSection>(::FindSection) {
-    companion object: BuilderContextCompanion<FindSection, FindContext>(::FindContext)
+    companion object: BuilderContext.Companion<FindSection, FindContext>(::FindContext)
 
     operator fun FindClause.unaryPlus() = add(this)
 

@@ -1,33 +1,37 @@
 package crux.api.underware
 
-interface BuilderContext<T> {
-    fun build(): T
+interface BuilderContext<TYPE> {
+    abstract class Companion<TYPE, BUILDER: BuilderContext<TYPE>>(val constructor: () -> BUILDER) {
+        fun build(block: BUILDER.() -> Unit) = constructor().also(block).build()
+    }
+
+    fun build(): TYPE
 }
 
-abstract class SimpleBuilderContext<C, T>(
-    private val constructor: (List<C>) -> T
-): BuilderContext<T> {
-    private val clauses = mutableListOf<C>()
+abstract class SimpleBuilderContext<CLAUSE, TYPE>(
+    private val constructor: (List<CLAUSE>) -> TYPE
+): BuilderContext<TYPE> {
+    private val clauses = mutableListOf<CLAUSE>()
 
-    protected fun add(clause: C) {
+    protected fun add(clause: CLAUSE) {
         clauses.add(clause)
     }
 
     override fun build() = constructor(clauses)
 }
 
-abstract class ComplexBuilderContext<C, T>(
-    private val constructor: (List<C>) -> T
-): BuilderContext<T> {
-    private val clauses = mutableListOf<C>()
-    private var hangingClause: C? = null
+abstract class ComplexBuilderContext<CLAUSE, TYPE>(
+    private val constructor: (List<CLAUSE>) -> TYPE
+): BuilderContext<TYPE> {
+    private val clauses = mutableListOf<CLAUSE>()
+    private var hangingClause: CLAUSE? = null
 
-    protected fun add(clause: C) {
+    protected fun add(clause: CLAUSE) {
         lockIn()
         hangingClause = clause
     }
 
-    protected fun replace(clause: C) {
+    protected fun replace(clause: CLAUSE) {
         hangingClause = clause
     }
 
@@ -36,12 +40,8 @@ abstract class ComplexBuilderContext<C, T>(
         hangingClause = null
     }
 
-    override fun build(): T {
+    override fun build(): TYPE {
         lockIn()
         return constructor(clauses)
     }
-}
-
-abstract class BuilderContextCompanion<T, B: BuilderContext<T>>(val constructor: () -> B) {
-    fun build(block: B.() -> Unit) = constructor().also(block).build()
 }

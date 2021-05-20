@@ -10,7 +10,7 @@ import crux.api.query.domain.WhereClause.Predicate.Type.*
 import crux.api.underware.*
 
 class WhereContext private constructor(): ComplexBuilderContext<WhereClause, WhereSection>(::WhereSection) {
-    companion object: BuilderContextCompanion<WhereSection, WhereContext>(::WhereContext)
+    companion object: BuilderContext.Companion<WhereSection, WhereContext>(::WhereContext)
 
     operator fun WhereClause.unaryPlus() = add(this)
 
