@@ -1,10 +1,10 @@
 (ns core2.expression-test
   (:require [clojure.test :as t]
+            [core2.core :as c2]
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]
             [core2.test-util :as tu]
-            [core2.types :as ty]
-            [core2.util :as util])
+            [core2.types :as ty])
   (:import org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.types.Types$MinorType))
 
@@ -126,3 +126,25 @@
                         "_valid-time-start" (expr/form->expr '(<= ?vt _vt-time-start))
                         "_valid-time-end" (expr/form->expr '(> ?vt _vt-time-end))}
                        '{?tt #inst "2019" ?vt #inst "2018"}))))))
+
+(t/deftest test-date-trunc
+  (with-open [node (c2/start-node {})]
+    (c2/await-tx node @(c2/submit-tx node [{:op :put, :doc {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}}]))
+    (with-open [db (c2/open-db node)]
+      (t/is (= [{:trunc #inst "2021-01-21"}]
+               (into [] (c2/plan-q db '[:project [{trunc (date-trunc "DAY" date)}]
+                                        [:scan [date]]]))))
+
+      (t/is (= [{:trunc #inst "2021-01-21T12:34"}]
+               (into [] (c2/plan-q db '[:project [{trunc (date-trunc "MINUTE" date)}]
+                                        [:scan [date]]]))))
+
+      (t/is (= [{:trunc #inst "2021-01-21"}]
+               (into [] (c2/plan-q db '[:select (> trunc #inst "2021")
+                                        [:project [{trunc (date-trunc "DAY" date)}]
+                                         [:scan [date]]]]))))
+
+      (t/is (= [{:trunc #inst "2021-01-21"}]
+               (into [] (c2/plan-q db '[:project [{trunc (date-trunc "DAY" trunc)}]
+                                        [:project [{trunc (date-trunc "MINUTE" date)}]
+                                         [:scan [date]]]])))))))

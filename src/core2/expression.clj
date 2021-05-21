@@ -430,8 +430,7 @@
 (defmethod codegen-call [:date-trunc String Date] [{[{field :literal} {x :code}] :args}]
   {:code `(Date/from (.truncatedTo (Instant/ofEpochMilli ~x)
                                    ~(case field
-                                      "YEAR" `ChronoUnit/YEARS
-                                      "MONTH" `ChronoUnit/MONTHS
+                                      ;; can't truncate instants to years/months
                                       "DAY" `ChronoUnit/DAYS
                                       "HOUR" `ChronoUnit/HOURS
                                       "MINUTE" `ChronoUnit/MINUTES
