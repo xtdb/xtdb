@@ -303,6 +303,8 @@
 
   (finishChunk [this]
     (when-not (.isEmpty live-roots)
+      (log/debugf "finishing chunk '%x', tx '%s'" (.chunk-idx watermark) (pr-str (.latestCompletedTx this)))
+
       (try
         (let [chunk-idx (.chunk-idx watermark)]
           @(CompletableFuture/allOf (->> (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
@@ -319,6 +321,7 @@
               (remove-closed-watermarks open-watermarks)
               (finally
                 (.unlock open-watermarks-lock stamp)))))
+        (log/debug "finished chunk.")
         (finally
           (.closeCols this)))))
 
