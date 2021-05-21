@@ -15,7 +15,8 @@
             [core2.operator.rename :as rename]
             [core2.operator.set :as set-op]
             [core2.operator.join :as join]
-            [core2.error :as err])
+            [core2.error :as err]
+            [core2.operator.csv :as csv])
   (:import clojure.lang.MapEntry
            core2.data_source.IQueryDataSource
            [core2.operator.set ICursorFactory IFixpointCursorFactory]))
@@ -88,6 +89,11 @@
                                                     :srcs (keys srcs)}))))]
     (fn [allocator]
       (table/->table-cursor allocator rows))))
+
+(defmethod emit-op :csv [[_ {:keys [path col-types]}] _srcs]
+  (fn [allocator]
+    (csv/->csv-cursor allocator path
+                      (into {} (map (juxt (comp name key) val)) col-types))))
 
 (defn- unary-op [relation srcs f]
   (let [inner-f (emit-op relation srcs)]

@@ -1,7 +1,9 @@
 (ns core2.logical-plan
   (:require [clojure.spec.alpha :as s]
             [core2.expression :as expr]
-            [core2.expression.temporal]))
+            [core2.expression.temporal]
+            [core2.system :as sys]
+            [core2.types :as types]))
 
 ;; Partly based on
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
@@ -27,8 +29,14 @@
                                          :min-count 1)))
 
 (s/def ::table (s/cat :op #{:table}
-                      :table (s/or :rows (s/coll-of (s/map-of ::named any?))
+                      :table (s/or :rows (s/coll-of (s/map-of ::column any?))
                                    :source ::source)))
+
+(s/def ::csv-col-type types/primitive-types)
+
+(s/def ::csv (s/cat :op #{:csv}
+                    :path ::sys/path
+                    :col-types (s/? (s/map-of ::column ::csv-col-type))))
 
 (s/def ::project (s/cat :op #{:π :pi :project}
                         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
@@ -109,6 +117,7 @@
 (s/def ::ra-expression (s/or :relation ::relation
                              :scan ::scan
                              :table ::table
+                             :csv ::csv
                              :project ::project
                              :select ::select
                              :rename ::rename
