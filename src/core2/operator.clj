@@ -1,22 +1,23 @@
 (ns core2.operator
   (:require [clojure.spec.alpha :as s]
             core2.data-source
+            [core2.error :as err]
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
             [core2.expression.temporal :as expr.temp]
             [core2.logical-plan :as lp]
+            [core2.operator.arrow :as arrow]
+            [core2.operator.csv :as csv]
             [core2.operator.group-by :as group-by]
+            [core2.operator.join :as join]
             [core2.operator.order-by :as order-by]
             [core2.operator.project :as project]
-            [core2.operator.table :as table]
-            [core2.util :as util]
-            [core2.operator.slice :as slice]
-            [core2.operator.select :as select]
             [core2.operator.rename :as rename]
+            [core2.operator.select :as select]
             [core2.operator.set :as set-op]
-            [core2.operator.join :as join]
-            [core2.error :as err]
-            [core2.operator.csv :as csv])
+            [core2.operator.slice :as slice]
+            [core2.operator.table :as table]
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.data_source.IQueryDataSource
            [core2.operator.set ICursorFactory IFixpointCursorFactory]))
@@ -94,6 +95,10 @@
   (fn [allocator]
     (csv/->csv-cursor allocator path
                       (into {} (map (juxt (comp name key) val)) col-types))))
+
+(defmethod emit-op :arrow [[_ {:keys [path]}] _srcs]
+  (fn [allocator]
+    (arrow/->arrow-cursor allocator path)))
 
 (defn- unary-op [relation srcs f]
   (let [inner-f (emit-op relation srcs)]

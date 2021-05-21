@@ -1,10 +1,11 @@
-(ns core2.operator.csv-test
+(ns core2.operator.external-data-test
   (:require [core2.operator.csv :as csv]
             [clojure.test :as t]
             [clojure.java.io :as io]
             [core2.test-util :as tu]
             [clojure.spec.alpha :as s]
-            [core2.system :as sys]))
+            [core2.system :as sys]
+            [core2.operator.arrow :as arrow]))
 
 (t/use-fixtures :once tu/with-allocator)
 
@@ -22,4 +23,9 @@
                                         "a-double" :float8
                                         "an-inst" :timestampmilli}
                                        {:batch-size 3})]
+    (t/is (= example-data (into [] (tu/<-cursor cursor))))))
+
+(t/deftest test-arrow-cursor
+  (with-open [cursor (arrow/->arrow-cursor tu/*allocator*
+                                           (s/conform ::sys/path (.toURI (io/resource "core2/operator/arrow-cursor-test.arrow"))))]
     (t/is (= example-data (into [] (tu/<-cursor cursor))))))

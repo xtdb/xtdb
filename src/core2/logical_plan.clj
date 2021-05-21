@@ -38,6 +38,9 @@
                     :path ::sys/path
                     :col-types (s/? (s/map-of ::column ::csv-col-type))))
 
+(s/def ::arrow (s/cat :op #{:arrow}
+                      :path ::sys/path))
+
 (s/def ::project (s/cat :op #{:π :pi :project}
                         :projections (s/coll-of (s/or :column ::column :extend ::column-expression) :min-count 1)
                         :relation ::ra-expression))
@@ -118,6 +121,7 @@
                              :scan ::scan
                              :table ::table
                              :csv ::csv
+                             :arrow ::arrow
                              :project ::project
                              :select ::select
                              :rename ::rename
