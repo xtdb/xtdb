@@ -9,6 +9,7 @@
 
 (defn device-info-csv->doc [[device-id api-version manufacturer model os-name]]
   {:_id (str "device-info-" device-id)
+   :device-id device-id
    :api-version api-version
    :manufacturer manufacturer
    :model model
@@ -23,7 +24,7 @@
           (-> time
               (str/replace " " "T")
               (str/replace #"-(\d\d)$" ".000-$1:00")))
-   :device-id (str "device-info-" device-id)
+   :device-id device-id
    :battery-level (Double/parseDouble battery-level)
    :battery-status battery-status
    :battery-temperature (Double/parseDouble battery-temperature)
@@ -73,10 +74,73 @@
              readings (map readings-csv->doc (csv/read-csv readings-rdr))
              [initial-readings rest-readings] (split-at (count device-infos) readings)]
 
-         @(->> (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                 {:op :put
-                  :doc doc})
+         @(->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
+                 (cond-> {:op :put
+                          :doc doc}
+                   time (assoc :_valid-time-start time)))
                (partition-all batch-size)
                (reduce (fn [_acc tx-ops]
                          (c2/submit-tx tx-producer tx-ops))
                        nil)))))))
+
+(comment
+  (submit-ts-devices dev/node :small))
+
+(def query-recent-battery-temperatures
+  ;; SELECT time, device_id, battery_temperature
+  ;; FROM readings
+  ;; WHERE battery_status = 'charging'
+  ;; ORDER BY time DESC
+  ;; LIMIT 10;
+
+  '[:slice {:limit 10}
+    [:order-by [{time :desc}]
+     [:project [time device-id battery-temperature]
+      [:scan [time device-id battery-temperature
+              {battery-status (= battery-status "discharging")}]]]]])
+
+(def query-busiest-low-battery-devices
+  ;; SELECT time, readings.device_id, cpu_avg_1min,
+  ;;        battery_level, battery_status, device_info.model
+  ;; FROM readings
+  ;;   JOIN device_info ON readings.device_id = device_info.device_id
+  ;; WHERE battery_level < 33 AND battery_status = 'discharging'
+  ;; ORDER BY cpu_avg_1min DESC, time DESC
+  ;; LIMIT 5;
+
+  '[:slice {:limit 5}
+    [:order-by [{cpu-avg-1min :desc}
+                {time :desc}]
+     [:join {device-id device-id}
+      [:scan [device-id time cpu-avg-1min
+              {battery-level (< battery-level 30)}
+              {battery-status (= battery-status "discharging")}]]
+      [:scan [device-id model]]]]])
+
+(def query-min-max-battery-levels-per-hour
+  ;; SELECT DATE_TRUNC('hour', time) "hour",
+  ;;        MIN(battery_level) min_battery_level,
+  ;;        MAX(battery_level) max_battery_level
+  ;; FROM readings r
+  ;; WHERE r.device_id IN (SELECT DISTINCT device_id FROM device_info
+  ;;                       WHERE model = 'pinto' OR model = 'focus')
+  ;; GROUP BY "hour"
+  ;; ORDER BY "hour" ASC
+  ;; LIMIT 12;
+
+  '[:slice {:limit 12}
+    [:order-by [{hour :asc}]
+     [:group-by [hour
+                 {min-battery-level (min battery-level)}
+                 {max-battery-level (max battery-level)}]
+      [:project [{hour (date-trunc "HOUR" time)}
+                 battery-level]
+       [:semi-join {device-id device-id}
+        [:scan [device-id time battery-level]]
+        [:scan [device-id {model (or (= model "pinto")
+                                     (= model "focus"))}]]]]]]])
+
+(comment
+  (time
+   (with-open [db (c2/open-db dev/node)]
+     (into [] (c2/plan-q db query-recent-battery-temperatures)))))

@@ -2,9 +2,9 @@
   (:require [clojure.string :as str]
             core2.operator.project
             core2.operator.select
+            [core2.relation :as rel]
             [core2.types :as types]
-            [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.util :as util])
   (:import clojure.lang.MapEntry
            core2.operator.project.ProjectionSpec
            [core2.operator.select IColumnSelector IRelationSelector]
@@ -13,10 +13,10 @@
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
            [java.time Duration Instant ZoneOffset]
-           java.time.temporal.ChronoField
+           [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
-           org.roaringbitmap.RoaringBitmap
-           org.apache.arrow.vector.types.Types$MinorType))
+           org.apache.arrow.vector.types.Types$MinorType
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -426,6 +426,17 @@
                    "HOUR" `ChronoField/HOUR_OF_DAY
                    "MINUTE" `ChronoField/MINUTE_OF_HOUR))
    :return-type Long})
+
+(defmethod codegen-call [:date-trunc String Date] [{[{field :literal} {x :code}] :args}]
+  {:code `(Date/from (.truncatedTo (Instant/ofEpochMilli ~x)
+                                   ~(case field
+                                      "YEAR" `ChronoUnit/YEARS
+                                      "MONTH" `ChronoUnit/MONTHS
+                                      "DAY" `ChronoUnit/DAYS
+                                      "HOUR" `ChronoUnit/HOURS
+                                      "MINUTE" `ChronoUnit/MINUTES
+                                      "SECOND" `ChronoUnit/SECONDS)))
+   :return-type Date})
 
 (doseq [^Method method (.getDeclaredMethods Math)
         :let [math-op (.getName method)
