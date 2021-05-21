@@ -213,8 +213,8 @@
              Double `(.getDouble ~variable ~idx-sym)
              String `(.getBuffer ~variable ~idx-sym)
              types/byte-array-class `(.getBuffer ~variable ~idx-sym)
-             Date `(.getDate ~variable ~idx-sym)
-             Duration `(.getDuration ~variable ~idx-sym)
+             Date `(.getDateMillis ~variable ~idx-sym)
+             Duration `(.getDurationMillis ~variable ~idx-sym)
              `(normalize-union-value (.getObject ~variable ~idx-sym)))
      :return-type var-type}))
 
@@ -428,13 +428,13 @@
    :return-type Long})
 
 (defmethod codegen-call [:date-trunc String Date] [{[{field :literal} {x :code}] :args}]
-  {:code `(Date/from (.truncatedTo (Instant/ofEpochMilli ~x)
-                                   ~(case field
-                                      ;; can't truncate instants to years/months
-                                      "DAY" `ChronoUnit/DAYS
-                                      "HOUR" `ChronoUnit/HOURS
-                                      "MINUTE" `ChronoUnit/MINUTES
-                                      "SECOND" `ChronoUnit/SECONDS)))
+  {:code `(.toEpochMilli (.truncatedTo (Instant/ofEpochMilli ~x)
+                                       ~(case field
+                                          ;; can't truncate instants to years/months
+                                          "DAY" `ChronoUnit/DAYS
+                                          "HOUR" `ChronoUnit/HOURS
+                                          "MINUTE" `ChronoUnit/MINUTES
+                                          "SECOND" `ChronoUnit/SECONDS)))
    :return-type Date})
 
 (doseq [^Method method (.getDeclaredMethods Math)
@@ -495,10 +495,10 @@
   {Boolean '.appendBool
    Long '.appendLong
    Double '.appendDouble
-   String '.appendStringBuffer
+   String '.appendString
    types/byte-array-class '.appendBuffer
-   Date '.appendDate
-   Duration '.appendDuration})
+   Date '.appendDateMillis
+   Duration '.appendDurationMillis})
 
 (def ^:private return-type->minor-type-sym
   {Boolean `Types$MinorType/BIT

@@ -137,7 +137,6 @@ Two main extension points:
 
 Clean up:
 - TODO remaining late-mat optimisations
-  - asymmetry of Dates?
   - confirm effect of using extra heap - can we reduce this?
   - reduce footprint of LinkedHashMap implementation detail
 - Parameterisation

@@ -12,10 +12,9 @@ public interface IAppendColumn extends AutoCloseable {
     void appendBool(boolean bool);
     void appendDouble(double dbl);
     void appendLong(long lng);
-    void appendDate(Date date);
-    void appendDuration(Duration duration);
-    void appendString(String s);
-    void appendStringBuffer(ByteBuffer buf);
+    void appendDateMillis(long date);
+    void appendDurationMillis(long millis);
+    void appendString(ByteBuffer buf);
     void appendBytes(ByteBuffer buf);
     void appendObject(Object obj);
 

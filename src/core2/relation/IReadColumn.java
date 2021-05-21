@@ -14,8 +14,8 @@ public interface IReadColumn extends AutoCloseable {
 
     boolean getBool(int idx);
     long getLong(int idx);
-    long getDate(int idx);
-    long getDuration(int idx);
+    long getDateMillis(int idx);
+    long getDurationMillis(int idx);
     double getDouble(int idx);
     ByteBuffer getBuffer(int idx);
     Object getObject(int idx);
