@@ -3795,11 +3795,11 @@
              (-> (q/query-plan-for (api/db *api*) query)
                  :vars-in-join-order)))))
 
-(defn- date->inverted-long [d]
+(defn- date->inverted-long [^Date d]
   (* -1 (.getTime d)))
 
 (defn- inverted-long->date [l]
-  (Date. (* -1 l)))
+  (Date. ^Long (* -1 l)))
 
 (t/deftest range-constraint-ordering-behaviours
   (fix/transact!
@@ -3891,3 +3891,34 @@
                    #inst "2021-05-19T00:00:00.000-00:00"
                    #inst "2021-05-17T00:00:00.000-00:00")
                  (map (comp inverted-long->date first) (iterator-seq res))))))))
+
+(t/deftest in-selectivity-join-slowdown-1447
+  (fix/transact! *api* (fix/people
+                        (for [n (range 1000)]
+                          {:crux.db/id (keyword (str "ivan-" n))
+                           :my-name "Ivan"
+                           :my-surname "Ivanov"
+                           :my-number n})))
+
+  (let [acceptable-limit-slowdown 0.7
+        problematic-ns-start (System/nanoTime)]
+    (t/is (= 4 (count (api/q (api/db *api*)
+                                '{:find [e1]
+                                  :in [[n ...] name surname]
+                                  :where [[e1 :my-name name]
+                                          [e1 :my-surname surname]
+                                          [e1 :my-number n]]}
+                                [20 40 60 80] "Ivan" "Ivanov"))))
+    (let [problematic-ns (- (System/nanoTime) problematic-ns-start)
+          workedaround-ns-start (System/nanoTime)]
+      (t/is (= 4 (count (api/q (api/db *api*)
+                                  '{:find [e1]
+                                    :in [[n ...]]
+                                    :where [[e1 :my-name "Ivan"]
+                                            [e1 :my-surname "Ivanov"]
+                                            [e1 :my-number n]]}
+                                  [20 40 60 80]))))
+      (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
+            slowdown (double (/ (min problematic-ns workedaround-ns)
+                                (max problematic-ns workedaround-ns)))]
+        (t/is (>= slowdown acceptable-limit-slowdown))))))
