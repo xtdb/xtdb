@@ -58,7 +58,8 @@
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (validate-tx-ops tx-ops)
-  (let [put-k-types (->doc-k-types tx-ops)
+  (let [tx-ops (vec tx-ops)
+        put-k-types (->doc-k-types tx-ops)
         document-field (apply t/->field "document" (.getType Types$MinorType/STRUCT) false
                               (for [[k v-types] put-k-types]
                                 (->doc-field k v-types)))
