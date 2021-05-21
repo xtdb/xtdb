@@ -150,10 +150,6 @@ Clean up:
 Should have:
 - External sort in query engine
 - We don't currently coalesce small intermediate blocks in the query engine
-- DONE Parameters beyond table-operator - override values in expressions without recompiling.
-  - DONE Change TPC-H queries to use parameters.
-- Bringing external CSV/Arrow into Core2?
-  - Will need to remove assumptions around type-ids in the logical plan/query engine
 - Support lists/cardinality-many? Requires discussion
 - Reconstructing the log - storage of incoming transactions in object store
 - Tx fns?
