@@ -3,11 +3,13 @@
             [core2.system :as sys]
             [core2.util :as util])
   (:import core2.object_store.ObjectStore
+           core2.LRU
            clojure.lang.MapEntry
            java.io.Closeable
            [java.nio.file Files Path]
            java.util.concurrent.CompletableFuture
            java.util.concurrent.locks.StampedLock
+           java.util.function.BiPredicate
            [java.util Map Map$Entry LinkedHashMap UUID]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]))
 
@@ -85,14 +87,14 @@
                     (.capacity buffer)))) )
 
 (defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size ^Path cache-path]
-  (proxy [LinkedHashMap] [16 0.75 true]
-    (removeEldestEntry [entry]
-      (let [entries-size (.size ^Map this)]
-        (if (or (> entries-size cache-entries-size)
-                (and (> entries-size 1) (> (buffer-cache-bytes-size this) cache-bytes-size)))
-          (do (util/try-close (.getValue ^Map$Entry entry))
-              true)
-          false)))))
+  (LRU. 16 (reify BiPredicate
+             (test [_ map entry]
+               (let [entries-size (.size ^Map map)]
+                 (if (or (> entries-size cache-entries-size)
+                         (and (> entries-size 1) (> (buffer-cache-bytes-size map) cache-bytes-size)))
+                   (do (util/try-close (.getValue ^Map$Entry entry))
+                       true)
+                   false))))))
 
 (defn ->buffer-pool {::sys/deps {:allocator :core2/allocator
                                  :object-store :core2/object-store}
