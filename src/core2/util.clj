@@ -267,26 +267,6 @@
 
      (VectorSchemaRoot. acc))))
 
-(defn slice-root-to
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot in-root, ^VectorSchemaRoot out-root]
-   (slice-root-to in-root 0 out-root))
-
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot in-root, ^long start-idx, ^VectorSchemaRoot out-root]
-   (slice-root-to in-root start-idx (- (.getRowCount in-root) start-idx) out-root))
-
-  (^org.apache.arrow.vector.VectorSchemaRoot [^VectorSchemaRoot in-root, ^long start-idx, ^long len, ^VectorSchemaRoot out-root]
-   (.clear out-root)
-
-   (let [num-fields (root-field-count in-root)
-         len (min (.getRowCount in-root) len)]
-     (dotimes [n num-fields]
-       (let [in-vec (.getVector in-root n)
-             out-vec (.getVector out-root n)]
-         (doto (.makeTransferPair in-vec out-vec)
-           (.splitAndTransfer start-idx len))))
-     (doto out-root
-       (set-vector-schema-root-row-count len)))))
-
 (defn build-arrow-ipc-byte-buffer ^java.nio.ByteBuffer {:style/indent 2}
   [^VectorSchemaRoot root ipc-type f]
 
