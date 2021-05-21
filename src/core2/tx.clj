@@ -12,7 +12,7 @@
   (close [_]
     (let [thread (Thread/currentThread)]
       (when-let [^AtomicInteger thread-ref-count (.get thread->count thread)]
-        (when (zero? (util/dec-ref-count thread-ref-count))
+        (when (zero? (.decrementAndGet thread-ref-count))
           (.remove thread->count thread)))
       (when (zero? (util/dec-ref-count ref-count))
         (util/try-close temporal-watermark)
