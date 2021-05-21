@@ -483,24 +483,9 @@
       (try-close cursor)
       (try-close closeable))))
 
-(defn maybe-single-child-dense-union ^org.apache.arrow.vector.ValueVector [^ValueVector v]
-  (or (when (instance? DenseUnionVector v)
-        (let [children-with-elements (for [^ValueVector child (.getChildrenFromFields ^DenseUnionVector v)
-                                           :when (pos? (.getValueCount child))]
-                                       child)]
-          (when (= 1 (count children-with-elements))
-            (first children-with-elements))))
-      v))
-
 (defn element-addressable-vector? [^ValueVector v]
   (and (instance? ElementAddressableVector v)
        (not (instance? BitVector v))))
-
-(defn vector-at-index ^org.apache.arrow.vector.ValueVector [^ValueVector v ^long idx]
-  (if (instance? DenseUnionVector v)
-    (let [^DenseUnionVector v v]
-      (.getVectorByType v (.getTypeId v idx)))
-    v))
 
 (defn pointer-or-object
   ([^ValueVector v ^long idx]
@@ -525,15 +510,6 @@
       (.setBytes buffer-copy 0 (.getBuf x) (.getOffset x) length)
       (ArrowBufPointer. buffer-copy 0 length))
     x))
-
-(defn copy-tuple [^VectorSchemaRoot in-root ^long idx ^VectorSchemaRoot out-root ^long out-idx]
-  (dotimes [n (root-field-count in-root)]
-    (let [in-vec (.getVector in-root n)
-          out-vec (.getVector out-root (.getName in-vec))]
-      (if (and (instance? DenseUnionVector in-vec)
-               (instance? DenseUnionVector out-vec))
-        (DenseUnionUtil/copyIdxSafe in-vec idx out-vec out-idx)
-        (.copyFromSafe out-vec idx out-idx in-vec)))))
 
 (defn ->region-allocator
   (^org.apache.arrow.memory.BufferAllocator []

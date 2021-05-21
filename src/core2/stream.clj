@@ -159,6 +159,15 @@
 (defprotocol PSpliterator
   (->spliterator [this]))
 
+(defn- maybe-single-child-dense-union ^org.apache.arrow.vector.ValueVector [^ValueVector v]
+  (or (when (instance? DenseUnionVector v)
+        (let [children-with-elements (for [^ValueVector child (.getChildrenFromFields ^DenseUnionVector v)
+                                           :when (pos? (.getValueCount child))]
+                                       child)]
+          (when (= 1 (count children-with-elements))
+            (first children-with-elements))))
+      v))
+
 (extend-protocol PSpliterator
   ValueVector
   (->spliterator [this]
@@ -166,7 +175,7 @@
 
   DenseUnionVector
   (->spliterator [this]
-    (let [v (util/maybe-single-child-dense-union this)]
+    (let [v (maybe-single-child-dense-union this)]
       (if (instance? DenseUnionVector v)
         (->ValueVectorSpliterator this 0 (.getValueCount this) default-characteristics)
         (->spliterator v))))
