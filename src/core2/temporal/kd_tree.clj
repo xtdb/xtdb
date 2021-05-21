@@ -870,21 +870,21 @@
       (.clear root))))
 
 (definterface IBlockManager
-  (^org.apache.arrow.vector.complex.FixedSizeListVector getRoot [^int block-idx]))
+  (^org.apache.arrow.vector.complex.FixedSizeListVector getBlockVector [^int block-idx]))
 
 (deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask ^boolean deletes?]
   IKdTreePointAccess
   (getPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
       (.getObject point-vec idx)))
 
   (getArrayPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)
+          root (.getBlockVector kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           k (.getListSize point-vec)
           point (long-array k)
@@ -896,13 +896,13 @@
   (getCoordinate [_ idx axis]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
       (.get ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis))))
 
   (setCoordinate [_ idx axis value]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
       (.set ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis) value)))
 
   (swapPoint [_ from-idx to-idx]
@@ -910,8 +910,8 @@
           from-idx (bit-and from-idx batch-mask)
           to-block-idx (unsigned-bit-shift-right to-idx batch-shift)
           to-idx (bit-and to-idx batch-mask)
-          ^FixedSizeListVector from-point-vec (.getRoot kd-tree from-block-idx)
-          ^FixedSizeListVector to-point-vec (.getRoot kd-tree to-block-idx)
+          ^FixedSizeListVector from-point-vec (.getBlockVector kd-tree from-block-idx)
+          ^FixedSizeListVector to-point-vec (.getBlockVector kd-tree to-block-idx)
           _ (when deletes?
               (let [tmp (.isNull to-point-vec to-idx)]
                 (if (.isNull from-point-vec from-idx)
@@ -935,14 +935,14 @@
     (if deletes?
       (let [block-idx (unsigned-bit-shift-right idx batch-shift)
             idx (bit-and idx batch-mask)
-            ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
+            ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
         (.isNull point-vec idx))
       false))
 
   (isInRange [_ idx min-range max-range]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
           k (.getListSize point-vec)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           element-start-idx (.getElementStartIndex point-vec idx)]
@@ -970,7 +970,7 @@
                          ^boolean deletes?
                          ^Function root-fn]
   IBlockManager
-  (getRoot [this block-idx]
+  (getBlockVector [this block-idx]
     (if (= block-idx latest-block-idx)
       latest-block
       (let [root (.computeIfAbsent block-cache block-idx root-fn)]
