@@ -1,6 +1,8 @@
 (ns core2.tx
-  (:require [core2.util :as util])
+  (:require [clojure.tools.logging :as log]
+            [core2.util :as util])
   (:import [java.util Date Map SortedMap]
+           java.util.function.IntUnaryOperator
            [java.util.concurrent.atomic AtomicInteger]
            [java.io Closeable]))
 
@@ -14,7 +16,19 @@
       (when-let [^AtomicInteger thread-ref-count (.get thread->count thread)]
         (when (zero? (.decrementAndGet thread-ref-count))
           (.remove thread->count thread)))
-      (when (zero? (util/dec-ref-count ref-count))
-        (util/try-close temporal-watermark)
-        (doseq [root (vals column->root)]
-          (util/try-close root))))))
+
+      (let [new-ref-count (.updateAndGet ^AtomicInteger ref-count
+                                         (reify IntUnaryOperator
+                                           (applyAsInt [_ x]
+                                             (if (pos? x)
+                                               (dec x)
+                                               -1))))]
+        (cond
+          (neg? new-ref-count)
+          (do (.set ref-count 0)
+              (log/warn "watermark ref count has gone negative:" new-ref-count))
+
+          (zero? new-ref-count)
+          (do (util/try-close temporal-watermark)
+              (doseq [root (vals column->root)]
+                (util/try-close root))))))))
