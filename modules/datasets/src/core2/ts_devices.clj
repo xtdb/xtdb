@@ -4,8 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [core2.core :as c2])
-  (:import java.net.URL
-           java.util.zip.GZIPInputStream))
+  (:import java.util.zip.GZIPInputStream))
 
 (defn device-info-csv->doc [[device-id api-version manufacturer model os-name]]
   {:_id (str "device-info-" device-id)
@@ -38,19 +37,11 @@
    :ssid ssid})
 
 (defn local-ts-devices-file [size file]
-  (when-let [^URL this-ns (io/resource "core2/ts_devices.clj")]
-    (when (= "file" (.getProtocol this-ns))
-      (let [file (-> (io/file (io/as-file this-ns) "../../.."
-                              "data/ts-devices"
-                              (name size)
-                              (format "devices_%s_%s.csv.gz"
-                                      (name size)
-                                      (case file
-                                        :readings "readings"
-                                        :device-info "device_info")))
-                     .getCanonicalFile)]
-        (when (.exists file)
-          file)))))
+  (io/resource (format "ts-devices/small/devices_%s_%s.csv.gz"
+                       (name size)
+                       (case file
+                         :readings "readings"
+                         :device-info "device_info"))))
 
 (defn gz-reader ^java.io.Reader [file]
   (-> (io/input-stream file)

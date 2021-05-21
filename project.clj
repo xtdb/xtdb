@@ -39,6 +39,7 @@
              ;; TODO debate best way to multi-module this
              ;; for now, I just want to ensure they're sufficiently isolated
              :datasets {:source-paths ["modules/datasets/src"]
+                        :resource-paths ["modules/datasets/data"]
                         :dependencies [[io.airlift.tpch/tpch "0.10"]
                                        [org.clojure/data.csv "1.0.0"]
                                        [software.amazon.awssdk/s3 "2.10.91"]]}
