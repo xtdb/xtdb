@@ -6,15 +6,14 @@
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [clojure.lang IFn$LLO IFn$LL]
-           [java.util ArrayDeque ArrayList Arrays Collection Comparator Date Deque HashMap
-            IdentityHashMap LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
-            Spliterator Spliterator$OfInt Spliterator$OfLong Spliterators]
+           [java.util ArrayDeque Deque HashMap
+            LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
+            Spliterator Spliterator$OfLong Spliterators]
            [java.util.function Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
-           [org.apache.arrow.vector BitVectorHelper BigIntVector BufferLayout IntVector TinyIntVector
-            VectorLoader VectorSchemaRoot]
-           [org.apache.arrow.vector.complex FixedSizeListVector StructVector]
+           [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
+           org.apache.arrow.vector.complex.FixedSizeListVector
            [org.apache.arrow.vector.types.pojo ArrowType$FixedSizeList Field Schema]
            [org.apache.arrow.vector.types Types$MinorType]
            org.apache.arrow.vector.ipc.ArrowFileWriter
