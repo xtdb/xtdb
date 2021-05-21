@@ -1,7 +1,7 @@
 (ns core2.blocks
-  (:require [core2.util :as util]
-            [core2.types :as t])
-  (:import core2.IChunkCursor
+  (:require [core2.types :as t]
+            [core2.util :as util])
+  (:import core2.ICursor
            [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
 
 (deftype SliceCursor [^VectorSchemaRoot root
@@ -9,9 +9,7 @@
                       ^:unsynchronized-mutable ^long start-row-id
                       ^:unsynchronized-mutable ^int start-idx
                       ^:unsynchronized-mutable ^VectorSchemaRoot current-slice]
-  IChunkCursor
-  (getSchema [_] (.getSchema root))
-
+  ICursor
   (tryAdvance [this c]
     (when current-slice
       (.close current-slice)
@@ -42,5 +40,5 @@
     (when current-slice
       (.close current-slice))))
 
-(defn ->slices ^core2.IChunkCursor [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
+(defn ->slices ^core2.ICursor [^VectorSchemaRoot root, ^long start-row-id, ^long max-rows-per-block]
   (SliceCursor. root max-rows-per-block start-row-id 0 nil))

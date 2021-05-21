@@ -2,9 +2,9 @@
   (:require [clojure.set :as set]
             [clojure.string :as str]
             [core2.operator.scan :as scan]
-            [core2.util :as util]
-            [core2.relation :as rel])
-  (:import [core2 IChunkCursor ICursor]
+            [core2.relation :as rel]
+            [core2.util :as util])
+  (:import core2.ICursor
            [core2.relation IReadColumn IReadRelation]
            [java.util LinkedHashMap Map]
            java.util.function.Consumer))

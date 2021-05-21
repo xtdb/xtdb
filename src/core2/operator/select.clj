@@ -1,7 +1,7 @@
 (ns core2.operator.select
-  (:require [core2.util :as util]
-            [core2.relation :as rel])
-  (:import [core2 IChunkCursor ICursor]
+  (:require [core2.relation :as rel]
+            [core2.util :as util])
+  (:import core2.ICursor
            core2.relation.IReadRelation
            java.util.function.Consumer))
 
@@ -13,7 +13,7 @@
 (definterface IColumnSelector
   (^org.roaringbitmap.RoaringBitmap select [^core2.relation.IReadColumn in-col]))
 
-(deftype SelectCursor [^IChunkCursor in-cursor
+(deftype SelectCursor [^ICursor in-cursor
                        ^IRelationSelector selector]
   ICursor
   (tryAdvance [_ c]

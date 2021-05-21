@@ -9,7 +9,7 @@
             [core2.types :as t]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           [core2 DenseUnionUtil IChunkCursor]
+           [core2 DenseUnionUtil ICursor]
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal ITemporalManager TemporalCoordinates]
@@ -287,7 +287,7 @@
             chunk-idx (.chunk-idx watermark)]
         (util/build-arrow-ipc-byte-buffer write-root :file
           (fn [write-batch!]
-            (with-open [^IChunkCursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
+            (with-open [^ICursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
               (.forEachRemaining slices
                                  (reify Consumer
                                    (accept [_ sliced-root]

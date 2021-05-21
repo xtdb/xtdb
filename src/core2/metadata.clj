@@ -12,7 +12,7 @@
   (:import core2.buffer_pool.IBufferPool
            core2.object_store.ObjectStore
            core2.tx.Watermark
-           core2.IChunkCursor
+           core2.ICursor
            java.io.Closeable
            [java.util Date HashMap List Map SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
@@ -144,7 +144,7 @@
                (.setIndexDefined min-vec column-idx)
                (.setIndexDefined max-vec column-idx)
 
-               (with-open [^IChunkCursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
+               (with-open [^ICursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
                  (let [start-block-idx (.startNewValue blocks-vec column-idx)
 
                        ^long end-block-idx

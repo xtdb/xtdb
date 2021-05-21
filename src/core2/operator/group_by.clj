@@ -1,7 +1,7 @@
 (ns core2.operator.group-by
-  (:require [core2.util :as util]
-            [core2.relation :as rel])
-  (:import [core2 IChunkCursor ICursor]
+  (:require [core2.relation :as rel]
+            [core2.util :as util])
+  (:import core2.ICursor
            core2.relation.IReadRelation
            [java.util ArrayList Comparator DoubleSummaryStatistics EnumSet HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
@@ -287,7 +287,7 @@
     (rel/->read-relation (rel/append->read-cols out-cols))))
 
 (deftype GroupByCursor [^BufferAllocator allocator
-                        ^IChunkCursor in-cursor
+                        ^ICursor in-cursor
                         ^List aggregate-specs]
   ICursor
   (tryAdvance [_ c]

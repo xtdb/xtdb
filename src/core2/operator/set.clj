@@ -1,12 +1,11 @@
 (ns core2.operator.set
   (:require [core2.error :as err]
+            [core2.relation :as rel]
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.relation :as rel])
-  (:import [core2 IChunkCursor ICursor]
+            [core2.util :as util])
+  (:import core2.ICursor
            [core2.relation IReadColumn IReadRelation]
-           java.io.Closeable
-           [java.util ArrayList HashSet LinkedList List Queue Set]
+           [java.util ArrayList HashSet LinkedList List Set]
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
@@ -265,9 +264,9 @@
 (defn ->distinct-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor]
   (DistinctCursor. allocator in-cursor (HashSet.)))
 
-(defn ->fixpoint-cursor ^core2.IChunkCursor [^BufferAllocator allocator,
-                                             ^ICursor base-cursor
-                                             ^IFixpointCursorFactory recursive-cursor-factory
-                                             incremental?]
+(defn ->fixpoint-cursor ^core2.ICursor [^BufferAllocator allocator,
+                                        ^ICursor base-cursor
+                                        ^IFixpointCursorFactory recursive-cursor-factory
+                                        incremental?]
   (FixpointCursor. allocator base-cursor recursive-cursor-factory
                    (HashSet.) (LinkedList.) incremental? nil true))

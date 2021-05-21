@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log])
   (:import clojure.lang.MapEntry
-           [core2 DenseUnionUtil IChunkCursor]
+           [core2 DenseUnionUtil ICursor]
            java.io.ByteArrayOutputStream
            java.lang.AutoCloseable
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
@@ -432,10 +432,7 @@
                       ^VectorLoader loader
                       ^:unsynchronized-mutable ^ArrowRecordBatch current-batch
                       ^boolean close-buffer?]
-  IChunkCursor
-  (getSchema [_]
-    (.getSchema root))
-
+  ICursor
   (tryAdvance [this c]
     (when current-batch
       (try-close current-batch)
@@ -456,7 +453,7 @@
     (when close-buffer?
       (try-close buf))))
 
-(defn ^core2.IChunkCursor ->chunks
+(defn ^core2.ICursor ->chunks
   ([^ArrowBuf ipc-file-format-buffer]
    (->chunks ipc-file-format-buffer {}))
   ([^ArrowBuf ipc-file-format-buffer {:keys [^RoaringBitmap block-idxs close-buffer?]}]
@@ -472,9 +469,8 @@
                    nil
                    (boolean close-buffer?)))))
 
-(defn ^core2.IChunkCursor and-also-close [^IChunkCursor cursor, ^AutoCloseable closeable]
-  (reify IChunkCursor
-    (getSchema [_] (.getSchema cursor))
+(defn ^core2.ICursor and-also-close [^ICursor cursor, ^AutoCloseable closeable]
+  (reify ICursor
     (characteristics [_] (.characteristics cursor))
     (estimateSize [_] (.estimateSize cursor))
     (getComparator [_] (.getComparator cursor))
