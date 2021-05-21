@@ -15,11 +15,11 @@
            [core2.temporal ITemporalManager TemporalCoordinates]
            [core2.tx TransactionInstant Watermark]
            java.io.Closeable
-           [java.util Collections Date Map Map$Entry Set TreeMap]
-           [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
+           [java.util Collections Date IdentityHashMap Map Map$Entry Set TreeMap]
+           [java.util.concurrent ConcurrentHashMap CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
-           java.util.function.Consumer
+           [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
@@ -124,7 +124,7 @@
         col-names))
 
 (defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant temporal-watermark ^long max-rows-per-block]
-  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant temporal-watermark (AtomicInteger. 1) max-rows-per-block))
+  (tx/->Watermark chunk-idx 0 (Collections/emptySortedMap) tx-instant temporal-watermark (AtomicInteger. 1) max-rows-per-block (ConcurrentHashMap.)))
 
 (defn- snapshot-roots [^Map live-roots]
   (Collections/unmodifiableSortedMap
@@ -141,7 +141,7 @@
   (let [i (.iterator open-watermarks)]
     (while (.hasNext i)
       (let [^Watermark open-watermark (.next i)]
-        (when (zero? (.get ^AtomicInteger (.ref-count open-watermark)))
+        (when (empty? (.thread->count open-watermark))
           (.remove i))))))
 
 (deftype Indexer [^BufferAllocator allocator
@@ -173,8 +173,15 @@
           (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
             (let [stamp (.writeLock open-watermarks-lock)]
               (try
-                (.add open-watermarks current-watermark)
-                current-watermark
+                (let [^Map thread->count (.thread->count current-watermark)
+                      ^AtomicInteger thread-ref-count (.computeIfAbsent thread->count
+                                                                        (Thread/currentThread)
+                                                                        (reify Function
+                                                                          (apply [_ k]
+                                                                            (AtomicInteger. 0))))]
+                  (.incrementAndGet thread-ref-count)
+                  (.add open-watermarks current-watermark)
+                  current-watermark)
                 (finally
                   (.unlock open-watermarks-lock stamp))))
             (recur))))))
@@ -194,7 +201,8 @@
                               tx-instant
                               (.getTemporalWatermark temporal-mgr)
                               (AtomicInteger. 1)
-                              max-rows-per-block)))
+                              max-rows-per-block
+                              (ConcurrentHashMap.))))
       (when (>= new-chunk-row-count max-rows-per-chunk)
         (.finishChunk this)))
 
@@ -323,11 +331,16 @@
         (let [i (.iterator open-watermarks)]
           (while (.hasNext i)
             (let [^Watermark open-watermark (.next i)
-                  ^AtomicInteger ref-cnt (.ref-count open-watermark)]
-              (loop [rc (.get ref-cnt)]
+                  ^AtomicInteger watermark-ref-cnt (.ref-count open-watermark)]
+              (doseq [[^Thread thread ^AtomicInteger thread-ref-count] (.thread->count open-watermark)
+                      :let [rc (.get thread-ref-count)]
+                      :when (pos? rc)]
+                (log/warn "interrupting:" thread "on close, has outstanding watermarks:" rc)
+                (.interrupt thread))
+              (loop [rc (.get watermark-ref-cnt)]
                 (when (pos? rc)
                   (util/try-close open-watermark)
-                  (recur (.get ref-cnt)))))))
+                  (recur (.get watermark-ref-cnt)))))))
         (finally
           (.unlock open-watermarks-lock stamp))))
     (.clear open-watermarks)
