@@ -15,9 +15,10 @@
            [core2.temporal ITemporalManager TemporalCoordinates]
            [core2.tx TransactionInstant Watermark]
            java.io.Closeable
-           [java.util Collections Date Map Map$Entry TreeMap]
+           [java.util Collections Date Map Map$Entry Set TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentSkipListMap]
            java.util.concurrent.atomic.AtomicInteger
+           java.util.concurrent.locks.StampedLock
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
@@ -136,6 +137,13 @@
     (TreeMap.)
     live-roots)))
 
+(defn- remove-closed-watermarks [^Set open-watermarks]
+  (let [i (.iterator open-watermarks)]
+    (while (.hasNext i)
+      (let [^Watermark open-watermark (.next i)]
+        (when (zero? (.get ^AtomicInteger (.ref-count open-watermark)))
+          (.remove i))))))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -143,6 +151,8 @@
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
                   ^Map live-roots
+                  ^Set open-watermarks
+                  ^StampedLock open-watermarks-lock
                   ^:volatile-mutable ^Watermark watermark]
 
   IChunkManager
@@ -153,11 +163,21 @@
                           (->live-root field-name allocator)))))
 
   (getWatermark [_]
-    (loop []
-      (when-let [current-watermark watermark]
-        (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
-          current-watermark
-          (recur)))))
+    (let [stamp (.writeLock open-watermarks-lock)]
+      (try
+        (remove-closed-watermarks open-watermarks)
+        (finally
+          (.unlock open-watermarks-lock stamp)))
+      (loop []
+        (when-let [current-watermark watermark]
+          (if (pos? (util/inc-ref-count (.ref-count current-watermark)))
+            (let [stamp (.writeLock open-watermarks-lock)]
+              (try
+                (.add open-watermarks current-watermark)
+                current-watermark
+                (finally
+                  (.unlock open-watermarks-lock stamp))))
+            (recur))))))
 
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
@@ -285,7 +305,12 @@
 
           (with-open [old-watermark watermark]
             (set! (.watermark this) (->empty-watermark (+ chunk-idx (.row-count old-watermark)) (.tx-instant old-watermark)
-                                                       (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
+                                                       (.getTemporalWatermark temporal-mgr) max-rows-per-block)))
+          (let [stamp (.writeLock open-watermarks-lock)]
+            (try
+              (remove-closed-watermarks open-watermarks)
+              (finally
+                (.unlock open-watermarks-lock stamp)))))
         (finally
           (.closeCols this)))))
 
@@ -293,6 +318,20 @@
   (close [this]
     (.closeCols this)
     (.close watermark)
+    (let [stamp (.writeLock open-watermarks-lock)]
+      (try
+        (let [i (.iterator open-watermarks)]
+          (while (.hasNext i)
+            (let [^Watermark open-watermark (.next i)
+                  ^AtomicInteger ref-cnt (.ref-count open-watermark)]
+              (loop [rc (.get ref-cnt)]
+                (when (pos? rc)
+                  (if (.compareAndSet ref-cnt rc 1)
+                    (.close open-watermark)
+                    (recur (.get ref-cnt))))))))
+        (finally
+          (.unlock open-watermarks-lock stamp))))
+    (.clear open-watermarks)
     (set! (.watermark this) nil)))
 
 (defn ->indexer {::sys/deps {:allocator :core2/allocator
@@ -321,4 +360,6 @@
               max-rows-per-chunk
               max-rows-per-block
               (ConcurrentSkipListMap.)
+              (util/->identity-set)
+              (StampedLock.)
               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
