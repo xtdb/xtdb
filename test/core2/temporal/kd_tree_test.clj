@@ -4,11 +4,11 @@
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
   (:import [java.util Collection Date HashMap List Spliterator$OfLong Spliterators Random]
-           [java.util.function Predicate ToLongFunction]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
            [org.apache.arrow.vector.complex FixedSizeListVector]
+           core2.temporal.IInternalIdManager
            [core2.temporal.kd_tree ArrowBufKdTree MergedKdTree Node]))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
@@ -35,12 +35,11 @@
   (let [kd-tree nil
         id->internal-id-map (doto (HashMap.)
                               (.put 7797 7797))
-        id->internal-id (reify ToLongFunction
-                          (applyAsLong [_ x]
-                            (.get id->internal-id-map x)))
-        id-exists? (reify Predicate
-                     (test [_ x]
-                       (.containsKey id->internal-id-map x)))
+        id-manager (reify IInternalIdManager
+                     (getOrCreateInternalId [_ id]
+                       (.get id->internal-id-map id))
+                     (isKnownId [_ id]
+                       (.containsKey id->internal-id-map id)))
         row-id->row (HashMap.)]
     ;; Current Insert
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
@@ -48,8 +47,7 @@
     (with-open [allocator (RootAllocator.)
                 ^Node kd-tree (temporal/insert-coordinates kd-tree
                                                            allocator
-                                                           id->internal-id
-                                                           id-exists?
+                                                           id-manager
                                                            (temporal/->coordinates {:id 7797
                                                                                     :row-id 1
                                                                                     :tx-time-start #inst "1998-01-10"}))]
@@ -67,8 +65,7 @@
       ;; Peter Olsen buys the flat on January 15, 1998.
       (let [kd-tree (temporal/insert-coordinates kd-tree
                                                  allocator
-                                                 id->internal-id
-                                                 id-exists?
+                                                 id-manager
                                                  (temporal/->coordinates {:id 7797
                                                                           :row-id 2
                                                                           :tx-time-start #inst "1998-01-15"}))]
@@ -100,8 +97,7 @@
         ;; Peter Olsen sells the flat on January 20, 1998.
         (let [kd-tree (temporal/insert-coordinates kd-tree
                                                    allocator
-                                                   id->internal-id
-                                                   id-exists?
+                                                   id-manager
                                                    (temporal/->coordinates {:id 7797
                                                                             :row-id 3
                                                                             :tx-time-start #inst "1998-01-20"
@@ -141,8 +137,7 @@
           ;; Eva actually purchased the flat on January 3, performed on January 23.
           (let [kd-tree (temporal/insert-coordinates kd-tree
                                                      allocator
-                                                     id->internal-id
-                                                     id-exists?
+                                                     id-manager
                                                      (temporal/->coordinates {:id 7797
                                                                               :row-id 4
                                                                               :tx-time-start #inst "1998-01-23"
@@ -191,8 +186,7 @@
             ;; A sequenced deletion performed on January 26: Eva actually purchased the flat on January 5.
             (let [kd-tree (temporal/insert-coordinates kd-tree
                                                        allocator
-                                                       id->internal-id
-                                                       id-exists?
+                                                       id-manager
                                                        (temporal/->coordinates {:id 7797
                                                                                 :row-id 5
                                                                                 :tx-time-start #inst "1998-01-26"
@@ -249,8 +243,7 @@
               ;; A sequenced update performed on January 28: Peter actually purchased the flat on January 12.
               (let [kd-tree (temporal/insert-coordinates kd-tree
                                                          allocator
-                                                         id->internal-id
-                                                         id-exists?
+                                                         id-manager
                                                          (temporal/->coordinates {:id 7797
                                                                                   :row-id 6
                                                                                   :tx-time-start #inst "1998-01-28"

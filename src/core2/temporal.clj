@@ -133,8 +133,11 @@
                                                       ^longs temporal-max-range
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
-(definterface TemporalManagerPrivate
+(definterface IInternalIdManager
   (^long getOrCreateInternalId [^Object id])
+  (^boolean isKnownId [^Object id]))
+
+(definterface TemporalManagerPrivate
   (^void populateKnownChunks [])
   (^Long latestTemporalSnapshotIndex [^int chunk-idx])
   (^void reloadTemporalIndex [^int chunk-idx ^Long snapshot-idx])
@@ -292,6 +295,7 @@
         (finally
           (util/delete-file path)))))
 
+  IInternalIdManager
   (getOrCreateInternalId [_ id]
     (.computeIfAbsent id->internal-id
                       (normalize-id id)
@@ -302,6 +306,9 @@
                               (recur (.nextLong rng))
                               (do (.addLong known-ids id)
                                   id)))))))
+
+  (isKnownId [_ id]
+    (.containsKey id->internal-id (normalize-id id)))
 
   ITemporalManager
   (getTemporalWatermark [_]
@@ -334,18 +341,11 @@
           (.reloadTemporalIndex this chunk-idx snapshot-idx)))))
 
   (updateTemporalCoordinates [this row-id->temporal-coordinates]
-    (let [id->long-id-fn (reify ToLongFunction
-                           (applyAsLong [_ id]
-                             (.getOrCreateInternalId this id)))
-          id-exists? (reify Predicate
-                       (test [_ id]
-                         (.containsKey id->internal-id (normalize-id id))))]
-
-      (set! (.kd-tree this) (reduce
-                             (fn [kd-tree coordinates]
-                               (insert-coordinates kd-tree allocator id->long-id-fn id-exists? coordinates))
-                             kd-tree
-                             (.values row-id->temporal-coordinates)))))
+    (set! (.kd-tree this) (reduce
+                           (fn [kd-tree coordinates]
+                             (insert-coordinates kd-tree allocator this coordinates))
+                           kd-tree
+                           (.values row-id->temporal-coordinates))))
 
   (createTemporalRoots [_ watermark columns temporal-min-range temporal-max-range row-id-bitmap]
     (let [kd-tree (.temporal-watermark watermark)
@@ -423,9 +423,9 @@
                             pool nil nil nil async-snapshot? compress-temporal-index? block-cache-size)
       (.populateKnownChunks))))
 
-(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^ToLongFunction id->internal-id ^Predicate id-exists? ^TemporalCoordinates coordinates]
-  (let [new-id? (not (.test id-exists? (.id coordinates)))
-        id (.applyAsLong id->internal-id (.id coordinates))
+(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^IInternalIdManager id-manager ^TemporalCoordinates coordinates]
+  (let [new-id? (not (.isKnownId id-manager (.id coordinates)))
+        id (.getOrCreateInternalId id-manager (.id coordinates))
         row-id (.rowId coordinates)
         tx-time-start-ms (.txTimeStart coordinates)
         valid-time-start-ms (.validTimeStart coordinates)
