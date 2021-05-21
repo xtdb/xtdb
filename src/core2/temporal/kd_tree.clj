@@ -2,14 +2,15 @@
   (:require [core2.types :as t]
             [core2.util :as util]
             [clojure.tools.logging :as log])
-  (:import [java.io Closeable]
+  (:import core2.LRU
+           [java.io Closeable]
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [clojure.lang IFn$LLO IFn$LL]
            [java.util ArrayDeque Deque HashMap
             LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
             Spliterator Spliterator$OfLong Spliterators]
-           [java.util.function Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
+           [java.util.function BiPredicate Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
@@ -869,22 +870,21 @@
       (.clear root))))
 
 (definterface IBlockManager
-  (^org.apache.arrow.vector.VectorSchemaRoot getRoot [^int block-idx]))
+  (^org.apache.arrow.vector.complex.FixedSizeListVector getRoot [^int block-idx]))
 
 (deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask ^boolean deletes?]
   IKdTreePointAccess
   (getPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
       (.getObject point-vec idx)))
 
   (getArrayPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)
+          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           k (.getListSize point-vec)
           point (long-array k)
@@ -896,15 +896,13 @@
   (getCoordinate [_ idx axis]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
       (.get ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis))))
 
   (setCoordinate [_ idx axis value]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
       (.set ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis) value)))
 
   (swapPoint [_ from-idx to-idx]
@@ -912,10 +910,8 @@
           from-idx (bit-and from-idx batch-mask)
           to-block-idx (unsigned-bit-shift-right to-idx batch-shift)
           to-idx (bit-and to-idx batch-mask)
-          from-root (.getRoot kd-tree from-block-idx)
-          to-root (.getRoot kd-tree to-block-idx)
-          ^FixedSizeListVector from-point-vec (.getVector from-root point-vec-idx)
-          ^FixedSizeListVector to-point-vec (.getVector to-root point-vec-idx)
+          ^FixedSizeListVector from-point-vec (.getRoot kd-tree from-block-idx)
+          ^FixedSizeListVector to-point-vec (.getRoot kd-tree to-block-idx)
           _ (when deletes?
               (let [tmp (.isNull to-point-vec to-idx)]
                 (if (.isNull from-point-vec from-idx)
@@ -939,16 +935,14 @@
     (if deletes?
       (let [block-idx (unsigned-bit-shift-right idx batch-shift)
             idx (bit-and idx batch-mask)
-            root (.getRoot kd-tree block-idx)
-            ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+            ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)]
         (.isNull point-vec idx))
       false))
 
   (isInRange [_ idx min-range max-range]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          root (.getRoot kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getVector root point-vec-idx)
+          ^FixedSizeListVector point-vec (.getRoot kd-tree block-idx)
           k (.getListSize point-vec)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           element-start-idx (.getElementStartIndex point-vec idx)]
@@ -962,29 +956,24 @@
               false)))))))
 
 (defn- ->block-cache [^long cache-size]
-  (proxy [LinkedHashMap] [cache-size 0.75 true]
-    (removeEldestEntry [entry]
-      (if (> (.size ^Map this) cache-size)
-        (do (util/try-close (.getValue ^Map$Entry entry))
-            true)
-        false))))
+  (LRU. cache-size
+        (reify BiPredicate
+          (test [_ map entry]
+            (if (> (.size ^Map map) cache-size)
+              (do (util/try-close (.getValue ^Map$Entry entry))
+                  true)
+              false)))))
 
 (deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
                          ^:unsynchronized-mutable ^int latest-block-idx
-                         ^:unsynchronized-mutable ^VectorSchemaRoot latest-block
-                         ^boolean deletes?]
+                         ^:unsynchronized-mutable ^FixedSizeListVector latest-block
+                         ^boolean deletes?
+                         ^Function root-fn]
   IBlockManager
   (getRoot [this block-idx]
     (if (= block-idx latest-block-idx)
       latest-block
-      (let [root (.computeIfAbsent block-cache
-                                   block-idx
-                                   (reify Function
-                                     (apply [_ block-idx]
-                                       (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)]
-                                         (let [root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
-                                           (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
-                                           root)))))]
+      (let [root (.computeIfAbsent block-cache block-idx root-fn)]
         (set! (.latest-block-idx this) block-idx)
         (set! (.latest-block this) root)
         root)))
@@ -1016,7 +1005,8 @@
                      (->block-cache block-cache-size)
                      -1
                      nil
-                     deletes?))
+                     deletes?
+                     root-fn))
 
   (kd-tree-point-access [kd-tree]
     (ArrowBufKdTreePointAccess. kd-tree batch-shift batch-mask deletes?))
@@ -1039,7 +1029,7 @@
     (.clear block-cache)
     (util/try-close arrow-buf)))
 
-(def ^:const default-block-cache-size 128)
+(def ^:const default-block-cache-size 1024)
 
 (defn ->arrow-buf-kd-tree
   (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf]
@@ -1063,15 +1053,23 @@
                       batch-size
                       (inc Integer/MAX_VALUE))
          batch-mask (dec batch-size)
-         batch-shift (Long/bitCount batch-mask)]
-     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil deletes?))))
+         batch-shift (Long/bitCount batch-mask)
+         root-fn (reify Function
+                   (apply [_ block-idx]
+                     (let [allocator (.getAllocator (.getReferenceManager arrow-buf))]
+                       (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)
+                                   root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+                         (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
+                         (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
+                                   (.transfer)))))))]
+     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil deletes? root-fn))))
 
 (defn ->mmap-kd-tree ^core2.temporal.kd_tree.ArrowBufKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
         arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
     (->arrow-buf-kd-tree arrow-buf)))
 
-(def ^:private ^:const default-disk-kd-tree-batch-size 1024)
+(def ^:private ^:const default-disk-kd-tree-batch-size (* 16 1024))
 
 (defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points {:keys [k batch-size compress-blocks?]
                                                                                         :or {compress-blocks? false
@@ -1132,13 +1130,13 @@
     this)
 
   (kd-tree-delete [this allocator point]
-    (let [static-delete? (atom false)]
+    (let [static-delete? (boolean-array 1)]
       (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
                 (reify LongConsumer
                   (accept [_ x]
-                    (reset! static-delete? true)
+                    (aset static-delete? 0 true)
                     (.addLong static-delete-bitmap x))))
-      (when (and (not @static-delete?)
+      (when (and (not (aget static-delete? 0))
                  (pos? (.count ^LongStream (kd-tree-range-search dynamic-kd-tree point point))))
         (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))))
     this)
