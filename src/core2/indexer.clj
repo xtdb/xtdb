@@ -326,9 +326,8 @@
                   ^AtomicInteger ref-cnt (.ref-count open-watermark)]
               (loop [rc (.get ref-cnt)]
                 (when (pos? rc)
-                  (if (.compareAndSet ref-cnt rc 1)
-                    (.close open-watermark)
-                    (recur (.get ref-cnt))))))))
+                  (util/try-close open-watermark)
+                  (recur (.get ref-cnt)))))))
         (finally
           (.unlock open-watermarks-lock stamp))))
     (.clear open-watermarks)
