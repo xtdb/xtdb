@@ -2,7 +2,7 @@
   (:require [core2.types :as t]
             [core2.util :as util]
             [clojure.tools.logging :as log])
-  (:import core2.LRU
+  (:import [core2 BitUtil LRU]
            [java.io Closeable]
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
@@ -10,7 +10,7 @@
            [java.util ArrayDeque Deque HashMap
             LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
             Spliterator Spliterator$OfLong Spliterators]
-           [java.util.function BiPredicate Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
+           [java.util.function BiPredicate Consumer Function IntFunction LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
@@ -45,7 +45,7 @@
   (kd-tree-value-count [_])
   (kd-tree-dimensions [_]))
 
-(deftype Node [^FixedSizeListVector point-vec ^int point-idx ^byte axis left right]
+(deftype Node [^FixedSizeListVector point-vec ^int point-idx ^int axis left right]
   Closeable
   (close [_]
     (util/try-close point-vec)))
@@ -288,29 +288,28 @@
             (.invokePrim ^IFn$LLO step (balanced-right-child node-idx) next-axis))))
       0 0))))
 
-(deftype KdTreeVectorPointAccess [^FixedSizeListVector point-vec]
+(deftype KdTreeVectorPointAccess [^FixedSizeListVector point-vec ^int k]
   IKdTreePointAccess
   (getPoint [_ idx]
     (.getObject point-vec idx))
 
   (getArrayPoint [_ idx]
     (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)
           point (long-array k)
-          element-start-idx (.getElementStartIndex point-vec idx)]
+          element-start-idx (unchecked-multiply-int idx k)]
       (dotimes [n k]
-        (aset point n (.get coordinates-vec (+ element-start-idx n))))
+        (aset point n (.get coordinates-vec (unchecked-add-int element-start-idx n))))
       point))
 
   (getCoordinate [_ idx axis]
     (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-          element-start-idx (.getElementStartIndex point-vec idx)]
-      (.get coordinates-vec (+ element-start-idx axis))))
+          element-start-idx (unchecked-multiply-int idx k)]
+      (.get coordinates-vec (unchecked-add-int element-start-idx axis))))
 
   (setCoordinate [_ idx axis value]
     (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
-          element-start-idx (.getElementStartIndex point-vec idx)]
-      (.setSafe coordinates-vec (+ element-start-idx axis) value)))
+          element-start-idx (unchecked-multiply-int idx k)]
+      (.setSafe coordinates-vec (unchecked-add-int element-start-idx axis) value)))
 
   (swapPoint [_ from-idx to-idx]
     (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
@@ -321,12 +320,12 @@
           _ (if tmp
               (.setNull point-vec from-idx)
               (.setNotNull point-vec from-idx))
-          from-idx (.getElementStartIndex point-vec from-idx)
-          to-idx (.getElementStartIndex point-vec to-idx)]
+          from-idx (unchecked-multiply-int from-idx k)
+          to-idx (unchecked-multiply-int to-idx k)]
 
-      (dotimes [axis (.getListSize point-vec)]
-        (let [from-idx (+ from-idx axis)
-              to-idx (+ to-idx axis)
+      (dotimes [axis k]
+        (let [from-idx (unchecked-add-int from-idx axis)
+              to-idx (unchecked-add-int to-idx axis)
               tmp (.get coordinates-vec from-idx)]
           (.set coordinates-vec from-idx (.get coordinates-vec to-idx))
           (.set coordinates-vec to-idx tmp)))))
@@ -335,13 +334,12 @@
     (.isNull point-vec idx))
 
   (isInRange [_ idx min-range max-range]
-    (let [k (.getListSize point-vec)
-          ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          element-start-idx (.getElementStartIndex point-vec idx)]
+    (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
+          element-start-idx (unchecked-multiply-int idx k)]
       (loop [n (int 0)]
         (if (= n k)
           true
-          (let [x (.get coordinates-vec (+ element-start-idx n))]
+          (let [x (.get coordinates-vec (unchecked-add-int element-start-idx n))]
             (if (and (<= (aget min-range n) x)
                      (<= x (aget max-range n)))
               (recur (inc n))
@@ -366,7 +364,7 @@
   (when (not-empty points)
     (let [k (count (first points))
           ^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)
-          access (KdTreeVectorPointAccess. point-vec)]
+          access (KdTreeVectorPointAccess. point-vec k)]
       (doseq [point points]
         (write-point point-vec access point))
       (try
@@ -391,41 +389,45 @@
                                      ^Deque stack]
   Spliterator$OfLong
   (^void forEachRemaining [_ ^LongConsumer c]
-    (loop []
-      (when-let [^Node node (.poll stack)]
-        (loop [node node]
-          (let [left (.left node)
-                right (.right node)
-                axis (.axis node)
-                point-idx (.point-idx node)
-                point-axis (.getCoordinate access point-idx axis)
-                min-axis (aget min-range axis)
-                max-axis (aget max-range axis)
-                min-match? (<= min-axis point-axis)
-                max-match? (<= point-axis max-axis)
-                visit-left? (and left min-match?)
-                visit-right? (and right max-match?)]
+   (let [access access
+         min-range min-range
+         max-range max-range
+         stack stack]
+     (loop []
+       (when-let [^Node node (.poll stack)]
+         (loop [node node]
+           (let [left (.left node)
+                 right (.right node)
+                 axis (.axis node)
+                 point-idx (.point-idx node)
+                 point-axis (.getCoordinate access point-idx axis)
+                 min-axis (aget min-range axis)
+                 max-axis (aget max-range axis)
+                 min-match? (<= min-axis point-axis)
+                 max-match? (<= point-axis max-axis)
+                 visit-left? (and (boolean left) min-match?)
+                 visit-right? (and (boolean right) max-match?)]
 
-            (when (and min-match?
-                       max-match?
-                       (.isInRange access point-idx min-range max-range)
-                       (not (.isDeleted access point-idx)))
-              (.accept c point-idx))
+             (when (and min-match?
+                        max-match?
+                        (.isInRange access point-idx min-range max-range)
+                        (BitUtil/bitNot (.isDeleted access point-idx)))
+               (.accept c point-idx))
 
-            (cond
-              (and visit-left? (not visit-right?))
-              (recur left)
+             (cond
+               (and visit-left? (BitUtil/bitNot visit-right?))
+               (recur left)
 
-              (and visit-right? (not visit-left?))
-              (recur right)
+               (and visit-right? (BitUtil/bitNot visit-left?))
+               (recur right)
 
-              :else
-              (do (when visit-right?
-                    (.push stack right))
+               :else
+               (do (when visit-right?
+                     (.push stack right))
 
-                  (when visit-left?
-                    (recur left))))))
-        (recur))))
+                   (when visit-left?
+                     (recur left))))))
+         (recur)))))
 
   (^boolean tryAdvance [_ ^LongConsumer c]
     (loop []
@@ -439,8 +441,8 @@
               max-axis (aget max-range axis)
               min-match? (<= min-axis point-axis)
               max-match? (<= point-axis max-axis)
-              visit-left? (and left min-match?)
-              visit-right? (and right max-match?)]
+              visit-left? (and (boolean left) min-match?)
+              visit-right? (and (boolean right) max-match?)]
 
           (when visit-right?
             (.push stack right))
@@ -451,7 +453,7 @@
           (if (and min-match?
                    max-match?
                    (.isInRange access point-idx min-range max-range)
-                   (not (.isDeleted access point-idx)))
+                   (BitUtil/bitNot (.isDeleted access point-idx)))
             (do (.accept c point-idx)
                 true)
             (recur)))
@@ -610,7 +612,7 @@
              (.right kd-tree))))
 
   (kd-tree-point-access [kd-tree]
-    (KdTreeVectorPointAccess. (.point-vec kd-tree)))
+    (KdTreeVectorPointAccess. (.point-vec kd-tree) (kd-tree-dimensions kd-tree)))
 
   (kd-tree-size [kd-tree]
     (.count ^LongStream (kd-tree-points kd-tree)))
@@ -684,37 +686,43 @@
                                        ^Deque stack]
   Spliterator$OfLong
   (^void forEachRemaining [this ^LongConsumer c]
-    (loop []
-      (when-let [^ColumnStackEntry stack-entry (.poll stack)]
-        (loop [idx (.idx stack-entry)
-               axis (.axis stack-entry)]
-          (let [axis-value (.getCoordinate access idx axis)
-                min-match? (<= (aget min-range axis) axis-value)
-                max-match? (<= axis-value (aget max-range axis))
-                left-idx (balanced-left-child idx)
-                right-idx (inc left-idx)
-                visit-left? (and min-match? (balanced-valid? n left-idx))
-                visit-right? (and max-match? (balanced-valid? n right-idx))]
+   (let [access access
+         min-range min-range
+         max-range max-range
+         k k
+         n n
+         stack stack]
+     (loop []
+       (when-let [^ColumnStackEntry stack-entry (.poll stack)]
+         (loop [idx (.idx stack-entry)
+                axis (.axis stack-entry)]
+           (let [axis-value (.getCoordinate access idx axis)
+                 min-match? (<= (aget min-range axis) axis-value)
+                 max-match? (<= axis-value (aget max-range axis))
+                 left-idx (balanced-left-child idx)
+                 right-idx (inc left-idx)
+                 visit-left? (and min-match? (balanced-valid? n left-idx))
+                 visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-            (when (and min-match?
-                       max-match?
-                       (.isInRange access idx min-range max-range)
-                       (not (.isDeleted access idx)))
-              (.accept c idx))
+             (when (and min-match?
+                        max-match?
+                        (.isInRange access idx min-range max-range)
+                        (BitUtil/bitNot (.isDeleted access idx)))
+               (.accept c idx))
 
-            (cond
-              (and visit-left? (not visit-right?))
-              (recur left-idx (next-axis axis k))
+             (cond
+               (and visit-left? (BitUtil/bitNot visit-right?))
+               (recur left-idx (next-axis axis k))
 
-              (and visit-right? (not visit-left?))
-              (recur right-idx (next-axis axis k))
+               (and visit-right? (BitUtil/bitNot visit-left?))
+               (recur right-idx (next-axis axis k))
 
-              :else
-              (do (when visit-right?
-                    (.push stack (ColumnStackEntry. right-idx (next-axis axis k))))
-                  (when visit-left?
-                    (recur left-idx (next-axis axis k)))))))
-        (recur))))
+               :else
+               (do (when visit-right?
+                     (.push stack (ColumnStackEntry. right-idx (next-axis axis k))))
+                   (when visit-left?
+                     (recur left-idx (next-axis axis k)))))))
+         (recur)))))
 
   (^boolean tryAdvance [this ^LongConsumer c]
     (loop []
@@ -730,10 +738,10 @@
                 visit-right? (and max-match? (balanced-valid? n right-idx))]
 
             (cond
-              (and visit-left? (not visit-right?))
+              (and visit-left? (BitUtil/bitNot visit-right?))
               (.push stack (ColumnStackEntry. left-idx (next-axis axis k)))
 
-              (and visit-right? (not visit-left?))
+              (and visit-right? (BitUtil/bitNot visit-left?))
               (.push stack (ColumnStackEntry. right-idx (next-axis axis k)))
 
               :else
@@ -745,7 +753,7 @@
             (if (and min-match?
                      max-match?
                      (.isInRange access idx min-range max-range)
-                     (not (.isDeleted access idx)))
+                     (BitUtil/bitNot (.isDeleted access idx)))
               (do (.accept c idx)
                   true)
               (recur))))
@@ -779,7 +787,7 @@
     (.filter (LongStream/range 0 (long (kd-tree-value-count kd-tree)))
              (reify LongPredicate
                (test [_ x]
-                 (not (.isDeleted access x)))))))
+                 (BitUtil/bitNot (.isDeleted access x)))))))
 
 (defn- column-kd-tree-range-search [kd-tree min-range max-range]
   (let [min-range (->longs min-range)
@@ -829,7 +837,7 @@
     (util/slice-root this 0))
 
   (kd-tree-point-access [kd-tree]
-    (KdTreeVectorPointAccess. (.getVector kd-tree point-vec-idx)))
+    (KdTreeVectorPointAccess. (.getVector kd-tree point-vec-idx) (kd-tree-dimensions kd-tree)))
 
   (kd-tree-size [kd-tree]
     (.count ^LongStream (kd-tree-points kd-tree)))
@@ -872,7 +880,7 @@
 (definterface IBlockManager
   (^org.apache.arrow.vector.complex.FixedSizeListVector getBlockVector [^int block-idx]))
 
-(deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask ^boolean deletes?]
+(deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask ^int k ^boolean deletes?]
   IKdTreePointAccess
   (getPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
@@ -886,24 +894,25 @@
           root (.getBlockVector kd-tree block-idx)
           ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          k (.getListSize point-vec)
           point (long-array k)
-          element-start-idx (.getElementStartIndex point-vec idx)]
+          element-start-idx (unchecked-multiply-int idx k)]
       (dotimes [n k]
-        (aset point n (.get coordinates-vec (+ element-start-idx n))))
+        (aset point n (.get coordinates-vec (unchecked-add-int element-start-idx n))))
       point))
 
   (getCoordinate [_ idx axis]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
-      (.get ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis))))
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
+          element-start-idx (unchecked-multiply-int idx k)]
+      (.get ^BigIntVector (.getDataVector point-vec) (unchecked-add-int element-start-idx axis))))
 
   (setCoordinate [_ idx axis value]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
-      (.set ^BigIntVector (.getDataVector point-vec) (+ (.getElementStartIndex point-vec idx) axis) value)))
+          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
+          element-start-idx (unchecked-multiply-int idx k)]
+      (.set ^BigIntVector (.getDataVector point-vec) (unchecked-add-int element-start-idx axis) value)))
 
   (swapPoint [_ from-idx to-idx]
     (let [from-block-idx (unsigned-bit-shift-right from-idx batch-shift)
@@ -922,38 +931,72 @@
                   (.setNotNull from-point-vec from-idx))))
           ^BigIntVector from-coordinates-vec (.getDataVector from-point-vec)
           ^BigIntVector to-coordinates-vec (.getDataVector to-point-vec)
-          from-idx (.getElementStartIndex from-point-vec from-idx)
-          to-idx (.getElementStartIndex to-point-vec to-idx)]
-      (dotimes [axis (.getListSize from-point-vec)]
-        (let [from-idx (+ from-idx axis)
-              to-idx (+ to-idx axis)
+          from-idx (unchecked-multiply-int from-idx k)
+          to-idx (unchecked-multiply-int to-idx k)]
+      (dotimes [axis k]
+        (let [from-idx (unchecked-add-int from-idx axis)
+              to-idx (unchecked-add-int to-idx axis)
               tmp (.get from-coordinates-vec from-idx)]
           (.set from-coordinates-vec from-idx (.get to-coordinates-vec to-idx))
           (.set to-coordinates-vec to-idx tmp)))))
 
   (isDeleted [_ idx]
-    (if deletes?
-      (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-            idx (bit-and idx batch-mask)
-            ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
-        (.isNull point-vec idx))
-      false))
+    (and deletes?
+         (let [block-idx (unsigned-bit-shift-right idx batch-shift)
+               idx (bit-and idx batch-mask)
+               ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
+           (.isNull point-vec idx))))
 
   (isInRange [_ idx min-range max-range]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
-          k (.getListSize point-vec)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
-          element-start-idx (.getElementStartIndex point-vec idx)]
+          element-start-idx (unchecked-multiply-int idx k)]
       (loop [n (int 0)]
         (if (= n k)
           true
-          (let [x (.get coordinates-vec (+ element-start-idx n))]
+          (let [x (.get coordinates-vec (unchecked-add-int element-start-idx n))]
             (if (and (<= (aget min-range n) x)
                      (<= x (aget max-range n)))
               (recur (inc n))
               false)))))))
+
+(deftype BlockClockCache [^ints keys ^objects values ^booleans referenced ^:unsynchronized-mutable ^int clock ^IntFunction root-fn]
+  IBlockManager
+  (getBlockVector [this block-idx]
+    (let [cache-size (alength keys)
+          mask (dec cache-size)]
+      (loop [n (int (bit-and mask block-idx))]
+        (if (= n cache-size)
+          (loop [clock clock]
+            (if (aget referenced clock)
+              (do (aset referenced clock false)
+                  (recur (let [clock (inc clock)]
+                           (if (= cache-size clock)
+                             0
+                             clock))))
+              (let [v (.apply root-fn block-idx)]
+                (util/try-close (aget values clock))
+                (aset values clock v)
+                (aset keys clock block-idx)
+                (let [clock (inc clock)]
+                  (set! (.clock this) (if (= cache-size clock)
+                                       0
+                                       clock))
+                  v))))
+          (if (= block-idx (aget keys n))
+            (do (aset referenced n true)
+                (aget values n))
+            (recur (inc n)))))))
+
+  Closeable
+  (close [_]
+    (doseq [v values]
+      (util/try-close v))))
+
+(defn- ->block-clock-cache [^long cache-size ^IntFunction root-fn]
+  (BlockClockCache. (int-array cache-size -1) (object-array cache-size) (boolean-array cache-size) 0 root-fn))
 
 (defn- ->block-cache [^long cache-size]
   (LRU. cache-size
@@ -964,20 +1007,10 @@
                   true)
               false)))))
 
-(deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size ^Map block-cache
-                         ^:unsynchronized-mutable ^int latest-block-idx
-                         ^:unsynchronized-mutable ^FixedSizeListVector latest-block
-                         ^boolean deletes?
-                         ^Function root-fn]
-  IBlockManager
-  (getBlockVector [this block-idx]
-    (if (= block-idx latest-block-idx)
-      latest-block
-      (let [root (.computeIfAbsent block-cache block-idx root-fn)]
-        (set! (.latest-block-idx this) block-idx)
-        (set! (.latest-block this) root)
-        root)))
-
+(deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size
+                         ^IBlockManager block-cache
+                          ^boolean deletes?
+                         ^IntFunction root-fn]
   KdTree
   (kd-tree-insert [_ allocator point]
     (throw (UnsupportedOperationException.)))
@@ -1002,14 +1035,12 @@
                      batch-mask
                      value-count
                      block-cache-size
-                     (->block-cache block-cache-size)
-                     -1
-                     nil
+                     (->block-clock-cache block-cache-size root-fn)
                      deletes?
                      root-fn))
 
   (kd-tree-point-access [kd-tree]
-    (ArrowBufKdTreePointAccess. kd-tree batch-shift batch-mask deletes?))
+    (ArrowBufKdTreePointAccess. block-cache batch-shift batch-mask (kd-tree-dimensions kd-tree) deletes?))
 
   (kd-tree-size [kd-tree]
     value-count)
@@ -1022,14 +1053,15 @@
 
   Closeable
   (close [_]
-    (util/try-close latest-block)
-    (.remove block-cache latest-block-idx)
-    (doseq [v (vals block-cache)]
-      (util/try-close v))
-    (.clear block-cache)
+    (util/try-close block-cache)
+    ;; (util/try-close latest-block)
+    ;; (.remove block-cache latest-block-idx)
+    ;; (doseq [v (vals block-cache)]
+    ;;   (util/try-close v))
+    ;; (.clear block-cache)
     (util/try-close arrow-buf)))
 
-(def ^:const default-block-cache-size 1024)
+(def ^:const default-block-cache-size 32)
 
 (defn ->arrow-buf-kd-tree
   (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf]
@@ -1047,29 +1079,29 @@
                       []
                       (.getRecordBatches footer))
          value-count (reduce + batch-sizes)
-         block-cache (->block-cache block-cache-size)
          batch-size (long (first batch-sizes))
          batch-size (if (= 1 (Long/bitCount batch-size))
                       batch-size
                       (inc Integer/MAX_VALUE))
          batch-mask (dec batch-size)
          batch-shift (Long/bitCount batch-mask)
-         root-fn (reify Function
+         root-fn (reify IntFunction
                    (apply [_ block-idx]
                      (let [allocator (.getAllocator (.getReferenceManager arrow-buf))]
                        (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)
                                    root (VectorSchemaRoot/create (.getSchema footer) allocator)]
                          (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
                          (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
-                                   (.transfer)))))))]
-     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache -1 nil deletes? root-fn))))
+                                   (.transfer)))))))
+         block-cache (->block-clock-cache block-cache-size root-fn)]
+     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache deletes? root-fn))))
 
 (defn ->mmap-kd-tree ^core2.temporal.kd_tree.ArrowBufKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
         arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
     (->arrow-buf-kd-tree arrow-buf)))
 
-(def ^:private ^:const default-disk-kd-tree-batch-size (* 16 1024))
+(def ^:private ^:const default-disk-kd-tree-batch-size (* 128 1024))
 
 (defn ->disk-kd-tree ^java.nio.file.Path [^BufferAllocator allocator ^Path path points {:keys [k batch-size compress-blocks?]
                                                                                         :or {compress-blocks? false
@@ -1136,8 +1168,7 @@
                   (accept [_ x]
                     (aset static-delete? 0 true)
                     (.addLong static-delete-bitmap x))))
-      (when (and (not (aget static-delete? 0))
-                 (pos? (.count ^LongStream (kd-tree-range-search dynamic-kd-tree point point))))
+      (when (BitUtil/bitNot (aget static-delete? 0))
         (set! (.dynamic-kd-tree this) (kd-tree-delete dynamic-kd-tree allocator point))))
     this)
 
@@ -1145,7 +1176,7 @@
     (LongStream/concat (.filter ^LongStream (kd-tree-range-search static-kd-tree min-range max-range)
                                 (reify LongPredicate
                                   (test [_ x]
-                                    (not (.contains static-delete-bitmap x)))))
+                                    (BitUtil/bitNot (.contains static-delete-bitmap x)))))
                        (.map ^LongStream (kd-tree-range-search dynamic-kd-tree min-range max-range)
                              (reify LongUnaryOperator
                                (applyAsLong [_ x]
@@ -1155,7 +1186,7 @@
     (LongStream/concat (.filter ^LongStream (kd-tree-points static-kd-tree)
                                 (reify LongPredicate
                                   (test [_ x]
-                                    (not (.contains static-delete-bitmap x)))))
+                                    (BitUtil/bitNot (.contains static-delete-bitmap x)))))
                        (.map ^LongStream (kd-tree-points dynamic-kd-tree)
                              (reify LongUnaryOperator
                                (applyAsLong [_ x]
