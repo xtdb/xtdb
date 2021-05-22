@@ -31,7 +31,7 @@
   (^void setCoordinate [^long idx ^int axis ^long value])
   (^void swapPoint [^long from-idx ^long to-idx])
   (^boolean isDeleted [^long idx])
-  (^boolean isInRange [^long idx ^longs min-range ^longs max-range]))
+  (^boolean isInRange [^long idx ^longs min-range ^longs max-range ^int mask]))
 
 (defprotocol KdTree
   (kd-tree-insert [_ allocator point])
@@ -85,7 +85,7 @@
     (throw (UnsupportedOperationException.)))
   (isDeleted [_ _]
     (throw (IndexOutOfBoundsException.)))
-  (isInRange [_ _ _ _]
+  (isInRange [_ _ _ _ _]
     (throw (IndexOutOfBoundsException.))))
 
 (extend-protocol KdTree
@@ -333,17 +333,19 @@
   (isDeleted [_ idx]
     (.isNull point-vec idx))
 
-  (isInRange [_ idx min-range max-range]
+  (isInRange [_ idx min-range max-range mask]
     (let [^BigIntVector coordinates-vec (.getDataVector point-vec)
           element-start-idx (unchecked-multiply-int idx k)]
       (loop [n (int 0)]
         (if (= n k)
           true
-          (let [x (.get coordinates-vec (unchecked-add-int element-start-idx n))]
-            (if (and (<= (aget min-range n) x)
-                     (<= x (aget max-range n)))
-              (recur (inc n))
-              false)))))))
+          (if (BitUtil/isBitSet mask n)
+            (let [x (.get coordinates-vec (unchecked-add-int element-start-idx n))]
+              (if (and (<= (aget min-range n) x)
+                       (<= x (aget max-range n)))
+                (recur (inc n))
+                false))
+            (recur (inc n))))))))
 
 (defn- reconstruct-node-kd-tree-from-breadth-first-points [^FixedSizeListVector point-vec]
   (let [k (.getListSize point-vec)
@@ -383,16 +385,30 @@
           (.add split-stack (.poll stack)))
         split-stack))))
 
+(defn range-bitmask ^long [^longs min-range ^longs max-range]
+  (let [len (alength min-range)]
+    (loop [n 0
+           mask 0]
+      (if (= n len)
+        mask
+        (recur (inc n)
+               (if (and (= Long/MIN_VALUE (aget min-range n))
+                        (= Long/MAX_VALUE (aget max-range n)))
+                 mask
+                 (bit-or mask (bit-shift-left 1 n))))))))
+
 (deftype NodeRangeSearchSpliterator [^IKdTreePointAccess access
                                      ^longs min-range
                                      ^longs max-range
+                                     ^int axis-mask
                                      ^Deque stack]
   Spliterator$OfLong
   (^void forEachRemaining [_ ^LongConsumer c]
    (let [access access
          min-range min-range
          max-range max-range
-         stack stack]
+         stack stack
+         axis-mask axis-mask]
      (loop []
        (when-let [^Node node (.poll stack)]
          (loop [node node]
@@ -400,17 +416,18 @@
                  right (.right node)
                  axis (.axis node)
                  point-idx (.point-idx node)
-                 point-axis (.getCoordinate access point-idx axis)
-                 min-axis (aget min-range axis)
-                 max-axis (aget max-range axis)
-                 min-match? (<= min-axis point-axis)
-                 max-match? (<= point-axis max-axis)
+                 partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+                 axis-value (if partial-match-axis?
+                              0
+                              (.getCoordinate access point-idx axis))
+                 min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+                 max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
                  visit-left? (and (boolean left) min-match?)
                  visit-right? (and (boolean right) max-match?)]
 
              (when (and min-match?
                         max-match?
-                        (.isInRange access point-idx min-range max-range)
+                        (.isInRange access point-idx min-range max-range axis-mask)
                         (BitUtil/bitNot (.isDeleted access point-idx)))
                (.accept c point-idx))
 
@@ -430,34 +447,35 @@
          (recur)))))
 
   (^boolean tryAdvance [_ ^LongConsumer c]
-    (loop []
-      (if-let [^Node node (.poll stack)]
-        (let [axis (.axis node)
-              point-idx (.point-idx node)
-              point-axis (.getCoordinate access point-idx axis)
-              left (.left node)
-              right (.right node)
-              min-axis (aget min-range axis)
-              max-axis (aget max-range axis)
-              min-match? (<= min-axis point-axis)
-              max-match? (<= point-axis max-axis)
-              visit-left? (and (boolean left) min-match?)
-              visit-right? (and (boolean right) max-match?)]
+   (loop []
+     (if-let [^Node node (.poll stack)]
+       (let [axis (.axis node)
+             point-idx (.point-idx node)
+             left (.left node)
+             right (.right node)
+             partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+             axis-value (if partial-match-axis?
+                          0
+                          (.getCoordinate access point-idx axis))
+             min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+             max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+             visit-left? (and (boolean left) min-match?)
+             visit-right? (and (boolean right) max-match?)]
 
-          (when visit-right?
-            (.push stack right))
+         (when visit-right?
+           (.push stack right))
 
-          (when visit-left?
-            (.push stack left))
+         (when visit-left?
+           (.push stack left))
 
-          (if (and min-match?
-                   max-match?
-                   (.isInRange access point-idx min-range max-range)
-                   (BitUtil/bitNot (.isDeleted access point-idx)))
-            (do (.accept c point-idx)
-                true)
-            (recur)))
-        false)))
+         (if (and min-match?
+                  max-match?
+                  (.isInRange access point-idx min-range max-range axis-mask)
+                  (BitUtil/bitNot (.isDeleted access point-idx)))
+           (do (.accept c point-idx)
+               true)
+           (recur)))
+       false)))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
@@ -467,7 +485,7 @@
 
   (trySplit [_]
     (when-let [split-stack (maybe-split-stack stack)]
-      (NodeRangeSearchSpliterator. access min-range max-range split-stack))))
+      (NodeRangeSearchSpliterator. access min-range max-range axis-mask split-stack))))
 
 (deftype NodeDepthFirstSpliterator [^IKdTreePointAccess access ^Deque stack]
   Spliterator$OfLong
@@ -542,7 +560,7 @@
         (let [axis (.axis node)
               idx (.point-idx node)]
           (cond
-            (.isInRange access idx point point)
+            (.isInRange access idx point point -1)
             (if (= (.isDeleted access idx) deleted?)
               (node-kd-tree-build-path build-path-fns (Node. point-vec (.point-idx node) (.axis node) (.left node) (.right node)))
               (let [point-idx (write-point point-vec access point)]
@@ -578,7 +596,7 @@
           access (kd-tree-point-access kd-tree)
           stack (doto (ArrayDeque.)
                   (.push kd-tree))]
-      (StreamSupport/longStream (NodeRangeSearchSpliterator. access min-range max-range stack) false)))
+      (StreamSupport/longStream (NodeRangeSearchSpliterator. access min-range max-range (range-bitmask min-range max-range) stack) false)))
 
   (kd-tree-points [kd-tree]
     (let [stack (doto (ArrayDeque.)
@@ -683,6 +701,7 @@
                                        ^longs max-range
                                        ^long k
                                        ^long n
+                                       ^int axis-mask
                                        ^Deque stack]
   Spliterator$OfLong
   (^void forEachRemaining [this ^LongConsumer c]
@@ -691,14 +710,18 @@
          max-range max-range
          k k
          n n
-         stack stack]
+         stack stack
+         axis-mask axis-mask]
      (loop []
        (when-let [^ColumnStackEntry stack-entry (.poll stack)]
          (loop [idx (.idx stack-entry)
                 axis (.axis stack-entry)]
-           (let [axis-value (.getCoordinate access idx axis)
-                 min-match? (<= (aget min-range axis) axis-value)
-                 max-match? (<= axis-value (aget max-range axis))
+           (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+                 axis-value (if partial-match-axis?
+                              0
+                              (.getCoordinate access idx axis))
+                 min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+                 max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
                  left-idx (balanced-left-child idx)
                  right-idx (inc left-idx)
                  visit-left? (and min-match? (balanced-valid? n left-idx))
@@ -706,7 +729,7 @@
 
              (when (and min-match?
                         max-match?
-                        (.isInRange access idx min-range max-range)
+                        (.isInRange access idx min-range max-range axis-mask)
                         (BitUtil/bitNot (.isDeleted access idx)))
                (.accept c idx))
 
@@ -725,39 +748,42 @@
          (recur)))))
 
   (^boolean tryAdvance [this ^LongConsumer c]
-    (loop []
-      (if-let [^ColumnStackEntry stack-entry (.poll stack)]
-        (let [idx (.idx stack-entry)
-              axis (.axis stack-entry)]
-          (let [axis-value (.getCoordinate access idx axis)
-                min-match? (<= (aget min-range axis) axis-value)
-                max-match? (<= axis-value (aget max-range axis))
-                left-idx (balanced-left-child idx)
-                right-idx (inc left-idx)
-                visit-left? (and min-match? (balanced-valid? n left-idx))
-                visit-right? (and max-match? (balanced-valid? n right-idx))]
+   (loop []
+     (if-let [^ColumnStackEntry stack-entry (.poll stack)]
+       (let [idx (.idx stack-entry)
+             axis (.axis stack-entry)]
+         (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+               axis-value (if partial-match-axis?
+                            0
+                            (.getCoordinate access idx axis))
+               min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+               max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+               left-idx (balanced-left-child idx)
+               right-idx (inc left-idx)
+               visit-left? (and min-match? (balanced-valid? n left-idx))
+               visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-            (cond
-              (and visit-left? (BitUtil/bitNot visit-right?))
-              (.push stack (ColumnStackEntry. left-idx (next-axis axis k)))
+           (cond
+             (and visit-left? (BitUtil/bitNot visit-right?))
+             (.push stack (ColumnStackEntry. left-idx (next-axis axis k)))
 
-              (and visit-right? (BitUtil/bitNot visit-left?))
-              (.push stack (ColumnStackEntry. right-idx (next-axis axis k)))
+             (and visit-right? (BitUtil/bitNot visit-left?))
+             (.push stack (ColumnStackEntry. right-idx (next-axis axis k)))
 
-              :else
-              (do (when visit-right?
-                    (.push stack (ColumnStackEntry. right-idx (next-axis axis k))))
-                  (when visit-left?
-                    (.push stack (ColumnStackEntry. left-idx (next-axis axis k))))))
+             :else
+             (do (when visit-right?
+                   (.push stack (ColumnStackEntry. right-idx (next-axis axis k))))
+                 (when visit-left?
+                   (.push stack (ColumnStackEntry. left-idx (next-axis axis k))))))
 
-            (if (and min-match?
-                     max-match?
-                     (.isInRange access idx min-range max-range)
-                     (BitUtil/bitNot (.isDeleted access idx)))
-              (do (.accept c idx)
-                  true)
-              (recur))))
-        false)))
+           (if (and min-match?
+                    max-match?
+                    (.isInRange access idx min-range max-range axis-mask)
+                    (BitUtil/bitNot (.isDeleted access idx)))
+             (do (.accept c idx)
+                 true)
+             (recur))))
+       false)))
 
   (characteristics [_]
     (bit-or Spliterator/DISTINCT Spliterator/IMMUTABLE Spliterator/NONNULL Spliterator/ORDERED))
@@ -767,7 +793,7 @@
 
   (trySplit [_]
     (when-let [split-stack (maybe-split-stack stack)]
-      (ColumnRangeSearchSpliterator. access min-range max-range k n split-stack))))
+      (ColumnRangeSearchSpliterator. access min-range max-range k n axis-mask split-stack))))
 
 (defn merge-kd-trees [^BufferAllocator allocator kd-tree-to kd-tree-from]
   (let [^long n (kd-tree-value-count kd-tree-from)
@@ -798,7 +824,7 @@
         stack (doto (ArrayDeque.)
                 (.push (ColumnStackEntry. 0 0)))]
       (StreamSupport/longStream
-       (ColumnRangeSearchSpliterator. access min-range max-range k n stack)
+       (ColumnRangeSearchSpliterator. access min-range max-range k n (range-bitmask min-range max-range) stack)
        false)))
 
 (defn- column-kd-tree-depth [kd-tree]
@@ -947,7 +973,7 @@
                ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
            (.isNull point-vec idx))))
 
-  (isInRange [_ idx min-range max-range]
+  (isInRange [_ idx min-range max-range mask]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
           ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
@@ -956,11 +982,13 @@
       (loop [n (int 0)]
         (if (= n k)
           true
-          (let [x (.get coordinates-vec (unchecked-add-int element-start-idx n))]
-            (if (and (<= (aget min-range n) x)
-                     (<= x (aget max-range n)))
-              (recur (inc n))
-              false)))))))
+          (if (BitUtil/isBitSet mask n)
+            (let [x (.get coordinates-vec (unchecked-add-int element-start-idx n))]
+              (if (and (<= (aget min-range n) x)
+                       (<= x (aget max-range n)))
+                (recur (inc n))
+                false))
+            (recur (inc n))))))))
 
 (deftype BlockClockCache [^ints keys ^objects values ^booleans referenced ^:unsynchronized-mutable ^int clock ^IntFunction root-fn]
   IBlockManager
