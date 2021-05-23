@@ -506,7 +506,12 @@
     (t/is (= 12 (@#'kd/balanced-right-child 5)))
 
     (t/is (= 6 (@#'kd/balanced-parent 12)))
-    (t/is (= 6 (@#'kd/balanced-parent 13))))
+    (t/is (= 6 (@#'kd/balanced-parent 13)))
+
+    (t/is (= 0 (@#'kd/balanced-height 0)))
+    (t/is (= 1 (@#'kd/balanced-height 1)))
+    (t/is (= 2 (@#'kd/balanced-height 3)))
+    (t/is (= 3 (@#'kd/balanced-height 7))))
 
   (t/testing "zero-based index predicates"
     (t/is (@#'kd/balanced-root? 0))

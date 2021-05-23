@@ -2,7 +2,7 @@
   (:require [core2.types :as t]
             [core2.util :as util]
             [clojure.tools.logging :as log])
-  (:import [core2 BitUtil LRU]
+  (:import [core2 BitUtil LongStack LRU]
            [java.io Closeable]
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
@@ -169,6 +169,12 @@
              `(balanced-valid? ~n (balanced-right-child ~idx)))}
   [^long n ^long idx]
   (balanced-valid? n (balanced-right-child idx)))
+
+(defn- balanced-height
+  {:inline (fn [idx]
+             `(- (dec Long/SIZE) (Long/numberOfLeadingZeros (inc ~idx))))}
+  ^long [^long idx]
+  (- (dec Long/SIZE) (Long/numberOfLeadingZeros (inc idx))))
 
 (deftype SubtreeSpliterator [^:unsynchronized-mutable ^long current-in-level
                              ^:unsynchronized-mutable ^long max-in-level
@@ -383,6 +389,17 @@
       (let [split-stack (ArrayDeque.)]
         (while (not= split-size (.size split-stack))
           (.add split-stack (.poll stack)))
+        split-stack))))
+
+(defn- maybe-split-long-stack ^core2.LongStack [^LongStack stack]
+  (let [split-size (quot (.size stack) 2)]
+    (when (pos? split-size)
+      (let [split-array (long-array split-size)
+            split-stack (LongStack.)]
+        (dotimes [n split-size]
+          (aset split-array n (.poll stack)))
+        (dotimes [n split-size]
+          (.push split-stack (aget split-array (- split-size (inc n)))))
         split-stack))))
 
 (defn range-bitmask ^long [^longs min-range ^longs max-range]
@@ -694,15 +711,13 @@
           (.setRowCount idx)
           (build-breadth-first-tree-in-place true))))))
 
-(deftype ColumnStackEntry [^long idx ^int axis])
-
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
                                        ^longs min-range
                                        ^longs max-range
                                        ^long k
                                        ^long n
                                        ^int axis-mask
-                                       ^Deque stack]
+                                       ^LongStack stack]
   Spliterator$OfLong
   (^void forEachRemaining [this ^LongConsumer c]
    (let [access access
@@ -713,76 +728,77 @@
          stack stack
          axis-mask axis-mask]
      (loop []
-       (when-let [^ColumnStackEntry stack-entry (.poll stack)]
-         (loop [idx (.idx stack-entry)
-                axis (.axis stack-entry)]
-           (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
-                 axis-value (if partial-match-axis?
-                              0
-                              (.getCoordinate access idx axis))
-                 min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
-                 max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
-                 left-idx (balanced-left-child idx)
-                 right-idx (inc left-idx)
-                 visit-left? (and min-match? (balanced-valid? n left-idx))
-                 visit-right? (and max-match? (balanced-valid? n right-idx))]
+       (when-not (.isEmpty stack)
+         (let [idx (.poll stack)]
+           (loop [idx idx
+                  axis (rem (balanced-height idx) k)]
+             (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+                   axis-value (if partial-match-axis?
+                                0
+                                (.getCoordinate access idx axis))
+                   min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+                   max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+                   left-idx (balanced-left-child idx)
+                   right-idx (inc left-idx)
+                   visit-left? (and min-match? (balanced-valid? n left-idx))
+                   visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-             (when (and min-match?
-                        max-match?
-                        (.isInRange access idx min-range max-range axis-mask)
-                        (BitUtil/bitNot (.isDeleted access idx)))
-               (.accept c idx))
+               (when (and min-match?
+                          max-match?
+                          (.isInRange access idx min-range max-range axis-mask)
+                          (BitUtil/bitNot (.isDeleted access idx)))
+                 (.accept c idx))
 
-             (cond
-               (and visit-left? (BitUtil/bitNot visit-right?))
-               (recur left-idx (next-axis axis k))
+               (cond
+                 (and visit-left? (BitUtil/bitNot visit-right?))
+                 (recur left-idx (next-axis axis k))
 
-               (and visit-right? (BitUtil/bitNot visit-left?))
-               (recur right-idx (next-axis axis k))
+                 (and visit-right? (BitUtil/bitNot visit-left?))
+                 (recur right-idx (next-axis axis k))
 
-               :else
-               (do (when visit-right?
-                     (.push stack (ColumnStackEntry. right-idx (next-axis axis k))))
-                   (when visit-left?
-                     (recur left-idx (next-axis axis k)))))))
+                 :else
+                 (do (when visit-right?
+                       (.push stack right-idx))
+                     (when visit-left?
+                       (recur left-idx (next-axis axis k))))))))
          (recur)))))
 
   (^boolean tryAdvance [this ^LongConsumer c]
    (loop []
-     (if-let [^ColumnStackEntry stack-entry (.poll stack)]
-       (let [idx (.idx stack-entry)
-             axis (.axis stack-entry)]
-         (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
-               axis-value (if partial-match-axis?
-                            0
-                            (.getCoordinate access idx axis))
-               min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
-               max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
-               left-idx (balanced-left-child idx)
-               right-idx (inc left-idx)
-               visit-left? (and min-match? (balanced-valid? n left-idx))
-               visit-right? (and max-match? (balanced-valid? n right-idx))]
+     (if-not (.isEmpty stack)
+       (let [idx (.poll stack)
+             axis (rem (balanced-height idx) k)
+             partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+             axis-value (if partial-match-axis?
+                          0
+                          (.getCoordinate access idx axis))
+             min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+             max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+             left-idx (balanced-left-child idx)
+             right-idx (inc left-idx)
+             visit-left? (and min-match? (balanced-valid? n left-idx))
+             visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-           (cond
-             (and visit-left? (BitUtil/bitNot visit-right?))
-             (.push stack (ColumnStackEntry. left-idx (next-axis axis k)))
+         (cond
+           (and visit-left? (BitUtil/bitNot visit-right?))
+           (.push stack left-idx)
 
-             (and visit-right? (BitUtil/bitNot visit-left?))
-             (.push stack (ColumnStackEntry. right-idx (next-axis axis k)))
+           (and visit-right? (BitUtil/bitNot visit-left?))
+           (.push stack right-idx)
 
-             :else
-             (do (when visit-right?
-                   (.push stack (ColumnStackEntry. right-idx (next-axis axis k))))
-                 (when visit-left?
-                   (.push stack (ColumnStackEntry. left-idx (next-axis axis k))))))
+           :else
+           (do (when visit-right?
+                 (.push stack right-idx))
+               (when visit-left?
+                 (.push stack left-idx))))
 
-           (if (and min-match?
-                    max-match?
-                    (.isInRange access idx min-range max-range axis-mask)
-                    (BitUtil/bitNot (.isDeleted access idx)))
-             (do (.accept c idx)
-                 true)
-             (recur))))
+         (if (and min-match?
+                  max-match?
+                  (.isInRange access idx min-range max-range axis-mask)
+                  (BitUtil/bitNot (.isDeleted access idx)))
+           (do (.accept c idx)
+               true)
+           (recur)))
        false)))
 
   (characteristics [_]
@@ -792,7 +808,7 @@
     Long/MAX_VALUE)
 
   (trySplit [_]
-    (when-let [split-stack (maybe-split-stack stack)]
+    (when-let [split-stack (maybe-split-long-stack stack)]
       (ColumnRangeSearchSpliterator. access min-range max-range k n axis-mask split-stack))))
 
 (defn merge-kd-trees [^BufferAllocator allocator kd-tree-to kd-tree-from]
@@ -821,8 +837,8 @@
         access (kd-tree-point-access kd-tree)
         ^long k (kd-tree-dimensions kd-tree)
         ^long n (kd-tree-value-count kd-tree)
-        stack (doto (ArrayDeque.)
-                (.push (ColumnStackEntry. 0 0)))]
+        stack (doto (LongStack.)
+                (.push 0))]
       (StreamSupport/longStream
        (ColumnRangeSearchSpliterator. access min-range max-range k n (range-bitmask min-range max-range) stack)
        false)))
