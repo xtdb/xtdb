@@ -18,10 +18,11 @@ public interface IBlockCache extends Closeable {
         }
 
         public FixedSizeListVector getBlockVector(int blockIdx) {
-            if (blockIdx != latestBlockIdx) {
-                this.latestBlockIdx = blockIdx;
-                this.latestBlock = blockCache.getBlockVector(blockIdx);
+            if (blockIdx == latestBlockIdx) {
+                return latestBlock;
             }
+            latestBlockIdx = blockIdx;
+            latestBlock = blockCache.getBlockVector(blockIdx);
             return latestBlock;
         }
 
