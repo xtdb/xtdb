@@ -923,14 +923,14 @@
 (deftype ArrowBufKdTreePointAccess [^IBlockCache block-cache ^int batch-shift ^int batch-mask ^int k ^boolean deletes?]
   IKdTreePointAccess
   (getPoint [_ idx]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
+    (let [block-idx (BitUtil/unsignedBitShiftRight idx batch-shift)
+          idx (BitUtil/bitMask idx batch-mask)
           ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)]
       (.getObject point-vec idx)))
 
   (getArrayPoint [_ idx]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
+    (let [block-idx (BitUtil/unsignedBitShiftRight idx batch-shift)
+          idx (BitUtil/bitMask idx batch-mask)
           root (.getBlockVector block-cache block-idx)
           ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
@@ -941,24 +941,24 @@
       point))
 
   (getCoordinate [_ idx axis]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
+    (let [block-idx (BitUtil/unsignedBitShiftRight idx batch-shift)
+          idx (BitUtil/bitMask idx batch-mask)
           ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           element-start-idx (unchecked-multiply-int idx k)]
       (.get ^BigIntVector (.getDataVector point-vec) (unchecked-add-int element-start-idx axis))))
 
   (setCoordinate [_ idx axis value]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
+    (let [block-idx (BitUtil/unsignedBitShiftRight idx batch-shift)
+          idx (BitUtil/bitMask idx batch-mask)
           ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           element-start-idx (unchecked-multiply-int idx k)]
       (.set ^BigIntVector (.getDataVector point-vec) (unchecked-add-int element-start-idx axis) value)))
 
   (swapPoint [_ from-idx to-idx]
-    (let [from-block-idx (unsigned-bit-shift-right from-idx batch-shift)
-          from-idx (bit-and from-idx batch-mask)
-          to-block-idx (unsigned-bit-shift-right to-idx batch-shift)
-          to-idx (bit-and to-idx batch-mask)
+    (let [from-block-idx (BitUtil/unsignedBitShiftRight from-idx batch-shift)
+          from-idx (BitUtil/bitMask from-idx batch-mask)
+          to-block-idx (BitUtil/unsignedBitShiftRight to-idx batch-shift)
+          to-idx (BitUtil/bitMask to-idx batch-mask)
           ^FixedSizeListVector from-point-vec (.getBlockVector block-cache from-block-idx)
           ^FixedSizeListVector to-point-vec (.getBlockVector block-cache to-block-idx)
           _ (when deletes?
@@ -982,14 +982,14 @@
 
   (isDeleted [_ idx]
     (and deletes?
-         (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-               idx (bit-and idx batch-mask)
+         (let [block-idx (BitUtil/unsignedBitShiftRight idx batch-shift)
+               idx (BitUtil/bitMask idx batch-mask)
                ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)]
            (.isNull point-vec idx))))
 
   (isInRange [_ idx min-range max-range mask]
-    (let [block-idx (unsigned-bit-shift-right idx batch-shift)
-          idx (bit-and idx batch-mask)
+    (let [block-idx (BitUtil/unsignedBitShiftRight idx batch-shift)
+          idx (BitUtil/bitMask idx batch-mask)
           ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           element-start-idx (unchecked-multiply-int idx k)]

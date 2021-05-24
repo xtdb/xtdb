@@ -17,13 +17,14 @@ public interface IBlockCache extends Closeable {
             this.blockCache = blockCache;
         }
 
-        public FixedSizeListVector getBlockVector(int blockIdx) {
+        public FixedSizeListVector getBlockVector(final int blockIdx) {
             if (blockIdx == latestBlockIdx) {
                 return latestBlock;
+            } else {
+                latestBlockIdx = blockIdx;
+                latestBlock = blockCache.getBlockVector(blockIdx);
+                return latestBlock;
             }
-            latestBlockIdx = blockIdx;
-            latestBlock = blockCache.getBlockVector(blockIdx);
-            return latestBlock;
         }
 
         public void close() throws IOException {
@@ -56,7 +57,7 @@ public interface IBlockCache extends Closeable {
             this.used = 0;
         }
 
-        public FixedSizeListVector getBlockVector(int blockIdx) {
+        public FixedSizeListVector getBlockVector(final int blockIdx) {
             final byte tag = (byte) blockIdx;
             for (int i = 0; i < used; i++) {
                 if (tags[i] == tag && keys[i] == blockIdx) {
