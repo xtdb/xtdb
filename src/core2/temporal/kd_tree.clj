@@ -3,10 +3,11 @@
             [core2.util :as util]
             [clojure.tools.logging :as log])
   (:import [core2 BitUtil LongStack LRU]
+           [core2.temporal IBlockCache IBlockCache$ClockBlockCache IBlockCache$LatestBlockCache]
            [java.io Closeable]
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
-           [clojure.lang IFn$LLO IFn$LL]
+           [clojure.lang IFn$LLO IFn$LL Murmur3]
            [java.util ArrayDeque Deque HashMap
             LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
             Spliterator Spliterator$OfLong Spliterators]
@@ -919,22 +920,19 @@
       (.writeBatch out)
       (.clear root))))
 
-(definterface IBlockManager
-  (^org.apache.arrow.vector.complex.FixedSizeListVector getBlockVector [^int block-idx]))
-
-(deftype ArrowBufKdTreePointAccess [^IBlockManager kd-tree ^int batch-shift ^int batch-mask ^int k ^boolean deletes?]
+(deftype ArrowBufKdTreePointAccess [^IBlockCache block-cache ^int batch-shift ^int batch-mask ^int k ^boolean deletes?]
   IKdTreePointAccess
   (getPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
+          ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)]
       (.getObject point-vec idx)))
 
   (getArrayPoint [_ idx]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          root (.getBlockVector kd-tree block-idx)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
+          root (.getBlockVector block-cache block-idx)
+          ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           point (long-array k)
           element-start-idx (unchecked-multiply-int idx k)]
@@ -945,14 +943,14 @@
   (getCoordinate [_ idx axis]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           element-start-idx (unchecked-multiply-int idx k)]
       (.get ^BigIntVector (.getDataVector point-vec) (unchecked-add-int element-start-idx axis))))
 
   (setCoordinate [_ idx axis value]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           element-start-idx (unchecked-multiply-int idx k)]
       (.set ^BigIntVector (.getDataVector point-vec) (unchecked-add-int element-start-idx axis) value)))
 
@@ -961,8 +959,8 @@
           from-idx (bit-and from-idx batch-mask)
           to-block-idx (unsigned-bit-shift-right to-idx batch-shift)
           to-idx (bit-and to-idx batch-mask)
-          ^FixedSizeListVector from-point-vec (.getBlockVector kd-tree from-block-idx)
-          ^FixedSizeListVector to-point-vec (.getBlockVector kd-tree to-block-idx)
+          ^FixedSizeListVector from-point-vec (.getBlockVector block-cache from-block-idx)
+          ^FixedSizeListVector to-point-vec (.getBlockVector block-cache to-block-idx)
           _ (when deletes?
               (let [tmp (.isNull to-point-vec to-idx)]
                 (if (.isNull from-point-vec from-idx)
@@ -986,13 +984,13 @@
     (and deletes?
          (let [block-idx (unsigned-bit-shift-right idx batch-shift)
                idx (bit-and idx batch-mask)
-               ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)]
+               ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)]
            (.isNull point-vec idx))))
 
   (isInRange [_ idx min-range max-range mask]
     (let [block-idx (unsigned-bit-shift-right idx batch-shift)
           idx (bit-and idx batch-mask)
-          ^FixedSizeListVector point-vec (.getBlockVector kd-tree block-idx)
+          ^FixedSizeListVector point-vec (.getBlockVector block-cache block-idx)
           ^BigIntVector coordinates-vec (.getDataVector point-vec)
           element-start-idx (unchecked-multiply-int idx k)]
       (loop [n (int 0)]
@@ -1006,42 +1004,6 @@
                 false))
             (recur (inc n))))))))
 
-(deftype BlockClockCache [^ints keys ^objects values ^booleans referenced ^:unsynchronized-mutable ^int clock ^IntFunction root-fn]
-  IBlockManager
-  (getBlockVector [this block-idx]
-    (let [cache-size (alength keys)
-          mask (dec cache-size)]
-      (loop [n (int (bit-and mask block-idx))]
-        (if (= n cache-size)
-          (loop [clock clock]
-            (if (aget referenced clock)
-              (do (aset referenced clock false)
-                  (recur (let [clock (inc clock)]
-                           (if (= cache-size clock)
-                             0
-                             clock))))
-              (let [v (.apply root-fn block-idx)]
-                (util/try-close (aget values clock))
-                (aset values clock v)
-                (aset keys clock block-idx)
-                (let [clock (inc clock)]
-                  (set! (.clock this) (if (= cache-size clock)
-                                       0
-                                       clock))
-                  v))))
-          (if (= block-idx (aget keys n))
-            (do (aset referenced n true)
-                (aget values n))
-            (recur (inc n)))))))
-
-  Closeable
-  (close [_]
-    (doseq [v values]
-      (util/try-close v))))
-
-(defn- ->block-clock-cache [^long cache-size ^IntFunction root-fn]
-  (BlockClockCache. (int-array cache-size -1) (object-array cache-size) (boolean-array cache-size) 0 root-fn))
-
 (defn- ->block-cache [^long cache-size]
   (LRU. cache-size
         (reify BiPredicate
@@ -1052,9 +1014,9 @@
               false)))))
 
 (deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size
-                         ^IBlockManager block-cache
-                          ^boolean deletes?
-                         ^IntFunction root-fn]
+                         ^IBlockCache block-cache
+                         ^boolean deletes?
+                         ^IBlockCache root-block-cache]
   KdTree
   (kd-tree-insert [_ allocator point]
     (throw (UnsupportedOperationException.)))
@@ -1079,9 +1041,9 @@
                      batch-mask
                      value-count
                      block-cache-size
-                     (->block-clock-cache block-cache-size root-fn)
+                     (IBlockCache$LatestBlockCache. (IBlockCache$ClockBlockCache. block-cache-size root-block-cache))
                      deletes?
-                     root-fn))
+                     root-block-cache))
 
   (kd-tree-point-access [kd-tree]
     (ArrowBufKdTreePointAccess. block-cache batch-shift batch-mask (kd-tree-dimensions kd-tree) deletes?))
@@ -1098,14 +1060,9 @@
   Closeable
   (close [_]
     (util/try-close block-cache)
-    ;; (util/try-close latest-block)
-    ;; (.remove block-cache latest-block-idx)
-    ;; (doseq [v (vals block-cache)]
-    ;;   (util/try-close v))
-    ;; (.clear block-cache)
     (util/try-close arrow-buf)))
 
-(def ^:const default-block-cache-size 32)
+(def ^:const default-block-cache-size 16)
 
 (defn ->arrow-buf-kd-tree
   (^core2.temporal.kd_tree.ArrowBufKdTree [^ArrowBuf arrow-buf]
@@ -1129,16 +1086,18 @@
                       (inc Integer/MAX_VALUE))
          batch-mask (dec batch-size)
          batch-shift (Long/bitCount batch-mask)
-         root-fn (reify IntFunction
-                   (apply [_ block-idx]
-                     (let [allocator (.getAllocator (.getReferenceManager arrow-buf))]
-                       (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)
-                                   root (VectorSchemaRoot/create (.getSchema footer) allocator)]
-                         (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
-                         (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
-                                   (.transfer)))))))
-         block-cache (->block-clock-cache block-cache-size root-fn)]
-     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache deletes? root-fn))))
+         root-block-cache (reify IBlockCache
+                            (getBlockVector [_ block-idx]
+                              (let [allocator (.getAllocator (.getReferenceManager arrow-buf))]
+                                (with-open [arrow-record-batch (util/->arrow-record-batch-view (.get (.getRecordBatches footer) block-idx) arrow-buf)
+                                            root (VectorSchemaRoot/create (.getSchema footer) allocator)]
+                                  (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
+                                  (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
+                                            (.transfer))))))
+
+                            (close [_]))
+         block-cache (IBlockCache$LatestBlockCache. (IBlockCache$ClockBlockCache. block-cache-size root-block-cache))]
+     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache deletes? root-block-cache))))
 
 (defn ->mmap-kd-tree ^core2.temporal.kd_tree.ArrowBufKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
