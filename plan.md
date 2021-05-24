@@ -114,17 +114,29 @@ Two main extension points:
 2. Core2 as something keen users can play with
    - Features, functionality
      - Higher-level queries
-       - Multi-way WCOJ hash joins?
-       - EDN Datalog.
-       - SQL.
+       - Basic EDN Datalog - compiling EDN Datalog down to logical plan
+         - :find, :where (triple joins),
+         - :order-by, :limit, group-by/aggregates
+         - known predicates
+         - :in clauses, parameterisation
+     - as-of API
+     - basic WatDiv
    - Documentation
 3. Core2 as a viable alternative to Crux
    - Deployment, monitoring
      - multi-module (Kafka, S3)
    - Documentation, marketing
    - Features, functionality
-     - Bitemporal features, interval algebra.
+     - SQL.
      - Eviction
+     - Full EDN Datalog
+       - Rules, or-joins, not-joins, self-joins etc
+       - Query planning
+       - Pull
+       - Nested queries
+     - Bitemporal features, interval algebra.
+       - Expose valid-time
+     - Multi-way WCOJ hash joins?
      - More logs/object-stores
        - Kinesis
        - GCP Pub/Sub and Cloud Storage.
@@ -134,6 +146,10 @@ Two main extension points:
        - JDBC log, object store.
    - Migration from Classic
    - How much of Crux should Core2 pull in?
+     - Match
+     - Speculative txs
+     - Tx fns
+     - Support lists/cardinality-many? Requires discussion
 
 Clean up:
 - TODO remaining late-mat optimisations
@@ -150,10 +166,7 @@ Clean up:
 Should have:
 - External sort in query engine
 - We don't currently coalesce small intermediate blocks in the query engine
-- Support lists/cardinality-many? Requires discussion
 - Reconstructing the log - storage of incoming transactions in object store
-- Tx fns?
-- Speculative transactions?
 
 Misc functionality/ideas:
 - GHD-based planner?
