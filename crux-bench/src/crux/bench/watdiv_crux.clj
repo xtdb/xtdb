@@ -82,6 +82,9 @@
 ;; - `crux-errors` are the query indices where Crux failed/timed out but the comparison database didn't (i.e. the ones we should arguably be able to execute)
 ;; - Queries where both databases timed out are excluded.
 
+;; N.B. Query 34 is interesting - it shows up as a 'crux-failure' for Neo4J but not RDF4J or Datomic - this is because Neo4J disagrees with RDF4J and Datomic.
+;; I don't know which is correct!
+
 (defn summarise-query-results [watdiv-query-results]
   (let [base-map (select-keys (first watdiv-query-results) [:bench-ns :crux-node-type])
         query-summary (merge base-map
