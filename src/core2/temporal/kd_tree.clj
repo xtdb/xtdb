@@ -1004,15 +1004,6 @@
                 false))
             (recur (inc n))))))))
 
-(defn- ->block-cache [^long cache-size]
-  (LRU. cache-size
-        (reify BiPredicate
-          (test [_ map entry]
-            (if (> (.size ^Map map) cache-size)
-              (do (util/try-close (.getValue ^Map$Entry entry))
-                  true)
-              false)))))
-
 (deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size
                          ^IBlockCache block-cache
                          ^boolean deletes?
