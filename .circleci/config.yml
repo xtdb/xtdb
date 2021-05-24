@@ -27,6 +27,9 @@ orbs:
               command: |
                 cd crux-build
                 DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
+
+          - run:
+              command: |
                 cd crux-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
 
@@ -144,7 +147,6 @@ jobs:
               - ~/crux/crux-bench/data/
             key: v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
 
-
   create-artifacts:
     docker:
       - image: circleci/clojure:openjdk-8-tools-deps
@@ -158,6 +160,10 @@ jobs:
           crux-edn: "crux-in-memory.edn"
           deps-edn: "deps-in-memory.edn"
           artifact-name: "crux-in-memory"
+      - crux/deploy-artifacts:
+          crux-edn: "crux-standalone-rocksdb.edn"
+          deps-edn: "deps-standalone-rocksdb.edn"
+          artifact-name: "crux-standalone-rocksdb"
 
   create-api-docs:
     docker:

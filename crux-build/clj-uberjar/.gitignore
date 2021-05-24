@@ -2,6 +2,6 @@
 !.gitignore
 !deps.edn
 !build-uberjar.sh
-!crux-in-memory.edn
 !crux.edn
-!crux-sql.edn
+!crux-in-memory.edn
+!crux-standalone-rocksdb.edn
