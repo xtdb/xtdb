@@ -26,8 +26,8 @@
     (doseq [k (range 2 4)]
       (let [rng (Random. 0)
             _ (prn :k k)
-            ns 100000
-            qs 10000
+            ns 1000000
+            qs 100
             ts 3
             _ (prn :gen-points ns)
             points (time
