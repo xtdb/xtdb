@@ -9,7 +9,8 @@
             [crux.fixtures :as f]
             [crux.fixtures.kv :as fkv]
             [crux.kv.index-store :as kvi]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.kv.document-store :as kvds])
   (:import clojure.lang.MapEntry
            crux.codec.EntityTx
            crux.api.NodeOutOfSyncException
@@ -288,3 +289,45 @@
 
       (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
         (t/is (= doc (db/entity index-snapshot :foo doc-id)))))))
+
+#_
+(t/deftest test-entity-slowdown
+  (with-fresh-index-store
+    (let [simple-doc {:crux.db/id :foo
+                      :foo :bar}
+          simple-doc-id (c/new-id simple-doc)
+          large-vec-doc {:crux.db/id :bar
+                         :foo (vec (range 1024))}
+          large-vec-doc-id (c/new-id large-vec-doc)
+          docs {simple-doc-id simple-doc, large-vec-doc-id large-vec-doc}
+          doc-store (kvds/->KvDocumentStore (:kv-store *index-store*) false)]
+      (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)
+        (db/index-docs docs)
+        (db/commit-index-tx))
+
+      (db/submit-docs doc-store docs)
+
+      (letfn [(bench-index-store [doc-id]
+                (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
+                  (dotimes [_ 1000]
+                    (db/entity index-snapshot :foo doc-id))
+                  (let [start-ns (System/nanoTime)]
+                    (dotimes [_ 1000]
+                      (db/entity index-snapshot :foo doc-id))
+                    (- (System/nanoTime) start-ns))))
+
+              (bench-doc-store [doc-id]
+                (dotimes [_ 1000]
+                  (db/fetch-docs doc-store #{doc-id}))
+                (time
+                 (let [start-ns (System/nanoTime)]
+                   (dotimes [_ 1000]
+                     (db/fetch-docs doc-store #{doc-id}))
+                   (- (System/nanoTime) start-ns))))]
+
+        ;; I mean, `<` is optimistic, I'll put a proper factor in here when we re-enable it
+        (t/is (< (bench-index-store simple-doc-id)
+                 (bench-doc-store simple-doc-id)))
+
+        (t/is (< (bench-index-store large-vec-doc-id)
+                 (bench-doc-store large-vec-doc-id)))))))
