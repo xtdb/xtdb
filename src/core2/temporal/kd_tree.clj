@@ -3,7 +3,7 @@
             [core2.util :as util]
             [clojure.tools.logging :as log])
   (:import [core2 BitUtil LongStack LRU]
-           [core2.temporal IBlockCache IBlockCache$ClockBlockCache IBlockCache$LatestBlockCache]
+           [core2.temporal IBlockCache IBlockCache$ClockBlockCache IBlockCache$LatestBlockCache SubtreeSpliterator]
            [java.io Closeable]
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
@@ -177,31 +177,7 @@
   ^long [^long idx]
   (BitUtil/log2 idx))
 
-(deftype SubtreeSpliterator [^:unsynchronized-mutable ^long current-in-level
-                             ^:unsynchronized-mutable ^long max-in-level
-                             ^:unsynchronized-mutable ^long current
-                             ^long n]
-  Object
-  (clone [_]
-    (SubtreeSpliterator. current-in-level max-in-level current n))
-
-  Spliterator$OfLong
-  (^boolean tryAdvance [this ^LongConsumer consumer]
-   (if (balanced-valid? n current)
-     (do (.accept consumer current)
-         (set! (.current this) (inc current))
-         (set! (.current-in-level this) (inc current-in-level))
-         (when (= current-in-level max-in-level)
-           (set! (.current this) (balanced-left-child (- current max-in-level)))
-           (set! (.max-in-level this) (+ max-in-level max-in-level))
-           (set! (.current-in-level this) 0))
-         (balanced-valid? n current))
-     false))
-
-  LongSupplier
-  (getAsLong [_] current))
-
-(defn ->subtree-spliterator ^core2.temporal.kd_tree.SubtreeSpliterator [^long n ^long root]
+(defn ->subtree-spliterator ^core2.temporal.SubtreeSpliterator [^long n ^long root]
   (SubtreeSpliterator. 0 1 root n))
 
 ;; Breadth first kd-tree in-place build based on:
@@ -727,42 +703,53 @@
          k k
          n n
          stack stack
-         axis-mask axis-mask]
-     (loop []
-       (when-not (.isEmpty stack)
-         (let [idx (.poll stack)]
-           (loop [idx idx
-                  axis (BitUtil/rem (balanced-height idx) k)]
-             (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
-                   axis-value (if partial-match-axis?
-                                0
-                                (.getCoordinate access idx axis))
-                   min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
-                   max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
-                   left-idx (balanced-left-child idx)
-                   right-idx (inc left-idx)
-                   visit-left? (and min-match? (balanced-valid? n left-idx))
-                   visit-right? (and max-match? (balanced-valid? n right-idx))]
+         axis-mask axis-mask
+         max-breadth-first-level (long (/ (* 2 (balanced-height n)) 3))]
+     (when-not (.isEmpty stack)
+       (let [idx (.poll stack)
+             level (balanced-height idx)]
+         (loop [level level
+                axis (BitUtil/rem level k)
+                next-level-entries (long-array 1 idx)]
+           (if (< level max-breadth-first-level)
+             (let [new-next-level-entries (LongStream/builder)]
+               (.forEach (LongStream/of next-level-entries)
+                         (reify LongConsumer
+                           (accept [_ idx]
+                             (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+                                   axis-value (if partial-match-axis?
+                                                0
+                                                (.getCoordinate access idx axis))
+                                   min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+                                   max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+                                   left-idx (balanced-left-child idx)
+                                   right-idx (inc left-idx)
+                                   visit-left? (and min-match? (balanced-valid? n left-idx))
+                                   visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-               (when (and min-match?
-                          max-match?
-                          (.isInRange access idx min-range max-range axis-mask)
-                          (BitUtil/bitNot (.isDeleted access idx)))
-                 (.accept c idx))
+                               (when (and min-match?
+                                          max-match?
+                                          (.isInRange access idx min-range max-range axis-mask)
+                                          (BitUtil/bitNot (.isDeleted access idx)))
+                                 (.accept c idx))
 
-               (cond
-                 (and visit-left? (BitUtil/bitNot visit-right?))
-                 (recur left-idx (next-axis axis k))
+                               (when visit-left?
+                                 (.add new-next-level-entries left-idx))
 
-                 (and visit-right? (BitUtil/bitNot visit-left?))
-                 (recur right-idx (next-axis axis k))
-
-                 :else
-                 (do (when visit-right?
-                       (.push stack right-idx))
-                     (when visit-left?
-                       (recur left-idx (next-axis axis k))))))))
-         (recur)))))
+                               (when visit-right?
+                                 (.add new-next-level-entries right-idx))))))
+               (let [new-next-level-entries (.toArray (.build new-next-level-entries))]
+                 (when (pos? (alength new-next-level-entries))
+                   (recur (inc level) (next-axis axis k) new-next-level-entries))))
+             (.forEach (LongStream/of next-level-entries)
+                       (reify LongConsumer
+                         (accept [_ idx]
+                           (.forEachRemaining ^Spliterator$OfLong (->subtree-spliterator n idx)
+                                              (reify LongConsumer
+                                                (accept [_ idx]
+                                                  (when (and (.isInRange access idx min-range max-range axis-mask)
+                                                             (BitUtil/bitNot (.isDeleted access idx)))
+                                                    (.accept c idx))))))))))))))
 
   (^boolean tryAdvance [this ^LongConsumer c]
    (loop []
