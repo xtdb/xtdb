@@ -16,4 +16,12 @@ public final class BitUtil {
     public static int bitMask(final long x, final int mask) {
         return ((int) x) & mask;
     }
+
+    public static int rem(final int x, final int y) {
+        return x % y;
+    }
+
+    public static int log2(final long x) {
+        return (Long.SIZE - 1) - Long.numberOfLeadingZeros(x + 1);
+    }
 }

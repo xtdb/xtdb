@@ -173,9 +173,9 @@
 
 (defn- balanced-height
   {:inline (fn [idx]
-             `(- (dec Long/SIZE) (Long/numberOfLeadingZeros (inc ~idx))))}
+             `(BitUtil/log2 ~idx))}
   ^long [^long idx]
-  (- (dec Long/SIZE) (Long/numberOfLeadingZeros (inc idx))))
+  (BitUtil/log2 idx))
 
 (deftype SubtreeSpliterator [^:unsynchronized-mutable ^long current-in-level
                              ^:unsynchronized-mutable ^long max-in-level
@@ -732,7 +732,7 @@
        (when-not (.isEmpty stack)
          (let [idx (.poll stack)]
            (loop [idx idx
-                  axis (rem (balanced-height idx) k)]
+                  axis (BitUtil/rem (balanced-height idx) k)]
              (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
                    axis-value (if partial-match-axis?
                                 0
@@ -768,7 +768,7 @@
    (loop []
      (if-not (.isEmpty stack)
        (let [idx (.poll stack)
-             axis (rem (balanced-height idx) k)
+             axis (BitUtil/rem (balanced-height idx) k)
              partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
              axis-value (if partial-match-axis?
                           0
