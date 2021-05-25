@@ -53,6 +53,7 @@
   (ave [this a v min-e entity-resolver-fn])
   (ae [this a min-e])
   (aev [this a e min-v entity-resolver-fn])
+  (entity [this e c])
   (entity-as-of-resolver [this eid valid-time tx-id])
   (entity-as-of ^crux.codec.EntityTx [this eid valid-time tx-id])
   (entity-history [this eid sort-order opts])
