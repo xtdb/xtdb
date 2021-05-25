@@ -875,59 +875,57 @@
     (t/testing "IPersistentMap"
       (doto (-> (PersistentArrayMap/EMPTY)
                 (.assoc "foo" "bar"))
-        (test-id) (test-value)))))
+        (test-id) (test-value)))
 
-(comment
-  ;;TODO: Test failing. When issue fixed, migrate these into the above
-  (t/testing "Set"
-    (doto (HashSet.)
-      (.add "foo")
-      (.add "bar")
-      (test-value)))
+    (t/testing "Set"
+      (doto (HashSet.)
+        (.add "foo")
+        (.add "bar")
+        (test-value)))
 
-  (t/testing "Singleton Map"
-    (doto (Collections/singletonMap "foo" "bar")
-      (test-id) (test-value)))
+    (t/testing "Singleton Map"
+      (doto (Collections/singletonMap "foo" "bar")
+        (test-id) (test-value)))
 
-  (t/testing "HashMap with single entry"
-    (doto (HashMap.)
-      (.put "foo" "bar")
-      (test-id) (test-value)))
+    (t/testing "HashMap with single entry"
+      (doto (HashMap.)
+        (.put "foo" "bar")
+        (test-id) (test-value)))
 
-  (t/testing "HashMap with multiple entries"
-    (doto (HashMap.)
-      (.put "foo" "bar")
-      (.put "baz" "waka")
-      (test-id) (test-value)))
+    (t/testing "HashMap with multiple entries"
+      (doto (HashMap.)
+        (.put "foo" "bar")
+        (.put "baz" "waka")
+        (test-id) (test-value)))
 
-  (t/testing "HashMap with entries added in different order"
-    (let [val1 (doto (HashMap.)
-                 (.put "foo" "bar")
-                 (.put "baz" "waka"))
-          val2 (doto (HashMap.)
-                 (.put "baz" "waka")
-                 (.put "foo" "bar"))]
+    (t/testing "HashMap with entries added in different order"
+      (let [val1 (doto (HashMap.)
+                   (.put "foo" "bar")
+                   (.put "baz" "waka"))
+            val2 (doto (HashMap.)
+                   (.put "baz" "waka")
+                   (.put "foo" "bar"))]
 
-      (t/is (= val1 val2))
-      (t/testing "As ID"
-        (with-open [node (crux/start-node {})]
-          (let [doc {:crux.db/id val1}]
-            (fix/submit+await-tx node [[:crux.tx/put doc]])
-            (t/is (= doc (crux/entity (crux/db node) val2)))
-            (let [result (crux/q (crux/db node) '{:find [?id]
-                                                  :where [[?id :crux.db/id]]})]
-              (t/is #{[val1]} result)
-              (t/is #{[val2]} result)))))
+        (t/is (= val1 val2))
+        (t/testing "As ID"
+          (with-open [node (crux/start-node {})]
+            (let [doc {:crux.db/id val1}]
+              (fix/submit+await-tx node [[:crux.tx/put doc]])
+              (t/is (= doc (crux/entity (crux/db node) val2)))
+              (let [result (crux/q (crux/db node) '{:find [?id]
+                                                    :where [[?id :crux.db/id]]})]
+                (t/is #{[val1]} result)
+                (t/is #{[val2]} result)))))
 
-      (t/testing "As Value"
-        (with-open [node (crux/start-node {})]
-          (let [doc {:crux.db/id :foo :bar val1}]
-            (fix/submit+await-tx node [[:crux.tx/put doc]])
-            (t/is (= doc (crux/entity (crux/db node) :foo)))
-            (let [result (crux/q (crux/db node) '{:find [?val]
-                                                  :where [[?id :bar ?val]]})]
-              (t/is #{[val1]} result)
-              (t/is #{[val2]} result))))))))
+        (t/testing "As Value"
+          (with-open [node (crux/start-node {})]
+            (let [doc {:crux.db/id :foo :bar val1}]
+              (fix/submit+await-tx node [[:crux.tx/put doc]])
+              (t/is (= doc (crux/entity (crux/db node) :foo)))
+              (let [result (crux/q (crux/db node) '{:find [?val]
+                                                    :where [[?id :bar ?val]]})]
+                (t/is #{[val1]} result)
+                (t/is #{[val2]} result)))))))))
 
 (t/deftest overlapping-valid-time-ranges-434
   (let [_ (fix/submit+await-tx

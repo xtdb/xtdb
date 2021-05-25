@@ -157,13 +157,17 @@
                                  mem/buffer-comparator))))))
 
 (defn- freeze-map [out m]
-  (cond
-    ;; have to maintain id-sorted-map here because it's on tx-logs,
-    ;; but we can't thaw this because nippy thaws it straight to PersistentTreeMap
-    ;; which doesn't allow incomparable keys
-    *consistent-ids?* (#'nippy/write-kvs out @#'nippy/id-sorted-map (sort-map m))
-    *consistent-values?* (#'nippy/write-map out (sort-map m))
-    :else (#'nippy/write-map out m)))
+  (try
+    (cond
+      ;; have to maintain id-sorted-map here because it's on tx-logs,
+      ;; but we can't thaw this because nippy thaws it straight to PersistentTreeMap
+      ;; which doesn't allow incomparable keys
+      *consistent-ids?* (#'nippy/write-kvs out @#'nippy/id-sorted-map (sort-map m))
+      *consistent-values?* (#'nippy/write-map out (sort-map m))
+      :else (#'nippy/write-map out (->kv-reduce m)))
+    (catch Exception e
+      (prn *consistent-ids?* *consistent-values?* m)
+      (throw e))))
 
 (extend-protocol nippy/IFreezable1
   Set
