@@ -28,6 +28,20 @@
     (binding [*allocator* allocator]
       (f))))
 
+(def ^:dynamic ^:private *node-opts* [])
+(def ^:dynamic *node*)
+
+(defn with-opts
+  ([opts] (partial with-opts opts))
+  ([opts f]
+   (binding [*node-opts* (conj *node-opts* opts)]
+     (f))))
+
+(defn with-node [f]
+  (with-open [node (c2/start-node *node-opts*)]
+    (binding [*node* node]
+      (f))))
+
 (defn ->list ^java.util.List [^ValueVector v]
   (let [acc (ArrayList.)]
     (dotimes [n (.getValueCount v)]
@@ -44,6 +58,15 @@
        (util/then-apply
         (fn [tx]
           (c2/await-tx node tx timeout))))))
+
+(defn with-submitted-tx* [tx-ops f]
+  @(-> (c2/submit-tx *node* tx-ops)
+       (then-await-tx *node*))
+  (with-open [db (c2/open-db *node*)]
+    (f db)))
+
+(defmacro with-submitted-tx [[db-binding tx-ops] & body]
+  `(with-submitted-tx* ~tx-ops (fn [~db-binding] ~@body)))
 
 (defn ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]
