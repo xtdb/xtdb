@@ -14,4 +14,3 @@ class NodeConfigurationContext private constructor() {
 
     private fun build() = builder.build()
 }
-

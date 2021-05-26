@@ -1,12 +1,12 @@
 package crux.api.query.conversion
 
-import crux.api.query.domain.ProjectionSpec
-import crux.api.query.domain.ProjectionSpec.Item
-import crux.api.query.domain.ProjectionSpec.Item.Field.Attribute
-import crux.api.query.domain.ProjectionSpec.Item.Field.Attributes
+import crux.api.query.domain.PullSpec
+import crux.api.query.domain.PullSpec.Item
+import crux.api.query.domain.PullSpec.Item.Field.Attribute
+import crux.api.query.domain.PullSpec.Item.Field.Attributes
 import crux.api.underware.*
 
-fun ProjectionSpec.toEdn() = items.map(Item::toEdn).pv
+fun PullSpec.toEdn() = items.map(Item::toEdn).pv
 
 private val ALL = "*".sym
 

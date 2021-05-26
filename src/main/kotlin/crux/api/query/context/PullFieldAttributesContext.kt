@@ -1,15 +1,15 @@
 package crux.api.query.context
 
 import clojure.lang.Keyword
-import crux.api.query.domain.ProjectionSpec.Item.Field.Attribute
-import crux.api.query.domain.ProjectionSpec.Item.Field.Attribute.*
-import crux.api.query.domain.ProjectionSpec.Item.Field.Attributes
+import crux.api.query.domain.PullSpec.Item.Field.Attribute
+import crux.api.query.domain.PullSpec.Item.Field.Attribute.*
+import crux.api.query.domain.PullSpec.Item.Field.Attributes
 import crux.api.underware.BuilderContext
 import crux.api.underware.SimpleBuilderContext
 import javax.naming.OperationNotSupportedException
 
-class ProjectionFieldAttributesContext: SimpleBuilderContext<Attribute, Attributes>(::Attributes) {
-    companion object : BuilderContext.Companion<Attributes, ProjectionFieldAttributesContext>(::ProjectionFieldAttributesContext)
+class PullFieldAttributesContext: SimpleBuilderContext<Attribute, Attributes>(::Attributes) {
+    companion object : BuilderContext.Companion<Attributes, PullFieldAttributesContext>(::PullFieldAttributesContext)
 
     var name: Keyword
         get() = throw OperationNotSupportedException()

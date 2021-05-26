@@ -24,6 +24,6 @@ sealed class FindClause {
 
     data class AggregateWithNumber(val type: AggregateType, val n: Int, val symbol: Symbol): FindClause()
 
-    data class Pull(val symbol: Symbol, val spec: ProjectionSpec): FindClause()
+    data class Pull(val symbol: Symbol, val spec: PullSpec): FindClause()
 }
 

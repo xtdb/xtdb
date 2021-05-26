@@ -2,7 +2,7 @@ package crux.api.query.domain
 
 import clojure.lang.Keyword
 
-data class ProjectionSpec(val items: List<Item>) {
+data class PullSpec(val items: List<Item>) {
 
     sealed class Item {
         object ALL: Item()
@@ -21,6 +21,6 @@ data class ProjectionSpec(val items: List<Item>) {
             }
         }
 
-        data class Join(val keyword: Keyword, val spec: ProjectionSpec): Item()
+        data class Join(val keyword: Keyword, val spec: PullSpec): Item()
     }
 }

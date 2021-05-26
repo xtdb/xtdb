@@ -4,8 +4,8 @@ import clojure.lang.Symbol
 import crux.api.query.domain.FindClause
 import crux.api.query.domain.FindClause.*
 import crux.api.query.domain.FindClause.AggregateType.*
-import crux.api.query.domain.ProjectionSpec
-import crux.api.query.domain.ProjectionSpec.Item.ALL
+import crux.api.query.domain.PullSpec
+import crux.api.query.domain.PullSpec.Item.ALL
 import crux.api.query.domain.QuerySection.FindSection
 import crux.api.underware.BuilderContext
 import crux.api.underware.SimpleBuilderContext
@@ -33,6 +33,6 @@ class FindContext private constructor(): SimpleBuilderContext<FindClause, FindSe
     fun sample(n: Int, symbol: Symbol) = aggregate(SAMPLE, n, symbol)
     fun distinct(symbol: Symbol) = aggregate(DISTINCT, symbol)
 
-    fun pull(symbol: Symbol, block: ProjectionSpecContext.() -> Unit) = +Pull(symbol, ProjectionSpecContext.build(block))
-    fun pullAll(symbol: Symbol) = +Pull(symbol, ProjectionSpec(listOf(ALL)))
+    fun pull(symbol: Symbol, block: PullSpecContext.() -> Unit) = +Pull(symbol, PullSpecContext.build(block))
+    fun pullAll(symbol: Symbol) = +Pull(symbol, PullSpec(listOf(ALL)))
 }
