@@ -19,6 +19,7 @@ class PullTest {
     companion object {
         private val nameKey = "name".kw
         private val professionKey = "profession".kw
+        private val fieldKey = "field".kw
 
         private fun createPerson(id: String, name: String, profession: String) = CruxDocument.build(id) {
             it.put("name", name)
@@ -26,6 +27,12 @@ class PullTest {
         }
 
         private fun createProfession(id: String, name: String) = CruxDocument.build(id) {
+            it.put("name", name)
+            it.put("field", "medical")
+        }
+        
+        @Suppress("SameParameterValue")
+        private fun createField(id: String, name: String) = CruxDocument.build(id) {
             it.put("name", name)
         }
 
@@ -39,10 +46,11 @@ class PullTest {
     private val db = CruxK.startNode().apply {
         submitTx {
             put(createPerson("ivan", "Ivan", "doctor"))
-            put(createPerson("sergei", "Sergei", "lawyer"))
+            put(createPerson("sergei", "Sergei", "dentist"))
             put(createPerson("petr", "Petr", "doctor"))
             put(createProfession("doctor", "Doctor"))
-            put(createProfession("lawyer", "Lawyer"))
+            put(createProfession("dentist", "Dentist"))
+            put(createField("medical", "Medical"))
         }.also {
             awaitTx(it, Duration.ofSeconds(10))
         }
@@ -67,7 +75,7 @@ class PullTest {
                 setOf(
                     listOf("ivan", "Ivan", "doctor"),
                     listOf("petr", "Petr", "doctor"),
-                    listOf("sergei", "Sergei", "lawyer")
+                    listOf("sergei", "Sergei", "dentist")
                 )
             )
         )
@@ -99,7 +107,7 @@ class PullTest {
                     ),
                     mapOf(
                         nameKey to "Sergei",
-                        professionKey to "lawyer"
+                        professionKey to "dentist"
                     )
                 )
             )
@@ -132,7 +140,7 @@ class PullTest {
                     mapOf(
                         cruxId to "sergei",
                         nameKey to "Sergei",
-                        professionKey to "lawyer"
+                        professionKey to "dentist"
                     )
                 )
             )
@@ -151,7 +159,7 @@ class PullTest {
                 }
 
                 where {
-                    person has professionKey eq "lawyer"
+                    person has professionKey eq "dentist"
                 }
             }.singleResultSet(),
             equalTo(
@@ -176,7 +184,7 @@ class PullTest {
                 }
 
                 where {
-                    person has professionKey eq "lawyer"
+                    person has professionKey eq "dentist"
                 }
             }.singleResultSet(),
             equalTo(
@@ -222,7 +230,7 @@ class PullTest {
                     mapOf(
                         nameKey to "Sergei",
                         professionKey to mapOf(
-                            nameKey to "Lawyer"
+                            nameKey to "Dentist"
                         )
                     )
                 )
@@ -250,21 +258,78 @@ class PullTest {
                         nameKey to "Ivan",
                         professionKey to mapOf(
                             cruxId to "doctor",
-                            nameKey to "Doctor"
+                            nameKey to "Doctor",
+                            fieldKey to "medical"
                         )
                     ),
                     mapOf(
                         nameKey to "Petr",
                         professionKey to mapOf(
                             cruxId to "doctor",
-                            nameKey to "Doctor"
+                            nameKey to "Doctor",
+                            fieldKey to "medical"
                         )
                     ),
                     mapOf(
                         nameKey to "Sergei",
                         professionKey to mapOf(
-                            cruxId to "lawyer",
-                            nameKey to "Lawyer"
+                            cruxId to "dentist",
+                            nameKey to "Dentist",
+                            fieldKey to "medical"
+                        )
+                    )
+                )
+            )
+        )
+
+    @Test
+    fun `can pull recursively`() =
+        assertThat(
+            db.q {
+                find {
+                    pull(person) {
+                        +nameKey
+                        join(professionKey) {
+                            +nameKey
+                            joinAll(fieldKey)
+                        }
+                    }
+                }
+
+                where {
+                    person has professionKey
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf(
+                    mapOf(
+                        nameKey to "Ivan",
+                        professionKey to mapOf(
+                            nameKey to "Doctor",
+                            fieldKey to mapOf(
+                                cruxId to "medical",
+                                nameKey to "Medical"
+                            )
+                        )
+                    ),
+                    mapOf(
+                        nameKey to "Petr",
+                        professionKey to mapOf(
+                            nameKey to "Doctor",
+                            fieldKey to mapOf(
+                                cruxId to "medical",
+                                nameKey to "Medical"
+                            )
+                        )
+                    ),
+                    mapOf(
+                        nameKey to "Sergei",
+                        professionKey to mapOf(
+                            nameKey to "Dentist",
+                            fieldKey to mapOf(
+                                cruxId to "medical",
+                                nameKey to "Medical"
+                            )
                         )
                     )
                 )
