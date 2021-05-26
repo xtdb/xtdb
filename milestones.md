@@ -30,10 +30,10 @@
    - Features, functionality
      - Higher-level queries
        - TODO Basic EDN Datalog - compiling EDN Datalog down to logical plan
-         - :find, :where (triple joins),
-         - :order-by, :limit, group-by/aggregates
+         - DONE :find, :where (triple joins),
+         - DONE :order-by, :limit, group-by/aggregates
          - known predicates
-         - :in clauses, parameterisation
+         - DONE :in clauses, parameterisation
      - TODO as-of API
      - TODO basic WatDiv
    - Documentation (README)

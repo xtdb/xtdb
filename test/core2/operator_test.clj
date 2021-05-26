@@ -175,9 +175,9 @@
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"
-    (with-open [fixpoint-cursor (c2/open-q {'table [{:a 0 :b 1}]}
+    (with-open [fixpoint-cursor (c2/open-q {'$table [{:a 0 :b 1}]}
                                            '[:fixpoint Fact
-                                             [:table table]
+                                             [:table $table]
                                              [:select
                                               (<= a 8)
                                               [:project
@@ -196,12 +196,12 @@
                (tu/<-cursor fixpoint-cursor)))))
 
   (t/testing "transitive closure"
-    (with-open [fixpoint-cursor (c2/open-q {'table [{:x "a" :y "b"}
-                                                    {:x "b" :y "c"}
-                                                    {:x "c" :y "d"}
-                                                    {:x "d" :y "a"}]}
+    (with-open [fixpoint-cursor (c2/open-q {'$table [{:x "a" :y "b"}
+                                                     {:x "b" :y "c"}
+                                                     {:x "c" :y "d"}
+                                                     {:x "d" :y "a"}]}
                                            '[:fixpoint Path
-                                             [:table table]
+                                             [:table $table]
                                              [:project [x y]
                                               [:join {z z}
                                                [:rename {y z} Path]
@@ -227,17 +227,17 @@
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
-           (into [] (c2/plan-q '{x [{:a 1}]
-                                 y [{:b 1}]}
-                               '[:assign [X [:table x]
-                                          Y [:table y]]
+           (into [] (c2/plan-q '{$x [{:a 1}]
+                                 $y [{:b 1}]}
+                               '[:assign [X [:table $x]
+                                          Y [:table $y]]
                                  [:join {a b} X Y]]))))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
-             (into [] (c2/plan-q '{x [{:a 1}]
-                                   y [{:b 1}]}
-                                 '[:assign [X [:table x]
-                                            Y [:join {a b} X [:table y]]
+             (into [] (c2/plan-q '{$x [{:a 1}]
+                                   $y [{:b 1}]}
+                                 '[:assign [X [:table $x]
+                                            Y [:join {a b} X [:table $y]]
                                             X Y]
                                    X]))))))

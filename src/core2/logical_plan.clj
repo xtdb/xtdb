@@ -1,7 +1,6 @@
 (ns core2.logical-plan
   (:require [clojure.spec.alpha :as s]
-            [core2.expression :as expr]
-            [core2.expression.temporal]
+            [clojure.string :as str]
             [core2.system :as sys]
             [core2.types :as types]))
 
@@ -12,8 +11,11 @@
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
 (s/def ::relation simple-symbol?)
-(s/def ::source simple-ident?)
 (s/def ::column simple-symbol?)
+
+(s/def ::source
+  (s/and simple-symbol?
+         (comp #(str/starts-with? % "$") name)))
 
 (defmulti ra-expr
   (fn [expr]
@@ -71,7 +73,8 @@
   (s/+ (s/& (s/cat :column ::column
                    :direction (s/? #{:asc :desc}))
             (s/conformer (fn [el]
-                           (into {:direction :asc} el))))))
+                           (into {:direction :asc} el))
+                         identity))))
 
 (defmethod ra-expr :order-by [_]
   (s/cat :op '#{:τ :tau :order-by order-by}
@@ -165,7 +168,8 @@
 (defmethod ra-expr :relation [_]
   (s/and ::relation
          (s/conformer (fn [rel]
-                        {:op :relation, :relation rel}))))
+                        {:op :relation, :relation rel})
+                      :relation)))
 
 (s/def ::ra-expression (s/multi-spec ra-expr :op))
 
