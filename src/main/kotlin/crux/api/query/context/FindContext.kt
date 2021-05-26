@@ -17,11 +17,9 @@ class FindContext private constructor(): SimpleBuilderContext<FindClause, FindSe
 
     operator fun Symbol.unaryPlus() = +SimpleFind(this)
 
-    private fun aggregate(type: AggregateType, symbol: Symbol) =
-        +Aggregate(type, symbol)
+    private fun aggregate(type: AggregateType, symbol: Symbol) = +Aggregate(type, symbol)
 
-    private fun aggregate(type: AggregateType, n: Int, symbol: Symbol) =
-        +AggregateWithNumber(type, n, symbol)
+    private fun aggregate(type: AggregateType, n: Int, symbol: Symbol) = +AggregateWithNumber(type, n, symbol)
 
     fun sum(symbol: Symbol) = aggregate(SUM, symbol)
     fun min(symbol: Symbol) = aggregate(MIN, symbol)
