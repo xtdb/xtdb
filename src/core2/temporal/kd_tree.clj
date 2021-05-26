@@ -705,7 +705,7 @@
          stack stack
          axis-mask axis-mask
          max-breadth-first-level (long (/ (* 2 (balanced-height n)) 3))]
-     (when-not (.isEmpty stack)
+     (while (BitUtil/bitNot (.isEmpty stack))
        (let [idx (.poll stack)
              level (balanced-height idx)]
          (loop [level level
