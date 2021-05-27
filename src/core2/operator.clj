@@ -215,11 +215,8 @@
                 (group-by/->group-by-cursor allocator inner agg-specs)))))
 
 (defmethod emit-op :order-by [[_ {:keys [order relation]}] srcs]
-  (let [order-specs (for [[order-type arg] order]
-                      (case order-type
-                        :direction (order-by/->order-spec (name (key (first arg)))
-                                                          (val (first arg)))
-                        :column (order-by/->order-spec (name arg) :asc)))]
+  (let [order-specs (for [{:keys [column direction]} order]
+                      (order-by/->order-spec (name column) direction))]
     (unary-op relation srcs
               (fn [allocator inner]
                 (order-by/->order-by-cursor allocator inner order-specs)))))

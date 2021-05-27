@@ -11,10 +11,11 @@
 ;; https://calcite.apache.org/javadocAggregate/org/apache/calcite/tools/RelBuilder.html
 ;; https://github.com/apache/arrow/blob/master/rust/datafusion/src/logical_plan/plan.rs
 
-(s/def ::named (some-fn keyword? symbol?))
-(s/def ::relation (s/and ::named (complement namespace)))
-(s/def ::source (s/and ::named (complement namespace)))
-(s/def ::column ::named)
+(s/def ::relation simple-symbol?)
+(s/def ::source simple-ident?)
+(s/def ::column simple-symbol?)
+
+(s/conform ::column 'foo)
 
 (s/def ::expression (s/conformer expr/form->expr))
 
@@ -29,7 +30,7 @@
                                          :min-count 1)))
 
 (s/def ::table (s/cat :op #{:table}
-                      :table (s/or :rows (s/coll-of (s/map-of ::column any?))
+                      :table (s/or :rows (s/coll-of (s/map-of simple-ident? any?))
                                    :source ::source)))
 
 (s/def ::csv-col-type types/primitive-types)
@@ -54,11 +55,13 @@
                        :columns (s/? (s/map-of ::column ::column :conform-keys true))
                        :relation ::ra-expression))
 
+(s/def ::order (s/+ (s/& (s/cat :column ::column
+                                :direction (s/? #{:asc :desc}))
+                         (s/conformer (fn [el]
+                                        (into {:direction :asc} el))))))
+
 (s/def ::order-by (s/cat :op '#{:τ :tau :order-by order-by}
-                         :order (s/coll-of (s/or :column ::column
-                                                 :direction (s/map-of ::column #{:asc :desc}
-                                                                      :count 1
-                                                                      :conform-keys true)))
+                         :order (s/spec ::order)
                          :relation ::ra-expression))
 
 (s/def ::group-by (s/cat :op #{:γ :gamma :group-by}
