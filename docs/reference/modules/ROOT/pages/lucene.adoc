@@ -110,8 +110,12 @@ You can use standard Lucene fuzzy textual search capabilities:
  [?e :crux.db/id]]}
 ----
 
-Will return all entities that with a `:name` that starts with
-"Iva". See the Lucene documentation for more information.
+This will return all entities with a `:name` attribute that starts with "Iva".
+
+All query functions implemented in `crux-lucene` pass your query string directly
+to Lucene's `QueryParser.parse` using the `StandardAnalyzer`, without any
+escaping or other modifications. See the Lucene documentation for more
+information.
 
 It's possible to supply var bindings to use in `text-search`:
 

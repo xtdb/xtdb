@@ -94,3 +94,19 @@
                                       :in    [input]
                                       :where [[(lucene-text-search input) [[?e ?v]]]]}
                                  1)))))
+
+(defn build-lucene-multi-field-or-string [kw-fields term-string]
+  (apply str
+         (interpose " OR " (for [field kw-fields]
+                             (str (subs (str field) 1) ":" term-string)))))
+
+(t/deftest test-construct-or-fields-dynamically
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+                                   :firstname "Fred"
+                                   :surname "Smith"}]])
+
+  (with-open [db (c/open-db *api*)]
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?s]
+                         :where [[(lucene-text-search ?s) [[?e]]]]}
+                    (build-lucene-multi-field-or-string [:firstname :surname] "Fre*"))))))
