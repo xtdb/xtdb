@@ -85,6 +85,10 @@
                          :in [?s]
                          :where [[(lucene-text-search ?s) [[?e]]]]}
                     "firstname: Fred")))
+    (t/is (not (seq (c/q db '{:find [?e]
+                              :in [?s]
+                              :where [[(lucene-text-search ?s) [[?e]]]]}
+                         "firstname Fred"))))
     (t/is (seq (c/q db '{:find [?e]
                          :in [?s]
                          :where [[(lucene-text-search ?s) [[?e]]]]}

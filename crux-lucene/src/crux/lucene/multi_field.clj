@@ -40,7 +40,7 @@
   [^Analyzer analyzer, [q & args]]
   (when-not (string? q)
     (throw (IllegalArgumentException. "lucene-text-search query must be String")))
-  (.parse (QueryParser. nil analyzer) (apply format q args)))
+  (.parse (QueryParser. "" analyzer) (apply format q args)))
 
 (defn- resolve-search-results-content-hash
   "Given search results each containing a content-hash, perform a
