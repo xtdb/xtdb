@@ -165,7 +165,7 @@
     (.build b)))
 
 (defmethod q/pred-args-spec 'wildcard-text-search [_]
-  (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v string?)) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
   (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v-wildcard pred-ctx))

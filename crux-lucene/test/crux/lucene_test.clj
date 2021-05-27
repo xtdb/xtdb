@@ -386,6 +386,22 @@
   (t/is (= (:crux.tx/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
            (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))))
 
+(t/deftest test-use-in-argument
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+                                   :firstname "Fred"
+                                   :surname "Smith"}]])
+
+  (with-open [db (c/open-db *api*)]
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?s]
+                         :where [[(wildcard-text-search ?s) [[?e]]]]}
+                    "Fr*")))
+    (t/is (thrown-with-msg? IllegalArgumentException #"Lucene text search values must be String"
+                            (c/q db '{:find  [?v]
+                                      :in    [input]
+                                      :where [[(wildcard-text-search input) [[?e ?v]]]]}
+                                 1)))))
+
 (comment
   (do
     (import '[ch.qos.logback.classic Level Logger]
