@@ -23,8 +23,8 @@
            [core2.operator.set ICursorFactory IFixpointCursorFactory]))
 
 (defmulti emit-op
-  (fn [op srcs]
-    (first op)))
+  (fn [ra-expr srcs]
+    (:op ra-expr)))
 
 (alter-meta! #'emit-op assoc :private true)
 
@@ -52,7 +52,7 @@
 (defmethod ->aggregate-spec :count-not-null [_ from-name to-name]
   (group-by/->count-not-null-spec from-name to-name))
 
-(defmethod emit-op :scan [[_ {:keys [source columns]}] srcs]
+(defmethod emit-op :scan [{:keys [source columns]} srcs]
   (let [col-names (for [[col-type arg] columns]
                     (str (case col-type
                            :column arg
@@ -80,7 +80,7 @@
       (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
         (.scan db col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
 
-(defmethod emit-op :table [[_ {[table-type table-arg] :table}] srcs]
+(defmethod emit-op :table [{[table-type table-arg] :table} srcs]
   (let [rows (case table-type
                :rows table-arg
                :source (or (get srcs table-arg)
@@ -91,12 +91,12 @@
     (fn [allocator]
       (table/->table-cursor allocator rows))))
 
-(defmethod emit-op :csv [[_ {:keys [path col-types]}] _srcs]
+(defmethod emit-op :csv [{:keys [path col-types]} _srcs]
   (fn [allocator]
     (csv/->csv-cursor allocator path
                       (into {} (map (juxt (comp name key) val)) col-types))))
 
-(defmethod emit-op :arrow [[_ {:keys [path]}] _srcs]
+(defmethod emit-op :arrow [{:keys [path]} _srcs]
   (fn [allocator]
     (arrow/->arrow-cursor allocator path)))
 
@@ -126,13 +126,13 @@
             (util/try-close left)
             (throw e)))))))
 
-(defmethod emit-op :select [[_ {:keys [predicate relation]}] srcs]
+(defmethod emit-op :select [{:keys [predicate relation]} srcs]
   (let [selector (expr/->expression-relation-selector predicate srcs)]
     (unary-op relation srcs
               (fn [_allocator inner]
                 (select/->select-cursor inner selector)))))
 
-(defmethod emit-op :project [[_ {:keys [projections relation]}] srcs]
+(defmethod emit-op :project [{:keys [projections relation]} srcs]
   (let [projection-specs (for [[p-type arg] projections]
                            (case p-type
                              :column (project/->identity-projection-spec (name arg))
@@ -142,7 +142,7 @@
               (fn [allocator inner]
                 (project/->project-cursor allocator inner projection-specs)))))
 
-(defmethod emit-op :rename [[_ {:keys [columns relation prefix]}] srcs]
+(defmethod emit-op :rename [{:keys [columns relation prefix]} srcs]
   (let [rename-map (->> columns
                         (into {} (map (juxt (comp name key)
                                             (comp name val)))))]
@@ -150,32 +150,32 @@
               (fn [_allocator inner]
                 (rename/->rename-cursor inner rename-map (some-> prefix (name)))))))
 
-(defmethod emit-op :distinct [[_ {:keys [relation]}] srcs]
+(defmethod emit-op :distinct [{:keys [relation]} srcs]
   (unary-op relation srcs
             (fn [allocator inner]
               (set-op/->distinct-cursor allocator inner))))
 
-(defmethod emit-op :union-all [[_ {:keys [left right]}] srcs]
+(defmethod emit-op :union-all [{:keys [left right]} srcs]
   (binary-op left right srcs
              (fn [_allocator left right]
                (set-op/->union-all-cursor left right))))
 
-(defmethod emit-op :intersection [[_ {:keys [left right]}] srcs]
+(defmethod emit-op :intersection [{:keys [left right]} srcs]
   (binary-op left right srcs
              (fn [allocator left right]
                (set-op/->intersection-cursor allocator left right))))
 
-(defmethod emit-op :difference [[_ {:keys [left right]}] srcs]
+(defmethod emit-op :difference [{:keys [left right]} srcs]
   (binary-op left right srcs
              (fn [allocator left right]
                (set-op/->difference-cursor allocator left right))))
 
-(defmethod emit-op :cross-join [[_ {:keys [left right]}] srcs]
+(defmethod emit-op :cross-join [{:keys [left right]} srcs]
   (binary-op left right srcs
              (fn [allocator left right]
                (join/->cross-join-cursor allocator left right))))
 
-(defmethod emit-op :join [[_ {:keys [columns left right]}] srcs]
+(defmethod emit-op :join [{:keys [columns left right]} srcs]
   (let [[left-col] (keys columns)
         [right-col] (vals columns)]
     (binary-op left right srcs
@@ -184,7 +184,7 @@
                                           left (name left-col)
                                           right (name right-col))))))
 
-(defmethod emit-op :semi-join [[_ {:keys [columns left right]}] srcs]
+(defmethod emit-op :semi-join [{:keys [columns left right]} srcs]
   (let [[left-col] (keys columns)
         [right-col] (vals columns)]
     (binary-op left right srcs
@@ -193,7 +193,7 @@
                                                left (name left-col)
                                                right (name right-col))))))
 
-(defmethod emit-op :anti-join [[_ {:keys [columns left right]}] srcs]
+(defmethod emit-op :anti-join [{:keys [columns left right]} srcs]
   (let [[left-col] (keys columns)
         [right-col] (vals columns)]
     (binary-op left right srcs
@@ -202,7 +202,7 @@
                                                left (name left-col)
                                                right (name right-col))))))
 
-(defmethod emit-op :group-by [[_ {:keys [columns relation]}] srcs]
+(defmethod emit-op :group-by [{:keys [columns relation]} srcs]
   (let [agg-specs (for [[col-type arg] columns]
                     (case col-type
                       :group-by (group-by/->group-spec (name arg))
@@ -214,27 +214,27 @@
               (fn [allocator inner]
                 (group-by/->group-by-cursor allocator inner agg-specs)))))
 
-(defmethod emit-op :order-by [[_ {:keys [order relation]}] srcs]
+(defmethod emit-op :order-by [{:keys [order relation]} srcs]
   (let [order-specs (for [{:keys [column direction]} order]
                       (order-by/->order-spec (name column) direction))]
     (unary-op relation srcs
               (fn [allocator inner]
                 (order-by/->order-by-cursor allocator inner order-specs)))))
 
-(defmethod emit-op :slice [[_ {:keys [relation], {:keys [offset limit]} :slice}] srcs]
+(defmethod emit-op :slice [{:keys [relation], {:keys [offset limit]} :slice} srcs]
   (unary-op relation srcs
             (fn [_allocator inner]
               (slice/->slice-cursor inner offset limit))))
 
 (def ^:dynamic ^:private *relation-variable->cursor-factory* {})
 
-(defmethod emit-op :relation [[_ relation-name] _srcs]
+(defmethod emit-op :relation [{:keys [relation]} _srcs]
   (fn [_allocator]
-    (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation-name)]
+    (let [^ICursorFactory cursor-factory (get *relation-variable->cursor-factory* relation)]
       (assert cursor-factory)
       (.createCursor cursor-factory))))
 
-(defmethod emit-op :fixpoint [[_ {:keys [mu-variable base recursive]}] srcs]
+(defmethod emit-op :fixpoint [{:keys [mu-variable base recursive]} srcs]
   (let [base-f (emit-op base srcs)
         recursive-f (emit-op recursive srcs)]
     (fn [allocator]
@@ -246,7 +246,7 @@
                                       (recursive-f allocator))))
                  false))))
 
-(defmethod emit-op :assign [[_ {:keys [bindings relation]}] srcs]
+(defmethod emit-op :assign [{:keys [bindings relation]} srcs]
   (fn [allocator]
     (let [assignments (reduce
                        (fn [acc {:keys [variable value]}]
