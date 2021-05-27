@@ -386,16 +386,26 @@
   (t/is (= (:crux.tx/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
            (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))))
 
+(defn escape-lucene-string [s]
+  ;; note this does not handle all cases if spaces are involved, e.g. a trailing " OR" will not be accepted by the QueryParser
+  (org.apache.lucene.queryparser.classic.QueryParser/escape s))
+
 (t/deftest test-use-in-argument
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
                                    :firstname "Fred"
-                                   :surname "Smith"}]])
+                                   :surname "Smith"
+                                   :escape-text "firstname:James"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db '{:find [?e]
                          :in [?s]
                          :where [[(wildcard-text-search ?s) [[?e]]]]}
-                    "Fr*")))
+                    "Fre*")))
+    (t/is (seq (c/q db '{:find [?e]
+                         :in [?s]
+                         :where [[(crux.lucene-test/escape-lucene-string ?s) ?s*]
+                                 [(wildcard-text-search ?s*) [[?e]]]]}
+                    "firstname:James")))
     (t/is (thrown-with-msg? IllegalArgumentException #"Lucene text search values must be String"
                             (c/q db '{:find  [?v]
                                       :in    [input]
