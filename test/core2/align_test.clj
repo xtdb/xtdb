@@ -49,10 +49,10 @@
               name-root (let [^List vecs [name-row-id-vec name-vec]]
                           (VectorSchemaRoot. vecs))]
 
-    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector (expr/form->expr '(<= age 30)))
+    (let [row-ids (doto (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= age 30) {})
                                                         (rel/<-vector age-vec))
                                                age-row-id-vec)
-                    (.and (align/->row-id-bitmap (.select (expr/->expression-column-selector (expr/form->expr '(<= name "Frank")))
+                    (.and (align/->row-id-bitmap (.select (expr/->expression-column-selector '(<= name "Frank") {})
                                                           (rel/<-vector name-vec))
                                                  name-row-id-vec)))
           roots [name-root age-root]]

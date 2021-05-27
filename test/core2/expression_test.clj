@@ -22,7 +22,7 @@
 (t/deftest test-simple-projection
   (with-open [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
     (letfn [(project [form]
-              (with-open [project-col (.project (expr/->expression-projection-spec "c" (expr/form->expr form))
+              (with-open [project-col (.project (expr/->expression-projection-spec "c" form {})
                                                 tu/*allocator* in-rel)]
                 (tu/<-column project-col)))]
 
@@ -58,12 +58,12 @@
 (t/deftest can-compile-simple-expression
   (with-open [in-rel (tu/->relation (Schema. [a-field b-field d-field e-field]) data)]
     (letfn [(select-relation [form params]
-              (-> (.select (expr/->expression-relation-selector (expr/form->expr form) params)
+              (-> (.select (expr/->expression-relation-selector form params)
                            in-rel)
                   (.getCardinality)))
 
             (select-column [form ^String col-name params]
-              (-> (.select (expr/->expression-column-selector (expr/form->expr form) params)
+              (-> (.select (expr/->expression-column-selector form params)
                            (.readColumn in-rel col-name))
                   (.getCardinality)))]
 
@@ -82,8 +82,8 @@
             [9223372036854775807, 9223372036854775807, 9223372036854775807,
              1546300799999, 9223372036854775807, 9223372036854775807]]
            (map vec (expr.temp/->temporal-min-max-range
-                     {"_valid-time-start" (expr/form->expr '(<= _vt-time-start #inst "2019"))
-                      "_valid-time-end" (expr/form->expr '(> _vt-time-end  #inst "2019"))}
+                     {"_valid-time-start" '(<= _vt-time-start #inst "2019")
+                      "_valid-time-end" '(> _vt-time-end  #inst "2019")}
                      {}))))
 
   (t/testing "symbol column name"
@@ -92,7 +92,7 @@
               [9223372036854775807, 9223372036854775807, 1546300800000,
                9223372036854775807, 9223372036854775807, 9223372036854775807]]
              (map vec (expr.temp/->temporal-min-max-range
-                       {'_valid-time-start (expr/form->expr '(= _vt-time-start #inst "2019"))}
+                       {'_valid-time-start '(= _vt-time-start #inst "2019")}
                        {})))))
 
   (t/testing "conjunction"
@@ -101,8 +101,8 @@
               [9223372036854775807, 9223372036854775807, 9223372036854775807,
                9223372036854775807, 9223372036854775807, 9223372036854775807]]
              (map vec (expr.temp/->temporal-min-max-range
-                       {"_valid-time-start" (expr/form->expr '(and (>= #inst "2019" _vt-time-start)
-                                                                   (>= #inst "2020" _vt-time-start)))}
+                       {"_valid-time-start" '(and (>= #inst "2019" _vt-time-start)
+                                                  (>= #inst "2020" _vt-time-start))}
                        {})))))
 
   (t/testing "disjunction not supported"
@@ -111,8 +111,8 @@
               [9223372036854775807, 9223372036854775807, 9223372036854775807,
                9223372036854775807, 9223372036854775807, 9223372036854775807]]
              (map vec (expr.temp/->temporal-min-max-range
-                       {"_valid-time-start" (expr/form->expr '(or (= _vt-time-start #inst "2019")
-                                                                  (= _vt-time-start #inst "2020")))}
+                       {"_valid-time-start" '(or (= _vt-time-start #inst "2019")
+                                                 (= _vt-time-start #inst "2020"))}
                        {})))))
 
   (t/testing "parameters"
@@ -121,10 +121,10 @@
               [9223372036854775807, 9223372036854775807, 1514764800000
                9223372036854775807, 9223372036854775807, 1546300799999]]
              (map vec (expr.temp/->temporal-min-max-range
-                       {"_tx-time-start" (expr/form->expr '(>= ?tt _tx-time-start))
-                        "_tx-time-end" (expr/form->expr '(< ?tt _tx-time-end))
-                        "_valid-time-start" (expr/form->expr '(<= ?vt _vt-time-start))
-                        "_valid-time-end" (expr/form->expr '(> ?vt _vt-time-end))}
+                       {"_tx-time-start" '(>= ?tt _tx-time-start)
+                        "_tx-time-end" '(< ?tt _tx-time-end)
+                        "_valid-time-start" '(<= ?vt _vt-time-start)
+                        "_valid-time-end" '(> ?vt _vt-time-end)}
                        '{?tt #inst "2019" ?vt #inst "2018"}))))))
 
 (t/deftest test-date-trunc

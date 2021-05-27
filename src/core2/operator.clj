@@ -61,15 +61,15 @@
                            :when (= col-type :select)]
                        (first arg))
                      (into {}))
-        col-preds (->> (for [[col-name select-expr] selects]
+        col-preds (->> (for [[col-name select-form] selects]
                          (MapEntry/create (name col-name)
-                                          (expr/->expression-column-selector select-expr srcs)))
+                                          (expr/->expression-column-selector select-form srcs)))
                        (into {}))
         args (vec (concat (for [col-name col-names
                                 :when (not (contains? selects col-name))]
-                            {:op :variable :variable (symbol col-name)})
+                            (symbol col-name))
                           (vals selects)))
-        metadata-pred (expr.meta/->metadata-selector {:op :call, :f 'and, :args args} srcs)
+        metadata-pred (expr.meta/->metadata-selector (cons 'and args) srcs)
 
         ^IQueryDataSource db (or (get srcs (or source '$))
                                  (throw (err/illegal-arg :unknown-db
@@ -136,8 +136,8 @@
   (let [projection-specs (for [[p-type arg] projections]
                            (case p-type
                              :column (project/->identity-projection-spec (name arg))
-                             :extend (let [[col-name expr] (first arg)]
-                                       (expr/->expression-projection-spec (name col-name) expr srcs))))]
+                             :extend (let [[col-name form] (first arg)]
+                                       (expr/->expression-projection-spec (name col-name) form srcs))))]
     (unary-op relation srcs
               (fn [allocator inner]
                 (project/->project-cursor allocator inner projection-specs)))))
@@ -206,8 +206,10 @@
   (let [agg-specs (for [[col-type arg] columns]
                     (case col-type
                       :group-by (group-by/->group-spec (name arg))
-                      :aggregate (let [[to-name {:keys [f args]}] (first arg)
+                      :aggregate (let [[to-name form] (first arg)
+                                       {:keys [f args]} (expr/form->expr form {})
                                        from-name (:variable (first args))]
+
                                    (->aggregate-spec (keyword (name f)) (name from-name) (name to-name)))
                       [col-type arg]))]
     (unary-op relation srcs

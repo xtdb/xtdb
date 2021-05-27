@@ -203,8 +203,9 @@
 (def ^:private memo-meta-expr->code (memoize meta-expr->code))
 (def ^:private memo-eval (memoize eval))
 
-(defn ->metadata-selector [expr params]
-  (let [{:keys [expr param-types params emitted-params]} (expr/normalise-params expr params)
+(defn ->metadata-selector [form params]
+  (let [{:keys [expr param-types params emitted-params]} (-> (expr/form->expr form params)
+                                                             (expr/normalise-params params))
         meta-expr (meta-expr expr (into {} param-types))
         {:keys [bloom-hash-syms bloom-hashes]} (->bloom-hashes meta-expr params)
         f (-> meta-expr

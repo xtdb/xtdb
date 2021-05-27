@@ -22,7 +22,7 @@
       (symbol? expr) :relation))
   :default ::default)
 
-(s/def ::expression (s/conformer expr/form->expr))
+(s/def ::expression some?)
 
 (s/def ::column-expression (s/map-of ::column ::expression :count 1 :conform-keys true))
 

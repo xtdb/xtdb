@@ -39,11 +39,11 @@
                                   {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr (.watermark db)
-                                           (expr.meta/->metadata-selector (expr/form->expr '(> name "Ivan")) {})))
+                                           (expr.meta/->metadata-selector '(> name "Ivan") {})))
                   "only needs to scan chunk 1, block 1")
             (t/is (= expected-match
                      (meta/matching-chunks metadata-mgr (.watermark db)
-                                           (expr.meta/->metadata-selector (expr/form->expr '(> name ?name)) {'?name "Ivan"})))
+                                           (expr.meta/->metadata-selector '(> name ?name) {'?name "Ivan"})))
                   "only needs to scan chunk 1, block 1"))
 
           @(-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 5}}])
@@ -80,12 +80,12 @@
                                {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
           (t/is (= expected-match
                    (meta/matching-chunks metadata-mgr (.watermark db)
-                                         (expr.meta/->metadata-selector (expr/form->expr '(= name "Ivan")) {})))
+                                         (expr.meta/->metadata-selector '(= name "Ivan") {})))
                 "only needs to scan chunk 0, block 0")
 
           (t/is (= expected-match
                    (meta/matching-chunks metadata-mgr (.watermark db)
-                                         (expr.meta/->metadata-selector (expr/form->expr '(= name ?name)) {'?name "Ivan"})))
+                                         (expr.meta/->metadata-selector '(= name ?name) {'?name "Ivan"})))
                 "only needs to scan chunk 0, block 0"))
 
         (t/is (= #{{:name "Ivan"}}

@@ -80,9 +80,10 @@
 (defn ->temporal-min-max-range [selects srcs]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
-    (doseq [[col-name select-expr] selects
+    (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)
-            :let [range-idx (temporal/->temporal-column-idx col-name)
+            :let [select-expr (expr/form->expr select-form srcs)
+                  range-idx (temporal/->temporal-column-idx col-name)
                   {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
                   meta-expr (@#'expr.meta/meta-expr expr param-types)]]
       (w/prewalk (fn [x]

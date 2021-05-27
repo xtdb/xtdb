@@ -46,9 +46,9 @@
 
         expr)))
 
-(defn form->expr [form]
+(defn form->expr [form params]
   (cond
-    (symbol? form) (if (.startsWith (name form) "?")
+    (symbol? form) (if (contains? params form)
                      {:op :param, :param form}
                      {:op :variable, :variable form})
 
@@ -60,11 +60,11 @@
 
                                  (let [[pred then else] args]
                                    {:op :if,
-                                    :pred (form->expr pred),
-                                    :then (form->expr then),
-                                    :else (form->expr else)}))
+                                    :pred (form->expr pred params),
+                                    :then (form->expr then params),
+                                    :else (form->expr else params)}))
 
-                           (-> {:op :call, :f f, :args (mapv form->expr args)}
+                           (-> {:op :call, :f f, :args (mapv #(form->expr % params) args)}
                                expand-variadics)))
 
     :else {:op :literal, :literal form}))
@@ -531,22 +531,19 @@
 (def ^:private memo-generate-projection (memoize generate-projection))
 (def ^:private memo-eval (memoize eval))
 
-(defn ->expression-projection-spec
-  (^core2.operator.project.ProjectionSpec [col-name expr]
-   (->expression-projection-spec col-name expr {}))
-
-  (^core2.operator.project.ProjectionSpec [col-name expr params]
-   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
-     (reify ProjectionSpec
-       (project [_ allocator in-rel]
-         (let [in-cols (expression-in-cols in-rel expr)
-               var-types (->> in-cols
-                              (util/into-linked-map
-                               (util/map-values (fn [_variable ^IReadColumn read-col]
-                                                  (.minorTypes read-col)))))
-               expr-fn (-> (memo-generate-projection col-name expr var-types param-types)
-                           (memo-eval))]
-           (expr-fn allocator (vals in-cols) (vals emitted-params) (.rowCount in-rel))))))))
+(defn ->expression-projection-spec ^core2.operator.project.ProjectionSpec [col-name form params]
+  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
+                                                      (normalise-params params))]
+    (reify ProjectionSpec
+      (project [_ allocator in-rel]
+        (let [in-cols (expression-in-cols in-rel expr)
+              var-types (->> in-cols
+                             (util/into-linked-map
+                              (util/map-values (fn [_variable ^IReadColumn read-col]
+                                                 (.minorTypes read-col)))))
+              expr-fn (-> (memo-generate-projection col-name expr var-types param-types)
+                          (memo-eval))]
+          (expr-fn allocator (vals in-cols) (vals emitted-params) (.rowCount in-rel)))))))
 
 (defn- generate-selection [expr var-types param-types]
   (let [codegen-opts {:var->types var-types, :param->type param-types}
@@ -566,38 +563,32 @@
 
 (def ^:private memo-generate-selection (memoize generate-selection))
 
-(defn ->expression-relation-selector
-  (^core2.operator.select.IRelationSelector [expr]
-   (->expression-relation-selector expr {}))
+(defn ->expression-relation-selector ^core2.operator.select.IRelationSelector [form params]
+  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
+                                                      (normalise-params params))]
+    (reify IRelationSelector
+      (select [_ in]
+        (let [in-cols (expression-in-cols in expr)
+              var-types (->> in-cols
+                             (util/into-linked-map
+                              (util/map-values (fn [_variable ^IReadColumn read-col]
+                                                 (.minorTypes read-col)))))
+              expr-code (memo-generate-selection expr var-types param-types)
+              expr-fn (memo-eval expr-code)]
+          (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in)))))))
 
-  (^core2.operator.select.IRelationSelector [expr params]
-   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)]
-     (reify IRelationSelector
-       (select [_ in]
-         (let [in-cols (expression-in-cols in expr)
-               var-types (->> in-cols
-                              (util/into-linked-map
-                               (util/map-values (fn [_variable ^IReadColumn read-col]
-                                                  (.minorTypes read-col)))))
-               expr-code (memo-generate-selection expr var-types param-types)
-               expr-fn (memo-eval expr-code)]
-           (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in))))))))
-
-(defn ->expression-column-selector
-  (^core2.operator.select.IColumnSelector [expr]
-   (->expression-column-selector expr {}))
-
-  (^core2.operator.select.IColumnSelector [expr params]
-   (let [{:keys [expr param-types emitted-params]} (normalise-params expr params)
-         vars (variables expr)
-         _ (assert (= 1 (count vars)))
-         variable (first vars)]
-     (reify IColumnSelector
-       (select [_ in-col]
-         (let [in-cols (doto (LinkedHashMap.)
-                         (.put variable in-col))
-               var-types (doto (LinkedHashMap.)
-                           (.put variable (.minorTypes in-col)))
-               expr-code (memo-generate-selection expr var-types param-types)
-               expr-fn (memo-eval expr-code)]
-           (expr-fn (vals in-cols) (vals emitted-params) (.valueCount in-col))))))))
+(defn ->expression-column-selector ^core2.operator.select.IColumnSelector [form params]
+  (let [{:keys [expr param-types emitted-params]} (-> (form->expr form params)
+                                                      (normalise-params params))
+        vars (variables expr)
+        _ (assert (= 1 (count vars)))
+        variable (first vars)]
+    (reify IColumnSelector
+      (select [_ in-col]
+        (let [in-cols (doto (LinkedHashMap.)
+                        (.put variable in-col))
+              var-types (doto (LinkedHashMap.)
+                          (.put variable (.minorTypes in-col)))
+              expr-code (memo-generate-selection expr var-types param-types)
+              expr-fn (memo-eval expr-code)]
+          (expr-fn (vals in-cols) (vals emitted-params) (.valueCount in-col)))))))
