@@ -78,9 +78,25 @@
          :order (s/spec ::order)
          :relation ::ra-expression))
 
+(s/def ::aggregate-expr
+  (s/cat :aggregate-fn simple-symbol?
+         :from-column ::column))
+
+(s/def ::aggregate
+  (s/and (s/or :just-expr ::aggregate-expr
+               :named (s/map-of ::column ::aggregate-expr, :min-count 1, :max-count 1))
+         (s/conformer (fn [[agg-type agg-arg]]
+                        (case agg-type
+                          :named (let [[to-column aggregate-expr] (first agg-arg)]
+                                   (assoc aggregate-expr :to-column to-column))
+                          :just-expr (let [{:keys [aggregate-fn from-column]} agg-arg]
+                                       (assoc agg-arg :to-column (symbol (format "%s-%s" aggregate-fn from-column))))))
+                      (fn [{:keys [to-column] :as agg}]
+                        [:named {to-column (dissoc agg :to-column)}]))))
+
 (defmethod ra-expr :group-by [_]
   (s/cat :op #{:γ :gamma :group-by}
-         :columns (s/coll-of (s/or :group-by ::column :aggregate ::column-expression) :min-count 1)
+         :columns (s/coll-of (s/or :group-by ::column, :aggregate ::aggregate), :min-count 1)
          :relation ::ra-expression))
 
 (s/def ::offset nat-int?)

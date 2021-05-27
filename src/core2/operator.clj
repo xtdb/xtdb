@@ -206,11 +206,10 @@
   (let [agg-specs (for [[col-type arg] columns]
                     (case col-type
                       :group-by (group-by/->group-spec (name arg))
-                      :aggregate (let [[to-name form] (first arg)
-                                       {:keys [f args]} (expr/form->expr form {})
-                                       from-name (:variable (first args))]
-
-                                   (->aggregate-spec (keyword (name f)) (name from-name) (name to-name)))
+                      :aggregate (let [{:keys [to-column aggregate-fn from-column]} arg]
+                                   (->aggregate-spec (keyword (name aggregate-fn))
+                                                     (name from-column)
+                                                     (name to-column)))
                       [col-type arg]))]
     (unary-op relation srcs
               (fn [allocator inner]
