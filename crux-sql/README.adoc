@@ -7,7 +7,7 @@ SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-sql {:mvn/version "21.04-1.16.0-alpha"}
+juxt/crux-sql {:mvn/version "21.05-1.17.0-alpha"}
 ----
 
 .pom.xml
@@ -16,7 +16,7 @@ juxt/crux-sql {:mvn/version "21.04-1.16.0-alpha"}
 <dependency>
     <groupId>juxt</groupId>
     <artifactId>crux-sql</artifactId>
-    <version>21.04-1.16.0-alpha</version>
+    <version>21.05-1.17.0-alpha</version>
 </dependency>
 ----
 

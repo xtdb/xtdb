@@ -84,7 +84,7 @@ You can also build custom Crux JARs with your choice of modules - see the https:
 
 You can also start a standalone Crux node using Docker, using:
 
-`docker run -p 3000:3000 juxt/crux-in-memory:21.04-1.16.0`
+`docker run -p 3000:3000 juxt/crux-in-memory:21.05-1.17.0`
 
 Again, this opens up an HTTP server at http://localhost:3000[window=_blank].
 
