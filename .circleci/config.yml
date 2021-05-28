@@ -27,9 +27,6 @@ orbs:
               command: |
                 cd crux-build
                 DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
-
-          - run:
-              command: |
                 cd crux-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
 
