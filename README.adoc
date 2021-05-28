@@ -27,8 +27,7 @@ Have a look in `core2.logical-plan` for what can go into these plans, and `core2
 [source,clojure]
 ----
 (with-open [node (c2/start-node {})
-            db (c2/open-db node)
-            res ]
+            db (c2/open-db node)]
   (into [] (c2/plan-q db '[:scan [{name (> name "Ivan")}]])))
 ----
 
