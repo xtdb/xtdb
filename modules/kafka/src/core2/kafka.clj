@@ -2,7 +2,8 @@
   (:require [clojure.java.io :as io]
             [core2.log :as log]
             [core2.system :as sys]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.tx :as tx])
   (:import [core2.log LogReader LogWriter]
            java.io.Closeable
            java.nio.file.Path
@@ -40,8 +41,8 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (log/->LogRecord (.offset record-metadata)
-                                                   (Date. (.timestamp record-metadata))
+                   (.complete fut (log/->LogRecord (tx/->TransactionInstant (.offset record-metadata)
+                                                                            (Date. (.timestamp record-metadata)))
                                                    record))))))
       fut))
 
@@ -61,8 +62,7 @@
 
     (try
       (->> (for [^ConsumerRecord record (.poll consumer poll-duration)]
-             (log/->LogRecord (.offset record)
-                              (Date. (.timestamp record))
+             (log/->LogRecord (tx/->TransactionInstant (.offset record) (Date. (.timestamp record)))
                               (.value record)))
            (into [] (take limit)))
       (catch InterruptException e

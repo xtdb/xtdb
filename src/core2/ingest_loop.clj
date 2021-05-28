@@ -25,7 +25,7 @@
           (doseq [^LogRecord record log-records]
             (if (Thread/interrupted)
               (throw (InterruptedException.))
-              (.indexTx indexer (c2-log/log-record->tx-instant record) (.record record))))
+              (.indexTx indexer (.tx record) (.record record))))
           (Thread/sleep poll-sleep-ms)))
       (catch InterruptedException _)
       (catch Throwable t

@@ -1,11 +1,11 @@
 (ns core2.tx-producer
   (:require [clojure.set :as set]
-            [core2.log :as c2-log]
+            core2.log
             [core2.system :as sys]
             [core2.types :as t]
             [core2.util :as util])
   (:import core2.DenseUnionUtil
-           core2.log.LogWriter
+           [core2.log LogRecord LogWriter]
            [java.util LinkedHashMap LinkedHashSet Set]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampVector VectorSchemaRoot]
@@ -132,8 +132,8 @@
   (submitTx [_ tx-ops]
     (-> (.appendRecord log (serialize-tx-ops tx-ops allocator))
         (util/then-apply
-          (fn [result]
-            (c2-log/log-record->tx-instant result))))))
+          (fn [^LogRecord result]
+            (.tx result))))))
 
 (defn ->tx-producer {::sys/deps {:log :core2/log
                                  :allocator :core2/allocator}}

@@ -4,6 +4,7 @@
             [core2.tx :as tx]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
+           core2.tx.TransactionInstant
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
            java.nio.ByteBuffer
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
@@ -20,14 +21,14 @@
 (definterface LogReader
   (^java.util.List #_<LogRecord> readRecords [^Long afterOffset ^int limit]))
 
-(defrecord LogRecord [^long offset ^Date time ^ByteBuffer record])
+(defrecord LogRecord [^TransactionInstant tx ^ByteBuffer record])
 
 (deftype InMemoryLog [!records]
   LogWriter
   (appendRecord [_ record]
     (CompletableFuture/completedFuture
      (let [records (swap! !records (fn [records]
-                                     (conj records (->LogRecord (count records) (Date.) record))))]
+                                     (conj records (->LogRecord (tx/->TransactionInstant (count records) (Date.)) record))))]
        (nth records (dec (count records))))))
 
   LogReader
@@ -40,9 +41,6 @@
 
 (defn ->log [_]
   (InMemoryLog. (atom [])))
-
-(defn log-record->tx-instant ^core2.tx.TransactionInstant [^LogRecord record]
-  (tx/->TransactionInstant (.offset record) (.time record)))
 
 (def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
 
@@ -95,7 +93,7 @@
                                     time-ms (.readLong log-in)
                                     record (byte-array size)]
                                 (when (= size (.read log-in record))
-                                  (->LogRecord offset (Date. time-ms) (ByteBuffer/wrap record))))
+                                  (->LogRecord (tx/->TransactionInstant offset (Date. time-ms)) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -143,7 +141,7 @@
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
-                      (.set elements n (MapEntry/create f (->LogRecord offset (Date. time-ms) record)))
+                      (.set elements n (MapEntry/create f (->LogRecord (tx/->TransactionInstant offset (Date. time-ms)) record)))
                       (recur (inc n) (+ offset header-size size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
