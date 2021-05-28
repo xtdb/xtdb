@@ -1332,3 +1332,11 @@
            (.close node))))
     (t/is (instance? InterruptedException (db/ingester-error (:tx-ingester node))))
     (t/is (< @!calls op-count))))
+
+(t/deftest empty-tx-can-be-awaited-1519
+  #_ ; TODO
+  (let [tx (api/submit-tx *api* [])
+        _ (api/await-tx *api* tx (Duration/ofSeconds 1))]
+    (t/is (= (select-keys tx [::tx/tx-id]) (api/latest-submitted-tx *api*)))
+    (t/is (= tx (api/latest-completed-tx *api*)))
+    (t/is (api/tx-committed? *api* tx))))
