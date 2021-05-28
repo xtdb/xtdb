@@ -2,13 +2,18 @@
 
 A Kotlin DSL for Crux which enables pretty transactions and queries
 
+== Quickstart
+
+```bash
+git clone git@github.com:crux-labs/crux-kotlin-dsl.git
+cd crux-kotlin-dsl
+./gradlew build
+cp build/libs/crux-kotlin-dsl-0.0.1-SNAPSHOT.jar {your-project-deps-directory}
+```
+
 == Status
 
 Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, use the https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/master/index.html[Crux Core Java API] directly for now.
-
-== Quickstart
-
-TODO: How does a Kotlin user pull `crux-kotlin-dsl` to try it out?
 
 == References
 
