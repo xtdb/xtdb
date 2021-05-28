@@ -34,7 +34,7 @@ Have a look in `core2.logical-plan` for what can go into these plans, and `core2
 
 == Plan
 
-See link:plan.md[plan.md] for upcoming development notes.
+See link:milestones.md[milestones.md] for upcoming development notes.
 
 See link:bibliography.org[bibliography.org] for a list of light bedtime reading.
 
