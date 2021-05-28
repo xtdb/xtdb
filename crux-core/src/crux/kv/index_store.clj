@@ -1047,11 +1047,9 @@
             {:tombstones tombstones})))))
 
   (index-entity-txs [_ entity-txs]
-    (let [{:crux.tx/keys [tx-id tx-time]} tx]
-      (kv/store transient-kv-store
-                (->> (conj (mapcat etx->kvs entity-txs)
-                           (MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer))
-                     (sort-by key mem/buffer-comparator)))))
+    (kv/store transient-kv-store
+              (->> (mapcat etx->kvs entity-txs)
+                   (sort-by key mem/buffer-comparator))))
 
   (commit-index-tx [_]
     (with-open [snapshot (kv/new-snapshot transient-kv-store)]
@@ -1083,9 +1081,13 @@
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache]
   db/IndexStore
   (begin-index-tx [_ tx fork-at]
-    (->KvIndexStoreTx kv-store (mut-kv/->mutable-kv-store) tx fork-at
-                      (atom #{}) thread-mgr
-                      (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) (HashMap.)))
+    (let [{:crux.tx/keys [tx-id tx-time]} tx
+          transient-kv-store (mut-kv/->mutable-kv-store)]
+      (kv/store transient-kv-store
+                [(MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)])
+      (->KvIndexStoreTx kv-store transient-kv-store tx fork-at
+                        (atom #{}) thread-mgr
+                        (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) (HashMap.))))
 
   ;; TODO, make use of this fn in unindex-eids
   (exclusive-avs [_ eids]
