@@ -1,6 +1,5 @@
 (ns core2.core
   (:require [clojure.pprint :as pp]
-            core2.await
             [core2.indexer :as indexer]
             core2.ingest-loop
             [core2.operator :as op]
@@ -9,12 +8,13 @@
             core2.tx-producer
             [core2.util :as util])
   (:import clojure.lang.IReduceInit
-           core2.await.ITxAwaiter
            core2.data_source.IDataSourceFactory
            [core2.indexer IChunkManager TransactionIndexer]
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
+           java.time.Duration
+           java.util.concurrent.TimeoutException
            org.apache.arrow.memory.RootAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -33,14 +33,19 @@
     ^java.util.concurrent.CompletableFuture [tx-producer tx-ops]))
 
 (defrecord Node [^TransactionIndexer indexer
-                 ^ITxAwaiter tx-awaiter
                  ^IDataSourceFactory data-source-factory
                  ^ITxProducer tx-producer
                  !system
                  close-fn]
   PNode
-  (await-tx [this tx] (await-tx this tx nil))
-  (await-tx [_ tx timeout] (.awaitTx tx-awaiter tx timeout))
+  (await-tx [this tx]
+    @(.awaitTxAsync indexer tx))
+
+  (await-tx [_ tx timeout]
+    (let [res (deref (.awaitTxAsync indexer tx) (.toMillis ^Duration timeout) ::timeout)]
+      (if (= res ::timeout)
+        (throw (TimeoutException. "await-tx timed out"))
+        res)))
 
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
@@ -60,7 +65,6 @@
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
 (defn ->node {::sys/deps {:indexer :core2/indexer
-                          :tx-awaiter :core2/tx-awaiter
                           :data-source-factory :core2/data-source-factory
                           :tx-producer :core2/tx-producer}}
   [deps]
@@ -92,7 +96,6 @@
                                             :core2/allocator `->allocator
                                             :core2/indexer 'core2.indexer/->indexer
                                             :core2/ingest-loop 'core2.ingest-loop/->ingest-loop
-                                            :core2/tx-awaiter 'core2.await/->tx-awaiter
                                             :core2/log 'core2.log/->log
                                             :core2/tx-producer 'core2.tx-producer/->tx-producer
                                             :core2/metadata-manager 'core2.metadata/->metadata-manager

@@ -1,5 +1,6 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
+            [core2.await :as await]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.metadata :as meta]
@@ -15,8 +16,8 @@
            [core2.temporal ITemporalManager TemporalCoordinates]
            [core2.tx TransactionInstant Watermark]
            java.io.Closeable
-           [java.util Collections Date IdentityHashMap Map Map$Entry Set TreeMap]
-           [java.util.concurrent ConcurrentHashMap CompletableFuture ConcurrentSkipListMap]
+           [java.util Collections Date Map Map$Entry Set TreeMap]
+           [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
            java.util.concurrent.atomic.AtomicInteger
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
@@ -34,7 +35,8 @@
 
 (definterface TransactionIndexer
   (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps])
-  (^core2.tx.TransactionInstant latestCompletedTx []))
+  (^core2.tx.TransactionInstant latestCompletedTx [])
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.tx.TransactionInstant tx]))
 
 (definterface IndexerPrivate
   (^int indexTx [^core2.tx.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops, ^long nextRowId])
@@ -153,7 +155,8 @@
                   ^Map live-roots
                   ^Set open-watermarks
                   ^StampedLock open-watermarks-lock
-                  ^:volatile-mutable ^Watermark watermark]
+                  ^:volatile-mutable ^Watermark watermark
+                  ^PriorityBlockingQueue awaiters]
 
   IChunkManager
   (getLiveRoot [_ field-name]
@@ -206,10 +209,15 @@
       (when (>= new-chunk-row-count max-rows-per-chunk)
         (.finishChunk this)))
 
+    (await/notify-tx tx-instant awaiters)
+
     tx-instant)
 
   (latestCompletedTx [_]
     (some-> watermark .tx-instant))
+
+  (awaitTxAsync [this tx]
+    (await/await-tx-async tx #(.latestCompletedTx this) awaiters))
 
   IndexerPrivate
   (indexTx [this tx-instant tx-ops next-row-id]
@@ -377,4 +385,5 @@
               (ConcurrentSkipListMap.)
               (util/->identity-set)
               (StampedLock.)
-              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block))))
+              (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
+              (PriorityBlockingQueue.))))

@@ -1,50 +1,56 @@
 (ns core2.await
-  (:require core2.indexer
-            [core2.system :as sys])
-  (:import core2.indexer.TransactionIndexer
-           java.io.Closeable
-           java.time.Duration
-           java.util.concurrent.TimeoutException))
+  (:require [core2.tx :as tx])
+  (:import core2.tx.TransactionInstant
+           [java.util.concurrent CompletableFuture PriorityBlockingQueue]))
 
-(definterface ITxAwaiter
-  (^core2.tx.TransactionInstant awaitTx [^core2.tx.TransactionInstant tx])
-  (^core2.tx.TransactionInstant awaitTx [^core2.tx.TransactionInstant tx, ^java.time.Duration timeout]))
+(deftype AwaitingTx [^TransactionInstant tx, ^CompletableFuture fut]
+  Comparable
+  (compareTo [_ other]
+    (.compareTo tx (.tx ^AwaitingTx other))))
 
-(deftype TxAwaiter [^TransactionIndexer indexer
-                    ^Duration poll-sleep-duration
-                    ^:unsynchronized-mutable ^boolean closed?]
-  ITxAwaiter
-  (awaitTx [this tx] (.awaitTx this tx nil))
+(defn- await-done? [^TransactionInstant awaited-tx, ^TransactionInstant completed-tx]
+  (or (nil? awaited-tx)
+      (when completed-tx
+        (not (pos? (.compareTo awaited-tx completed-tx))))))
 
-  (awaitTx [_this tx timeout]
-    (if tx
-      (let [poll-sleep-ms (.toMillis poll-sleep-duration)
-            end-ns (when timeout
-                     (+ (System/nanoTime) (.toNanos timeout)))
-            tx-id (.tx-id tx)]
-        (loop []
-          (let [latest-completed-tx (.latestCompletedTx indexer)]
-            (cond
-              (and latest-completed-tx
-                   (>= (.tx-id latest-completed-tx) tx-id))
-              latest-completed-tx
+(defn await-tx-async
+  ^java.util.concurrent.CompletableFuture
+  [^TransactionInstant awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
 
-              closed? (throw (IllegalStateException. "node closed"))
+  (let [fut (CompletableFuture.)]
+    (or (try
+          (let [completed-tx (->latest-completed-tx)]
+            (when (await-done? awaited-tx completed-tx)
+              ;; fast path - don't bother with the PBQ unless we need to
+              (.complete fut completed-tx)
+              true))
+          (catch Exception e
+            (.completeExceptionally fut e)
+            true))
 
-              (or (nil? timeout)
-                  (neg? (- (System/nanoTime) (long end-ns))))
-              (do
-                (Thread/sleep poll-sleep-ms)
-                (recur))
+        (let [awaiting-tx (AwaitingTx. awaited-tx fut)]
+          (.offer awaiters awaiting-tx)
 
-              :else (throw (TimeoutException.))))))
-      (.latestCompletedTx indexer)))
+          (try
+            (let [completed-tx (->latest-completed-tx)]
+              (when (await-done? awaited-tx completed-tx)
+                (.remove awaiters awaiting-tx)
+                (.complete fut completed-tx)))
+            (catch Exception e
+              (.completeExceptionally fut e)
+              true))))
+    fut))
 
-  Closeable
-  (close [this]
-    (set! (.closed? this) true)))
+(defn notify-tx [completed-tx ^PriorityBlockingQueue awaiters]
+  (while (when-let [^AwaitingTx awaiting-tx (.peek awaiters)]
+           (when (await-done? (.tx awaiting-tx) completed-tx)
+             (.remove awaiters awaiting-tx)
+             (.complete ^CompletableFuture (.fut awaiting-tx) completed-tx)
+             true))))
 
-(defn ->tx-awaiter {::sys/deps {:indexer :core2/indexer}
-                    ::sys/args {:poll-sleep-duration {:spec ::sys/duration, :default "PT0.1S"}}}
-  [{:keys [indexer poll-sleep-duration]}]
-  (TxAwaiter. indexer poll-sleep-duration false))
+(defn notify-ex [^Exception ex ^PriorityBlockingQueue awaiters]
+  ;; NOTE: by this point, any calls to `->latest-completed-tx` (above) must also throw this exception.
+  (doseq [^AwaitingTx awaiting-tx awaiters]
+    (.completeExceptionally ^CompletableFuture (.fut awaiting-tx) ex))
+
+  (.clear awaiters))

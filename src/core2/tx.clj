@@ -1,12 +1,15 @@
 (ns core2.tx
   (:require [clojure.tools.logging :as log]
             [core2.util :as util])
-  (:import [java.util Date Map SortedMap]
-           java.util.function.IntUnaryOperator
-           [java.util.concurrent.atomic AtomicInteger]
-           [java.io Closeable]))
+  (:import java.io.Closeable
+           [java.util Date Map SortedMap]
+           java.util.concurrent.atomic.AtomicInteger
+           java.util.function.IntUnaryOperator))
 
-(defrecord TransactionInstant [^long tx-id, ^Date tx-time])
+(defrecord TransactionInstant [^long tx-id, ^Date tx-time]
+  Comparable
+  (compareTo [_ other]
+    (- tx-id (.tx-id ^TransactionInstant other))))
 
 (defrecord Watermark [^long chunk-idx ^long row-count ^SortedMap column->root ^TransactionInstant tx-instant
                       ^Object temporal-watermark ^AtomicInteger ref-count ^int max-rows-per-block ^Map thread->count]
