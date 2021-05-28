@@ -41,6 +41,6 @@ CREATE TABLE IF NOT EXISTS tx_events (
         (jdbc/execute! ds ["DROP INDEX tx_events_event_key_idx"]))
 
       (when-not (idx-exists? ds "tx_events_event_key_idx_2")
-        (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx_2 ON tx_events(compacted, event_key)"]))
+        (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"]))
 
       (check-tx-time-col ds))))
