@@ -719,43 +719,41 @@
                 next-level-entries (long-array 1 idx)]
            (cond
              (>= level scan-level)
-             (.forEach (LongStream/of next-level-entries)
-                       (reify LongConsumer
-                         (accept [_ idx]
-                           (.forEachRemaining ^Spliterator$OfLong (->subtree-spliterator n idx)
-                                              (reify LongConsumer
-                                                (accept [_ idx]
-                                                  (when (and (.isInRange access idx min-range max-range axis-mask)
-                                                             (BitUtil/bitNot (.isDeleted access idx)))
-                                                    (.accept c idx))))))))
+             (dotimes [x (alength next-level-entries)]
+               (let [idx (aget next-level-entries x)]
+                 (.forEachRemaining ^Spliterator$OfLong (->subtree-spliterator n idx)
+                                    (reify LongConsumer
+                                      (accept [_ idx]
+                                        (when (and (.isInRange access idx min-range max-range axis-mask)
+                                                   (BitUtil/bitNot (.isDeleted access idx)))
+                                          (.accept c idx)))))))
 
              (< visited-levels max-breadth-first-levels)
              (let [new-next-level-entries (LongStream/builder)]
-               (.forEach (LongStream/of next-level-entries)
-                         (reify LongConsumer
-                           (accept [_ idx]
-                             (let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
-                                   axis-value (if partial-match-axis?
-                                                0
-                                                (.getCoordinate access idx axis))
-                                   min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
-                                   max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
-                                   left-idx (balanced-left-child idx)
-                                   right-idx (inc left-idx)
-                                   visit-left? (and min-match? (balanced-valid? n left-idx))
-                                   visit-right? (and max-match? (balanced-valid? n right-idx))]
+               (dotimes [x (alength next-level-entries)]
+                 (let [idx (aget next-level-entries x)
+                       partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+                       axis-value (if partial-match-axis?
+                                    0
+                                    (.getCoordinate access idx axis))
+                       min-match? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+                       max-match? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+                       left-idx (balanced-left-child idx)
+                       right-idx (inc left-idx)
+                       visit-left? (and min-match? (balanced-valid? n left-idx))
+                       visit-right? (and max-match? (balanced-valid? n right-idx))]
 
-                               (when (and min-match?
-                                          max-match?
-                                          (.isInRange access idx min-range max-range axis-mask)
-                                          (BitUtil/bitNot (.isDeleted access idx)))
-                                 (.accept c idx))
+                   (when (and min-match?
+                              max-match?
+                              (.isInRange access idx min-range max-range axis-mask)
+                              (BitUtil/bitNot (.isDeleted access idx)))
+                     (.accept c idx))
 
-                               (when visit-left?
-                                 (.add new-next-level-entries left-idx))
+                   (when visit-left?
+                     (.add new-next-level-entries left-idx))
 
-                               (when visit-right?
-                                 (.add new-next-level-entries right-idx))))))
+                   (when visit-right?
+                     (.add new-next-level-entries right-idx))))
                (let [new-next-level-entries (.toArray (.build new-next-level-entries))]
                  (when (pos? (alength new-next-level-entries))
                    (recur (inc level) (inc visited-levels) (next-axis axis k) new-next-level-entries))))
