@@ -688,7 +688,7 @@
           (.setRowCount idx)
           (build-breadth-first-tree-in-place true))))))
 
-(def ^:private ^:const breadth-first-level-upper-limit 18)
+(def ^:private ^:const breadth-first-level-upper-limit 22)
 (def ^:private ^:const breadth-first-scan-levels 8)
 
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
