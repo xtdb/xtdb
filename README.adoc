@@ -15,6 +15,68 @@ cp build/libs/crux-kotlin-dsl-0.0.1-SNAPSHOT.jar {your-project-deps-directory}
 
 Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, use the https://crux-doc.s3.eu-west-2.amazonaws.com/crux-javadoc/master/index.html[Crux Core Java API] directly for now.
 
+== Releasing
+
+To release a JAR to MavenCentral, you will need to follow three steps:
+
+1. Create a GPG key
+2. Create a `gradle.properties` file with your secrets
+3. Build and Publish
+
+=== (1) Create a GPG key
+
+Follow the instructions here:
+https://central.sonatype.org/publish/requirements/gpg/#generating-a-key-pair
+...save your key's passphrase and revocation certificate in your password manager.
+
+If you have trouble distributing your GPG key, try one of the servers listed in this tutorial:
+https://medium.com/geekculture/how-to-publish-artifacts-on-maven-central-24342fd286cd#bb8b
+
+=== (2) Create `gradle.properties` secrets
+
+==== (2.a) Get your public key id:
+
+[source,shell]
+----
+# Look for the key in '0x12345678' format.
+# Use the '12345678' portion as your public key id.
+gpg -K --keyid-format 0xSHORT
+----
+
+==== (2.b) Create a secret key ring file:
+
+[source,shell]
+----
+# this requires your key's passphrase:
+gpg --keyring secring.gpg --export-secret-keys > ~/.gnupg/secring.gpg
+----
+
+==== (2.c) Create `~/.gradle/gradle.properties`
+
+This file will hold your secrets, which is why it's not in git.
+See this Gradle doc for more details:
+https://docs.gradle.org/current/userguide/signing_plugin.html#sec:signatory_credentials
+
+.~/.gradle/gradle.properties
+[source]
+----
+# File location: ~/.gradle/gradle.properties
+signing.keyId=ABCDEFGH
+signing.password=YOUR_PASSPHRASE
+signing.secretKeyRingFile=/home/YOUR_USER/.gnupg/secring.gpg
+ossrhUsername=YOUR_SONATYPE_JIRA_USERNAME
+ossrhPassword=YOUR_SONATYPE_JIRA_PASSWORD
+----
+
+=== (3) Build and publish:
+
+[source,shell]
+----
+./gradlew test
+./gradlew build jar javadocJar sourcesJar
+./gradlew publish
+----
+
 == References
 
 * https://www.juxt.pro/drafts/crux-kotlin (TODO: replace with real blog post)
