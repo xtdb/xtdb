@@ -688,6 +688,8 @@
           (.setRowCount idx)
           (build-breadth-first-tree-in-place true))))))
 
+(def ^:private ^:const breadth-first-level-upper-limit 18)
+
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
                                        ^longs min-range
                                        ^longs max-range
@@ -704,7 +706,8 @@
          n n
          stack stack
          axis-mask axis-mask
-         max-breadth-first-level (long (/ (* 2 (balanced-height n)) 3))]
+         max-breadth-first-level (min breadth-first-level-upper-limit
+                                      (long (/ (* 2 (balanced-height n)) 3)))]
      (while (BitUtil/bitNot (.isEmpty stack))
        (let [idx (.poll stack)
              level (balanced-height idx)]
