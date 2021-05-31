@@ -689,6 +689,7 @@
           (build-breadth-first-tree-in-place true))))))
 
 (def ^:private ^:const breadth-first-level-upper-limit 18)
+(def ^:private ^:const breadth-first-scan-levels 8)
 
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
                                        ^longs min-range
@@ -706,15 +707,29 @@
          n n
          stack stack
          axis-mask axis-mask
-         max-breadth-first-level (min breadth-first-level-upper-limit
-                                      (long (/ (* 2 (balanced-height n)) 3)))]
+         height (balanced-height n)
+         scan-level (max 0 (- height breadth-first-scan-levels))
+         max-breadth-first-levels (min scan-level breadth-first-level-upper-limit)]
      (while (BitUtil/bitNot (.isEmpty stack))
        (let [idx (.poll stack)
              level (balanced-height idx)]
          (loop [level level
+                visited-levels 0
                 axis (BitUtil/rem level k)
                 next-level-entries (long-array 1 idx)]
-           (if (< level max-breadth-first-level)
+           (cond
+             (>= level scan-level)
+             (.forEach (LongStream/of next-level-entries)
+                       (reify LongConsumer
+                         (accept [_ idx]
+                           (.forEachRemaining ^Spliterator$OfLong (->subtree-spliterator n idx)
+                                              (reify LongConsumer
+                                                (accept [_ idx]
+                                                  (when (and (.isInRange access idx min-range max-range axis-mask)
+                                                             (BitUtil/bitNot (.isDeleted access idx)))
+                                                    (.accept c idx))))))))
+
+             (< visited-levels max-breadth-first-levels)
              (let [new-next-level-entries (LongStream/builder)]
                (.forEach (LongStream/of next-level-entries)
                          (reify LongConsumer
@@ -743,16 +758,12 @@
                                  (.add new-next-level-entries right-idx))))))
                (let [new-next-level-entries (.toArray (.build new-next-level-entries))]
                  (when (pos? (alength new-next-level-entries))
-                   (recur (inc level) (next-axis axis k) new-next-level-entries))))
-             (.forEach (LongStream/of next-level-entries)
-                       (reify LongConsumer
-                         (accept [_ idx]
-                           (.forEachRemaining ^Spliterator$OfLong (->subtree-spliterator n idx)
-                                              (reify LongConsumer
-                                                (accept [_ idx]
-                                                  (when (and (.isInRange access idx min-range max-range axis-mask)
-                                                             (BitUtil/bitNot (.isDeleted access idx)))
-                                                    (.accept c idx))))))))))))))
+                   (recur (inc level) (inc visited-levels) (next-axis axis k) new-next-level-entries))))
+
+             :else
+             (let [len (alength next-level-entries)]
+               (dotimes [n len]
+                 (.push stack (aget next-level-entries (dec (- len n))))))))))))
 
   (^boolean tryAdvance [this ^LongConsumer c]
    (loop []
