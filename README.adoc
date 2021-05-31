@@ -38,8 +38,8 @@ https://medium.com/geekculture/how-to-publish-artifacts-on-maven-central-24342fd
 
 [source,shell]
 ----
-# Look for the key in '0x12345678' format.
-# Use the '12345678' portion as your public key id.
+# Look for the key in '0xABCDEFGH' format.
+# Use the 8-char 'ABCDEFGH' portion as 'signing.keyId' below.
 gpg -K --keyid-format 0xSHORT
 ----
 
