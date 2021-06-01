@@ -4,11 +4,28 @@ A Kotlin DSL for Crux which enables pretty transactions and queries
 
 == Quickstart
 
-```bash
-git clone git@github.com:crux-labs/crux-kotlin-dsl.git
-cd crux-kotlin-dsl
-./gradlew build
-cp build/libs/crux-kotlin-dsl-0.0.1-SNAPSHOT.jar {your-project-deps-directory}
+Add both the Sonatype snapshots repo and Clojars to your repositories:
+
+```kotlin
+repositories {
+    maven {
+        name = "Snapshots"
+        url = uri("https://oss.sonatype.org/content/repositories/snapshots")
+    }
+    maven {
+        name = "Clojars"
+        url = uri("https://repo.clojars.org/")
+    }
+}
+```
+
+Then add `crux-kotlin-dsl` as a dependency:
+
+```kotlin
+dependencies {
+    implementation "pro.juxt:crux-kotlin-dsl:0.0.1-SNAPSHOT"
+    ...
+}
 ```
 
 == Status
@@ -19,11 +36,23 @@ Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, u
 
 To release a JAR to MavenCentral, you will need to follow three steps:
 
-1. Create a GPG key
-2. Create a `gradle.properties` file with your secrets
-3. Build and Publish
+1. Create a Sonatype user
+2. Create a GPG key
+3. Create a `gradle.properties` file with your secrets
+4. Build and Publish
 
-=== (1) Create a GPG key
+=== (1) Create a Sonatype user
+
+As far as I can tell, there is no automated way for existing users to add new
+users to GroupIds. There is https://oss.sonatype.org, which has some administrator
+features but it would seem none of us are admins for the GroupId `pro.juxt`.
+
+The process will unfortunately be somewhat manual. Create a JIRA user (yes, really)
+on https://issues.sonatype.org/secure/Signup!default.jspa[issues.sonatype.org]. Then
+create a new JIRA ticket (yes, really) requesting "deployer" access to the `pro.juxt`
+GroupId. A human being will be with you shortly.
+
+=== (2) Create a GPG key
 
 Follow the instructions here:
 https://central.sonatype.org/publish/requirements/gpg/#generating-a-key-pair
@@ -32,9 +61,9 @@ https://central.sonatype.org/publish/requirements/gpg/#generating-a-key-pair
 If you have trouble distributing your GPG key, try one of the servers listed in this tutorial:
 https://medium.com/geekculture/how-to-publish-artifacts-on-maven-central-24342fd286cd#bb8b
 
-=== (2) Create `gradle.properties` secrets
+=== (3) Create `gradle.properties` secrets
 
-==== (2.a) Get your public key id:
+==== (3.a) Get your public key id:
 
 [source,shell]
 ----
@@ -43,7 +72,7 @@ https://medium.com/geekculture/how-to-publish-artifacts-on-maven-central-24342fd
 gpg -K --keyid-format 0xSHORT
 ----
 
-==== (2.b) Create a secret key ring file:
+==== (3.b) Create a secret key ring file:
 
 [source,shell]
 ----
@@ -51,7 +80,7 @@ gpg -K --keyid-format 0xSHORT
 gpg --keyring secring.gpg --export-secret-keys > ~/.gnupg/secring.gpg
 ----
 
-==== (2.c) Create `~/.gradle/gradle.properties`
+==== (3.c) Create `~/.gradle/gradle.properties`
 
 This file will hold your secrets, which is why it's not in git.
 See this Gradle doc for more details:
@@ -68,7 +97,7 @@ ossrhUsername=YOUR_SONATYPE_JIRA_USERNAME
 ossrhPassword=YOUR_SONATYPE_JIRA_PASSWORD
 ----
 
-=== (3) Build and publish:
+=== (4) Build and publish:
 
 [source,shell]
 ----
