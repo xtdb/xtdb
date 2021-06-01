@@ -38,10 +38,13 @@ public final class ConcurrentHashMapTableAccess {
             mh = MethodHandles.lookup().unreflectGetter(tableField);
             mh = mh.asType(mh.type().changeReturnType(Object[].class));
         } catch (Exception e) {
-            LOGGER.warn("Could not open ConcurrentHashMap.table field - Crux's cache may perform badly in certain cases. Use `--add-opens java.base/java.util.concurrent=ALL-UNNAMED` to remove this warning.");
         }
 
         TABLE_FIELD_METHOD_HANDLE = mh;
+    }
+
+    public static boolean canAccessTable() {
+        return TABLE_FIELD_METHOD_HANDLE != null;
     }
 
     public static final <K, V> Object[] getConcurrentHashMapTable(final ConcurrentHashMap<K, V> map) throws Throwable {

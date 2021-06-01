@@ -3,11 +3,9 @@
             [clojure.test :as t]
             [clojure.walk :as w]
             [crux.api :as api]
-            [crux.codec :as c]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.index :as idx]
-            [crux.query :as q]
-            [taoensso.nippy :as nippy])
+            [crux.query :as q])
   (:import [java.util Arrays Date UUID]
            java.util.concurrent.TimeoutException))
 
