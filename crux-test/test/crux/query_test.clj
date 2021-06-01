@@ -3920,3 +3920,17 @@
             slowdown (double (/ (min problematic-ns workedaround-ns)
                                 (max problematic-ns workedaround-ns)))]
         (t/is (>= slowdown acceptable-limit-slowdown))))))
+
+(t/deftest circular-deps-test-1523
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :surname "Evans"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :fred :name "Fred" :surname "Evans"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :matt :name "Matt" :surname "Stevens"}]])
+
+  (with-open [db (api/open-db *api*)]
+    #_ ; FIXME
+    (t/is (= :fixme-expected
+             (api/q db '{:find  [?a-name ?b-name]
+                         :where [[?a :name ?a-name]
+                                 [?a :surname ?lastname]
+                                 [(text-search :surname ?lastname) [[?b]]]
+                                 [?b :name ?b-name]]})))))
