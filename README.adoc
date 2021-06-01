@@ -24,7 +24,7 @@ Then add `crux-kotlin-dsl` as a dependency:
 ```kotlin
 dependencies {
     implementation "pro.juxt:crux-kotlin-dsl:0.0.1-SNAPSHOT"
-    ...
+    // ...
 }
 ```
 
