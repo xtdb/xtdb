@@ -76,7 +76,12 @@
                                                            cell-axis-idx
                                                            (dec (- cell-axis-idx)))]]
                            (take-while #(<= ^long % y) (drop (dec cell-axis-idx) axis-scale)))
-          blocks (distinct (keep #(.get directory %) (cartesian-product axis-block-ids)))
+          blocks (for [cell-idx (distinct (cartesian-product axis-block-ids))
+                       :when (= k (count cell-idx))
+                       :let [cell-idx (LongBuffer/wrap (->longs cell-idx))
+                             block (.get directory cell-idx)]
+                       :when block]
+                   block)
           ^IKdTreePointAccess access (kd/kd-tree-point-access this)
           axis-mask (kd/range-bitmask min-range max-range)
           acc (LongStream/builder)]
