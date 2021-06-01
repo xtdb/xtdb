@@ -90,9 +90,9 @@
                                (util/pointer-or-object internal-vec internal-idx))))))))
 
 (defn- probe-phase ^core2.relation.IReadRelation [^IReadRelation probe-rel
-                                                ^Map join-key->build-pointers
-                                                ^String probe-column-name
-                                                semi-join? anti-join?]
+                                                  ^Map join-key->build-pointers
+                                                  ^String probe-column-name
+                                                  semi-join? anti-join?]
   (when (pos? (.rowCount probe-rel))
     (let [probe-col (.readColumn probe-rel probe-column-name)
           probe-pointer (ArrowBufPointer.)
