@@ -1,1 +1,3 @@
-{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn}}
+{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn}
+ :hooks {:analyze-call {core2.core/with-db hooks.core2/with-db
+                        core2.core/with-db-async hooks.core2/with-db}}}

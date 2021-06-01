@@ -14,7 +14,8 @@
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
 
 (definterface ITxProducer
-  (submitTx [^java.util.List txOps]))
+  (submitTx
+    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [^java.util.List txOps]))
 
 (defn- ->doc-k-types [tx-ops]
   (let [doc-k-types (LinkedHashMap.)]

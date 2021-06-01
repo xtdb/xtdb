@@ -16,6 +16,7 @@
             [clojure.tools.logging :as log])
   (:import [core2.buffer_pool BufferPool IBufferPool]
            core2.core.Node
+           core2.data_source.QueryDataSource
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
@@ -70,8 +71,8 @@
            :mem-free 7.20742332E8,
            :mem-used 2.79257668E8}}]])
 
-(defn open-watermark ^core2.tx.Watermark [node]
-  (.watermark (c2/open-db node)))
+(defn db-watermark ^core2.tx.Watermark [^QueryDataSource db]
+  (.watermark db))
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
@@ -95,15 +96,16 @@
                               (juxt meta/latest-tx meta/latest-row-id))))
 
         (t/is (= last-tx-instant
-                 (last (for [tx-ops txs]
-                         @(c2/submit-tx node tx-ops)))))
+                 @(last (for [tx-ops txs]
+                          (c2/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-instant
-                 (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
+                 (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (with-open [watermark (open-watermark node)]
-            (let [column->root (.column->root watermark)
+          (c2/with-db [db node]
+            (let [watermark (db-watermark db)
+                  column->root (.column->root watermark)
                   first-column (first column->root)
                   last-column (last column->root)]
               (t/is (zero? (.chunk-idx watermark)))
@@ -120,15 +122,16 @@
                     "device-info-demo000001" -6688467811848818630
                     "reading-demo000001" -8292973307042192125}
                    (.id->internal-id tm)))
-          (with-open [watermark (open-watermark node)]
-            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
+          (c2/with-db [db node]
+            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark (db-watermark db))))))))
 
         (tu/finish-chunk node)
 
-        (with-open [watermark (open-watermark node)]
-          (t/is (= 4 (.chunk-idx watermark)))
-          (t/is (zero? (.row-count watermark)))
-          (t/is (empty? (.column->root watermark))))
+        (c2/with-db [db node]
+          (let [watermark (db-watermark db)]
+            (t/is (= 4 (.chunk-idx watermark)))
+            (t/is (zero? (.row-count watermark)))
+            (t/is (empty? (.column->root watermark)))))
 
         (t/is (= [last-tx-instant (dec total-number-of-ops)]
                  @(meta/with-latest-metadata mm
@@ -210,8 +213,8 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock :compress-temporal-index? false})]
       (let [^ObjectStore os (:core2/object-store @(:!system node))]
 
-        @(-> (c2/submit-tx node tx-ops)
-             (tu/then-await-tx node))
+        (-> (c2/submit-tx node tx-ops)
+            (tu/then-await-tx node))
 
         (tu/finish-chunk node)
 
@@ -231,12 +234,13 @@
                          @(c2/submit-tx node tx-ops)))))
 
         (t/is (= last-tx-instant
-                 (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
+                 (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
         (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
         (with-open [node (tu/->local-node {:node-dir node-dir})]
           (t/is (= last-tx-instant
-                   (c2/await-tx node last-tx-instant (Duration/ofSeconds 2))))
+                   (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
+
           (t/is (= last-tx-instant (c2/latest-completed-tx node))))
 
         (t/is (zero? (.count (Files/list object-dir))))))))
@@ -267,7 +271,7 @@
                                 nil
                                 (partition-all 100 tx-ops))]
 
-          (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 5))))
+          (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 5))))
           (t/is (= last-tx-instant (c2/latest-completed-tx node)))
           (tu/finish-chunk node)
 
@@ -349,7 +353,7 @@
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (:core2/object-store @(:!system node))]]
-            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofSeconds 15))))
+            (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 15))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
@@ -393,7 +397,9 @@
                   ^ObjectStore os (:core2/object-store system)
                   ^IMetadataManager mm (:core2/metadata-manager system)
                   ^TemporalManager tm (:core2/temporal-manager system)]
-              (t/is (= first-half-tx-instant (c2/await-tx node first-half-tx-instant (Duration/ofSeconds 5))))
+              (t/is (= first-half-tx-instant
+                       (-> first-half-tx-instant
+                           (tu/then-await-tx node (Duration/ofSeconds 5)))))
               (t/is (= first-half-tx-instant (c2/latest-completed-tx node)))
 
               (let [[^TransactionInstant os-tx-instant os-latest-row-id] @(meta/with-latest-metadata mm
@@ -424,15 +430,17 @@
                           :let [^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
 
                     (t/is (<= (.tx-id first-half-tx-instant)
-                              (.tx-id (c2/await-tx node first-half-tx-instant (Duration/ofSeconds 5)))
+                              (.tx-id (-> first-half-tx-instant
+                                          (tu/then-await-tx node (Duration/ofSeconds 5))))
                               (.tx-id second-half-tx-instant)))
 
-                    (with-open [watermark (open-watermark node)]
-                      (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark watermark))) 3500))
+                    (c2/with-db [db node]
+                      (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark (db-watermark db)))) 3500))
                       (t/is (>= (count (.id->internal-id tm)) 2000))))
 
                   (doseq [^Node node [new-node node]]
-                    (t/is (= second-half-tx-instant (c2/await-tx node second-half-tx-instant (Duration/ofSeconds 5))))
+                    (t/is (= second-half-tx-instant (-> second-half-tx-instant
+                                                        (tu/then-await-tx node (Duration/ofSeconds 5)))))
                     (t/is (= second-half-tx-instant (c2/latest-completed-tx node))))
 
                   (Thread/sleep 1000) ;; TODO for now
@@ -460,7 +468,5 @@
                                (when-not (instance? UnsupportedOperationException throwable)
                                  (log* logger level throwable message))))]
       (t/is (thrown-with-msg? Exception #"oh no!"
-                              (deref (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo", :count 42}}])
-                                         (tu/then-await-tx node (Duration/ofSeconds 1)))
-                                     500
-                                     ::timeout))))))
+                              (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo", :count 42}}])
+                                  (tu/then-await-tx node (Duration/ofSeconds 1))))))))

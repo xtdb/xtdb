@@ -179,7 +179,9 @@
   [^CompletableFuture fut f]
   (.thenApply fut (->jfn f)))
 
-(defn then-compose {:style/indent :defn} [^CompletableFuture fut f]
+(defn then-compose {:style/indent :defn}
+  ^java.util.concurrent.CompletableFuture
+  [^CompletableFuture fut f]
   (.thenCompose fut (->jfn f)))
 
 (defmacro completable-future {:style/indent 1} [pool & body]

@@ -21,15 +21,13 @@
   (with-open [node (tu/->local-node {:node-dir node-dir,
                                      :clock clock
                                      :compress-temporal-index? compress-temporal-index?})]
-    (let [last-tx (tpch/submit-docs! node scale-factor)]
-      (c2/await-tx node last-tx (Duration/ofMinutes 1))
+    (let [last-tx (-> (tpch/submit-docs! node scale-factor)
+                      (tu/then-await-tx node))]
+      (tu/finish-chunk node)
 
-      (tu/finish-chunk node))
-
-    (with-open [db (c2/open-db node)]
-      (binding [*node* node
-                *db* db]
-        (f)))))
+      (c2/with-db [db node {:tx last-tx, :timeout (Duration/ofMinutes 1)}]
+        (binding [*node* node, *db* db]
+          (f))))))
 
 (defn- test-tpch-ingest [scale-factor expected-objects]
   (let [node-dir (util/->path (format "target/can-submit-tpch-docs-%s" scale-factor))

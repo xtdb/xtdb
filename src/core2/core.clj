@@ -1,5 +1,6 @@
 (ns core2.core
   (:require [clojure.pprint :as pp]
+            core2.data-source
             [core2.indexer :as indexer]
             core2.ingest-loop
             [core2.operator :as op]
@@ -8,25 +9,47 @@
             core2.tx-producer
             [core2.util :as util])
   (:import clojure.lang.IReduceInit
-           core2.data_source.IDataSourceFactory
+           [core2.data_source IDataSourceFactory QueryDataSource]
            [core2.indexer IChunkManager TransactionIndexer]
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
            java.time.Duration
-           java.util.concurrent.TimeoutException
+           [java.util.concurrent CompletableFuture TimeUnit]
            org.apache.arrow.memory.RootAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
 
 (defprotocol PNode
-  (await-tx
-    ^core2.tx.TransactionInstant [node tx]
-    ^core2.tx.TransactionInstant [node tx timeout])
-
   (latest-completed-tx ^core2.tx.TransactionInstant [node])
 
-  (open-db ^core2.data_source.QueryDataSource [node]))
+  (await-tx-async
+    ^java.util.concurrent.CompletableFuture #_<core2.tx.TransactionInstant> [node tx])
+
+  (open-db-async
+    ^java.util.concurrent.CompletableFuture #_<core2.data_source.QueryDataSource> [node]
+    ^java.util.concurrent.CompletableFuture #_<core2.data_source.QueryDataSource> [node db-opts]))
+
+(defn with-db-async* [node db-opts f]
+  (-> (open-db-async node db-opts)
+      (util/then-apply (bound-fn [^QueryDataSource db]
+                         (try
+                           (f db)
+                           (finally
+                             (.close db)))))))
+
+(defmacro with-db-async [[db-binding node db-opts] & body]
+  `(with-db-async* ~node ~db-opts (bound-fn [~db-binding] ~@body)))
+
+(defmacro with-db [& args]
+  `@(with-db-async ~@args))
+
+(def ^:private with-db-arglists
+  '([[db-binding node] & body]
+    [[db-binding node {:keys [tx valid-time timeout]}] & body]))
+
+(alter-meta! #'with-db assoc :arglists with-db-arglists)
+(alter-meta! #'with-db-async assoc :arglists with-db-arglists)
 
 (defprotocol PSubmitNode
   (submit-tx
@@ -38,19 +61,27 @@
                  !system
                  close-fn]
   PNode
-  (await-tx [this tx]
-    @(.awaitTxAsync indexer tx))
-
-  (await-tx [_ tx timeout]
-    (let [res (deref (.awaitTxAsync indexer tx) (.toMillis ^Duration timeout) ::timeout)]
-      (if (= res ::timeout)
-        (throw (TimeoutException. "await-tx timed out"))
-        res)))
-
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
-  (open-db [_]
-    (.openDataSource data-source-factory (.getWatermark ^IChunkManager indexer)))
+  (await-tx-async [this tx]
+    (-> (if-not (instance? CompletableFuture tx)
+          (CompletableFuture/completedFuture tx)
+          tx)
+        (util/then-compose (fn [tx]
+                             (.awaitTxAsync indexer tx)))))
+
+  (open-db-async [this]
+    (open-db-async this {}))
+
+  (open-db-async [this db-opts]
+    ;; TODO pass valid-time and tx through to the data-source
+    (let [{:keys [valid-time tx ^Duration timeout]} db-opts]
+      (-> (if tx
+            (-> (await-tx-async this tx)
+                (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))
+            (CompletableFuture/completedFuture nil))
+          (util/then-apply (fn [_]
+                             (.openDataSource data-source-factory (.getWatermark ^IChunkManager indexer)))))))
 
   PSubmitNode
   (submit-tx [_ tx-ops]

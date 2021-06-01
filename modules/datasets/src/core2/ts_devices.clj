@@ -133,5 +133,5 @@
 
 (comment
   (time
-   (with-open [db (c2/open-db dev/node)]
+   (c2/with-db [db dev/node]
      (into [] (c2/plan-q db query-recent-battery-temperatures)))))

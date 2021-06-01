@@ -5,7 +5,7 @@
             [core2.ts-devices :as tsd])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
-           java.time.Duration
+           java.util.concurrent.TimeUnit
            software.amazon.awssdk.services.s3.model.GetObjectRequest
            software.amazon.awssdk.services.s3.S3Client))
 
@@ -41,7 +41,8 @@
                          readings-rdr (tsd/gz-reader readings-file)]
                (tsd/submit-ts-devices node device-info-rdr readings-rdr)))]
     (bench/with-timing :await-tx
-      (c2/await-tx node tx (Duration/ofHours 5)))
+      @(-> (c2/await-tx-async node tx)
+           (.orTimeout 5 TimeUnit/HOURS)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk node))))

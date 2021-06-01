@@ -24,7 +24,7 @@
                 last-tx-instant (tsd/submit-ts-devices node :small)]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-instant))
-            (t/is (= last-tx-instant (c2/await-tx node last-tx-instant (Duration/ofMinutes 15))))
+            (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofMinutes 15))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
             (tu/finish-chunk node)
 
@@ -35,7 +35,7 @@
           (f))))))
 
 (t/deftest ^:timescale test-recent-battery-temperatures
-  (with-open [db (c2/open-db *node*)]
+  (c2/with-db [db *node*]
     (t/is (= [{:time #inst "2016-11-15T18:39:00.000-00:00",
                :device-id "demo000000",
                :battery-temperature 91.9}
@@ -69,13 +69,13 @@
              (into [] (c2/plan-q db tsd/query-recent-battery-temperatures))))))
 
 (t/deftest ^:timescale test-busiest-low-battery-devices
-  (with-open [db (c2/open-db *node*)]
+  (c2/with-db [db *node*]
     #_ ; TODO will fill these in once we've resolved issues in ts-devices ingest
     (t/is (= []
              (into [] (c2/plan-q db tsd/query-busiest-low-battery-devices))))))
 
 (t/deftest ^:timescale test-min-max-battery-levels-per-hour
-  (with-open [db (c2/open-db *node*)]
+  (c2/with-db [db *node*]
     #_ ; TODO will fill these in once we've resolved issues in ts-devices ingest
     (t/is (= []
              (into [] (c2/plan-q db tsd/query-min-max-battery-levels-per-hour))))))

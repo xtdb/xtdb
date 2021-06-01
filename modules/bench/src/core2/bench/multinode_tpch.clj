@@ -3,11 +3,9 @@
             [core2.bench :as bench]
             [core2.core :as c2]
             [core2.tpch :as tpch])
-  (:import core2.relation.IReadRelation
-           java.nio.file.attribute.FileAttribute
+  (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
-           java.util.function.Consumer
            java.util.UUID))
 
 (defn run-multinode [{:keys [scale-factor sleep-ms]} start-node]
@@ -34,9 +32,7 @@
                     query tpch/tpch-q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.core.Node node]
                           (log/info "awaiting" k "node")
-                          (c2/await-tx node last-tx (Duration/ofHours 1))
-
-                          (with-open [db (c2/open-db node)]
+                          (c2/with-db [db node {:tx last-tx, :timeout (Duration/ofHours 1)}]
                             (log/info "rows:"
                                       (->> (c2/plan-q (merge {'$ db} (::tpch/params (meta query))) query)
                                            (sequence)

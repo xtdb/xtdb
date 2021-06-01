@@ -60,7 +60,7 @@
     (future
       (let [last-tx (time
                      (tpch/submit-docs! node 0.1))]
-        (time (c2/await-tx node last-tx (Duration/ofHours 1)))
+        (time (tu/then-await-tx last-tx node (Duration/ofHours 1)))
         (time (tu/finish-chunk node)))))
 
   (do
@@ -69,5 +69,5 @@
                 #'tpch/tpch-q5-local-supplier-volume
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
-      (with-open [db (c2/open-db node)]
+      (c2/with-db [db node]
         (time (into [] (c2/plan-q db @!q)))))))

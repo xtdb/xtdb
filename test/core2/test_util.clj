@@ -3,23 +3,26 @@
             [clojure.test :as t]
             [core2.core :as c2]
             [core2.json :as c2-json]
+            [core2.relation :as rel]
             [core2.types :as ty]
-            [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.util :as util])
   (:import core2.core.Node
            core2.ICursor
+           core2.indexer.TransactionIndexer
            core2.object_store.FileSystemObjectStore
-           [core2.relation IReadRelation IReadColumn]
+           [core2.relation IReadColumn IReadRelation]
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
            [java.util ArrayList Date LinkedList]
-           java.util.concurrent.CompletableFuture
+           [java.util.concurrent CompletableFuture TimeoutException]
            java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
-           [org.apache.arrow.vector.types.pojo Field Schema]
-           org.apache.arrow.vector.types.Types$MinorType))
+           org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.types.Types$MinorType
+           java.util.concurrent.TimeUnit
+           java.util.concurrent.TimeUnit))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -49,24 +52,12 @@
     acc))
 
 (defn then-await-tx
-  ([^CompletableFuture submit-tx-fut, ^Node node]
-   (-> submit-tx-fut
-       (then-await-tx node (Duration/ofSeconds 2))))
+  (^core2.tx.TransactionInstant [tx node]
+   @(c2/await-tx-async node tx))
 
-  ([^CompletableFuture submit-tx-fut, ^Node node, timeout]
-   (-> submit-tx-fut
-       (util/then-apply
-        (fn [tx]
-          (c2/await-tx node tx timeout))))))
-
-(defn with-submitted-tx* [tx-ops f]
-  @(-> (c2/submit-tx *node* tx-ops)
-       (then-await-tx *node*))
-  (with-open [db (c2/open-db *node*)]
-    (f db)))
-
-(defmacro with-submitted-tx [[db-binding tx-ops] & body]
-  `(with-submitted-tx* ~tx-ops (fn [~db-binding] ~@body)))
+  (^core2.tx.TransactionInstant [tx node ^Duration timeout]
+   @(-> (c2/await-tx-async node tx)
+        (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
 (defn ->mock-clock ^java.time.Clock [^Iterable dates]
   (let [times-iterator (.iterator dates)]

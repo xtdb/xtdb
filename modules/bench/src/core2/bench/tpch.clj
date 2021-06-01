@@ -4,14 +4,14 @@
             [core2.core :as c2]
             [core2.tpch :as tpch])
   (:import core2.core.Node
-           java.time.Duration
-           java.util.function.Consumer))
+           java.util.concurrent.TimeUnit))
 
 (defn ingest-tpch [^Node node {:keys [scale-factor]}]
   (let [tx (bench/with-timing :submit-docs
              (tpch/submit-docs! node scale-factor))]
     (bench/with-timing :await-tx
-      (c2/await-tx node tx (Duration/ofHours 5)))
+      @(-> (c2/await-tx-async node tx)
+           (.orTimeout 5 TimeUnit/HOURS)))
 
     (bench/with-timing :finish-chunk
       (bench/finish-chunk node))))
@@ -30,7 +30,7 @@
     (bench/with-timing :ingest
       (ingest-tpch node {:scale-factor 0.01}))
 
-    (with-open [db (c2/open-db node)]
+    (c2/with-db [db node]
       (bench/with-timing :cold-queries
         (query-tpch db))
 
@@ -50,7 +50,7 @@
         (bench/with-timing :ingest
           (ingest-tpch node opts))
 
-        (with-open [db (c2/open-db node)]
+        (c2/with-db [db node]
           (bench/with-timing :cold-queries
             (query-tpch db))
 
