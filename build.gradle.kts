@@ -53,11 +53,26 @@ publishing {
                 withXml {
                     // yes, I believe any sane person would agree this is definitely better than
                     // just typing out the XML by hand like a monkey.
-                    var repo = asNode().appendNode("repositories").appendNode("repository")
+                    var profile = asNode().appendNode("profiles").appendNode("profile")
+                    profile.appendNode("id", "with-clojars")
+
+                    var repo = profile.appendNode("repositories").appendNode("repository")
                     repo.appendNode("id", "Clojars")
                     repo.appendNode("name", "Clojars")
                     repo.appendNode("url", "https://repo.clojars.org/")
+                    repo.appendNode("layout", "default")
+                    var releases = repo.appendNode("releases")
+                    releases.appendNode("enabled", "true")
+                    releases.appendNode("updatePolicy", "always")
+                    releases.appendNode("checksumPolicy", "warn")
+                    var snapshots = repo.appendNode("snapshots")
+                    snapshots.appendNode("enabled", "true")
+                    snapshots.appendNode("updatePolicy", "always")
+                    snapshots.appendNode("checksumPolicy", "warn")
                     repo
+                }
+                withXml {
+                    asNode().appendNode("activeProfiles").appendNode("activeProfile", "with-clojars")
                 }
             }
         }
