@@ -89,7 +89,7 @@ dependencies {
     implementation(platform("org.jetbrains.kotlin:kotlin-bom"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
-    implementation("juxt:crux-core:21.04-1.16.0-beta") {
+    api("juxt:crux-core:21.04-1.16.0-beta") {
         isTransitive = true
     }
 
