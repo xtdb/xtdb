@@ -53,26 +53,12 @@ publishing {
                 withXml {
                     // yes, I believe any sane person would agree this is definitely better than
                     // just typing out the XML by hand like a monkey.
-                    var profile = asNode().appendNode("profiles").appendNode("profile")
-                    profile.appendNode("id", "with-clojars")
-
-                    var repo = profile.appendNode("repositories").appendNode("repository")
+                    var repo = asNode().appendNode("repositories").appendNode("repository")
                     repo.appendNode("id", "Clojars")
                     repo.appendNode("name", "Clojars")
                     repo.appendNode("url", "https://repo.clojars.org/")
                     repo.appendNode("layout", "default")
-                    var releases = repo.appendNode("releases")
-                    releases.appendNode("enabled", "true")
-                    releases.appendNode("updatePolicy", "always")
-                    releases.appendNode("checksumPolicy", "warn")
-                    var snapshots = repo.appendNode("snapshots")
-                    snapshots.appendNode("enabled", "true")
-                    snapshots.appendNode("updatePolicy", "always")
-                    snapshots.appendNode("checksumPolicy", "warn")
                     repo
-                }
-                withXml {
-                    asNode().appendNode("activeProfiles").appendNode("activeProfile", "with-clojars")
                 }
             }
         }
@@ -103,9 +89,9 @@ dependencies {
     implementation(platform("org.jetbrains.kotlin:kotlin-bom"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
-    // TODO: I'm not sure if we need both `implementation` and `api`? -sd
-    implementation("juxt:crux-core:21.04-1.16.0-beta")
-    api("juxt:crux-core:21.04-1.16.0-beta")
+    implementation("juxt:crux-core:21.04-1.16.0-beta") {
+        isTransitive = true
+    }
 
     testImplementation(kotlin("test-junit5"))
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
