@@ -53,21 +53,20 @@
           (let [shared-entries (for [[k v :as kv] directory
                                      :when (= v data-page-id)]
                                  kv)]
-            ;; TODO: does this work with more than one shared entry?
             (if (> (count shared-entries) 1)
-              (let [[[^LongBuffer cell-key] [^LongBuffer diff-key]] (sort-by key shared-entries)
-                    split-axis (->> (map = (.array cell-key) (.array diff-key))
+              (let [[^LongBuffer first-cell-key ^LongBuffer second-cell-key] (sort (keys shared-entries))
+                    split-axis (->> (map = (.array first-cell-key) (.array second-cell-key))
                                     (take-while true?)
                                     (count))
-                    new-min (.get cell-key split-axis)
+                    new-min (.get second-cell-key split-axis)
                     [^List old-data-page ^List new-data-page] (->> (sort-by #(aget ^longs % split-axis) data-page)
                                                                    (split-with #(< (aget ^longs % split-axis) new-min)))]
                 (.set data-pages data-page-id (ArrayList. old-data-page))
                 (.add data-pages (ArrayList. new-data-page))
-                (doseq [[^LongBuffer k] shared-entries
-                        :let [new-cell-key (LongBuffer/wrap (doto (long-array (.array k))
-                                                              (aset split-axis new-min)))]]
-                  (.put directory new-cell-key (.size data-pages))))
+                (doseq [[^LongBuffer k] shared-entries]
+                  (.put directory k (if (= new-min (.get k split-axis))
+                                      (.size data-pages)
+                                      data-page-id))))
               (let [^long split-axis (ffirst (sort-by (comp count second) (map-indexed vector scales)))
                     [^List old-data-page ^List new-data-page] (->> (sort-by #(aget ^longs % split-axis) data-page)
                                                                    (split-at (quot data-page-size 2)))
