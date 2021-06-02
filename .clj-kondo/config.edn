@@ -1,0 +1,1 @@
+{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn}}
