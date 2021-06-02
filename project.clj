@@ -53,6 +53,12 @@
                      :test-paths ["modules/kafka/test"]
                      :dependencies [[org.apache.kafka/kafka-clients "2.8.0"]]}
 
+             :jdbc {:source-paths ["modules/jdbc/src"]
+                    :test-paths ["modules/jdbc/test"]
+                    :dependencies [[seancorfield/next.jdbc "1.2.659"]
+                                   [com.zaxxer/HikariCP "4.0.3"]
+                                   [org.postgresql/postgresql "42.2.20" :scope "provided"]]}
+
              :bench [:s3 :kafka :datasets
                      {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
                       :resource-paths ["modules/bench/resources"]
