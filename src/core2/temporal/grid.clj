@@ -25,7 +25,7 @@
           x (first colls)]
       (cons x more))))
 
-(deftype GridFile [^int k ^int block-size ^List scales ^Map directory ^List blocks]
+(deftype GridFile [^int k ^int data-page-size ^List scales ^Map directory ^List data-pages]
   kd/KdTree
   (kd-tree-insert [this allocator point]
     (let [point (->longs point)
@@ -42,22 +42,24 @@
           (aset axis-scale 0 (min (aget axis-scale 0) x))
           (aset axis-scale (dec splits) (max (aget axis-scale (dec splits)) x))))
       (let [cell-idx (LongBuffer/wrap cell-idx)
-            ^long block-id (.computeIfAbsent directory cell-idx (reify Function
-                                                                  (apply [_ k]
-                                                                    (.add blocks (ArrayList.))
-                                                                    (dec (.size blocks)))))
-            ^List block (.get blocks block-id)]
-        (.add block point)
-        (when (> block-size (.size block))
+            ^long data-page-id (.computeIfAbsent directory cell-idx (reify Function
+                                                                      (apply [_ k]
+                                                                        (.add data-pages (ArrayList.))
+                                                                        (dec (.size data-pages)))))
+            ^List data-page (.get data-pages data-page-id)]
+        (.add data-page point)
+        (when (> data-page-size (.size data-page))
+          ;; TODO: need to split all cells along the axis and find
+          ;; correct new-min.
           (let [^long split-axis (ffirst (sort-by (comp count second) (map-indexed vector scales)))
-                [^List old-block ^List new-block] (split-at (quot block-size 2) (sort-by #(aget ^longs % split-axis) block))
+                [^List old-data-page ^List new-data-page] (split-at (quot data-page-size 2) (sort-by #(aget ^longs % split-axis) data-page))
                 new-axis-idx (inc (.get cell-idx split-axis))
-                new-min (aget ^longs (first new-block) split-axis)
+                new-min (aget ^longs (first new-data-page) split-axis)
                 new-cell-idx (doto (long-array (.array cell-idx))
                                (aset split-axis new-axis-idx))]
-            (.set blocks block-id (ArrayList. old-block))
-            (.add blocks (ArrayList. new-block))
-            (.put directory new-cell-idx (.size blocks))
+            (.set data-pages data-page-id (ArrayList. old-data-page))
+            (.add data-pages (ArrayList. new-data-page))
+            (.put directory new-cell-idx (.size data-pages))
             (.set scales split-axis (long-array (doto (ArrayList. ^List (vec (.get scales split-axis)))
                                                   (.add new-axis-idx new-min))))))
         this)))
@@ -66,37 +68,36 @@
   (kd-tree-range-search [this min-range max-range]
     (let [min-range (->longs min-range)
           max-range (->longs max-range)
-          axis-block-ids (for [n (range k)
-                               :let [x (aget min-range n)
-                                     y (aget max-range n)
-                                     ^longs axis-scale (nth scales n)
-                                     splits (alength axis-scale)
-                                     cell-axis-idx (Arrays/binarySearch axis-scale x)
-                                     ^long cell-axis-idx (if (pos? cell-axis-idx)
-                                                           cell-axis-idx
-                                                           (dec (- cell-axis-idx)))]]
-                           (take-while #(<= ^long % y) (drop (dec cell-axis-idx) axis-scale)))
-          blocks (for [cell-idx (distinct (cartesian-product axis-block-ids))
-                       :when (= k (count cell-idx))
-                       :let [cell-idx (LongBuffer/wrap (->longs cell-idx))
-                             block (.get directory cell-idx)]
-                       :when block]
-                   block)
+          axis-cell-ids (for [n (range k)
+                              :let [x (aget min-range n)
+                                    y (aget max-range n)
+                                    ^longs axis-scale (nth scales n)
+                                    splits (alength axis-scale)
+                                    cell-axis-idx (Arrays/binarySearch axis-scale x)
+                                    ^long cell-axis-idx (if (pos? cell-axis-idx)
+                                                          cell-axis-idx
+                                                          (dec (- cell-axis-idx)))]]
+                          (take-while #(<= ^long % y) (drop (dec cell-axis-idx) axis-scale)))
+          data-page-ids (for [cell-idx (distinct (cartesian-product axis-cell-ids))
+                              :when (= k (count cell-idx))
+                              :let [cell-idx (LongBuffer/wrap (->longs cell-idx))
+                                    data-page-id (.get directory cell-idx)]
+                              :when data-page-id]
+                          data-page-id)
           ^IKdTreePointAccess access (kd/kd-tree-point-access this)
           axis-mask (kd/range-bitmask min-range max-range)
           acc (LongStream/builder)]
-      (loop [[block & blocks] blocks
-             idx 0]
-        (if-not block
+      (loop [[data-page-id & data-page-ids] data-page-ids]
+        (if-not data-page-id
           (.build acc)
-          (let [block-size (count block)]
-            (loop [n 0]
-              (when-not (= block-size n)
-                (let [point (nth block n)]
-                  (when (.isInRange access k min-range max-range axis-mask)
-                    (.add acc (+ n idx)))
-                  (recur (inc n)))))
-            (recur blocks (+ idx block-size)))))))
+          (let [data-page (.get data-pages data-page-id)
+                data-page-offset (* data-page-size (long data-page-id))
+                data-page-size (count data-page)]
+            (dotimes [n data-page-size]
+              (let [point (nth data-page n)]
+                (when (.isInRange access k min-range max-range axis-mask)
+                  (.add acc (+ data-page-offset n)))))
+            (recur data-pages))))))
   (kd-tree-points [this]
     (LongStream/range 0 (kd/kd-tree-value-count this)))
   (kd-tree-depth [_]
@@ -108,17 +109,17 @@
   (kd-tree-size [this]
     (kd/kd-tree-value-count this))
   (kd-tree-value-count [_]
-    (reduce + (map count blocks)))
+    (reduce + (map count data-pages)))
   (kd-tree-dimensions [_]
     k))
 
-(deftype GridFilePointAccess [^GridFile gf ^int block-shift ^int block-mask]
+(deftype GridFilePointAccess [^GridFile gf ^int data-page-shift ^int data-page-mask]
   IKdTreePointAccess
   (getPoint [this idx]
     (vec (.getArrayPoint this idx)))
   (getArrayPoint [this idx]
-    (nth (nth (.blocks gf) (BitUtil/unsignedBitShiftRight idx block-shift))
-         (bit-and idx block-mask)))
+    (nth (nth (.data-pages gf) (BitUtil/unsignedBitShiftRight idx data-page-shift))
+         (bit-and idx data-page-mask)))
   (getCoordinate [this idx axis]
     (aget (.getArrayPoint this idx) axis))
   (setCoordinate [_ idx axis value]
@@ -142,13 +143,15 @@
             (recur (inc n))))))))
 
 (defn- ->grid-file-point-access [^GridFile gf]
-  (GridFilePointAccess. gf (.block-size gf) (dec (.block-size gf))))
+  (let [data-page-mask (dec (.data-page-size gf))]
+    (GridFilePointAccess. gf (Long/bitCount data-page-mask) data-page-mask)))
 
-(defn ->grid-file ^core2.temporal.grid.GridFile [^long k ^long block-size points]
-  (assert (= 1 (Long/bitCount block-size)))
+(defn ->grid-file ^core2.temporal.grid.GridFile [^long k ^long data-page-size points]
+  (assert (= 1 (Long/bitCount data-page-size)))
   (let [axis-splits (int-array k)
         scales (ArrayList. ^Collection (repeatedly k #(long-array 1 Long/MAX_VALUE)))
         directory (HashMap.)
-        blocks (ArrayList.)
-        gf (GridFile. k block-size scales directory blocks)]
-    (reduce kd/kd-tree-insert gf points)))
+        data-pages (ArrayList.)
+        gf (GridFile. k data-page-size scales directory data-pages)]
+    (reduce (fn [acc point]
+              (kd/kd-tree-insert acc nil point)) gf points)))
