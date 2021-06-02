@@ -5,27 +5,27 @@
             :url "http://opensource.org/licenses/MIT"}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/tools.logging "0.6.0"]
+                 [org.clojure/tools.logging "1.1.0"]
                  [org.clojure/spec.alpha "0.2.194"]
-                 [com.stuartsierra/dependency "0.2.0"]
-                 [org.clojure/data.json "2.0.2"]
+                 [com.stuartsierra/dependency "1.0.0"]
+                 [org.clojure/data.json "2.3.1"]
                  [org.clojure/tools.cli "1.0.206"]
-                 [org.apache.arrow/arrow-algorithm "4.0.0"]
-                 [org.apache.arrow/arrow-compression "4.0.0"]
-                 [org.apache.arrow/arrow-vector "4.0.0"]
-                 [org.apache.arrow/arrow-memory-netty "4.0.0"]
+                 [org.apache.arrow/arrow-algorithm "4.0.1"]
+                 [org.apache.arrow/arrow-compression "4.0.1"]
+                 [org.apache.arrow/arrow-vector "4.0.1"]
+                 [org.apache.arrow/arrow-memory-netty "4.0.1"]
                  [org.roaringbitmap/RoaringBitmap "0.9.10"]]
 
   :profiles {:dev [:datasets :s3 :kafka
                    {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                    [org.clojure/tools.namespace "1.1.0"]
                                    [integrant "0.8.0"]
-                                   [integrant/repl "0.3.1"]
+                                   [integrant/repl "0.3.2"]
 
-                                   [org.clojure/test.check "0.10.0"]
+                                   [org.clojure/test.check "1.1.0"]
                                    [org.clojure/data.csv "1.0.0"]
-                                   [org.openjdk.jmh/jmh-core "1.27"]
-                                   [org.openjdk.jmh/jmh-generator-annprocess "1.27"]
+                                   [org.openjdk.jmh/jmh-core "1.32"]
+                                   [org.openjdk.jmh/jmh-generator-annprocess "1.32"]
                                    [cheshire "5.10.0"]]
                     :repl-options {:init-ns user}
                     :source-paths ["dev"]
@@ -42,16 +42,16 @@
                         :resource-paths ["modules/datasets/data"]
                         :dependencies [[io.airlift.tpch/tpch "0.10"]
                                        [org.clojure/data.csv "1.0.0"]
-                                       [software.amazon.awssdk/s3 "2.10.91"]]}
+                                       [software.amazon.awssdk/s3 "2.16.76"]]}
 
              :s3 {:source-paths ["modules/s3/src"]
                   :java-source-paths ["modules/s3/src"]
                   :test-paths ["modules/s3/test"]
-                  :dependencies [[software.amazon.awssdk/s3 "2.10.91"]]}
+                  :dependencies [[software.amazon.awssdk/s3 "2.16.76"]]}
 
              :kafka {:source-paths ["modules/kafka/src"]
                      :test-paths ["modules/kafka/test"]
-                     :dependencies [[org.apache.kafka/kafka-clients "2.7.0"]]}
+                     :dependencies [[org.apache.kafka/kafka-clients "2.8.0"]]}
 
              :bench [:s3 :kafka :datasets
                      {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
