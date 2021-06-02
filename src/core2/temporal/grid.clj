@@ -7,6 +7,13 @@
            java.util.stream.LongStream
            java.nio.LongBuffer))
 
+;; TODO: Move this to use histograms via
+;; https://www.jmlr.org/papers/volume11/ben-haim10a/ben-haim10a.pdf to
+;; build its scales (via one pass, see Appendix A), and don't
+;; implement a real grid-file. Also, see
+;; https://github.com/VividCortex/gohistogram
+;; https://www.researchgate.net/publication/2611689_A_One-Pass_Space-Efficient_Algorithm_for_Finding_Quantiles
+
 ;; http://www.mathcs.emory.edu/~cheung/Courses/554/Syllabus/3-index/grid.html
 
 (set! *unchecked-math* :warn-on-boxed)
