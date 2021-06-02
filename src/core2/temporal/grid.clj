@@ -2,8 +2,8 @@
   (:require [core2.temporal.kd-tree :as kd])
   (:import core2.temporal.kd_tree.IKdTreePointAccess
            core2.BitUtil
-           [java.util ArrayList Arrays Collection HashMap List Map]
-           java.util.function.Function
+           [java.util ArrayList Arrays Collection HashMap List Map Map$Entry NavigableMap TreeMap]
+           [java.util.function BiFunction Function]
            java.util.stream.LongStream
            java.nio.LongBuffer))
 
@@ -205,3 +205,77 @@
         gf (GridFile. k data-page-size scales directory data-pages)]
     (reduce (fn [acc point]
               (kd/kd-tree-insert acc allocator point)) gf points)))
+
+;; TODO: implement sum and uniform from paper.
+;; try p2 algorithm instead:
+;; https://www.researchgate.net/publication/255672978_The_P_2_algorithm_for_dynamic_calculation_of_quantiles_and_histograms_without_storing_observations
+;; https://bitbucket.org/scassidy/livestats/src/master/livestats/livestats.py
+;; https://github.com/absmall/p2/blob/master/p2.cc
+
+(definterface IHistogram
+  (^core2.temporal.grid.IHistogram update [^double x])
+  (^double quantile [^double q])
+  (^double cdf [^double x])
+  (^double getMin [])
+  (^double getMax [])
+  (^long getTotal [])
+  (^String histogramString []))
+
+(deftype Histogram [^int max-bins
+                    ^:unsynchronized-mutable ^long total
+                    ^:unsynchronized-mutable ^double min-v
+                    ^:unsynchronized-mutable ^double max-v
+                    ^NavigableMap bins]
+  IHistogram
+  (update [this x]
+    (set! (.total this) (inc total))
+    (set! (.min-v this) (min x min-v))
+    (set! (.max-v this) (max x max-v))
+    (when-not (.computeIfPresent bins x (reify BiFunction
+                                          (apply [_ k v]
+                                            (inc (long v)))))
+      (.put bins x 1)
+      (while (> (.size bins) max-bins)
+        (let [kv1+kv2 (->> (partition 2 1 bins)
+                           (apply min-key (fn [[^Map$Entry kv1 ^Map$Entry kv2]]
+                                            (- ^double (.getKey kv2) ^double (.getKey kv1)))))
+              ^Map$Entry kv1 (first kv1+kv2)
+              ^double k1 (.getKey kv1)
+              ^long v1 (.getValue kv1)
+              ^Map$Entry kv2 (second kv1+kv2)
+              ^double k2 (.getKey kv2)
+              ^long v2 (.getValue kv2)
+              new-v (+ v1 v2)
+              new-k (/ (+ (* k1 v1) (* k2 v2)) new-v)]
+          (doto bins
+            (.remove k1)
+            (.remove k2)
+            (.put new-k new-v)))))
+    this)
+
+  (quantile [this q]
+    (loop [[[k ^long v] & bins] bins
+           count (* q total)]
+      (if (and (pos? count) v)
+        (recur bins (- count v))
+        (or k -1))))
+
+  (cdf [this x]
+    (/ (long (reduce + (map val (.headMap bins x true)))) total))
+
+  (getMin [this]
+    min-v)
+
+  (getMax [this]
+    max-v)
+
+  (getTotal [this]
+    total)
+
+  (histogramString [this]
+    (str "total: " total " min: " min-v " max: " max-v "\n"
+         (apply str (for [[k ^long v] bins]
+                      (str (format "%10.4f"  k) "\t" (apply str (repeat (* 20 max-bins (double (/ v total))) "*")) "\n"))))))
+
+(defn ->histogram ^core2.temporal.grid.Histogram [^long max-bins]
+  (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (TreeMap.)))
