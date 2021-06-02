@@ -189,7 +189,7 @@
   (let [data-page-mask (dec (.data-page-size gf))]
     (GridFilePointAccess. gf (Long/bitCount data-page-mask) data-page-mask)))
 
-(defn ->grid-file ^core2.temporal.grid.GridFile [^long k ^long data-page-size points]
+(defn ->grid-file ^core2.temporal.grid.GridFile [allocator ^long k ^long data-page-size points]
   (assert (= 1 (Long/bitCount data-page-size)))
   (let [axis-splits (int-array k)
         scales (ArrayList. ^Collection (repeatedly k #(long-array 0)))
@@ -197,4 +197,4 @@
         data-pages (ArrayList.)
         gf (GridFile. k data-page-size scales directory data-pages)]
     (reduce (fn [acc point]
-              (kd/kd-tree-insert acc nil point)) gf points)))
+              (kd/kd-tree-insert acc allocator point)) gf points)))
