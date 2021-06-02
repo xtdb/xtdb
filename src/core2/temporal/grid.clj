@@ -86,8 +86,28 @@
                 (.set scales split-axis (long-array (doto (ArrayList. ^List (vec (.get scales split-axis)))
                                                       (.add new-axis-idx new-min))))))))
         this)))
-  (kd-tree-delete [_ allocator point]
-    (throw (UnsupportedOperationException.)))
+  (kd-tree-delete [this allocator point]
+    (let [point (->longs point)
+          cell-key (long-array k)]
+      (dotimes [n k]
+        (let [x (aget point n)
+              ^longs axis-scale (nth scales n)
+              cell-axis-idx (Arrays/binarySearch axis-scale x)
+              ^long cell-axis-idx (if (pos? cell-axis-idx)
+                                    cell-axis-idx
+                                    (dec (- cell-axis-idx)))]
+          (aset cell-key n (aget axis-scale cell-axis-idx))))
+      (let [cell-key (LongBuffer/wrap cell-key)
+            ^long data-page-id (.computeIfAbsent directory cell-key (reify Function
+                                                                      (apply [_ k]
+                                                                        (.add data-pages (ArrayList.))
+                                                                        (dec (.size data-pages)))))
+            ^List data-page (.get data-pages data-page-id)]
+        (doseq [idx (for [[idx p] (map-indexed vector data-page)
+                          :when (= (LongBuffer/wrap p) cell-key)]
+                      idx)]
+          (.remove data-page idx))
+        this)))
   (kd-tree-range-search [this min-range max-range]
     (let [min-range (->longs min-range)
           max-range (->longs max-range)
