@@ -49,26 +49,43 @@
                                                                         (dec (.size data-pages)))))
             ^List data-page (.get data-pages data-page-id)]
         (.add data-page point)
-        ;; TODO: need to deal with splitting of shared pages.
         (when (> (.size data-page) data-page-size)
-          (let [^long split-axis (ffirst (sort-by (comp count second) (map-indexed vector scales)))
-                [^List old-data-page ^List new-data-page] (->> (sort-by #(aget ^longs % split-axis) data-page)
-                                                               (split-at (quot data-page-size 2)))
-                new-axis-idx (inc (aget cell-idx split-axis))
-                old-min (.get cell-key split-axis)
-                new-min (aget ^longs (first new-data-page) split-axis)
-                new-cell-key (LongBuffer/wrap (doto (long-array (.array cell-key))
-                                                (aset split-axis new-min)))]
-            (.set data-pages data-page-id (ArrayList. old-data-page))
-            (.add data-pages (ArrayList. new-data-page))
-            (.put directory new-cell-key (.size data-pages))
-            (doseq [[^LongBuffer cell-key-to-split existing-data-page] (for [[^LongBuffer k :as kv] directory
-                                                                             :when (= old-min (.get k split-axis))]
-                                                                         kv)]
-              (.put directory (LongBuffer/wrap (doto (long-array (.array cell-key-to-split))
-                                                 (aset split-axis new-min))) existing-data-page))
-            (.set scales split-axis (long-array (doto (ArrayList. ^List (vec (.get scales split-axis)))
-                                                  (.add new-axis-idx new-min))))))
+          (let [shared-entries (for [[k v :as kv] directory
+                                     :when (= v data-page-id)]
+                                 kv)]
+            ;; TODO: does this work with more than one shared entry?
+            (if (> (count shared-entries) 1)
+              (let [[[^LongBuffer cell-key] [^LongBuffer diff-key]] (sort-by key shared-entries)
+                    split-axis (->> (map = (.array cell-key) (.array diff-key))
+                                    (take-while true?)
+                                    (count))
+                    new-min (.get cell-key split-axis)
+                    [^List old-data-page ^List new-data-page] (->> (sort-by #(aget ^longs % split-axis) data-page)
+                                                                   (split-with #(< (aget ^longs % split-axis) new-min)))]
+                (.set data-pages data-page-id (ArrayList. old-data-page))
+                (.add data-pages (ArrayList. new-data-page))
+                (doseq [[^LongBuffer k] shared-entries
+                        :let [new-cell-key (LongBuffer/wrap (doto (long-array (.array k))
+                                                              (aset split-axis new-min)))]]
+                  (.put directory new-cell-key (.size data-pages))))
+              (let [^long split-axis (ffirst (sort-by (comp count second) (map-indexed vector scales)))
+                    [^List old-data-page ^List new-data-page] (->> (sort-by #(aget ^longs % split-axis) data-page)
+                                                                   (split-at (quot data-page-size 2)))
+                    new-axis-idx (inc (aget cell-idx split-axis))
+                    old-min (.get cell-key split-axis)
+                    new-min (aget ^longs (first new-data-page) split-axis)
+                    new-cell-key (LongBuffer/wrap (doto (long-array (.array cell-key))
+                                                    (aset split-axis new-min)))]
+                (.set data-pages data-page-id (ArrayList. old-data-page))
+                (.add data-pages (ArrayList. new-data-page))
+                (.put directory new-cell-key (.size data-pages))
+                (doseq [[^LongBuffer cell-key-to-split existing-data-page] (for [[^LongBuffer k :as kv] directory
+                                                                                 :when (= old-min (.get k split-axis))]
+                                                                             kv)]
+                  (.put directory (LongBuffer/wrap (doto (long-array (.array cell-key-to-split))
+                                                     (aset split-axis new-min))) existing-data-page))
+                (.set scales split-axis (long-array (doto (ArrayList. ^List (vec (.get scales split-axis)))
+                                                      (.add new-axis-idx new-min))))))))
         this)))
   (kd-tree-delete [_ allocator point]
     (throw (UnsupportedOperationException.)))
