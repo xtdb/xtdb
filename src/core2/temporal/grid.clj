@@ -44,9 +44,9 @@
         (let [x (aget point n)
               ^longs axis-scale (nth scales n)
               cell-axis-idx (Arrays/binarySearch axis-scale x)
-              ^long cell-axis-idx (if (pos? cell-axis-idx)
-                                    cell-axis-idx
-                                    (dec (- cell-axis-idx)))]
+              ^long cell-axis-idx (if (neg? cell-axis-idx)
+                                    (dec (- cell-axis-idx))
+                                    cell-axis-idx)]
           (aset cell-idx n cell-axis-idx)
           (aset cell-key n (aget axis-scale cell-axis-idx))))
       (let [cell-key (LongBuffer/wrap cell-key)
@@ -100,9 +100,9 @@
         (let [x (aget point n)
               ^longs axis-scale (nth scales n)
               cell-axis-idx (Arrays/binarySearch axis-scale x)
-              ^long cell-axis-idx (if (pos? cell-axis-idx)
-                                    cell-axis-idx
-                                    (dec (- cell-axis-idx)))]
+              ^long cell-axis-idx (if (neg? cell-axis-idx)
+                                    (dec (- cell-axis-idx))
+                                    cell-axis-idx)]
           (aset cell-key n (aget axis-scale cell-axis-idx))))
       (let [cell-key (LongBuffer/wrap cell-key)
             ^long data-page-id (.computeIfAbsent directory cell-key (reify Function
@@ -124,9 +124,9 @@
                                      ^longs axis-scale (nth scales n)
                                      splits (alength axis-scale)
                                      cell-axis-idx (Arrays/binarySearch axis-scale x)
-                                     ^long cell-axis-idx (if (pos? cell-axis-idx)
-                                                           cell-axis-idx
-                                                           (dec (- cell-axis-idx)))]]
+                                     ^long cell-axis-idx (if (neg? cell-axis-idx)
+                                                           (dec (- cell-axis-idx))
+                                                           cell-axis-idx)]]
                            (take-while #(<= ^long % y) (drop (dec cell-axis-idx) axis-scale)))
           data-page-ids (for [cell-key (distinct (cartesian-product axis-cell-keys))
                               :when (= k (count cell-key))
@@ -229,6 +229,7 @@
   (^double quantile [^double q])
   (^double cdf [^double x])
   (^double sum [^double x])
+  (^doubles uniform [^int number-of-buckets])
   (^double getMin [])
   (^double getMax [])
   (^long getTotal [])
@@ -330,9 +331,9 @@
         :else
         (let [probe-bin (Bin. x 0)
               idx (Collections/binarySearch bins probe-bin)
-              ^long idx (if (pos? idx)
-                          idx
-                          (dec (- idx)))]
+              ^long idx (if (neg? idx)
+                          (dec (- idx))
+                          idx)]
           (if (> idx last-idx)
             total
             (let [^IBin kv1 (.get bins idx)
@@ -354,6 +355,35 @@
                                 (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
                                 s))]
               (+ s (/ v1 2.0))))))))
+
+  (uniform [this number-of-buckets]
+    (let [last-idx (dec (.size bins))
+          number-of-buckets number-of-buckets]
+      (double-array
+       (for [^long x (range 1 number-of-buckets)
+             :let [s (* (double (/ x number-of-buckets)) total)
+                   ^long idx (loop [[^IBin bin & bins] bins
+                                    idx 0]
+                               (if-not bin
+                                 idx
+                                 (if (< (.sum this (.getValue bin)) s)
+                                   (recur bins (inc idx))
+                                   idx)))
+                   ^IBin kv1 (.get bins idx)
+                   ^IBin kv2 (if (= idx last-idx)
+                               (Bin. 0 0)
+                               (.get bins (inc idx)))
+                   k1 (.getValue kv1)
+                   v1 (.getCount kv1)
+                   k2 (.getValue kv2)
+                   v2 (.getCount kv2)
+                   d (- s (.sum this k1))
+                   a (- v2 v1)
+                   b (* 2 v1)
+                   c (- (* 2 d))
+                   z (/ (+ (- b) (Math/sqrt (- (* b b) (* 4 a c))))
+                        (* 2 a))]]
+         (+ k1 (* (- k2 k1) z))))))
 
   (getMin [this]
     min-v)
