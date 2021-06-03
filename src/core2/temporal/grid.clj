@@ -297,10 +297,8 @@
             new-k (/ (+ (* k1 v1) (* k2 v2)) new-v)
             new-bin (Bin. new-k new-v)]
         (doto bins
-          (.remove kv1)
-          (.remove kv2))
-        (let [idx (dec (- (Collections/binarySearch bins new-bin)))]
-          (.add bins idx new-bin))))
+          (.remove (inc min-idx))
+          (.set min-idx new-bin))))
 
     this)
 
