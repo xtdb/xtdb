@@ -228,7 +228,7 @@
   (^core2.temporal.grid.IHistogram update [^double x])
   (^double quantile [^double q])
   (^double cdf [^double x])
-  (^long sum [^double x])
+  (^double sum [^double x])
   (^double getMin [])
   (^double getMax [])
   (^long getTotal [])
@@ -348,11 +348,11 @@
                               (- x k1)))
                   s (* (/ (+ v1 vx) 2)
                        (/ (- x k1) (- k2 k1)))
-                  ^long s (loop [n 0
-                                 s s]
-                            (if (< n idx)
-                              (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
-                              s))]
+                  ^double s (loop [n 0
+                                   s s]
+                              (if (< n idx)
+                                (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
+                                s))]
               (+ s (/ v1 2.0))))))))
 
   (getMin [this]
@@ -369,7 +369,7 @@
          (apply str (for [^IBin b bins
                           :let [k (.getValue b)
                                 v (.getCount b)]]
-                      (str (format "%10.4f"  k) "\t" (apply str (repeat (* 20 max-bins (double (/ v total))) "*")) "\n"))))))
+                      (str (format "%10.4f"  k) "\t" (apply str (repeat (* 40 (double (/ v total))) "*")) "\n"))))))
 
 (defn ->histogram ^core2.temporal.grid.Histogram [^long max-bins]
   (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
