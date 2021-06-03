@@ -2,7 +2,7 @@
   (:require [core2.temporal.kd-tree :as kd])
   (:import core2.temporal.kd_tree.IKdTreePointAccess
            core2.BitUtil
-           [java.util ArrayList Arrays Collection HashMap List Map Map$Entry NavigableMap TreeMap]
+           [java.util ArrayList Arrays Collection Collections Comparator HashMap List Map]
            [java.util.function BiFunction Function]
            java.util.stream.LongStream
            java.nio.LongBuffer))
@@ -206,11 +206,23 @@
     (reduce (fn [acc point]
               (kd/kd-tree-insert acc allocator point)) gf points)))
 
-;; TODO: implement sum and uniform from paper.
-;; try p2 algorithm instead:
+;; TODO: implement sum and uniform from paper. Arrays for faster updates.
+;; https://github.com/soundcloud/spdt/blob/master/compute/src/main/scala/com.soundcloud.spdt/Histogram.scala
+
+;; TODO: try p2 algorithm instead:
 ;; https://www.researchgate.net/publication/255672978_The_P_2_algorithm_for_dynamic_calculation_of_quantiles_and_histograms_without_storing_observations
 ;; https://bitbucket.org/scassidy/livestats/src/master/livestats/livestats.py
 ;; https://github.com/absmall/p2/blob/master/p2.cc
+
+;; https://github.com/MaxHalford/streaming-cdf-benchmark
+;; https://github.com/carsonfarmer/streamhist
+;; https://github.com/bigmlcom/histogram
+
+;; Also, TDigest:
+;; https://github.com/henrygarner/t-digest
+
+;; https://www.cs.rutgers.edu/~muthu/bquant.pdf
+;; https://github.com/matttproud/python_quantile_estimation/blob/master/com/matttproud/quantile/__init__.py
 
 (definterface IHistogram
   (^core2.temporal.grid.IHistogram update [^double x])
@@ -221,47 +233,93 @@
   (^long getTotal [])
   (^String histogramString []))
 
+(definterface IBin
+  (^double getValue [])
+  (^long getCount [])
+  (^void increment []))
+
+(deftype Bin [^double value ^:unsynchronized-mutable ^long count]
+  IBin
+  (getValue [_] value)
+
+  (getCount [_] count)
+
+  (increment [this]
+    (set! (.count this) (inc count)))
+
+  (equals [_ other]
+    (= value (.value ^Bin other)))
+
+  (hashCode [_]
+    (Double/hashCode value))
+
+  Comparable
+  (compareTo [_ other]
+    (Double/compare value (.value ^Bin other))))
+
 (deftype Histogram [^int max-bins
                     ^:unsynchronized-mutable ^long total
                     ^:unsynchronized-mutable ^double min-v
                     ^:unsynchronized-mutable ^double max-v
-                    ^NavigableMap bins]
+                    ^List bins]
   IHistogram
   (update [this x]
     (set! (.total this) (inc total))
     (set! (.min-v this) (min x min-v))
     (set! (.max-v this) (max x max-v))
-    (when-not (.computeIfPresent bins x (reify BiFunction
-                                          (apply [_ k v]
-                                            (inc (long v)))))
-      (.put bins x 1)
-      (while (> (.size bins) max-bins)
-        (let [kv1+kv2 (->> (partition 2 1 bins)
-                           (apply min-key (fn [[^Map$Entry kv1 ^Map$Entry kv2]]
-                                            (- ^double (.getKey kv2) ^double (.getKey kv1)))))
-              ^Map$Entry kv1 (first kv1+kv2)
-              ^double k1 (.getKey kv1)
-              ^long v1 (.getValue kv1)
-              ^Map$Entry kv2 (second kv1+kv2)
-              ^double k2 (.getKey kv2)
-              ^long v2 (.getValue kv2)
-              new-v (+ v1 v2)
-              new-k (/ (+ (* k1 v1) (* k2 v2)) new-v)]
-          (doto bins
-            (.remove k1)
-            (.remove k2)
-            (.put new-k new-v)))))
+
+    (let [new-bin (Bin. x 1)
+          idx (Collections/binarySearch bins new-bin)]
+      (if (neg? idx)
+        (.add bins (dec (- idx)) new-bin)
+        (.increment ^IBin (.get bins idx))))
+
+    (while (> (.size bins) max-bins)
+      (let [^long min-idx (loop [n 0
+                                 min-idx 0
+                                 delta Double/MAX_VALUE]
+                            (if (= n (dec (.size bins)))
+                              min-idx
+                              (let [new-delta (- (.getValue ^IBin (.get bins (inc n)))
+                                                 (.getValue ^IBin (.get bins n)))]
+                                (if (< new-delta delta)
+                                  (recur (inc n) n new-delta)
+                                  (recur (inc n) min-idx delta)))))
+            ^IBin kv1 (.get bins min-idx)
+            ^IBin kv2 (.get bins (inc min-idx))
+            k1 (.getValue kv1)
+            v1 (.getCount kv1)
+            k2 (.getValue kv2)
+            v2 (.getCount kv2)
+            new-v (+ v1 v2)
+            new-k (/ (+ (* k1 v1) (* k2 v2)) new-v)
+            new-bin (Bin. new-k new-v)]
+        (doto bins
+          (.remove kv1)
+          (.remove kv2))
+        (let [idx (dec (- (Collections/binarySearch bins new-bin)))]
+          (.add bins idx new-bin))))
+
     this)
 
   (quantile [this q]
-    (loop [[[k ^long v] & bins] bins
+    (loop [[^IBin bin & bins] bins
            count (* q total)]
-      (if (and (pos? count) v)
-        (recur bins (- count v))
-        (or k -1))))
+      (if-not bin
+        -1
+        (let [v (.getCount bin)]
+          (if (and (pos? count) v)
+            (recur bins (- count v))
+            (.getValue bin))))))
 
   (cdf [this x]
-    (/ (long (reduce + (map val (.headMap bins x true)))) total))
+    (loop [[^IBin bin & bins] bins
+           cdf 0.0]
+      (if-not bin
+        (double (/ cdf total))
+        (if (<= (.getValue bin) x)
+          (recur bins (+ cdf (.getCount bin)))
+          (double (/ cdf total))))))
 
   (getMin [this]
     min-v)
@@ -274,8 +332,10 @@
 
   (histogramString [this]
     (str "total: " total " min: " min-v " max: " max-v "\n"
-         (apply str (for [[k ^long v] bins]
+         (apply str (for [^IBin b bins
+                          :let [k (.getValue b)
+                                v (.getCount b)]]
                       (str (format "%10.4f"  k) "\t" (apply str (repeat (* 20 max-bins (double (/ v total))) "*")) "\n"))))))
 
 (defn ->histogram ^core2.temporal.grid.Histogram [^long max-bins]
-  (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (TreeMap.)))
+  (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
