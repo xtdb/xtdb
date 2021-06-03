@@ -1690,7 +1690,7 @@
                                                   "https://opencrux.com/reference/queries.html#pull")})))
 
     (log/debug :query (cio/pr-edn-str (-> q
-                                          (assoc :in in)
+                                          (assoc :in (or in []))
                                           (dissoc :args))))
     (validate-in in)
     (let [rule-name->rules (with-meta (rule-name->rules rules) {:rules (:rules q)})
