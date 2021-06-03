@@ -306,7 +306,7 @@
     (loop [[^IBin bin & bins] bins
            count (* q total)]
       (if-not bin
-        -1
+        max-v
         (let [v (.getCount bin)]
           (if (and (pos? count) v)
             (recur bins (- count v))
@@ -314,12 +314,12 @@
 
   (cdf [this x]
     (loop [[^IBin bin & bins] bins
-           cdf 0.0]
+           count 0]
       (if-not bin
-        (double (/ cdf total))
+        (double (/ count total))
         (if (<= (.getValue bin) x)
-          (recur bins (+ cdf (.getCount bin)))
-          (double (/ cdf total))))))
+          (recur bins (+ count (.getCount bin)))
+          (double (/ count total))))))
 
   (getMin [this]
     min-v)
