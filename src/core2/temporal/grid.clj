@@ -379,10 +379,13 @@
                    v2 (.getCount kv2)
                    d (- s (.sum this k1))
                    a (- v2 v1)
-                   b (* 2 v1)
-                   c (- (* 2 d))
-                   z (/ (+ (- b) (Math/sqrt (- (* b b) (* 4 a c))))
-                        (* 2 a))]]
+                   b (* 2.0 v1)
+                   c (- (* 2.0 d))
+                   ;; NOTE: unsure if this NaN handling is correct?
+                   z (if (zero? a)
+                       (- (/ c b))
+                       (/ (+ (- b) (Math/sqrt (Math/abs (- (* b b) (* 4.0 a c)))))
+                          (* 2.0 a)))]]
          (+ k1 (* (- k2 k1) z))))))
 
   (getMin [this]
@@ -399,7 +402,7 @@
          (apply str (for [^IBin b bins
                           :let [k (.getValue b)
                                 v (.getCount b)]]
-                      (str (format "%10.4f"  k) "\t" (apply str (repeat (* 40 (double (/ v total))) "*")) "\n"))))))
+                      (str (format "%10.4f"  k) "\t" (apply str (repeat (* 200 (double (/ v total))) "*")) "\n"))))))
 
 (defn ->histogram ^core2.temporal.grid.Histogram [^long max-bins]
   (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
