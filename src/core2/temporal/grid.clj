@@ -323,36 +323,37 @@
           (double (/ count total))))))
 
   (sum [this x]
-    (cond
-      (< x min-v) 0
-      (>= x max-v) total
-      :else
-      (let [probe-bin (Bin. x 0)
-            idx (Collections/binarySearch bins probe-bin)
-            ^long idx (if (pos? idx)
-                        idx
-                        (dec (- idx)))]
-        (if (> idx (dec (.size bins)))
-          total
-          (let [^IBin kv1 (.get bins idx)
-                ^IBin kv2 (if (= idx (dec (.size bins)))
-                            (Bin. 0 0)
-                            (.get bins (inc idx)))
-                k1 (.getValue kv1)
-                v1 (.getCount kv1)
-                k2 (.getValue kv2)
-                v2 (.getCount kv2)
+    (let [last-idx (dec (.size bins))]
+      (cond
+        (< x (.getValue ^IBin (.get bins 0))) 0
+        (>= x (.getValue ^IBin (.get bins last-idx))) total
+        :else
+        (let [probe-bin (Bin. x 0)
+              idx (Collections/binarySearch bins probe-bin)
+              ^long idx (if (pos? idx)
+                          idx
+                          (dec (- idx)))]
+          (if (> idx last-idx)
+            total
+            (let [^IBin kv1 (.get bins idx)
+                  ^IBin kv2 (if (= idx last-idx)
+                              (Bin. 0 0)
+                              (.get bins (inc idx)))
+                  k1 (.getValue kv1)
+                  v1 (.getCount kv1)
+                  k2 (.getValue kv2)
+                  v2 (.getCount kv2)
 
-                vx (+ v1 (* (/ (+ v2 v1) (- k2 k1))
-                            (- x k1)))
-                s (* (/ (+ v1 vx) 2)
-                     (/ (- x k1) (- k2 k1)))
-                ^long s (loop [n 0
-                               s s]
-                          (if (< n idx)
-                            (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
-                            s))]
-            (+ s (/ v1 2.0)))))))
+                  vx (+ v1 (* (/ (+ v2 v1) (- k2 k1))
+                              (- x k1)))
+                  s (* (/ (+ v1 vx) 2)
+                       (/ (- x k1) (- k2 k1)))
+                  ^long s (loop [n 0
+                                 s s]
+                            (if (< n idx)
+                              (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
+                              s))]
+              (+ s (/ v1 2.0))))))))
 
   (getMin [this]
     min-v)
