@@ -477,15 +477,13 @@
                     (.add acc (+ start-point-idx m))))))
             (recur cell-idxs))))))
   (kd-tree-points [this]
-    (reduce
-     (fn [^LongStream acc ^LongStream x]
-       (LongStream/concat acc x))
-     (LongStream/empty)
-     (for [^long cell-idx (range (.size cells))
-           :let [^FixedSizeListVector cell (.get cells cell-idx)]
-           :when (and cell (pos? (.getValueCount cell)))
-           :let [start-point-idx (bit-shift-left cell-idx cell-shift)]]
-       (LongStream/range start-point-idx (+ start-point-idx (.getValueCount cell))))))
+    (.flatMap (LongStream/range 0 (.size cells))
+              (reify LongFunction
+                (apply [_ cell-idx]
+                  (if-let [^FixedSizeListVector cell (.get cells cell-idx)]
+                    (let [start-point-idx (bit-shift-left cell-idx cell-shift)]
+                      (LongStream/range start-point-idx (+ start-point-idx (.getValueCount cell))))
+                    (LongStream/empty))))))
   (kd-tree-depth [_] 0)
   (kd-tree-retain [this _] this)
   (kd-tree-point-access [this]
