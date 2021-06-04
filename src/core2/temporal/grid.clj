@@ -1,10 +1,15 @@
 (ns core2.temporal.grid
-  (:require [core2.temporal.kd-tree :as kd])
-  (:import core2.temporal.kd_tree.IKdTreePointAccess
+  (:require [core2.util :as util]
+            [core2.temporal.kd-tree :as kd])
+  (:import [core2.temporal.kd_tree IKdTreePointAccess KdTreeVectorPointAccess]
            core2.BitUtil
+           org.apache.arrow.memory.BufferAllocator
+           org.apache.arrow.vector.complex.FixedSizeListVector
+           org.apache.arrow.vector.types.pojo.Field
            [java.util ArrayList Arrays Collection Collections Comparator HashMap List Map]
            [java.util.function BiFunction Function LongPredicate]
            java.util.stream.LongStream
+           java.io.Closeable
            java.nio.LongBuffer))
 
 ;; TODO: Move this to use histograms via
@@ -410,7 +415,7 @@
 
 (declare ->simple-grid-point-access)
 
-(deftype SimpleGrid [^List scales ^longs mins ^longs maxs ^List cells ^int k ^int axis-shift ^int cell-shift ^long total]
+(deftype SimpleGrid [^BufferAllocator allocator ^List scales ^longs mins ^longs maxs ^List cells ^int k ^int axis-shift ^int cell-shift ^long total]
   ISimpleGrid
   (cellIdx [_ point]
     (loop [n 0
@@ -425,16 +430,9 @@
 
   kd/KdTree
   (kd-tree-insert [this allocator point]
-    (.add ^List (.get cells (.cellIdx this point)) (->longs point))
-    this)
+    (throw (UnsupportedOperationException.)))
   (kd-tree-delete [this allocator point]
-    (let [point (->longs point)
-          ^List cell (.get cells (.cellIdx this point))
-          it (.iterator cell)]
-      (while (.hasNext it)
-        (when (Arrays/equals ^longs (.next it) point)
-          (.remove it))))
-    this)
+    (throw (UnsupportedOperationException.)))
   (kd-tree-range-search [this min-range max-range]
     (let [min-range (->longs min-range)
           max-range (->longs max-range)
@@ -470,19 +468,12 @@
         (if-not cell-idx
           (.build acc)
           (let [^long cell-idx cell-idx]
-            (when-let [^List cell (.get cells cell-idx)]
-              (let [start-point-idx (bit-shift-left cell-idx cell-shift)]
-                (dotimes [m (.size cell)]
-                  (let [^longs point (.get cell m)]
-                    (loop [m (int 0)]
-                      (if (= m k)
-                        (.add acc (+ start-point-idx m))
-                        (if (BitUtil/isBitSet axis-mask m)
-                          (let [x (aget point m)]
-                            (when (and (<= (aget min-range m) x)
-                                       (<= x (aget max-range m)))
-                              (recur (inc m))))
-                          (recur (inc m)))))))))
+            (when-let [^FixedSizeListVector cell (.get cells cell-idx)]
+              (let [access (KdTreeVectorPointAccess. cell k)
+                    start-point-idx (bit-shift-left cell-idx cell-shift)]
+                (dotimes [m (.getValueCount cell)]
+                  (when (.isInRange access m min-range max-range axis-mask)
+                    (.add acc (+ start-point-idx m))))))
             (recur cell-idxs))))))
   (kd-tree-points [this]
     (reduce
@@ -490,61 +481,61 @@
        (LongStream/concat acc x))
      (LongStream/empty)
      (for [^long cell-idx (range (.size cells))
-           :let [^List cell (.get cells cell-idx)]
-           :when (and cell (BitUtil/bitNot (.isEmpty cell)))
+           :let [^FixedSizeListVector cell (.get cells cell-idx)]
+           :when (and cell (pos? (.getValueCount cell)))
            :let [start-point-idx (bit-shift-left cell-idx cell-shift)]]
-       (LongStream/range start-point-idx (+ start-point-idx (.size cell))))))
+       (LongStream/range start-point-idx (+ start-point-idx (.getValueCount cell))))))
   (kd-tree-depth [_] 0)
   (kd-tree-retain [this _] this)
   (kd-tree-point-access [this]
     (->simple-grid-point-access this))
   (kd-tree-size [_] total)
   (kd-tree-value-count [_] total)
-  (kd-tree-dimensions [_] k))
+  (kd-tree-dimensions [_] k)
 
-(deftype SimpleGridPointAccess [^SimpleGrid grid ^int cell-shift ^int cell-mask]
+  Closeable
+  (close [_]
+    (doseq [cell cells]
+      (util/try-close cell))))
+
+(deftype SimpleGridPointAccess [^SimpleGrid grid ^int cell-shift ^int cell-mask ^int k]
   IKdTreePointAccess
   (getPoint [this idx]
+    (.getPoint (KdTreeVectorPointAccess. (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
+               (bit-and idx cell-mask))
     (ArrayList. ^List (seq (.getArrayPoint this idx))))
   (getArrayPoint [this idx]
-    (.get ^List (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift))
-          (bit-and idx cell-mask)))
+    (.getArrayPoint (KdTreeVectorPointAccess. (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
+                    (bit-and idx cell-mask)))
   (getCoordinate [this idx axis]
-    (aget (.getArrayPoint this idx) axis))
+    (.getCoordinate (KdTreeVectorPointAccess. (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
+                    (bit-and idx cell-mask)
+                    axis))
   (setCoordinate [_ idx axis value]
     (throw (UnsupportedOperationException.)))
   (swapPoint [_ from-idx to-idx]
     (throw (UnsupportedOperationException.)))
   (isDeleted [_ idx]
-    false)
+    (.isDeleted (KdTreeVectorPointAccess. (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
+                (bit-and idx cell-mask)))
   (isInRange [this idx min-range max-range mask]
-    (let [point (.getArrayPoint this idx)
-          k (.k grid)]
-      (loop [n (int 0)]
-        (if (= n k)
-          true
-          (if (BitUtil/isBitSet mask n)
-            (let [x (aget point n)]
-              (if (and (<= (aget min-range n) x)
-                       (<= x (aget max-range n)))
-                (recur (inc n))
-                false))
-            (recur (inc n))))))))
+    (.isInRange (KdTreeVectorPointAccess. (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
+                (bit-and idx cell-mask) min-range max-range mask)))
 
 (defn- ->simple-grid-point-access [^SimpleGrid grid]
   (let [cell-shift (.cell-shift grid)
         cell-mask (dec (bit-shift-left 1 cell-shift))]
-    (SimpleGridPointAccess. grid cell-shift cell-mask)))
+    (SimpleGridPointAccess. grid cell-shift cell-mask (.k grid))))
 
 (defn- next-power-of-two ^long [^long x]
   (bit-shift-left 1 (inc (- (dec Long/SIZE) (Long/numberOfLeadingZeros (dec x))))))
 
 (defn ->simple-grid
-  ([^long k points]
-   (->simple-grid k points {}))
-  ([^long k points {:keys [max-histogram-bins ^long cell-size]
-                    :or {max-histogram-bins 16
-                         cell-size 1024}}]
+  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points]
+   (->simple-grid allocator k points {}))
+  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points {:keys [max-histogram-bins ^long cell-size]
+                                                                               :or {max-histogram-bins 16
+                                                                                    cell-size 1024}}]
    (let [total (count points)
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
@@ -565,12 +556,13 @@
            maxs (long-array (for [^IHistogram h histograms]
                               (Math/ceil (.getMax h))))
            cells (ArrayList. ^List (repeat number-of-cells nil))
-           grid (SimpleGrid. scales mins maxs cells k axis-shift cell-shift total)]
+           grid (SimpleGrid. allocator scales mins maxs cells k axis-shift cell-shift total)
+           ^Field point-field (kd/->point-field k)]
        (doseq [p points
                :let [p (->longs p)
                      cell-idx (.cellIdx grid p)
-                     ^List cell (or (.get cells cell-idx)
-                                    (doto (ArrayList.)
-                                      (->> (.set cells cell-idx))))]]
-         (.add cell p))
+                     ^FixedSizeListVector cell (or (.get cells cell-idx)
+                                                   (doto (.createVector point-field allocator)
+                                                     (->> (.set cells cell-idx))))]]
+         (kd/write-point cell (KdTreeVectorPointAccess. cell k) p))
        grid))))

@@ -115,14 +115,14 @@
     (dotimes [n (count point)]
       (.setCoordinate access idx n (long (nth point n))))))
 
-(defn- write-point ^long [^FixedSizeListVector point-vec ^IKdTreePointAccess access point]
+(defn write-point ^long [^FixedSizeListVector point-vec ^IKdTreePointAccess access point]
   (let [idx (.getValueCount point-vec)
         list-idx (.startNewValue point-vec idx)]
     (write-coordinates access idx point)
     (.setValueCount point-vec (inc idx))
     idx))
 
-(defn- ->point-field ^org.apache.arrow.vector.types.pojo.Field [^long k]
+(defn ->point-field ^org.apache.arrow.vector.types.pojo.Field [^long k]
   (t/->field "point" (ArrowType$FixedSizeList. k) false
              (t/->field "coordinates" (.getType Types$MinorType/BIGINT) false)))
 

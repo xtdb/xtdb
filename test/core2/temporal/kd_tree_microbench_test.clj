@@ -8,7 +8,8 @@
            [java.util.stream LongStream]
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
-           [core2.temporal.kd_tree ArrowBufKdTree Node]))
+           [core2.temporal.kd_tree ArrowBufKdTree Node]
+           core2.temporal.grid.SimpleGrid))
 
 (defmacro in-range? [min-range point max-range]
   `(let [len# (alength ~point)]
@@ -57,7 +58,7 @@
                                            (.count)))))
 
         (prn :build-simple-grid)
-        (let [simple-grid (time (grid/->simple-grid k points))]
+        (with-open [^SimpleGrid simple-grid (time (grid/->simple-grid allocator k points))]
           (prn :range-queries-simple-grid qs)
           (dotimes [_ ts]
             (time
