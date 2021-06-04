@@ -469,20 +469,20 @@
       (loop [[cell-idx & cell-idxs] cell-idxs]
         (if-not cell-idx
           (.build acc)
-          (let [^long cell-idx cell-idx
-                ^List cell (.get cells cell-idx)
-                start-point-idx (bit-shift-left cell-idx cell-shift)]
-            (dotimes [m (.size cell)]
-              (let [^longs point (.get cell m)]
-                (loop [m (int 0)]
-                  (if (= m k)
-                    (.add acc (+ start-point-idx m))
-                    (if (BitUtil/isBitSet axis-mask m)
-                      (let [x (aget point m)]
-                        (when (and (<= (aget min-range m) x)
-                                   (<= x (aget max-range m)))
-                          (recur (inc m))))
-                      (recur (inc m)))))))
+          (let [^long cell-idx cell-idx]
+            (when-let [^List cell (.get cells cell-idx)]
+              (let [start-point-idx (bit-shift-left cell-idx cell-shift)]
+                (dotimes [m (.size cell)]
+                  (let [^longs point (.get cell m)]
+                    (loop [m (int 0)]
+                      (if (= m k)
+                        (.add acc (+ start-point-idx m))
+                        (if (BitUtil/isBitSet axis-mask m)
+                          (let [x (aget point m)]
+                            (when (and (<= (aget min-range m) x)
+                                       (<= x (aget max-range m)))
+                              (recur (inc m))))
+                          (recur (inc m)))))))))
             (recur cell-idxs))))))
   (kd-tree-points [this]
     (reduce
@@ -491,7 +491,7 @@
      (LongStream/empty)
      (for [^long cell-idx (range (.size cells))
            :let [^List cell (.get cells cell-idx)]
-           :when (BitUtil/bitNot (.isEmpty cell))
+           :when (and cell (BitUtil/bitNot (.isEmpty cell)))
            :let [start-point-idx (bit-shift-left cell-idx cell-shift)]]
        (LongStream/range start-point-idx (+ start-point-idx (.size cell))))))
   (kd-tree-depth [_] 0)
@@ -536,6 +536,9 @@
         cell-mask (dec (bit-shift-left 1 cell-shift))]
     (SimpleGridPointAccess. grid cell-shift cell-mask)))
 
+(defn- next-power-of-two ^long [^long x]
+  (bit-shift-left 1 (inc (- (dec Long/SIZE) (Long/numberOfLeadingZeros (dec x))))))
+
 (defn ->simple-grid
   ([^long k points]
    (->simple-grid k points {}))
@@ -545,11 +548,11 @@
    (let [total (count points)
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
-         cells-per-dimension (Long/highestOneBit (Math/ceil (Math/pow number-of-cells (/ 1 k))))
+         cells-per-dimension (next-power-of-two (Math/ceil (Math/pow number-of-cells (/ 1 k))))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
          number-of-cells (Math/ceil (Math/pow cells-per-dimension k))
          axis-shift (Long/bitCount (dec cells-per-dimension))
-         cell-shift (* 2 (Long/bitCount (dec cell-size)))
+         cell-shift (Long/bitCount (dec (bit-shift-left cell-size 4)))
          ^List histograms (vec (repeatedly k #(->histogram max-histogram-bins)))]
      (doseq [p points]
        (let [p (->longs p)]
@@ -561,10 +564,13 @@
                               (Math/floor (.getMin h))))
            maxs (long-array (for [^IHistogram h histograms]
                               (Math/ceil (.getMax h))))
-           cells (ArrayList. ^List (repeatedly number-of-cells #(ArrayList.)))
+           cells (ArrayList. ^List (repeat number-of-cells nil))
            grid (SimpleGrid. scales mins maxs cells k axis-shift cell-shift total)]
        (doseq [p points
                :let [p (->longs p)
-                     cell-idx (.cellIdx grid p)]]
-         (.add ^List (.get cells cell-idx) p))
+                     cell-idx (.cellIdx grid p)
+                     ^List cell (or (.get cells cell-idx)
+                                    (doto (ArrayList.)
+                                      (->> (.set cells cell-idx))))]]
+         (.add cell p))
        grid))))
