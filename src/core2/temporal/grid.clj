@@ -438,34 +438,40 @@
   (kd-tree-range-search [this min-range max-range]
     (let [min-range (->longs min-range)
           max-range (->longs max-range)
-          axis-cell-keys (for [n (range k)
-                               :let [x (aget min-range n)
-                                     y (aget max-range n)
+          axis-cell-idxs (for [n (range k)
+                               :let [min-r (aget min-range n)
+                                     max-r (aget max-range n)
                                      min-v (aget mins n)
-                                     max-v (aget maxs n)]]
-                           (when-not (or (< max-v x) (> min-v y))
-                             (let [^longs axis-scale (.get scales n)
-                                   x-cell-axis-idx (Arrays/binarySearch axis-scale x)
-                                   ^long x-cell-axis-idx (if (neg? x-cell-axis-idx)
-                                                           (dec (- x-cell-axis-idx))
-                                                           x-cell-axis-idx)
-                                   y-cell-axis-idx (Arrays/binarySearch axis-scale y)
-                                   ^long y-cell-axis-idx (if (neg? y-cell-axis-idx)
-                                                           (dec (- y-cell-axis-idx))
-                                                           y-cell-axis-idx)]
-                               (range x-cell-axis-idx (inc y-cell-axis-idx)))))
-          cell-idxs (for [cell-key (distinct (cartesian-product axis-cell-keys))
-                          :when (= k (count cell-key))
-                          :let [cell-idx (.cellIdx this (->longs cell-key))]
-                          :when (< cell-idx (.size cells))]
-                      cell-idx)
+                                     max-v (aget maxs n)]
+                               :when (BitUtil/bitNot (or (< max-v min-r) (> min-v max-r)))
+                               :let [^longs axis-scale (.get scales n)
+                                     min-axis-idx (Arrays/binarySearch axis-scale min-r)
+                                     min-axis-idx (if (neg? min-axis-idx)
+                                                    (dec (- min-axis-idx))
+                                                    min-axis-idx)
+                                     max-axis-idx (Arrays/binarySearch axis-scale max-r)
+                                     max-axis-idx (if (neg? max-axis-idx)
+                                                    (- max-axis-idx)
+                                                    (inc max-axis-idx))]
+                               :when (not= min-axis-idx max-axis-idx)]
+                           (range min-axis-idx max-axis-idx))
+          cell-idxs (when (= k (count axis-cell-idxs))
+                      (for [cell-idxs (cartesian-product axis-cell-idxs)
+                            :let [cell-idxs (->longs cell-idxs)]]
+                        (loop [n 0
+                               idx 0]
+                          (if (= n k)
+                            idx
+                            (let [axis-idx (aget cell-idxs n)]
+                              (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx)))))))
           ^IKdTreePointAccess access (kd/kd-tree-point-access this)
           axis-mask (kd/range-bitmask min-range max-range)
           acc (LongStream/builder)]
-      (loop [[^long cell-idx & cell-idxs] cell-idxs]
+      (loop [[cell-idx & cell-idxs] cell-idxs]
         (if-not cell-idx
           (.build acc)
-          (let [^List cell (.get cells cell-idx)
+          (let [^long cell-idx cell-idx
+                ^List cell (.get cells cell-idx)
                 start-point-idx (bit-shift-left cell-idx cell-shift)]
             (dotimes [n (.size cell)]
               (let [idx (+ start-point-idx n)]
@@ -492,7 +498,7 @@
 (deftype SimpleGridPointAccess [^SimpleGrid grid ^int cell-shift ^int cell-mask]
   IKdTreePointAccess
   (getPoint [this idx]
-    (ArrayList. ^List (vec (.getArrayPoint this idx))))
+    (ArrayList. ^List (seq (.getArrayPoint this idx))))
   (getArrayPoint [this idx]
     (.get ^List (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift))
           (bit-and idx cell-mask)))
@@ -532,8 +538,9 @@
    (let [total (count points)
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
-         cells-per-dimension (Math/floor (Math/pow 2 (/ 1 k)))
+         cells-per-dimension (Long/highestOneBit (Math/ceil (Math/pow number-of-cells (/ 1 k))))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
+         number-of-cells (Math/ceil (Math/pow cells-per-dimension k))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          cell-shift (* 2 (Long/bitCount (dec cell-size)))
          ^List histograms (vec (repeatedly k #(->histogram max-histogram-bins)))]
