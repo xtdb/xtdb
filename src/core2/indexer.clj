@@ -156,7 +156,8 @@
                   ^Set open-watermarks
                   ^StampedLock open-watermarks-lock
                   ^:volatile-mutable ^Watermark watermark
-                  ^PriorityBlockingQueue awaiters]
+                  ^PriorityBlockingQueue awaiters
+                  ^:volatile-mutable ^Throwable ingester-error]
 
   IChunkManager
   (getLiveRoot [_ field-name]
@@ -191,33 +192,41 @@
 
   TransactionIndexer
   (indexTx [this tx-instant tx-ops]
-    (let [chunk-idx (.chunk-idx watermark)
-          row-count (.row-count watermark)
-          next-row-id (+ chunk-idx row-count)
-          number-of-new-rows (.indexTx this tx-instant tx-ops next-row-id)
-          new-chunk-row-count (+ row-count number-of-new-rows)]
-      (with-open [_old-watermark watermark]
-        (set! (.watermark this)
-              (tx/->Watermark chunk-idx
-                              new-chunk-row-count
-                              (snapshot-roots live-roots)
-                              tx-instant
-                              (.getTemporalWatermark temporal-mgr)
-                              (AtomicInteger. 1)
-                              max-rows-per-block
-                              (ConcurrentHashMap.))))
-      (when (>= new-chunk-row-count max-rows-per-chunk)
-        (.finishChunk this)))
+    (try
+      (let [chunk-idx (.chunk-idx watermark)
+            row-count (.row-count watermark)
+            next-row-id (+ chunk-idx row-count)
+            number-of-new-rows (.indexTx this tx-instant tx-ops next-row-id)
+            new-chunk-row-count (+ row-count number-of-new-rows)]
+        (with-open [_old-watermark watermark]
+          (set! (.watermark this)
+                (tx/->Watermark chunk-idx
+                                new-chunk-row-count
+                                (snapshot-roots live-roots)
+                                tx-instant
+                                (.getTemporalWatermark temporal-mgr)
+                                (AtomicInteger. 1)
+                                max-rows-per-block
+                                (ConcurrentHashMap.))))
+        (when (>= new-chunk-row-count max-rows-per-chunk)
+          (.finishChunk this)))
 
-    (await/notify-tx tx-instant awaiters)
+      (await/notify-tx tx-instant awaiters)
 
-    tx-instant)
+      tx-instant
+      (catch Throwable e
+        (set! (.ingester-error this) e)
+        (await/notify-ex e awaiters)
+        (throw e))))
 
   (latestCompletedTx [_]
     (some-> watermark .tx-instant))
 
   (awaitTxAsync [this tx]
-    (await/await-tx-async tx #(.latestCompletedTx this) awaiters))
+    (await/await-tx-async tx
+                          #(or (some-> ingester-error throw)
+                               (.latestCompletedTx this))
+                          awaiters))
 
   IndexerPrivate
   (indexTx [this tx-instant tx-ops next-row-id]
@@ -386,4 +395,5 @@
               (util/->identity-set)
               (StampedLock.)
               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
-              (PriorityBlockingQueue.))))
+              (PriorityBlockingQueue.)
+              nil)))

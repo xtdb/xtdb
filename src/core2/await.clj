@@ -13,6 +13,11 @@
       (when completed-tx
         (not (pos? (.compareTo awaited-tx completed-tx))))))
 
+(defn- ->ingester-ex [^Throwable cause]
+  (ex-info (str "Ingestion stopped: " (.getMessage cause))
+           {}
+           cause))
+
 (defn await-tx-async
   ^java.util.concurrent.CompletableFuture
   [^TransactionInstant awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
@@ -25,7 +30,7 @@
               (.complete fut completed-tx)
               true))
           (catch Exception e
-            (.completeExceptionally fut e)
+            (.completeExceptionally fut (->ingester-ex e))
             true))
 
         (let [awaiting-tx (AwaitingTx. awaited-tx fut)]
@@ -37,7 +42,7 @@
                 (.remove awaiters awaiting-tx)
                 (.complete fut completed-tx)))
             (catch Exception e
-              (.completeExceptionally fut e)
+              (.completeExceptionally fut (->ingester-ex e))
               true))))
     fut))
 
@@ -51,6 +56,7 @@
 (defn notify-ex [^Exception ex ^PriorityBlockingQueue awaiters]
   ;; NOTE: by this point, any calls to `->latest-completed-tx` (above) must also throw this exception.
   (doseq [^AwaitingTx awaiting-tx awaiters]
-    (.completeExceptionally ^CompletableFuture (.fut awaiting-tx) ex))
+    (.completeExceptionally ^CompletableFuture (.fut awaiting-tx)
+                            (->ingester-ex ex)))
 
   (.clear awaiters))

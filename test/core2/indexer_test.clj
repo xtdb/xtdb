@@ -11,7 +11,9 @@
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
             [core2.types :as ty]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.indexer :as idx]
+            [clojure.tools.logging :as log])
   (:import [core2.buffer_pool BufferPool IBufferPool]
            core2.core.Node
            core2.metadata.IMetadataManager
@@ -448,3 +450,17 @@
                       (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))
 
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
+
+(t/deftest test-await-fails-fast
+  (with-open [node (c2/start-node {})]
+    (with-redefs [idx/copy-safe! (fn [& args]
+                                   (throw (UnsupportedOperationException. "oh no!")))
+                  log/log* (let [log* log/log*]
+                             (fn [logger level throwable message]
+                               (when-not (instance? UnsupportedOperationException throwable)
+                                 (log* logger level throwable message))))]
+      (t/is (thrown-with-msg? Exception #"oh no!"
+                              (deref (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo", :count 42}}])
+                                         (tu/then-await-tx node (Duration/ofSeconds 1)))
+                                     500
+                                     ::timeout))))))
