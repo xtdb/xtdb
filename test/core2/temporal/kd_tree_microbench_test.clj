@@ -57,7 +57,7 @@
                                            (.count)))))
 
         (prn :build-simple-grid)
-        (let [grid (grid/->simple-grid k points)]
+        (let [grid (time (grid/->simple-grid k points))]
           (prn :range-queries-simple-grid qs)
           (dotimes [_ ts]
             (time

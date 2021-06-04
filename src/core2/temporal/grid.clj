@@ -450,7 +450,7 @@
      (for [^List cell cells
            :when (BitUtil/bitNot (.isEmpty cell))
            :let [start-point-idx (bit-shift-left (.cellIdx this (.get cell 0)) cell-shift)]]
-       (LongStream/range start-point-idx (+ start-point-idx (.size cells))))))
+       (LongStream/range start-point-idx (+ start-point-idx (.size cell))))))
   (kd-tree-depth [_] 0)
   (kd-tree-retain [this _] this)
   (kd-tree-point-access [this]
@@ -464,8 +464,8 @@
   (getPoint [this idx]
     (vec (.getArrayPoint this idx)))
   (getArrayPoint [this idx]
-    (.get ^List (.get ^List (.cells grid) (bit-and idx cell-mask))
-          (BitUtil/unsignedBitShiftRight idx cell-shift)))
+    (.get ^List (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift))
+          (bit-and idx cell-mask)))
   (getCoordinate [this idx axis]
     (aget (.getArrayPoint this idx) axis))
   (setCoordinate [_ idx axis value]
@@ -489,8 +489,9 @@
             (recur (inc n))))))))
 
 (defn- ->simple-grid-point-access [^SimpleGrid grid]
-  (let [cell-shift (.cell-shift grid)]
-    (SimpleGridPointAccess. grid cell-shift (dec cell-shift))))
+  (let [cell-shift (.cell-shift grid)
+        cell-mask (dec (bit-shift-left 1 cell-shift))]
+    (SimpleGridPointAccess. grid cell-shift cell-mask)))
 
 (defn ->simple-grid
   ([^long k points]
@@ -504,7 +505,7 @@
          cells-per-dimension (Math/floor (Math/pow 2 (/ 1 k)))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
          axis-shift (Long/bitCount (dec cells-per-dimension))
-         cell-shift (Long/bitCount (dec cell-size))
+         cell-shift (* 2 (Long/bitCount (dec cell-size)))
          ^List histograms (vec (repeatedly k #(->histogram max-histogram-bins)))]
      (doseq [p points]
        (let [p (->longs p)]
