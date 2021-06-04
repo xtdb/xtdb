@@ -404,3 +404,45 @@
 
 (defn ->histogram ^core2.temporal.grid.Histogram [^long max-bins]
   (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
+
+(definterface ISimpleGrid
+  (cellIdx [^longs point]))
+
+(deftype SimpleGrid [^List scales ^List cells ^int k ^int cell-shift ^long total]
+  ISimpleGrid
+  (cellIdx [_ point]
+    (loop [n 0
+           idx 0]
+      (if (= n k)
+        idx
+        (let [axis-idx (Arrays/binarySearch ^longs (.get scales n) (aget point n))
+              ^long axis-idx (if (neg? axis-idx)
+                               (dec (- axis-idx))
+                               axis-idx)]
+          (recur (inc n) (bit-or (bit-shift-left idx cell-shift) axis-idx)))))))
+
+(defn ->simple-grid
+  ([^long k points]
+   (->simple-grid k points {}))
+  ([^long k points {:keys [max-histogram-bins ^long cell-size]
+                    :or {max-histogram-bins 16
+                         cell-size 1024}}]
+   (let [total (count points)
+         cells-per-dimension (max 2 (Long/highestOneBit (Math/ceil (Math/pow cell-size (/ 1 k)))))
+         _ (assert (= 1 (Long/bitCount cells-per-dimension)))
+         number-of-cells (Math/pow cells-per-dimension k)
+         cell-shift (Long/bitCount (dec cells-per-dimension))
+         ^List histograms (vec (repeatedly k #(->histogram max-histogram-bins)))]
+     (doseq [p points]
+       (let [p (->longs p)]
+         (dotimes [n k]
+           (.update ^IHistogram (.get histograms n) (aget p n)))))
+     (let [^List scales (vec (for [^IHistogram h histograms]
+                               (long-array (.uniform h cells-per-dimension))))
+           ^List cells (vec (repeatedly number-of-cells #(ArrayList.)))
+           grid (SimpleGrid. scales cells k cell-shift total)]
+       (doseq [p points]
+         (let [p (->longs p)
+               cell-idx (.cellIdx grid p)]
+           (.add ^List (.get cells cell-idx) p)))
+       grid))))
