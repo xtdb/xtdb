@@ -5,6 +5,7 @@
            core2.BitUtil
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.vector.complex.FixedSizeListVector
+           org.apache.arrow.vector.VectorSchemaRoot
            org.apache.arrow.vector.types.pojo.Field
            [java.util ArrayList Arrays Collection Collections Comparator HashMap List Map]
            [java.util.function BiFunction Function LongPredicate]
@@ -565,4 +566,7 @@
                                                    (doto (.createVector point-field allocator)
                                                      (->> (.set cells cell-idx))))]]
          (kd/write-point cell (KdTreeVectorPointAccess. cell k) p))
+       (doseq [cell cells
+               :when cell]
+         (kd/build-breadth-first-tree-in-place (VectorSchemaRoot/of (into-array [cell]))))
        grid))))

@@ -186,7 +186,7 @@
 ;; http://www.sci.utah.edu/publications/Wal2015a/ospParticle.pdf
 ;; https://github.com/ingowald/ospray-module-pkd
 
-(defn- build-breadth-first-tree-in-place
+(defn build-breadth-first-tree-in-place
   ([kd-tree] (build-breadth-first-tree-in-place kd-tree false))
   ([kd-tree check?]
    (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)
