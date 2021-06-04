@@ -3,7 +3,7 @@
   (:import core2.temporal.kd_tree.IKdTreePointAccess
            core2.BitUtil
            [java.util ArrayList Arrays Collection Collections Comparator HashMap List Map]
-           [java.util.function BiFunction Function]
+           [java.util.function BiFunction Function LongPredicate]
            java.util.stream.LongStream
            java.nio.LongBuffer))
 
@@ -406,9 +406,11 @@
   (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
 
 (definterface ISimpleGrid
-  (cellIdx [^longs point]))
+  (^int cellIdx [^longs point]))
 
-(deftype SimpleGrid [^List scales ^List cells ^int k ^int cell-shift ^long total]
+(declare ->simple-grid-point-access)
+
+(deftype SimpleGrid [^List scales ^List cells ^int k ^int axis-shift ^int cell-shift ^long total]
   ISimpleGrid
   (cellIdx [_ point]
     (loop [n 0
@@ -419,7 +421,76 @@
               ^long axis-idx (if (neg? axis-idx)
                                (dec (- axis-idx))
                                axis-idx)]
-          (recur (inc n) (bit-or (bit-shift-left idx cell-shift) axis-idx)))))))
+          (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx))))))
+
+  kd/KdTree
+  (kd-tree-insert [this allocator point]
+    (.add ^List (.get cells (.cellIdx this point)) (->longs point))
+    this)
+  (kd-tree-delete [this allocator point]
+    (let [point (->longs point)
+          ^List cell (.get cells (.cellIdx this point))
+          it (.iterator cell)]
+      (while (.hasNext it)
+        (when (Arrays/equals ^longs (.next it) point)
+          (.remove it))))
+    this)
+  (kd-tree-range-search [this min-range max-range]
+    (let [^IKdTreePointAccess access (kd/kd-tree-point-access this)
+          axis-mask (kd/range-bitmask min-range max-range)]
+      (.filter ^LongStream (kd/kd-tree-points this)
+               (reify LongPredicate
+                 (test [_ x]
+                   (.isInRange access x min-range max-range axis-mask))))))
+  (kd-tree-points [this]
+    (reduce
+     (fn [^LongStream acc ^LongStream x]
+       (LongStream/concat acc x))
+     (LongStream/empty)
+     (for [^List cell cells
+           :when (BitUtil/bitNot (.isEmpty cell))
+           :let [start-point-idx (bit-shift-left (.cellIdx this (first cell)) cell-shift)]]
+       (LongStream/range start-point-idx (+ start-point-idx (.size cells))))))
+  (kd-tree-depth [_] 0)
+  (kd-tree-retain [this _] this)
+  (kd-tree-point-access [this]
+    (->simple-grid-point-access this))
+  (kd-tree-size [_] total)
+  (kd-tree-value-count [_] total)
+  (kd-tree-dimensions [_] k))
+
+(deftype SimpleGridPointAccess [^SimpleGrid grid ^int cell-shift ^int cell-mask]
+  IKdTreePointAccess
+  (getPoint [this idx]
+    (vec (.getArrayPoint this idx)))
+  (getArrayPoint [this idx]
+    (.get ^List (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift))
+          (bit-and idx cell-mask)))
+  (getCoordinate [this idx axis]
+    (aget (.getArrayPoint this idx) axis))
+  (setCoordinate [_ idx axis value]
+    (throw (UnsupportedOperationException.)))
+  (swapPoint [_ from-idx to-idx]
+    (throw (UnsupportedOperationException.)))
+  (isDeleted [_ idx]
+    false)
+  (isInRange [this idx min-range max-range mask]
+    (let [point (.getArrayPoint this idx)
+          k (.k grid)]
+      (loop [n (int 0)]
+        (if (= n k)
+          true
+          (if (BitUtil/isBitSet mask n)
+            (let [x (aget point n)]
+              (if (and (<= (aget min-range n) x)
+                       (<= x (aget max-range n)))
+                (recur (inc n))
+                false))
+            (recur (inc n))))))))
+
+(defn- ->simple-grid-point-access [^SimpleGrid grid]
+  (let [cell-shift (.cell-shift grid)]
+    (SimpleGridPointAccess. grid cell-shift (dec cell-shift))))
 
 (defn ->simple-grid
   ([^long k points]
@@ -429,9 +500,11 @@
                          cell-size 1024}}]
    (let [total (count points)
          cells-per-dimension (max 2 (Long/highestOneBit (Math/ceil (Math/pow cell-size (/ 1 k)))))
+         _ (assert (= 1 (Long/bitCount cell-size)))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
          number-of-cells (Math/pow cells-per-dimension k)
-         cell-shift (Long/bitCount (dec cells-per-dimension))
+         axis-shift (Long/bitCount (dec cells-per-dimension))
+         cell-shift (Long/bitCount cell-size)
          ^List histograms (vec (repeatedly k #(->histogram max-histogram-bins)))]
      (doseq [p points]
        (let [p (->longs p)]
@@ -440,7 +513,7 @@
      (let [^List scales (vec (for [^IHistogram h histograms]
                                (long-array (.uniform h cells-per-dimension))))
            ^List cells (vec (repeatedly number-of-cells #(ArrayList.)))
-           grid (SimpleGrid. scales cells k cell-shift total)]
+           grid (SimpleGrid. scales cells k cell-shift axis-shift total)]
        (doseq [p points]
          (let [p (->longs p)
                cell-idx (.cellIdx grid p)]
