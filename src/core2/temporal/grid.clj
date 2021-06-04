@@ -489,9 +489,10 @@
      (fn [^LongStream acc ^LongStream x]
        (LongStream/concat acc x))
      (LongStream/empty)
-     (for [^List cell cells
+     (for [^long cell-idx (range (.size cells))
+           :let [^List cell (.get cells cell-idx)]
            :when (BitUtil/bitNot (.isEmpty cell))
-           :let [start-point-idx (bit-shift-left (.cellIdx this (.get cell 0)) cell-shift)]]
+           :let [start-point-idx (bit-shift-left cell-idx cell-shift)]]
        (LongStream/range start-point-idx (+ start-point-idx (.size cell))))))
   (kd-tree-depth [_] 0)
   (kd-tree-retain [this _] this)
