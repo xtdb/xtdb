@@ -449,7 +449,7 @@
      (LongStream/empty)
      (for [^List cell cells
            :when (BitUtil/bitNot (.isEmpty cell))
-           :let [start-point-idx (bit-shift-left (.cellIdx this (first cell)) cell-shift)]]
+           :let [start-point-idx (bit-shift-left (.cellIdx this (.get cell 0)) cell-shift)]]
        (LongStream/range start-point-idx (+ start-point-idx (.size cells))))))
   (kd-tree-depth [_] 0)
   (kd-tree-retain [this _] this)
@@ -464,8 +464,8 @@
   (getPoint [this idx]
     (vec (.getArrayPoint this idx)))
   (getArrayPoint [this idx]
-    (.get ^List (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift))
-          (bit-and idx cell-mask)))
+    (.get ^List (.get ^List (.cells grid) (bit-and idx cell-mask))
+          (BitUtil/unsignedBitShiftRight idx cell-shift)))
   (getCoordinate [this idx axis]
     (aget (.getArrayPoint this idx) axis))
   (setCoordinate [_ idx axis value]
@@ -499,12 +499,12 @@
                     :or {max-histogram-bins 16
                          cell-size 1024}}]
    (let [total (count points)
-         cells-per-dimension (max 2 (Long/highestOneBit (Math/ceil (Math/pow cell-size (/ 1 k)))))
          _ (assert (= 1 (Long/bitCount cell-size)))
+         number-of-cells (Math/ceil (/ total cell-size))
+         cells-per-dimension (Math/floor (Math/pow 2 (/ 1 k)))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
-         number-of-cells (Math/pow cells-per-dimension k)
          axis-shift (Long/bitCount (dec cells-per-dimension))
-         cell-shift (Long/bitCount cell-size)
+         cell-shift (Long/bitCount (dec cell-size))
          ^List histograms (vec (repeatedly k #(->histogram max-histogram-bins)))]
      (doseq [p points]
        (let [p (->longs p)]
@@ -513,7 +513,7 @@
      (let [^List scales (vec (for [^IHistogram h histograms]
                                (long-array (.uniform h cells-per-dimension))))
            ^List cells (vec (repeatedly number-of-cells #(ArrayList.)))
-           grid (SimpleGrid. scales cells k cell-shift axis-shift total)]
+           grid (SimpleGrid. scales cells k axis-shift cell-shift total)]
        (doseq [p points]
          (let [p (->longs p)
                cell-idx (.cellIdx grid p)]

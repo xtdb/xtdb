@@ -1,7 +1,8 @@
 (ns core2.temporal.kd-tree-microbench-test
   (:require [clojure.test :as t]
             [core2.util :as util]
-            [core2.temporal.kd-tree :as kd])
+            [core2.temporal.kd-tree :as kd]
+            [core2.temporal.grid :as grid])
   (:import [java.util Collection HashMap Random]
            [java.util.function Predicate]
            [java.util.stream LongStream]
@@ -54,6 +55,15 @@
                                                       (test [_ location]
                                                         (in-range? min-range ^longs location max-range))))
                                            (.count)))))
+
+        (prn :build-simple-grid)
+        (let [grid (grid/->simple-grid k points)]
+          (prn :range-queries-simple-grid qs)
+          (dotimes [_ ts]
+            (time
+             (doseq [[query-id min-range max-range] queries]
+               (t/is (= (.get query->count query-id)
+                        (.count ^LongStream (kd/kd-tree-range-search grid min-range max-range))))))))
 
         (prn :build-node-kd-tree-insert ns)
         (with-open [^Node kd-tree (time
