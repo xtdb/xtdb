@@ -464,7 +464,6 @@
                             idx
                             (let [axis-idx (aget cell-idxs n)]
                               (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx)))))))
-          ^IKdTreePointAccess access (kd/kd-tree-point-access this)
           axis-mask (kd/range-bitmask min-range max-range)
           acc (LongStream/builder)]
       (loop [[cell-idx & cell-idxs] cell-idxs]
@@ -473,10 +472,17 @@
           (let [^long cell-idx cell-idx
                 ^List cell (.get cells cell-idx)
                 start-point-idx (bit-shift-left cell-idx cell-shift)]
-            (dotimes [n (.size cell)]
-              (let [idx (+ start-point-idx n)]
-                (when (.isInRange access idx min-range max-range axis-mask)
-                  (.add acc idx))))
+            (dotimes [m (.size cell)]
+              (let [^longs point (.get cell m)]
+                (loop [m (int 0)]
+                  (if (= m k)
+                    (.add acc (+ start-point-idx m))
+                    (if (BitUtil/isBitSet axis-mask m)
+                      (let [x (aget point m)]
+                        (when (and (<= (aget min-range m) x)
+                                   (<= x (aget max-range m)))
+                          (recur (inc m))))
+                      (recur (inc m)))))))
             (recur cell-idxs))))))
   (kd-tree-points [this]
     (reduce
