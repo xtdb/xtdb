@@ -452,29 +452,36 @@
                                      max-axis-idx (if (neg? max-axis-idx)
                                                     (- max-axis-idx)
                                                     (inc max-axis-idx))]
-                               :when (not= min-axis-idx max-axis-idx)]
-                           (range min-axis-idx max-axis-idx))
+                               :when (not= min-axis-idx max-axis-idx)
+                               :let [r (range min-axis-idx max-axis-idx)]]
+                           (-> (mapv vector r (repeat true))
+                               (assoc-in [0 1] false)
+                               (assoc-in [(dec (count r)) 1] false)))
           cell-idxs (when (= k (count axis-cell-idxs))
-                      (for [cell-idxs (cartesian-product axis-cell-idxs)
-                            :let [cell-idxs (->longs cell-idxs)]]
+                      (for [cell-idxs+cell-in-ranges (cartesian-product axis-cell-idxs)
+                            :let [cell-idxs (->longs (map first cell-idxs+cell-in-ranges))
+                                  cell-in-range? (every? true? (map second cell-idxs+cell-in-ranges))]]
                         (loop [n 0
                                idx 0]
                           (if (= n k)
-                            idx
+                            [idx cell-in-range?]
                             (let [axis-idx (aget cell-idxs n)]
                               (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx)))))))
           axis-mask (kd/range-bitmask min-range max-range)
           acc (LongStream/builder)]
-      (loop [[cell-idx & cell-idxs] cell-idxs]
+      (loop [[[cell-idx cell-in-range?] & cell-idxs] cell-idxs]
         (if-not cell-idx
           (.build acc)
           (let [^long cell-idx cell-idx]
             (when-let [^FixedSizeListVector cell (.get cells cell-idx)]
               (let [access (KdTreeVectorPointAccess. cell k)
                     start-point-idx (bit-shift-left cell-idx cell-shift)]
-                (dotimes [m (.getValueCount cell)]
-                  (when (.isInRange access m min-range max-range axis-mask)
-                    (.add acc (+ start-point-idx m))))))
+                (if cell-in-range?
+                  (dotimes [m (.getValueCount cell)]
+                    (.add acc (+ start-point-idx m)))
+                  (dotimes [m (.getValueCount cell)]
+                    (when (.isInRange access m min-range max-range axis-mask)
+                      (.add acc (+ start-point-idx m)))))))
             (recur cell-idxs))))))
   (kd-tree-points [this]
     (.flatMap (LongStream/range 0 (.size cells))
