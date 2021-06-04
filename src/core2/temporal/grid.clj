@@ -410,7 +410,7 @@
 
 (declare ->simple-grid-point-access)
 
-(deftype SimpleGrid [^List scales ^List cells ^int k ^int axis-shift ^int cell-shift ^long total]
+(deftype SimpleGrid [^List scales ^longs mins ^longs maxs ^List cells ^int k ^int axis-shift ^int cell-shift ^long total]
   ISimpleGrid
   (cellIdx [_ point]
     (loop [n 0
@@ -436,12 +436,42 @@
           (.remove it))))
     this)
   (kd-tree-range-search [this min-range max-range]
-    (let [^IKdTreePointAccess access (kd/kd-tree-point-access this)
-          axis-mask (kd/range-bitmask min-range max-range)]
-      (.filter ^LongStream (kd/kd-tree-points this)
-               (reify LongPredicate
-                 (test [_ x]
-                   (.isInRange access x min-range max-range axis-mask))))))
+    (let [min-range (->longs min-range)
+          max-range (->longs max-range)
+          axis-cell-keys (for [n (range k)
+                               :let [x (aget min-range n)
+                                     y (aget max-range n)
+                                     min-v (aget mins n)
+                                     max-v (aget maxs n)]]
+                           (when-not (or (< max-v x) (> min-v y))
+                             (let [^longs axis-scale (.get scales n)
+                                   x-cell-axis-idx (Arrays/binarySearch axis-scale x)
+                                   ^long x-cell-axis-idx (if (neg? x-cell-axis-idx)
+                                                           (dec (- x-cell-axis-idx))
+                                                           x-cell-axis-idx)
+                                   y-cell-axis-idx (Arrays/binarySearch axis-scale y)
+                                   ^long y-cell-axis-idx (if (neg? y-cell-axis-idx)
+                                                           (dec (- y-cell-axis-idx))
+                                                           y-cell-axis-idx)]
+                               (range x-cell-axis-idx (inc y-cell-axis-idx)))))
+          cell-idxs (for [cell-key (distinct (cartesian-product axis-cell-keys))
+                          :when (= k (count cell-key))
+                          :let [cell-idx (.cellIdx this (->longs cell-key))]
+                          :when (< cell-idx (.size cells))]
+                      cell-idx)
+          ^IKdTreePointAccess access (kd/kd-tree-point-access this)
+          axis-mask (kd/range-bitmask min-range max-range)
+          acc (LongStream/builder)]
+      (loop [[^long cell-idx & cell-idxs] cell-idxs]
+        (if-not cell-idx
+          (.build acc)
+          (let [^List cell (.get cells cell-idx)
+                start-point-idx (bit-shift-left cell-idx cell-shift)]
+            (dotimes [n (.size cell)]
+              (let [idx (+ start-point-idx n)]
+                (when (.isInRange access idx min-range max-range axis-mask)
+                  (.add acc idx))))
+            (recur cell-idxs))))))
   (kd-tree-points [this]
     (reduce
      (fn [^LongStream acc ^LongStream x]
@@ -462,7 +492,7 @@
 (deftype SimpleGridPointAccess [^SimpleGrid grid ^int cell-shift ^int cell-mask]
   IKdTreePointAccess
   (getPoint [this idx]
-    (vec (.getArrayPoint this idx)))
+    (ArrayList. ^List (vec (.getArrayPoint this idx))))
   (getArrayPoint [this idx]
     (.get ^List (.get ^List (.cells grid) (BitUtil/unsignedBitShiftRight idx cell-shift))
           (bit-and idx cell-mask)))
@@ -511,12 +541,16 @@
        (let [p (->longs p)]
          (dotimes [n k]
            (.update ^IHistogram (.get histograms n) (aget p n)))))
-     (let [^List scales (vec (for [^IHistogram h histograms]
-                               (long-array (.uniform h cells-per-dimension))))
-           ^List cells (vec (repeatedly number-of-cells #(ArrayList.)))
-           grid (SimpleGrid. scales cells k axis-shift cell-shift total)]
-       (doseq [p points]
-         (let [p (->longs p)
-               cell-idx (.cellIdx grid p)]
-           (.add ^List (.get cells cell-idx) p)))
+     (let [scales (ArrayList. ^List (vec (for [^IHistogram h histograms]
+                                           (long-array (.uniform h cells-per-dimension)))))
+           mins (long-array (for [^IHistogram h histograms]
+                              (Math/floor (.getMin h))))
+           maxs (long-array (for [^IHistogram h histograms]
+                              (Math/ceil (.getMax h))))
+           cells (ArrayList. ^List (repeatedly number-of-cells #(ArrayList.)))
+           grid (SimpleGrid. scales mins maxs cells k axis-shift cell-shift total)]
+       (doseq [p points
+               :let [p (->longs p)
+                     cell-idx (.cellIdx grid p)]]
+         (.add ^List (.get cells cell-idx) p))
        grid))))
