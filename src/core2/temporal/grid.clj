@@ -10,7 +10,7 @@
            org.apache.arrow.vector.VectorSchemaRoot
            org.apache.arrow.vector.types.pojo.Field
            [java.util ArrayList Arrays List]
-           java.util.function.LongFunction
+           [java.util.function LongConsumer LongFunction]
            java.util.stream.LongStream
            java.io.Closeable))
 
@@ -24,8 +24,6 @@
 
 ;; Fix boxing inefficiencies in boundary generation and cartesian
 ;; product.
-
-;; Support points as kd tree idx stream.
 
 ;; Write cells to intermediate files and stitch them together as a
 ;; single Arrow IPC file, one cell per batch (including empty cells).
@@ -180,7 +178,9 @@
   (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points {:keys [max-histogram-bins ^long cell-size]
                                                                                :or {max-histogram-bins 16
                                                                                     cell-size 1024}}]
-   (let [total (count points)
+   (let [^long total (if (satisfies? kd/KdTree points)
+                       (kd/kd-tree-size points)
+                       (count points))
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
          cells-per-dimension (next-power-of-two (Math/ceil (Math/pow number-of-cells (/ 1 k))))
@@ -188,11 +188,18 @@
          number-of-cells (Math/ceil (Math/pow cells-per-dimension k))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          cell-shift (Long/bitCount (dec (bit-shift-left cell-size 12)))
-         ^List histograms (vec (repeatedly k #(hist/->histogram max-histogram-bins)))]
-     (doseq [p points]
-       (let [p (kd/->longs p)]
-         (dotimes [n k]
-           (.update ^IHistogram (.get histograms n) (aget p n)))))
+         ^List histograms (vec (repeatedly k #(hist/->histogram max-histogram-bins)))
+         update-histograms-fn (fn [^longs p]
+                                (dotimes [n k]
+                                  (.update ^IHistogram (.get histograms n) (aget p n))))]
+     (if (satisfies? kd/KdTree points)
+       (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
+         (.forEach ^LongStream (kd/kd-tree-points points)
+                   (reify LongConsumer
+                     (accept [_ x]
+                       (update-histograms-fn (.getArrayPoint access x))))))
+       (doseq [p points]
+         (update-histograms-fn (kd/->longs p))))
      (let [scales (object-array (for [^IHistogram h histograms]
                                   (long-array (.uniform h cells-per-dimension))))
            mins (long-array (for [^IHistogram h histograms]
@@ -201,14 +208,21 @@
                               (Math/ceil (.getMax h))))
            cells (object-array number-of-cells)
            grid (SimpleGrid. allocator scales mins maxs cells k axis-shift cell-shift total)
-           ^Field point-field (kd/->point-field k)]
-       (doseq [p points
-               :let [p (kd/->longs p)
-                     cell-idx (.cellIdx grid p)
-                     ^FixedSizeListVector cell (or (aget cells cell-idx)
-                                                   (doto (.createVector point-field allocator)
-                                                     (->> (aset cells cell-idx))))]]
-         (kd/write-point cell (KdTreeVectorPointAccess. cell k) p))
+           ^Field point-field (kd/->point-field k)
+           write-point-fn (fn [^longs p]
+                            (let [cell-idx (.cellIdx grid p)
+                                  ^FixedSizeListVector cell (or (aget cells cell-idx)
+                                                                (doto (.createVector point-field allocator)
+                                                                  (->> (aset cells cell-idx))))]
+                              (kd/write-point cell (KdTreeVectorPointAccess. cell k) p)))]
+       (if (satisfies? kd/KdTree points)
+         (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
+           (.forEach ^LongStream (kd/kd-tree-points points)
+                     (reify LongConsumer
+                       (accept [_ x]
+                         (write-point-fn (.getArrayPoint access x))))))
+         (doseq [p points]
+           (write-point-fn (kd/->longs p))))
        (doseq [cell cells
                :when cell]
          (kd/build-breadth-first-tree-in-place (VectorSchemaRoot/of (into-array [cell]))))
