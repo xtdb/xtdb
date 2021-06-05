@@ -184,5 +184,5 @@
                                 v (.getCount b)]]
                       (str (format "%10.4f"  k) "\t" (apply str (repeat (* 200 (double (/ v total))) "*")) "\n"))))))
 
-(defn ->histogram ^core2.temporal.grid.Histogram [^long max-bins]
+(defn ->histogram ^core2.temporal.histogram.Histogram [^long max-bins]
   (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
