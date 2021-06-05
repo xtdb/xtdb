@@ -39,6 +39,40 @@
           x (first colls)]
       (cons x more))))
 
+(defn- three-way-partition ^longs [^IKdTreePointAccess access ^long low ^long hi ^long axis]
+  (let [pivot (.getCoordinate access (quot (+ low hi) 2) axis)]
+    (loop [i (int low)
+           j (int low)
+           k (inc (int hi))]
+      (if (< j k)
+        (let [diff (Long/compare (.getCoordinate access j axis) pivot)]
+          (cond
+            (neg? diff)
+            (do (.swapPoint access i j)
+                (recur (inc i) (inc j) k))
+
+            (pos? diff)
+            (let [k (dec k)]
+              (.swapPoint access j k)
+              (recur i j k))
+
+            :else
+            (recur i (inc j) k)))
+        (doto (long-array 2)
+          (aset 0 i)
+          (aset 1 (dec k)))))))
+
+(defn- quick-sort [^IKdTreePointAccess access ^long low ^long hi ^long axis]
+  (when (< low hi)
+    (let [^longs left-right (three-way-partition access low hi axis)
+          left (dec (aget left-right 0))
+          right (inc (aget left-right 1))]
+      (if (< (- left low) (- hi right))
+        (do (quick-sort access low left axis)
+            (recur access right hi axis))
+        (do (quick-sort access right hi axis)
+            (recur access low left axis))))))
+
 (definterface ISimpleGrid
   (^int cellIdx [^longs point]))
 
@@ -223,7 +257,7 @@
                          (write-point-fn (.getArrayPoint access x))))))
          (doseq [p points]
            (write-point-fn (kd/->longs p))))
-       (doseq [cell cells
+       (doseq [^FixedSizeListVector cell cells
                :when cell]
-         (kd/build-breadth-first-tree-in-place (VectorSchemaRoot/of (into-array [cell]))))
+         (quick-sort (KdTreeVectorPointAccess. cell k) 0 (dec (.getValueCount cell)) (dec k)))
        grid))))
