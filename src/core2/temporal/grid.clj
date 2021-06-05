@@ -78,6 +78,26 @@
 
 (declare ->simple-grid-point-access)
 
+(defn- binary-search-axis ^long [^IKdTreePointAccess access ^long n ^long axis ^long x]
+  (let [n (int n)
+        axis (int axis)]
+    (loop [low (int 0)
+           hi n]
+      (if (and (<= low hi) (< low n))
+        (let [idx (quot (+ low hi) 2)
+              c (.getCoordinate access idx axis)
+              diff (Long/compare x c)]
+          (cond
+            (zero? diff)
+            idx
+
+            (pos? diff)
+            (recur (inc idx) hi)
+
+            (neg? diff)
+            (recur low (dec idx))))
+        (- (inc low))))))
+
 (deftype SimpleGrid [^BufferAllocator allocator
                      ^objects scales
                      ^longs mins
@@ -91,7 +111,7 @@
   (cellIdx [_ point]
     (loop [n 0
            idx 0]
-      (if (= n k)
+      (if (= n (dec k))
         idx
         (let [axis-idx (Arrays/binarySearch ^longs (aget scales n) (aget point n))
               ^long axis-idx (if (neg? axis-idx)
@@ -107,7 +127,8 @@
   (kd-tree-range-search [this min-range max-range]
     (let [min-range (kd/->longs min-range)
           max-range (kd/->longs max-range)
-          axis-cell-idxs (for [n (range k)
+          k-minus-one (dec k)
+          axis-cell-idxs (for [n (range k-minus-one)
                                :let [min-r (aget min-range n)
                                      max-r (aget max-range n)
                                      min-v (aget mins n)
@@ -117,27 +138,27 @@
                                      min-axis-idx (Arrays/binarySearch axis-scale min-r)
                                      min-axis-idx (if (neg? min-axis-idx)
                                                     (dec (- min-axis-idx))
-                                                    min-axis-idx)
+                                                    (long min-axis-idx))
                                      max-axis-idx (Arrays/binarySearch axis-scale max-r)
                                      max-axis-idx (if (neg? max-axis-idx)
-                                                    (- max-axis-idx)
-                                                    (inc max-axis-idx))]
-                               :when (not= min-axis-idx max-axis-idx)
-                               :let [r (range min-axis-idx max-axis-idx)]]
+                                                    (dec (- max-axis-idx))
+                                                    (long max-axis-idx))]
+                               :let [r (range min-axis-idx (inc max-axis-idx))]]
                            (-> (mapv vector r (repeat true))
                                (assoc-in [0 1] false)
                                (assoc-in [(dec (count r)) 1] false)))
-          cell-idxs (when (= k (count axis-cell-idxs))
+          cell-idxs (when (= k-minus-one (count axis-cell-idxs))
                       (for [cell-idxs+cell-in-ranges (cartesian-product axis-cell-idxs)
                             :let [cell-idxs (kd/->longs (map first cell-idxs+cell-in-ranges))
                                   cell-in-range? (every? true? (map second cell-idxs+cell-in-ranges))]]
                         (loop [n 0
                                idx 0]
-                          (if (= n k)
+                          (if (= n k-minus-one)
                             [idx cell-in-range?]
                             (let [axis-idx (aget cell-idxs n)]
                               (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx)))))))
           axis-mask (kd/range-bitmask min-range max-range)
+          partial-match-last-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask k-minus-one))
           acc (LongStream/builder)]
       (loop [[[cell-idx cell-in-range?] & cell-idxs] cell-idxs]
         (if-not cell-idx
@@ -145,13 +166,29 @@
           (let [^long cell-idx cell-idx]
             (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
               (let [access (KdTreeVectorPointAccess. cell k)
-                    start-point-idx (bit-shift-left cell-idx cell-shift)]
+                    start-point-idx (bit-shift-left cell-idx cell-shift)
+                    start-idx (if partial-match-last-axis?
+                                0
+                                (binary-search-axis access (.getValueCount cell) k-minus-one (aget min-range k-minus-one)))
+                    start-idx (if (neg? start-idx)
+                                (dec (- start-idx))
+                                start-idx)
+                    end-idx (if partial-match-last-axis?
+                              (long (.getValueCount cell))
+                              (binary-search-axis access (.getValueCount cell) k-minus-one (aget max-range k-minus-one)))
+                    end-idx (if (neg? end-idx)
+                              (- (- end-idx) 2)
+                              end-idx)]
                 (if cell-in-range?
-                  (dotimes [m (.getValueCount cell)]
-                    (.add acc (+ start-point-idx m)))
-                  (dotimes [m (.getValueCount cell)]
-                    (when (.isInRange access m min-range max-range axis-mask)
-                      (.add acc (+ start-point-idx m)))))))
+                  (loop [idx start-idx]
+                    (when (<= idx end-idx)
+                      (.add acc (+ start-point-idx idx))
+                      (recur (inc idx))))
+                  (loop [idx start-idx]
+                    (when (<= idx end-idx)
+                      (when (.isInRange access idx min-range max-range axis-mask)
+                        (.add acc (+ start-point-idx idx)))
+                      (recur (inc idx)))))))
             (recur cell-idxs))))))
   (kd-tree-points [this]
     (.flatMap (LongStream/range 0 (alength cells))
@@ -211,15 +248,16 @@
    (->simple-grid allocator k points {}))
   (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points {:keys [max-histogram-bins ^long cell-size]
                                                                                :or {max-histogram-bins 16
-                                                                                    cell-size 1024}}]
+                                                                                    cell-size (* 4 1024)}}]
    (let [^long total (if (satisfies? kd/KdTree points)
                        (kd/kd-tree-size points)
                        (count points))
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
-         cells-per-dimension (next-power-of-two (Math/ceil (Math/pow number-of-cells (/ 1 k))))
+         k-minus-one (dec k)
+         cells-per-dimension (next-power-of-two (Math/ceil (Math/pow number-of-cells (/ 1 k-minus-one))))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
-         number-of-cells (Math/ceil (Math/pow cells-per-dimension k))
+         number-of-cells (Math/ceil (Math/pow cells-per-dimension k-minus-one))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          cell-shift (Long/bitCount (dec (bit-shift-left cell-size 12)))
          ^List histograms (vec (repeatedly k #(hist/->histogram max-histogram-bins)))
@@ -259,5 +297,5 @@
            (write-point-fn (kd/->longs p))))
        (doseq [^FixedSizeListVector cell cells
                :when cell]
-         (quick-sort (KdTreeVectorPointAccess. cell k) 0 (dec (.getValueCount cell)) (dec k)))
+         (quick-sort (KdTreeVectorPointAccess. cell k) 0 (dec (.getValueCount cell)) k-minus-one))
        grid))))
