@@ -160,12 +160,10 @@
           axis-mask (kd/range-bitmask min-range max-range)
           partial-match-last-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask k-minus-one))
           acc (LongStream/builder)]
-      (loop [[[cell-idx cell-in-range?] & cell-idxs] cell-idxs]
-        (if-not cell-idx
-          (.build acc)
-          (let [^long cell-idx cell-idx]
-            (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
-              (let [access (KdTreeVectorPointAccess. cell k)
+      (doseq [[^long cell-idx cell-in-range?] cell-idxs
+              :let [^FixedSizeListVector cell (aget cells cell-idx)]
+              :when cell
+              :let [access (KdTreeVectorPointAccess. cell k)
                     start-point-idx (bit-shift-left cell-idx cell-shift)
                     start-idx (if partial-match-last-axis?
                                 0
@@ -178,18 +176,18 @@
                               (binary-search-axis access (.getValueCount cell) k-minus-one (aget max-range k-minus-one)))
                     end-idx (if (neg? end-idx)
                               (- (- end-idx) 2)
-                              end-idx)]
-                (if cell-in-range?
-                  (loop [idx start-idx]
-                    (when (<= idx end-idx)
-                      (.add acc (+ start-point-idx idx))
-                      (recur (inc idx))))
-                  (loop [idx start-idx]
-                    (when (<= idx end-idx)
-                      (when (.isInRange access idx min-range max-range axis-mask)
-                        (.add acc (+ start-point-idx idx)))
-                      (recur (inc idx)))))))
-            (recur cell-idxs))))))
+                              end-idx)]]
+        (if cell-in-range?
+          (loop [idx start-idx]
+            (when (<= idx end-idx)
+              (.add acc (+ start-point-idx idx))
+              (recur (inc idx))))
+          (loop [idx start-idx]
+            (when (<= idx end-idx)
+              (when (.isInRange access idx min-range max-range axis-mask)
+                (.add acc (+ start-point-idx idx)))
+              (recur (inc idx))))))
+      (.build acc)))
   (kd-tree-points [this]
     (.flatMap (LongStream/range 0 (alength cells))
               (reify LongFunction
