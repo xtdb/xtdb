@@ -189,7 +189,7 @@
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
          number-of-cells (Math/ceil (Math/pow cells-per-dimension k))
          axis-shift (Long/bitCount (dec cells-per-dimension))
-         cell-shift (Long/bitCount (dec (bit-shift-left cell-size 4)))
+         cell-shift (Long/bitCount (dec (bit-shift-left cell-size 12)))
          ^List histograms (vec (repeatedly k #(hist/->histogram max-histogram-bins)))]
      (doseq [p points]
        (let [p (kd/->longs p)]
