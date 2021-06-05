@@ -17,6 +17,23 @@
 ;; "Learning Multi-dimensional Indexes"
 ;; https://arxiv.org/pdf/1912.01668.pdf
 
+;; TODO:
+
+;; Try different data distributions in test.
+
+;; Sort cells by a dimension (last in paper) and leave it out from the
+;; grid. Can reuse variant of old quick select.
+
+;; Fix boxing inefficiencies in boundary generation and cartesian
+;; product.
+
+;; Support points as kd tree idx stream.
+
+;; Write cells to intermediate files and stitch them together as a
+;; single Arrow IPC file, one cell per batch (including empty cells).
+
+;; Split out multidimensional index protocols from kd-tree specifics.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (defn- cartesian-product [colls]
