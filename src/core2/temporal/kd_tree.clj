@@ -65,7 +65,7 @@
 
 (def ^:private ^Class longs-class (Class/forName "[J"))
 
-(defn- ->longs ^longs [xs]
+(defn ->longs ^longs [xs]
   (if (instance? longs-class xs)
     xs
     (long-array xs)))
