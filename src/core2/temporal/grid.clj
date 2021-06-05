@@ -19,8 +19,6 @@
 
 ;; TODO:
 
-;; Try different data distributions in test.
-
 ;; Sort cells by a dimension (last in paper) and leave it out from the
 ;; grid. Can reuse variant of old quick select.
 
