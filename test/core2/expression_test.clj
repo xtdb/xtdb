@@ -77,55 +77,68 @@
         (t/is (= 500 (select-column '(>= e ?e) "e" {'?e "0500"})))))))
 
 (t/deftest can-extract-min-max-range-from-expression
-  (t/is (= [[-9223372036854775808, -9223372036854775808, 1546300800000,
-             -9223372036854775808, -9223372036854775808, -9223372036854775808]
-            [9223372036854775807, 9223372036854775807, 9223372036854775807,
-             1546300799999, 9223372036854775807, 9223372036854775807]]
-           (map vec (expr.temp/->temporal-min-max-range
-                     {"_valid-time-start" '(<= _vt-time-start #inst "2019")
-                      "_valid-time-end" '(> _vt-time-end  #inst "2019")}
-                     {}))))
-
-  (t/testing "symbol column name"
-    (t/is (= [[-9223372036854775808, -9223372036854775808, 1546300800000,
-               -9223372036854775808, -9223372036854775808, -9223372036854775808]
-              [9223372036854775807, 9223372036854775807, 1546300800000,
-               9223372036854775807, 9223372036854775807, 9223372036854775807]]
+  (let [ms-2018 (.getTime #inst "2018")
+        ms-2019 (.getTime #inst "2019")
+        ms-2020 (.getTime #inst "2020")]
+    (t/is (= [[Long/MIN_VALUE, Long/MIN_VALUE,
+               ms-2019, Long/MIN_VALUE,
+               Long/MIN_VALUE, Long/MIN_VALUE]
+              [Long/MAX_VALUE, Long/MAX_VALUE,
+               Long/MAX_VALUE, (dec ms-2019),
+               Long/MAX_VALUE, Long/MAX_VALUE]]
              (map vec (expr.temp/->temporal-min-max-range
-                       {'_valid-time-start '(= _vt-time-start #inst "2019")}
-                       {})))))
+                       {"_valid-time-start" '(<= _vt-time-start #inst "2019")
+                        "_valid-time-end" '(> _vt-time-end  #inst "2019")}
+                       {}))))
 
-  (t/testing "conjunction"
-    (t/is (= [[-9223372036854775808, -9223372036854775808, 1577836800000
-               -9223372036854775808, -9223372036854775808, -9223372036854775808]
-              [9223372036854775807, 9223372036854775807, 9223372036854775807,
-               9223372036854775807, 9223372036854775807, 9223372036854775807]]
-             (map vec (expr.temp/->temporal-min-max-range
-                       {"_valid-time-start" '(and (>= #inst "2019" _vt-time-start)
-                                                  (>= #inst "2020" _vt-time-start))}
-                       {})))))
+    (t/testing "symbol column name"
+      (t/is (= [[Long/MIN_VALUE, Long/MIN_VALUE,
+                 ms-2019, Long/MIN_VALUE,
+                 Long/MIN_VALUE, Long/MIN_VALUE]
+                [Long/MAX_VALUE, Long/MAX_VALUE,
+                 ms-2019, Long/MAX_VALUE,
+                 Long/MAX_VALUE, Long/MAX_VALUE]]
+               (map vec (expr.temp/->temporal-min-max-range
+                         {'_valid-time-start '(= _vt-time-start #inst "2019")}
+                         {})))))
 
-  (t/testing "disjunction not supported"
-    (t/is (= [[-9223372036854775808, -9223372036854775808, -9223372036854775808,
-               -9223372036854775808, -9223372036854775808, -9223372036854775808]
-              [9223372036854775807, 9223372036854775807, 9223372036854775807,
-               9223372036854775807, 9223372036854775807, 9223372036854775807]]
-             (map vec (expr.temp/->temporal-min-max-range
-                       {"_valid-time-start" '(or (= _vt-time-start #inst "2019")
-                                                 (= _vt-time-start #inst "2020"))}
-                       {})))))
+    (t/testing "conjunction"
+      (t/is (= [[Long/MIN_VALUE, Long/MIN_VALUE,
+                 ms-2020, Long/MIN_VALUE,
+                 Long/MIN_VALUE, Long/MIN_VALUE]
+                [Long/MAX_VALUE, Long/MAX_VALUE,
+                 Long/MAX_VALUE, Long/MAX_VALUE,
+                 Long/MAX_VALUE, Long/MAX_VALUE]]
+               (map vec (expr.temp/->temporal-min-max-range
+                         {"_valid-time-start" '(and (>= #inst "2019" _vt-time-start)
+                                                    (>= #inst "2020" _vt-time-start))}
+                         {})))))
 
-  (t/testing "parameters"
-    (t/is (= [[-9223372036854775808, -9223372036854775808, -9223372036854775808,
-               1514764800001, 1546300800000, -9223372036854775808]
-              [9223372036854775807, 9223372036854775807, 1514764800000
-               9223372036854775807, 9223372036854775807, 1546300799999]]
-             (map vec (expr.temp/->temporal-min-max-range
-                       {"_tx-time-start" '(>= ?tt _tx-time-start)
-                        "_tx-time-end" '(< ?tt _tx-time-end)
-                        "_valid-time-start" '(<= ?vt _vt-time-start)
-                        "_valid-time-end" '(> ?vt _vt-time-end)}
-                       '{?tt #inst "2019" ?vt #inst "2018"}))))))
+    (t/testing "disjunction not supported"
+      (t/is (= [[Long/MIN_VALUE, Long/MIN_VALUE,
+                 Long/MIN_VALUE, Long/MIN_VALUE,
+                 Long/MIN_VALUE, Long/MIN_VALUE]
+                [Long/MAX_VALUE, Long/MAX_VALUE,
+                 Long/MAX_VALUE, Long/MAX_VALUE,
+                 Long/MAX_VALUE, Long/MAX_VALUE]]
+               (map vec (expr.temp/->temporal-min-max-range
+                         {"_valid-time-start" '(or (= _vt-time-start #inst "2019")
+                                                   (= _vt-time-start #inst "2020"))}
+                         {})))))
+
+    (t/testing "parameters"
+      (t/is (= [[Long/MIN_VALUE, Long/MIN_VALUE,
+                 Long/MIN_VALUE, (inc ms-2018),
+                 ms-2019, Long/MIN_VALUE]
+                [Long/MAX_VALUE, Long/MAX_VALUE,
+                 ms-2018, Long/MAX_VALUE,
+                 Long/MAX_VALUE, (dec ms-2019)]]
+               (map vec (expr.temp/->temporal-min-max-range
+                         {"_tx-time-start" '(>= ?tt _tx-time-start)
+                          "_tx-time-end" '(< ?tt _tx-time-end)
+                          "_valid-time-start" '(<= ?vt _vt-time-start)
+                          "_valid-time-end" '(> ?vt _vt-time-end)}
+                         '{?tt #inst "2019" ?vt #inst "2018"})))))))
 
 (t/deftest test-date-trunc
   (with-open [node (c2/start-node {})]
