@@ -13,16 +13,59 @@
 
 Main require: `[core2.core :as c2]`
 
+=== Transactions
 Transactions are slightly different to Classic:
 
 - `[:crux.tx/put <doc>]` -> `{:op :put, :doc <doc>}`. Put and delete supported thus far.
 - `:crux.db/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 
+=== DBs
 Core2 has the concept of 'db's, similar to `crux/open-db` but (as yet) without the ability to specify VT/TT.
+While there is `c2/await-tx-async` and `c2/open-db-async`, these (by their async nature) involve a bit of boilerplate.
+Instead, we have `with-db-async` and `with-db` (sync) macros, which combine awaiting a transaction, and opening/closing a DB:
 
-At the moment, the main query function is on the node itself, `plan-ra` taking a 'db' and a relational-algebra query plan.
-Have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
+[source,clojure]
+----
+;; simple case - use the latest tx the node has available:
+;; will return the result of the `with-db` block
+(c2/with-db [db node]
+  ...)
+
+;; or, to read your own writes (timeout optional):
+;; `with-db` will await the transaction
+(let [tx (c2/submit-tx node [...])]
+  (c2/with-db [db node {:tx tx, :timeout (Duration/ofMillis 250)}]
+    ...))
+
+;; in tests, we often inline `tx`:
+(c2/with-db [db node
+             {:tx (c2/submit-tx node [...])}]
+  ...)
+----
+
+`with-db-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the value returned from the block.
+(In fact, `with-db` just calls `with-db-async` and deref's it.)
+
+=== Queries
+In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-q`.
+This returns a reducible sequence that you can pass to (say) `reduce`, `into` or `run!`.
+When finalised (by `reduce`) this will ensure the query results are adequately closed.
+
+[source,clojure]
+----
+(with-open [node (c2/start-node {})]
+  (c2/with-db [db node]
+    (into [] (c2/plan-q '{:find [?e ?name]
+                          :where [[?e :name ?name]]}
+                        db))))
+----
+
+These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, although this is only because it's what was closest to what we had available at the time.
+
+Note the param order is query then database (different to Classic, same as other EDN Datalog databases) - this is because Core2 queries can accept multiple DBs.
+
+There is also `c2/plan-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
 
 [source,clojure]
 ----
