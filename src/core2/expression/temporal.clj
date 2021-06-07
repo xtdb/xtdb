@@ -92,14 +92,14 @@
                        (let [{:keys [f param]} x
                              time-ms (.getTime ^Date (get params param))]
                          (case f
-                           < (aset min-range range-idx (max (inc time-ms)
-                                                            (aget min-range range-idx)))
-                           <= (aset min-range range-idx (max time-ms
-                                                             (aget min-range range-idx)))
-                           > (aset max-range range-idx (min (dec time-ms)
+                           < (aset max-range range-idx (min (dec time-ms)
                                                             (aget max-range range-idx)))
-                           >= (aset max-range range-idx (min time-ms
+                           <= (aset max-range range-idx (min time-ms
                                                              (aget max-range range-idx)))
+                           > (aset min-range range-idx (max (inc time-ms)
+                                                            (aget min-range range-idx)))
+                           >= (aset min-range range-idx (max time-ms
+                                                             (aget min-range range-idx)))
                            nil)))
                      x))
                  meta-expr))
