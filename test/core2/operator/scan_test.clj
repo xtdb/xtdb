@@ -12,7 +12,7 @@
                                  {:op :put, :doc {:_id "foo", :col2 "baz2"}}])]
       (c2/with-db [db node {:tx tx}]
          (t/is (= [{:_id "bar", :col1 "bar1", :col2 "bar2"}]
-                  (into [] (c2/plan-q db '[:scan [_id col1 col2]]))))))))
+                  (into [] (c2/plan-ra '[:scan [_id col1 col2]] db))))))))
 
 (t/deftest multiple-sources
   (with-open [node1 (c2/start-node {})
@@ -22,7 +22,7 @@
       (c2/with-db [db1 node1 {:tx tx1}]
         (c2/with-db [db2 node2 {:tx tx2}]
           (t/is (= [{:_id "foo", :col1 "col1", :col2 "col2"}]
-                   (into [] (c2/plan-q {'$db1 db1, '$db2 db2}
-                                       '[:join {_id _id}
-                                         [:scan $db1 [_id col1]]
-                                         [:scan $db2 [_id col2]]])))))))))
+                   (into [] (c2/plan-ra '[:join {_id _id}
+                                          [:scan $db1 [_id col1]]
+                                          [:scan $db2 [_id col2]]]
+                                        {'$db1 db1, '$db2 db2})))))))))

@@ -12,4 +12,4 @@
       (let [tx (c2/submit-tx node [{:op :put, :doc {:_id "foo"}}])]
         (c2/with-db [db node {:tx tx}]
           (t/is (= [{:_id (Text. "foo")}]
-                   (into [] (c2/plan-q db '[:scan [_id]])))))))))
+                   (into [] (c2/plan-ra '[:scan [_id]] db)))))))))

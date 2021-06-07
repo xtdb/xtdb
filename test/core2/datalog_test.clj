@@ -1,6 +1,5 @@
 (ns core2.datalog-test
-  (:require [core2.datalog :as d]
-            [core2.james-bond :as bond]
+  (:require [core2.james-bond :as bond]
             [clojure.test :as t]
             [core2.test-util :as tu]
             [core2.core :as c2]))
@@ -8,8 +7,7 @@
 (t/use-fixtures :each tu/with-node)
 
 (defn run-query [query & args]
-  (let [[srcs lp-query] (apply d/compile-query query args)]
-    (into [] (c2/plan-q srcs lp-query))))
+  (into [] (apply c2/plan-q query args)))
 
 (def ivan+petr
   [{:op :put, :doc {:_id "ivan", :first-name "Ivan", :last-name "Ivanov"}}

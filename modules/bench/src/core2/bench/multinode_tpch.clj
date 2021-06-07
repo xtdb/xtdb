@@ -34,7 +34,7 @@
                           (log/info "awaiting" k "node")
                           (c2/with-db [db node {:tx last-tx, :timeout (Duration/ofHours 1)}]
                             (log/info "rows:"
-                                      (->> (c2/plan-q (merge {'$ db} (::tpch/params (meta query))) query)
+                                      (->> (c2/plan-ra query (merge {'$ db} (::tpch/params (meta query))))
                                            (sequence)
                                            (count)))))]
                   (doseq [[k node] {:primary primary-node

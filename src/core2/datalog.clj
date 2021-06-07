@@ -303,11 +303,12 @@
 (defn compile-query [query & args]
   (let [conformed-query (conform-query query)
         {:keys [srcs table-keys]} (compile-srcs conformed-query args)]
-    [srcs (-> (compile-where conformed-query {:table-keys table-keys})
-              (with-group-by conformed-query)
-              (with-order-by conformed-query)
-              (with-slice conformed-query)
-              (with-renamed-find-vars conformed-query))]))
+    [(-> (compile-where conformed-query {:table-keys table-keys})
+         (with-group-by conformed-query)
+         (with-order-by conformed-query)
+         (with-slice conformed-query)
+         (with-renamed-find-vars conformed-query))
+     srcs]))
 
 (comment
   (compile-query '{:find [?e1 ?e2 ?a1 ?a2]

@@ -7,7 +7,8 @@
             [core2.relation :as rel]
             [core2.system :as sys]
             core2.tx-producer
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.datalog :as d])
   (:import clojure.lang.IReduceInit
            [core2.data_source IDataSourceFactory QueryDataSource]
            [core2.indexer IChunkManager TransactionIndexer]
@@ -101,23 +102,27 @@
   [deps]
   (map->Node (assoc deps :!system (atom nil))))
 
-(defn open-q ^core2.ICursor [db-or-dbs query]
+(defn open-ra ^core2.ICursor [query db-or-dbs]
   (let [allocator (RootAllocator.)]
     (try
-      (-> (op/open-q allocator (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs}) query)
+      (-> (op/open-ra allocator query (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs}))
           (util/and-also-close allocator))
       (catch Throwable t
         (util/try-close allocator)
         (throw t)))))
 
-(defn plan-q [db-or-dbs query]
+(defn plan-ra [query db-or-dbs]
   (reify IReduceInit
     (reduce [_ f init]
-      (with-open [res (open-q db-or-dbs query)]
+      (with-open [res (open-ra query db-or-dbs)]
         (util/reduce-cursor (fn [acc rel]
                               (reduce f acc (rel/rel->rows rel)))
                             init
                             res)))))
+
+(defn plan-q [query & params]
+  (let [[query srcs] (apply d/compile-query query params)]
+    (plan-ra query srcs)))
 
 (defn ->allocator [_]
   (RootAllocator.))
