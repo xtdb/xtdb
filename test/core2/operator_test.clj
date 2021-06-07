@@ -110,7 +110,7 @@
                         (c2/plan-ra [:scan (into '[last-updated]
                                                   temporal-constraints)]
                                     {'$ db, '?tt1 tt1, '?tt2 tt2})))]
-          (t/is (= #{"tx1" "tx2"}
+          (t/is (= #{"tx2"}
                    (q)))
 
           (t/is (= #{"tx1"}

@@ -77,30 +77,35 @@
   {:code `(quot ~@emitted-args)
    :return-type Duration})
 
+(defn apply-constraint [^longs min-range ^longs max-range
+                        f col-name ^Date time]
+  (let [range-idx (temporal/->temporal-column-idx col-name)
+        time-ms (.getTime ^Date time)]
+    (case f
+      < (aset max-range range-idx (min (dec time-ms)
+                                       (aget max-range range-idx)))
+      <= (aset max-range range-idx (min time-ms
+                                        (aget max-range range-idx)))
+      > (aset min-range range-idx (max (inc time-ms)
+                                       (aget min-range range-idx)))
+      >= (aset min-range range-idx (max time-ms
+                                        (aget min-range range-idx)))
+      nil)))
+
 (defn ->temporal-min-max-range [selects srcs]
   (let [min-range (temporal/->min-range)
         max-range (temporal/->max-range)]
     (doseq [[col-name select-form] selects
             :when (temporal/temporal-column? col-name)
             :let [select-expr (expr/form->expr select-form srcs)
-                  range-idx (temporal/->temporal-column-idx col-name)
                   {:keys [expr param-types params]} (expr/normalise-params select-expr srcs)
                   meta-expr (@#'expr.meta/meta-expr expr param-types)]]
       (w/prewalk (fn [x]
                    (when-not (and (map? x) (= 'or (:f x)))
                      (when (and (map? x) (= :metadata-vp-call (:op x)))
-                       (let [{:keys [f param]} x
-                             time-ms (.getTime ^Date (get params param))]
-                         (case f
-                           < (aset max-range range-idx (min (dec time-ms)
-                                                            (aget max-range range-idx)))
-                           <= (aset max-range range-idx (min time-ms
-                                                             (aget max-range range-idx)))
-                           > (aset min-range range-idx (max (inc time-ms)
-                                                            (aget min-range range-idx)))
-                           >= (aset min-range range-idx (max time-ms
-                                                             (aget min-range range-idx)))
-                           nil)))
+                       (let [{:keys [f param]} x]
+                         (apply-constraint min-range max-range
+                                           f col-name (get params param))))
                      x))
                  meta-expr))
     [min-range max-range]))
