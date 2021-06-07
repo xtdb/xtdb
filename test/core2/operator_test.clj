@@ -95,6 +95,84 @@
                  (into #{} (c2/plan-q {'$ db, '?name "Ivan"}
                                       '[:scan [{name (= name ?name)}]]))))))))
 
+(t/deftest test-temporal-bounds
+  (with-open [node (c2/start-node {})]
+    (let [{tt1 :tx-time} @(c2/submit-tx node
+                                        [{:op :put, :doc {:_id "my-doc",
+                                                          :last-updated "tx1"}}])
+          _ (Thread/sleep 10) ; to prevent same-ms transactions
+          {tt2 :tx-time, :as tx2} @(c2/submit-tx node
+                                                 [{:op :put, :doc {:_id "my-doc",
+                                                                   :last-updated "tx2"}}])]
+      (c2/with-db [db node {:tx tx2}]
+        (letfn [(q [& temporal-constraints]
+                  (into #{} (map :last-updated)
+                        (c2/plan-q {'$ db, '?tt1 tt1, '?tt2 tt2}
+                                   [:scan (into '[last-updated]
+                                                 temporal-constraints)])))]
+          (t/is (= #{"tx1" "tx2"}
+                   (q)))
+
+          (t/is (= #{"tx1"}
+                   (q '{_tx-time-start (<= _tx-time-start ?tt1)})))
+
+          (t/is (= #{}
+                   (q '{_tx-time-start (< _tx-time-start ?tt1)})))
+
+          (t/is (= #{"tx1" "tx2"}
+                   (q '{_tx-time-start (<= _tx-time-start ?tt2)})))
+
+          (t/is (= #{"tx2"}
+                   (q '{_tx-time-start (> _tx-time-start ?tt1)})))
+
+
+          (t/is (= #{}
+                   (q '{_tx-time-end (< _tx-time-end ?tt2)})))
+
+          (t/is (= #{"tx1"}
+                   (q '{_tx-time-end (<= _tx-time-end ?tt2)})))
+
+          (t/is (= #{"tx2"}
+                   (q '{_tx-time-end (> _tx-time-end ?tt2)})))
+
+          (t/is (= #{"tx1" "tx2"}
+                   (q '{_tx-time-end (>= _tx-time-end ?tt2)})))
+
+          (t/testing "multiple constraints"
+            (t/is (= #{"tx1"}
+                     (q '{_tx-time-start (and (<= _tx-time-start ?tt1)
+                                              (<= _tx-time-start ?tt2))})))
+
+            (t/is (= #{"tx1"}
+                     (q '{_tx-time-start (and (<= _tx-time-start ?tt2)
+                                              (<= _tx-time-start ?tt1))})))
+
+            (t/is (= #{"tx2"}
+                     (q '{_tx-time-end (and (> _tx-time-end ?tt2)
+                                            (> _tx-time-end ?tt1))})))
+
+            (t/is (= #{"tx2"}
+                     (q '{_tx-time-end (and (> _tx-time-end ?tt1)
+                                            (> _tx-time-end ?tt2))}))))
+
+          (t/is (= #{}
+                   (q '{_tx-time-start (<= _tx-time-start ?tt1)}
+                      '{_tx-time-end (< _tx-time-end ?tt2)})))
+
+          (t/is (= #{"tx1"}
+                   (q '{_tx-time-start (<= _tx-time-start ?tt1)}
+                      '{_tx-time-end (<= _tx-time-end ?tt2)})))
+
+          (t/is (= #{"tx1"}
+                   (q '{_tx-time-start (<= _tx-time-start ?tt1)}
+                      '{_tx-time-end (> _tx-time-end ?tt1)}))
+                "as of tt1")
+
+          (t/is (= #{"tx2"}
+                   (q '{_tx-time-start (<= _tx-time-start ?tt2)}
+                      '{_tx-time-end (> _tx-time-end ?tt2)}))
+                "as of tt2"))))))
+
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"
     (with-open [fixpoint-cursor (c2/open-q {'table [{:a 0 :b 1}]}
