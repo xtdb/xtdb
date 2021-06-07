@@ -130,42 +130,48 @@
           max-range (kd/->longs max-range)
           k-minus-one (dec k)
           axis-mask (kd/range-bitmask min-range max-range)
-          axis-cell-idxs (for [^long n (range k-minus-one)
-                               :let [min-r (aget min-range n)
-                                     max-r (aget max-range n)
-                                     min-v (aget mins n)
-                                     max-v (aget maxs n)]
-                               :when (BitUtil/bitNot (or (< max-v min-r) (> min-v max-r)))
-                               :let [^longs axis-scale (aget scales n)
-                                     min-axis-idx (Arrays/binarySearch axis-scale min-r)
-                                     min-axis-idx (if (neg? min-axis-idx)
-                                                    (dec (- min-axis-idx))
-                                                    (long min-axis-idx))
-                                     max-axis-idx (Arrays/binarySearch axis-scale max-r)
-                                     max-axis-idx (if (neg? max-axis-idx)
-                                                    (dec (- max-axis-idx))
-                                                    (long max-axis-idx))]
-                               :let [r (range min-axis-idx (inc max-axis-idx))
-                                     cell-axis-mask (bit-and axis-mask (bit-shift-left 1 n))]]
-                           (-> (mapv vector r (repeat 0))
-                               (assoc-in [0 1] cell-axis-mask)
-                               (assoc-in [(dec (count r)) 1] cell-axis-mask)))
-          cell-idxs (when (= k-minus-one (count axis-cell-idxs))
-                      (for [cell-idxs+masks (cartesian-product axis-cell-idxs)
-                            :let [cell-idxs (kd/->longs (map first cell-idxs+masks))
-                                  cell-axis-mask (reduce bit-or (map second cell-idxs+masks))]]
-                        (loop [n 0
-                               idx 0]
-                          (if (= n k-minus-one)
-                            [idx cell-axis-mask]
-                            (let [axis-idx (aget cell-idxs n)]
-                              (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx)))))))
+          axis-idxs+masks (for [^long n (range k-minus-one)
+                                :let [min-r (aget min-range n)
+                                      max-r (aget max-range n)
+                                      min-v (aget mins n)
+                                      max-v (aget maxs n)]
+                                :when (BitUtil/bitNot (or (< max-v min-r) (> min-v max-r)))
+                                :let [^longs axis-scale (aget scales n)
+                                      min-axis-idx (Arrays/binarySearch axis-scale min-r)
+                                      min-axis-idx (if (neg? min-axis-idx)
+                                                     (dec (- min-axis-idx))
+                                                     (long min-axis-idx))
+                                      max-axis-idx (Arrays/binarySearch axis-scale max-r)
+                                      max-axis-idx (if (neg? max-axis-idx)
+                                                     (dec (- max-axis-idx))
+                                                     (long max-axis-idx))]
+                                :let [mask (bit-and axis-mask (bit-shift-left 1 n))
+                                      axis-idxs+masks (-> (LongStream/range min-axis-idx (inc max-axis-idx))
+                                                          (.mapToObj (reify LongFunction
+                                                                       (apply [_ x]
+                                                                         (doto (long-array 2)
+                                                                           (aset 0 x)))))
+                                                          (.toArray))]]
+                            (do (aset ^longs (aget axis-idxs+masks 0) 1 mask)
+                                (aset ^longs (aget axis-idxs+masks (dec (alength axis-idxs+masks))) 1 mask)
+                                axis-idxs+masks))
+          cell-idx+masks (when (= k-minus-one (count axis-idxs+masks))
+                           (for [axis-idxs+masks (cartesian-product axis-idxs+masks)]
+                             (reduce
+                              (fn [^longs acc ^longs axis-idx+mask]
+                                (doto acc
+                                  (aset 0 (bit-or (bit-shift-left (aget acc 0) axis-shift) (aget axis-idx+mask 0)))
+                                  (aset 1 (bit-or (aget acc 1) (aget axis-idx+mask 1)))))
+                              (long-array 2)
+                              axis-idxs+masks)))
           partial-match-last-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask k-minus-one))
           min-r (aget min-range k-minus-one)
           max-r (aget max-range k-minus-one)
           acc (LongStream/builder)]
-      (doseq [[^long cell-idx ^long cell-axis-mask] cell-idxs
-              :let [^FixedSizeListVector cell (aget cells cell-idx)]
+      (doseq [^longs cell-idx+mask cell-idx+masks
+              :let [cell-idx (aget cell-idx+mask 0)
+                    cell-axis-mask (aget cell-idx+mask 1)
+                    ^FixedSizeListVector cell (aget cells cell-idx)]
               :when cell
               :let [access (KdTreeVectorPointAccess. cell k)
                     access-fn (reify IntToLongFunction
