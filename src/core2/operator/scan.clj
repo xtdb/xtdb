@@ -81,8 +81,9 @@
       (let [res (HashMap.)
             ^BigIntVector row-id-vec (.getVector root 0)]
         (dotimes [idx (.getValueCount row-id-vec)]
-          (when (.contains row-id-bitmap (.get row-id-vec idx))
-            (.put res idx (inc ^long (.getOrDefault res idx 0)))))
+          (let [row-id (.get row-id-vec idx)]
+            (when (.contains row-id-bitmap row-id)
+              (.put res row-id (inc ^long (.getOrDefault res idx 0))))))
         res))))
 
 (defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
