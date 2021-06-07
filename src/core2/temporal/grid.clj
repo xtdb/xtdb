@@ -307,12 +307,13 @@
            (write-point-fn (kd/->longs p))))
        (dotimes [n number-of-cells]
          (when-let [^FixedSizeListVector cell (aget cells n)]
-           (let [min-r (aget mins k-minus-one)
-                 max-r (aget maxs k-minus-one)
-                 slope (double (/ (.getValueCount cell) (- max-r min-r)))
-                 base (- (* slope min-r))
-                 slope-idx (* 2 n)]
-             (aset k-minus-one-slope+base slope-idx slope)
-             (aset k-minus-one-slope+base (inc slope-idx) base))
-           (quick-sort (KdTreeVectorPointAccess. cell k) 0 (dec (.getValueCount cell)) k-minus-one)))
+           (let [access (KdTreeVectorPointAccess. cell k)]
+             (quick-sort access 0 (dec (.getValueCount cell)) k-minus-one)
+             (let [min-r (.getCoordinate access 0 k-minus-one)
+                   max-r (.getCoordinate access (dec (.getValueCount cell)) k-minus-one)
+                   slope (double (/ (.getValueCount cell) (- max-r min-r)))
+                   base (- (* slope min-r))
+                   slope-idx (* 2 n)]
+               (aset k-minus-one-slope+base slope-idx slope)
+               (aset k-minus-one-slope+base (inc slope-idx) base)))))
        grid))))
