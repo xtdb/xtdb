@@ -94,8 +94,16 @@
           (recur l r (BitUtil/unsignedBitShiftRight (+ l r) 1))))
       (dec r))))
 
-(definterface ISimpleGrid
-  (^int cellIdx [^longs point]))
+(defn- ->cell-idx ^long [^objects scales ^longs point ^long k-minus-one ^long axis-shift]
+  (loop [n 0
+         idx 0]
+    (if (= n k-minus-one)
+      idx
+      (let [axis-idx (Arrays/binarySearch ^longs (aget scales n) (aget point n))
+            ^long axis-idx (if (neg? axis-idx)
+                             (dec (- axis-idx))
+                             axis-idx)]
+        (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx))))))
 
 (declare ->simple-grid-point-access)
 
@@ -109,17 +117,6 @@
                      ^int axis-shift
                      ^int cell-shift
                      ^long total]
-  ISimpleGrid
-  (cellIdx [_ point]
-    (loop [n 0
-           idx 0]
-      (if (= n (dec k))
-        idx
-        (let [axis-idx (Arrays/binarySearch ^longs (aget scales n) (aget point n))
-              ^long axis-idx (if (neg? axis-idx)
-                               (dec (- axis-idx))
-                               axis-idx)]
-          (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx))))))
   kd/KdTree
   (kd-tree-insert [this allocator point]
     (throw (UnsupportedOperationException.)))
@@ -293,7 +290,7 @@
            grid (SimpleGrid. allocator scales mins maxs cells k-minus-one-slope+base k axis-shift cell-shift total)
            ^Field point-field (kd/->point-field k)
            write-point-fn (fn [^longs p]
-                            (let [cell-idx (.cellIdx grid p)
+                            (let [cell-idx (->cell-idx scales p k-minus-one axis-shift)
                                   ^FixedSizeListVector cell (or (aget cells cell-idx)
                                                                 (doto (.createVector point-field allocator)
                                                                   (->> (aset cells cell-idx))))]
