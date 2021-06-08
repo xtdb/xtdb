@@ -55,7 +55,7 @@
             qs 100
             next-long-fn (case d
                            :random #(.nextLong rng)
-                           :zipf (let [^LongSupplier z (->zipf-rejection-sampler rng ns 0.99)]
+                           :zipf (let [^LongSupplier z (->zipf-rejection-sampler rng ns 0.7)]
                                    #(* Long/MAX_VALUE (- (/ (.getAsLong ^LongSupplier z) ns) 0.5))))
             _ (prn :k k)
             _ (prn :distribution d)
@@ -70,8 +70,8 @@
             _ (prn :gen-queries qs)
             queries (time
                      (vec (for [n (range qs)
-                                :let [min+max-pairs (repeatedly k #(sort [(.nextLong rng)
-                                                                          (.nextLong rng)]))]]
+                                :let [min+max-pairs (repeatedly k #(sort [(next-long-fn)
+                                                                          (next-long-fn)]))]]
                             [n
                              (long-array (map first min+max-pairs))
                              (long-array (map second min+max-pairs))])))
