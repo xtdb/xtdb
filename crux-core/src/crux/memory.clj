@@ -5,10 +5,10 @@
             [crux.io :as cio]
             [taoensso.nippy :as nippy])
   (:import [java.io DataInputStream DataOutputStream]
+           java.nio.Buffer
            java.nio.ByteBuffer
-           java.util.Comparator
            java.util.function.Supplier
-           [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
            [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
            crux.ByteUtils))
@@ -71,7 +71,7 @@
       :else
       ;; TODO: This slice is safer if the byte buffer itself is used,
       ;; but slower.
-      (let [buffer (.slice ^ByteBuffer (.limit (.duplicate chunk) (+ offset size)))]
+      (let [buffer (.slice ^ByteBuffer (.limit ^Buffer (.duplicate chunk) (+ offset size)))]
         (.position chunk new-aligned-offset)
         (UnsafeBuffer. ^ByteBuffer buffer 0 size)))))
 
