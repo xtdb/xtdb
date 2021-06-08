@@ -15,28 +15,29 @@
   {:code `(and (< x-start y-end) (> x-end y-start))
    :return-type Boolean})
 
-(defmethod expr/codegen-call [:contains Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y :code} ] :args}]
-  {:code `(and (<= x-start y) (> x-end y))
+(defmethod expr/codegen-call [:contains Date Date Date] [{[{x-start :code} {x-end :code} {y :code}] :args}]
+  {:code `(let [y# ~y]
+            (and (<= ~x-start y#) (> ~x-end y#)))
    :return-type Boolean})
 
 (defmethod expr/codegen-call [:contains Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
-  {:code `(and (<= x-start y-start) (>= x-end y-end))
+  {:code `(and (<= ~x-start ~y-start) (>= ~x-end ~y-end))
    :return-type Boolean})
 
 (defmethod expr/codegen-call [:precedes Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
-  {:code `(<= x-end y-start)
+  {:code `(<= ~x-end ~y-start)
    :return-type Boolean})
 
 (defmethod expr/codegen-call [:succeeds Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
-  {:code `(>= x-start y-end)
+  {:code `(>= ~x-start ~y-end)
    :return-type Boolean})
 
 (defmethod expr/codegen-call [:immediately-precedes Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code}] :args}]
-  {:code `(= x-end y-start)
+  {:code `(= ~x-end ~y-start)
    :return-type Boolean})
 
 (defmethod expr/codegen-call [:immediately-succeeds Date Date Date Date] [{[{x-start :code} {x-end :code} {y-start :code}  {y-end :code} ] :args}]
-  {:code `(= x-start y-end)
+  {:code `(= ~x-start ~y-end)
    :return-type Boolean})
 
 ;; SQL:2011 Operations involving datetimes and intervals
