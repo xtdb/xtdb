@@ -246,9 +246,6 @@
         cell-mask (dec (bit-shift-left 1 cell-shift))]
     (SimpleGridPointAccess. (.cells grid) cell-shift cell-mask (.k grid))))
 
-(defn- next-power-of-two ^long [^long x]
-  (bit-shift-left 1 (inc (- (dec Long/SIZE) (Long/numberOfLeadingZeros (dec x))))))
-
 (defn ->simple-grid
   (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points]
    (->simple-grid allocator k points {}))
@@ -261,11 +258,10 @@
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
          k-minus-one (dec k)
-         cells-per-dimension (next-power-of-two (Math/ceil (Math/pow number-of-cells (/ 1 k-minus-one))))
+         cells-per-dimension (BitUtil/ceilPowerOfTwo (Math/ceil (Math/pow number-of-cells (/ 1 k-minus-one))))
          _ (assert (= 1 (Long/bitCount cells-per-dimension)))
          number-of-cells (Math/ceil (Math/pow cells-per-dimension k-minus-one))
          axis-shift (Long/bitCount (dec cells-per-dimension))
-         cell-shift (Long/bitCount (dec (bit-shift-left cell-size 12)))
          histogram-bins (min max-histogram-bins (* 2 cells-per-dimension))
          ^List histograms (vec (repeatedly k #(hist/->histogram histogram-bins)))
          update-histograms-fn (fn [^longs p]
@@ -287,7 +283,6 @@
                               (Math/ceil (.getMax h))))
            cells (object-array number-of-cells)
            k-minus-one-slope+base (double-array (* 2 number-of-cells))
-           grid (SimpleGrid. allocator scales mins maxs cells k-minus-one-slope+base k axis-shift cell-shift total)
            ^Field point-field (kd/->point-field k)
            write-point-fn (fn [^longs p]
                             (let [cell-idx (->cell-idx scales p k-minus-one axis-shift)
@@ -314,4 +309,8 @@
                    slope-idx (* 2 n)]
                (aset k-minus-one-slope+base slope-idx slope)
                (aset k-minus-one-slope+base (inc slope-idx) base)))))
-       grid))))
+       (let [max-cell-size (reduce max (for [^FixedSizeListVector cell cells
+                                             :when cell]
+                                         (.getValueCount cell)))
+             cell-shift (Long/bitCount (dec (BitUtil/ceilPowerOfTwo max-cell-size)))]
+         (SimpleGrid. allocator scales mins maxs cells k-minus-one-slope+base k axis-shift cell-shift total))))))

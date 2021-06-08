@@ -24,4 +24,8 @@ public final class BitUtil {
     public static int log2(final long x) {
         return (Long.SIZE - 1) - Long.numberOfLeadingZeros(x + 1);
     }
+
+    public static long ceilPowerOfTwo(final long x) {
+        return 1 << (1 + ((Long.SIZE - 1) - Long.numberOfLeadingZeros(x - 1)));
+    }
 }
