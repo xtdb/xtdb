@@ -3581,21 +3581,24 @@
 
 (t/deftest test-cardinality-join-slowdown
   (fix/transact! *api* (fix/people
-                        (for [n (range 1000)]
-                          {:crux.db/id (keyword (str "dummy-" n))
-                           :my-name (str n)})))
-
-  (fix/transact! *api* (fix/people
-                        (for [n (range 1000)]
-                          {:crux.db/id (keyword (str "ivan-" n))
-                           :my-name "Ivan"
-                           :my-number n})))
-
-  (fix/transact! *api* (fix/people
-                        (for [n (range 1000)]
-                          {:crux.db/id (keyword (str "oleg-" n))
-                           :my-name "Oleg"
-                           :my-number n})))
+                        (apply concat
+                               (for [n (range 1000)]
+                                 [{:crux.db/id (keyword (str "dummy-" n))
+                                   :my-name (str n)}
+                                  {:crux.db/id (keyword (str "ivan-" n))
+                                   :my-name "Ivan"
+                                   :my-number n}
+                                  {:crux.db/id (keyword (str "oleg-" n))
+                                   :my-name "Oleg"
+                                   :my-number n}
+                                  {:crux.db/id (keyword (str "dummy2-" n))
+                                   :my-name2 (str n)}
+                                  {:crux.db/id (keyword (str "ivan2-" n))
+                                   :my-name2 "Ivan"
+                                   :my-number2 n}
+                                  {:crux.db/id (keyword (str "oleg2-" n))
+                                   :my-name2 "Oleg"
+                                   :my-number2 n}]))))
 
   (t/testing "join order avoids cross product"
     (t/is (= '["Oleg" "Ivan" e1 n e2]
@@ -3607,9 +3610,8 @@
                                           [e1 :my-number n]
                                           [e2 :my-number n]]})))))
 
-  ;; Kept low due to caches intervening between the runs, actual
-  ;; failure is way beyond this limit.
-  (let [acceptable-limit-slowdown 0.25
+  ;; Problematic case is no longer problematic (and typically slightly faster!)
+  (let [acceptable-limit-slowdown 0.7
         problematic-ns-start (System/nanoTime)]
     (t/is (= 1000 (count (api/q (api/db *api*)
                                 '{:find [e1]
@@ -3622,10 +3624,10 @@
       (t/is (= 1000 (count (api/q (api/db *api*)
                                   '{:find [e1]
                                     :in [$ e2n]
-                                    :where [[e1 :my-name "Ivan"]
-                                            [e2 :my-name e2n]
-                                            [e1 :my-number n]
-                                            [e2 :my-number n]]}
+                                    :where [[e1 :my-name2 "Ivan"]
+                                            [e2 :my-name2 e2n]
+                                            [e1 :my-number2 n]
+                                            [e2 :my-number2 n]]}
                                   "Oleg"))))
       (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
             slowdown (double (/ (min problematic-ns workedaround-ns)
