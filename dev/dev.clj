@@ -70,4 +70,4 @@
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
       (c2/with-db [db node]
-        (time (into [] (c2/plan-q db @!q)))))))
+        (time (into [] (c2/plan-ra @!q db)))))))

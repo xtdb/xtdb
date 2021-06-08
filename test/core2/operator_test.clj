@@ -27,11 +27,11 @@
     (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
-                         (into #{} (c2/plan-q db '[:scan [{name (> name "Ivan")}]]))))
+                         (into #{} (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
 
                 (t/is (= expected
-                         (into #{} (c2/plan-q {'$ db, '?name "Ivan"}
-                                              '[:scan [{name (> name ?name)}]])))))]
+                         (into #{} (c2/plan-ra '[:scan [{name (> name ?name)}]]
+                                               {'$ db, '?name "Ivan"})))))]
 
         (c2/with-db [db node]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
@@ -89,11 +89,11 @@
                 "only needs to scan chunk 0, block 0"))
 
         (t/is (= #{{:name "Ivan"}}
-                 (into #{} (c2/plan-q db '[:scan [{name (= name "Ivan")}]]))))
+                 (into #{} (c2/plan-ra '[:scan [{name (= name "Ivan")}]] db))))
 
         (t/is (= #{{:name "Ivan"}}
-                 (into #{} (c2/plan-q {'$ db, '?name "Ivan"}
-                                      '[:scan [{name (= name ?name)}]]))))))))
+                 (into #{} (c2/plan-ra '[:scan [{name (= name ?name)}]]
+                                       {'$ db, '?name "Ivan"}))))))))
 
 (t/deftest test-temporal-bounds
   (with-open [node (c2/start-node {})]
@@ -107,10 +107,10 @@
       (c2/with-db [db node {:tx tx2}]
         (letfn [(q [& temporal-constraints]
                   (into #{} (map :last-updated)
-                        (c2/plan-q {'$ db, '?tt1 tt1, '?tt2 tt2}
-                                   [:scan (into '[last-updated]
-                                                 temporal-constraints)])))]
-          (t/is (= #{"tx1" "tx2"}
+                        (c2/plan-ra [:scan (into '[last-updated]
+                                                  temporal-constraints)]
+                                    {'$ db, '?tt1 tt1, '?tt2 tt2})))]
+          (t/is (= #{"tx2"}
                    (q)))
 
           (t/is (= #{"tx1"}
@@ -175,15 +175,15 @@
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"
-    (with-open [fixpoint-cursor (c2/open-q {'table [{:a 0 :b 1}]}
-                                           '[:fixpoint Fact
-                                             [:table table]
-                                             [:select
-                                              (<= a 8)
-                                              [:project
-                                               [{a (+ a 1)}
-                                                {b (* (+ a 1) b)}]
-                                               Fact]]])]
+    (with-open [fixpoint-cursor (c2/open-ra '[:fixpoint Fact
+                                              [:table $table]
+                                              [:select
+                                               (<= a 8)
+                                               [:project
+                                                [{a (+ a 1)}
+                                                 {b (* (+ a 1) b)}]
+                                                Fact]]]
+                                            {'$table [{:a 0 :b 1}]})]
       (t/is (= [[{:a 0, :b 1}]
                 [{:a 1, :b 1}]
                 [{:a 2, :b 2}]
@@ -196,16 +196,16 @@
                (tu/<-cursor fixpoint-cursor)))))
 
   (t/testing "transitive closure"
-    (with-open [fixpoint-cursor (c2/open-q {'table [{:x "a" :y "b"}
-                                                    {:x "b" :y "c"}
-                                                    {:x "c" :y "d"}
-                                                    {:x "d" :y "a"}]}
-                                           '[:fixpoint Path
-                                             [:table table]
-                                             [:project [x y]
-                                              [:join {z z}
-                                               [:rename {y z} Path]
-                                               [:rename {x z} Path]]]])]
+    (with-open [fixpoint-cursor (c2/open-ra '[:fixpoint Path
+                                              [:table $table]
+                                              [:project [x y]
+                                               [:join {z z}
+                                                [:rename {y z} Path]
+                                                [:rename {x z} Path]]]]
+                                            {'$table [{:x "a" :y "b"}
+                                                      {:x "b" :y "c"}
+                                                      {:x "c" :y "d"}
+                                                      {:x "d" :y "a"}]})]
 
       (t/is (= [[{:x "a", :y "b"}
                  {:x "b", :y "c"}
@@ -227,17 +227,17 @@
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
-           (into [] (c2/plan-q '{x [{:a 1}]
-                                 y [{:b 1}]}
-                               '[:assign [X [:table x]
-                                          Y [:table y]]
-                                 [:join {a b} X Y]]))))
+           (into [] (c2/plan-ra '[:assign [X [:table $x]
+                                           Y [:table $y]]
+                                  [:join {a b} X Y]]
+                                '{$x [{:a 1}]
+                                  $y [{:b 1}]}))))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
-             (into [] (c2/plan-q '{x [{:a 1}]
-                                   y [{:b 1}]}
-                                 '[:assign [X [:table x]
-                                            Y [:join {a b} X [:table y]]
-                                            X Y]
-                                   X]))))))
+             (into [] (c2/plan-ra '[:assign [X [:table $x]
+                                             Y [:join {a b} X [:table $y]]
+                                             X Y]
+                                    X]
+                                  '{$x [{:a 1}]
+                                    $y [{:b 1}]}))))))

@@ -8,7 +8,7 @@
   (tx/->TransactionInstant tx-id nil))
 
 (t/deftest test-await
-  (t/is (= (->tx 3)
+  (t/is (= (->tx 2)
            @(await/await-tx-async (->tx 2)
                                   (constantly (->tx 3))
                                   (PriorityBlockingQueue.)))

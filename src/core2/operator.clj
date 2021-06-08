@@ -262,8 +262,11 @@
         (let [inner-f (emit-op relation srcs)]
           (inner-f allocator))))))
 
-(defn open-q ^core2.ICursor [allocator srcs lp]
+(defn open-ra ^core2.ICursor [allocator lp srcs]
   (when-not (s/valid? ::lp/logical-plan lp)
-    (throw (IllegalArgumentException. (s/explain-str ::lp/logical-plan lp))))
+    (throw (err/illegal-arg :malformed-query
+                            {:plan lp
+                             :srcs srcs
+                             :explain (s/explain-data ::lp/logical-plan lp)})))
   (let [op-f (emit-op (s/conform ::lp/logical-plan lp) srcs)]
     (op-f allocator)))

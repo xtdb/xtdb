@@ -27,7 +27,7 @@
           (let [completed-tx (->latest-completed-tx)]
             (when (await-done? awaited-tx completed-tx)
               ;; fast path - don't bother with the PBQ unless we need to
-              (.complete fut completed-tx)
+              (.complete fut awaited-tx)
               true))
           (catch Exception e
             (.completeExceptionally fut (->ingester-ex e))
@@ -40,7 +40,7 @@
             (let [completed-tx (->latest-completed-tx)]
               (when (await-done? awaited-tx completed-tx)
                 (.remove awaiters awaiting-tx)
-                (.complete fut completed-tx)))
+                (.complete fut awaited-tx)))
             (catch Exception e
               (.completeExceptionally fut (->ingester-ex e))
               true))))
@@ -48,10 +48,11 @@
 
 (defn notify-tx [completed-tx ^PriorityBlockingQueue awaiters]
   (while (when-let [^AwaitingTx awaiting-tx (.peek awaiters)]
-           (when (await-done? (.tx awaiting-tx) completed-tx)
-             (.remove awaiters awaiting-tx)
-             (.complete ^CompletableFuture (.fut awaiting-tx) completed-tx)
-             true))))
+           (let [awaited-tx (.tx awaiting-tx)]
+             (when (await-done? awaited-tx completed-tx)
+               (.remove awaiters awaiting-tx)
+               (.complete ^CompletableFuture (.fut awaiting-tx) awaited-tx)
+               true)))))
 
 (defn notify-ex [^Exception ex ^PriorityBlockingQueue awaiters]
   ;; NOTE: by this point, any calls to `->latest-completed-tx` (above) must also throw this exception.

@@ -1,8 +1,11 @@
 (ns core2.data-source
   (:require [core2.operator.scan :as scan]
             [core2.system :as sys]
-            [core2.util :as util])
-  (:import java.io.Closeable))
+            core2.tx
+            [core2.util :as util]
+            [core2.expression.temporal :as expr.temp])
+  (:import core2.tx.TransactionInstant
+           java.io.Closeable))
 
 (definterface IQueryDataSource
   (^core2.ICursor scan [^java.util.List #_<String> colNames,
@@ -12,13 +15,24 @@
                         ^longs temporalMaxRange]))
 
 (definterface IDataSourceFactory
-  (^core2.data_source.IQueryDataSource openDataSource [^core2.tx.Watermark watermark]))
+  (^core2.data_source.IQueryDataSource openDataSource [^core2.tx.Watermark watermark
+                                                       ^core2.tx.TransactionInstant tx]))
 
-(deftype QueryDataSource [metadata-mgr temporal-mgr buffer-pool watermark]
+(deftype QueryDataSource [metadata-mgr temporal-mgr buffer-pool watermark ^TransactionInstant tx]
   IQueryDataSource
   (scan [_ col-names metadata-pred col-preds temporal-min-range temporal-max-range]
+    (when-let [tx-time (.tx-time tx)]
+      (expr.temp/apply-constraint temporal-min-range temporal-max-range
+                                  '<= "_tx-time-start" tx-time)
+
+      (when-not (or (contains? col-preds "_tx-time-start")
+                    (contains? col-preds "_tx-time-end"))
+        (expr.temp/apply-constraint temporal-min-range temporal-max-range
+                                    '> "_tx-time-end" tx-time)))
+
     (scan/->scan-cursor metadata-mgr temporal-mgr buffer-pool
-                        watermark col-names metadata-pred col-preds temporal-min-range temporal-max-range))
+                        watermark col-names metadata-pred col-preds
+                        temporal-min-range temporal-max-range))
 
   Closeable
   (close [_]
@@ -30,5 +44,5 @@
   [{:keys [metadata-mgr temporal-mgr buffer-pool]}]
   (reify
     IDataSourceFactory
-    (openDataSource [_ watermark]
-      (QueryDataSource. metadata-mgr temporal-mgr buffer-pool watermark))))
+    (openDataSource [_ watermark tx]
+      (QueryDataSource. metadata-mgr temporal-mgr buffer-pool watermark tx))))

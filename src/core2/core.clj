@@ -7,9 +7,10 @@
             [core2.relation :as rel]
             [core2.system :as sys]
             core2.tx-producer
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.datalog :as d])
   (:import clojure.lang.IReduceInit
-           [core2.data_source IDataSourceFactory QueryDataSource]
+           [core2.data_source IDataSourceFactory IQueryDataSource]
            [core2.indexer IChunkManager TransactionIndexer]
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
@@ -27,16 +28,16 @@
     ^java.util.concurrent.CompletableFuture #_<core2.tx.TransactionInstant> [node tx])
 
   (open-db-async
-    ^java.util.concurrent.CompletableFuture #_<core2.data_source.QueryDataSource> [node]
-    ^java.util.concurrent.CompletableFuture #_<core2.data_source.QueryDataSource> [node db-opts]))
+    ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node]
+    ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node db-opts]))
 
 (defn with-db-async* [node db-opts f]
   (-> (open-db-async node db-opts)
-      (util/then-apply (bound-fn [^QueryDataSource db]
+      (util/then-apply (bound-fn [^IQueryDataSource db]
                          (try
                            (f db)
                            (finally
-                             (.close db)))))))
+                             (util/try-close db)))))))
 
 (defmacro with-db-async [[db-binding node db-opts] & body]
   `(with-db-async* ~node ~db-opts (bound-fn [~db-binding] ~@body)))
@@ -63,7 +64,7 @@
   PNode
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
-  (await-tx-async [this tx]
+  (await-tx-async [_ tx]
     (-> (if-not (instance? CompletableFuture tx)
           (CompletableFuture/completedFuture tx)
           tx)
@@ -79,9 +80,11 @@
       (-> (if tx
             (-> (await-tx-async this tx)
                 (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))
-            (CompletableFuture/completedFuture nil))
-          (util/then-apply (fn [_]
-                             (.openDataSource data-source-factory (.getWatermark ^IChunkManager indexer)))))))
+            (CompletableFuture/completedFuture (latest-completed-tx this)))
+          (util/then-apply (fn [tx]
+                             (.openDataSource data-source-factory
+                                              (.getWatermark ^IChunkManager indexer)
+                                              tx))))))
 
   PSubmitNode
   (submit-tx [_ tx-ops]
@@ -101,23 +104,27 @@
   [deps]
   (map->Node (assoc deps :!system (atom nil))))
 
-(defn open-q ^core2.ICursor [db-or-dbs query]
+(defn open-ra ^core2.ICursor [query db-or-dbs]
   (let [allocator (RootAllocator.)]
     (try
-      (-> (op/open-q allocator (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs}) query)
+      (-> (op/open-ra allocator query (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs}))
           (util/and-also-close allocator))
       (catch Throwable t
         (util/try-close allocator)
         (throw t)))))
 
-(defn plan-q [db-or-dbs query]
+(defn plan-ra [query db-or-dbs]
   (reify IReduceInit
     (reduce [_ f init]
-      (with-open [res (open-q db-or-dbs query)]
+      (with-open [res (open-ra query db-or-dbs)]
         (util/reduce-cursor (fn [acc rel]
                               (reduce f acc (rel/rel->rows rel)))
                             init
                             res)))))
+
+(defn plan-q [query & params]
+  (let [[query srcs] (apply d/compile-query query params)]
+    (plan-ra query srcs)))
 
 (defn ->allocator [_]
   (RootAllocator.))
