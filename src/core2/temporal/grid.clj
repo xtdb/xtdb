@@ -259,7 +259,6 @@
          number-of-cells (Math/ceil (/ total cell-size))
          k-minus-one (dec k)
          cells-per-dimension (BitUtil/ceilPowerOfTwo (Math/ceil (Math/pow number-of-cells (/ 1 k-minus-one))))
-         _ (assert (= 1 (Long/bitCount cells-per-dimension)))
          number-of-cells (Math/ceil (Math/pow cells-per-dimension k-minus-one))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          histogram-bins (min max-histogram-bins (* 2 cells-per-dimension))
