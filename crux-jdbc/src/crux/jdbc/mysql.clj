@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS tx_events (
   compacted INTEGER NOT NULL)"])
 
       (when (idx-exists? ds "tx_events_event_key_idx")
-        (jdbc/execute! ds ["DROP INDEX tx_events_event_key_idx"]))
+        (jdbc/execute! ds ["DROP INDEX tx_events_event_key_idx ON tx_events"]))
 
       (when-not (idx-exists? ds "tx_events_event_key_idx_2")
         (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"]))
