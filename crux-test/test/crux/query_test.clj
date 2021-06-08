@@ -3894,11 +3894,16 @@
 
 (t/deftest in-selectivity-join-slowdown-1447
   (fix/transact! *api* (fix/people
-                        (for [n (range 1000)]
-                          {:crux.db/id (keyword (str "ivan-" n))
-                           :my-name "Ivan"
-                           :my-surname "Ivanov"
-                           :my-number n})))
+                        (apply concat
+                               (for [n (range 1000)]
+                                 [{:crux.db/id (keyword (str "ivan-" n))
+                                   :my-name "Ivan"
+                                   :my-surname "Ivanov"
+                                   :my-number n}
+                                  {:crux.db/id (keyword (str "ivan2-" n))
+                                   :my-name2 "Ivan"
+                                   :my-surname2 "Ivanov"
+                                   :my-number2 n}]))))
 
   (let [acceptable-limit-slowdown 0.7
         problematic-ns-start (System/nanoTime)]
@@ -3914,9 +3919,9 @@
       (t/is (= 4 (count (api/q (api/db *api*)
                                   '{:find [e1]
                                     :in [[n ...]]
-                                    :where [[e1 :my-name "Ivan"]
-                                            [e1 :my-surname "Ivanov"]
-                                            [e1 :my-number n]]}
+                                    :where [[e1 :my-name2 "Ivan"]
+                                            [e1 :my-surname2 "Ivanov"]
+                                            [e1 :my-number2 n]]}
                                   [20 40 60 80]))))
       (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
             slowdown (double (/ (min problematic-ns workedaround-ns)
