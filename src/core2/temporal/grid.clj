@@ -255,9 +255,9 @@
 (defn ->simple-grid
   (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points]
    (->simple-grid allocator k points {}))
-  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points {:keys [max-histogram-bins ^long cell-size]
-                                                                               :or {max-histogram-bins 16
-                                                                                    cell-size (* 4 1024)}}]
+  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points {:keys [^long max-histogram-bins ^long cell-size]
+                                                                               :or {max-histogram-bins 256
+                                                                                    cell-size (* 8 1024)}}]
    (let [^long total (if (satisfies? kd/KdTree points)
                        (kd/kd-tree-size points)
                        (count points))
@@ -269,7 +269,8 @@
          number-of-cells (Math/ceil (Math/pow cells-per-dimension k-minus-one))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          cell-shift (Long/bitCount (dec (bit-shift-left cell-size 12)))
-         ^List histograms (vec (repeatedly k #(hist/->histogram max-histogram-bins)))
+         histogram-bins (min max-histogram-bins (* 2 cells-per-dimension))
+         ^List histograms (vec (repeatedly k #(hist/->histogram histogram-bins)))
          update-histograms-fn (fn [^longs p]
                                 (dotimes [n k]
                                   (.update ^IHistogram (.get histograms n) (aget p n))))]
