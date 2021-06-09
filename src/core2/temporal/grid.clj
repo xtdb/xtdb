@@ -12,6 +12,7 @@
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.ipc.ArrowFileWriter
            org.apache.arrow.compression.CommonsCompressionFactory
+           java.util.concurrent.atomic.AtomicInteger
            [java.util ArrayList Arrays List]
            [java.util.function Function IntToLongFunction LongConsumer LongFunction]
            java.util.stream.LongStream
@@ -122,7 +123,8 @@
                      ^int axis-shift
                      ^int cell-shift
                      ^long size
-                     ^long value-count]
+                     ^long value-count
+                     ^AtomicInteger ref-cnt]
   kd/KdTree
   (kd-tree-insert [this allocator point]
     (throw (UnsupportedOperationException.)))
@@ -211,7 +213,11 @@
                       (LongStream/range start-point-idx (+ start-point-idx (.getValueCount cell))))
                     (LongStream/empty))))))
   (kd-tree-height [_] 1)
-  (kd-tree-retain [this _] this)
+  (kd-tree-retain [this _]
+    (when (zero? (.getAndIncrement ref-cnt))
+      (.set ref-cnt 0)
+      (throw (IllegalStateException. "grid closed")))
+    this)
   (kd-tree-point-access [this]
     (->simple-grid-point-access this))
   (kd-tree-size [_] size)
@@ -220,9 +226,10 @@
 
   Closeable
   (close [_]
-    (doseq [cell cells]
-      (util/try-close cell))
-    (util/try-close arrow-buf)))
+    (when (zero? (.decrementAndGet ref-cnt))
+      (doseq [cell cells]
+        (util/try-close cell))
+      (util/try-close arrow-buf))))
 
 (deftype SimpleGridPointAccess [^objects cells ^int cell-shift ^int cell-mask ^int k]
   IKdTreePointAccess
@@ -275,7 +282,8 @@
                axis-shift
                cell-shift
                size
-               value-count))
+               value-count
+               (AtomicInteger. 1)))
 
 (def ^:private ^:const point-vec-idx 0)
 
