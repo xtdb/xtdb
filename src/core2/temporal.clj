@@ -163,10 +163,10 @@
 
 (def ^:const ^int id-idx 0)
 (def ^:const ^int row-id-idx 1)
-(def ^:const ^int valid-time-start-idx 2)
-(def ^:const ^int valid-time-end-idx 3)
-(def ^:const ^int tx-time-start-idx 4)
-(def ^:const ^int tx-time-end-idx 5)
+(def ^:const ^int tx-time-start-idx 2)
+(def ^:const ^int tx-time-end-idx 3)
+(def ^:const ^int valid-time-start-idx 4)
+(def ^:const ^int valid-time-end-idx 5)
 
 (def ^:private column->idx {"_valid-time-start" valid-time-start-idx
                             "_valid-time-end" valid-time-end-idx
