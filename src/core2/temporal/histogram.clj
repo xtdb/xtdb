@@ -151,7 +151,7 @@
                                    idx)))
                    ^IBin kv1 (.get bins idx)
                    ^IBin kv2 (if (= idx last-idx)
-                               (Bin. 0 0)
+                               (Bin. max-v 0)
                                (.get bins (inc idx)))
                    k1 (.getValue kv1)
                    v1 (.getCount kv1)

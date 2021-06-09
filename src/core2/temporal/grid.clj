@@ -337,8 +337,9 @@
        (doseq [p points]
          (update-histograms-fn (kd/->longs p))))
      (try
-       (let [scales (object-array (for [^IHistogram h histograms]
-                                    (long-array (.uniform h cells-per-dimension))))
+       (let [scales (object-array (for [^IHistogram h histograms
+                                        :let [u (.uniform h cells-per-dimension)]]
+                                    (long-array (distinct u))))
              mins (long-array (for [^IHistogram h histograms]
                                 (Math/floor (.getMin h))))
              maxs (long-array (for [^IHistogram h histograms]
@@ -391,16 +392,16 @@
                                                :when cell-path]
                                            (quot (util/path-size cell-path) (* k Long/BYTES))))
                cell-shift (Long/bitCount (dec (BitUtil/ceilPowerOfTwo max-cell-size)))
-               grid-meta (json/write-str {:scales scales
-                                          :mins mins
-                                          :maxs maxs
-                                          :k-minus-one-slope+base k-minus-one-slope+base
-                                          :k k
-                                          :axis-shift axis-shift
-                                          :cell-shift cell-shift
-                                          :size total
-                                          :value-count (bit-shift-left (inc number-of-cells) cell-shift)})
-               schema (Schema. [(kd/->point-field k)] {"grid-meta" grid-meta})
+               grid-meta {:scales scales
+                          :mins mins
+                          :maxs maxs
+                          :k-minus-one-slope+base k-minus-one-slope+base
+                          :k k
+                          :axis-shift axis-shift
+                          :cell-shift cell-shift
+                          :size total
+                          :value-count (bit-shift-left (inc number-of-cells) cell-shift)}
+               schema (Schema. [(kd/->point-field k)] {"grid-meta" (json/write-str grid-meta)})
                buf (long-array k)]
            (with-open [root (VectorSchemaRoot/create schema allocator)
                        ch (util/->file-channel path util/write-new-file-opts)
