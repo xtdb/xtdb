@@ -3,7 +3,8 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [core2.error :as err]
-            [core2.logical-plan :as lp])
+            [core2.logical-plan :as lp]
+            [core2.expression :as expr])
   (:import clojure.lang.MapEntry))
 
 (s/def ::logic-var
@@ -59,7 +60,19 @@
                         (-> triple (update :src (some-fn identity (constantly '$)))))
                       identity)))
 
-(s/def ::where (s/coll-of ::triple))
+(s/def ::predicate
+  (s/and vector?
+         (-> (s/cat :application
+                    (s/spec (-> (s/cat :f simple-symbol?
+                                       :args (s/* (s/nonconforming (s/or :logic-var ::logic-var
+                                                                         :value ::value))))
+                                (s/nonconforming))))
+             (s/nonconforming))
+         (s/conformer first vector)))
+
+(s/def ::where
+  (s/coll-of (s/or :triple ::triple
+                   :predicate ::predicate)))
 
 (s/def ::offset nat-int?)
 (s/def ::limit nat-int?)
@@ -233,41 +246,56 @@
             expr
             table-keys)))
 
-(defn- compile-where [{find-args :find, in-bindings :in, where-clauses :where} {:keys [table-keys]}]
+(defn- compile-triples [triples {find-args :find, in-bindings :in} {:keys [table-keys]}]
   (let [find-vars (into #{} (map find-arg-var) find-args)
         in-scalars (into #{} (mapcat in-scalar-vars) in-bindings)
         xform->lvs (keep (fn [[var-type var-arg]]
                            (when (= :logic-var var-type)
                              var-arg)))
-        v-vars (into #{} (comp (map :v) xform->lvs) where-clauses)
-        eid-srcs (->> (for [{[eid-type eid-arg] :e, :keys [src]} where-clauses
+        v-vars (into #{} (comp (map :v) xform->lvs) triples)
+        eid-srcs (->> (for [{[eid-type eid-arg] :e, :keys [src]} triples
                             :when (= eid-type :logic-var)]
                         (MapEntry/create eid-arg src))
                       (reduce (fn [acc [eid src]]
                                 (-> acc (update eid (fnil conj #{}) src)))
                               {}))]
-    (loop [[clause & more-clauses] where-clauses
+    (loop [[triple & more-triples] triples
            left-expr nil
            table-keys table-keys]
       (let [[left-expr table-keys] (join-tables left-expr table-keys)]
-        (if-not clause
+        (if-not triple
           (or (cross-join-tables left-expr table-keys)
               (throw (err/illegal-arg :no-clauses-available-to-query
                                       {::err/message "no clauses available to query"})))
 
-          (let [same-src+entity? (comp #{[(:src clause) (:e clause)]} (juxt :src :e))
-                clauses (cons clause (filter same-src+entity? more-clauses))
+          (let [same-src+entity? (comp #{[(:src triple) (:e triple)]} (juxt :src :e))
+                clauses (cons triple (filter same-src+entity? more-triples))
                 right-expr (->rel-expr clauses
                                        {:in-scalars in-scalars
                                         :find-vars find-vars
                                         :v-vars v-vars
                                         :eid-srcs eid-srcs})]
 
-            (recur (remove same-src+entity? more-clauses)
+            (recur (remove same-src+entity? more-triples)
                    (if left-expr
                      (join-exprs left-expr right-expr)
                      right-expr)
                    table-keys)))))))
+
+(defn wrap-predicates [plan predicates]
+  (case (count predicates)
+    0 plan
+    1 [:select (first predicates) plan]
+    [:select (list* 'and predicates) plan]))
+
+(defn compile-where [{where-clauses :where, :as query} {:keys [table-keys]}]
+  (let [{triples :triple,
+         predicates :predicate} (->> where-clauses
+                                     (reduce (fn [acc [clause-type clause-arg]]
+                                               (update acc clause-type (fnil conj []) clause-arg))
+                                             {}))]
+    (-> (compile-triples triples query {:table-keys table-keys})
+        (wrap-predicates predicates))))
 
 (defn- with-group-by [plan {find-args :find}]
   (if (every? (comp #{:logic-var} first) find-args)

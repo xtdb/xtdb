@@ -311,3 +311,32 @@
                              :in [[[?first-name ?last-name]]]}
                            [["Ivan" "Ivanov"]
                             ["Petr" "Petrov"]])))))
+
+(t/deftest test-known-predicates
+  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+    (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
+             (set (run-query '{:find [?first-name ?last-name]
+                               :where [[?e :first-name ?first-name]
+                                       [?e :last-name ?last-name]
+                                       [(< ?first-name "James")]]}
+                             db))))
+
+    (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
+             (set (run-query '{:find [?first-name ?last-name]
+                               :where [[?e :first-name ?first-name]
+                                       [?e :last-name ?last-name]
+                                       [(<= ?first-name "Ivan")]]}
+                             db))))
+
+    (t/is (empty? (run-query '{:find [?first-name ?last-name]
+                               :where [[?e :first-name ?first-name]
+                                       [?e :last-name ?last-name]
+                                       [(<= ?first-name "Ivan")]
+                                       [(> ?last-name "Ivanov")]]}
+                             db)))
+
+    (t/is (empty? (run-query '{:find [?first-name ?last-name]
+                               :where [[?e :first-name ?first-name]
+                                       [?e :last-name ?last-name]
+                                       [(< ?first-name "Ivan")]]}
+                             db)))))
