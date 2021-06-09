@@ -254,6 +254,7 @@
                 op (aget op-type-ids op-type-id)
                 ^TemporalCoordinates temporal-coordinates (temporal/row-id->coordinates row-id)]
             (set! (.txTimeStart temporal-coordinates) tx-time-ms)
+            (set! (.validTimeStart temporal-coordinates) tx-time-ms)
             (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
