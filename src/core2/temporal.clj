@@ -2,6 +2,7 @@
   (:require [core2.metadata :as meta]
             core2.object-store
             [core2.system :as sys]
+            [core2.temporal.grid :as grid]
             [core2.temporal.kd-tree :as kd]
             core2.tx
             [core2.types :as t]
@@ -241,8 +242,7 @@
       (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
         (set! (.kd-tree this) (kd/->merged-kd-tree
                                (.buildStaticTree this
-                                                 (kd/->arrow-buf-kd-tree temporal-buffer {:block-cache-size block-cache-size
-                                                                                          :deletes? false})
+                                                 (grid/->arrow-buf-grid temporal-buffer)
                                                  chunk-idx
                                                  snapshot-idx)
                                nil))
@@ -281,15 +281,15 @@
         (if snapshot-idx
           (let [^ArrowBuf temporal-buffer @(.getBuffer buffer-pool (->temporal-snapshot-obj-key snapshot-idx))]
             (with-open [kd-tree (.buildStaticTree this
-                                                  (kd/->arrow-buf-kd-tree temporal-buffer {:deletes? false})
+                                                  (grid/->arrow-buf-grid temporal-buffer)
                                                   chunk-idx
                                                   snapshot-idx)]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-temporal-index?})
+              (let [temporal-buf (-> (grid/->disk-grid allocator path kd-tree {:k k})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf))))
           (when-let [kd-tree (.buildStaticTree this nil chunk-idx snapshot-idx)]
             (with-open [^Closeable kd-tree kd-tree]
-              (let [temporal-buf (-> (kd/->disk-kd-tree allocator path kd-tree {:k k :compress-blocks? compress-temporal-index?})
+              (let [temporal-buf (-> (grid/->disk-grid allocator path kd-tree {:k k})
                                      (util/->mmap-path))]
                 @(.putObject object-store new-snapshot-obj-key temporal-buf)))))
         (finally
