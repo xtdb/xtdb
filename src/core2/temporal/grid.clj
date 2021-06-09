@@ -121,7 +121,8 @@
                      ^int k
                      ^int axis-shift
                      ^int cell-shift
-                     ^long total]
+                     ^long size
+                     ^long value-count]
   kd/KdTree
   (kd-tree-insert [this allocator point]
     (throw (UnsupportedOperationException.)))
@@ -213,8 +214,8 @@
   (kd-tree-retain [this _] this)
   (kd-tree-point-access [this]
     (->simple-grid-point-access this))
-  (kd-tree-size [_] total)
-  (kd-tree-value-count [_] total)
+  (kd-tree-size [_] size)
+  (kd-tree-value-count [_] value-count)
   (kd-tree-dimensions [_] k)
 
   Closeable
@@ -262,7 +263,8 @@
                                            k
                                            axis-shift
                                            cell-shift
-                                           total]}]
+                                           size
+                                           value-count]}]
   (SimpleGrid. arrow-buf
                (object-array (map long-array scales))
                (long-array mins)
@@ -272,7 +274,8 @@
                k
                axis-shift
                cell-shift
-               total))
+               size
+               value-count))
 
 (def ^:private ^:const point-vec-idx 0)
 
@@ -308,7 +311,7 @@
          number-of-cells (Math/ceil (/ total cell-size))
          k-minus-one (dec k)
          cells-per-dimension (BitUtil/ceilPowerOfTwo (Math/ceil (Math/pow number-of-cells (/ 1 k-minus-one))))
-         number-of-cells (Math/ceil (Math/pow cells-per-dimension k-minus-one))
+         number-of-cells (long (Math/ceil (Math/pow cells-per-dimension k-minus-one)))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          histogram-bins (min max-histogram-bins (* 2 cells-per-dimension))
          ^List histograms (vec (repeatedly k #(hist/->histogram histogram-bins)))
@@ -368,7 +371,10 @@
              (let [min-r (aget k-minus-one-mins n)
                    max-r (aget k-minus-one-maxs n)
                    value-count (quot (util/path-size cell-path) k)
-                   slope (double (/ value-count (- max-r min-r)))
+                   diff (- max-r min-r)
+                   slope (if (zero? diff)
+                           0.0
+                           (double (/ value-count diff)))
                    base (- (* slope min-r))
                    slope-idx (* 2 n)]
                (aset k-minus-one-slope+base slope-idx slope)
@@ -384,7 +390,8 @@
                                           :k k
                                           :axis-shift axis-shift
                                           :cell-shift cell-shift
-                                          :total total})
+                                          :size total
+                                          :value-count (bit-shift-left (inc number-of-cells) cell-shift)})
                schema (Schema. [(kd/->point-field k)] {"grid-meta" grid-meta})
                buf (long-array k)]
            (with-open [root (VectorSchemaRoot/create schema allocator)
