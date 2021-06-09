@@ -315,7 +315,7 @@
          update-histograms-fn (fn [^longs p]
                                 (dotimes [n k]
                                   (.update ^IHistogram (.get histograms n) (aget p n))))
-         cells (object-array number-of-cells)
+         cell-outs (object-array number-of-cells)
          cell-paths (object-array number-of-cells)]
      (if (satisfies? kd/KdTree points)
        (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
@@ -337,14 +337,14 @@
              k-minus-one-slope+base (double-array (* 2 number-of-cells))
              write-point-fn (fn [^longs p]
                               (let [cell-idx (->cell-idx scales p k-minus-one axis-shift)
-                                    ^DataOutputStream out (or (aget cells cell-idx)
+                                    ^DataOutputStream out (or (aget cell-outs cell-idx)
                                                               (let [f (str "." (.getFileName path) (format "_cell_%016x.raw" cell-idx))
                                                                     cell-path (.resolveSibling path f)]
                                                                 (aset cell-paths cell-idx cell-path)
                                                                 (let [file-ch (util/->file-channel cell-path util/write-new-file-opts)]
                                                                   (try
                                                                     (doto (DataOutputStream. (BufferedOutputStream. (Channels/newOutputStream file-ch)))
-                                                                      (->> (aset cells cell-idx)))
+                                                                      (->> (aset cell-outs cell-idx)))
                                                                     (catch Exception e
                                                                       (util/try-close file-ch)
                                                                       (throw e))))))]
@@ -363,7 +363,7 @@
            (doseq [p points]
              (write-point-fn (kd/->longs p))))
          (dotimes [n number-of-cells]
-           (util/try-close (aget cells n))
+           (util/try-close (aget cell-outs n))
            (when-let [^Path cell-path (aget cell-paths n)]
              (let [min-r (aget k-minus-one-mins n)
                    max-r (aget k-minus-one-maxs n)
@@ -407,7 +407,7 @@
                  (.writeBatch out))))))
        path
        (finally
-         (doseq [cell cells]
+         (doseq [cell cell-outs]
            (util/try-close cell))
          (doseq [cell-path cell-paths
                  :when cell-path]
