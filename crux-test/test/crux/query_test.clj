@@ -3928,17 +3928,15 @@
                                 (max problematic-ns workedaround-ns)))]
         (t/is (>= slowdown acceptable-limit-slowdown))))))
 
-(defn static-ivan-pred [v]
-  [[:ivan]])
-
 (t/deftest circular-deps-test-1523
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :surname "Evans"}]])
 
   (with-open [db (api/open-db *api*)]
     #_ ; FIXME
     (t/is (= :fixme-expected
-             (api/q db '{:find  [?b-name]
-                         :where [#_[?a :name ?a-name] ; error appears when uncommenting this
+             (api/q db '{:find  [?b]
+                         :where [#_[?a :name] ; error appears when uncommenting this
                                  [?a :surname ?lastname]
-                                 [(crux.query-test/static-ivan-pred ?lastname) [[?b]]]
-                                 [?b :name ?b-name]]})))))
+                                 [(identity ?lastname) ?b]
+                                 [?b :any-att] ; error then disappears when commenting this
+                                 ]})))))
