@@ -91,7 +91,9 @@
         (prn :average-match-ratio (double (/ (/ (reduce + (vals query->count)) qs) ns)))
 
         (prn :build-simple-grid)
-        (with-open [^SimpleGrid simple-grid (time (grid/->simple-grid allocator k points))]
+        (with-open [^SimpleGrid simple-grid (time
+                                             (->> (grid/->disk-grid allocator (.resolve test-dir (format "grid_%d.arrow" k)) points {:k k})
+                                                  (grid/->mmap-grid allocator)))]
           (prn :range-queries-simple-grid qs)
           (dotimes [_ ts]
             (time

@@ -1,18 +1,23 @@
 (ns core2.temporal.grid
-  (:require [core2.util :as util]
+  (:require [clojure.data.json :as json]
+            [core2.util :as util]
             [core2.temporal.kd-tree :as kd]
             [core2.temporal.histogram :as hist])
   (:import [core2.temporal.kd_tree IKdTreePointAccess KdTreeVectorPointAccess]
            core2.temporal.histogram.IHistogram
            core2.BitUtil
-           org.apache.arrow.memory.BufferAllocator
+           [org.apache.arrow.memory ArrowBuf BufferAllocator]
            org.apache.arrow.vector.complex.FixedSizeListVector
-           org.apache.arrow.vector.VectorSchemaRoot
-           org.apache.arrow.vector.types.pojo.Field
+           [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
+           org.apache.arrow.vector.types.pojo.Schema
+           org.apache.arrow.vector.ipc.ArrowFileWriter
+           org.apache.arrow.compression.CommonsCompressionFactory
            [java.util ArrayList Arrays List]
-           [java.util.function IntToLongFunction LongConsumer LongFunction]
+           [java.util.function Function IntToLongFunction LongConsumer LongFunction]
            java.util.stream.LongStream
-           java.io.Closeable))
+           [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream]
+           [java.nio.channels Channels FileChannel]
+           java.nio.file.Path))
 
 ;; "Learning Multi-dimensional Indexes"
 ;; https://arxiv.org/pdf/1912.01668.pdf
@@ -107,7 +112,7 @@
 
 (declare ->simple-grid-point-access)
 
-(deftype SimpleGrid [^BufferAllocator allocator
+(deftype SimpleGrid [^ArrowBuf arrow-buf
                      ^objects scales
                      ^longs mins
                      ^longs maxs
@@ -215,7 +220,8 @@
   Closeable
   (close [_]
     (doseq [cell cells]
-      (util/try-close cell))))
+      (util/try-close cell))
+    (util/try-close arrow-buf)))
 
 (deftype SimpleGridPointAccess [^objects cells ^int cell-shift ^int cell-mask ^int k]
   IKdTreePointAccess
@@ -246,12 +252,55 @@
         cell-mask (dec (bit-shift-left 1 cell-shift))]
     (SimpleGridPointAccess. (.cells grid) cell-shift cell-mask (.k grid))))
 
-(defn ->simple-grid
-  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points]
-   (->simple-grid allocator k points {}))
-  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^long k points {:keys [^long max-histogram-bins ^long cell-size]
-                                                                               :or {max-histogram-bins 256
-                                                                                    cell-size (* 8 1024)}}]
+(defn- ->grid-meta-json->simple-grid
+  ^core2.temporal.grid.SimpleGrid [arrow-buf
+                                   cells
+                                   {:keys [scales
+                                           mins
+                                           maxs
+                                           k-minus-one-slope+base
+                                           k
+                                           axis-shift
+                                           cell-shift
+                                           total]}]
+  (SimpleGrid. arrow-buf
+               (object-array (map long-array scales))
+               (long-array mins)
+               (long-array maxs)
+               cells
+               (double-array k-minus-one-slope+base)
+               k
+               axis-shift
+               cell-shift
+               total))
+
+(def ^:private ^:const point-vec-idx 0)
+
+(defn ->arrow-buf-grid ^core2.temporal.grid.SimpleGrid [^ArrowBuf arrow-buf]
+  (let [footer (util/read-arrow-footer arrow-buf)
+        schema (.getSchema footer)
+        grid-meta (json/read-str (get (.getCustomMetadata schema) "grid-meta") :key-fn keyword)
+        allocator (.getAllocator (.getReferenceManager arrow-buf))
+        cells (object-array
+               (for [block (.getRecordBatches footer)]
+                 (with-open [arrow-record-batch (util/->arrow-record-batch-view block arrow-buf)
+                             root (VectorSchemaRoot/create schema allocator)]
+                   (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
+                   (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
+                             (.transfer))))))]
+    (->grid-meta-json->simple-grid arrow-buf cells grid-meta)))
+
+(defn ->mmap-grid ^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path]
+  (let [nio-buffer (util/->mmap-path path)
+        arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
+    (->arrow-buf-grid arrow-buf)))
+
+(defn ->disk-grid
+  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path points {:keys [^long max-histogram-bins ^long cell-size ^long k]
+                                                                                  :or {max-histogram-bins 256
+                                                                                       cell-size (* 8 1024)}}]
+   (assert (number? k))
+   (util/mkdirs (.getParent path))
    (let [^long total (if (satisfies? kd/KdTree points)
                        (kd/kd-tree-size points)
                        (count points))
@@ -265,7 +314,9 @@
          ^List histograms (vec (repeatedly k #(hist/->histogram histogram-bins)))
          update-histograms-fn (fn [^longs p]
                                 (dotimes [n k]
-                                  (.update ^IHistogram (.get histograms n) (aget p n))))]
+                                  (.update ^IHistogram (.get histograms n) (aget p n))))
+         cells (object-array number-of-cells)
+         cell-paths (object-array number-of-cells)]
      (if (satisfies? kd/KdTree points)
        (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
          (.forEach ^LongStream (kd/kd-tree-points points)
@@ -274,42 +325,90 @@
                        (update-histograms-fn (.getArrayPoint access x))))))
        (doseq [p points]
          (update-histograms-fn (kd/->longs p))))
-     (let [scales (object-array (for [^IHistogram h histograms]
-                                  (long-array (.uniform h cells-per-dimension))))
-           mins (long-array (for [^IHistogram h histograms]
-                              (Math/floor (.getMin h))))
-           maxs (long-array (for [^IHistogram h histograms]
-                              (Math/ceil (.getMax h))))
-           cells (object-array number-of-cells)
-           k-minus-one-slope+base (double-array (* 2 number-of-cells))
-           ^Field point-field (kd/->point-field k)
-           write-point-fn (fn [^longs p]
-                            (let [cell-idx (->cell-idx scales p k-minus-one axis-shift)
-                                  ^FixedSizeListVector cell (or (aget cells cell-idx)
-                                                                (doto (.createVector point-field allocator)
-                                                                  (->> (aset cells cell-idx))))]
-                              (kd/write-point cell (KdTreeVectorPointAccess. cell k) p)))]
-       (if (satisfies? kd/KdTree points)
-         (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
-           (.forEach ^LongStream (kd/kd-tree-points points)
-                     (reify LongConsumer
-                       (accept [_ x]
-                         (write-point-fn (.getArrayPoint access x))))))
-         (doseq [p points]
-           (write-point-fn (kd/->longs p))))
-       (dotimes [n number-of-cells]
-         (when-let [^FixedSizeListVector cell (aget cells n)]
-           (let [access (KdTreeVectorPointAccess. cell k)]
-             (quick-sort access 0 (dec (.getValueCount cell)) k-minus-one)
-             (let [min-r (.getCoordinate access 0 k-minus-one)
-                   max-r (.getCoordinate access (dec (.getValueCount cell)) k-minus-one)
-                   slope (double (/ (.getValueCount cell) (- max-r min-r)))
+     (try
+       (let [scales (object-array (for [^IHistogram h histograms]
+                                    (long-array (.uniform h cells-per-dimension))))
+             mins (long-array (for [^IHistogram h histograms]
+                                (Math/floor (.getMin h))))
+             maxs (long-array (for [^IHistogram h histograms]
+                                (Math/ceil (.getMax h))))
+             k-minus-one-mins (long-array number-of-cells Long/MAX_VALUE)
+             k-minus-one-maxs (long-array number-of-cells Long/MIN_VALUE)
+             k-minus-one-slope+base (double-array (* 2 number-of-cells))
+             write-point-fn (fn [^longs p]
+                              (let [cell-idx (->cell-idx scales p k-minus-one axis-shift)
+                                    ^DataOutputStream out (or (aget cells cell-idx)
+                                                              (let [f (str "." (.getFileName path) (format "_cell_%016x.raw" cell-idx))
+                                                                    cell-path (.resolveSibling path f)]
+                                                                (aset cell-paths cell-idx cell-path)
+                                                                (let [file-ch (util/->file-channel cell-path util/write-new-file-opts)]
+                                                                  (try
+                                                                    (doto (DataOutputStream. (BufferedOutputStream. (Channels/newOutputStream file-ch)))
+                                                                      (->> (aset cells cell-idx)))
+                                                                    (catch Exception e
+                                                                      (util/try-close file-ch)
+                                                                      (throw e))))))]
+                                (dotimes [n k]
+                                  (let [x (aget p n)]
+                                    (when (= n k-minus-one)
+                                      (aset k-minus-one-mins cell-idx (min x (aget k-minus-one-mins cell-idx)))
+                                      (aset k-minus-one-maxs cell-idx (max x (aget k-minus-one-maxs cell-idx))))
+                                    (.writeLong out x)))))]
+         (if (satisfies? kd/KdTree points)
+           (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
+             (.forEach ^LongStream (kd/kd-tree-points points)
+                       (reify LongConsumer
+                         (accept [_ x]
+                           (write-point-fn (.getArrayPoint access x))))))
+           (doseq [p points]
+             (write-point-fn (kd/->longs p))))
+         (dotimes [n number-of-cells]
+           (util/try-close (aget cells n))
+           (when-let [^Path cell-path (aget cell-paths n)]
+             (let [min-r (aget k-minus-one-mins n)
+                   max-r (aget k-minus-one-maxs n)
+                   value-count (quot (util/path-size cell-path) k)
+                   slope (double (/ value-count (- max-r min-r)))
                    base (- (* slope min-r))
                    slope-idx (* 2 n)]
                (aset k-minus-one-slope+base slope-idx slope)
-               (aset k-minus-one-slope+base (inc slope-idx) base)))))
-       (let [max-cell-size (reduce max (for [^FixedSizeListVector cell cells
-                                             :when cell]
-                                         (.getValueCount cell)))
-             cell-shift (Long/bitCount (dec (BitUtil/ceilPowerOfTwo max-cell-size)))]
-         (SimpleGrid. allocator scales mins maxs cells k-minus-one-slope+base k axis-shift cell-shift total))))))
+               (aset k-minus-one-slope+base (inc slope-idx) base))))
+         (let [max-cell-size (reduce max (for [^Path cell-path cell-paths
+                                               :when cell-path]
+                                           (quot (util/path-size cell-path) (* k Long/BYTES))))
+               cell-shift (Long/bitCount (dec (BitUtil/ceilPowerOfTwo max-cell-size)))
+               grid-meta (json/write-str {:scales scales
+                                          :mins mins
+                                          :maxs maxs
+                                          :k-minus-one-slope+base k-minus-one-slope+base
+                                          :k k
+                                          :axis-shift axis-shift
+                                          :cell-shift cell-shift
+                                          :total total})
+               schema (Schema. [(kd/->point-field k)] {"grid-meta" grid-meta})
+               buf (long-array k)]
+           (with-open [root (VectorSchemaRoot/create schema allocator)
+                       ch (util/->file-channel path util/write-new-file-opts)
+                       out (ArrowFileWriter. root nil ch)]
+             (let [^IKdTreePointAccess out-access (kd/kd-tree-point-access root)
+                   ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+               (dotimes [n number-of-cells]
+                 (.clear root)
+                 (when-let [^Path cell-path (aget cell-paths n)]
+                   (with-open [in (DataInputStream. (BufferedInputStream. (Channels/newInputStream (util/->file-channel cell-path))))]
+                     (let [value-count (quot (util/path-size cell-path) (* k Long/BYTES))]
+                       (dotimes [_ value-count]
+                         (dotimes [m k]
+                           (aset buf m (.readLong in)))
+                         (kd/write-point point-vec out-access buf))
+                       (.setRowCount root value-count)))
+                   (util/delete-file cell-path)
+                   (quick-sort out-access 0 (dec (.getRowCount root)) k-minus-one))
+                 (.writeBatch out))))))
+       path
+       (finally
+         (doseq [cell cells]
+           (util/try-close cell))
+         (doseq [cell-path cell-paths
+                 :when cell-path]
+           (util/delete-file cell-path)))))))
