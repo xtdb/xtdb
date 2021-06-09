@@ -3892,42 +3892,6 @@
                    #inst "2021-05-17T00:00:00.000-00:00")
                  (map (comp inverted-long->date first) (iterator-seq res))))))))
 
-(t/deftest in-selectivity-join-slowdown-1447
-  (fix/transact! *api* (fix/people
-                        (apply concat
-                               (for [n (range 1000)]
-                                 [{:crux.db/id (keyword (str "ivan-" n))
-                                   :my-name "Ivan"
-                                   :my-surname "Ivanov"
-                                   :my-number n}
-                                  {:crux.db/id (keyword (str "ivan2-" n))
-                                   :my-name2 "Ivan"
-                                   :my-surname2 "Ivanov"
-                                   :my-number2 n}]))))
-
-  (let [acceptable-limit-slowdown 0.7
-        problematic-ns-start (System/nanoTime)]
-    (t/is (= 4 (count (api/q (api/db *api*)
-                                '{:find [e1]
-                                  :in [[n ...] name surname]
-                                  :where [[e1 :my-name name]
-                                          [e1 :my-surname surname]
-                                          [e1 :my-number n]]}
-                                [20 40 60 80] "Ivan" "Ivanov"))))
-    (let [problematic-ns (- (System/nanoTime) problematic-ns-start)
-          workedaround-ns-start (System/nanoTime)]
-      (t/is (= 4 (count (api/q (api/db *api*)
-                                  '{:find [e1]
-                                    :in [[n ...]]
-                                    :where [[e1 :my-name2 "Ivan"]
-                                            [e1 :my-surname2 "Ivanov"]
-                                            [e1 :my-number2 n]]}
-                                  [20 40 60 80]))))
-      (let [workedaround-ns (- (System/nanoTime) workedaround-ns-start)
-            slowdown (double (/ (min problematic-ns workedaround-ns)
-                                (max problematic-ns workedaround-ns)))]
-        (t/is (>= slowdown acceptable-limit-slowdown))))))
-
 (t/deftest circular-deps-test-1523
   (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :surname "Evans"}]])
 
