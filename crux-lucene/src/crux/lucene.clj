@@ -7,9 +7,13 @@
             [crux.io :as cio]
             [crux.query :as q]
             [crux.system :as sys])
-  (:import crux.query.VarBinding
+  (:import clojure.lang.IFn
+           crux.query.VarBinding
            java.io.Closeable
+           java.io.IOException
            java.nio.file.Path
+           java.time.Duration
+           java.util.Date
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
            [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
@@ -17,12 +21,59 @@
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
-           [org.apache.lucene.store Directory FSDirectory]))
+           [org.apache.lucene.store Directory FSDirectory]
+           [java.util.concurrent Future Executors TimeUnit]))
 
-(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer]
+(defn throttle [name f wait-ms]
+  (if (= wait-ms 0)
+    (reify
+      IFn
+      (invoke [_]
+        (f)
+        nil)
+      Closeable
+      (close [_]))
+    (let [!state (atom [(.getTime (Date.)) false])
+          executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory name))
+          run-f (fn run-f [now]
+                  (reset! !state [(or now (.getTime (Date.))) false])
+                  (f))
+          schedule-run (fn run []
+                          (let [[last-run-time fut] @!state]
+                            (when (false? fut)
+                              (let [now (.getTime (Date.))
+                                    next-run (+ last-run-time wait-ms)]
+                                (if (< next-run now)
+                                  (run-f now)
+                                  (reset! !state [last-run-time
+                                                  (.schedule executor
+                                                             ^Runnable (partial run-f false)
+                                                             ^long (- next-run now)
+                                                             TimeUnit/MILLISECONDS)]))))))]
+      (reify
+        IFn
+        (invoke [_]
+          (let [[_ fut] @!state]
+            (when-not (true? fut)
+              (schedule-run)
+              nil)))
+        Closeable
+        (close [_]
+          (let [[_ fut] @!state]
+            (when-not (true? fut)
+              (when-not (false? fut)
+                (.get ^Future fut))
+              (doto executor
+                (.shutdownNow)
+                (.awaitTermination 5000 TimeUnit/MILLISECONDS))
+              (reset! !state [(.getTime (Date.)) true]))))))))
+
+(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer fsync-executor]
   Closeable
   (close [this]
     (.close ^IndexWriter index-writer)
+    (.close ^SearcherManager searcher-manager)
+    (.close ^Closeable fsync-executor)
     (cio/try-close directory)))
 
 (defn- ^String ->hash-str [eid]
@@ -220,7 +271,11 @@
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
-                        :spec ::sys/path}}
+                        :spec ::sys/path}
+               :fsync-throttle {:doc "Minimum interval between fsync'd Lucene commits (0 is synchronous)"
+                                :required? false
+                                :default (Duration/ofSeconds 0)
+                                :spec ::sys/duration}}
    ::sys/deps {:bus :crux/bus
                :document-store :crux/document-store
                :index-store :crux/index-store
@@ -228,13 +283,20 @@
                :indexer `->indexer
                :analyzer `->analyzer}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine] :as opts}]
+  [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine ^Duration fsync-throttle]}]
   (let [directory (FSDirectory/open db-dir)
         index-writer (->index-writer directory analyzer)
         searcher-manager (SearcherManager. index-writer false false nil)
-        lucene-store (LuceneNode. directory analyzer index-writer searcher-manager indexer)]
-    ;; Ensure lucene index exists for immediate queries:
-    (.commit index-writer)
+        fsync-executor (throttle "crux-lucene-fsync-throttler"
+                                 (fn []
+                                   (.maybeRefreshBlocking searcher-manager)
+                                   (try
+                                     (.commit index-writer)
+                                     (catch IOException e
+                                       (log/error e "Error during Lucene commit:"))))
+                                 (.toMillis fsync-throttle))
+        lucene-store (LuceneNode. directory analyzer index-writer searcher-manager indexer fsync-executor)]
+    (fsync-executor) ; Ensure Lucene index exists for immediate queries
     (validate-lucene-store-up-to-date index-store lucene-store)
     (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
     (bus/listen bus {:crux/event-types #{:crux.tx/committing-tx :crux.tx/aborting-tx}
@@ -247,6 +309,6 @@
                     (when-let [evicting-eids (not-empty (:evicting-eids ev))]
                       (evict! indexer index-writer evicting-eids)))
                   (index-tx! index-writer (:submitted-tx ev))
-                  (.commit index-writer)
-                  (.maybeRefreshBlocking searcher-manager)))
+                  (.maybeRefreshBlocking searcher-manager)
+                  (fsync-executor)))
     lucene-store))
