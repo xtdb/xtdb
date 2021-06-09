@@ -204,7 +204,7 @@
                     (let [start-point-idx (bit-shift-left cell-idx cell-shift)]
                       (LongStream/range start-point-idx (+ start-point-idx (.getValueCount cell))))
                     (LongStream/empty))))))
-  (kd-tree-depth [_] 0)
+  (kd-tree-height [_] 1)
   (kd-tree-retain [this _] this)
   (kd-tree-point-access [this]
     (->simple-grid-point-access this))

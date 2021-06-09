@@ -39,7 +39,7 @@
   (kd-tree-delete [_ allocator point])
   (kd-tree-range-search [_ min-range max-range])
   (kd-tree-points [_])
-  (kd-tree-depth [_])
+  (kd-tree-height [_])
   (kd-tree-retain [_ allocator])
   (kd-tree-point-access [_])
   (kd-tree-size [_])
@@ -100,7 +100,7 @@
     (LongStream/empty))
   (kd-tree-points [_]
     (LongStream/empty))
-  (kd-tree-depth [_] 0)
+  (kd-tree-height [_] 0)
   (kd-tree-retain [_ _])
   (kd-tree-point-access [_]
     (NilPointAccess.))
@@ -597,22 +597,22 @@
                   (.push kd-tree))]
       (StreamSupport/longStream (NodeDepthFirstSpliterator. (kd-tree-point-access kd-tree) stack) false)))
 
-  (kd-tree-depth [kd-tree]
+  (kd-tree-height [kd-tree]
     (let [stack (doto (ArrayDeque.)
                   (.push [1 kd-tree]))]
-      (loop [[depth ^Node node] (.poll stack)
-             max-depth 0]
+      (loop [[height ^Node node] (.poll stack)
+             max-height 0]
         (if-not node
-          max-depth
-          (let [depth (long depth)]
+          max-height
+          (let [height (long height)]
             (when-let [left (.left node)]
-              (.push stack [(inc depth) left]))
+              (.push stack [(inc height) left]))
 
             (when-let [right (.right node)]
-              (.push stack [(inc depth) right]))
+              (.push stack [(inc height) right]))
 
             (recur (.poll stack)
-                   (max depth max-depth)))))))
+                   (max height max-height)))))))
 
   (kd-tree-retain [kd-tree allocator]
     (let [^FixedSizeListVector point-vec (.point-vec kd-tree)]
@@ -843,7 +843,7 @@
        (ColumnRangeSearchSpliterator. access min-range max-range k n (range-bitmask min-range max-range) stack)
        false)))
 
-(defn- column-kd-tree-depth [kd-tree]
+(defn- column-kd-tree-height [kd-tree]
   (let [^long n (kd-tree-value-count kd-tree)]
     ((fn step ^long [^long idx]
        (let [left-idx (balanced-left-child idx)
@@ -872,8 +872,8 @@
   (kd-tree-points [kd-tree]
     (column-kd-tree-points kd-tree))
 
-  (kd-tree-depth [kd-tree]
-    (column-kd-tree-depth kd-tree))
+  (kd-tree-height [kd-tree]
+    (column-kd-tree-height kd-tree))
 
   (kd-tree-retain [this allocator]
     (util/slice-root this 0))
@@ -1020,8 +1020,8 @@
   (kd-tree-points [kd-tree]
     (column-kd-tree-points kd-tree))
 
-  (kd-tree-depth [kd-tree]
-    (column-kd-tree-depth kd-tree))
+  (kd-tree-height [kd-tree]
+    (column-kd-tree-height kd-tree))
 
   (kd-tree-retain [this allocator]
     (ArrowBufKdTree. (doto arrow-buf
@@ -1187,9 +1187,9 @@
                                (applyAsLong [_ x]
                                  (+ static-value-count x))))))
 
-  (kd-tree-depth [_]
-    (max (long (kd-tree-depth static-kd-tree))
-         (long (kd-tree-depth dynamic-kd-tree))))
+  (kd-tree-height [_]
+    (max (long (kd-tree-height static-kd-tree))
+         (long (kd-tree-height dynamic-kd-tree))))
 
   (kd-tree-retain [kd-tree allocator]
     (MergedKdTree. (kd-tree-retain static-kd-tree allocator)
