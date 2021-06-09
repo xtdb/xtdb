@@ -367,8 +367,8 @@
                  (set (kd/kd-tree->seq disk-kd-tree-from-points))
                  (set (kd/kd-tree->seq disk-kd-tree-from-tree)))))
 
-      (t/testing "depth"
-        (t/is (= 3
+      (t/testing "height"
+        (t/is (= 2
                  (kd/kd-tree-height kd-tree)
                  (kd/kd-tree-height column-kd-tree)
                  (kd/kd-tree-height disk-kd-tree-from-points)
@@ -426,7 +426,7 @@
                             ^VectorSchemaRoot static-tree (kd/->column-kd-tree allocator old-tree 2)
                             merged-tree (kd/->merged-kd-tree static-tree dynamic-tree)]
                   (t/is (= 7 (kd/kd-tree-size merged-tree)))
-                  (t/is (= 3 (kd/kd-tree-height merged-tree)))
+                  (t/is (= 2 (kd/kd-tree-height merged-tree)))
 
                   (let [unknown-node [0 0]
                         expected-nodes (set (map vec (kd/kd-tree->seq rebuilt-tree)))

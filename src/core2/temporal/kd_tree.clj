@@ -100,7 +100,7 @@
     (LongStream/empty))
   (kd-tree-points [_]
     (LongStream/empty))
-  (kd-tree-height [_] 0)
+  (kd-tree-height [_] -1)
   (kd-tree-retain [_ _])
   (kd-tree-point-access [_]
     (NilPointAccess.))
@@ -171,6 +171,7 @@
   [^long n ^long idx]
   (balanced-valid? n (balanced-right-child idx)))
 
+;; height of zero based index, height of root with index 0 is 0.
 (defn- balanced-height
   {:inline (fn [idx]
              `(BitUtil/log2 ~idx))}
@@ -599,7 +600,7 @@
 
   (kd-tree-height [kd-tree]
     (let [stack (doto (ArrayDeque.)
-                  (.push [1 kd-tree]))]
+                  (.push [0 kd-tree]))]
       (loop [[height ^Node node] (.poll stack)
              max-height 0]
         (if-not node
@@ -696,6 +697,7 @@
                                        ^longs max-range
                                        ^long k
                                        ^long n
+                                       ^long height
                                        ^int axis-mask
                                        ^LongStack stack]
   Spliterator$OfLong
@@ -707,7 +709,6 @@
          n n
          stack stack
          axis-mask axis-mask
-         height (balanced-height n)
          scan-level (max 0 (- height breadth-first-scan-levels))
          max-breadth-first-levels (min scan-level breadth-first-level-upper-limit)]
      (while (BitUtil/bitNot (.isEmpty stack))
@@ -809,7 +810,7 @@
 
   (trySplit [_]
     (when-let [split-stack (maybe-split-long-stack stack)]
-      (ColumnRangeSearchSpliterator. access min-range max-range k n axis-mask split-stack))))
+      (ColumnRangeSearchSpliterator. access min-range max-range k n height axis-mask split-stack))))
 
 (defn merge-kd-trees [^BufferAllocator allocator kd-tree-to kd-tree-from]
   (let [^long n (kd-tree-value-count kd-tree-from)
@@ -837,26 +838,16 @@
         access (kd-tree-point-access kd-tree)
         ^long k (kd-tree-dimensions kd-tree)
         ^long n (kd-tree-value-count kd-tree)
-        stack (doto (LongStack.)
-                (.push 0))]
-      (StreamSupport/longStream
-       (ColumnRangeSearchSpliterator. access min-range max-range k n (range-bitmask min-range max-range) stack)
-       false)))
+        ^long height (kd-tree-height kd-tree)
+        stack (LongStack.)]
+    (when (pos? n)
+      (.push stack 0))
+    (StreamSupport/longStream
+     (ColumnRangeSearchSpliterator. access min-range max-range k n height (range-bitmask min-range max-range) stack)
+     false)))
 
 (defn- column-kd-tree-height [kd-tree]
-  (let [^long n (kd-tree-value-count kd-tree)]
-    ((fn step ^long [^long idx]
-       (let [left-idx (balanced-left-child idx)
-             right-idx (balanced-right-child idx)
-             visit-left? (balanced-valid? n left-idx)
-             visit-right? (balanced-valid? n right-idx)]
-
-         (inc (max (if visit-right?
-                     (.invokePrim ^IFn$LL step right-idx)
-                     0)
-                   (if visit-left?
-                     (.invokePrim ^IFn$LL step left-idx)
-                     0))))) 0)))
+  (balanced-height (dec (long (kd-tree-value-count kd-tree)))))
 
 (extend-protocol KdTree
   VectorSchemaRoot
