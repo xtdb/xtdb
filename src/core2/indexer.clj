@@ -283,15 +283,19 @@
             (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
                         tx-id-vec 0 row-id)
 
-            (when-not (.isNull valid-time-start-vec per-op-offset)
-              (set! (.validTimeStart temporal-coordinates) (.get valid-time-start-vec per-op-offset))
-              (copy-safe! (.getLiveRoot this (.getName valid-time-start-vec))
-                          valid-time-start-vec per-op-offset row-id))
+            (set! (.validTimeStart temporal-coordinates)
+                  (if-not (.isNull valid-time-start-vec per-op-offset)
+                    (do (copy-safe! (.getLiveRoot this (.getName valid-time-start-vec))
+                                    valid-time-start-vec per-op-offset row-id)
+                        (.get valid-time-start-vec per-op-offset))
+                    tx-time-ms))
 
-            (when-not (.isNull valid-time-end-vec per-op-offset)
-              (set! (.validTimeEnd temporal-coordinates) (.get valid-time-end-vec per-op-offset))
-              (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
-                          valid-time-end-vec per-op-offset row-id))))
+            (set! (.validTimeEnd temporal-coordinates)
+                  (if-not (.isNull valid-time-end-vec per-op-offset)
+                    (do (.get valid-time-end-vec per-op-offset)
+                        (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
+                                    valid-time-end-vec per-op-offset row-id))
+                    (.getTime temporal/end-of-time)))))
 
         (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
 

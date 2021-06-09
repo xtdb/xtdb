@@ -16,6 +16,7 @@
            [java.io Closeable Writer]
            java.lang.AutoCloseable
            java.time.Duration
+           java.util.Date
            [java.util.concurrent CompletableFuture TimeUnit]
            org.apache.arrow.memory.RootAllocator))
 
@@ -75,7 +76,6 @@
     (open-db-async this {}))
 
   (open-db-async [this db-opts]
-    ;; TODO pass valid-time and tx through to the data-source
     (let [{:keys [valid-time tx ^Duration timeout]} db-opts]
       (-> (if tx
             (-> (await-tx-async this tx)
@@ -84,7 +84,8 @@
           (util/then-apply (fn [tx]
                              (.openDataSource data-source-factory
                                               (.getWatermark ^IChunkManager indexer)
-                                              tx))))))
+                                              tx
+                                              (or valid-time (Date.))))))))
 
   PSubmitNode
   (submit-tx [_ tx-ops]

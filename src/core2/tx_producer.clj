@@ -33,7 +33,7 @@
     (case op
       :put (assert (contains? (:doc tx-op) :_id))
       :delete (assert (and (contains? tx-op :_id)
-                           (set/subset? (set (keys tx-op)) #{:_id :_valid-time-start :_valid-time-end}))))
+                           (set/subset? (set (keys tx-op)) #{:op :_id :_valid-time-start :_valid-time-end}))))
 
     (when _valid-time-start
       (assert (inst? _valid-time-start)))
@@ -51,7 +51,7 @@
            (for [^ArrowType v-type v-types]
              (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type false)))))
 
-(def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-field
+(def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
   (t/->field "_valid-time-start" (t/primitive-type->arrow-type :timestampmilli) true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
@@ -68,11 +68,11 @@
         tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
                                        (t/->field "put" (.getType Types$MinorType/STRUCT) false
                                                   document-field
-                                                  valid-time-field
+                                                  valid-time-start-field
                                                   valid-time-end-field)
                                        (t/->field "delete" (.getType Types$MinorType/STRUCT) false
                                                   delete-id-field
-                                                  valid-time-field
+                                                  valid-time-start-field
                                                   valid-time-end-field))])]
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
@@ -111,16 +111,16 @@
                           (util/set-value-count id-duv (inc (.getValueCount id-duv))))))
 
             (if _valid-time-start
-              (t/set-safe! valid-time-start-vec tx-op-n _valid-time-start)
+              (t/set-safe! valid-time-start-vec tx-op-offset _valid-time-start)
               (doto valid-time-start-vec
-                (util/set-value-count tx-op-n)
-                (t/set-null! tx-op-n)))
+                (util/set-value-count (inc tx-op-offset))
+                (t/set-null! tx-op-offset)))
 
             (if _valid-time-end
-              (t/set-safe! valid-time-end-vec tx-op-n _valid-time-end)
+              (t/set-safe! valid-time-end-vec tx-op-offset _valid-time-end)
               (doto valid-time-end-vec
-                (util/set-value-count tx-op-n)
-                (t/set-null! tx-op-n)))))
+                (util/set-value-count (inc tx-op-offset))
+                (t/set-null! tx-op-offset)))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
 
