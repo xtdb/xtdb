@@ -689,6 +689,13 @@
           (.setRowCount idx)
           (build-breadth-first-tree-in-place true))))))
 
+(defn ->arrow-buf-column-kd-tree ^org.apache.arrow.vector.VectorSchemaRoot [^ArrowBuf arrow-buf]
+  (let [footer (util/read-arrow-footer arrow-buf)]
+    (with-open [arrow-record-batch (util/->arrow-record-batch-view (first (.getRecordBatches footer)) arrow-buf)]
+      (let [root (VectorSchemaRoot/create (.getSchema footer) (.getAllocator (.getReferenceManager arrow-buf)))]
+        (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
+        root))))
+
 (def ^:private ^:const breadth-first-level-upper-limit 22)
 (def ^:private ^:const breadth-first-scan-levels 8)
 
