@@ -1036,7 +1036,9 @@
     (ArrowBufKdTreePointAccess. block-cache batch-shift batch-mask (kd-tree-dimensions kd-tree) deletes?))
 
   (kd-tree-size [kd-tree]
-    value-count)
+    (if deletes?
+      (.count ^LongStream (kd-tree-points kd-tree))
+      value-count))
 
   (kd-tree-value-count [kd-tree]
     value-count)
