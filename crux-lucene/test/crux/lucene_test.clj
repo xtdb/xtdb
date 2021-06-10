@@ -140,7 +140,41 @@
                         :where '[[(text-search :name "Ivan") [[?e ?v]]]
                                  [?e :crux.db/id]]})))))
 
-;; https://github.com/juxt/crux/issues/1428
+
+(t/deftest test-identical-cardinality-many-is-indexed-once
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name ["Ivan" "Ivan" "Ivan"]}]])
+
+  (with-open [db (c/open-db *api*)]
+    (t/is (= [[:ivan "Ivan"]]
+             (iterator-seq (c/open-q db {:find '[?e ?v]
+                                         :where '[[(text-search :name "Ivan") [[?e ?v]]]]}))))))
+
+(t/deftest test-can-search-keywords-and-symbols
+  (let [docs [{:crux.db/id :ivan1 :name :ivan-123-456-abc/xyz1}
+              {:crux.db/id :ivan2 :name :ivan-123-456-abc/xyz2}
+              {:crux.db/id :ivan3 :name :ivan-123-456-abc/xyz3}
+              {:crux.db/id :ivan4 :name 'myns/ivan}
+              {:crux.db/id :ivan5 :name "Ivan"}
+              {:crux.db/id :ivan6 :name ["Ivan" :Ivan 'Ivan]}]]
+    (submit+await-tx (for [doc docs] [:crux.tx/put doc]))
+
+    (with-open [db (c/open-db *api*)]
+      (t/is (= '#{[:ivan3 :ivan-123-456-abc/xyz3]
+                  [:ivan2 :ivan-123-456-abc/xyz2]
+                  [:ivan6 :Ivan]
+                  [:ivan6 "Ivan"]
+                  [:ivan6 Ivan]
+                  [:ivan1 :ivan-123-456-abc/xyz1]
+                  [:ivan5 "Ivan"]
+                  [:ivan4 myns/ivan]}
+               (c/q db '{:find [?e ?v]
+                         :where [[(text-search :name "ivan") [[?e ?v]]]
+                                 [?e :crux.db/id]]})))
+      (t/is (= (set (take 3 docs))
+               (c/q db '{:find [?e ?v]
+                         :keys [crux.db/id name]
+                         :where [[(text-search :name "abc\\/xy") [[?e ?v]]]
+                                 [?e :crux.db/id]]}))))))
 
 (t/deftest test-can-search-multiple-entities-with-same-av-pair-bug-1428
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan1 :name "Ivan"}]

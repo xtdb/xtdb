@@ -35,6 +35,7 @@
 
 (def ^:const ^:private field-crux-id "_crux_id")
 (def ^:const ^:private field-crux-val "_crux_val")
+(def ^:const ^:private field-crux-val-type "_crux_val_type")
 (def ^:const ^:private field-crux-attr "_crux_attr")
 
 (defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
@@ -131,7 +132,11 @@
   perform a temporal resolution against A/V to resolve the eid."
   [attr index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
   (mapcat (fn [[^Document doc score]]
-            (let [v (.get ^Document doc field-crux-val)]
+            (let [v ((condp = (.get ^Document doc field-crux-val-type)
+                       "clojure.lang.Keyword" #(keyword (subs % 1))
+                       "clojure.lang.Symbol" symbol
+                       identity)
+                     (.get ^Document doc field-crux-val))]
               (for [eid (doall (db/ave index-snapshot attr v nil entity-resolver-fn))]
                 [(db/decode-value index-snapshot eid) v score])))
           search-results))
@@ -182,16 +187,26 @@
             [k v] (->> (dissoc crux-doc :crux.db/id)
                        (mapcat (fn [[k v]]
                                  (for [v (cc/vectorize-value v)
-                                       :when (string? v)]
+                                       :when ((some-fn string? keyword? symbol?) v)]
                                    [k v]))))
-            :let [id-str (->hash-str (DocumentId. k v))
+            :let [v-str (str v)
+                  v-type-str (condp = (type v)
+                               java.lang.String "java.lang.String"
+                               clojure.lang.Keyword "clojure.lang.Keyword"
+                               clojure.lang.Symbol "clojure.lang.Symbol")
+                  v-str-id (if (symbol? v)
+                             (str "'" v-str)
+                             v-str)
+                  id-str (->hash-str (DocumentId. k v-str-id))
                   doc (doto (Document.)
                         ;; To search for triples by a-v for deduping
                         (.add (StringField. field-crux-id, id-str, Field$Store/NO))
                         ;; The actual term, which will be tokenized
-                        (.add (TextField. (keyword->k k), v, Field$Store/YES))
+                        (.add (TextField. (keyword->k k), v-str, Field$Store/YES))
+                        ;; Used for type resolving and coercion
+                        ((fn [doc] (when-not (= v-type-str "java.lang.String") (.add ^Document doc (StringField. field-crux-val-type, ^String v-type-str, Field$Store/YES)))))
                         ;; Used for wildcard searches
-                        (.add (TextField. field-crux-val, v, Field$Store/YES))
+                        (.add (TextField. field-crux-val, v-str, Field$Store/YES))
                         ;; Used for wildcard searches
                         (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES)))]]
       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
@@ -204,8 +219,11 @@
             qs (for [[a v] (db/exclusive-avs index-store eids)
                      :let [a (attrs-id->attr (->hash-str a))
                            v (db/decode-value index-snapshot v)]
-                     :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
+                     :when (not= :crux.db/id a)
+                     :let [v-str (str v)]]
+                 (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a (if (symbol? v)
+                                                                               (str "'" v-str)
+                                                                               v-str))))))]
         (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
 
 (defn ->indexer
