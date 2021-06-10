@@ -174,32 +174,31 @@
                      (bit-or (bit-shift-left cell-idx axis-shift) (aget axis-idx+mask 0))
                      (bit-or cell-axis-mask (aget axis-idx+mask 1)))
               (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
-                (let [n (.getValueCount cell)]
-                  (when (pos? n)
-                    (let [access (KdTreeVectorPointAccess. cell k)
-                          access-fn (reify IntToLongFunction
-                                      (applyAsLong [_ idx]
-                                        (.getCoordinate access idx k-minus-one)))
-                          slope-idx (bit-shift-left cell-idx 1)
-                          slope (aget k-minus-one-slope+base slope-idx)
-                          base (aget k-minus-one-slope+base (inc slope-idx))
-                          start-point-idx (bit-shift-left cell-idx cell-shift)
-                          start-idx (if partial-match-last-axis?
-                                      0
-                                      (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
-                          end-idx (if partial-match-last-axis?
-                                    (dec n)
-                                    (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
-                      (if (zero? cell-axis-mask)
-                        (loop [idx start-idx]
-                          (when (<= idx end-idx)
-                            (.add acc (+ start-point-idx idx))
-                            (recur (inc idx))))
-                        (loop [idx start-idx]
-                          (when (<= idx end-idx)
-                            (when (.isInRange access idx min-range max-range cell-axis-mask)
-                              (.add acc (+ start-point-idx idx)))
-                            (recur (inc idx)))))))))))))
+                (let [access (KdTreeVectorPointAccess. cell k)
+                      access-fn (reify IntToLongFunction
+                                  (applyAsLong [_ idx]
+                                    (.getCoordinate access idx k-minus-one)))
+                      n (.getValueCount cell)
+                      slope-idx (bit-shift-left cell-idx 1)
+                      slope (aget k-minus-one-slope+base slope-idx)
+                      base (aget k-minus-one-slope+base (inc slope-idx))
+                      start-point-idx (bit-shift-left cell-idx cell-shift)
+                      start-idx (if partial-match-last-axis?
+                                  0
+                                  (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
+                      end-idx (if partial-match-last-axis?
+                                (dec n)
+                                (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
+                  (if (zero? cell-axis-mask)
+                    (loop [idx start-idx]
+                      (when (<= idx end-idx)
+                        (.add acc (+ start-point-idx idx))
+                        (recur (inc idx))))
+                    (loop [idx start-idx]
+                      (when (<= idx end-idx)
+                        (when (.isInRange access idx min-range max-range cell-axis-mask)
+                          (.add acc (+ start-point-idx idx)))
+                        (recur (inc idx)))))))))))
 
       (.build acc)))
   (kd-tree-points [this]
@@ -295,8 +294,9 @@
                  (with-open [arrow-record-batch (util/->arrow-record-batch-view block arrow-buf)
                              root (VectorSchemaRoot/create schema allocator)]
                    (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
-                   (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
-                             (.transfer))))))]
+                   (when (pos? (.getRowCount root))
+                     (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
+                               (.transfer)))))))]
     (->grid-meta-json->simple-grid arrow-buf cells grid-meta)))
 
 (defn ->mmap-grid ^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path]
