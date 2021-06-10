@@ -160,49 +160,46 @@
                             (do (aset ^longs (aget axis-idxs+masks 0) 1 mask)
                                 (aset ^longs (aget axis-idxs+masks (dec (alength axis-idxs+masks))) 1 mask)
                                 axis-idxs+masks))
-          cell-idx+masks (when (= k-minus-one (count axis-idxs+masks))
-                           (for [axis-idxs+masks (cartesian-product axis-idxs+masks)]
-                             (reduce
-                              (fn [^longs acc ^longs axis-idx+mask]
-                                (doto acc
-                                  (aset 0 (bit-or (bit-shift-left (aget acc 0) axis-shift) (aget axis-idx+mask 0)))
-                                  (aset 1 (bit-or (aget acc 1) (aget axis-idx+mask 1)))))
-                              (long-array 2)
-                              axis-idxs+masks)))
           partial-match-last-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask k-minus-one))
           min-r (aget min-range k-minus-one)
           max-r (aget max-range k-minus-one)
           acc (LongStream/builder)]
-      (doseq [^longs cell-idx+mask cell-idx+masks
-              :let [cell-idx (aget cell-idx+mask 0)
-                    cell-axis-mask (aget cell-idx+mask 1)
-                    ^FixedSizeListVector cell (aget cells cell-idx)]
-              :when cell
-              :let [access (KdTreeVectorPointAccess. cell k)
-                    access-fn (reify IntToLongFunction
-                                (applyAsLong [_ idx]
-                                  (.getCoordinate access idx k-minus-one)))
-                    slope-idx (bit-shift-left cell-idx 1)
-                    slope (aget k-minus-one-slope+base slope-idx)
-                    base (aget k-minus-one-slope+base (inc slope-idx))
-                    n (.getValueCount cell)
-                    start-point-idx (bit-shift-left cell-idx cell-shift)
-                    start-idx (if partial-match-last-axis?
-                                0
-                                (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
-                    end-idx (if partial-match-last-axis?
-                              (dec n)
-                              (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]]
-        (if (zero? cell-axis-mask)
-          (loop [idx start-idx]
-            (when (<= idx end-idx)
-              (.add acc (+ start-point-idx idx))
-              (recur (inc idx))))
-          (loop [idx start-idx]
-            (when (<= idx end-idx)
-              (when (.isInRange access idx min-range max-range cell-axis-mask)
-                (.add acc (+ start-point-idx idx)))
-              (recur (inc idx))))))
+      (when (= k-minus-one (count axis-idxs+masks))
+        (doseq [axis-idxs+masks (cartesian-product axis-idxs+masks)]
+          (loop [[^longs axis-idx+mask & axis-idxs+masks] axis-idxs+masks
+                 cell-idx 0
+                 cell-axis-mask 0]
+            (if axis-idx+mask
+              (recur axis-idxs+masks
+                     (bit-or (bit-shift-left cell-idx axis-shift) (aget axis-idx+mask 0))
+                     (bit-or cell-axis-mask (aget axis-idx+mask 1)))
+              (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
+                (let [access (KdTreeVectorPointAccess. cell k)
+                      access-fn (reify IntToLongFunction
+                                  (applyAsLong [_ idx]
+                                    (.getCoordinate access idx k-minus-one)))
+                      slope-idx (bit-shift-left cell-idx 1)
+                      slope (aget k-minus-one-slope+base slope-idx)
+                      base (aget k-minus-one-slope+base (inc slope-idx))
+                      n (.getValueCount cell)
+                      start-point-idx (bit-shift-left cell-idx cell-shift)
+                      start-idx (if partial-match-last-axis?
+                                  0
+                                  (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
+                      end-idx (if partial-match-last-axis?
+                                (dec n)
+                                (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
+                  (if (zero? cell-axis-mask)
+                    (loop [idx start-idx]
+                      (when (<= idx end-idx)
+                        (.add acc (+ start-point-idx idx))
+                        (recur (inc idx))))
+                    (loop [idx start-idx]
+                      (when (<= idx end-idx)
+                        (when (.isInRange access idx min-range max-range cell-axis-mask)
+                          (.add acc (+ start-point-idx idx)))
+                        (recur (inc idx)))))))))))
+
       (.build acc)))
   (kd-tree-points [this]
     (.flatMap (LongStream/range 0 (alength cells))
