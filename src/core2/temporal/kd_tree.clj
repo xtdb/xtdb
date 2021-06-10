@@ -697,7 +697,7 @@
         root))))
 
 (def ^:private ^:const breadth-first-level-upper-limit 22)
-(def ^:private ^:const breadth-first-scan-levels 8)
+(def ^:private ^:const breadth-first-scan-levels 4)
 
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
                                        ^longs min-range
@@ -786,7 +786,6 @@
              right-idx (inc left-idx)
              visit-left? (and min-match? (balanced-valid? n left-idx))
              visit-right? (and max-match? (balanced-valid? n right-idx))]
-
          (cond
            (and visit-left? (BitUtil/bitNot visit-right?))
            (.push stack left-idx)
