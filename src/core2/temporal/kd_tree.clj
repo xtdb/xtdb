@@ -697,7 +697,7 @@
         root))))
 
 (def ^:private ^:const breadth-first-level-upper-limit 22)
-(def ^:private ^:const breadth-first-scan-levels 4)
+(def ^:private ^:const breadth-first-scan-levels 2)
 
 (deftype ColumnRangeSearchSpliterator [^IKdTreePointAccess access
                                        ^longs min-range
