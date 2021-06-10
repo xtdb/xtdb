@@ -174,31 +174,32 @@
                      (bit-or (bit-shift-left cell-idx axis-shift) (aget axis-idx+mask 0))
                      (bit-or cell-axis-mask (aget axis-idx+mask 1)))
               (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
-                (let [access (KdTreeVectorPointAccess. cell k)
-                      access-fn (reify IntToLongFunction
-                                  (applyAsLong [_ idx]
-                                    (.getCoordinate access idx k-minus-one)))
-                      slope-idx (bit-shift-left cell-idx 1)
-                      slope (aget k-minus-one-slope+base slope-idx)
-                      base (aget k-minus-one-slope+base (inc slope-idx))
-                      n (.getValueCount cell)
-                      start-point-idx (bit-shift-left cell-idx cell-shift)
-                      start-idx (if partial-match-last-axis?
-                                  0
-                                  (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
-                      end-idx (if partial-match-last-axis?
-                                (dec n)
-                                (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
-                  (if (zero? cell-axis-mask)
-                    (loop [idx start-idx]
-                      (when (<= idx end-idx)
-                        (.add acc (+ start-point-idx idx))
-                        (recur (inc idx))))
-                    (loop [idx start-idx]
-                      (when (<= idx end-idx)
-                        (when (.isInRange access idx min-range max-range cell-axis-mask)
-                          (.add acc (+ start-point-idx idx)))
-                        (recur (inc idx)))))))))))
+                (let [n (.getValueCount cell)]
+                  (when (pos? n)
+                    (let [access (KdTreeVectorPointAccess. cell k)
+                          access-fn (reify IntToLongFunction
+                                      (applyAsLong [_ idx]
+                                        (.getCoordinate access idx k-minus-one)))
+                          slope-idx (bit-shift-left cell-idx 1)
+                          slope (aget k-minus-one-slope+base slope-idx)
+                          base (aget k-minus-one-slope+base (inc slope-idx))
+                          start-point-idx (bit-shift-left cell-idx cell-shift)
+                          start-idx (if partial-match-last-axis?
+                                      0
+                                      (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
+                          end-idx (if partial-match-last-axis?
+                                    (dec n)
+                                    (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
+                      (if (zero? cell-axis-mask)
+                        (loop [idx start-idx]
+                          (when (<= idx end-idx)
+                            (.add acc (+ start-point-idx idx))
+                            (recur (inc idx))))
+                        (loop [idx start-idx]
+                          (when (<= idx end-idx)
+                            (when (.isInRange access idx min-range max-range cell-axis-mask)
+                              (.add acc (+ start-point-idx idx)))
+                            (recur (inc idx)))))))))))))
 
       (.build acc)))
   (kd-tree-points [this]
