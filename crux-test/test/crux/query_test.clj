@@ -3893,14 +3893,14 @@
                  (map (comp inverted-long->date first) (iterator-seq res))))))))
 
 (t/deftest circular-deps-test-1523
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :surname "Evans"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan", :foo :foo}]
+                        [:crux.tx/put {:crux.db/id :foo, :bar :bar}]])
 
+  ;; failed with 'circular dependency between ?foo and ?a'
   (with-open [db (api/open-db *api*)]
-    #_ ; FIXME
-    (t/is (= :fixme-expected
-             (api/q db '{:find  [?b]
-                         :where [#_[?a :name] ; error appears when uncommenting this
-                                 [?a :surname ?lastname]
-                                 [(identity ?lastname) ?b]
-                                 [?b :any-att] ; error then disappears when commenting this
-                                 ]})))))
+    (t/is (= #{["Ivan" :bar]}
+             (api/q db '{:find [?a-name ?bar]
+                         :where [[?a :name ?a-name]
+                                 [?a :foo ?foo-val]
+                                 [(identity ?foo-val) ?foo]
+                                 [?foo :bar ?bar]]})))))

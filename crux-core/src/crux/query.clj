@@ -1318,7 +1318,6 @@
                           db]
   (let [collected-vars (collect-vars type->clauses)
         pred-vars (set (for [{:keys [pred return]} pred-clauses
-                             :when (not return)
                              arg (:args pred)
                              :when (logic-var? arg)]
                          arg))
