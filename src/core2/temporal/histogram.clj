@@ -8,8 +8,6 @@
 
 (definterface IHistogram
   (^core2.temporal.histogram.IHistogram update [^double x])
-  (^double quantile [^double q])
-  (^double cdf [^double x])
   (^double sum [^double x])
   (^doubles uniform [^int number-of-buckets])
   (^double getMin [])
@@ -83,25 +81,6 @@
           (.set min-idx new-bin))))
 
     this)
-
-  (quantile [this q]
-    (loop [[^IBin bin & bins] bins
-           count (* q total)]
-      (if-not bin
-        max-v
-        (let [v (.getCount bin)]
-          (if (and (pos? count) v)
-            (recur bins (- count v))
-            (.getValue bin))))))
-
-  (cdf [this x]
-    (loop [[^IBin bin & bins] bins
-           count 0]
-      (if-not bin
-        (double (/ count total))
-        (if (<= (.getValue bin) x)
-          (recur bins (+ count (.getCount bin)))
-          (double (/ count total))))))
 
   (sum [this x]
     (let [last-idx (dec (.size bins))]
