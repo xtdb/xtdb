@@ -4,6 +4,21 @@
 ;; "A Streaming Parallel Decision Tree Algorithm"
 ;; https://www.jmlr.org/papers/volume11/ben-haim10a/ben-haim10a.pdf
 
+;; NOTES, checkout:
+;; http://engineering.nyu.edu/~suel/papers/pxp.pdf
+;; https://www.researchgate.net/publication/2459804_Approximating_Multi-Dimensional_Aggregate_Range_Queries_Over_Real_Attributes
+;; https://ashraf.aboulnaga.me/pubs/sigmod99sthist.pdf
+
+;; I think adapting the current histogram to store points in the bins
+;; and figure out an efficient way to calculate nearest points during
+;; updates might be enough, and then use the normal sum/uniform across
+;; a single axis at at time on the result.
+
+;; We might need a way which can accept many empty buckets and
+;; maintains a mapping of sparse cell-idxs to dense block-idxs.
+
+;; Also, check out the Tsunami paper again.
+
 (set! *unchecked-math* :warn-on-boxed)
 
 (definterface IHistogram
@@ -13,6 +28,7 @@
   (^double getMin [])
   (^double getMax [])
   (^long getTotal [])
+  (^java.util.List getBins [])
   (^String histogramString []))
 
 (definterface IBin
@@ -45,12 +61,12 @@
                     ^:unsynchronized-mutable ^double max-v
                     ^List bins]
   IHistogram
-  (update [this x]
+  (update [this p]
     (set! (.total this) (inc total))
-    (set! (.min-v this) (min x min-v))
-    (set! (.max-v this) (max x max-v))
+    (set! (.min-v this) (min p min-v))
+    (set! (.max-v this) (max p max-v))
 
-    (let [new-bin (Bin. x 1)
+    (let [new-bin (Bin. p 1)
           idx (Collections/binarySearch bins new-bin)]
       (if (neg? idx)
         (.add bins (dec (- idx)) new-bin)
@@ -67,53 +83,58 @@
                                 (if (< new-delta delta)
                                   (recur (inc n) n new-delta)
                                   (recur (inc n) min-idx delta)))))
-            ^IBin kv1 (.get bins min-idx)
-            ^IBin kv2 (.get bins (inc min-idx))
-            k1 (.getValue kv1)
-            v1 (.getCount kv1)
-            k2 (.getValue kv2)
-            v2 (.getCount kv2)
-            new-v (+ v1 v2)
-            new-k (/ (+ (* k1 v1) (* k2 v2)) new-v)
-            new-bin (Bin. new-k new-v)]
+            ^IBin bin-i (.get bins min-idx)
+            ^IBin bin-i+1 (.get bins (inc min-idx))
+            qi (.getValue bin-i)
+            ki (.getCount bin-i)
+            qi+1 (.getValue bin-i+1)
+            ki+1 (.getCount bin-i+1)
+            new-k (+ ki ki+1)
+            new-q (/ (+ (* qi ki) (* qi+1 ki+1)) new-k)
+            new-bin (Bin. new-q new-k)]
         (doto bins
           (.remove (inc min-idx))
           (.set min-idx new-bin))))
 
     this)
 
-  (sum [this x]
+  (sum [this b]
     (let [last-idx (dec (.size bins))]
       (cond
-        (< x (.getValue ^IBin (.get bins 0))) 0
-        (>= x (.getValue ^IBin (.get bins last-idx))) total
+        (< b (.getValue ^IBin (.get bins 0))) 0
+        (>= b (.getValue ^IBin (.get bins last-idx))) total
         :else
-        (let [probe-bin (Bin. x 0)
+        (let [probe-bin (Bin. b 0)
               idx (Collections/binarySearch bins probe-bin)
               ^long idx (if (neg? idx)
-                          (dec (- idx))
+                          (- (- idx) 2)
                           idx)]
-          (if (> idx last-idx)
-            total
-            (let [^IBin kv1 (.get bins idx)
-                  ^IBin kv2 (if (= idx last-idx)
-                              (Bin. max-v 0)
-                              (.get bins (inc idx)))
-                  k1 (.getValue kv1)
-                  v1 (.getCount kv1)
-                  k2 (.getValue kv2)
-                  v2 (.getCount kv2)
+          (cond
+            (neg? idx)
+            0.0
 
-                  vx (+ v1 (* (/ (+ v2 v1) (- k2 k1))
-                              (- x k1)))
-                  s (* (/ (+ v1 vx) 2)
-                       (/ (- x k1) (- k2 k1)))
-                  ^double s (loop [n 0
-                                   s s]
-                              (if (< n idx)
-                                (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
-                                s))]
-              (+ s (/ v1 2.0))))))))
+            (> idx last-idx)
+            total
+
+            :else
+            (let [^IBin bin-i (.get bins idx)
+                  ^IBin bin-i+1 (if (= idx last-idx)
+                                  (Bin. (inc max-v) 0)
+                                  (.get bins (inc idx)))
+                  pi (.getValue bin-i)
+                  mi (.getCount bin-i)
+                  pi+1 (.getValue bin-i+1)
+                  mi+1 (.getCount bin-i+1)
+
+                  mb (+ mi (* (/ (- mi+1 mi) (- pi+1 pi))
+                              (- b pi)))
+                  s (* (/ (+ mi mb) 2.0)
+                       (/ (- b pi) (- pi+1 pi)))]
+              (loop [n 0
+                     s s]
+                (if (< n idx)
+                  (recur (inc n) (+ s (.getCount ^IBin (.get bins n))))
+                  (+ s (/ mi 2.0))))))))))
 
   (uniform [this number-of-buckets]
     (let [last-idx (dec (.size bins))
@@ -127,25 +148,25 @@
                                  idx
                                  (if (< (.sum this (.getValue bin)) s)
                                    (recur bins (inc idx))
-                                   idx)))
-                   ^IBin kv1 (.get bins idx)
-                   ^IBin kv2 (if (= idx last-idx)
-                               (Bin. max-v 0)
-                               (.get bins (inc idx)))
-                   k1 (.getValue kv1)
-                   v1 (.getCount kv1)
-                   k2 (.getValue kv2)
-                   v2 (.getCount kv2)
-                   d (- s (.sum this k1))
-                   a (- v2 v1)
-                   b (* 2.0 v1)
+                                   (max 0 (dec idx)))))
+                   ^IBin bin-i (.get bins idx)
+                   ^IBin bin-i+1 (if (= idx last-idx)
+                                   (Bin. (inc max-v) 0)
+                                   (.get bins (inc idx)))
+                   pi (.getValue bin-i)
+                   mi (.getCount bin-i)
+                   pi+1 (.getValue bin-i+1)
+                   mi+1 (.getCount bin-i+1)
+                   d (- s (.sum this pi))
+                   a (- mi+1 mi)
+                   b (* 2.0 mi)
                    c (- (* 2.0 d))
                    ;; NOTE: unsure if this NaN handling is correct?
                    z (if (zero? a)
                        (- (/ c b))
                        (/ (+ (- b) (Math/sqrt (Math/abs (- (* b b) (* 4.0 a c)))))
                           (* 2.0 a)))]]
-         (+ k1 (* (- k2 k1) z))))))
+         (+ pi (* (- pi+1 pi) z))))))
 
   (getMin [this]
     min-v)
@@ -155,6 +176,9 @@
 
   (getTotal [this]
     total)
+
+  (getBins [this]
+    bins)
 
   (histogramString [this]
     (str "total: " total " min: " min-v " max: " max-v "\n"
