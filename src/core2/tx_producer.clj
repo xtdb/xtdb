@@ -24,7 +24,7 @@
                     :put (:doc tx-op)
                     :delete (select-keys tx-op [:_id]))]
       (let [^Set field-types (.computeIfAbsent doc-k-types k (util/->jfn (fn [_] (LinkedHashSet.))))]
-        (.add field-types (t/->arrow-type (type v)))))
+        (.add field-types (t/class->arrow-type (type v)))))
 
     doc-k-types))
 
@@ -93,7 +93,7 @@
                        (doseq [[k v] doc
                                :let [^DenseUnionVector value-duv (.getChild document-vec (name k) DenseUnionVector)]]
                          (if (some? v)
-                           (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type v))))
+                           (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/class->arrow-type (type v))))
                                  value-offset (DenseUnionUtil/writeTypeId value-duv tx-op-offset type-id)]
                              (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
 
@@ -104,7 +104,7 @@
                         (.setIndexDefined op-vec tx-op-offset)
 
                         (if (some? id)
-                          (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/->arrow-type (type id))))
+                          (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/class->arrow-type (type id))))
                                 value-offset (DenseUnionUtil/writeTypeId id-duv tx-op-offset type-id)]
                             (t/set-safe! (.getVectorByType id-duv type-id) value-offset id))
 

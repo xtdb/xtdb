@@ -275,7 +275,7 @@
 
 (defn- append-object [^IAppendColumn col, obj]
   (case (types/arrow-type->type-id
-         (types/->arrow-type (class obj)))
+         (types/class->arrow-type (class obj)))
     1 (.appendNull col)
     2 (.appendLong col obj)
     3 (.appendDouble col obj)
@@ -286,9 +286,9 @@
     18 (.appendDurationMillis col (.toMillis ^Duration obj))
     (throw (ex-info "can't append this" {:obj obj,
                                          :type (class obj),
-                                         :arrow-type (types/->arrow-type (class obj))
+                                         :arrow-type (types/class->arrow-type (class obj))
                                          :type-id (types/arrow-type->type-id
-                                                   (types/->arrow-type (class obj)))}))))
+                                                   (types/class->arrow-type (class obj)))}))))
 
 (deftype VectorBackedAppendColumn [^ValueVector out-vec]
   IAppendColumn

@@ -65,7 +65,7 @@
      acc)))
 
 (defn literal-hashes ^ints [^BufferAllocator allocator literal]
-  (let [arrow-type (types/->arrow-type (class literal))
+  (let [arrow-type (types/class->arrow-type (class literal))
         minor-type (Types/getMinorTypeForArrowType arrow-type)]
     (with-open [^ValueVector vec (.getNewVector minor-type (types/->field "_" arrow-type false) allocator nil)]
       (types/set-safe! vec 0 literal)

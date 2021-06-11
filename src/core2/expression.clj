@@ -473,7 +473,7 @@
      :param-types (->> params
                        (util/into-linked-map
                         (util/map-entries (fn [param-k param-v]
-                                            (let [arrow-type (types/->arrow-type (class param-v))
+                                            (let [arrow-type (types/class->arrow-type (class param-v))
                                                   normalized-expr-type (class (normalize-union-value param-v))
                                                   primitive-tag (get type->cast normalized-expr-type)]
                                               (MapEntry/create (cond-> param-k

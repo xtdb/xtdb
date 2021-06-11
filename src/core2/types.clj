@@ -18,7 +18,7 @@
 
 (def duration-milli-arrow-type (ArrowType$Duration. TimeUnit/MILLISECOND))
 
-(def ->arrow-type
+(def class->arrow-type
   {nil (.getType Types$MinorType/NULL)
    Long (.getType Types$MinorType/BIGINT)
    Double (.getType Types$MinorType/FLOAT8)
@@ -71,7 +71,7 @@
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
 
 (def ^org.apache.arrow.vector.types.pojo.Field row-id-field
-  (->field "_row-id" (->arrow-type Long) false))
+  (->field "_row-id" (class->arrow-type Long) false))
 
 (defprotocol PValueVector
   (set-safe! [value-vector idx v])
@@ -148,7 +148,7 @@
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
 
   DenseUnionVector
-  (set-safe! [this idx v] (let [type-id (arrow-type->type-id (->arrow-type (class v)))
+  (set-safe! [this idx v] (let [type-id (arrow-type->type-id (class->arrow-type (class v)))
                                 offset (DenseUnionUtil/writeTypeId this idx type-id)]
                             (set-safe! (.getVectorByType this (.getTypeId this idx)) offset v)))
   (set-null! [this idx] (set-safe! this idx nil))

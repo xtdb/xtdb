@@ -144,7 +144,7 @@
                ~(if (= meta-value :bloom-filter)
                   `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
 
-                  (let [arrow-type (types/->arrow-type field-type)
+                  (let [arrow-type (types/class->arrow-type field-type)
                         minor-type (Types/getMinorTypeForArrowType arrow-type)
                         vec-sym (get metadata-vec-syms meta-value)
                         col-sym (gensym 'meta-col)
