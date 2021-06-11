@@ -21,7 +21,7 @@
                                        (s/conform ::sys/path (.toURI (io/resource "core2/operator/csv-cursor-test.csv")))
                                        {"a-long" :bigint
                                         "a-double" :float8
-                                        "an-inst" :timestampmilli}
+                                        "an-inst" :timestamp-milli}
                                        {:batch-size 3})]
     (t/is (= example-data (into [] (tu/<-cursor cursor))))))
 

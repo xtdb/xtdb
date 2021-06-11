@@ -10,7 +10,7 @@
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector StructVector]
-           [org.apache.arrow.vector.types Types$MinorType UnionMode]
+           org.apache.arrow.vector.types.UnionMode
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$Union Schema]))
 
 (definterface ITxProducer
@@ -41,36 +41,35 @@
       (assert (inst? _valid-time-end)))))
 
 (defn- ->doc-field [k v-types]
-  (let [v-types (sort-by #(.getFlatbufID (.getTypeID ^ArrowType %)) v-types)]
+  (let [v-types (sort-by t/arrow-type->type-id v-types)]
     (apply t/->field
            (name k)
            (ArrowType$Union. UnionMode/Dense
-                             (int-array (for [^ArrowType v-type v-types]
-                                          (.getFlatbufID (.getTypeID v-type)))))
+                             (int-array (map t/arrow-type->type-id v-types)))
            false
            (for [^ArrowType v-type v-types]
-             (t/->field (str "type-" (.getFlatbufID (.getTypeID v-type))) v-type false)))))
+             (t/->field (str "type-" (t/arrow-type->type-id v-type)) v-type false)))))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-start-field
-  (t/->field "_valid-time-start" (t/primitive-type->arrow-type :timestampmilli) true))
+  (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true))
 
 (def ^:private ^org.apache.arrow.vector.types.pojo.Field valid-time-end-field
-  (t/->field "_valid-time-end" (t/primitive-type->arrow-type :timestampmilli) true))
+  (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
   (validate-tx-ops tx-ops)
   (let [tx-ops (vec tx-ops)
         put-k-types (->doc-k-types tx-ops)
-        document-field (apply t/->field "document" (.getType Types$MinorType/STRUCT) false
+        document-field (apply t/->field "document" t/struct-type false
                               (for [[k v-types] put-k-types]
                                 (->doc-field k v-types)))
         delete-id-field (->doc-field :_id (:_id put-k-types))
-        tx-schema (Schema. [(t/->field "tx-ops" (.getType Types$MinorType/DENSEUNION) false
-                                       (t/->field "put" (.getType Types$MinorType/STRUCT) false
+        tx-schema (Schema. [(t/->field "tx-ops" t/dense-union-type false
+                                       (t/->field "put" t/struct-type false
                                                   document-field
                                                   valid-time-start-field
                                                   valid-time-end-field)
-                                       (t/->field "delete" (.getType Types$MinorType/STRUCT) false
+                                       (t/->field "delete" t/struct-type false
                                                   delete-id-field
                                                   valid-time-start-field
                                                   valid-time-end-field))])]
@@ -93,7 +92,7 @@
                        (doseq [[k v] doc
                                :let [^DenseUnionVector value-duv (.getChild document-vec (name k) DenseUnionVector)]]
                          (if (some? v)
-                           (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/class->arrow-type (type v))))
+                           (let [type-id (t/arrow-type->type-id (t/class->arrow-type (type v)))
                                  value-offset (DenseUnionUtil/writeTypeId value-duv tx-op-offset type-id)]
                              (t/set-safe! (.getVectorByType value-duv type-id) value-offset v))
 
@@ -104,7 +103,7 @@
                         (.setIndexDefined op-vec tx-op-offset)
 
                         (if (some? id)
-                          (let [type-id (.getFlatbufID (.getTypeID ^ArrowType (t/class->arrow-type (type id))))
+                          (let [type-id (t/arrow-type->type-id (t/class->arrow-type (type id)))
                                 value-offset (DenseUnionUtil/writeTypeId id-duv tx-op-offset type-id)]
                             (t/set-safe! (.getVectorByType id-duv type-id) value-offset id))
 

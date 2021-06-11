@@ -3,26 +3,23 @@
             [clojure.test :as t]
             [core2.core :as c2]
             [core2.json :as c2-json]
+            core2.object-store
             [core2.relation :as rel]
             [core2.types :as ty]
             [core2.util :as util])
   (:import core2.core.Node
            core2.ICursor
-           core2.indexer.TransactionIndexer
            core2.object_store.FileSystemObjectStore
-           [core2.relation IReadColumn IReadRelation]
+           core2.relation.IReadColumn
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration ZoneId]
            [java.util ArrayList Date LinkedList]
-           [java.util.concurrent CompletableFuture TimeoutException]
+           java.util.concurrent.TimeUnit
            java.util.function.Consumer
            org.apache.arrow.memory.RootAllocator
            [org.apache.arrow.vector FieldVector ValueVector VectorSchemaRoot]
-           org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType
-           java.util.concurrent.TimeUnit
-           java.util.concurrent.TimeUnit))
+           org.apache.arrow.vector.types.pojo.Schema))
 
 (def ^:dynamic ^org.apache.arrow.memory.BufferAllocator *allocator*)
 
@@ -127,8 +124,8 @@
       (let [blocks [[{:name "foo", :age 20}
                      {:name "bar", :age 25}]
                     [{:name "baz", :age 30}]]]
-        (with-open [cursor (->cursor (Schema. [(ty/->field "name" (.getType Types$MinorType/VARCHAR) false)
-                                               (ty/->field "age" (.getType Types$MinorType/BIGINT) false)])
+        (with-open [cursor (->cursor (Schema. [(ty/->field "name" (ty/->arrow-type :varchar) false)
+                                               (ty/->field "age" (ty/->arrow-type :bigint) false)])
                                      blocks)]
 
           (t/is (= blocks (<-cursor cursor))))))))

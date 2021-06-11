@@ -9,14 +9,13 @@
   (:import core2.operator.project.ProjectionSpec
            core2.operator.select.IRelationSelector
            org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType
            org.roaringbitmap.RoaringBitmap))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-union-all
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
@@ -43,8 +42,8 @@
         (t/is (empty? (tu/<-cursor union-cursor)))))))
 
 (t/deftest test-intersection
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
@@ -90,8 +89,8 @@
         (t/is (empty? (tu/<-cursor intersection-cursor)))))))
 
 (t/deftest test-difference
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field b-field])
                                          [[{:a 12 :b 10}, {:a 0 :b 15}]
                                           [{:a 100 :b 15}]])
@@ -130,8 +129,8 @@
         (t/is (= [#{{:a 10} {:a 15}}] (mapv set (tu/<-cursor difference-cursor))))))))
 
 (t/deftest test-distinct
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
 
     (with-open [in-cursor (tu/->cursor (Schema. [a-field b-field])
                                        [[{:a 12 :b 10}, {:a 0 :b 15}]
@@ -164,8 +163,8 @@
         (t/is (empty? (tu/<-cursor distinct-cursor)))))))
 
 (t/deftest test-fixpoint
-  (with-open [in-cursor (tu/->cursor (Schema. [(ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-                                               (ty/->field "b" (.getType Types$MinorType/BIGINT) false)])
+  (with-open [in-cursor (tu/->cursor (Schema. [(ty/->field "a" (ty/->arrow-type :bigint) false)
+                                               (ty/->field "b" (ty/->arrow-type :bigint) false)])
                                      [[{:a 0 :b 1}]])
               factorial-cursor (set-op/->fixpoint-cursor
                                 tu/*allocator* in-cursor

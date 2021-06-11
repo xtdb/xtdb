@@ -63,7 +63,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "timestampmilli",
+        "name" : "timestamp-milli",
         "nullable" : false,
         "type" : {
           "name" : "timestamp",
@@ -72,7 +72,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "durationmilli",
+        "name" : "duration-milli",
         "nullable" : false,
         "type" : {
           "name" : "duration",
@@ -125,12 +125,12 @@
         "VALIDITY" : [ ],
         "DATA" : [ ]
       },{
-        "name" : "timestampmilli",
+        "name" : "timestamp-milli",
         "count" : 0,
         "VALIDITY" : [ ],
         "DATA" : [ ]
       },{
-        "name" : "durationmilli",
+        "name" : "duration-milli",
         "count" : 0,
         "VALIDITY" : [ ],
         "DATA" : [ ]

@@ -86,7 +86,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "timestampmilli",
+        "name" : "timestamp-milli",
         "nullable" : true,
         "type" : {
           "name" : "timestamp",
@@ -95,7 +95,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "duration",
+        "name" : "duration-milli",
         "nullable" : true,
         "type" : {
           "name" : "duration",
@@ -155,7 +155,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "timestampmilli",
+        "name" : "timestamp-milli",
         "nullable" : true,
         "type" : {
           "name" : "timestamp",
@@ -164,7 +164,7 @@
         },
         "children" : [ ]
       },{
-        "name" : "duration",
+        "name" : "duration-milli",
         "nullable" : true,
         "type" : {
           "name" : "duration",
@@ -243,7 +243,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "timestampmilli",
+            "name" : "timestamp-milli",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -252,7 +252,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "duration",
+            "name" : "duration-milli",
             "nullable" : true,
             "type" : {
               "name" : "duration",
@@ -312,7 +312,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "timestampmilli",
+            "name" : "timestamp-milli",
             "nullable" : true,
             "type" : {
               "name" : "timestamp",
@@ -321,7 +321,7 @@
             },
             "children" : [ ]
           },{
-            "name" : "duration",
+            "name" : "duration-milli",
             "nullable" : true,
             "type" : {
               "name" : "duration",
@@ -398,12 +398,12 @@
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
       },{
-        "name" : "timestampmilli",
+        "name" : "timestamp-milli",
         "count" : 20,
         "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
         "DATA" : [0,0,1577836800000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
       },{
-        "name" : "duration",
+        "name" : "duration-milli",
         "count" : 20,
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -443,12 +443,12 @@
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
       },{
-        "name" : "timestampmilli",
+        "name" : "timestamp-milli",
         "count" : 20,
         "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
         "DATA" : [0,0,1577923200000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
       },{
-        "name" : "duration",
+        "name" : "duration-milli",
         "count" : 20,
         "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -503,12 +503,12 @@
             "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
           },{
-            "name" : "timestampmilli",
+            "name" : "timestamp-milli",
             "count" : 20,
             "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
             "DATA" : [0,0,1577836800000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
           },{
-            "name" : "duration",
+            "name" : "duration-milli",
             "count" : 20,
             "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
@@ -548,12 +548,12 @@
             "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
           },{
-            "name" : "timestampmilli",
+            "name" : "timestamp-milli",
             "count" : 20,
             "VALIDITY" : [0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
             "DATA" : [0,0,1577923200000,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1479211200000]
           },{
-            "name" : "duration",
+            "name" : "duration-milli",
             "count" : 20,
             "VALIDITY" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             "DATA" : [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]

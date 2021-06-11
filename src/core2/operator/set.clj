@@ -9,7 +9,6 @@
            java.util.function.Consumer
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
-           [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo Field Schema]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -26,16 +25,14 @@
         (throw (union-incompatible)))
       (Schema. (for [[^Field x-field, ^Field y-field] (map vector x-fields y-fields)
                      :let [x-name (.getName x-field)
-                           x-type (Types/getMinorTypeForArrowType
-                                   (.getType x-field))
+                           x-type (.getType x-field)
                            y-name (.getName y-field)
-                           y-type (Types/getMinorTypeForArrowType
-                                   (.getType y-field))]]
+                           y-type (.getType y-field)]]
                  (cond
                    (not (and (= x-name y-name) (= x-type y-type)))
                    (throw (union-incompatible))
 
-                   (= Types$MinorType/DENSEUNION x-type y-type)
+                   (= t/dense-union-type x-type y-type)
                    (t/->primitive-dense-union-field x-name)
 
                    :else x-field))))))

@@ -2,8 +2,7 @@
   (:require [core2.expression :as expr]
             [core2.types :as types])
   (:import java.util.Date
-           org.apache.arrow.vector.types.pojo.ArrowType
-           org.apache.arrow.vector.types.Types$MinorType))
+           org.apache.arrow.vector.types.pojo.ArrowType))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -43,14 +42,13 @@
 (prefer-method expr/codegen-call [:compare Number Number] [:compare Comparable Comparable])
 (prefer-method expr/codegen-call [:compare String String] [:compare Comparable Comparable])
 
-(defn- comparator-code [^Types$MinorType minor-type]
+(defn- comparator-code [^ArrowType arrow-type]
   (let [left-col-sym (gensym 'left-col)
         left-idx-sym (gensym 'left-idx)
         right-col-sym (gensym 'right-col)
         right-idx-sym (gensym 'right-idx)
-        arrow-type (.getType minor-type)
         el-type (get types/arrow-type->java-type arrow-type Comparable)
-        codegen-opts {:var->types {left-col-sym #{minor-type}, right-col-sym #{minor-type}}}]
+        codegen-opts {:var->types {left-col-sym #{arrow-type}, right-col-sym #{arrow-type}}}]
     `(reify ColumnComparator
        (compareIdx [_# ~left-col-sym ~left-idx-sym ~right-col-sym ~right-idx-sym]
          ~(:code (expr/codegen-expr
@@ -68,11 +66,9 @@
                            :return-type el-type}]}
                   codegen-opts))))))
 
-(def ^:private memo-comparator-code
-  (memoize comparator-code))
-
+(def ^:private memo-comparator-code (memoize comparator-code))
 (def ^:private memo-eval (memoize eval))
 
-(defn ->comparator ^core2.expression.comparator.ColumnComparator [^Types$MinorType minor-type]
-  (-> (memo-comparator-code minor-type)
+(defn ->comparator ^core2.expression.comparator.ColumnComparator [^ArrowType arrow-type]
+  (-> (memo-comparator-code arrow-type)
       (memo-eval)))

@@ -1,6 +1,6 @@
 (ns core2.types
-  (:require [clojure.string :as str]
-            [core2.util :as util])
+  (:require [core2.util :as util]
+            [clojure.set :as set])
   (:import core2.DenseUnionUtil
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
@@ -28,51 +28,43 @@
    :timestamp-milli (.getType Types$MinorType/TIMESTAMPMILLI)
    :duration-milli duration-milli-arrow-type})
 
+(def <-arrow-type (set/map-invert ->arrow-type))
+
+(def struct-type (.getType Types$MinorType/STRUCT))
+(def dense-union-type (.getType Types$MinorType/DENSEUNION))
+
 (def class->arrow-type
-  {nil (.getType Types$MinorType/NULL)
-   Long (.getType Types$MinorType/BIGINT)
-   Double (.getType Types$MinorType/FLOAT8)
-   byte-array-class (.getType Types$MinorType/VARBINARY)
-   ByteBuffer (.getType Types$MinorType/VARBINARY)
-   String (.getType Types$MinorType/VARCHAR)
-   Text (.getType Types$MinorType/VARCHAR)
-   Boolean (.getType Types$MinorType/BIT)
-   Date (.getType Types$MinorType/TIMESTAMPMILLI)
-   Duration duration-milli-arrow-type
-   LocalDateTime (.getType Types$MinorType/TIMESTAMPMILLI)})
+  {nil (->arrow-type :null)
+   Long (->arrow-type :bigint)
+   Double (->arrow-type :float8)
+   byte-array-class (->arrow-type :varbinary)
+   ByteBuffer (->arrow-type :varbinary)
+   String (->arrow-type :varchar)
+   Text (->arrow-type :varchar)
+   Boolean (->arrow-type :bit)
+   Date (->arrow-type :timestamp-milli)
+   Duration (->arrow-type :duration-milli)
+   LocalDateTime (->arrow-type :timestamp-milli)})
 
 (def arrow-type->vector-type
-  {(.getType Types$MinorType/NULL) NullVector
-   (.getType Types$MinorType/BIGINT) BigIntVector
-   (.getType Types$MinorType/FLOAT8) Float8Vector
-   (.getType Types$MinorType/VARBINARY) VarBinaryVector
-   (.getType Types$MinorType/VARCHAR) VarCharVector
-   (.getType Types$MinorType/TIMESTAMPMILLI) TimeStampMilliVector
-   duration-milli-arrow-type DurationVector
-   (.getType Types$MinorType/BIT) BitVector})
-
-(def minor-type->java-type
-  {Types$MinorType/NULL nil
-   Types$MinorType/BIGINT Long
-   Types$MinorType/FLOAT8 Double
-   Types$MinorType/VARBINARY byte-array-class
-   Types$MinorType/VARCHAR String
-   Types$MinorType/TIMESTAMPMILLI Date
-   Types$MinorType/DURATION Duration
-   Types$MinorType/BIT Boolean})
+  {(->arrow-type :null) NullVector
+   (->arrow-type :bigint) BigIntVector
+   (->arrow-type :float8) Float8Vector
+   (->arrow-type :varbinary) VarBinaryVector
+   (->arrow-type :varchar) VarCharVector
+   (->arrow-type :timestamp-milli) TimeStampMilliVector
+   (->arrow-type :duration-milli) DurationVector
+   (->arrow-type :bit) BitVector})
 
 (def arrow-type->java-type
-  (->> (for [[^Types$MinorType k v] minor-type->java-type]
-         [(if (= Types$MinorType/DURATION k)
-            duration-milli-arrow-type
-            (.getType k))
-          v])
-       (into {})))
-
-(defn minor-type->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [^Types$MinorType minor-type]
-  (if (= Types$MinorType/DURATION minor-type)
-    duration-milli-arrow-type
-    (.getType minor-type)))
+  {(->arrow-type :null) nil
+   (->arrow-type :bigint) Long
+   (->arrow-type :float8) Double
+   (->arrow-type :varbinary) byte-array-class
+   (->arrow-type :varchar) String
+   (->arrow-type :timestamp-milli) Date
+   (->arrow-type :duration-milli) Duration
+   (->arrow-type :bit) Boolean})
 
 (defn arrow-type->type-id ^long [^ArrowType arrow-type]
   (long (.getFlatbufID (.getTypeID arrow-type))))
@@ -165,34 +157,21 @@
   (get-object [this idx] (get-object (.getVectorByType this (.getTypeId this idx))
                                      (.getOffset this idx))))
 
-(def ^:private ->minor-type
-  (->> (for [^Types$MinorType t (Types$MinorType/values)]
-         [(keyword (str/lower-case (.name t))) t])
-       (into {})))
-
-(def primitive-types
-  #{:null :bigint :float8 :varbinary :varchar :bit :timestampmilli :durationmilli})
-
-(defn primitive-type->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [type-k]
-  (if (= :durationmilli type-k)
-    duration-milli-arrow-type
-    (.getType ^Types$MinorType (->minor-type type-k))))
-
 (defn ->primitive-dense-union-field
   (^org.apache.arrow.vector.types.pojo.Field [field-name]
-   (->primitive-dense-union-field field-name primitive-types))
+   (->primitive-dense-union-field field-name (keys ->arrow-type)))
   (^org.apache.arrow.vector.types.pojo.Field [^String field-name type-ks]
-   (let [type-ks (sort-by (comp arrow-type->type-id primitive-type->arrow-type) type-ks)
+   (let [type-ks (sort-by (comp arrow-type->type-id ->arrow-type) type-ks)
          type-ids (int-array (for [type-k type-ks]
-                               (-> type-k primitive-type->arrow-type arrow-type->type-id)))]
+                               (-> type-k ->arrow-type arrow-type->type-id)))]
      (apply ->field field-name
             (ArrowType$Union. UnionMode/Dense type-ids)
             false
             (for [type-k type-ks]
               (if (= type-k :null)
                 (->field "$data$"
-                         (primitive-type->arrow-type type-k)
+                         (->arrow-type type-k)
                          true)
                 (->field (name type-k)
-                         (primitive-type->arrow-type type-k)
+                         (->arrow-type type-k)
                          false)))))))

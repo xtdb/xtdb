@@ -3,15 +3,14 @@
             [core2.operator.join :as join]
             [core2.test-util :as tu]
             [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType))
+  (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-cross-join
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
-        c-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
+        c-field (ty/->field "c" (ty/->arrow-type :bigint) false)]
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]
                                           [{:a 100}]])
@@ -43,9 +42,9 @@
 
 
 (t/deftest test-equi-join
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
-        c-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
+        c-field (ty/->field "c" (ty/->arrow-type :bigint) false)]
 
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]
@@ -115,9 +114,9 @@
         (t/is (empty? (tu/<-cursor join-cursor)))))))
 
 (t/deftest test-semi-equi-join
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
-        c-field (ty/->field "c" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
+        c-field (ty/->field "c" (ty/->arrow-type :bigint) false)]
 
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]
@@ -172,8 +171,8 @@
         (t/is (empty? (tu/<-cursor join-cursor)))))))
 
 (t/deftest test-anti-equi-join
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)]
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)]
 
     (with-open [left-cursor (tu/->cursor (Schema. [a-field])
                                          [[{:a 12}, {:a 0}]

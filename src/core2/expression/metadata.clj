@@ -145,14 +145,13 @@
                   `(bloom/bloom-contains? ~(:bloom metadata-vec-syms) ~expr/idx-sym ~bloom-hash-sym)
 
                   (let [arrow-type (types/class->arrow-type field-type)
-                        minor-type (Types/getMinorTypeForArrowType arrow-type)
                         vec-sym (get metadata-vec-syms meta-value)
                         col-sym (gensym 'meta-col)
                         variable-code (expr/codegen-expr
                                        {:op :variable, :variable col-sym}
-                                       {:var->types {col-sym #{minor-type}}})]
+                                       {:var->types {col-sym #{arrow-type}}})]
                     `(let [~(-> vec-sym (expr/with-tag (types/arrow-type->vector-type arrow-type)))
-                           (.getChild ~vec-sym ~(meta/type->field-name minor-type))]
+                           (.getChild ~vec-sym ~(meta/type->field-name arrow-type))]
                        (when-not (.isNull ~vec-sym ~expr/idx-sym)
                          (let [~(-> col-sym (expr/with-tag IReadColumn)) (rel/<-vector ~vec-sym)]
                            ~(:code (expr/codegen-expr

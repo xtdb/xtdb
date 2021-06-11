@@ -53,8 +53,8 @@
    :varbinary #(.decode b64-decoder ^String %)
    :varchar #(Text. ^String %)
    :bit #(or (= "1" %) (= "true" %))
-   :timestampmilli #(.getTime ^Date (inst/read-instant-date %))
-   :durationmilli #(.toMillis (Duration/parse %))})
+   :timestamp-milli #(.getTime ^Date (inst/read-instant-date %))
+   :duration-milli #(.toMillis (Duration/parse %))})
 
 (defn ^core2.ICursor ->csv-cursor
   ([^BufferAllocator allocator, ^Path path, col-types]
@@ -66,7 +66,7 @@
          col-types (map #(get col-types % :varchar) col-names)
          schema (Schema. (map (fn [col-name col-type]
                                 (types/->field col-name
-                                               (types/primitive-type->arrow-type col-type)
+                                               (types/->arrow-type col-type)
                                                false))
                               col-names col-types))]
      (CSVCursor. allocator rdr

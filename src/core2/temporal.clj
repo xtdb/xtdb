@@ -147,14 +147,14 @@
 
 (def ->temporal-field
   (->> (for [col-name ["_tx-time-start" "_tx-time-end" "_valid-time-start" "_valid-time-end"]]
-         [col-name (t/->primitive-dense-union-field col-name #{:timestampmilli})])
+         [col-name (t/->primitive-dense-union-field col-name #{:timestamp-milli})])
        (into {})))
 
 (defn temporal-column? [col-name]
   (contains? ->temporal-field (name col-name)))
 
 (def ^:private timestampmilli-type-id
-  (-> (t/primitive-type->arrow-type :timestampmilli)
+  (-> (t/->arrow-type :timestamp-milli)
       (t/arrow-type->type-id)))
 
 (defn ->temporal-root-schema ^org.apache.arrow.vector.types.pojo.Schema [col-name]

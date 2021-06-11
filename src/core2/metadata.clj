@@ -4,23 +4,22 @@
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
             core2.object-store
+            [core2.relation :as rel]
             [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.util :as util])
   (:import core2.buffer_pool.IBufferPool
+           core2.ICursor
            core2.object_store.ObjectStore
            core2.tx.Watermark
-           core2.ICursor
            java.io.Closeable
            [java.util Date HashMap List Map SortedSet]
            [java.util.concurrent CompletableFuture ConcurrentSkipListSet]
            [java.util.function Consumer Function]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
-           [org.apache.arrow.vector BigIntVector FieldVector TimeStampMilliVector VarBinaryVector VarCharVector VectorSchemaRoot]
+           [org.apache.arrow.vector BigIntVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
-           [org.apache.arrow.vector.types Types Types$MinorType]
            [org.apache.arrow.vector.types.pojo ArrowType ArrowType$List Schema]
            org.apache.arrow.vector.util.Text
            org.roaringbitmap.RoaringBitmap))
@@ -39,37 +38,29 @@
 
 (defrecord ChunkMatch [^long chunk-idx, ^RoaringBitmap block-idxs])
 
-(defn type->field-name [^Types$MinorType minor-type]
-  (.toLowerCase (.toString minor-type)))
+(defn type->field-name [^ArrowType arrow-type]
+  (name (t/<-arrow-type arrow-type)))
 
 (def ^:private type-meta-fields
-  (for [^Types$MinorType minor-type (sort-by (comp t/arrow-type->type-id t/minor-type->arrow-type) (keys t/minor-type->java-type))]
-    (t/->field (type->field-name minor-type) (t/minor-type->arrow-type minor-type) true)))
+  (for [^ArrowType arrow-type (sort-by t/arrow-type->type-id (keys t/arrow-type->java-type))]
+    (t/->field (type->field-name arrow-type) arrow-type true)))
 
 (def ^org.apache.arrow.vector.types.pojo.Schema metadata-schema
-  (Schema. [(t/->field "column" (.getType Types$MinorType/VARCHAR) false)
+  (Schema. [(t/->field "column" (t/->arrow-type :varchar) false)
 
-            (t/->field "count" (.getType Types$MinorType/BIGINT) false)
-            (t/->field "min-row-id" (.getType Types$MinorType/BIGINT) false)
-            (t/->field "max-row-id" (.getType Types$MinorType/BIGINT) false)
+            (t/->field "count" (t/->arrow-type :bigint) false)
+            (t/->field "min-row-id" (t/->arrow-type :bigint) false)
+            (t/->field "max-row-id" (t/->arrow-type :bigint) false)
 
-            (apply t/->field "min"
-                   (.getType Types$MinorType/STRUCT) false
-                   type-meta-fields)
-            (apply t/->field "max"
-                   (.getType Types$MinorType/STRUCT) false
-                   type-meta-fields)
-            (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)
+            (apply t/->field "min" t/struct-type false type-meta-fields)
+            (apply t/->field "max" t/struct-type false type-meta-fields)
+            (t/->field "bloom" (t/->arrow-type :varbinary) false)
 
             (t/->field "blocks" (ArrowType$List.) false
-                       (t/->field "block-meta" (.getType Types$MinorType/STRUCT) true
-                                  (apply t/->field "min"
-                                         (.getType Types$MinorType/STRUCT) false
-                                         type-meta-fields)
-                                  (apply t/->field "max"
-                                         (.getType Types$MinorType/STRUCT) false
-                                         type-meta-fields)
-                                  (t/->field "bloom" (.getType Types$MinorType/VARBINARY) false)))]))
+                       (t/->field "block-meta" t/struct-type true
+                                  (apply t/->field "min" t/struct-type false type-meta-fields)
+                                  (apply t/->field "max" t/struct-type false type-meta-fields)
+                                  (t/->field "bloom" (t/->arrow-type :varbinary) false)))]))
 
 (defn- ->metadata-obj-key [chunk-idx]
   (format "metadata-%016x.arrow" chunk-idx))
@@ -81,13 +72,13 @@
   (some-> (second (re-matches #"metadata-(\p{XDigit}{16}).arrow" obj-key))
           (Long/parseLong 16)))
 
-(defn- write-min-max [^FieldVector field-vec,
+(defn- write-min-max [^ValueVector field-vec,
                       ^StructVector min-meta-vec, ^StructVector max-meta-vec,
                       ^long meta-idx]
   (when (pos? (.getValueCount field-vec))
-    (let [minor-type (.getMinorType field-vec)
-          type-name (type->field-name minor-type)
-          col-comparator (expr.comp/->comparator minor-type)
+    (let [arrow-type (.getType (.getField field-vec))
+          type-name (type->field-name arrow-type)
+          col-comparator (expr.comp/->comparator arrow-type)
 
           field-col (rel/<-vector field-vec)
           min-vec (.getChild min-meta-vec type-name)
@@ -226,11 +217,11 @@
         ^StructVector max-vec (.getVector metadata-root "max")]
     (tx/->TransactionInstant (-> max-vec
                                  ^BigIntVector
-                                 (.getChild (type->field-name Types$MinorType/BIGINT))
+                                 (.getChild (type->field-name (t/->arrow-type :bigint)))
                                  (.get (.columnIndex metadata-idxs "_tx-id")))
                              (Date. (-> max-vec
                                         ^TimeStampMilliVector
-                                        (.getChild (type->field-name Types$MinorType/TIMESTAMPMILLI))
+                                        (.getChild (type->field-name (t/->arrow-type :timestamp-milli)))
                                         (.get (.columnIndex metadata-idxs "_tx-time")))))))
 
 (defn latest-row-id [_chunk-idx ^VectorSchemaRoot metadata-root]

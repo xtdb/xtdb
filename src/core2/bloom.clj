@@ -1,12 +1,11 @@
 (ns core2.bloom
   (:require [core2.types :as types])
-  (:import org.apache.arrow.memory.BufferAllocator
+  (:import java.nio.ByteBuffer
+           org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.hash.MurmurHasher
-           [org.apache.arrow.vector BitVector FieldVector ValueVector VarBinaryVector]
-           org.apache.arrow.vector.types.Types
-           java.nio.ByteBuffer
-           org.roaringbitmap.RoaringBitmap
-           org.roaringbitmap.buffer.ImmutableRoaringBitmap))
+           [org.apache.arrow.vector ValueVector VarBinaryVector]
+           org.roaringbitmap.buffer.ImmutableRoaringBitmap
+           org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -65,9 +64,8 @@
      acc)))
 
 (defn literal-hashes ^ints [^BufferAllocator allocator literal]
-  (let [arrow-type (types/class->arrow-type (class literal))
-        minor-type (Types/getMinorTypeForArrowType arrow-type)]
-    (with-open [^ValueVector vec (.getNewVector minor-type (types/->field "_" arrow-type false) allocator nil)]
+  (let [arrow-type (types/class->arrow-type (class literal))]
+    (with-open [^ValueVector vec (.createVector (types/->field "_" arrow-type false) allocator)]
       (types/set-safe! vec 0 literal)
       (bloom-hashes vec 0))))
 

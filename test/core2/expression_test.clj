@@ -5,15 +5,14 @@
             [core2.expression.temporal :as expr.temp]
             [core2.test-util :as tu]
             [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType))
+  (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
-(def a-field (ty/->field "a" (.getType Types$MinorType/FLOAT8) false))
-(def b-field (ty/->field "b" (.getType Types$MinorType/FLOAT8) false))
-(def d-field (ty/->field "d" (.getType Types$MinorType/BIGINT) false))
-(def e-field (ty/->field "e" (.getType Types$MinorType/VARCHAR) false))
+(def a-field (ty/->field "a" (ty/->arrow-type :float8) false))
+(def b-field (ty/->field "b" (ty/->arrow-type :float8) false))
+(def d-field (ty/->field "d" (ty/->arrow-type :bigint) false))
+(def e-field (ty/->field "e" (ty/->arrow-type :varchar) false))
 
 (def data
   (for [n (range 1000)]

@@ -1,7 +1,6 @@
 package core2.relation;
 
 import org.apache.arrow.vector.ValueVector;
-import org.apache.arrow.vector.types.Types.MinorType;
 import org.apache.arrow.vector.types.pojo.ArrowType;
 
 import java.nio.ByteBuffer;

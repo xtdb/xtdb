@@ -60,7 +60,7 @@
                        offset
                        (.getVectorByType ^DenseUnionVector src-vec type-id)))
 
-      (let [type-id (t/arrow-type->type-id (.getType (.getMinorType src-vec)))
+      (let [type-id (t/arrow-type->type-id (.getType (.getField src-vec)))
             offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
         (.copyFromSafe (.getVectorByType field-vec type-id)
                        src-idx
@@ -70,11 +70,10 @@
     (util/set-vector-schema-root-row-count content-root (inc value-count))))
 
 (def ^:private ^Field tx-time-field
-  (t/->primitive-dense-union-field "_tx-time" #{:timestampmilli}))
+  (t/->primitive-dense-union-field "_tx-time" #{:timestamp-milli}))
 
 (def ^:private timestampmilli-type-id
-  (-> (t/primitive-type->arrow-type :timestampmilli)
-      (t/arrow-type->type-id)))
+  (-> (t/->arrow-type :timestamp-milli) (t/arrow-type->type-id)))
 
 (defn ->tx-time-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Date tx-time]
   (doto ^DenseUnionVector (.createVector tx-time-field allocator)
@@ -87,7 +86,7 @@
   (t/->primitive-dense-union-field "_tx-id" #{:bigint}))
 
 (def ^:private bigint-type-id
-  (-> (t/primitive-type->arrow-type :bigint)
+  (-> (t/->arrow-type :bigint)
       (t/arrow-type->type-id)))
 
 (defn ->tx-id-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^long tx-id]
@@ -101,8 +100,7 @@
   (t/->primitive-dense-union-field "_tombstone" #{:bit}))
 
 (def ^:private bit-type-id
-  (-> (t/primitive-type->arrow-type :bit)
-      (t/arrow-type->type-id)))
+  (-> (t/arrow-type->type-id (t/->arrow-type :bit))))
 
 (defn ->tombstone-vec ^org.apache.arrow.vector.complex.DenseUnionVector [^BufferAllocator allocator, ^Boolean tombstone?]
   (doto ^DenseUnionVector (.createVector tombstone-field allocator)

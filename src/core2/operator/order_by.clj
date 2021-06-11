@@ -9,7 +9,6 @@
            [java.util.function Consumer ToIntFunction]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.Types
            org.apache.arrow.vector.types.pojo.ArrowType))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -37,7 +36,7 @@
                                ^ArrowType arrow-type (if (= 1 (.size arrow-types))
                                                        (first arrow-types)
                                                        (throw (UnsupportedOperationException.)))
-                               col-comparator (expr.comp/->comparator (Types/getMinorTypeForArrowType arrow-type))
+                               col-comparator (expr.comp/->comparator arrow-type)
 
                                ^Comparator
                                comparator (cond-> (reify Comparator

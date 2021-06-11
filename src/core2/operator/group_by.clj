@@ -4,12 +4,11 @@
             [core2.types :as types])
   (:import core2.ICursor
            core2.relation.IReadRelation
-           [java.util ArrayList Comparator DoubleSummaryStatistics EnumSet HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
+           [java.util ArrayList Comparator DoubleSummaryStatistics HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
            [java.util.function BiConsumer Consumer Function IntConsumer ObjDoubleConsumer ObjIntConsumer ObjLongConsumer Supplier]
            [java.util.stream Collector Collector$Characteristics Collectors IntStream]
            org.apache.arrow.memory.BufferAllocator
            org.apache.arrow.memory.util.ArrowBufPointer
-           org.apache.arrow.vector.types.Types$MinorType
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)

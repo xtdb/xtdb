@@ -3,14 +3,13 @@
             [core2.operator.group-by :as group-by]
             [core2.test-util :as tu]
             [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType))
+  (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
 (t/deftest test-group-by
-  (let [a-field (ty/->field "a" (.getType Types$MinorType/BIGINT) false)
-        b-field (ty/->field "b" (.getType Types$MinorType/BIGINT) false)
+  (let [a-field (ty/->field "a" (ty/->arrow-type :bigint) false)
+        b-field (ty/->field "b" (ty/->arrow-type :bigint) false)
         aggregate-spec [(group-by/->group-spec "a")
                         (group-by/->sum-number-spec "b" "sum")
                         (group-by/->avg-number-spec "b" "avg")

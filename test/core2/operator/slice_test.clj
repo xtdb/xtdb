@@ -3,8 +3,7 @@
             [core2.operator.slice :as slice]
             [core2.test-util :as tu]
             [core2.types :as ty])
-  (:import org.apache.arrow.vector.types.pojo.Schema
-           org.apache.arrow.vector.types.Types$MinorType))
+  (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
 
@@ -50,7 +49,7 @@
   (let [blocks [[{:idx 0}, {:idx 1}]
                 [{:idx 2}, {:idx 3}]]]
     (letfn [(slice [offset length]
-              (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (.getType Types$MinorType/BIGINT) false)])
+              (with-open [cursor (tu/->cursor (Schema. [(ty/->field "idx" (ty/->arrow-type :bigint) false)])
                                               blocks)
                           slice-cursor (slice/->slice-cursor cursor offset length)]
                 (tu/<-cursor slice-cursor)))]
