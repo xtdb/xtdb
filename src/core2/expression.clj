@@ -15,7 +15,6 @@
            [java.time Duration Instant ZoneOffset]
            [java.time.temporal ChronoField ChronoUnit]
            [java.util Date LinkedHashMap]
-           org.apache.arrow.vector.types.Types$MinorType
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -205,7 +204,7 @@
   (let [var-types (or (get var->types variable)
                       (throw (IllegalArgumentException. (str "unknown variable: " variable))))
         var-type (or (when (= 1 (count var-types))
-                       (get types/minor-type->java-type (first var-types)))
+                       (get types/arrow-type->java-type (first var-types)))
                      Comparable)]
     {:code (condp = var-type
              Boolean `(.getBool ~variable ~idx-sym)
@@ -500,14 +499,14 @@
    Date '.appendDateMillis
    Duration '.appendDurationMillis})
 
-(def ^:private return-type->minor-type-sym
-  {Boolean `Types$MinorType/BIT
-   Long `Types$MinorType/BIGINT
-   Double `Types$MinorType/FLOAT8
-   String `Types$MinorType/VARCHAR
-   types/byte-array-class `Types$MinorType/VARBINARY
-   Date `Types$MinorType/TIMESTAMPMILLI
-   Duration `Types$MinorType/DURATION})
+(def ^:private return-type->type-kw
+  {Boolean :bit
+   Long :bigint
+   Double :float8
+   String :varchar
+   types/byte-array-class :varbinary
+   Date :timestamp-milli
+   Duration :duration-milli})
 
 (defn- generate-projection [col-name expr var-types param-types]
   (let [codegen-opts {:var->types var-types, :param->type param-types}
@@ -519,8 +518,8 @@
         out-col-sym (gensym 'out-vec)]
 
     `(fn [~allocator-sym [~@variables] [~@(keys param-types)] ^long row-count#]
-       (let [~out-col-sym ~(if-let [minor-type-sym (return-type->minor-type-sym return-type)]
-                             `(rel/->vector-append-column ~allocator-sym ~col-name ~minor-type-sym)
+       (let [~out-col-sym ~(if-let [type-kw (return-type->type-kw return-type)]
+                             `(rel/->vector-append-column ~allocator-sym ~col-name (types/->arrow-type ~type-kw))
                              `(rel/->fresh-append-column ~allocator-sym ~col-name))]
          (dotimes [~idx-sym row-count#]
            (~(get return-type->append-sym return-type '.appendObject)
@@ -540,7 +539,7 @@
               var-types (->> in-cols
                              (util/into-linked-map
                               (util/map-values (fn [_variable ^IReadColumn read-col]
-                                                 (.minorTypes read-col)))))
+                                                 (.arrowTypes read-col)))))
               expr-fn (-> (memo-generate-projection col-name expr var-types param-types)
                           (memo-eval))]
           (expr-fn allocator (vals in-cols) (vals emitted-params) (.rowCount in-rel)))))))
@@ -572,7 +571,7 @@
               var-types (->> in-cols
                              (util/into-linked-map
                               (util/map-values (fn [_variable ^IReadColumn read-col]
-                                                 (.minorTypes read-col)))))
+                                                 (.arrowTypes read-col)))))
               expr-code (memo-generate-selection expr var-types param-types)
               expr-fn (memo-eval expr-code)]
           (expr-fn (vals in-cols) (vals emitted-params) (.rowCount in)))))))
@@ -588,7 +587,7 @@
         (let [in-cols (doto (LinkedHashMap.)
                         (.put variable in-col))
               var-types (doto (LinkedHashMap.)
-                          (.put variable (.minorTypes in-col)))
+                          (.put variable (.arrowTypes in-col)))
               expr-code (memo-generate-selection expr var-types param-types)
               expr-fn (memo-eval expr-code)]
           (expr-fn (vals in-cols) (vals emitted-params) (.valueCount in-col)))))))

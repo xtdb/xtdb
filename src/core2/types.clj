@@ -18,6 +18,16 @@
 
 (def duration-milli-arrow-type (ArrowType$Duration. TimeUnit/MILLISECOND))
 
+(def ->arrow-type
+  {:null (.getType Types$MinorType/NULL)
+   :bigint (.getType Types$MinorType/BIGINT)
+   :float8 (.getType Types$MinorType/FLOAT8)
+   :varbinary (.getType Types$MinorType/VARBINARY)
+   :varchar (.getType Types$MinorType/VARCHAR)
+   :bit (.getType Types$MinorType/BIT)
+   :timestamp-milli (.getType Types$MinorType/TIMESTAMPMILLI)
+   :duration-milli duration-milli-arrow-type})
+
 (def class->arrow-type
   {nil (.getType Types$MinorType/NULL)
    Long (.getType Types$MinorType/BIGINT)

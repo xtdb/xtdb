@@ -1,15 +1,16 @@
 (ns core2.operator.order-by
   (:require [core2.expression.comparator :as expr.comp]
-            [core2.util :as util]
-            [core2.relation :as rel])
+            [core2.relation :as rel]
+            [core2.util :as util])
   (:import clojure.lang.Keyword
            core2.ICursor
-           [core2.relation IAppendRelation IReadColumn IReadRelation]
-           [java.util Comparator EnumSet List]
+           core2.relation.IReadRelation
+           [java.util Comparator List]
            [java.util.function Consumer ToIntFunction]
            java.util.stream.IntStream
            org.apache.arrow.memory.BufferAllocator
-           org.apache.arrow.vector.types.Types$MinorType))
+           org.apache.arrow.vector.types.Types
+           org.apache.arrow.vector.types.pojo.ArrowType))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -32,11 +33,11 @@
       (.sorted (reduce (fn [^Comparator acc ^OrderSpec order-spec]
                          (let [^String col-name (.col-name order-spec)
                                read-col (.readColumn read-rel col-name)
-                               minor-types (.minorTypes read-col)
-                               ^Types$MinorType minor-type (if (= 1 (.size minor-types))
-                                                             (first minor-types)
-                                                             (throw (UnsupportedOperationException.)))
-                               col-comparator (expr.comp/->comparator minor-type)
+                               arrow-types (.arrowTypes read-col)
+                               ^ArrowType arrow-type (if (= 1 (.size arrow-types))
+                                                       (first arrow-types)
+                                                       (throw (UnsupportedOperationException.)))
+                               col-comparator (expr.comp/->comparator (Types/getMinorTypeForArrowType arrow-type))
 
                                ^Comparator
                                comparator (cond-> (reify Comparator

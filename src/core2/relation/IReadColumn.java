@@ -2,15 +2,17 @@ package core2.relation;
 
 import org.apache.arrow.vector.ValueVector;
 import org.apache.arrow.vector.types.Types.MinorType;
+import org.apache.arrow.vector.types.pojo.ArrowType;
 
 import java.nio.ByteBuffer;
 import java.util.EnumSet;
+import java.util.Set;
 
 public interface IReadColumn extends AutoCloseable {
     String getName();
     IReadColumn rename(String colName);
     int valueCount();
-    EnumSet<MinorType> minorTypes();
+    Set<ArrowType> arrowTypes();
 
     boolean getBool(int idx);
     long getLong(int idx);

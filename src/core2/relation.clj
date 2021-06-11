@@ -4,17 +4,16 @@
   (:import [core2.relation IAppendColumn IAppendRelation IReadColumn IReadRelation]
            java.nio.ByteBuffer
            java.time.Duration
-           [java.util ArrayList Collection Date EnumSet HashMap LinkedHashMap List Map Map$Entry Set]
+           [java.util ArrayList Collection Date Set HashMap HashSet LinkedHashMap List Map Map$Entry Set]
            java.util.function.Function
            [java.util.stream IntStream IntStream$Builder]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           org.apache.arrow.vector.types.pojo.FieldType
-           org.apache.arrow.vector.types.Types$MinorType))
+           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType]))
 
 (definterface IAppendColumnPrivate
-  (^org.apache.arrow.vector.ValueVector _getAppendVector [^org.apache.arrow.vector.types.Types$MinorType minorType])
+  (^org.apache.arrow.vector.ValueVector _getAppendVector [^org.apache.arrow.vector.types.pojo.ArrowType arrowType])
   (^int _getAppendIndex [^org.apache.arrow.vector.ValueVector appendVector]))
 
 (defn- element->nio-buffer ^java.nio.ByteBuffer [^BaseVariableWidthVector vec ^long idx]
@@ -26,16 +25,16 @@
     (.nioBuffer value-buffer offset (- end-offset offset))))
 
 (deftype ReadColumn [^String col-name
-                     ^EnumSet minor-types
+                     ^Set arrow-types
                      ^Collection close-vecs
                      ^"[Lorg.apache.arrow.vector.ValueVector;" vecs
                      ^ints idxs
                      ^int value-count]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (ReadColumn. col-name minor-types #{} vecs idxs value-count))
+  (rename [_ col-name] (ReadColumn. col-name arrow-types #{} vecs idxs value-count))
   (valueCount [_] value-count)
-  (minorTypes [_] minor-types)
+  (arrowTypes [_] arrow-types)
 
   (getBool [_ idx] (= 1 (.get ^BitVector (aget vecs idx) (aget idxs idx))))
   (getDouble [_ idx] (.get ^Float8Vector (aget vecs idx) (aget idxs idx)))
@@ -51,18 +50,18 @@
   (close [_]
     (run! util/try-close close-vecs)))
 
-(defn- ->read-column [^String col-name, ^EnumSet minor-types, ^Collection close-vecs, ^List vecs, ^IntStream$Builder idxs]
+(defn- ->read-column [^String col-name, arrow-types, ^Collection close-vecs, ^List vecs, ^IntStream$Builder idxs]
   (let [idxs (.toArray (.build idxs))
         value-count (alength idxs)
         vecs (.toArray vecs ^"[Lorg.apache.arrow.vector.ValueVector;" (make-array ValueVector value-count))]
-    (ReadColumn. col-name (EnumSet/copyOf minor-types) close-vecs vecs idxs value-count)))
+    (ReadColumn. col-name (into #{} arrow-types) close-vecs vecs idxs value-count)))
 
-(deftype DirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^EnumSet minor-types]
+(deftype DirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^Set arrow-types]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (DirectVectorBackedColumn. in-vec col-name minor-types))
+  (rename [_ col-name] (DirectVectorBackedColumn. in-vec col-name arrow-types))
   (valueCount [_] (.getValueCount in-vec))
-  (minorTypes [_] minor-types)
+  (arrowTypes [_] arrow-types)
 
   (getBool [_ idx] (= 1 (.get ^BitVector in-vec idx)))
   (getDouble [_ idx] (.get ^Float8Vector in-vec idx))
@@ -78,12 +77,12 @@
   (close [_]
     (util/try-close in-vec)))
 
-(deftype DenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^EnumSet minor-types]
+(deftype DenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^Set arrow-types]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (DenseUnionColumn. in-vec col-name minor-types))
+  (rename [_ col-name] (DenseUnionColumn. in-vec col-name arrow-types))
   (valueCount [_] (.getValueCount in-vec))
-  (minorTypes [_] minor-types)
+  (arrowTypes [_] arrow-types)
 
   (getBool [this idx]
     (= 1 (.get ^BitVector (._getInternalVector this idx)
@@ -118,12 +117,12 @@
   (close [_]
     (util/try-close in-vec)))
 
-(deftype IndirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^EnumSet minor-types, ^ints idxs]
+(deftype IndirectVectorBackedColumn [^ValueVector in-vec, ^String col-name, ^Set arrow-types, ^ints idxs]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (IndirectVectorBackedColumn. in-vec col-name minor-types idxs))
+  (rename [_ col-name] (IndirectVectorBackedColumn. in-vec col-name arrow-types idxs))
   (valueCount [_] (alength idxs))
-  (minorTypes [_] minor-types)
+  (arrowTypes [_] arrow-types)
 
   (getBool [_ idx] (= 1 (.get ^BitVector in-vec (aget idxs idx))))
   (getDouble [_ idx] (.get ^Float8Vector in-vec (aget idxs idx)))
@@ -139,11 +138,11 @@
   (close [_]
     (util/try-close in-vec)))
 
-(deftype IndirectDenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^EnumSet minor-types, ^ints idxs]
+(deftype IndirectDenseUnionColumn [^DenseUnionVector in-vec, ^String col-name, ^Set arrow-types, ^ints idxs]
   IReadColumn
   (getName [_] col-name)
-  (rename [_ col-name] (IndirectDenseUnionColumn. in-vec col-name minor-types idxs))
-  (minorTypes [_] minor-types)
+  (rename [_ col-name] (IndirectDenseUnionColumn. in-vec col-name arrow-types idxs))
+  (arrowTypes [_] arrow-types)
   (valueCount [_] (alength idxs))
 
   (getBool [this idx]
@@ -179,27 +178,24 @@
   (close [_]
     (util/try-close in-vec)))
 
-(defn- vector-minor-types [^ValueVector v]
-  (EnumSet/of (.getMinorType v)))
+(defn- vector-arrow-types [^ValueVector v]
+  #{(.getType (.getField v))})
 
-(defn- dense-union-minor-types [^DenseUnionVector duv]
-  (let [^Collection minor-types (for [^ValueVector vv (.getChildrenFromFields duv)
-                                      :when (pos? (.getValueCount vv))]
-                                  (.getMinorType vv))]
-    (if (.isEmpty minor-types)
-      (EnumSet/noneOf Types$MinorType)
-      (EnumSet/copyOf minor-types))))
+(defn- dense-union-arrow-types [^DenseUnionVector duv]
+  (into #{} (for [^ValueVector vv (.getChildrenFromFields duv)
+                  :when (pos? (.getValueCount vv))]
+              (.getType (.getField vv)))))
 
 (defn ^core2.relation.IReadColumn <-vector
   ([^ValueVector in-vec]
    (if (instance? DenseUnionVector in-vec)
-     (DenseUnionColumn. in-vec (.getName in-vec) (dense-union-minor-types in-vec))
-     (DirectVectorBackedColumn. in-vec (.getName in-vec) (vector-minor-types in-vec))))
+     (DenseUnionColumn. in-vec (.getName in-vec) (dense-union-arrow-types in-vec))
+     (DirectVectorBackedColumn. in-vec (.getName in-vec) (vector-arrow-types in-vec))))
 
   ([^ValueVector in-vec, ^ints idxs]
    (if (instance? DenseUnionVector in-vec)
-     (IndirectDenseUnionColumn. in-vec (.getName in-vec) (dense-union-minor-types in-vec) idxs)
-     (IndirectVectorBackedColumn. in-vec (.getName in-vec) (vector-minor-types in-vec) idxs))))
+     (IndirectDenseUnionColumn. in-vec (.getName in-vec) (dense-union-arrow-types in-vec) idxs)
+     (IndirectVectorBackedColumn. in-vec (.getName in-vec) (vector-arrow-types in-vec) idxs))))
 
 (deftype ReadRelation [^Map cols, ^int row-count]
   IReadRelation
@@ -234,27 +230,27 @@
    (ReadRelation. read-cols row-count)))
 
 (deftype IndirectAppendColumn [^String col-name
-                               ^EnumSet minor-types
+                               ^Set arrow-types
                                ^Set vecSet
                                ^List vecs
                                ^:unsynchronized-mutable ^IntStream$Builder idxs]
   IAppendColumn
   (appendFrom [_ src idx]
     (let [in-vec (._getInternalVector src idx)]
-      (.add minor-types (.getMinorType in-vec))
+      (.add arrow-types (.getType (.getField in-vec)))
       (.add vecs in-vec)
       (.add vecSet in-vec)
       (.add idxs (._getInternalIndex src idx))))
 
   (read [_]
-    (->read-column col-name minor-types #{} vecs idxs))
+    (->read-column col-name arrow-types #{} vecs idxs))
 
   (close [_]
     (.clear vecSet)
     (.clear vecs)))
 
 (defn ->indirect-append-column [col-name]
-  (IndirectAppendColumn. col-name (EnumSet/noneOf Types$MinorType) (util/->identity-set) (ArrayList.) (IntStream/builder)))
+  (IndirectAppendColumn. col-name (HashSet.) (util/->identity-set) (ArrayList.) (IntStream/builder)))
 
 (deftype AppendRelation [^Map append-cols, ^Function col-fn]
   IAppendRelation
@@ -334,71 +330,67 @@
       (.setValueCount out-vec (inc idx))
       idx)))
 
-(defn ->vector-append-column ^IAppendColumn [^BufferAllocator allocator, ^String col-name, ^Types$MinorType minor-type]
+(defn ->vector-append-column ^IAppendColumn [^BufferAllocator allocator, ^String col-name, ^ArrowType arrow-type]
   (VectorBackedAppendColumn.
-   (.getNewVector minor-type
-                  col-name
-                  (FieldType/nullable (types/minor-type->arrow-type minor-type))
-                  allocator nil)))
+   (.createVector (Field. col-name true arrow-type nil nil)
+                  allocator)))
 
 (deftype FreshAppendColumn [^BufferAllocator allocator
                             ^String col-name
-                            ^EnumSet minor-types
+                            ^Set arrow-types
                             ^Map type->vecs
                             ^List vecs
                             ^IntStream$Builder idxs]
   IAppendColumn
   (appendFrom [this read-col idx]
     (let [in-vec (._getInternalVector read-col idx)
-          out-vec (._getAppendVector this (.getMinorType in-vec))]
+          out-vec (._getAppendVector this (.getType (.getField in-vec)))]
       (.copyFromSafe out-vec (._getInternalIndex read-col idx) (._getAppendIndex this out-vec) in-vec)))
 
-  (read [_] (->read-column col-name minor-types (vals type->vecs) vecs idxs))
+  (read [_] (->read-column col-name arrow-types (vals type->vecs) vecs idxs))
 
   (appendNull [this]
-    (let [^NullVector out-vec (._getAppendVector this Types$MinorType/NULL)]
+    (let [^NullVector out-vec (._getAppendVector this (types/->arrow-type :null))]
       ;; calling _getAppendIndex adds one to null's valueCount
       (._getAppendIndex this out-vec)))
 
   (appendBool [this bool]
-    (let [^BitVector out-vec (._getAppendVector this Types$MinorType/BIT)]
+    (let [^BitVector out-vec (._getAppendVector this (types/->arrow-type :bit))]
       (.set out-vec (._getAppendIndex this out-vec) (if bool 1 0))))
 
   (appendDouble [this dbl]
-    (let [^Float8Vector out-vec (._getAppendVector this Types$MinorType/FLOAT8)]
+    (let [^Float8Vector out-vec (._getAppendVector this (types/->arrow-type :float8))]
       (.set out-vec (._getAppendIndex this out-vec) dbl)))
 
   (appendLong [this dbl]
-    (let [^BigIntVector out-vec (._getAppendVector this Types$MinorType/BIGINT)]
+    (let [^BigIntVector out-vec (._getAppendVector this (types/->arrow-type :bigint))]
       (.set out-vec (._getAppendIndex this out-vec) dbl)))
 
   (appendString [this buf]
-    (let [^VarCharVector out-vec (._getAppendVector this Types$MinorType/VARCHAR)]
+    (let [^VarCharVector out-vec (._getAppendVector this (types/->arrow-type :varchar))]
       (.setSafe out-vec (._getAppendIndex this out-vec) buf (.position buf) (.remaining buf))))
 
   (appendDateMillis [this date]
-    (let [^TimeStampMilliVector out-vec (._getAppendVector this Types$MinorType/TIMESTAMPMILLI)]
+    (let [^TimeStampMilliVector out-vec (._getAppendVector this (types/->arrow-type :timestamp-milli))]
       (.set out-vec (._getAppendIndex this out-vec) date)))
 
   (appendDurationMillis [this duration]
-    (let [^DurationVector out-vec (._getAppendVector this Types$MinorType/DURATION)]
+    (let [^DurationVector out-vec (._getAppendVector this (types/->arrow-type :duration-milli))]
       (.set out-vec (._getAppendIndex this out-vec) duration)))
 
   (appendObject [this obj]
     (append-object this obj))
 
   IAppendColumnPrivate
-  (_getAppendVector [_ minor-type]
-    (.add minor-types minor-type)
+  (_getAppendVector [_ arrow-type]
+    (.add arrow-types arrow-type)
     (let [out-vec (.computeIfAbsent type->vecs
-                                    minor-type
+                                    arrow-type
                                     (reify Function
-                                      (apply [_ minor-type]
-                                        (let [^Types$MinorType minor-type minor-type]
-                                          (.getNewVector minor-type
-                                                         col-name
-                                                         (FieldType/nullable (types/minor-type->arrow-type minor-type))
-                                                         allocator nil)))))]
+                                      (apply [_ arrow-type]
+                                        (let [^ArrowType arrow-type arrow-type]
+                                          (.createVector (Field. col-name true arrow-type nil nil)
+                                                         allocator)))))]
       (.add vecs out-vec)
       out-vec))
 
@@ -412,7 +404,7 @@
     (run! util/try-close (.values type->vecs))))
 
 (defn ->fresh-append-column ^core2.relation.IAppendColumn [allocator col-name]
-  (FreshAppendColumn. allocator col-name (EnumSet/noneOf Types$MinorType) (HashMap.) (ArrayList.) (IntStream/builder)))
+  (FreshAppendColumn. allocator col-name (HashSet.) (HashMap.) (ArrayList.) (IntStream/builder)))
 
 (defn ->fresh-append-relation ^core2.relation.IAppendRelation [allocator]
   (AppendRelation. (LinkedHashMap.)

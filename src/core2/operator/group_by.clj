@@ -1,6 +1,7 @@
 (ns core2.operator.group-by
   (:require [core2.relation :as rel]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.types :as types])
   (:import core2.ICursor
            core2.relation.IReadRelation
            [java.util ArrayList Comparator DoubleSummaryStatistics EnumSet HashMap LinkedHashMap List LongSummaryStatistics Map Optional Spliterator]
@@ -76,13 +77,13 @@
                 container
                 (.get supplier))
           consumer (cond
-                     (= (EnumSet/of Types$MinorType/BIGINT) (.minorTypes from-col))
+                     (= #{(types/->arrow-type :bigint)} (.arrowTypes from-col))
                      (reify IntConsumer
                        (accept [_ idx]
                          (.accept ^ObjLongConsumer accumulator acc
                                   (.getLong from-col idx))))
 
-                     (= (EnumSet/of Types$MinorType/FLOAT8) (.minorTypes from-col))
+                     (= #{(types/->arrow-type :float8)} (.arrowTypes from-col))
                      (reify IntConsumer
                        (accept [_ idx]
                          (.accept ^ObjDoubleConsumer accumulator acc
