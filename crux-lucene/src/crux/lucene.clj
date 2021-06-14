@@ -28,7 +28,7 @@
 (defn- ^String ->hash-str [eid]
   (str (cc/new-id eid)))
 
-(defrecord DocumentId [a v])
+(defrecord DocumentId [e a v])
 
 (defn ^String keyword->k [k]
   (subs (str k) 1))
@@ -36,6 +36,7 @@
 (def ^:const ^:private field-crux-id "_crux_id")
 (def ^:const ^:private field-crux-val "_crux_val")
 (def ^:const ^:private field-crux-attr "_crux_attr")
+(def ^:const ^:private field-crux-eid "_crux_eid")
 
 (defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
   (IndexWriter. directory, (IndexWriterConfig. analyzer)))
@@ -174,47 +175,38 @@
   (index! [this index-writer docs])
   (evict! [this index-writer eids]))
 
-(defrecord LuceneAvIndexer [index-store]
+(defrecord LuceneAveIndexer []
   LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [crux-doc (vals docs)
-            [k v] (->> (dissoc crux-doc :crux.db/id)
-                       (mapcat (fn [[k v]]
+    (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
+            [a v] (->> (dissoc crux-doc :crux.db/id)
+                       (mapcat (fn [[a v]]
                                  (for [v (cc/vectorize-value v)
                                        :when (string? v)]
-                                   [k v]))))
-            :let [id-str (->hash-str (DocumentId. k v))
+                                   [a v]))))
+            :let [id-str (->hash-str (DocumentId. e a v))
                   doc (doto (Document.)
-                        ;; To search for triples by a-v for deduping
+                        ;; To search for triples by e-a-v for deduping
                         (.add (StringField. field-crux-id, id-str, Field$Store/NO))
                         ;; The actual term, which will be tokenized
-                        (.add (TextField. (keyword->k k), v, Field$Store/YES))
+                        (.add (TextField. (keyword->k a), v, Field$Store/YES))
                         ;; Used for wildcard searches
                         (.add (TextField. field-crux-val, v, Field$Store/YES))
+                        (.add (TextField. field-crux-eid, (->hash-str e), Field$Store/YES))
                         ;; Used for wildcard searches
-                        (.add (StringField. field-crux-attr, (keyword->k k), Field$Store/YES)))]]
+                        (.add (StringField. field-crux-attr, (keyword->k a), Field$Store/YES)))]]
       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
 
   (evict! [_ index-writer eids]
-    (with-open [index-snapshot (db/open-index-snapshot index-store)]
-      (let [attrs-id->attr (->> (db/all-attrs index-snapshot)
-                                (map #(vector (->hash-str %) %))
-                                (into {}))
-            qs (for [[a v] (db/exclusive-avs index-store eids)
-                     :let [a (attrs-id->attr (->hash-str a))
-                           v (db/decode-value index-snapshot v)]
-                     :when (not= :crux.db/id a)]
-                 (TermQuery. (Term. field-crux-id (->hash-str (DocumentId. a v)))))]
-        (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs))))))
+    (let [qs (for [eid eids]
+               (TermQuery. (Term. field-crux-eid (->hash-str eid))))]
+      (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
-(defn ->indexer
-  {::sys/deps {:index-store :crux/index-store}}
-  [{:keys [index-store]}]
-  (LuceneAvIndexer. index-store))
+(defn ->indexer [_]
+  (LuceneAveIndexer.))
 
-(defn ->analyzer
-  [_]
+(defn ->analyzer [_]
   (StandardAnalyzer.))
 
 (defn ->lucene-store
