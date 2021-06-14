@@ -306,7 +306,7 @@
 
 (defn ->disk-grid
   (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path points {:keys [^long max-histogram-bins ^long cell-size ^long k]
-                                                                                  :or {max-histogram-bins 256
+                                                                                  :or {max-histogram-bins 128
                                                                                        cell-size (* 8 1024)}}]
    (assert (number? k))
    (util/mkdirs (.getParent path))
@@ -319,7 +319,7 @@
          cells-per-dimension (BitUtil/ceilPowerOfTwo (Math/ceil (Math/pow number-of-cells (/ 1 k-minus-one))))
          number-of-cells (long (Math/ceil (Math/pow cells-per-dimension k-minus-one)))
          axis-shift (Long/bitCount (dec cells-per-dimension))
-         histogram-bins (min max-histogram-bins (* 2 cells-per-dimension))
+         histogram-bins (min max-histogram-bins (* k-minus-one cells-per-dimension))
          ^IMultiDimensionalHistogram histogram (hist/->multidimensional-histogram histogram-bins k)
          update-histograms-fn (fn [^longs p]
                                 (let [p (double-array p)]
