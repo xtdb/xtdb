@@ -250,7 +250,7 @@
       (aset acc n (/ (aget x n) y)))
     acc))
 
-(defn- vec-l1-distance ^double [^doubles x ^doubles y]
+(defn- vec-manhattan-distance ^double [^doubles x ^doubles y]
   (let [len (alength x)]
     (loop [n 0
            distance 0.0]
@@ -258,14 +258,17 @@
         distance
         (recur (inc n) (+ distance (Math/abs (- (aget x n) (aget y n)))))))))
 
-(defn- vec-l2-distance ^double [^doubles x ^doubles y]
+(defn- vec-squared-euclidean-distance ^double [^doubles x ^doubles y]
   (let [len (alength x)]
     (loop [n 0
            distance 0.0]
       (if (= n len)
-        distance ;; no need to sqrt
+        distance
         (let [diff (- (aget x n) (aget y n))]
           (recur (inc n) (+ distance (* diff diff))))))))
+
+(defn- vec-euclidean-distance ^double [^doubles x ^doubles y]
+  (Math/sqrt (vec-squared-euclidean-distance x y)))
 
 (deftype MultiDimensionalHistogram [^int max-bins
                                     ^int k
@@ -311,8 +314,8 @@
           (recur (inc n) (+ 2 n) min-idx-a min-idx-b delta)
 
           :else
-          (let [new-delta (vec-l2-distance (.getValue ^IMultiDimensionalBin (.get bins n))
-                                           (.getValue ^IMultiDimensionalBin (.get bins m)))]
+          (let [new-delta (vec-squared-euclidean-distance (.getValue ^IMultiDimensionalBin (.get bins n))
+                                                          (.getValue ^IMultiDimensionalBin (.get bins m)))]
             (if (< new-delta delta)
               (recur n (inc m) n m new-delta)
               (recur n (inc m) min-idx-a min-idx-b delta))))))
