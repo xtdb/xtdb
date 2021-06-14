@@ -1,5 +1,5 @@
 (ns core2.temporal.histogram
-  (:import [java.util ArrayList Collections List]))
+  (:import [java.util Arrays ArrayList Collections List]))
 
 ;; "A Streaming Parallel Decision Tree Algorithm"
 ;; https://www.jmlr.org/papers/volume11/ben-haim10a/ben-haim10a.pdf
@@ -189,3 +189,150 @@
 
 (defn ->histogram ^core2.temporal.histogram.Histogram [^long max-bins]
   (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
+
+(definterface IMultiDimensionalHistogram
+  (^core2.temporal.histogram.IMultiDimensionalHistogram update [^doubles x])
+  (^doubles getMins [])
+  (^doubles getMaxs [])
+  (^long getTotal [])
+  (^java.util.List getBins [])
+  (^core2.temporal.histogram.IHistogram projectAxis [^int axis]))
+
+(definterface IMultiDimensionalBin
+  (^doubles getValue [])
+  (^long getCount [])
+  (^void increment [])
+  (^core2.temporal.histogram.IBin projectAxis [^int axis]))
+
+(deftype MultiDimensionalBin [^doubles value ^:unsynchronized-mutable ^long count]
+  IMultiDimensionalBin
+  (getValue [_] value)
+
+  (getCount [_] count)
+
+  (increment [this]
+    (set! (.count this) (inc count)))
+
+  (projectAxis [_ axis]
+    (Bin. (aget value axis) count))
+
+  (equals [_ other]
+    (Arrays/equals value (.getValue ^IMultiDimensionalBin other)))
+
+  (hashCode [_]
+    (Arrays/hashCode value))
+
+  Comparable
+  (compareTo [_ other]
+    (Arrays/compare value (.getValue ^IMultiDimensionalBin other))))
+
+(defn- vec-plus ^doubles [^doubles x ^doubles y]
+  (let [acc (double-array (alength x))]
+    (dotimes [n (alength x)]
+      (aset acc n (+ (aget x n) (aget y n))))
+    acc))
+
+(defn- vec-minus ^doubles [^doubles x ^doubles y]
+  (let [acc (double-array (alength x))]
+    (dotimes [n (alength x)]
+      (aset acc n (- (aget x n) (aget y n))))
+    acc))
+
+(defn- vec-multiply ^doubles [^doubles x ^double y]
+  (let [acc (double-array (alength x))]
+    (dotimes [n (alength x)]
+      (aset acc n (* (aget x n) y)))
+    acc))
+
+(defn- vec-divide ^doubles [^doubles x ^double y]
+  (let [acc (double-array (alength x))]
+    (dotimes [n (alength x)]
+      (aset acc n (/ (aget x n) y)))
+    acc))
+
+(defn- vec-l1-distance ^double [^doubles x ^doubles y]
+  (let [len (alength x)]
+    (loop [n 0
+           distance 0.0]
+      (if (= n len)
+        distance
+        (recur (inc n) (+ distance (Math/abs (- (aget x n) (aget y n)))))))))
+
+(defn- vec-l2-distance ^double [^doubles x ^doubles y]
+  (let [len (alength x)]
+    (loop [n 0
+           distance 0.0]
+      (if (= n len)
+        (Math/sqrt distance)
+        (recur (inc n) (+ distance (Math/pow (- (aget x n) (aget y n)) 2)))))))
+
+(deftype MultiDimensionalHistogram [^int max-bins
+                                    ^int k
+                                    ^:unsynchronized-mutable ^long total
+                                    ^:unsynchronized-mutable ^doubles min-v
+                                    ^:unsynchronized-mutable ^doubles max-v
+                                    ^List bins]
+  IMultiDimensionalHistogram
+  (update [this p]
+    (set! (.total this) (inc total))
+    (dotimes [n k]
+      (let [x (aget p n)]
+        (aset min-v n (min (aget min-v n) x))
+        (aset max-v n (max (aget max-v n) x))))
+    (let [new-bin (MultiDimensionalBin. p 1)
+          idx (.indexOf bins new-bin)]
+      (if (neg? idx)
+        (.add bins new-bin)
+        (.increment ^IMultiDimensionalBin (.get bins idx))))
+
+    (while (> (.size bins) max-bins)
+      (loop [n 0
+             m 1
+             min-idx-a 0
+             min-idx-b 0
+             delta Double/MAX_VALUE]
+        (cond
+          (= n (.size bins))
+          (let [^IMultiDimensionalBin bin-i (.get bins min-idx-a)
+                ^IMultiDimensionalBin bin-i+1 (.get bins min-idx-b)
+                qi (.getValue bin-i)
+                ki (.getCount bin-i)
+                qi+1 (.getValue bin-i+1)
+                ki+1 (.getCount bin-i+1)
+                new-k (+ ki ki+1)
+                new-q (vec-divide (vec-plus (vec-multiply qi ki) (vec-multiply qi+1 ki+1)) new-k)
+                new-bin (MultiDimensionalBin. new-q new-k)]
+            (doto bins
+              (.remove min-idx-b)
+              (.set min-idx-a new-bin)))
+
+          (= m (.size bins))
+          (recur (inc n) (+ 2 n) min-idx-a min-idx-b delta)
+
+          :else
+          (let [new-delta (vec-l2-distance (.getValue ^IMultiDimensionalBin (.get bins n))
+                                           (.getValue ^IMultiDimensionalBin (.get bins m)))]
+            (if (< new-delta delta)
+              (recur n (inc m) n m new-delta)
+              (recur n (inc m) min-idx-a min-idx-b delta))))))
+
+    this)
+
+  (getMins [_]
+    min-v)
+
+  (getMaxs [_]
+    max-v)
+
+  (getTotal [_]
+    total)
+
+  (getBins [_]
+    bins)
+
+  (projectAxis [_ axis]
+    (Histogram. max-bins total (aget min-v axis) (aget max-v axis) (ArrayList. ^List (sort (for [^IMultiDimensionalBin b bins]
+                                                                                             (.projectAxis b axis)))))))
+
+(defn ->multidimensional-histogram ^core2.temporal.histogram.MultiDimensionalHistogram [^long max-bins ^long k]
+  (MultiDimensionalHistogram. max-bins k 0 (double-array k Double/MAX_VALUE) (double-array k Double/MIN_VALUE) (ArrayList. (inc max-bins))))
