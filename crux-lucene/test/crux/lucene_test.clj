@@ -231,19 +231,6 @@
     (with-open [db (c/open-db *api*)]
       (t/is (= ["ivan1"] (map first (c/q db q)))))))
 
-(t/deftest test-use-in-argument
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
-  (with-open [db (c/open-db *api*)]
-    (t/is (seq (c/q db '{:find  [?v]
-                         :in    [input]
-                         :where [[(text-search :name input) [[?e ?v]]]]}
-                    "Ivan")))
-    (t/is (thrown-with-msg? IllegalArgumentException #"Lucene text search values must be String"
-                            (c/q db '{:find  [?v]
-                                      :in    [input]
-                                      :where [[(text-search :name input) [[?e ?v]]]]}
-                                 1)))))
-
 (t/deftest test-exclude-future-results
   (let [q {:find '[?e] :where '[[(text-search :name "Ivan") [[?e]]] [?e :crux.db/id]]}]
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivanka"}]])
