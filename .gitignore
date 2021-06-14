@@ -18,4 +18,3 @@ target/
 docs/build/
 .calva/
 .lsp/
-.clj-kondo/

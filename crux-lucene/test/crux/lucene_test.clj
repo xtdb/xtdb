@@ -250,19 +250,18 @@
   ;; (i.e. indexing strategy) - this start-up check does not account
   ;; for this:
 
-  (fix/with-tmp-dir "rocks" [rocks-tmp-dir]
-    (fix/with-tmp-dir "lucene" [lucene-tmp-dir]
-      (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                    :db-dir rocks-tmp-dir}}})]
-        (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+  (fix/with-tmp-dirs #{rocks-tmp-dir lucene-tmp-dir}
+    (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                                                  :db-dir rocks-tmp-dir}}})]
+      (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
 
-      (try
-        (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                      :db-dir rocks-tmp-dir}}
-                                        :crux.lucene/lucene-store {:db-dir lucene-tmp-dir}})])
-        (t/is false "Exception expected")
-        (catch Exception t
-          (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t)))))))))
+    (try
+      (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                                                    :db-dir rocks-tmp-dir}}
+                                      :crux.lucene/lucene-store {:db-dir lucene-tmp-dir}})])
+      (t/is false "Exception expected")
+      (catch Exception t
+        (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t))))))))
 
 (defn- with-lucene-rocks-node* [{:keys [node-dir index-dir lucene-dir]} f]
   (with-open [node (c/start-node (merge {:crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
