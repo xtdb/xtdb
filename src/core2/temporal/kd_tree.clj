@@ -1003,7 +1003,8 @@
 (deftype ArrowBufKdTree [^ArrowBuf arrow-buf ^ArrowFooter footer ^int batch-shift ^long batch-mask ^long value-count ^int block-cache-size
                          ^IBlockCache block-cache
                          ^boolean deletes?
-                         block-cache-fn]
+                         block-cache-fn
+                         ^boolean single-block?]
   KdTree
   (kd-tree-insert [_ allocator point]
     (throw (UnsupportedOperationException.)))
@@ -1030,10 +1031,13 @@
                      block-cache-size
                      (block-cache-fn)
                      deletes?
-                     block-cache-fn))
+                     block-cache-fn
+                     single-block?))
 
   (kd-tree-point-access [kd-tree]
-    (ArrowBufKdTreePointAccess. block-cache batch-shift batch-mask (kd-tree-dimensions kd-tree) deletes?))
+    (if single-block?
+      (KdTreeVectorPointAccess. (.getBlockVector block-cache 0) (kd-tree-dimensions kd-tree))
+      (ArrowBufKdTreePointAccess. block-cache batch-shift batch-mask (kd-tree-dimensions kd-tree) deletes?)))
 
   (kd-tree-size [kd-tree]
     (if deletes?
@@ -1087,8 +1091,9 @@
                             (close [_]))
          block-cache-fn (fn []
                           (IBlockCache$LatestBlockCache. (IBlockCache$ClockBlockCache. block-cache-size root-block-cache)))
-         block-cache (block-cache-fn)]
-     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache deletes? block-cache-fn))))
+         block-cache (block-cache-fn)
+         single-block? (= 1 (count batch-sizes))]
+     (ArrowBufKdTree. arrow-buf footer batch-shift batch-mask value-count block-cache-size block-cache deletes? block-cache-fn single-block?))))
 
 (defn ->mmap-kd-tree ^core2.temporal.kd_tree.ArrowBufKdTree [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
