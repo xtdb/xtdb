@@ -4,7 +4,7 @@
             [core2.temporal.kd-tree :as kd]
             [core2.temporal.histogram :as hist])
   (:import [core2.temporal.kd_tree IKdTreePointAccess KdTreeVectorPointAccess]
-           core2.temporal.histogram.IHistogram
+           [core2.temporal.histogram IHistogram IMultiDimensionalHistogram]
            core2.BitUtil
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            org.apache.arrow.vector.complex.FixedSizeListVector
@@ -320,10 +320,10 @@
          number-of-cells (long (Math/ceil (Math/pow cells-per-dimension k-minus-one)))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          histogram-bins (min max-histogram-bins (* 2 cells-per-dimension))
-         ^List histograms (vec (repeatedly k #(hist/->histogram histogram-bins)))
+         ^IMultiDimensionalHistogram histogram (hist/->multidimensional-histogram histogram-bins k)
          update-histograms-fn (fn [^longs p]
-                                (dotimes [n k]
-                                  (.update ^IHistogram (.get histograms n) (aget p n))))
+                                (let [p (double-array p)]
+                                  (.update histogram p)))
          cell-outs (object-array number-of-cells)
          cell-paths (object-array number-of-cells)]
      (if (satisfies? kd/KdTree points)
@@ -335,7 +335,9 @@
        (doseq [p points]
          (update-histograms-fn (kd/->longs p))))
      (try
-       (let [scales (object-array (for [^IHistogram h histograms
+       (let [histograms (for [n (range k)]
+                          (.projectAxis histogram n))
+             scales (object-array (for [^IHistogram h histograms
                                         :let [u (.uniform h cells-per-dimension)]]
                                     (long-array (distinct u))))
              mins (long-array (for [^IHistogram h histograms]
