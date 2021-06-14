@@ -263,8 +263,9 @@
     (loop [n 0
            distance 0.0]
       (if (= n len)
-        (Math/sqrt distance)
-        (recur (inc n) (+ distance (Math/pow (- (aget x n) (aget y n)) 2)))))))
+        distance ;; no need to sqrt
+        (let [diff (- (aget x n) (aget y n))]
+          (recur (inc n) (+ distance (* diff diff))))))))
 
 (deftype MultiDimensionalHistogram [^int max-bins
                                     ^int k
