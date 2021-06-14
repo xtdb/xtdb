@@ -17,7 +17,7 @@
            [core2.temporal ITemporalManager TemporalRoots]
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]
-           java.util.function.Consumer
+           [java.util.function BiFunction Consumer]
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
            [org.roaringbitmap IntConsumer RoaringBitmap]
@@ -83,7 +83,11 @@
         (dotimes [idx (.getValueCount row-id-vec)]
           (let [row-id (.get row-id-vec idx)]
             (when (.contains row-id-bitmap row-id)
-              (.put res row-id (inc ^long (.getOrDefault res idx 0))))))
+              (.compute res row-id (reify BiFunction
+                                     (apply [_ k v]
+                                       (if v
+                                         (inc (long v))
+                                         1)))))))
         res))))
 
 (defn- ->temporal-roots ^core2.temporal.TemporalRoots [^ITemporalManager temporal-manager ^Watermark watermark ^List col-names ^longs temporal-min-range ^longs temporal-max-range atemporal-row-id-bitmap]
