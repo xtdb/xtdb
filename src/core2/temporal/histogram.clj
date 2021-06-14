@@ -270,6 +270,14 @@
 (defn- vec-euclidean-distance ^double [^doubles x ^doubles y]
   (Math/sqrt (vec-squared-euclidean-distance x y)))
 
+(defn- vec-chessboard-distance ^double [^doubles x ^doubles y]
+  (let [len (alength x)]
+    (loop [n 0
+           distance 0.0]
+      (if (= n len)
+        distance
+        (recur (inc n) (max distance (Math/abs (- (aget x n) (aget y n)))))))))
+
 (deftype MultiDimensionalHistogram [^int max-bins
                                     ^int k
                                     ^:unsynchronized-mutable ^long total
