@@ -290,9 +290,9 @@
 
             (set! (.validTimeEnd temporal-coordinates)
                   (if-not (.isNull valid-time-end-vec per-op-offset)
-                    (do (.get valid-time-end-vec per-op-offset)
-                        (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
-                                    valid-time-end-vec per-op-offset row-id))
+                    (do (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
+                                    valid-time-end-vec per-op-offset row-id)
+                        (.get valid-time-end-vec per-op-offset))
                     (.getTime temporal/end-of-time)))))
 
         (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
