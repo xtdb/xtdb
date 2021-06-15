@@ -113,6 +113,7 @@ papers:
 - [[https://en.wikipedia.org/wiki/K-d_tree][k-d tree]] (wikipedia)
 - [[https://en.wikipedia.org/wiki/R*_tree][R* trees]]
 - [[https://research-repository.griffith.edu.au/bitstream/handle/10072/43351/76130_1.pdf?sequence=1&isAllowed=y][TD-tree: A Triangular Decomposition Access Method for Temporal Data]] (POINT folks)
+- [[https://openproceedings.org/2019/conf/edbt/EDBT19_paper_27.pdf][BB-Tree: A practical and efficient main-memory indexstructure for multidimensional workloads]]
 
 ** Array Programming
 - [[https://www.eecg.utoronto.ca/~jzhu/csc326/readings/iverson.pdf][Notation as a Tool of Thought]]
