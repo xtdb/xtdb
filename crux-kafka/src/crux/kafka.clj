@@ -7,7 +7,8 @@
             [crux.io :as cio]
             [crux.status :as status]
             [crux.system :as sys]
-            [crux.tx :as tx])
+            [crux.tx :as tx]
+            [crux.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
            [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
@@ -154,6 +155,9 @@
                          (mapcat identity)
                          (map tx-record->tx-log-entry)))))
 
+  (subscribe [this after-tx-id f]
+    (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+
   (latest-submitted-tx [_]
     (let [tx-tp (TopicPartition. tx-topic 0)
           end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
@@ -173,8 +177,8 @@
   (close [_]
     (cio/try-close consumer)))
 
-(defn ->ingest-only-tx-log {::sys/deps {:kafka-config `->kafka-config
-                                        :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}}
+(defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
+                            :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}}
   [{:keys [tx-topic-opts kafka-config]}]
   (let [latest-submitted-tx-consumer (->consumer {:kafka-config kafka-config})
         producer (->producer {:kafka-config kafka-config})
@@ -192,36 +196,6 @@
                       :latest-submitted-tx-consumer latest-submitted-tx-consumer
                       :tx-topic tx-topic
                       :kafka-config kafka-config})))
-
-(defn ->tx-log {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
-                                  (::sys/deps (meta #'->ingest-only-tx-log)))
-                ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
-                                  (::sys/args (meta #'->ingest-only-tx-log))
-                                  {:poll-wait-duration {:spec ::sys/duration
-                                                        :required? true
-                                                        :doc "How long to wait when polling Kafka"
-                                                        :default (Duration/ofSeconds 1)}})}
-  [{:keys [kafka-config tx-topic-opts poll-wait-duration] :as opts}]
-  (let [tx-log (->ingest-only-tx-log opts)
-        tx-topic (:topic-name tx-topic-opts)
-        tp (TopicPartition. tx-topic 0)
-        consumer (doto (->consumer {:kafka-config kafka-config})
-                   (.assign #{tp}))
-        polling-consumer (tx/->polling-tx-consumer opts
-                                                   (fn [after-tx-id]
-                                                     (let [expected-position (or (some-> after-tx-id inc) 0)]
-                                                       (when-not (= (.position consumer tp) expected-position)
-                                                         (seek-consumer consumer {tp expected-position})))
-
-                                                     (cio/->cursor (fn [])
-                                                                   (->> (consumer-seqs consumer poll-wait-duration)
-                                                                        (mapcat identity)
-                                                                        (map tx-record->tx-log-entry)))))]
-    (-> tx-log
-        (assoc :consumer (reify Closeable
-                           (close [_]
-                             (cio/try-close polling-consumer)
-                             (cio/try-close consumer)))))))
 
 ;;;; DocumentStore
 (defn- submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]

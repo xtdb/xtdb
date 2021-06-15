@@ -254,7 +254,7 @@
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
     (Thread/setDefaultUncaughtExceptionHandler uncaught-exception-handler)))
 
-(defn thread-factory [name-prefix]
+(defn thread-factory ^java.util.concurrent.ThreadFactory [name-prefix]
   (let [idx (atom 0)]
     (reify ThreadFactory
       (newThread [_ r]
