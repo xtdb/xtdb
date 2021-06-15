@@ -106,6 +106,7 @@ papers:
 - [[https://www.researchgate.net/profile/Michael-Boehlen/publication/3892903_A_split_operator_for_now-relative_bitemporal_databases/links/5428352e0cf26120b7b56556/A-split-operator-for-now-relative-bitemporal-databases.pdf?origin=publication_detail][A split operator for now-relative bitemporal databases]]
 - [[https://www2.cs.arizona.edu/~rts/pubs/TODS87.pdf][The Temporal Query Language TQuel]]
 - [[https://www.research-collection.ethz.ch/bitstream/handle/20.500.11850/73726/eth-7496-01.pdf][TPC Bi-H specification]]
+- [[https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59478/file/ssdbm2015-bitemporal-windows.pdf][Indexing Bi-temporal Windows]]
 
 ** Trees
 - [[https://www.researchgate.net/profile/Susana-Ladra/publication/221580271_k2-Trees_for_Compact_Web_Graph_Representation/links/0fcfd51080b06db631000000/k2-Trees-for-Compact-Web-Graph-Representation.pdf?origin=publication_detail][k^{2}-trees for Compact Web Graph Representation]]
