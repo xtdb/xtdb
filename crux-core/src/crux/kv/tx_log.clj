@@ -11,6 +11,7 @@
             [crux.tx.event :as txe])
   (:import java.io.Closeable
            java.nio.ByteOrder
+           java.time.Duration
            [java.util.concurrent ExecutorService LinkedBlockingQueue RejectedExecutionHandler ThreadPoolExecutor TimeUnit]
            java.util.Date
            [org.agrona DirectBuffer MutableDirectBuffer]))
@@ -33,8 +34,8 @@
   {:crux.tx/tx-id (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN)
    :crux.tx/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
-(defn- ingest-tx [tx-ingester tx tx-events]
-  (let [in-flight-tx (db/begin-tx tx-ingester tx nil)]
+(defn- ingest-tx [tx-indexer tx tx-events]
+  (let [in-flight-tx (db/begin-tx tx-indexer tx nil)]
     (if (db/index-tx-events in-flight-tx tx-events)
       (db/commit in-flight-tx)
       (db/abort in-flight-tx))))
@@ -104,6 +105,9 @@
                              (tx-log (::tx/tx-id (last txs))))))))]
         (cio/->cursor (fn []) (tx-log after-tx-id)))))
 
+  (subscribe-async [this after-tx-id f]
+    (tx/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+
   Closeable
   (close [_]
     (try
@@ -134,33 +138,7 @@
                            (rejectedExecution [_ runnable executor]
                              (.put queue runnable))))))
 
-(defn ->ingest-only-tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}}
+(defn ->tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store}}
   [{:keys [kv-store]}]
   (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
                  :kv-store kv-store}))
-
-(defn ->tx-log {::sys/deps {:kv-store 'crux.mem-kv/->kv-store
-                            :tx-ingester :crux/tx-ingester
-                            :index-store :crux/index-store}
-                ::sys/args {:fsync? {:spec ::sys/boolean
-                                     :required? true
-                                     :default true}}}
-  [{:keys [tx-ingester index-store kv-store fsync?]}]
-  (let [^ExecutorService ingest-executor (bounded-solo-thread-pool 1024 (cio/thread-factory "crux-standalone-tx-ingest"))
-        tx-log (->KvTxLog (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
-                          ingest-executor
-                          kv-store
-                          tx-ingester
-                          fsync?)
-        latest-submitted-tx-id (::tx/tx-id (db/latest-submitted-tx tx-log))
-        latest-completed-tx-id (::tx/tx-id (db/latest-completed-tx index-store))]
-    (when (not= latest-submitted-tx-id latest-completed-tx-id)
-      (.submit ingest-executor
-               ^Runnable (fn []
-                           (with-open [txs (db/open-tx-log tx-log latest-completed-tx-id)]
-                             (doseq [tx (iterator-seq txs)
-                                     :while (<= (::tx/tx-id tx) latest-submitted-tx-id)]
-                               (ingest-tx tx-ingester
-                                          (select-keys tx [::tx/tx-id ::tx/tx-time])
-                                          (::txe/tx-events tx)))))))
-    tx-log))

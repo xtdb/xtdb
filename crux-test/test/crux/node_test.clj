@@ -48,9 +48,9 @@
 
 (t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:crux/tx-log {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}
-                                   :crux/document-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}
-                                   :crux/index-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}})]
+    (with-open [n (api/start-node {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+                                   :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+                                   :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
       (t/is n))))
 
 (t/deftest start-node-from-java

@@ -15,6 +15,7 @@
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
            java.sql.Timestamp
+           java.time.Duration
            java.util.Date))
 
 (defprotocol Dialect
@@ -128,12 +129,12 @@
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog
-  (submit-tx [this tx-events]
+  (submit-tx [_ tx-events]
     (let [tx (-> (insert-event! pool nil tx-events "txs")
                  (tx-result->tx-data pool dialect))]
       (delay tx)))
 
-  (open-tx-log [this after-tx-id]
+  (open-tx-log [_ after-tx-id]
     (let [conn (jdbc/get-connection pool)
           stmt (jdbc/prepare conn
                              ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
@@ -146,7 +147,10 @@
                                  :crux.tx/tx-time (-> (:tx_time y) (->date dialect))
                                  :crux.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
-  (latest-submitted-tx [this]
+  (subscribe-async [this after-tx-id f]
+    (tx/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+
+  (latest-submitted-tx [_]
     (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
@@ -156,17 +160,6 @@
   (close [_]
     (cio/try-close tx-consumer)))
 
-(defn ->ingest-only-tx-log {::sys/deps {:connection-pool `->connection-pool}}
+(defn ->tx-log {::sys/deps {:connection-pool `->connection-pool}}
   [{{:keys [pool dialect]} :connection-pool}]
   (map->JdbcTxLog {:pool pool, :dialect dialect}))
-
-(defn ->tx-log {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
-                                  (::sys/deps (meta #'->ingest-only-tx-log)))
-                ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
-                                  (::sys/args (meta #'->ingest-only-tx-log)))}
-  [opts]
-  (let [tx-log (->ingest-only-tx-log opts)]
-    (-> tx-log
-        (assoc :tx-consumer (tx/->polling-tx-consumer opts
-                                                      (fn [after-tx-id]
-                                                        (db/open-tx-log tx-log after-tx-id)))))))

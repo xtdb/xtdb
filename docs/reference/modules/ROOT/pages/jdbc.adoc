@@ -102,8 +102,6 @@ EDN::
 ----
 ====
 
-If you do not want the local node to index transactions, you can use the xref:#ingest-only-tx-log[`+crux.jdbc/->ingest-only-tx-log+`] module.
-
 === JDBC as a Document Store
 
 [tabs]
@@ -227,11 +225,6 @@ EDN::
 
 * `connection-pool`
 * `poll-sleep-duration` (string/`Duration`, default 100 milliseconds, `"PT0.1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
-
-[#ingest-only-tx-log]
-=== Ingest-only transaction log (`+crux.jdbc/->ingest-only-tx-log+`)
-
-* `connection-pool`
 
 === Document store (`+crux.jdbc/->document-store+`)
 

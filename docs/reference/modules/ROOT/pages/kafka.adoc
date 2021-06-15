@@ -90,8 +90,6 @@ EDN::
 ----
 ====
 
-If you do not want the local node to index transactions, you can use the xref:ingest-only-tx-log[`+crux.kafka/->ingest-only-tx-log+`] module.
-
 === Kafka as a Document Store
 
 [tabs]
@@ -298,12 +296,6 @@ EDN::
 * `tx-topic-opts` (topic options)
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
-
-[#ingest-only-tx-log]
-=== Ingest-only transaction log (`+crux.kafka/->ingest-only-tx-log+`)
-
-* `kafka-config` (connection config)
-* `tx-topic-opts` (topic options)
 
 === Document store (`+crux.kafka/->document-store+`)
 
