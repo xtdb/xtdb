@@ -231,6 +231,7 @@
                                             :crux/index-store 'crux.kv.index-store/->kv-index-store
                                             :crux/bus 'crux.bus/->bus
                                             :crux/tx-ingester 'crux.tx/->tx-ingester
+                                            :crux/tx-indexer 'crux.tx/->tx-indexer
                                             :crux/document-store 'crux.kv.document-store/->document-store
                                             :crux/tx-log 'crux.kv.tx-log/->tx-log
                                             :crux/query-engine 'crux.query/->query-engine}]
