@@ -18,7 +18,7 @@
            [java.util Arrays Collections Comparator Date HashMap Map Random]
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
-           [java.util.function Consumer Function LongConsumer LongFunction Predicate ToLongFunction]
+           [java.util.function Consumer Function LongConsumer LongFunction LongPredicate Predicate ToLongFunction]
            [java.util.stream LongStream Stream]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector VectorSchemaRoot]
@@ -192,6 +192,61 @@
     (ByteBuffer/wrap id)
     id))
 
+(defn- wrap-with-current-entity-cache [kd-tree ^Map current-entities-cache]
+  (reify
+    kd/KdTree
+    (kd-tree-insert [_ allocator point]
+      (throw (UnsupportedOperationException.)))
+    (kd-tree-delete [_ allocator point]
+      (throw (UnsupportedOperationException.)))
+    (kd-tree-range-search [_ min-range max-range]
+      (let [min-range (kd/->longs min-range)
+            max-range (kd/->longs max-range)
+            end-of-time-ms (.getTime end-of-time)]
+        (if (and (= (aget min-range tx-time-end-idx)
+                    (aget max-range tx-time-end-idx)
+                    end-of-time-ms)
+                 (= (aget min-range id-idx)
+                    (aget max-range id-idx)))
+          (let [id (aget min-range id-idx)
+                new-min-range (doto (->min-range)
+                                (aset id-idx id)
+                                (aset tx-time-end-idx end-of-time-ms))
+                new-max-range (doto (->max-range)
+                                (aset id-idx id)
+                                (aset tx-time-end-idx end-of-time-ms))
+                ^IKdTreePointAccess access (kd/kd-tree-point-access kd-tree)
+                axis-mask (-> (kd/range-bitmask min-range max-range)
+                              (bit-and-not (bit-or (bit-shift-left 1 id-idx)
+                                                   (bit-shift-left 1 tx-time-end-idx))))]
+            (-> (LongStream/of ^longs (.computeIfAbsent current-entities-cache
+                                                        id
+                                                        (reify Function
+                                                          (apply [_ _]
+                                                            (.toArray ^LongStream (kd/kd-tree-range-search kd-tree new-min-range new-max-range))))))
+                (.filter (reify LongPredicate
+                           (test [_ x]
+                             (.isInRange access x min-range max-range axis-mask))))))
+          (kd/kd-tree-range-search kd-tree min-range max-range))))
+    (kd-tree-points [_]
+      (kd/kd-tree-points kd-tree))
+    (kd-tree-height [_]
+      (kd/kd-tree-height kd-tree))
+    (kd-tree-retain [_ allocator]
+      (wrap-with-current-entity-cache (kd/kd-tree-retain kd-tree allocator) current-entities-cache))
+    (kd-tree-point-access [_]
+      (kd/kd-tree-point-access kd-tree))
+    (kd-tree-size [_]
+      (kd/kd-tree-size kd-tree))
+    (kd-tree-value-count [_]
+      (kd/kd-tree-value-count kd-tree))
+    (kd-tree-dimensions [_]
+      (kd/kd-tree-dimensions kd-tree))
+
+    Closeable
+    (close [_]
+      (util/try-close kd-tree))))
+
 (deftype TemporalManager [^BufferAllocator allocator
                           ^ObjectStore object-store
                           ^IBufferPool buffer-pool
@@ -228,7 +283,8 @@
           @(CompletableFuture/allOf (into-array CompletableFuture futs))
           (doseq [chunk-idx new-chunk-idxs
                   :let [obj-key (->temporal-obj-key chunk-idx)
-                        chunk-kd-tree (kd/->arrow-buf-kd-tree @(.getBuffer buffer-pool obj-key))]]
+                        chunk-kd-tree (wrap-with-current-entity-cache (kd/->arrow-buf-kd-tree @(.getBuffer buffer-pool obj-key))
+                                                                      (ConcurrentHashMap.))]]
             (swap! kd-tree #(if %
                               (kd/->merged-kd-tree % chunk-kd-tree)
                               chunk-kd-tree)))
