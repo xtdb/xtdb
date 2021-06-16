@@ -414,9 +414,12 @@
   [deps]
   (map->TxIndexer deps))
 
-(defrecord TxIngester [!error ^Future job]
+(defrecord TxIngester [index-store !error ^Future job]
   db/TxIngester
   (ingester-error [_] @!error)
+
+  db/LatestCompletedTx
+  (latest-completed-tx [_] (db/latest-completed-tx index-store))
 
   Closeable
   (close [_]
@@ -444,4 +447,4 @@
                                 (reset! !error t)
                                 (bus/send bus {:crux/event-type ::ingester-error, :ingester-error t})
                                 (throw t)))))]
-    (->TxIngester !error job)))
+    (->TxIngester index-store !error job)))

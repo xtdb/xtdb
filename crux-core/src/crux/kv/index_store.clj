@@ -1110,12 +1110,13 @@
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
 
-  (latest-completed-tx [_]
-    (latest-completed-tx kv-store))
-
   (tx-failed? [_ tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
+
+  db/LatestCompletedTx
+  (latest-completed-tx [_]
+    (latest-completed-tx kv-store))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]
