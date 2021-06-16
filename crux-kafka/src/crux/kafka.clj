@@ -7,7 +7,8 @@
             [crux.status :as status]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [clojure.set :as set])
+            [clojure.set :as set]
+            [crux.tx.subscribe :as tx-sub])
   (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
@@ -136,15 +137,14 @@
                        tx-topic, kafka-config,
                        ^Closeable consumer]
   db/TxLog
-  (submit-tx [this tx-events]
-    (try
-      (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
-        (delay
-         (let [record-meta ^RecordMetadata @tx-send-future]
-           {::tx/tx-id (.offset record-meta)
-            ::tx/tx-time (Date. (.timestamp record-meta))})))))
+  (submit-tx [_ tx-events]
+    (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
+      (delay
+        (let [record-meta ^RecordMetadata @tx-send-future]
+          {::tx/tx-id (.offset record-meta)
+           ::tx/tx-time (Date. (.timestamp record-meta))}))))
 
-  (open-tx-log [this after-tx-id]
+  (open-tx-log [_ after-tx-id]
     (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
           consumer (doto (->consumer {:kafka-config kafka-config})
                      (.assign (keys tp-offsets))
@@ -155,9 +155,9 @@
                          (map tx-record->tx-log-entry)))))
 
   (subscribe-async [this after-tx-id f]
-    (tx/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+    (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
 
-  (latest-submitted-tx [this]
+  (latest-submitted-tx [_]
     (let [tx-tp (TopicPartition. tx-topic 0)
           end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
       (when (pos? end-offset)

@@ -11,7 +11,8 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [crux.tx.subscribe :as tx-sub])
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
            java.sql.Timestamp
@@ -148,7 +149,7 @@
                                  :crux.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
   (subscribe-async [this after-tx-id f]
-    (tx/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+    (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
 
   (latest-submitted-tx [_]
     (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]

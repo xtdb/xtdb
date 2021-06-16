@@ -264,7 +264,7 @@
         (assoc :ingester-job
                (db/subscribe-async tx-log (db/latest-completed-tx lucene-store)
                                    (let [await-deps (select-keys opts #{:bus :tx-ingester})]
-                                     (fn [{:keys [::txe/tx-events ::tx/tx-id] :as tx}]
+                                     (fn [_job {:keys [::txe/tx-events ::tx/tx-id] :as tx}]
                                        (try
                                          (tx/await-tx await-deps tx)
 
