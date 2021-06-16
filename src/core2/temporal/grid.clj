@@ -20,18 +20,19 @@
            [java.nio.channels Channels FileChannel]
            java.nio.file.Path))
 
-;; "Learning Multi-dimensional Indexes"
-;; https://arxiv.org/pdf/1912.01668.pdf
-
 ;; TODO:
 
-;; Fix boxing inefficiencies in boundary generation and cartesian
-;; product.
+;; Check node kd-tree edit, seems slow, protocol issues,
+;; MethodImplCache?
 
-;; Write cells to intermediate files and stitch them together as a
-;; single Arrow IPC file, one cell per batch (including empty cells).
+;; Cartesian product needs replacing. range and count also shows up.
 
-;; Split out multidimensional index protocols from kd-tree specifics.
+;; MultiDimensionalBin can probably use identity and remove expensive
+;; equals. set! in updateNeighbour gets boxed. The reify in
+;; find-neighbour seems odd.
+
+;; "Learning Multi-dimensional Indexes"
+;; https://arxiv.org/pdf/1912.01668.pdf
 
 (set! *unchecked-math* :warn-on-boxed)
 
