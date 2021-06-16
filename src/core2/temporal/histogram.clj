@@ -346,5 +346,28 @@
     (Histogram. max-bins total (aget min-v axis) (aget max-v axis) (ArrayList. ^List (sort (for [^IMultiDimensionalBin b bins]
                                                                                              (.projectAxis b axis)))))))
 
-(defn ->multidimensional-histogram ^core2.temporal.histogram.MultiDimensionalHistogram [^long max-bins ^long k]
-  (MultiDimensionalHistogram. max-bins k 0 (double-array k Double/MAX_VALUE) (double-array k Double/MIN_VALUE) (ArrayList. (inc max-bins))))
+(deftype OneDMultiDimensionalHistogram [^IHistogram histogram]
+  IMultiDimensionalHistogram
+  (update [this p]
+    (.update histogram (aget p 0))
+    this)
+
+  (getMins [_]
+    (double-array 1 (.getMin histogram)))
+
+  (getMaxs [_]
+    (double-array 1 (.getMax histogram)))
+
+  (getTotal [_]
+    (.getTotal histogram))
+
+  (getBins [_]
+    (throw (UnsupportedOperationException.)))
+
+  (projectAxis [_ _]
+    histogram))
+
+(defn ->multidimensional-histogram ^core2.temporal.histogram.IMultiDimensionalHistogram [^long max-bins ^long k]
+  (if (= 1 k)
+    (OneDMultiDimensionalHistogram. (->histogram max-bins))
+    (MultiDimensionalHistogram. max-bins k 0 (double-array k Double/MAX_VALUE) (double-array k Double/MIN_VALUE) (ArrayList. (inc max-bins)))))
