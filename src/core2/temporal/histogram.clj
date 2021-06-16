@@ -1,5 +1,6 @@
 (ns core2.temporal.histogram
-  (:import [java.util Arrays ArrayList Collections List]))
+  (:import [java.util Arrays ArrayList Collections Comparator List]
+           [java.util.function Consumer ToDoubleFunction]))
 
 ;; "A Streaming Parallel Decision Tree Algorithm"
 ;; https://www.jmlr.org/papers/volume11/ben-haim10a/ben-haim10a.pdf
@@ -75,7 +76,7 @@
     (while (> (.size bins) max-bins)
       (let [^long min-idx (loop [n 0
                                  min-idx 0
-                                 delta Double/MAX_VALUE]
+                                 delta Double/POSITIVE_INFINITY]
                             (if (= n (dec (.size bins)))
                               min-idx
                               (let [new-delta (- (.getValue ^IBin (.get bins (inc n)))
@@ -188,7 +189,7 @@
                       (str (format "%10.4f"  k) "\t" (apply str (repeat (* 200 (double (/ v total))) "*")) "\n"))))))
 
 (defn ->histogram ^core2.temporal.histogram.Histogram [^long max-bins]
-  (Histogram. max-bins 0 Double/MAX_VALUE Double/MIN_VALUE (ArrayList. (inc max-bins))))
+  (Histogram. max-bins 0 Double/POSITIVE_INFINITY Double/NEGATIVE_INFINITY (ArrayList. (inc max-bins))))
 
 (definterface IMultiDimensionalHistogram
   (^core2.temporal.histogram.IMultiDimensionalHistogram update [^doubles x])
@@ -204,7 +205,24 @@
   (^void increment [])
   (^core2.temporal.histogram.IBin projectAxis [^int axis]))
 
-(deftype MultiDimensionalBin [^doubles value ^:unsynchronized-mutable ^long count]
+;; "Fast Hierarchical Clustering and Other Applications of Dynamic
+;; Closest Pairs"
+;; https://arxiv.org/pdf/cs/9912014.pdf
+
+(definterface IFastPair
+  (^double getDistance [])
+  (^Object getNeighbour [])
+  (^void updateNeighbour [^Object bin ^double distance]))
+
+(def ^:private ^Comparator fast-pair-comparator (Comparator/comparingDouble
+                                                 (reify ToDoubleFunction
+                                                   (applyAsDouble [_ x]
+                                                     (.getDistance ^IFastPair x)))))
+
+(deftype MultiDimensionalBin [^doubles value
+                              ^:unsynchronized-mutable ^long count
+                              ^:unsynchronized-mutable ^double distance
+                              ^:unsynchronized-mutable ^IMultiDimensionalBin neighbour]
   IMultiDimensionalBin
   (getValue [_] value)
 
@@ -224,7 +242,18 @@
 
   Comparable
   (compareTo [_ other]
-    (Arrays/compare value (.getValue ^IMultiDimensionalBin other))))
+    (Arrays/compare value (.getValue ^IMultiDimensionalBin other)))
+
+  IFastPair
+  (getDistance [_]
+    distance)
+
+  (getNeighbour [_]
+    neighbour)
+
+  (updateNeighbour [this bin distance]
+    (set! (.neighbour this) bin)
+    (set! (.distance this) distance)))
 
 (defn- vec-plus ^doubles [^doubles x ^doubles y]
   (let [acc (double-array (alength x))]
@@ -278,6 +307,17 @@
         distance
         (recur (inc n) (max distance (Math/abs (- (aget x n) (aget y n)))))))))
 
+(defn- find-neighbour [^List bins ^MultiDimensionalBin bin]
+  (let [p (.getValue bin)]
+    (.updateNeighbour bin nil Double/POSITIVE_INFINITY)
+    (.forEach bins (reify Consumer
+                     (accept [_ b]
+                       (let [^MultiDimensionalBin b b]
+                         (when-not (identical? b bin)
+                           (let [distance (vec-squared-euclidean-distance p (.getValue b))]
+                             (when (< distance (.getDistance bin))
+                               (.updateNeighbour bin b distance))))))))))
+
 (deftype MultiDimensionalHistogram [^int max-bins
                                     ^int k
                                     ^:unsynchronized-mutable ^long total
@@ -291,42 +331,39 @@
       (let [x (aget p n)]
         (aset min-v n (min (aget min-v n) x))
         (aset max-v n (max (aget max-v n) x))))
-    (let [new-bin (MultiDimensionalBin. p 1)
-          idx (.indexOf bins new-bin)]
-      (if (neg? idx)
-        (.add bins new-bin)
-        (.increment ^IMultiDimensionalBin (.get bins idx))))
+    (let [new-bin (MultiDimensionalBin. p 1 Double/POSITIVE_INFINITY nil)]
+      (find-neighbour bins new-bin)
+      (.add bins new-bin)
 
-    (while (> (.size bins) max-bins)
-      (loop [n 0
-             m 1
-             min-idx-a 0
-             min-idx-b 0
-             delta Double/MAX_VALUE]
-        (cond
-          (= n (.size bins))
-          (let [^IMultiDimensionalBin bin-i (.get bins min-idx-a)
-                ^IMultiDimensionalBin bin-i+1 (.get bins min-idx-b)
-                qi (.getValue bin-i)
-                ki (.getCount bin-i)
-                qi+1 (.getValue bin-i+1)
-                ki+1 (.getCount bin-i+1)
-                new-k (+ ki ki+1)
-                new-q (vec-divide (vec-plus (vec-multiply qi ki) (vec-multiply qi+1 ki+1)) new-k)
-                new-bin (MultiDimensionalBin. new-q new-k)]
-            (doto bins
-              (.remove min-idx-b)
-              (.set min-idx-a new-bin)))
+      (while (> (.size bins) max-bins)
+        (let [^MultiDimensionalBin bin-i (Collections/min bins fast-pair-comparator)
+              ^MultiDimensionalBin bin-i+1 (.getNeighbour bin-i)
 
-          (= m (.size bins))
-          (recur (inc n) (+ 2 n) min-idx-a min-idx-b delta)
+              qi (.getValue bin-i)
+              ki (.getCount bin-i)
+              qi+1 (.getValue bin-i+1)
+              ki+1 (.getCount bin-i+1)
+              new-k (+ ki ki+1)
+              new-q (vec-divide (vec-plus (vec-multiply qi ki) (vec-multiply qi+1 ki+1)) new-k)
+              new-bin (MultiDimensionalBin. new-q new-k Double/POSITIVE_INFINITY nil)
 
-          :else
-          (let [new-delta (vec-squared-euclidean-distance (.getValue ^IMultiDimensionalBin (.get bins n))
-                                                          (.getValue ^IMultiDimensionalBin (.get bins m)))]
-            (if (< new-delta delta)
-              (recur n (inc m) n m new-delta)
-              (recur n (inc m) min-idx-a min-idx-b delta))))))
+              bin-i-idx (.indexOf bins bin-i)
+              bin-i+1-idx (.indexOf bins bin-i+1)
+              last-idx (dec (.size bins))]
+
+          (.set bins bin-i-idx new-bin)
+          (.set bins bin-i+1-idx (.get bins last-idx))
+          (.remove bins last-idx)
+
+          (find-neighbour bins new-bin)
+
+          (.forEach bins (reify Consumer
+                           (accept [_ b]
+                             (let [^MultiDimensionalBin b b]
+                               (let [neighbour (.getNeighbour b)]
+                                 (when (or (identical? bin-i neighbour)
+                                           (identical? bin-i+1 neighbour))
+                                   (find-neighbour bins b))))))))))
 
     this)
 
@@ -346,28 +383,6 @@
     (Histogram. max-bins total (aget min-v axis) (aget max-v axis) (ArrayList. ^List (sort (for [^IMultiDimensionalBin b bins]
                                                                                              (.projectAxis b axis)))))))
 
-(deftype OneDMultiDimensionalHistogram [^IHistogram histogram]
-  IMultiDimensionalHistogram
-  (update [this p]
-    (.update histogram (aget p 0))
-    this)
-
-  (getMins [_]
-    (double-array 1 (.getMin histogram)))
-
-  (getMaxs [_]
-    (double-array 1 (.getMax histogram)))
-
-  (getTotal [_]
-    (.getTotal histogram))
-
-  (getBins [_]
-    (throw (UnsupportedOperationException.)))
-
-  (projectAxis [_ _]
-    histogram))
-
 (defn ->multidimensional-histogram ^core2.temporal.histogram.IMultiDimensionalHistogram [^long max-bins ^long k]
-  (if (= 1 k)
-    (OneDMultiDimensionalHistogram. (->histogram max-bins))
-    (MultiDimensionalHistogram. max-bins k 0 (double-array k Double/MAX_VALUE) (double-array k Double/MIN_VALUE) (ArrayList. (inc max-bins)))))
+  (MultiDimensionalHistogram. max-bins k 0 (double-array k Double/POSITIVE_INFINITY) (double-array k Double/MIN_VALUE)
+                              (ArrayList. (inc max-bins))))
