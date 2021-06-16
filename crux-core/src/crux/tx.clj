@@ -450,12 +450,16 @@
     (->TxIngester index-store !error job)))
 
 (defn await-tx
-  ([deps awaited-tx] (await-tx deps awaited-tx {}))
+  ([deps awaited-tx]
+   (await-tx deps awaited-tx {}))
+
   ([{:keys [bus tx-ingester]} awaited-tx
-    {:keys [^Duration timeout]}]
+    {:keys [^Duration timeout, indexed-tx-event ingester-error-event]
+     :or {indexed-tx-event ::indexed-tx
+          ingester-error-event ::ingester-error}}]
    (let [tx-k (some (set (keys awaited-tx)) [::tx-id ::tx-time])
          tx-v (get awaited-tx tx-k)
-         fut (bus/await bus {:crux/event-types #{::indexed-tx ::ingester-error :crux.node/node-closing}
+         fut (bus/await bus {:crux/event-types #{indexed-tx-event ingester-error-event :crux.node/node-closing}
                              :->result (letfn [(tx->result [tx]
                                                  (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
                                                    {:tx tx}))]
@@ -464,9 +468,9 @@
                                                      {:ingester-error ingester-error})
                                                    (tx->result (db/latest-completed-tx tx-ingester))))
                                            ([{:keys [crux/event-type] :as ev}]
-                                            (case event-type
-                                              ::indexed-tx (tx->result (:submitted-tx ev))
-                                              ::ingester-error {:ingester-error (:ingester-error ev)}
+                                            (condp = event-type
+                                              indexed-tx-event (tx->result (:submitted-tx ev))
+                                              ingester-error-event {:ingester-error (:ingester-error ev)}
                                               :crux.node/node-closing {:node-closing? true}))))})
 
          {:keys [timeout? ingester-error node-closing? tx]} (if timeout

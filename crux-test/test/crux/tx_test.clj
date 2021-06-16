@@ -1378,12 +1378,13 @@
         (t/is (= tx1 (await-tx tx1 nil)))))
 
     (t/testing "times out if it's not quite ready"
-      (future
-        (Thread/sleep 100)
-        (bus/send bus (assoc-in tx-evt [:submitted-tx ::tx/tx-id] 0)))
+      (let [fut (future
+                  (Thread/sleep 100)
+                  (bus/send bus (assoc-in tx-evt [:submitted-tx ::tx/tx-id] 0)))]
+        (with-latest-tx nil
+          (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 50)))))
 
-      (with-latest-tx nil
-        (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500))))))
+        @fut))
 
     (t/testing "throws on ingester error"
       (future

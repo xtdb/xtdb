@@ -1,12 +1,11 @@
 (ns crux.lucene.multi-field
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as cc]
-            [crux.db :as db]
             [crux.lucene :as l]
             [crux.memory :as mem]
             [crux.query :as q])
   (:import org.apache.lucene.analysis.Analyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
            [org.apache.lucene.index IndexWriter Term]
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search Query TermQuery]))
@@ -15,9 +14,12 @@
 (def ^:const ^:private field-eid "_crux_eid")
 
 (defrecord LuceneMultiFieldIndexer []
-  l/LuceneIndexer
+  l/LuceneTxIndexer
+  (index-tx! [_ index-writer evicted-eids docs]
+    (doseq [eid evicted-eids
+            :let [q (TermQuery. (Term. field-eid (str (cc/new-id eid))))]]
+      (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))
 
-  (index! [this index-writer docs]
     (->> docs
          (map (fn [[content-hash doc]]
                 (let [d (Document.)]
@@ -29,12 +31,7 @@
                   ;; For eviction:
                   (.add d (StringField. field-eid, (str (cc/new-id (:crux.db/id doc))), Field$Store/NO))
                   d)))
-         (.addDocuments ^IndexWriter index-writer)))
-
-  (evict! [this index-writer eids]
-    (doseq [eid eids
-            :let [q (TermQuery. (Term. field-eid (str (cc/new-id eid))))]]
-      (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
+         (.addDocuments ^IndexWriter index-writer))))
 
 (defn ^Query build-lucene-text-query
   [^Analyzer analyzer, [q & args]]

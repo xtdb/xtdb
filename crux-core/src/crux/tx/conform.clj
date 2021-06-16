@@ -190,11 +190,15 @@
 (defmethod <-tx-event :crux.tx/fn [evt]
   (zipmap [:op :fn-eid :args-content-hash] evt))
 
+(defn conformed-tx-events->doc-hashes [tx-events]
+  (->> tx-events
+       (mapcat #(keep % [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
+       (remove #{c/nil-id-buffer})))
+
 (defn tx-events->doc-hashes [tx-events]
   (->> tx-events
        (map <-tx-event)
-       (mapcat #(keep % [:content-hash :old-content-hash :new-content-hash :args-content-hash]))
-       (remove #{c/nil-id-buffer})))
+       (conformed-tx-events->doc-hashes)))
 
 (defn tx-events->tx-ops [document-store tx-events]
   (let [docs (db/fetch-docs document-store (tx-events->doc-hashes tx-events))]
