@@ -320,9 +320,9 @@
          number-of-cells (long (Math/ceil (Math/pow cells-per-dimension k-minus-one)))
          axis-shift (Long/bitCount (dec cells-per-dimension))
          histogram-bins (min max-histogram-bins (* k-minus-one cells-per-dimension))
-         ^IMultiDimensionalHistogram histogram (hist/->multidimensional-histogram histogram-bins k)
+         ^IMultiDimensionalHistogram histogram (hist/->multidimensional-histogram histogram-bins k-minus-one)
          update-histograms-fn (fn [^longs p]
-                                (let [p (double-array p)]
+                                (let [p (double-array k-minus-one p)]
                                   (.update histogram p)))
          cell-outs (object-array number-of-cells)
          cell-paths (object-array number-of-cells)]
@@ -335,7 +335,7 @@
        (doseq [p points]
          (update-histograms-fn (kd/->longs p))))
      (try
-       (let [histograms (for [n (range k)]
+       (let [histograms (for [n (range k-minus-one)]
                           (.projectAxis histogram n))
              scales (object-array (for [^IHistogram h histograms
                                         :let [u (.uniform h cells-per-dimension)]]
