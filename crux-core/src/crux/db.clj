@@ -22,7 +22,9 @@
   (exclusive-avs [this eids])
   (store-index-meta [this k v])
   (tx-failed? [this tx-id])
-  (begin-index-tx [index-store tx fork-at])
+  (begin-index-tx [index-store tx fork-at]))
+
+(defprotocol LatestCompletedTx
   (latest-completed-tx [this]))
 
 (defprotocol IndexMeta

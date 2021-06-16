@@ -11,7 +11,8 @@
             [crux.node :as n]
             [crux.rocksdb :as rocks]
             [crux.tx :as tx]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [crux.db :as db])
   (:import [crux.api Crux ICruxAPI CruxDocument]
            [crux.api.tx Transaction]
            java.time.Duration
@@ -134,14 +135,17 @@
                                     :where [[e :name "Ivan"]]}
                                   (object-array 0)))))))
 
+(def ^:private ^:dynamic *latest-completed-tx*)
+
 (defmacro with-latest-tx [latest-tx & body]
-  `(with-redefs [api/latest-completed-tx (fn [node#]
-                                           ~latest-tx)]
+  `(binding [*latest-completed-tx* ~latest-tx]
      ~@body))
 
 (t/deftest test-await-tx
   (let [bus (bus/->bus {})
-        tx-ingester (tx/map->TxIngester {:!error (atom nil)})
+        tx-ingester (reify
+                      db/TxIngester (ingester-error [_] nil)
+                      db/LatestCompletedTx (latest-completed-tx [_] *latest-completed-tx*))
         await-tx (fn [tx timeout]
                    (#'n/await-tx {:bus bus :tx-ingester tx-ingester} ::tx/tx-id tx timeout))
         tx1 {::tx/tx-id 1
