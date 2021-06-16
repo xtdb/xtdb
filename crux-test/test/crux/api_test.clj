@@ -449,7 +449,7 @@
 
 (t/deftest missing-doc-halts-tx-ingestion
   (when-not (contains? #{:remote} *node-type*)
-    (let [tx (db/submit-tx (:tx-log *api*) [[:crux.tx/put (c/new-id :foo) (c/new-id {:crux.db/id :foo})]])]
+    (let [tx @(db/submit-tx (:tx-log *api*) [[:crux.tx/put (c/new-id :foo) (c/new-id {:crux.db/id :foo})]])]
       (t/is (thrown-with-msg?
              IllegalStateException
              #"missing docs"

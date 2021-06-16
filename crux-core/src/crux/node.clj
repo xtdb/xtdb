@@ -18,7 +18,6 @@
   (:import [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
-           java.util.concurrent.TimeoutException
            java.util.Date))
 
 (def crux-version
@@ -32,43 +31,12 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defn- await-tx [{:keys [bus tx-ingester]} tx-k awaited-tx ^Duration timeout]
-  (let [tx-v (get awaited-tx tx-k)
-        fut (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
-                            :->result (letfn [(tx->result [tx]
-                                                (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
-                                                  {:tx tx}))]
-                                        (fn
-                                          ([] (or
-                                               (tx->result (db/latest-completed-tx tx-ingester))
-                                               (when-let [ingester-error (db/ingester-error tx-ingester)]
-                                                 {:ingester-error ingester-error})))
-                                          ([{:keys [crux/event-type] :as ev}]
-                                           (case event-type
-                                             ::tx/indexed-tx (tx->result (:submitted-tx ev))
-                                             ::tx/ingester-error {:ingester-error (:ingester-error ev)}
-                                             ::node-closing {:node-closing? true}))))})
-
-        {:keys [timeout? ingester-error node-closing? tx]} (if timeout
-                                                             (deref fut (.toMillis timeout) {:timeout? true})
-                                                             (deref fut))]
-
-    (when timeout?
-      (future-cancel fut))
-
-    (cond
-      ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
-      timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
-                                              ", index has: " (pr-str (db/latest-completed-tx tx-ingester)))))
-      node-closing? (throw (InterruptedException. "Node closed."))
-      tx tx)))
-
-(defn- query-expired? [{:keys [finished-at] :as query} ^Duration max-age]
+(defn- query-expired? [{:keys [finished-at]} ^Duration max-age]
   (when finished-at
     (let [time-since-query ^Duration (Duration/between (.toInstant ^Date finished-at) (Instant/now))]
       (neg? (.compareTo max-age time-since-query)))))
 
-(defn slow-query? [{:keys [started-at finished-at] :as query} {:keys [^Duration slow-queries-min-threshold]}]
+(defn slow-query? [{:keys [started-at finished-at]} {:keys [^Duration slow-queries-min-threshold]}]
   (let [time-taken (Duration/between (.toInstant ^Date started-at) (.toInstant ^Date finished-at))]
     (neg? (.compareTo slow-queries-min-threshold time-taken))))
 
@@ -126,7 +94,7 @@
         (merge crux-version
                (status (dissoc @!system :crux/node))))))
 
-  (tx-committed? [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
+  (tx-committed? [this {:keys [::tx/tx-id] :as submitted-tx}]
     (cio/with-read-lock lock
       (cio/with-read-lock lock
         (ensure-node-open this)
@@ -145,19 +113,19 @@
   (sync [this tx-time timeout]
     (defonce warn-on-deprecated-sync
       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-    (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
+    (::tx/tx-time (tx/await-tx this {::tx/tx-time tx-time} {:timeout timeout})))
 
   (await-tx [this submitted-tx]
     (api/await-tx this submitted-tx nil))
 
   (await-tx [this submitted-tx timeout]
-    (await-tx this ::tx/tx-id submitted-tx timeout))
+    (tx/await-tx this submitted-tx {:timeout timeout}))
 
   (await-tx-time [this tx-time]
     (api/await-tx-time this tx-time nil))
 
   (await-tx-time [this tx-time timeout]
-    (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
+    (::tx/tx-time (tx/await-tx this {::tx/tx-time tx-time} {:timeout timeout})))
 
   (listen [_ {:crux/keys [event-type] :as event-opts} f]
     (case event-type
@@ -216,7 +184,7 @@
                             (remove #(db/tx-failed? index-store (:crux.tx/tx-id %)))
                             (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
                             (map (if with-ops?
-                                   (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
+                                   (fn [{:keys [crux.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
                                          (dissoc :crux.tx.event/tx-events)
                                          (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
@@ -237,7 +205,7 @@
         (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
-(defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
+(defmethod print-method CruxNode [_node ^Writer w] (.write w "#<CruxNode>"))
 (defmethod pp/simple-dispatch CruxNode [it] (print-method it *out*))
 
 (defn- swap-finished-query! [!running-queries {:keys [query-id] :as query} {:keys [bus] :as  node-opts}]
@@ -286,30 +254,30 @@
                                          :status :completed}
                                         node-opts)))))
 
-(defn- ->node {::sys/deps {:index-store :crux/index-store
-                           :tx-ingester :crux/tx-ingester
-                           :bus :crux/bus
-                           :document-store :crux/document-store
-                           :tx-log :crux/tx-log
-                           :query-engine :crux/query-engine}
-               ::sys/args {:await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
-                                              :default nil
-                                              :spec ::sys/duration}
-                           :recent-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
-                                                    :default (Duration/ofMinutes 5)
-                                                    :crux.config/type :crux.config/duration}
-                           :recent-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
-                                                      :default 20
-                                                      :crux.config/type :crux.config/nat-int}
-                           :slow-queries-max-age {:doc "How long to retain queries on the slow query queue"
-                                                  :default (Duration/ofHours 24)
-                                                  :spec ::sys/duration}
-                           :slow-queries-max-count {:doc "Max number of finished queries to retain on the slow query queue"
-                                                    :default 100
-                                                    :spec ::sys/nat-int}
-                           :slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
-                                                        :default (Duration/ofMinutes 1)
-                                                        :spec ::sys/duration}}}
+(defn ->node {::sys/deps {:index-store :crux/index-store
+                          :tx-ingester :crux/tx-ingester
+                          :bus :crux/bus
+                          :document-store :crux/document-store
+                          :tx-log :crux/tx-log
+                          :query-engine :crux/query-engine}
+              ::sys/args {:await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
+                                             :default nil
+                                             :spec ::sys/duration}
+                          :recent-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
+                                                   :default (Duration/ofMinutes 5)
+                                                   :crux.config/type :crux.config/duration}
+                          :recent-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
+                                                     :default 20
+                                                     :crux.config/type :crux.config/nat-int}
+                          :slow-queries-max-age {:doc "How long to retain queries on the slow query queue"
+                                                 :default (Duration/ofHours 24)
+                                                 :spec ::sys/duration}
+                          :slow-queries-max-count {:doc "Max number of finished queries to retain on the slow query queue"
+                                                   :default 100
+                                                   :spec ::sys/nat-int}
+                          :slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
+                                                       :default (Duration/ofMinutes 1)
+                                                       :spec ::sys/duration}}}
   [opts]
   (map->CruxNode (merge opts
                         {:!running-queries (doto (atom {:in-progress {} :completed '()})

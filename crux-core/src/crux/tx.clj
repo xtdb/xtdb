@@ -17,7 +17,7 @@
            crux.codec.EntityTx
            java.io.Closeable
            java.time.Duration
-           [java.util.concurrent CompletableFuture Future]
+           [java.util.concurrent CompletableFuture Future TimeoutException]
            java.util.Date
            java.util.function.BiConsumer))
 
@@ -448,6 +448,40 @@
                                       (bus/send bus {:crux/event-type ::ingester-error, :ingester-error t})
                                       (throw t)))))]
     (->TxIngester index-store !error job)))
+
+(defn await-tx
+  ([deps awaited-tx] (await-tx deps awaited-tx {}))
+  ([{:keys [bus tx-ingester]} awaited-tx
+    {:keys [^Duration timeout]}]
+   (let [tx-k (some (set (keys awaited-tx)) [::tx-id ::tx-time])
+         tx-v (get awaited-tx tx-k)
+         fut (bus/await bus {:crux/event-types #{::indexed-tx ::ingester-error :crux.node/node-closing}
+                             :->result (letfn [(tx->result [tx]
+                                                 (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
+                                                   {:tx tx}))]
+                                         (fn
+                                           ([] (or (when-let [ingester-error (db/ingester-error tx-ingester)]
+                                                     {:ingester-error ingester-error})
+                                                   (tx->result (db/latest-completed-tx tx-ingester))))
+                                           ([{:keys [crux/event-type] :as ev}]
+                                            (case event-type
+                                              ::indexed-tx (tx->result (:submitted-tx ev))
+                                              ::ingester-error {:ingester-error (:ingester-error ev)}
+                                              :crux.node/node-closing {:node-closing? true}))))})
+
+         {:keys [timeout? ingester-error node-closing? tx]} (if timeout
+                                                              (deref fut (.toMillis timeout) {:timeout? true})
+                                                              (deref fut))]
+
+     (when timeout?
+       (future-cancel fut))
+
+     (cond
+       ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
+       timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
+                                               ", index has: " (pr-str (db/latest-completed-tx tx-ingester)))))
+       node-closing? (throw (InterruptedException. "Node closed."))
+       tx tx))))
 
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (cio/thread-factory "crux-tx-subscription"))
