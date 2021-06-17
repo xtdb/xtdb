@@ -22,14 +22,17 @@
 
 ;; TODO:
 
-;; Check node kd-tree edit, seems slow, protocol issues,
-;; MethodImplCache?
-
-;; Cartesian product needs replacing. range and count also shows up.
-
 ;; MultiDimensionalBin can probably use identity and remove expensive
 ;; equals. set! in updateNeighbour gets boxed. The reify in
 ;; find-neighbour seems odd.
+
+;; Check node kd-tree edit, seems slow, protocol issues,
+;; MethodImplCache?
+
+;; Sanity check and revisit "classic" depth first range search for
+;; column trees.
+
+;; Cartesian product needs replacing. range and count also shows up.
 
 ;; "Learning Multi-dimensional Indexes"
 ;; https://arxiv.org/pdf/1912.01668.pdf
