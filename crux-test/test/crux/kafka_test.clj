@@ -30,7 +30,6 @@
         (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put evicted-doc]
                                                  [:crux.tx/put non-evicted-doc]])
               _ (api/await-tx *api* submitted-tx)
-              evicted-doc-hash (:crux.db/content-hash (api/entity-tx (api/db *api*) :to-be-evicted))
               _ (api/submit-tx *api* [[:crux.tx/evict (:crux.db/id evicted-doc)]])
               submitted-tx (api/submit-tx *api* [[:crux.tx/put after-evict-doc]])
               _ (api/await-tx *api* submitted-tx nil)]

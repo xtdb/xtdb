@@ -415,27 +415,25 @@
                  @!events))))))
 
 (t/deftest test-tx-fn-replacing-arg-docs-866
-  ;; Intermittent failure on Kafka, see #1256
-  (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
-                                         :crux.db/fn '(fn [ctx doc]
-                                                        [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
+                                       :crux.db/fn '(fn [ctx doc]
+                                                      [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
 
-    (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
-      (t/testing "replaces args doc with resulting ops"
-        (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
+  (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
+    (t/testing "replaces args doc with resulting ops"
+      (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
 
-        (t/is (= {:crux.db/id :ivan, :name "Ivan"}
-                 (api/entity (api/db *api*) :ivan)))
+      (t/is (= {:crux.db/id :ivan, :name "Ivan"}
+               (api/entity (api/db *api*) :ivan)))
 
-        (let [*server-api* (or *http-server-api* *api*)
-              arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
-                           (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
+      (let [*server-api* (or *http-server-api* *api*)
+            arg-doc-id (with-open [tx-log (db/open-tx-log (:tx-log *server-api*) nil)]
+                         (-> (iterator-seq tx-log) last ::txe/tx-events first last))]
 
-          (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
-                   (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
-                       (get arg-doc-id)
-                       (dissoc :crux.db/id)))))))))
+        (t/is (= {:crux.db.fn/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan, :name "Ivan"})]]}
+                 (-> (db/fetch-docs (:document-store *server-api*) #{arg-doc-id})
+                     (get arg-doc-id)
+                     (dissoc :crux.db/id))))))))
 
 (t/deftest test-await-tx
   (when-not (= *node-type* :remote)
