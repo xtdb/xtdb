@@ -68,20 +68,16 @@
   (notify-tx! [_ tx])
   (handle-notifying-subscriber [_ tx-log after-tx-id f]))
 
-(defrecord NotifyingSubscriberHandler [!latest-submitted-tx-id !semaphores]
+(defrecord NotifyingSubscriberHandler [!state]
   PNotifyingSubscriberHandler
   (notify-tx! [_ tx]
-    (let [semaphores (dosync
-                      (ref-set !latest-submitted-tx-id (::tx/tx-id tx))
-                      @!semaphores)]
+    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (::tx/tx-id tx))]
       (doseq [^Semaphore semaphore semaphores]
         (.release semaphore))))
 
   (handle-notifying-subscriber [_ tx-log after-tx-id f]
     (let [semaphore (Semaphore. 0)
-          latest-submitted-tx-id (dosync
-                                  (alter !semaphores conj semaphore)
-                                  @!latest-submitted-tx-id)]
+          {:keys [latest-submitted-tx-id]} (swap! !state update :semaphores conj semaphore)]
 
       (completable-thread
        (fn [^CompletableFuture fut]
@@ -90,6 +86,7 @@
              (let [last-tx-id (if (and latest-submitted-tx-id
                                        (or (nil? after-tx-id)
                                            (< after-tx-id latest-submitted-tx-id)))
+
                                 ;; catching up
                                 (with-open [log (db/open-tx-log tx-log after-tx-id)]
                                   (reduce (tx-handler f fut)
@@ -99,7 +96,7 @@
 
                                 ;; running live
                                 (reduce (tx-handler f fut)
-                                        [after-tx-id nil]
+                                        after-tx-id
                                         (let [permits (do
                                                         (.acquire semaphore)
                                                         (inc (.drainPermits semaphore)))
@@ -117,9 +114,8 @@
                  :else (recur last-tx-id))))
 
            (finally
-             (dosync
-              (alter !semaphores disj semaphore)))))))))
+             (swap! !state update :semaphores disj semaphore))))))))
 
 (defn ->notifying-subscriber-handler [latest-submitted-tx]
-  (->NotifyingSubscriberHandler (ref (::tx/tx-id latest-submitted-tx))
-                                (ref #{})))
+  (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id (::tx/tx-id latest-submitted-tx)
+                                       :semaphores #{}})))
