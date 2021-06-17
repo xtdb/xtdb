@@ -994,7 +994,7 @@
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
         !latch (promise)]
-    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-tx ::tx/committing-tx ::tx/indexed-tx}}
+    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
                 (fn [evt]
                   (swap! !events conj evt)
                   (when (= ::tx/indexed-tx (:crux/event-type evt))
@@ -1009,10 +1009,6 @@
         (t/is false))
 
       (t/is (= [{:crux/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
-                {:crux/event-type ::tx/committing-tx,
-                 :submitted-tx submitted-tx,
-                 :evicting-eids #{}
-                 :doc-ids doc-ids}
                 {:crux/event-type ::tx/indexed-tx,
                  :submitted-tx submitted-tx,
                  :committed? true
@@ -1025,7 +1021,7 @@
                                    #crux/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
                                    #crux/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
-                   (update 2 dissoc :bytes-indexed)))))))
+                   (update 1 dissoc :bytes-indexed)))))))
 
 (t/deftest await-fails-quickly-738
   (with-redefs [tx/index-tx-event (fn [_ _ _]

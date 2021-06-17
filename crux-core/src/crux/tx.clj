@@ -39,12 +39,6 @@
 (defmethod bus/event-spec ::indexing-tx [_]
   (s/keys :req-un [::submitted-tx]))
 
-(defmethod bus/event-spec ::committing-tx [_]
-  (s/keys :req-un [::submitted-tx ::evicting-eids ::doc-ids]))
-
-(defmethod bus/event-spec ::aborting-tx [_]
-  (s/keys :req-un [::submitted-tx]))
-
 (defmethod bus/event-spec ::indexed-tx [_]
   (s/keys :req [::txe/tx-events],
           :req-un [::submitted-tx ::committed?]
@@ -320,7 +314,6 @@
                                (index-docs this (-> docs without-tx-fn-docs))
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
-                                                            (swap! !tx update :evicted-eids into evict-eids)
                                                             (db/unindex-eids index-store-tx evict-eids))]
                                  (when-let [docs (seq (concat docs tombstones))]
                                    (db/submit-docs document-store-tx docs)))
@@ -344,18 +337,12 @@
     (when fork-at
       (throw (IllegalStateException. "Can't commit from fork.")))
 
-    (let [{:keys [evicted-eids doc-ids tx-events]} @!tx]
-      ;; these two come before the committing tx bus message
-      ;; because Lucene relies on both of them before indexing/evicting docs
-      (fork/commit-doc-store-tx document-store-tx)
+    (fork/commit-doc-store-tx document-store-tx)
+    (db/commit-index-tx index-store-tx)
 
-      (bus/send bus {:crux/event-type ::committing-tx,
-                     :submitted-tx tx
-                     :evicting-eids evicted-eids
-                     :doc-ids doc-ids})
+    (log/debug "Transaction committed:" (pr-str tx))
 
-      (db/commit-index-tx index-store-tx)
-
+    (let [{:keys [tx-events]} @!tx]
       (bus/send bus (into {:crux/event-type ::indexed-tx,
                            :submitted-tx tx,
                            :committed? true
@@ -371,13 +358,10 @@
     (when (:fork-at tx)
       (throw (IllegalStateException. "Can't abort from fork.")))
 
-    (bus/send bus {:crux/event-type ::aborting-tx,
-                   :submitted-tx tx})
-
-    (log/debug "Transaction aborted:" (pr-str tx))
-
     (fork/abort-doc-store-tx document-store-tx)
     (db/abort-index-tx index-store-tx)
+
+    (log/debug "Transaction aborted:" (pr-str tx))
 
     (bus/send bus {:crux/event-type ::indexed-tx,
                    :submitted-tx tx,
@@ -396,7 +380,6 @@
       (->InFlightTx tx fork-at
                     (atom :open)
                     (atom {:doc-ids #{}
-                           :evicted-eids #{}
                            :av-count 0
                            :bytes-indexed 0
                            :tx-events []})
