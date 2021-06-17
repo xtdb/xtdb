@@ -202,7 +202,6 @@
 (definterface IMultiDimensionalBin
   (^doubles getValue [])
   (^long getCount [])
-  (^void increment [])
   (^core2.temporal.histogram.IBin projectAxis [^int axis]))
 
 ;; "Fast Hierarchical Clustering and Other Applications of Dynamic
@@ -228,21 +227,8 @@
 
   (getCount [_] count)
 
-  (increment [this]
-    (set! (.count this) (inc count)))
-
   (projectAxis [_ axis]
     (Bin. (aget value axis) count))
-
-  (equals [_ other]
-    (Arrays/equals value (.getValue ^IMultiDimensionalBin other)))
-
-  (hashCode [_]
-    (Arrays/hashCode value))
-
-  Comparable
-  (compareTo [_ other]
-    (Arrays/compare value (.getValue ^IMultiDimensionalBin other)))
 
   IFastPair
   (getDistance [_]
@@ -252,32 +238,8 @@
     neighbour)
 
   (updateNeighbour [this bin distance]
-    (set! (.neighbour this) bin)
-    (set! (.distance this) distance)))
-
-(defn- vec-plus ^doubles [^doubles x ^doubles y]
-  (let [acc (double-array (alength x))]
-    (dotimes [n (alength x)]
-      (aset acc n (+ (aget x n) (aget y n))))
-    acc))
-
-(defn- vec-minus ^doubles [^doubles x ^doubles y]
-  (let [acc (double-array (alength x))]
-    (dotimes [n (alength x)]
-      (aset acc n (- (aget x n) (aget y n))))
-    acc))
-
-(defn- vec-multiply ^doubles [^doubles x ^double y]
-  (let [acc (double-array (alength x))]
-    (dotimes [n (alength x)]
-      (aset acc n (* (aget x n) y)))
-    acc))
-
-(defn- vec-divide ^doubles [^doubles x ^double y]
-  (let [acc (double-array (alength x))]
-    (dotimes [n (alength x)]
-      (aset acc n (/ (aget x n) y)))
-    acc))
+    (set! (.distance this) distance)
+    (set! (.neighbour this) bin)))
 
 (defn- vec-manhattan-distance ^double [^doubles x ^doubles y]
   (let [len (alength x)]
@@ -344,7 +306,10 @@
               qi+1 (.getValue bin-i+1)
               ki+1 (.getCount bin-i+1)
               new-k (+ ki ki+1)
-              new-q (vec-divide (vec-plus (vec-multiply qi ki) (vec-multiply qi+1 ki+1)) new-k)
+              new-q (double-array k)
+              _ (dotimes [n k]
+                  (aset new-q n (/ (+ (* (aget qi n) ki)
+                                      (* (aget qi+1 n) ki+1)) new-k)))
               new-bin (MultiDimensionalBin. new-q new-k Double/POSITIVE_INFINITY nil)
 
               bin-i-idx (.indexOf bins bin-i)
