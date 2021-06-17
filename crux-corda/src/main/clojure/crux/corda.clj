@@ -61,7 +61,7 @@
     (db-type dialect))
   :default ::default)
 
-(defn ->crux-tx [^SecureHash corda-tx-id {{:keys [dialect ^AppServiceHub service-hub]} :tx-log}]
+(defn ->crux-tx [^SecureHash corda-tx-id {{{:keys [dialect ^AppServiceHub service-hub]} :tx-log} :node}]
   (some-> (jdbc/execute-one! (.jdbcSession service-hub)
                              ["SELECT * FROM crux_txs WHERE corda_tx_id = ?"
                               (str corda-tx-id)]
@@ -129,10 +129,10 @@
             (tx-row->tx dialect)
             (select-keys [::tx/tx-id ::tx/tx-time]))))
 
-(defn sync-txs [{:keys [tx-log tx-ingester document-store] :as crux-node}]
+(defn sync-txs [{{:keys [tx-log tx-ingester document-store] :as crux-node} :node}]
   (with-open [txs (open-tx-log tx-log (::tx/tx-id (crux/latest-completed-tx crux-node)))]
     (doseq [{:keys [docs ::tx/tx-events] :as tx} (iterator-seq txs)]
-      (let [in-flight-tx (db/begin-tx tx-ingester tx)]
+      (let [in-flight-tx (db/begin-tx tx-ingester tx nil)]
         (try
           (db/submit-docs document-store docs)
           (db/index-tx-events in-flight-tx tx-events)

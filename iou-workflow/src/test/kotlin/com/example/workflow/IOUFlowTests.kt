@@ -1,6 +1,5 @@
 package com.example.workflow
 
-import clojure.lang.Keyword
 import com.example.contract.IOUState
 import com.example.service.CruxService
 import net.corda.core.node.services.queryBy
@@ -66,15 +65,13 @@ class IOUFlowTests {
             }
         }
 
-        val txIdKey = Keyword.intern("crux.tx/tx-id")
-
         // We check Crux gets a transaction
         for (node in nodes) {
             val cruxService = node.services.cordaService(CruxService::class.java)
             val cruxNode = cruxService.node
 
-            assertEquals(1L, cruxService.cruxTx(signedTx.id)!![txIdKey])
-            assertEquals(1L, cruxNode.latestCompletedTx()[txIdKey])
+            assertEquals(1L, cruxService.cruxTx(signedTx.id)!!.id)
+            assertEquals(1L, cruxNode.latestCompletedTx().id)
 
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),

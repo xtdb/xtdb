@@ -5,10 +5,7 @@ package crux.corda
 import clojure.java.api.Clojure
 import clojure.lang.AFunction
 import clojure.lang.Keyword
-import crux.api.Crux
-import crux.api.ICruxAPI
-import crux.api.ModuleConfigurator
-import crux.api.NodeConfigurator
+import crux.api.*
 import crux.corda.state.CruxState
 import net.corda.core.crypto.SecureHash
 import net.corda.core.node.AppServiceHub
@@ -26,13 +23,13 @@ data class CruxDoc(
 ) : CruxState
 
 @Suppress("unused")
-class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfigurator) {
+class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfiguration.Builder) {
     // TODO migrate `ModuleConfigurator` to interface
     fun set(key: String, value: Any) { moduleConfigurator.set(key, value) }
     fun set(kvs: Map<String, Any>) { moduleConfigurator.set(kvs) }
     fun with(module: String) { moduleConfigurator.with(module) }
     fun with(module: String, ref: String) { moduleConfigurator.with(module, ref) }
-    fun with(module: String, configurator: ModuleConfigurator.() -> Unit) { moduleConfigurator.with(module) { configurator(it) } }
+    fun with(module: String, configurator: ModuleConfiguration.Builder.() -> Unit) { moduleConfigurator.with(module) { configurator(it) } }
 
     fun withDocumentMapping(f: (Any) -> Iterable<CruxState>?) {
         moduleConfigurator.with("document-mapper") {
@@ -45,7 +42,7 @@ class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfigurator)
     }
 }
 
-fun NodeConfigurator.withCordaTxLog(txLogConfigurator: CordaTxLogConfigurator.() -> Unit = {}) {
+fun NodeConfiguration.Builder.withCordaTxLog(txLogConfigurator: CordaTxLogConfigurator.() -> Unit = {}) {
     with("crux/tx-log") {
         it.module("crux.corda/->tx-log")
         txLogConfigurator(CordaTxLogConfigurator(it))
@@ -53,7 +50,7 @@ fun NodeConfigurator.withCordaTxLog(txLogConfigurator: CordaTxLogConfigurator.()
 }
 
 @Suppress("unused")
-fun AppServiceHub.startCruxNode(configurator: NodeConfigurator.() -> Unit = {}): ICruxAPI {
+fun AppServiceHub.startCruxNode(configurator: NodeConfiguration.Builder.() -> Unit = {}): ICruxAPI {
     val hub = this
     val node = Crux.startNode {
         it.with("crux.corda/service-hub") {
@@ -79,7 +76,7 @@ fun AppServiceHub.startCruxNode(configurator: NodeConfigurator.() -> Unit = {}):
 }
 
 @Suppress("UNCHECKED_CAST", "UNUSED")
-fun AppServiceHub.cruxTx(cruxNode: ICruxAPI, id: SecureHash): Map<Keyword, Any>? =
+fun AppServiceHub.cruxTx(cruxNode: ICruxAPI, id: SecureHash): TransactionInstant? =
     database.transaction {
-        TO_CRUX_TX(id, cruxNode) as Map<Keyword, Any>?
+        TransactionInstant.factory(TO_CRUX_TX(id, cruxNode) as Map<Keyword, Any>?)
     }

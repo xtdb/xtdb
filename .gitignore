@@ -1,5 +1,6 @@
 # Clojure
 .cpcache
+.nrepl-port
 
 # Gradle
 .gradle/
