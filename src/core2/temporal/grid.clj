@@ -28,6 +28,12 @@
 ;; Check node kd-tree edit, seems slow, protocol issues,
 ;; MethodImplCache?
 
+;; Calculating the distance is the expensive step during find-neighbour.
+
+;; swapPoint is slow when building column trees. isInRange in general.
+;; ArrayDeque push is slow when editing nodes. Reduce as well, but
+;; likely due to deep trees?
+
 ;; Sanity check and revisit "classic" depth first range search for
 ;; column trees.
 
