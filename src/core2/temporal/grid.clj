@@ -14,8 +14,8 @@
            org.apache.arrow.compression.CommonsCompressionFactory
            java.util.concurrent.atomic.AtomicInteger
            [java.util ArrayList Arrays List]
-           [java.util.function Function IntToLongFunction LongConsumer LongFunction]
-           java.util.stream.LongStream
+           [java.util.function Consumer Function IntToLongFunction LongConsumer LongFunction UnaryOperator]
+           [java.util.stream LongStream Stream]
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream]
            [java.nio.channels Channels FileChannel]
            java.nio.file.Path))
@@ -39,12 +39,23 @@
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(defn- cartesian-product [colls]
-  (if (empty? colls)
-    '(())
-    (for [more (cartesian-product (rest colls))
-          x (first colls)]
-      (cons x more))))
+(defn- cartesian-product-idxs ^java.util.stream.Stream [counts]
+  (let [total-count (reduce * counts)
+        end-idxs (int-array (map dec counts))
+        len (alength end-idxs)]
+    (.limit (Stream/iterate (int-array len)
+                            (reify UnaryOperator
+                              (apply [_ as]
+                                (let [^ints as as]
+                                  (loop [n 0]
+                                    (let [x (aget as n)]
+                                      (if (= x (aget end-idxs n))
+                                        (when (not= n len)
+                                          (aset as n 0)
+                                          (recur (inc n)))
+                                        (aset as n (inc x)))))
+                                  as))))
+            total-count)))
 
 (defn- three-way-partition ^longs [^IKdTreePointAccess access ^long low ^long hi ^long axis]
   (let [pivot (.getCoordinate access (quot (+ low hi) 2) axis)]
@@ -139,70 +150,75 @@
           max-range (kd/->longs max-range)
           k-minus-one (dec k)
           axis-mask (kd/range-bitmask min-range max-range)
-          axis-idxs+masks (for [^long n (range k-minus-one)
-                                :let [min-r (aget min-range n)
-                                      max-r (aget max-range n)
-                                      min-v (aget mins n)
-                                      max-v (aget maxs n)]
-                                :when (BitUtil/bitNot (or (< max-v min-r) (> min-v max-r)))
-                                :let [^longs axis-scale (aget scales n)
-                                      min-axis-idx (Arrays/binarySearch axis-scale min-r)
-                                      min-axis-idx (if (neg? min-axis-idx)
-                                                     (dec (- min-axis-idx))
-                                                     (long min-axis-idx))
-                                      max-axis-idx (Arrays/binarySearch axis-scale max-r)
-                                      max-axis-idx (if (neg? max-axis-idx)
-                                                     (dec (- max-axis-idx))
-                                                     (long max-axis-idx))]
-                                :let [mask (bit-and axis-mask (bit-shift-left 1 n))
-                                      axis-idxs+masks (-> (LongStream/range min-axis-idx (inc max-axis-idx))
-                                                          (.mapToObj (reify LongFunction
-                                                                       (apply [_ x]
-                                                                         (doto (long-array 2)
-                                                                           (aset 0 x)))))
-                                                          (.toArray))]]
-                            (do (aset ^longs (aget axis-idxs+masks 0) 1 mask)
-                                (aset ^longs (aget axis-idxs+masks (dec (alength axis-idxs+masks))) 1 mask)
-                                axis-idxs+masks))
+          axis-idxs+masks (object-array
+                           (for [^long n (range k-minus-one)
+                                 :let [min-r (aget min-range n)
+                                       max-r (aget max-range n)
+                                       min-v (aget mins n)
+                                       max-v (aget maxs n)]
+                                 :when (BitUtil/bitNot (or (< max-v min-r) (> min-v max-r)))
+                                 :let [^longs axis-scale (aget scales n)
+                                       min-axis-idx (Arrays/binarySearch axis-scale min-r)
+                                       min-axis-idx (if (neg? min-axis-idx)
+                                                      (dec (- min-axis-idx))
+                                                      (long min-axis-idx))
+                                       max-axis-idx (Arrays/binarySearch axis-scale max-r)
+                                       max-axis-idx (if (neg? max-axis-idx)
+                                                      (dec (- max-axis-idx))
+                                                      (long max-axis-idx))]
+                                 :let [mask (bit-and axis-mask (bit-shift-left 1 n))
+                                       axis-idxs+masks (-> (LongStream/range min-axis-idx (inc max-axis-idx))
+                                                           (.mapToObj (reify LongFunction
+                                                                        (apply [_ x]
+                                                                          (doto (long-array 2)
+                                                                            (aset 0 x)))))
+                                                           (.toArray))]]
+                             (do (aset ^longs (aget axis-idxs+masks 0) 1 mask)
+                                 (aset ^longs (aget axis-idxs+masks (dec (alength axis-idxs+masks))) 1 mask)
+                                 axis-idxs+masks)))
           partial-match-last-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask k-minus-one))
           min-r (aget min-range k-minus-one)
           max-r (aget max-range k-minus-one)
           acc (LongStream/builder)]
       (when (= k-minus-one (count axis-idxs+masks))
-        (doseq [axis-idxs+masks (cartesian-product axis-idxs+masks)]
-          (loop [[^longs axis-idx+mask & axis-idxs+masks] axis-idxs+masks
-                 cell-idx 0
-                 cell-axis-mask 0]
-            (if axis-idx+mask
-              (recur axis-idxs+masks
-                     (bit-or (bit-shift-left cell-idx axis-shift) (aget axis-idx+mask 0))
-                     (bit-or cell-axis-mask (aget axis-idx+mask 1)))
-              (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
-                (let [access (KdTreeVectorPointAccess. cell k)
-                      access-fn (reify IntToLongFunction
-                                  (applyAsLong [_ idx]
-                                    (.getCoordinate access idx k-minus-one)))
-                      n (.getValueCount cell)
-                      slope-idx (bit-shift-left cell-idx 1)
-                      slope (aget k-minus-one-slope+base slope-idx)
-                      base (aget k-minus-one-slope+base (inc slope-idx))
-                      start-point-idx (bit-shift-left cell-idx cell-shift)
-                      start-idx (if partial-match-last-axis?
-                                  0
-                                  (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
-                      end-idx (if partial-match-last-axis?
-                                (dec n)
-                                (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
-                  (if (zero? cell-axis-mask)
-                    (loop [idx start-idx]
-                      (when (<= idx end-idx)
-                        (.add acc (+ start-point-idx idx))
-                        (recur (inc idx))))
-                    (loop [idx start-idx]
-                      (when (<= idx end-idx)
-                        (when (.isInRange access idx min-range max-range cell-axis-mask)
-                          (.add acc (+ start-point-idx idx)))
-                        (recur (inc idx)))))))))))
+        (.forEach (cartesian-product-idxs (map count axis-idxs+masks))
+                  (reify Consumer
+                    (accept [_ idxs]
+                      (let [^ints idxs idxs]
+                        (loop [m 0
+                               cell-idx 0
+                               cell-axis-mask 0]
+                          (if (< m k-minus-one)
+                            (let [^longs axis-idx+mask (aget ^objects (aget axis-idxs+masks m) (aget idxs m))]
+                              (recur (inc m)
+                                     (bit-or (bit-shift-left cell-idx axis-shift) (aget axis-idx+mask 0))
+                                     (bit-or cell-axis-mask (aget axis-idx+mask 1))))
+                            (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
+                              (let [access (KdTreeVectorPointAccess. cell k)
+                                    access-fn (reify IntToLongFunction
+                                                (applyAsLong [_ idx]
+                                                  (.getCoordinate access idx k-minus-one)))
+                                    n (.getValueCount cell)
+                                    slope-idx (bit-shift-left cell-idx 1)
+                                    slope (aget k-minus-one-slope+base slope-idx)
+                                    base (aget k-minus-one-slope+base (inc slope-idx))
+                                    start-point-idx (bit-shift-left cell-idx cell-shift)
+                                    start-idx (if partial-match-last-axis?
+                                                0
+                                                (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
+                                    end-idx (if partial-match-last-axis?
+                                              (dec n)
+                                              (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
+                                (if (zero? cell-axis-mask)
+                                  (loop [idx start-idx]
+                                    (when (<= idx end-idx)
+                                      (.add acc (+ start-point-idx idx))
+                                      (recur (inc idx))))
+                                  (loop [idx start-idx]
+                                    (when (<= idx end-idx)
+                                      (when (.isInRange access idx min-range max-range cell-axis-mask)
+                                        (.add acc (+ start-point-idx idx)))
+                                      (recur (inc idx))))))))))))))
 
       (.build acc)))
   (kd-tree-points [this]
