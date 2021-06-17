@@ -1,14 +1,15 @@
 (ns crux.kafka
   (:require [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.status :as status]
             [crux.system :as sys]
-            [crux.tx :as tx]
-            [clojure.set :as set])
-  (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
+            [crux.tx :as tx])
+  (:import clojure.lang.MapEntry
+           [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
@@ -17,8 +18,8 @@
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
-           [org.apache.kafka.common.errors InterruptException TopicExistsException]
-           [org.apache.kafka.common PartitionInfo TopicPartition]))
+           [org.apache.kafka.common PartitionInfo TopicPartition]
+           [org.apache.kafka.common.errors InterruptException TopicExistsException]))
 
 (defn ->kafka-config {::sys/args {:bootstrap-servers {:spec ::sys/string
                                                       :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
@@ -136,15 +137,14 @@
                        tx-topic, kafka-config,
                        ^Closeable consumer]
   db/TxLog
-  (submit-tx [this tx-events]
-    (try
-      (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
-        (delay
-         (let [record-meta ^RecordMetadata @tx-send-future]
-           {::tx/tx-id (.offset record-meta)
-            ::tx/tx-time (Date. (.timestamp record-meta))})))))
+  (submit-tx [_ tx-events]
+    (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
+      (delay
+        (let [record-meta ^RecordMetadata @tx-send-future]
+          {::tx/tx-id (.offset record-meta)
+           ::tx/tx-time (Date. (.timestamp record-meta))}))))
 
-  (open-tx-log [this after-tx-id]
+  (open-tx-log [_ after-tx-id]
     (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
           consumer (doto (->consumer {:kafka-config kafka-config})
                      (.assign (keys tp-offsets))
@@ -154,7 +154,7 @@
                          (mapcat identity)
                          (map tx-record->tx-log-entry)))))
 
-  (latest-submitted-tx [this]
+  (latest-submitted-tx [_]
     (let [tx-tp (TopicPartition. tx-topic 0)
           end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
       (when (pos? end-offset)
@@ -265,7 +265,13 @@
 
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (submit-docs id-and-docs this))
+    (submit-docs id-and-docs this)
+
+    ;; for #1256 - let's fast-track tx-fn doc replacements straight into the local doc-store to prevent the race condition.
+    ;; we don't do this for all docs because of put/evict ordering - would prefer the topic to be the authority on this.
+    (some->> (seq (->> id-and-docs
+                       (filter (comp (some-fn :crux.db.fn/tx-events :crux.db.fn/failed?) val))))
+             (db/submit-docs local-document-store)))
 
   (fetch-docs [_ ids]
     (let [ids (set ids)
@@ -298,7 +304,8 @@
                          (db/fetch-docs local-document-store (set/difference ids (set (keys docs))))))))))))
 
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
-  [(c/new-id (.key doc-record)) (.value doc-record)])
+  (MapEntry/create (c/new-id (.key doc-record))
+                   (.value doc-record)))
 
 (defn- index-doc-log [{:keys [local-document-store index-store !indexing-error doc-topic-opts kafka-config group-id poll-wait-duration]}]
   (let [doc-topic (:topic-name doc-topic-opts)
