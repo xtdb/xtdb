@@ -46,7 +46,7 @@ JSON::
 ----
 {
   "crux.lucene/lucene-store": {
-        "db-dir": "lucene",
+    "db-dir": "lucene",
   }
 }
 ----
@@ -67,12 +67,6 @@ EDN::
  :crux.lucene/lucene-store {:db-dir "lucene-dir"}}
 ----
 ====
-
-[WARNING]
-You must have a fresh node to add Lucene configuration to.
-If you add Lucene configuration to a populated Crux node, you will receive an exception when the node starts up: `Lucene store latest tx mismatch`.
-To remedy this, you must wipe the index directories for the Crux node and restart.
-The Lucene index will then be populated as part of the normal Crux node ingestion process.
 
 == Querying
 
@@ -117,8 +111,8 @@ It's possible to supply var bindings to use in `text-search`:
 
 [source,clojure]
 ----
-(c/q db '{:find  [?v]
-          :in    [input]
+(c/q db '{:find [?v]
+          :in [input]
           :where [[(text-search :name input) [[?e ?v]]]]}
      "Ivan")
 ----
