@@ -4,14 +4,10 @@ A Kotlin DSL for Crux which enables pretty transactions and queries
 
 == Quickstart
 
-Add both the Sonatype snapshots repo and Clojars to your repositories:
+Add Clojars to your repositories:
 
 ```kotlin
 repositories {
-    maven {
-        name = "Snapshots"
-        url = uri("https://oss.sonatype.org/content/repositories/snapshots")
-    }
     maven {
         name = "Clojars"
         url = uri("https://repo.clojars.org/")
@@ -23,7 +19,7 @@ Then add `crux-kotlin-dsl` as a dependency:
 
 ```kotlin
 dependencies {
-    implementation("pro.juxt:crux-kotlin-dsl:0.0.1-SNAPSHOT")
+    implementation("pro.juxt.crux:crux-kotlin-dsl:0.0.1")
     // ...
 }
 ```
