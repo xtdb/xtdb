@@ -119,6 +119,8 @@ and its architecture -- past, present, and very-near-future.
 * https://arxiv.org/abs/2104.13793[Fast Parallel Hypertree Decompositions in Logarithmic Recursion Depth], Gottlob, Lanzinger, et al. 2021.
 ** https://github.com/cem-okulmus/log-k-decomp[Reference Implementation], GitHub.
 * https://arxiv.org/abs/2104.13457[Hypersuccinct Trees -- New universal tree source codes for optimal compressed tree data structures], Munro, Nicholson, et al. 2021.
+* https://arxiv.org/pdf/1912.01668.pdf[Learning Multi-dimensional Indexes], Nathan, Ding, et al. Proceedings of the 2020 ACM SIGMOD International Conference on Management of Data, Pages 985-1000. 2020.
+* https://arxiv.org/pdf/2004.02335.pdf[The n-dimensional k-vector and its application to orthogonal range searching], Arnas, Leake, Mortari. Applied Mathematics and Computation, Vol. 372. 2020.
 
 [#raytracing]
 === Data Structures: Raytracing
@@ -126,6 +128,13 @@ and its architecture -- past, present, and very-near-future.
 * https://www.uni-weimar.de/fileadmin/user/fak/medien/professuren/Virtual_Reality/pictures/asrtrt01/bih_presentation.pdf[BIH (Bounding Interval Hierarchy)], Gründl.
 * https://people.cs.clemson.edu/~dhouse/courses/405/papers/bounding-interval-WK06.pdf[Instant Ray Tracing: The Bounding Interval Hierarchy], Wächter, Keller. Eurographics Symposium on Rendering. 2006.
 * https://cs.swansea.ac.uk/wordpressvc/wp-content/uploads/2012/10/d-and-c-ray-tracing.pdf[Naive Ray-Tracing: A Divide-And-Conquer Approach], Mora. ACM Trans. Graph. 30, 5, Article 117. October 2011.
+
+[#closestpoint]
+=== Data Structures: Closest Point
+
+* https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.366.9611&rep=rep1&type=pdf[DIVIDE-AND-CONQUER IN MULTIDIMENSIONAL SPACE], Bentley, Shamos. Proceedings of the Eighth Annual ACM Symposium on Theory of Computing. 1976.
+* https://arxiv.org/pdf/cs/9912014.pdf[Fast Hierarchical Clustering and Other Applications ofDynamic Closest Pairs], Eppstein. ACM Journal of Experimental Algorithmics, Vol. 5. 2000.
+* https://epubs.siam.org/doi/pdf/10.1137/1.9781611976014.6[Dynamic Generalized Closest Pair: Revisiting Eppstein’s Technique], Chan. Symposium on Simplicity in Algorithms. 2020.
 
 [#temporaldatastructures]
 === Data Structures: Temporal
@@ -135,6 +144,7 @@ and its architecture -- past, present, and very-near-future.
 ** https://people.cs.aau.dk/~csj/Thesis/pdf/chapter37.pdf[Chapter 37: Light-Weight Indexing of General Bitemporal Data], Bliuj ̄ut ̇e, Jensen, et al. 2000.
 * https://core.ac.uk/download/pdf/143854032.pdf[The POINT Approach to Represent _now_ in Bitemporal Databases], Stantic, Sattar, et al. Journal of Intelligent Information Systems, Vol. 32, Pages 297–323. 2009.
 * https://drum.lib.umd.edu/bitstream/handle/1903/889/CS-TR-3764.pdf[Designing Access Methods for Bitemporal Databases], Kumar, Tsotras, Faloutsos. IEEE Transactions on Knowledge and Data Engineering, Vol. 10, No. 1, Pages 1-20. 1998.
+* https://opus.bibliothek.uni-augsburg.de/opus4/frontdoor/deliver/index/docId/59478/file/ssdbm2015-bitemporal-windows.pdf[Indexing Bi-temporal Windows], Ge, Kaufmann, et al. Proceedings of the 27th International Conference on Scientific and Statistical Database Management, No. 19. 2015.
 * https://research-repository.griffith.edu.au/bitstream/handle/10072/58356/91581_1.pdf?sequence=1[Querying now-relative data], Anselma, Luca, et al. Journal of Intelligent Information Systems, No. 41, Pages 285–311. 2013.
 * http://www.cs.ucr.edu/~tsotras/cs236/W15/tempDB-survey.pdf[Comparison of Access Methods for Time-Evolving Data], Salzberg, Tsotras. ACM Computing Surveys, Vol. 31, No. 2. June 1999.
 
