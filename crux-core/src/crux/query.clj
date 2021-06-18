@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
             [clojure.java.io :as io]
-            [com.stuartsierra.dependency :as dep]
+            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
             [crux.cache :as cache]
             [crux.cache.lru :as lru]
             [crux.codec :as c]
