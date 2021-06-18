@@ -19,8 +19,8 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [edn-query-language.core :as eql]
             [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
+            [juxt.clojars-mirrors.eql.v2021v02v28.edn-query-language.core :as eql]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import [clojure.lang Box ExceptionInfo]
            crux.codec.EntityTx

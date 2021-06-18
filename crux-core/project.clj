@@ -14,7 +14,7 @@
                  [org.clojure/tools.cli "1.0.206"]
                  [org.agrona/agrona "1.11.0"]
                  [com.github.jnr/jnr-ffi "2.2.4" :scope "provided"]
-                 [edn-query-language/eql "2021.02.28"]]
+                 [pro.juxt.clojars-mirrors.edn-query-language/eql "2021.02.28"]]
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
