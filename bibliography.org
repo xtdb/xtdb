@@ -127,3 +127,4 @@ papers:
 ** Misc
 - [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
 - [[https://arxiv.org/pdf/1610.09166.pdf][Push vs. Pull-Based Loop Fusion in Query Engines]]
+- [[https://www.researchgate.net/publication/220225069_The_Grid_File_An_Adaptable_Symmetric_Multikey_File_Structure][The Grid File: An Adaptable, Symmetric Multikey File Structure]]
