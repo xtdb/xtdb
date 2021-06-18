@@ -1,19 +1,18 @@
 (ns ^:no-doc crux.document-store
-  (:require [clojure.java.io :as io]
-            [crux.io :as cio]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
+            [crux.cache :as cache]
             [crux.codec :as c]
             [crux.db :as db]
-            [crux.cache :as cache]
+            [crux.io :as cio]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import clojure.lang.MapEntry
-           (java.io Closeable DataInputStream DataOutputStream FileInputStream FileOutputStream)
-           (java.nio.file Files LinkOption OpenOption StandardOpenOption Path)
+           [java.io Closeable DataInputStream DataOutputStream]
+           [java.nio.file Files LinkOption OpenOption Path StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           (java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit)
-           (java.util.function Supplier)))
+           [java.util.concurrent CompletableFuture Executors ExecutorService TimeUnit]
+           java.util.function.Supplier))
 
 (defn- completable-future {:style/indent 1} ^java.util.concurrent.CompletableFuture
   [pool f]

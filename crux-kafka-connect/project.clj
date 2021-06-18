@@ -8,7 +8,7 @@
                  [juxt/crux-http-client "crux-git-version-beta"]
                  [org.clojure/tools.logging "1.1.0"]
                  [cheshire "5.9.0"]
-                 [com.taoensso/nippy "3.1.1"]
+                 [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
                  [com.cognitect/transit-clj "1.0.324"]
                  [org.slf4j/slf4j-api "1.7.30"]]
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.6.0"]]}}

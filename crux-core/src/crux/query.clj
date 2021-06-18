@@ -1,33 +1,32 @@
 (ns ^:no-doc crux.query
-  (:require [clojure.set :as set]
+  (:require [clojure.java.io :as io]
+            [clojure.pprint :as pp]
+            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
-            [clojure.java.io :as io]
-            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
+            [crux.api :as api]
+            [crux.bus :as bus]
             [crux.cache :as cache]
             [crux.cache.lru :as lru]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.error :as err]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.memory :as mem]
             [crux.pull :as pull]
-            [crux.bus :as bus]
-            [crux.api :as api]
-            [crux.tx :as tx]
-            [crux.error :as err]
-            [crux.tx.conform :as txc]
-            [taoensso.nippy :as nippy]
-            [edn-query-language.core :as eql]
             [crux.system :as sys]
-            [clojure.pprint :as pp])
+            [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [edn-query-language.core :as eql]
+            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import [clojure.lang Box ExceptionInfo]
-           (crux.api HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
-           (java.io Closeable Writer)
-           (java.util Collection Comparator Date List UUID)
-           (java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit)))
+           [java.io Closeable Writer]
+           [java.util Collection Comparator Date List UUID]
+           [java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit]))
 
 (defn logic-var? [x]
   (and (symbol? x)

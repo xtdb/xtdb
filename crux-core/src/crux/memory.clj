@@ -1,17 +1,14 @@
 (ns ^:no-doc crux.memory
-  (:require [clojure.java.io :as io]
-            [clojure.string :as str]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
             [crux.io :as cio]
-            [taoensso.nippy :as nippy])
-  (:import [java.io DataInputStream DataOutputStream]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+  (:import crux.ByteUtils
+           [java.io DataInputStream DataOutputStream]
            java.nio.ByteBuffer
-           java.util.Comparator
            java.util.function.Supplier
-           [org.agrona BufferUtil DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
+           [org.agrona DirectBuffer ExpandableDirectByteBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
-           [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]
-           crux.ByteUtils))
+           [org.agrona.io DirectBufferInputStream ExpandableDirectBufferOutputStream]))
 
 (defprotocol MemoryRegion
   (->on-heap ^bytes [this])

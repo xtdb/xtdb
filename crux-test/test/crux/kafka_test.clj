@@ -1,18 +1,12 @@
 (ns crux.kafka-test
-  (:require [clojure.test :as t]
+  (:require [clojure.java.io :as io]
+            [clojure.test :as t]
             [crux.api :as api]
-            [crux.codec :as c]
             [crux.db :as db]
-            [crux.fixtures :as fix :refer [*api* *opts*]]
-            [crux.fixtures.kafka :as fk :refer [*kafka-config*]]
-            [crux.kafka :as k]
-            [crux.rdf :as rdf]
-            [crux.tx :as tx]
-            [crux.kv :as kv]
-            [clojure.java.io :as io])
-  (:import java.time.Duration
-           [org.apache.kafka.clients.consumer ConsumerRecord KafkaConsumer]
-           org.apache.kafka.clients.producer.ProducerRecord))
+            [crux.fixtures :as fix :refer [*api*]]
+            [crux.fixtures.kafka :as fk]
+            [crux.kafka :as k])
+  (:import java.time.Duration))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 

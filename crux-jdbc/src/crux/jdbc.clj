@@ -1,5 +1,6 @@
 (ns crux.jdbc
   (:require [clojure.java.data :as jd]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [crux.codec :as c]
             [crux.db :as db]
@@ -7,15 +8,14 @@
             [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx :as tx]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [next.jdbc :as jdbc]
             [next.jdbc.connection :as jdbcc]
-            [next.jdbc.result-set :as jdbcr]
-            [taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s])
-  (:import (com.zaxxer.hikari HikariDataSource HikariConfig)
-           java.util.Date
+            [next.jdbc.result-set :as jdbcr])
+  (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
-           java.sql.Timestamp))
+           java.sql.Timestamp
+           java.util.Date))
 
 (defprotocol Dialect
   (setup-schema! [_ pool])

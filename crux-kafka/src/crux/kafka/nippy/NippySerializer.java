@@ -9,8 +9,8 @@ public class NippySerializer implements Serializer<Object> {
     private static final IFn freeze;
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("taoensso.nippy"));
-        freeze = Clojure.var("taoensso.nippy/fast-freeze");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy"));
+        freeze = Clojure.var("juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy/fast-freeze");
     }
 
     public void close() {

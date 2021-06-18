@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.jdbc.oracle
   (:require [crux.jdbc :as j]
-            [next.jdbc :as jdbc]
-            [taoensso.nippy :as nippy])
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [next.jdbc :as jdbc])
   (:import [oracle.sql BLOB TIMESTAMP]))
 
 (defn- table-exists? [pool tbl-name]

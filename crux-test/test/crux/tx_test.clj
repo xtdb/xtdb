@@ -12,7 +12,7 @@
             [crux.query :as q]
             [crux.node :as n]
             [crux.io :as cio]
-            [taoensso.nippy :as nippy]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [crux.tx.event :as txe]
             [clojure.string :as string]
             [crux.tx.conform :as txc]
