@@ -403,8 +403,8 @@
          (dotimes [n number-of-cells]
            (util/try-close (aget cell-outs n))
            (when-let [^Path cell-path (aget cell-paths n)]
-             (let [min-r (aget k-minus-one-mins n)
-                   max-r (aget k-minus-one-maxs n)
+             (let [min-r (double (aget k-minus-one-mins n))
+                   max-r (double (aget k-minus-one-maxs n))
                    value-count (quot (util/path-size cell-path) k)
                    diff (- max-r min-r)
                    slope (if (zero? diff)
