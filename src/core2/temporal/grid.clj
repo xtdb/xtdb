@@ -22,6 +22,9 @@
 
 ;; TODO:
 
+;; Try implementing Elf:
+;; https://wwwiti.cs.uni-magdeburg.de/iti_db/publikationen/ps/auto/thesisBroneske19.pdf
+
 ;; MultiDimensionalBin set! in updateNeighbour gets boxed. The reify
 ;; in find-neighbour seems odd.
 
