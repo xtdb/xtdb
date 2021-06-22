@@ -2,8 +2,8 @@
   (:require [crux.api :as api]
             [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
-            [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc]))
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]))
 
 (defn ->status-html-encoder [{:keys [crux-node http-options]}]
   (reify mfc/EncodeToBytes

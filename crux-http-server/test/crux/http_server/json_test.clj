@@ -3,7 +3,7 @@
             [clojure.test :as t]
             [crux.fixtures :as fix]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
-            [jsonista.core :as json]))
+            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as json]))
 
 (t/use-fixtures :each fh/with-http-server fix/with-node)
 

@@ -9,7 +9,7 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
             [crux.http-server.entity-ref :as entity-ref]
-            [jsonista.core :as json]
+            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as json]
             [crux.query-state :as cqs])
   (:import java.io.InputStream))
 

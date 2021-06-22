@@ -18,19 +18,19 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [jsonista.core :as json]
-            [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc]
-            reitit.coercion.spec
-            [reitit.ring :as rr]
-            [reitit.ring.coercion :as rrc]
-            [reitit.ring.middleware.exception :as re]
-            [reitit.ring.middleware.muuntaja :as rm]
-            [reitit.swagger :as swagger]
-            [ring.adapter.jetty9 :as j]
-            [ring.middleware.params :as p]
-            [ring.util.response :as resp]
-            [ring.util.time :as rt])
+            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as json]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
+            [juxt.clojars-mirrors.reitit-spec.v0v5v12.reitit.coercion.spec :as reitit.spec]
+            [juxt.clojars-mirrors.reitit-ring.v0v5v12.reitit.ring :as rr]
+            [juxt.clojars-mirrors.reitit-ring.v0v5v12.reitit.ring.coercion :as rrc]
+            [juxt.clojars-mirrors.reitit-middleware.v0v5v12.reitit.ring.middleware.exception :as re]
+            [juxt.clojars-mirrors.reitit-middleware.v0v5v12.reitit.ring.middleware.muuntaja :as rm]
+            [juxt.clojars-mirrors.reitit-swagger.v0v5v12.reitit.swagger :as swagger]
+            [juxt.clojars-mirrors.ring-jetty-adapter.v0v14v2.ring.adapter.jetty9 :as j]
+            [juxt.clojars-mirrors.ring-core.v1v9v2.ring.middleware.params :as p]
+            [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.response :as resp]
+            [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.time :as rt])
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
@@ -428,7 +428,7 @@
 
                {:data
                 {:muuntaja default-muuntaja
-                 :coercion reitit.coercion.spec/coercion
+                 :coercion reitit.spec/coercion
                  :middleware (cond-> [p/wrap-params
                                       wrap-camel-case-params
                                       rm/format-negotiate-middleware

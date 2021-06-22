@@ -9,10 +9,10 @@
             [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
-            [jsonista.core :as j]
-            [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc]
-            [spec-tools.core :as st])
+            [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as j]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
+            [juxt.clojars-mirrors.spec-tools.v0v10v5.spec-tools.core :as st])
   (:import crux.io.Cursor
            [java.io Closeable OutputStream]))
 

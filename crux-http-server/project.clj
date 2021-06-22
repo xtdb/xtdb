@@ -5,24 +5,21 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
-                 [hiccup "2.0.0-alpha2"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [metosin/reitit "0.5.12"]
-                 [ring/ring-core "1.9.2"]
-                 [info.sunng/ring-jetty9-adapter "0.14.2"]
-                 [org.eclipse.jetty/jetty-alpn-openjdk8-server "9.4.36.v20210114"]
-                 [ring-cors "0.1.13"]
-                 [metosin/muuntaja "0.6.8"]
                  [com.cognitect/transit-clj "1.0.324"]
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
 
+                 [hiccup "2.0.0-alpha2"]
+                 [pro.juxt.clojars-mirrors.crux/crux-http-server-deps "0.0.2"]
                  [pro.juxt.clojars-mirrors.camel-snake-kebab/camel-snake-kebab "0.4.2"]]
 
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev
              {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-              :dependencies [[org.clojure/clojurescript "1.10.844"]
+              :dependencies [[metosin/reitit-dev "0.5.12"]
+
+                             [org.clojure/clojurescript "1.10.844"]
                              [ch.qos.logback/logback-classic "1.2.3"]
                              [cljsjs/codemirror "5.44.0-1"]
                              [com.bhauman/figwheel-main "0.2.12"
@@ -30,6 +27,8 @@
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
                              [reagent "0.10.0"]
                              [re-frame "0.12.0"]
+                             [metosin/reitit-frontend "0.5.12"]
+                             [metosin/reitit-spec "0.5.12"]
                              [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
                              [tick "0.4.23-alpha"]
