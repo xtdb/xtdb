@@ -18,7 +18,7 @@
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
 
-                 [camel-snake-kebab "0.4.2"]]
+                 [pro.juxt.clojars-mirrors.camel-snake-kebab/camel-snake-kebab "0.4.2"]]
 
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev

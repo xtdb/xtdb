@@ -1,10 +1,10 @@
 (ns crux.http-server.json
-  (:require [camel-snake-kebab.core :as csk]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [crux.codec :as c]
             [crux.http-server.entity-ref :as entity-ref]
             [crux.io :as cio]
             [jsonista.core :as j]
+            [juxt.clojars-mirrors.camel-snake-kebab.v0v4v2.camel-snake-kebab.core :as csk]
             [muuntaja.format.core :as mfc])
   (:import clojure.lang.IPersistentList
            com.fasterxml.jackson.core.JsonGenerator

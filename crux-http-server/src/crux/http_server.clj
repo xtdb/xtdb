@@ -1,7 +1,7 @@
 (ns crux.http-server
   "HTTP API for Crux.
   The optional SPARQL handler requires juxt.crux/rdf."
-  (:require [camel-snake-kebab.core :as csk]
+  (:require [juxt.clojars-mirrors.camel-snake-kebab.v0v4v2.camel-snake-kebab.core :as csk]
             [clojure.edn :as edn]
             [clojure.instant :as instant]
             [clojure.java.io :as io]
