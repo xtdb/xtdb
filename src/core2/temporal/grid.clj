@@ -25,6 +25,11 @@
 ;; Try implementing Elf:
 ;; https://wwwiti.cs.uni-magdeburg.de/iti_db/publikationen/ps/auto/thesisBroneske19.pdf
 
+;; Try different hash-trees, like "HD-Tree: An Efficient
+;; High-Dimensional Virtual Index Structure Using a Half Decomposition
+;; Strategy", or the classic X-tree
+;; https://kops.uni-konstanz.de/bitstream/handle/123456789/5734/The_X_Tree.pdf?sequence=1&isAllowed=y
+
 ;; Sanity check the slope interpolation.
 
 ;; MultiDimensionalBin set! in updateNeighbour gets boxed. The reify
@@ -123,6 +128,67 @@
           (recur l r (BitUtil/unsignedBitShiftRight (+ l r) 1))))
       (dec r))))
 
+;; NOTE: slopes and linear scan cannot beat binary search
+;; currently. Remove?
+
+(def ^:private ^:const linear-scan-limit 16)
+
+(defn- linear-search-leftmost ^long [^IntToLongFunction access-fn ^long n ^long idx ^long x]
+  (let [m (max (min idx (dec n)) 0)]
+    (if (< (.applyAsLong access-fn m) x)
+      (loop [m m
+             c 0]
+        (cond
+          (= linear-scan-limit c)
+          (binary-search-leftmost access-fn n m x)
+
+          (and (< m n)
+               (< (.applyAsLong access-fn m) x))
+          (recur (inc m) (inc c))
+
+          :else
+          m))
+      (loop [m m
+             c 0]
+        (cond
+          (= linear-scan-limit c)
+          (binary-search-leftmost access-fn n m x)
+
+          (and (>= m 0)
+               (>= (.applyAsLong access-fn m) x))
+          (recur (dec m) (inc c))
+
+          :else
+          (inc m))))))
+
+(defn- linear-search-rightmost ^long [^IntToLongFunction access-fn ^long n ^long idx ^long x]
+  (let [m (max (min idx (dec n)) 0)]
+    (if (> (.applyAsLong access-fn m) x)
+      (loop [m m
+             c 0]
+        (cond
+          (= linear-scan-limit c)
+          (binary-search-rightmost access-fn n m x)
+
+          (and (>= m 0)
+               (> (.applyAsLong access-fn m) x))
+          (recur (dec m) (inc c))
+
+          :else
+          m))
+      (loop [m m
+             c 0]
+        (cond
+          (= linear-scan-limit c)
+          (binary-search-rightmost access-fn n m x)
+
+          (and (< m n)
+               (<= (.applyAsLong access-fn m) x))
+          (recur (inc m) (inc c))
+
+          :else
+          (dec m))))))
+
 (defn- ->cell-idx ^long [^objects scales ^longs point ^long k-minus-one ^long axis-shift]
   (loop [n 0
          idx 0]
@@ -207,16 +273,17 @@
                                                 (applyAsLong [_ idx]
                                                   (.getCoordinate access idx k-minus-one)))
                                     n (.getValueCount cell)
-                                    slope-idx (bit-shift-left cell-idx 1)
-                                    slope (aget k-minus-one-slope+base slope-idx)
-                                    base (aget k-minus-one-slope+base (inc slope-idx))
+                                    ;; slope-idx (bit-shift-left cell-idx 1)
+                                    ;; slope (aget k-minus-one-slope+base slope-idx)
+                                    ;; base (aget k-minus-one-slope+base (inc slope-idx))
+                                    mid-idx (BitUtil/unsignedBitShiftRight n 1)
                                     start-point-idx (bit-shift-left cell-idx cell-shift)
                                     start-idx (if partial-match-last-axis?
                                                 0
-                                                (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
+                                                (binary-search-leftmost access-fn n mid-idx min-r))
                                     end-idx (if partial-match-last-axis?
                                               (dec n)
-                                              (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
+                                              (binary-search-rightmost access-fn n mid-idx max-r))]
                                 (if (zero? cell-axis-mask)
                                   (loop [idx start-idx]
                                     (when (<= idx end-idx)
