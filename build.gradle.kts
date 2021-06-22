@@ -7,7 +7,7 @@ plugins {
     signing
 }
 
-group = "pro.juxt"
+group = "pro.juxt.crux"
 version = "0.0.1-SNAPSHOT"
 
 java {
