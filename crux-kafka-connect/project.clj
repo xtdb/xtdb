@@ -7,7 +7,7 @@
                  [juxt/crux-core "crux-git-version-beta"]
                  [juxt/crux-http-client "crux-git-version-beta"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [cheshire "5.9.0"]
+                 [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
                  [com.cognitect/transit-clj "1.0.324"]
                  [org.slf4j/slf4j-api "1.7.30"]]

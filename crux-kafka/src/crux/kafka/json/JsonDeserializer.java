@@ -10,8 +10,8 @@ public class JsonDeserializer implements Deserializer<Object> {
     private static final IFn parseString;
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("cheshire.core"));
-        parseString = Clojure.var("cheshire.core/parse-string");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core"));
+        parseString = Clojure.var("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core/parse-string");
     }
 
     public void close() {
