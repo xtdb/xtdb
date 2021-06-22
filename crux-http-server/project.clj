@@ -11,7 +11,6 @@
                  [ring/ring-core "1.9.2"]
                  [info.sunng/ring-jetty9-adapter "0.14.2"]
                  [org.eclipse.jetty/jetty-alpn-openjdk8-server "9.4.36.v20210114"]
-                 [ring/ring-codec "1.1.3"]
                  [ring-cors "0.1.13"]
                  [metosin/muuntaja "0.6.8"]
                  [com.cognitect/transit-clj "1.0.324"]
