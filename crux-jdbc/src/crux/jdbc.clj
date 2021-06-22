@@ -8,10 +8,10 @@
             [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [next.jdbc :as jdbc]
-            [next.jdbc.connection :as jdbcc]
-            [next.jdbc.result-set :as jdbcr])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
            java.sql.Timestamp

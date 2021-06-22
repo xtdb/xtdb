@@ -1,6 +1,6 @@
 (ns ^:no-doc crux.jdbc.sqlite
   (:require [crux.jdbc :as j]
-            [next.jdbc :as jdbc])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import [java.time LocalDateTime ZoneId]
            java.time.format.DateTimeFormatter
            java.util.Date
