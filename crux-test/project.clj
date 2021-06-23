@@ -69,7 +69,7 @@
 
                                    ;; General:
                                    [ch.qos.logback/logback-classic "1.2.3"]
-                                   [clj-http "3.12.1"]
+                                   [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
 
                                    ;; Outer tests:
                                    [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]

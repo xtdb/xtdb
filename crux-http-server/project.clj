@@ -39,7 +39,7 @@
                              [ring/ring-devel "1.8.1"]
                              [expound "0.8.7"]]}
 
-             :test {:dependencies [[clj-http "3.12.1"]
+             :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                                    [juxt/crux-test "crux-git-version"]]}}
 
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]

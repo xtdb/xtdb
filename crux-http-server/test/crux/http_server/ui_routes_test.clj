@@ -1,5 +1,5 @@
 (ns crux.http-server.ui-routes-test
-  (:require [clj-http.client :as http]
+  (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
             [clojure.data.csv :as csv]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
