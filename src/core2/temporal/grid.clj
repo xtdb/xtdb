@@ -295,7 +295,7 @@
                                       (recur (inc idx))))))))))))))
 
       (.build acc)))
-  (kd-tree-points [this]
+  (kd-tree-points [this deletes?]
     (.flatMap (LongStream/range 0 (alength cells))
               (reify LongFunction
                 (apply [_ cell-idx]
@@ -422,7 +422,7 @@
          cell-paths (object-array number-of-cells)]
      (if (satisfies? kd/KdTree points)
        (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
-         (.forEach ^LongStream (kd/kd-tree-points points)
+         (.forEach ^LongStream (kd/kd-tree-points points false)
                    (reify LongConsumer
                      (accept [_ x]
                        (update-histograms-fn (.getArrayPoint access x))))))
@@ -462,7 +462,7 @@
                                     (.writeLong out x)))))]
          (if (satisfies? kd/KdTree points)
            (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
-             (.forEach ^LongStream (kd/kd-tree-points points)
+             (.forEach ^LongStream (kd/kd-tree-points points false)
                        (reify LongConsumer
                          (accept [_ x]
                            (write-point-fn (.getArrayPoint access x))))))

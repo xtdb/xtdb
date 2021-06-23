@@ -228,8 +228,8 @@
                            (test [_ x]
                              (.isInRange access x min-range max-range axis-mask))))))
           (kd/kd-tree-range-search kd-tree min-range max-range))))
-    (kd-tree-points [_]
-      (kd/kd-tree-points kd-tree))
+    (kd-tree-points [_ deletes?]
+      (kd/kd-tree-points kd-tree deletes?))
     (kd-tree-height [_]
       (kd/kd-tree-height kd-tree))
     (kd-tree-retain [_ allocator]
