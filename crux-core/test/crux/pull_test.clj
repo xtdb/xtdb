@@ -121,7 +121,16 @@
 
       (t/is (= #{#:film{:name "Skyfall", :year "2012"}
                  #:film{:name "Spectre", :year "2015"}}
-               (set (crux/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))))
+               (set (crux/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))
+
+    (t/testing "pullMany fn vector"
+      (t/is (= [#:film {:name "Skyfall", :year "2012"}
+                #:film {:name "Spectre", :year "2015"}]
+               (crux/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre})))
+
+      (t/is (= [#:film {:name "Skyfall", :year "2012"}
+                #:film {:name "Spectre", :year "2015"}]
+               (crux/pull-many db [:film/name :film/year] #{:skyfall :spectre}))))))
 
 (t/deftest test-limit
   (let [db (submit-bond)]
@@ -244,3 +253,12 @@
              (crux/q db
                      '{:find [(pull ?e [*])]
                        :where [[?e :crux.db/id :foo]]})))))
+
+(t/deftest test-missing-forward-join
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo :ref [:bar :baz]}]
+                        [:crux.tx/put {:crux.db/id :bar}]])
+
+  (t/is (= #{[{:ref [#:crux.db{:id :bar} {}]}]}
+           (crux/q (crux/db *api*)
+                   '{:find [(pull ?it [{:ref [:crux.db/id]}])]
+                     :where [[?it :crux.db/id :foo]]}))))
