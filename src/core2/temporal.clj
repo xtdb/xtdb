@@ -283,7 +283,7 @@
           @(CompletableFuture/allOf (into-array CompletableFuture futs))
           (doseq [chunk-idx new-chunk-idxs
                   :let [obj-key (->temporal-obj-key chunk-idx)
-                        chunk-kd-tree (wrap-with-current-entity-cache (kd/->arrow-buf-kd-tree @(.getBuffer buffer-pool obj-key))
+                        chunk-kd-tree (wrap-with-current-entity-cache (grid/->arrow-buf-grid  @(.getBuffer buffer-pool obj-key))
                                                                       (ConcurrentHashMap.))]]
             (swap! kd-tree #(if %
                               (kd/->merged-kd-tree % chunk-kd-tree)
@@ -372,20 +372,21 @@
 
   (registerNewChunk [this chunk-idx]
     (when kd-tree
-      (with-open [^VectorSchemaRoot new-chunk-kd-tree (kd/->column-kd-tree allocator (if (instance? MergedKdTree kd-tree)
-                                                                                       (.getDynamicKdTree ^MergedKdTree kd-tree)
-                                                                                       kd-tree) k)]
-        (let [temporal-buf (util/root->arrow-ipc-byte-buffer new-chunk-kd-tree :file)
-              new-temporal-obj-key (->temporal-obj-key chunk-idx)]
-          (if compress-temporal-index?
-            (let [tmp-file (util/->temp-file new-temporal-obj-key "")]
-              (try
-                (util/write-buffer-to-path temporal-buf tmp-file)
-                (util/compress-arrow-ipc-file-blocks tmp-file)
-                @(.putObject object-store new-temporal-obj-key (util/->mmap-path tmp-file))
-                (finally
-                  (util/delete-file tmp-file))))
-            @(.putObject object-store new-temporal-obj-key temporal-buf)))))
+      (let [new-temporal-obj-key (->temporal-obj-key chunk-idx)
+            path (util/->temp-file new-temporal-obj-key "")]
+        (try
+          (let [temporal-buf (-> (grid/->disk-grid allocator
+                                                   path
+                                                   (if (instance? MergedKdTree kd-tree)
+                                                     (.getDynamicKdTree ^MergedKdTree kd-tree)
+                                                     kd-tree)
+                                                   {:k k
+                                                    :cell-size 256
+                                                    :deletes? true})
+                                 (util/->mmap-path))]
+            @(.putObject object-store new-temporal-obj-key temporal-buf))
+          (finally
+            (util/delete-file path)))))
     (.awaitSnapshotBuild this)
     (when kd-tree
       (with-open [^Closeable old-kd-tree kd-tree]

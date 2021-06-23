@@ -17,6 +17,10 @@
         },
         "children" : [ ]
       }]
+    }],
+    "metadata" : [{
+      "value" : "{\"maxs\":[253402300799999,4437113781045784576,1577923200000,3,1577923200000],\"value-count\":8,\"axis-shift\":0,\"mins\":[253402300799999,-8292973307042192384,1577836800000,0,1577836800000],\"deletes?\":true,\"scales\":[null,null,null,null,null],\"k-minus-one-slope+base\":[0.0,-0.0],\"size\":4,\"k\":6,\"cell-shift\":2}",
+      "key" : "grid-meta"
     }]
   },
   "batches" : [{
