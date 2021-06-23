@@ -7,7 +7,7 @@
             [crux.codec :as c]
             [crux.http-server.json :as http-json]
             [crux.io :as cio]
-            [hiccup2.core :as hiccup2]
+            [juxt.clojars-mirrors.hiccup.v2v0v0-alpha2.hiccup2.core :as hiccup2]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.edn :as mfe]
