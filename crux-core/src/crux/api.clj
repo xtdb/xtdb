@@ -166,21 +166,20 @@
     "Eagerly retrieves entity history for the given entity.
 
   Options:
-  * `sort-order` (parameter): `#{:asc :desc}`
-  * `:with-docs?`: specifies whether to include documents in the entries
-  * `:with-corrections?`: specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
-  * `:start` (nested map, inclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to start at.
-  * `:end` (nested map, exclusive, optional): the `:crux.db/valid-time` and `:crux.tx/tx-time` to stop at.
+  * `sort-order`: `#{:asc :desc}`
+  * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:crux.db/doc` key
+  * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
+  * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
+  * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
 
-  No matter what `:start` and `:end` parameters you specify, you won't receive
-  results later than the valid-time and transact-time of this DB value.
+  No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
   Each entry in the result contains the following keys:
-   * `:crux.db/valid-time`,
-   * `:crux.db/tx-time`,
-   * `:crux.tx/tx-id`,
-   * `:crux.db/content-hash`
-   * `:crux.db/doc` (see `with-docs?`).")
+  * `:crux.db/valid-time`,
+  * `:crux.db/tx-time`,
+  * `:crux.tx/tx-id`,
+  * `:crux.db/content-hash`
+  * `:crux.db/doc` (see `with-docs?`).")
 
   (open-entity-history
     ^crux.api.ICursor [db eid sort-order]
