@@ -865,16 +865,16 @@
 
 (defn merge-kd-trees [^BufferAllocator allocator kd-tree-to kd-tree-from]
   (let [^long n (kd-tree-value-count kd-tree-from)
-        ^IKdTreePointAccess from-access (kd-tree-point-access kd-tree-from)]
-    (loop [idx 0
-           acc kd-tree-to]
-      (if (= idx n)
-        acc
-        (let [point (.getArrayPoint from-access idx)]
-          (recur (inc idx)
-                 (if (.isDeleted from-access idx)
+        ^IKdTreePointAccess from-access (kd-tree-point-access kd-tree-from)
+        it (.iterator ^LongStream (kd-tree-points kd-tree-from true))]
+    (loop [acc kd-tree-to]
+      (if (.hasNext it)
+        (let [idx (.nextLong it)
+              point (.getArrayPoint from-access idx)]
+          (recur (if (.isDeleted from-access idx)
                    (kd-tree-delete acc allocator point)
-                   (kd-tree-insert acc allocator point))))))))
+                   (kd-tree-insert acc allocator point))))
+        acc))))
 
 (defn- column-kd-tree-points [kd-tree deletes?]
   (let [^IKdTreePointAccess access (kd-tree-point-access kd-tree)]
@@ -1264,11 +1264,13 @@
   (^core2.temporal.kd_tree.MergedKdTree [static-kd-tree dynamic-kd-tree]
    (let [static-delete-bitmap (Roaring64Bitmap.)
          ^IKdTreePointAccess access (kd-tree-point-access dynamic-kd-tree)]
-     (dotimes [n (long (kd-tree-value-count dynamic-kd-tree))]
-       (when (.isDeleted access n)
-         (let [point (.getArrayPoint access n)]
-           (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
-                     (reify LongConsumer
-                       (accept [_ x]
-                         (.addLong static-delete-bitmap x)))))))
+     (.forEach ^LongStream (kd-tree-points dynamic-kd-tree true)
+               (reify LongConsumer
+                 (accept [_ n]
+                   (when (.isDeleted access n)
+                     (let [point (.getArrayPoint access n)]
+                       (.forEach ^LongStream (kd-tree-range-search static-kd-tree point point)
+                                 (reify LongConsumer
+                                   (accept [_ x]
+                                     (.addLong static-delete-bitmap x)))))))))
      (MergedKdTree. static-kd-tree dynamic-kd-tree static-delete-bitmap (kd-tree-size static-kd-tree) (kd-tree-value-count static-kd-tree)))))
