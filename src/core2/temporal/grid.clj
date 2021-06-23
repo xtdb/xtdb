@@ -273,17 +273,16 @@
                                                 (applyAsLong [_ idx]
                                                   (.getCoordinate access idx k-minus-one)))
                                     n (.getValueCount cell)
-                                    ;; slope-idx (bit-shift-left cell-idx 1)
-                                    ;; slope (aget k-minus-one-slope+base slope-idx)
-                                    ;; base (aget k-minus-one-slope+base (inc slope-idx))
-                                    mid-idx (BitUtil/unsignedBitShiftRight n 1)
+                                    slope-idx (bit-shift-left cell-idx 1)
+                                    slope (aget k-minus-one-slope+base slope-idx)
+                                    base (aget k-minus-one-slope+base (inc slope-idx))
                                     start-point-idx (bit-shift-left cell-idx cell-shift)
                                     start-idx (if partial-match-last-axis?
                                                 0
-                                                (binary-search-leftmost access-fn n mid-idx min-r))
+                                                (binary-search-leftmost access-fn n (+ (* slope min-r) base) min-r))
                                     end-idx (if partial-match-last-axis?
                                               (dec n)
-                                              (binary-search-rightmost access-fn n mid-idx max-r))]
+                                              (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
                                 (if (zero? cell-axis-mask)
                                   (loop [idx start-idx]
                                     (when (<= idx end-idx)
@@ -474,7 +473,7 @@
            (when-let [^Path cell-path (aget cell-paths n)]
              (let [min-r (double (aget k-minus-one-mins n))
                    max-r (double (aget k-minus-one-maxs n))
-                   value-count (quot (util/path-size cell-path) k)
+                   value-count (quot (util/path-size cell-path) (* k Long/BYTES))
                    diff (- max-r min-r)
                    slope (if (zero? diff)
                            0.0
