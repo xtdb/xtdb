@@ -8,7 +8,7 @@
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [clojure.lang IFn$LLO IFn$LL Murmur3]
-           [java.util ArrayDeque Deque HashMap
+           [java.util ArrayDeque Arrays Deque HashMap
             LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
             Spliterator Spliterator$OfLong Spliterators]
            [java.util.function BiPredicate Consumer Function IntFunction LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
@@ -107,6 +107,57 @@
   (kd-tree-size [_] 0)
   (kd-tree-value-count [_] 0)
   (kd-tree-dimensions [_] 0))
+
+(deftype ListPointAccess [^List list]
+  IKdTreePointAccess
+  (getPoint [_ idx]
+    (.get list idx))
+  (getArrayPoint [_ idx]
+    (->longs (.get list idx)))
+  (getCoordinate [this idx axis]
+    (aget ^longs (.getArrayPoint this idx) axis))
+  (setCoordinate [_ _ _ _]
+    (throw (UnsupportedOperationException.)))
+  (swapPoint [_ _ _]
+    (throw (UnsupportedOperationException.)))
+  (isDeleted [_ _]
+    false)
+  (isInRange [this idx min-range max-range axis]
+    (let [point (.getArrayPoint this idx)
+          len (alength point)]
+      (loop [n (int 0)]
+        (if (= n len)
+          true
+          (let [x (aget point n)]
+            (if (and (<= (aget min-range n) x)
+                     (<= x (aget max-range n)))
+              (recur (inc n))
+              false)))))))
+
+(extend-protocol KdTree
+  List
+  (kd-tree-insert [_ allocator point]
+    (throw (UnsupportedOperationException.)))
+  (kd-tree-delete [_ allocator point]
+    (throw (UnsupportedOperationException.)))
+  (kd-tree-range-search [this min-range max-range]
+    (let [min-range (->longs min-range)
+          max-range (->longs max-range)
+          ^IKdTreePointAccess access (kd-tree-point-access this)]
+      (.filter (LongStream/range 0 (.size this))
+               (reify LongPredicate
+                 (test [_ x]
+                   (.isInRange access x min-range max-range -1))))))
+  (kd-tree-points [this deletes?]
+    (LongStream/range 0 (.size this)))
+  (kd-tree-height [_] 0)
+  (kd-tree-retain [this _]
+    this)
+  (kd-tree-point-access [this]
+    (ListPointAccess. this))
+  (kd-tree-size [this] (.size this))
+  (kd-tree-value-count [this] (.size this))
+  (kd-tree-dimensions [this] (count (first this))))
 
 (defn- write-coordinates [^IKdTreePointAccess access ^long idx point]
   (if (instance? longs-class point)
@@ -350,9 +401,12 @@
   (when (not-empty points)
     (let [k (count (first points))
           ^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)
-          access (KdTreeVectorPointAccess. point-vec k)]
-      (doseq [point points]
-        (write-point point-vec access point))
+          access (KdTreeVectorPointAccess. point-vec k)
+          ^IKdTreePointAccess point-access (kd-tree-point-access points)]
+      (.forEach ^LongStream (kd-tree-points points false)
+                (reify LongConsumer
+                  (accept [_ x]
+                    (write-point point-vec access (.getArrayPoint point-access x)))))
       (try
         (let [root (VectorSchemaRoot/of (into-array [point-vec]))]
           (build-breadth-first-tree-in-place root)
@@ -654,7 +708,8 @@
                                   (.mapToObj (reify LongFunction
                                                (apply [_ x]
                                                  (.getArrayPoint point-access x))))
-                                  (.toArray)))))
+                                  (.toArray)
+                                  (Arrays/asList)))))
 
 (def ^:private ^:const point-vec-idx 0)
 
@@ -881,27 +936,18 @@
   (let [^long k (kd-tree-dimensions root)
         ^IKdTreePointAccess out-access (kd-tree-point-access root)
         ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
-    (if (satisfies? KdTree points)
-      (let [^IKdTreePointAccess point-access (kd-tree-point-access points)]
-        (.forEach ^LongStream (kd-tree-points points false)
-                  (reify LongConsumer
-                    (accept [_ point-idx]
-                      (let [idx (.getRowCount root)]
-                        (.startNewValue point-vec idx)
-                        (dotimes [n k]
-                          (.setCoordinate out-access idx n (.getCoordinate point-access point-idx n)))
-                        (.setRowCount root (inc idx))
-                        (when (= (.getRowCount root) batch-size)
-                          (.writeBatch out)
-                          (.clear root)))))))
-      (doseq [point points
-              :let [idx (.getRowCount root)]]
-        (.startNewValue point-vec idx)
-        (write-coordinates out-access idx point)
-        (.setRowCount root (inc idx))
-        (when (= (.getRowCount root) batch-size)
-          (.writeBatch out)
-          (.clear root))))
+    (let [^IKdTreePointAccess point-access (kd-tree-point-access points)]
+      (.forEach ^LongStream (kd-tree-points points false)
+                (reify LongConsumer
+                  (accept [_ point-idx]
+                    (let [idx (.getRowCount root)]
+                      (.startNewValue point-vec idx)
+                      (dotimes [n k]
+                        (.setCoordinate out-access idx n (.getCoordinate point-access point-idx n)))
+                      (.setRowCount root (inc idx))
+                      (when (= (.getRowCount root) batch-size)
+                        (.writeBatch out)
+                        (.clear root)))))))
     (when (pos? (.getRowCount root))
       (.writeBatch out)
       (.clear root))))

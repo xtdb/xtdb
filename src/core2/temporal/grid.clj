@@ -404,9 +404,7 @@
                                                                                        cell-size (* 8 1024)}}]
    (assert (number? k))
    (util/mkdirs (.getParent path))
-   (let [^long total (if (satisfies? kd/KdTree points)
-                       (kd/kd-tree-size points)
-                       (count points))
+   (let [^long total (kd/kd-tree-size points)
          _ (assert (= 1 (Long/bitCount cell-size)))
          number-of-cells (Math/ceil (/ total cell-size))
          k-minus-one (dec k)
@@ -419,15 +417,12 @@
                                 (let [p (double-array k-minus-one p)]
                                   (.update histogram p)))
          cell-outs (object-array number-of-cells)
-         cell-paths (object-array number-of-cells)]
-     (if (satisfies? kd/KdTree points)
-       (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
-         (.forEach ^LongStream (kd/kd-tree-points points false)
-                   (reify LongConsumer
-                     (accept [_ x]
-                       (update-histograms-fn (.getArrayPoint access x))))))
-       (doseq [p points]
-         (update-histograms-fn (kd/->longs p))))
+         cell-paths (object-array number-of-cells)
+         ^IKdTreePointAccess access (kd/kd-tree-point-access points)]
+     (.forEach ^LongStream (kd/kd-tree-points points false)
+               (reify LongConsumer
+                 (accept [_ x]
+                   (update-histograms-fn (.getArrayPoint access x)))))
      (try
        (let [histograms (for [n (range k-minus-one)]
                           (.projectAxis histogram n))
@@ -460,14 +455,10 @@
                                       (aset k-minus-one-mins cell-idx (min x (aget k-minus-one-mins cell-idx)))
                                       (aset k-minus-one-maxs cell-idx (max x (aget k-minus-one-maxs cell-idx))))
                                     (.writeLong out x)))))]
-         (if (satisfies? kd/KdTree points)
-           (let [^IKdTreePointAccess access (kd/kd-tree-point-access points)]
-             (.forEach ^LongStream (kd/kd-tree-points points false)
-                       (reify LongConsumer
-                         (accept [_ x]
-                           (write-point-fn (.getArrayPoint access x))))))
-           (doseq [p points]
-             (write-point-fn (kd/->longs p))))
+         (.forEach ^LongStream (kd/kd-tree-points points false)
+                   (reify LongConsumer
+                     (accept [_ x]
+                       (write-point-fn (.getArrayPoint access x)))))
          (dotimes [n number-of-cells]
            (util/try-close (aget cell-outs n))
            (when-let [^Path cell-path (aget cell-paths n)]

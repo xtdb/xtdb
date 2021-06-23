@@ -11,17 +11,6 @@
            [core2.temporal.kd_tree ArrowBufKdTree Node]
            core2.temporal.grid.SimpleGrid))
 
-(defmacro in-range? [min-range point max-range]
-  `(let [len# (alength ~point)]
-     (loop [n# (int 0)]
-       (if (= n# len#)
-         true
-         (let [x# (aget ~point n#)]
-           (if (and (<= (aget ~min-range n#) x#)
-                    (<= x# (aget ~max-range n#)))
-             (recur (inc n#))
-             false))))))
-
 (deftype ZipfRejectionSampler [^Random rng ^long n ^double skew ^double t]
   LongSupplier
   (getAsLong [_]
@@ -82,11 +71,7 @@
         (prn :range-queries-scan qs)
         (time
          (doseq [[query-id ^longs min-range ^longs max-range] queries]
-           (.put query->count query-id (-> (.stream ^Collection points)
-                                           (.filter (reify Predicate
-                                                      (test [_ location]
-                                                        (in-range? min-range ^longs location max-range))))
-                                           (.count)))))
+           (.put query->count query-id (.count ^LongStream (kd/kd-tree-range-search points min-range max-range)))))
 
         (prn :average-match-ratio (double (/ (/ (reduce + (vals query->count)) qs) ns)))
 
