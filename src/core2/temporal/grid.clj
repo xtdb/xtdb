@@ -14,7 +14,7 @@
            org.apache.arrow.compression.CommonsCompressionFactory
            java.util.concurrent.atomic.AtomicInteger
            [java.util ArrayList Arrays List]
-           [java.util.function Consumer Function IntToLongFunction LongConsumer LongFunction UnaryOperator]
+           [java.util.function Consumer Function IntToLongFunction LongConsumer LongFunction LongPredicate LongUnaryOperator UnaryOperator]
            [java.util.stream LongStream Stream]
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream]
            [java.nio.channels Channels FileChannel]
@@ -213,7 +213,8 @@
                      ^int cell-shift
                      ^long size
                      ^long value-count
-                     ^AtomicInteger ref-cnt]
+                     ^AtomicInteger ref-cnt
+                     ^boolean deletes?]
   kd/KdTree
   (kd-tree-insert [this allocator point]
     (throw (UnsupportedOperationException.)))
@@ -283,16 +284,29 @@
                                     end-idx (if partial-match-last-axis?
                                               (dec n)
                                               (binary-search-rightmost access-fn n (+ (* slope max-r) base) max-r))]
-                                (if (zero? cell-axis-mask)
-                                  (loop [idx start-idx]
-                                    (when (<= idx end-idx)
-                                      (.add acc (+ start-point-idx idx))
-                                      (recur (inc idx))))
-                                  (loop [idx start-idx]
-                                    (when (<= idx end-idx)
-                                      (when (.isInRange access idx min-range max-range cell-axis-mask)
-                                        (.add acc (+ start-point-idx idx)))
-                                      (recur (inc idx))))))))))))))
+                                (if deletes?
+                                  (if (zero? cell-axis-mask)
+                                    (loop [idx start-idx]
+                                      (when (<= idx end-idx)
+                                        (when (BitUtil/bitNot (.isDeleted access idx))
+                                          (.add acc (+ start-point-idx idx)))
+                                        (recur (inc idx))))
+                                    (loop [idx start-idx]
+                                      (when (<= idx end-idx)
+                                        (when (and (BitUtil/bitNot (.isDeleted access idx))
+                                                   (.isInRange access idx min-range max-range cell-axis-mask))
+                                          (.add acc (+ start-point-idx idx)))
+                                        (recur (inc idx)))))
+                                  (if (zero? cell-axis-mask)
+                                    (loop [idx start-idx]
+                                      (when (<= idx end-idx)
+                                        (.add acc (+ start-point-idx idx))
+                                        (recur (inc idx))))
+                                    (loop [idx start-idx]
+                                      (when (<= idx end-idx)
+                                        (when (.isInRange access idx min-range max-range cell-axis-mask)
+                                          (.add acc (+ start-point-idx idx)))
+                                        (recur (inc idx)))))))))))))))
 
       (.build acc)))
   (kd-tree-points [this deletes?]
@@ -301,7 +315,13 @@
                 (apply [_ cell-idx]
                   (if-let [^FixedSizeListVector cell (aget cells cell-idx)]
                     (let [start-point-idx (bit-shift-left cell-idx cell-shift)]
-                      (LongStream/range start-point-idx (+ start-point-idx (.getValueCount cell))))
+                      (cond-> (LongStream/range 0 (.getValueCount cell))
+                        (not deletes?) (.filter (reify LongPredicate
+                                                  (test [_ x]
+                                                    (BitUtil/bitNot (.isNull cell x)))))
+                        true (.map (reify LongUnaryOperator
+                                     (applyAsLong [_ x]
+                                       (+ start-point-idx x))))))
                     (LongStream/empty))))))
   (kd-tree-height [_] 1)
   (kd-tree-retain [this _]
@@ -362,7 +382,8 @@
                                            axis-shift
                                            cell-shift
                                            size
-                                           value-count]}]
+                                           value-count
+                                           deletes?]}]
   (SimpleGrid. arrow-buf
                (object-array (map long-array scales))
                (long-array mins)
@@ -374,7 +395,8 @@
                cell-shift
                size
                value-count
-               (AtomicInteger. 1)))
+               (AtomicInteger. 1)
+               deletes?))
 
 (def ^:private ^:const point-vec-idx 0)
 
@@ -399,9 +421,13 @@
     (->arrow-buf-grid arrow-buf)))
 
 (defn ->disk-grid
-  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path points {:keys [^long max-histogram-bins ^long cell-size ^long k]
+  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path points {:keys [^long max-histogram-bins
+                                                                                         ^long cell-size
+                                                                                         ^long k
+                                                                                         deletes?]
                                                                                   :or {max-histogram-bins 128
-                                                                                       cell-size (* 8 1024)}}]
+                                                                                       cell-size (* 8 1024)
+                                                                                       deletes? false}}]
    (assert (number? k))
    (util/mkdirs (.getParent path))
    (let [^long total (kd/kd-tree-size points)
@@ -419,7 +445,7 @@
          cell-outs (object-array number-of-cells)
          cell-paths (object-array number-of-cells)
          ^IKdTreePointAccess access (kd/kd-tree-point-access points)]
-     (.forEach ^LongStream (kd/kd-tree-points points false)
+     (.forEach ^LongStream (kd/kd-tree-points points deletes?)
                (reify LongConsumer
                  (accept [_ x]
                    (update-histograms-fn (.getArrayPoint access x)))))
@@ -436,7 +462,7 @@
              k-minus-one-mins (long-array number-of-cells Long/MAX_VALUE)
              k-minus-one-maxs (long-array number-of-cells Long/MIN_VALUE)
              k-minus-one-slope+base (double-array (* 2 number-of-cells))
-             write-point-fn (fn [^longs p]
+             write-point-fn (fn [^longs p deleted?]
                               (let [cell-idx (->cell-idx scales p k-minus-one axis-shift)
                                     ^DataOutputStream out (or (aget cell-outs cell-idx)
                                                               (let [f (str "." (.getFileName path) (format "_cell_%016x.raw" cell-idx))
@@ -454,17 +480,20 @@
                                     (when (= n k-minus-one)
                                       (aset k-minus-one-mins cell-idx (min x (aget k-minus-one-mins cell-idx)))
                                       (aset k-minus-one-maxs cell-idx (max x (aget k-minus-one-maxs cell-idx))))
-                                    (.writeLong out x)))))]
-         (.forEach ^LongStream (kd/kd-tree-points points false)
+                                    (.writeLong out x)))
+                                (.writeByte out (if deleted?
+                                                  1
+                                                  0))))]
+         (.forEach ^LongStream (kd/kd-tree-points points deletes?)
                    (reify LongConsumer
                      (accept [_ x]
-                       (write-point-fn (.getArrayPoint access x)))))
+                       (write-point-fn (.getArrayPoint access x) (.isDeleted access x)))))
          (dotimes [n number-of-cells]
            (util/try-close (aget cell-outs n))
            (when-let [^Path cell-path (aget cell-paths n)]
              (let [min-r (double (aget k-minus-one-mins n))
                    max-r (double (aget k-minus-one-maxs n))
-                   value-count (quot (util/path-size cell-path) (* k Long/BYTES))
+                   value-count (quot (util/path-size cell-path) (inc (* k Long/BYTES)))
                    diff (- max-r min-r)
                    slope (if (zero? diff)
                            0.0
@@ -475,7 +504,7 @@
                (aset k-minus-one-slope+base (inc slope-idx) base))))
          (let [max-cell-size (reduce max (for [^Path cell-path cell-paths
                                                :when cell-path]
-                                           (quot (util/path-size cell-path) (* k Long/BYTES))))
+                                           (quot (util/path-size cell-path) (inc (* k Long/BYTES)))))
                cell-shift (Long/bitCount (dec (BitUtil/ceilPowerOfTwo max-cell-size)))
                grid-meta {:scales scales
                           :mins mins
@@ -485,7 +514,8 @@
                           :axis-shift axis-shift
                           :cell-shift cell-shift
                           :size total
-                          :value-count (bit-shift-left (inc number-of-cells) cell-shift)}
+                          :value-count (bit-shift-left (inc number-of-cells) cell-shift)
+                          :deletes? deletes?}
                schema (Schema. [(kd/->point-field k)] {"grid-meta" (json/write-str grid-meta)})
                buf (long-array k)]
            (with-open [root (VectorSchemaRoot/create schema allocator)
@@ -497,11 +527,14 @@
                  (.clear root)
                  (when-let [^Path cell-path (aget cell-paths n)]
                    (with-open [in (DataInputStream. (BufferedInputStream. (Channels/newInputStream (util/->file-channel cell-path))))]
-                     (let [value-count (quot (util/path-size cell-path) (* k Long/BYTES))]
+                     (let [value-count (quot (util/path-size cell-path) (inc (* k Long/BYTES)))]
                        (dotimes [_ value-count]
                          (dotimes [m k]
                            (aset buf m (.readLong in)))
-                         (kd/write-point point-vec out-access buf))
+                         (let [deleted? (= (.readByte in) 1)
+                               idx (kd/write-point point-vec out-access buf)]
+                           (when deleted?
+                             (.setNull point-vec idx))))
                        (.setRowCount root value-count)))
                    (util/delete-file cell-path)
                    (quick-sort out-access 0 (dec (.getRowCount root)) k-minus-one))
