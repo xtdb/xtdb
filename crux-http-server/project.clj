@@ -40,8 +40,6 @@
                              [com.bhauman/spell-spec "0.1.2"]
                              [ring/ring-devel "1.8.1"]
                              [expound "0.8.7"]]}
-             :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
-                                     :target "crux-http-server/cljs-target/public/css/"}}
 
              :test {:dependencies [[clj-http "3.12.1"]
                                    [juxt/crux-test "crux-git-version"]]}}
@@ -51,9 +49,7 @@
                           ["clean"]
                           ["run" "-m" "figwheel.main" "-O" "advanced" "-bo" "dev"]
                           ["sass"]]
-            "install" ["do"
-                       ["with-profiles" "+sass-from-root" "build:cljs"]
-                       "install"]}
+            "install" ["do" "build:cljs" "install"]}
   :plugins [[yogthos/lein-sass "0.1.10"]]
   :resource-paths ["resources" "cljs-target" "src-cljs"]
   :jar-exclusions [#"public/cljs-out/dev/.*"]

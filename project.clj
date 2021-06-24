@@ -1,28 +1,9 @@
-(def modules
-  ["crux-core"
-   "crux-rdf"
-   "crux-metrics"
-   "crux-rocksdb" "crux-lmdb"
-   "crux-jdbc"
-   "crux-http-client" "crux-http-server"
-   "crux-kafka-embedded" "crux-kafka-connect" "crux-kafka"
-   "crux-sql"
-   "crux-lucene"
-   "crux-test"
-   "crux-s3"
-   "crux-azure-blobs"
-   "crux-google-cloud-storage"
-   "crux-bench"])
-
 (defproject juxt/crux-dev "crux-dev-SNAPSHOT"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
   :middleware [leiningen.project-version/middleware]
-
-  :plugins [[lein-sub "0.3.0"]]
-  :sub ~modules
 
   :dependencies
   [[org.clojure/clojure "1.10.3"]
@@ -100,9 +81,6 @@
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
   :global-vars {*warn-on-reflection* true}
-
-  :aliases {"check" ["sub" "-s" ~(->> modules (remove #{"crux-jdbc"}) (clojure.string/join ":")) "check"]
-            "build" ["do" ["sub" "install"] ["sub" "test"]]}
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
              :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}

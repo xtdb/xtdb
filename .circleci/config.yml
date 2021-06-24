@@ -78,7 +78,7 @@ jobs:
           command: |
             rm -rf ~/.m2/juxt/crux-*
             export LEIN_JVM_OPTS=-Xmx2G
-            lein sub install
+            ./lein-sub install
 
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh
@@ -101,7 +101,10 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
-      - run: lein do sub test, check
+      - run:
+          command: |
+            ./lein-sub check
+            ./lein-sub test
       - store_test_results:
           path: "crux-test/target/test-results"
 
@@ -123,7 +126,7 @@ jobs:
               - v1-dataset-
 
         - run: sh ./crux-bench/bin/download-dataset.sh
-        - run: lein sub -s crux-bench uberjar
+        - run: ./lein-sub -s crux-bench uberjar
         - run:
             command: |
               echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV

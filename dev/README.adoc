@@ -3,7 +3,7 @@
 The top-level project ties all the other projects together for convenience whilst working within this repo.
 All of the below commands should be run in the *root* of the Crux repo.
 
-* To run a Clojure REPL that includes dependencies for all components of Crux, first build the sub-modules using `lein sub install`.
+* To run a Clojure REPL that includes dependencies for all components of Crux, first build the sub-modules using `./lein-sub install`.
 * Start a REPL with `lein repl` (with `--headless` if you're just going to connect to it from your editor).
 * Once you've connected to the REPL, in the `user` namespace, run:
   * `(dev)` to require and go to the `dev` namespace.
@@ -16,15 +16,15 @@ All of the below commands should be run in the *root* of the Crux repo.
   * see https://github.com/weavejester/integrant-repl[Integrant REPL] for more details.
 * You should now have a running Crux node under `(dev/crux-node)` - you can verify this by calling `(crux/status (crux-node))` (in the `dev` namespace).
 * Most of the time, you shouldn't need to bounce the REPL, but:
-  * if you add a module, or change any of the dependencies of any of the modules, that'll require another `lein sub install` and a REPL bounce
-  * if you change any of the Java classes, that'll require a `lein sub javac` and a REPL bounce
+  * if you add a module, or change any of the dependencies of any of the modules, that'll require another `./lein-sub install` and a REPL bounce
+  * if you change any of the Java classes, that'll require a `./lein-sub javac` and a REPL bounce
   * otherwise, `(dev/reset)` (or just `(reset)` if you're already in the `dev` ns) should be sufficient.
-* You can run module tests from the root of the git repo without a `lein sub install`, because of the lein checkouts - all of the tests are in scope here, so things like `lein test :only crux.tx-test` should also work.
+* You can run module tests from the root of the git repo without a `./lein-sub install`, because of the lein checkouts - all of the tests are in scope here, so things like `lein test :only crux.tx-test` should also work.
 * Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
 
 == Testing
 
-The recommended way of running the full test suite is `lein build`.
+The recommended way of running the full test suite is `./bin/build.sh`.
 
 The test suite relies on the `timeout` command line utility, this comes as a default on Linux but isn't preinstalled on MacOS. You can get it with `brew install coreutils && echo 'alias timeout=gtimeout' >> ~/.bashrc'`
 
