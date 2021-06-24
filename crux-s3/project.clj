@@ -1,8 +1,8 @@
-(defproject juxt/crux-s3 "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-s3 "crux-git-version-beta"
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
 
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
                  [software.amazon.awssdk/s3 "2.10.91"]
 
                  ;; dependency resolution
@@ -14,7 +14,7 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
+  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]
 

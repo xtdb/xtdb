@@ -16,14 +16,14 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-juxt/crux-core {:mvn/version "{crux_version}-beta"}
+pro.juxt.crux/crux-core {:mvn/version "{crux_version}-beta"}
 ----
 pom.xml::
 +
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-core</artifactId>
     <version>{crux_version}-beta</version>
 </dependency>
@@ -103,8 +103,8 @@ deps.edn::
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.10.3"}
 
-        juxt/crux-core {:mvn/version "{crux_version}-beta"}
-        juxt/crux-http-server {:mvn/version "{crux_version}-alpha"}}}
+        pro.juxt.crux/crux-core {:mvn/version "{crux_version}-beta"}
+        pro.juxt.crux/crux-http-server {:mvn/version "{crux_version}-alpha"}}}
 ----
 ====
 

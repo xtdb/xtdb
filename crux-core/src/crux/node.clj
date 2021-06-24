@@ -22,7 +22,7 @@
            java.util.Date))
 
 (def crux-version
-  (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
+  (when-let [pom-file (io/resource "META-INF/maven/pro.juxt.crux/crux-core/pom.properties")]
     (with-open [in (io/reader pom-file)]
       (let [{:strs [version revision]} (cio/load-properties in)]
         {:crux.version/version version

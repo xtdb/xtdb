@@ -36,6 +36,6 @@
                            x))))
         (cond-> mvn-group-override (-> (assoc :group mvn-group-override)
                                        (->> (postwalk (fn [x]
-                                                        (if (and (symbol? x) (= "juxt" (namespace x)))
+                                                        (if (and (symbol? x) (= "pro.juxt.crux" (namespace x)))
                                                           (symbol mvn-group-override (name x))
                                                           x)))))))))

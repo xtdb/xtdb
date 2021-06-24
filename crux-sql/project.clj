@@ -1,10 +1,10 @@
-(defproject juxt/crux-sql "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-sql "crux-git-version-alpha"
   :description "SQL for Crux using Apache Calcite"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [org.apache.calcite/calcite-core "1.22.0" :exclusions [com.google.code.findbugs/jsr305]]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
@@ -25,7 +25,7 @@
                  [com.google.guava/guava "30.1.1-jre"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
+             :test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
   :middleware [leiningen.project-version/middleware]
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

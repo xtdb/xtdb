@@ -21,18 +21,18 @@ used to express complex joins and recursive graph traversals.
 * [Maven releases - Clojars](https://clojars.org/juxt/crux-core)
   ```xml
   <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-core</artifactId>
     <version>21.06-1.17.1-beta</version>
   </dependency>
   ```
 
   ```clojure
-  [juxt/crux-core "21.06-1.17.1-beta"]
+  [pro.juxt.crux/crux-core "21.06-1.17.1-beta"]
   ```
 
   ```clojure
-  juxt/crux-core {:mvn/version "21.06-1.17.1-beta"}
+  pro.juxt.crux/crux-core {:mvn/version "21.06-1.17.1-beta"}
   ```
 * [Release notes](https://github.com/juxt/crux/releases)
 * Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/juxt/crux/discussions) | crux@juxt.pro

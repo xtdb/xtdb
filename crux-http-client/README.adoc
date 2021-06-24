@@ -5,14 +5,14 @@ This module offers an HTTP client that allows you to send transactions and run q
 .deps.edn
 [source,clojure]
 ----
-juxt/crux-http-client {:mvn/version "21.06-1.17.1-beta"}
+pro.juxt.crux/crux-http-client {:mvn/version "21.06-1.17.1-beta"}
 ----
 
 .pom.xml
 [source,xml]
 ----
 <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-http-client</artifactId>
     <version>21.06-1.17.1-beta</version>
 </dependency>

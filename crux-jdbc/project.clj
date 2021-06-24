@@ -1,11 +1,11 @@
-(defproject juxt/crux-jdbc "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-jdbc "crux-git-version-beta"
   :description "Crux JDBC"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
                  [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [org.clojure/java.data "1.0.86"]
                  [com.zaxxer/HikariCP "3.4.5"]

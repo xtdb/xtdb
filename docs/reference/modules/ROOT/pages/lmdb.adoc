@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-juxt/crux-lmdb {:mvn/version "{crux_version}-alpha"}
+pro.juxt.crux/crux-lmdb {:mvn/version "{crux_version}-alpha"}
 ----
 
 pom.xml::
@@ -22,7 +22,7 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-lmdb</artifactId>
     <version>{crux_version}-alpha</version>
 </dependency>

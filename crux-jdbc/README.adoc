@@ -23,8 +23,8 @@ To make use of the various database implementations, it is likely that you will 
 ----
 :dependencies
 	...
-	[juxt/crux-core <version>]
-	[juxt/crux-jdbc <version>]
+	[pro.juxt.crux/crux-core <version>]
+	[pro.juxt.crux/crux-jdbc <version>]
         [com.oracle.ojdbc/ojdbc8 "19.3.0.0"]
 	...
 ----

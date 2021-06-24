@@ -1,11 +1,11 @@
-(defproject juxt/crux-kafka-connect "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-kafka-connect "crux-git-version-beta"
   :description "Crux Kafka Connect"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-http-client "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-http-client "crux-git-version-beta"]
                  [org.clojure/tools.logging "1.1.0"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
