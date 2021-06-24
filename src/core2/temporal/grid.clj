@@ -232,12 +232,17 @@
                                        min-v (aget mins n)
                                        max-v (aget maxs n)]
                                  :when (BitUtil/bitNot (or (< max-v min-r) (> min-v max-r)))
-                                 :let [^longs axis-scale (aget scales n)
-                                       min-axis-idx (Arrays/binarySearch axis-scale min-r)
+                                 :let [partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask n))
+                                       ^longs axis-scale (aget scales n)
+                                       min-axis-idx (if partial-match-axis?
+                                                      (int 0)
+                                                      (Arrays/binarySearch axis-scale min-r))
                                        min-axis-idx (if (neg? min-axis-idx)
                                                       (dec (- min-axis-idx))
                                                       (long min-axis-idx))
-                                       max-axis-idx (Arrays/binarySearch axis-scale max-r)
+                                       max-axis-idx (if partial-match-axis?
+                                                      (unchecked-dec-int (alength axis-scale))
+                                                      (Arrays/binarySearch axis-scale max-r))
                                        max-axis-idx (if (neg? max-axis-idx)
                                                       (dec (- max-axis-idx))
                                                       (long max-axis-idx))]
