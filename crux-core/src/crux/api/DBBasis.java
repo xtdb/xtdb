@@ -34,7 +34,6 @@ public final class DBBasis {
     /**
      * Not intended for public use, may be removed.
      * @param map
-     * @return
      */
     @SuppressWarnings("unchecked")
     public static DBBasis factory(IPersistentMap map) {
@@ -45,8 +44,6 @@ public final class DBBasis {
 
     /**
      * Not intended for public use, may be removed.
-     *
-     * @return
      */
     public IPersistentMap toMap() {
         IPersistentMap ret = PersistentArrayMap.EMPTY;

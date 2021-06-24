@@ -18,7 +18,7 @@ used to express complex joins and recursive graph traversals.
 ## Quick Links
 
 * [Documentation](https://opencrux.com)
-* [Maven releases - Clojars](https://clojars.org/juxt/crux-core)
+* [Maven releases](https://repo1.maven.org/maven2/pro/juxt/crux/)
   ```xml
   <dependency>
     <groupId>pro.juxt.crux</groupId>
