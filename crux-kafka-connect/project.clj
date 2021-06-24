@@ -42,6 +42,21 @@
                   "-Werror"
                   "-proc:none"]
   :plugins [[lein-licenses "0.2.2"]
-            [thomasa/mranderson "0.5.1"]]
+            [thomasa/mranderson "0.5.1"]
+            [lein-javadoc "0.3.0"]]
   :mranderson {:unresolved-tree true}
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :javadoc-opts {:package-names ["crux"]
+                 :output-dir "target/javadoc/out"
+                 :additional-args ["-windowtitle" "Crux Kafka Javadoc"
+                                   "-quiet"
+                                   "-Xdoclint:none"
+                                   "-link" "https://docs.oracle.com/javase/8/docs/api/"
+                                   "-link" "https://www.javadoc.io/static/org.clojure/clojure/1.10.3"
+                                   "-link" "https://kafka.apache.org/26/javadoc/"]}
+
+  :classifiers {:sources {:prep-tasks ^:replace []}
+                :javadoc {:prep-tasks ^:replace ["javadoc"]
+                          :omit-source true
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})

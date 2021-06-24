@@ -14,6 +14,8 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
+  :plugins [[lein-javadoc "0.3.0"]]
+
   :profiles {:test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]
@@ -27,4 +29,18 @@
                   "-Werror"
                   "-proc:none"]
 
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :javadoc-opts {:package-names ["crux"]
+                 :output-dir "target/javadoc/out"
+                 :additional-args ["-windowtitle" "Crux S3 Javadoc"
+                                   "-quiet"
+                                   "-Xdoclint:none"
+                                   "-link" "https://docs.oracle.com/javase/8/docs/api/"
+                                   "-link" "https://www.javadoc.io/static/org.clojure/clojure/1.10.3"
+                                   "-link" "https://sdk.amazonaws.com/java/api/latest"]}
+
+  :classifiers {:sources {:prep-tasks ^:replace []}
+                :javadoc {:prep-tasks ^:replace ["javadoc"]
+                          :omit-source true
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})
