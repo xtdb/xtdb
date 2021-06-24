@@ -283,8 +283,7 @@
           @(CompletableFuture/allOf (into-array CompletableFuture futs))
           (doseq [chunk-idx new-chunk-idxs
                   :let [obj-key (->temporal-obj-key chunk-idx)
-                        chunk-kd-tree (wrap-with-current-entity-cache (grid/->arrow-buf-grid  @(.getBuffer buffer-pool obj-key))
-                                                                      (ConcurrentHashMap.))]]
+                        chunk-kd-tree (grid/->arrow-buf-grid  @(.getBuffer buffer-pool obj-key))]]
             (swap! kd-tree #(if %
                               (kd/->merged-kd-tree % chunk-kd-tree)
                               chunk-kd-tree)))
