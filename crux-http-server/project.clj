@@ -3,6 +3,7 @@
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
                  [pro.juxt.crux/crux-core "crux-git-version-beta"]
@@ -53,4 +54,14 @@
   :jar-exclusions [#"public/cljs-out/dev/.*"]
   :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

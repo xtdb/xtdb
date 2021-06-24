@@ -3,6 +3,7 @@
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [org.slf4j/slf4j-api "1.7.30"]
@@ -47,4 +48,14 @@
   :classifiers {:sources {:prep-tasks ^:replace []}
                 :javadoc {:prep-tasks ^:replace ["javadoc"]
                           :omit-source true
-                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

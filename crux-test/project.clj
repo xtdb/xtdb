@@ -3,6 +3,7 @@
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [pro.juxt.crux/crux-core "crux-git-version-beta"]
                  [pro.juxt.crux/crux-jdbc "crux-git-version-beta"]
@@ -82,4 +83,14 @@
                                    [com.nimbusds/nimbus-jose-jwt "9.7"]
 
                                    ;; Kafka connect tests
-                                   [org.apache.kafka/connect-api "2.6.0"]]}})
+                                   [org.apache.kafka/connect-api "2.6.0"]]}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})
