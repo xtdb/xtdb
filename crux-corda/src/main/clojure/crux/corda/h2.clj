@@ -1,7 +1,7 @@
 (ns crux.corda.h2
   (:require [crux.corda :as crux-corda]
             [crux.tx :as tx]
-            [next.jdbc :as jdbc])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (java.time OffsetDateTime LocalDate LocalTime ZoneOffset)
            (java.util Date)
            org.h2.api.TimestampWithTimeZone))

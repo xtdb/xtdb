@@ -1,13 +1,12 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 allprojects {
-    group = "juxt"
-    version = "0.1.0-SNAPSHOT"
+    group = "pro.juxt.crux"
+    version = "0.0.1-SNAPSHOT"
 
     repositories {
         mavenCentral()
         jcenter()
-        maven { url = uri("https://repo.clojars.org") }
         maven { url = uri("https://ci-artifactory.corda.r3cev.com/artifactory/corda") }
         maven { url = uri("https://repo.gradle.org/gradle/libs-releases") }
     }
@@ -21,7 +20,7 @@ allprojects {
 
 plugins {
     kotlin("jvm") version "1.4.10"
-    id("dev.clojurephant.clojure") version "0.6.0-alpha.4"
+    id("dev.clojurephant.clojure") version "0.6.0"
     id("net.corda.plugins.cordapp") version "5.0.10"
     id("net.corda.plugins.quasar-utils") version "5.0.10"
 }

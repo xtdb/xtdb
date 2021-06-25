@@ -1,7 +1,7 @@
 (ns crux.corda.postgres
   (:require [crux.corda :as crux-corda]
             [crux.tx :as tx]
-            [next.jdbc :as jdbc])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (java.util Date)
            (java.sql Timestamp)))
 

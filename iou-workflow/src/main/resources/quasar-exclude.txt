@@ -53,6 +53,7 @@ jdk**
 jni**
 jnr**
 junit**
+juxt**
 kotlin**
 linux**
 liquibase**

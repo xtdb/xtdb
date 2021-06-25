@@ -4,8 +4,8 @@
             [crux.db :as db]
             [crux.codec :as c]
             [crux.system :as sys]
-            [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as jdbcr]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
             [crux.io :as cio])
   (:import (crux.corda.state CruxState)
