@@ -28,7 +28,7 @@
     (f)
     (#'tx/reset-tx-fn-error)))
 
-(def picasso-id :http://dbpedia.org/resource/Pablo_Picasso)
+(def picasso-id (keyword "http://dbpedia.org/resource/Pablo_Picasso"))
 (def picasso-eid (c/new-id picasso-id))
 
 (def picasso
@@ -53,15 +53,15 @@
                                    :vt valid-time
                                    :tt tx-time
                                    :tx-id tx-id})
-                 (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-id))))
+                 (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") tx-time tx-id))))
 
       (t/testing "cannot see entity before valid or transact time"
-        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" tx-id)))
-        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time -1))))
+        (t/is (nil? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") #inst "2018-05-20" tx-id)))
+        (t/is (nil? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") tx-time -1))))
 
       (t/testing "can see entity after valid or transact time"
-        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-22" tx-id)))
-        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-id))))
+        (t/is (some? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") #inst "2018-05-22" tx-id)))
+        (t/is (some? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") tx-time tx-id))))
 
       (t/testing "can see entity history"
         (t/is (= [(c/map->EntityTx {:eid picasso-eid
@@ -69,7 +69,7 @@
                                     :vt valid-time
                                     :tt tx-time
                                     :tx-id tx-id})]
-                 (db/entity-history index-snapshot :http://dbpedia.org/resource/Pablo_Picasso :desc {})))))
+                 (db/entity-history index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") :desc {})))))
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
@@ -85,9 +85,9 @@
                                      :vt new-valid-time
                                      :tt new-tx-time
                                      :tx-id new-tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
+                   (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id)))
 
-          (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" -1))))))
+          (t/is (nil? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") #inst "2018-05-20" -1))))))
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
@@ -103,13 +103,13 @@
                                      :vt new-valid-time
                                      :tt new-tx-time
                                      :tx-id new-tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
+                   (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id)))
           (t/is (= (c/map->EntityTx {:eid picasso-eid
                                      :content-hash content-hash
                                      :vt valid-time
                                      :tt tx-time
                                      :tx-id tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time tx-id))))
+                   (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time tx-id))))
 
         (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -127,24 +127,24 @@
                                          :vt new-valid-time
                                          :tt new-tx-time
                                          :tx-id new-tx-id})
-                       (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
+                       (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id)))
 
               (t/is (= prev-tx-id
-                       (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso prev-tx-time prev-tx-id)))))))
+                       (:tx-id (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") prev-tx-time prev-tx-id)))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
-                (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
+                (fix/submit+await-tx [[:crux.tx/delete (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time]])]
             (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-              (t/is (nil? (.content-hash (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id))))
+              (t/is (nil? (.content-hash (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id))))
               (t/testing "first version of entity is still visible in the past"
-                (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-id))))))))))
+                (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") valid-time new-tx-id))))))))))
 
     (t/testing "can retrieve history of entity"
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-        (t/is (= 5 (count (db/entity-history index-snapshot :http://dbpedia.org/resource/Pablo_Picasso :desc
+        (t/is (= 5 (count (db/entity-history index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") :desc
                                              {:with-corrections? true}))))))))
 
 (t/deftest test-can-cas-entity
