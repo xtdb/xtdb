@@ -85,6 +85,10 @@
                                    ;; Kafka connect tests
                                    [org.apache.kafka/connect-api "2.6.0"]]}}
 
+  ;; empty JARs to keep Maven Central happy
+  :classifiers {:sources {:jar-exclusions [#""]}
+                :javadoc {:jar-exclusions [#""]}}
+
   :pom-addition ([:developers
                   [:developer
                    [:id "juxt"]
