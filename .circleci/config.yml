@@ -6,6 +6,7 @@ orbs:
   aws-ecr: circleci/aws-ecr@6.7.0
   aws-s3: circleci/aws-s3@1.0.15
   node: circleci/node@1.1.6
+  shellcheck: circleci/shellcheck@2.2.3
   crux:
     orbs:
       go: circleci/go@0.2.0
@@ -65,6 +66,7 @@ jobs:
 
     steps:
       - checkout
+      - shellcheck/install
 
       - run: md5sum **/project.clj > .circleci-cache-key
 
@@ -73,6 +75,8 @@ jobs:
           - v1-dependencies-{{ checksum ".circleci-cache-key" }}
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
+
+      - run: shellcheck ./lein-sub
 
       - run:
           command: |
