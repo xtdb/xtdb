@@ -16,7 +16,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-core {:mvn/version "{crux_version}-beta"}
+pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
 ----
 pom.xml::
 +
@@ -25,7 +25,7 @@ pom.xml::
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-core</artifactId>
-    <version>{crux_version}-beta</version>
+    <version>{crux_version}</version>
 </dependency>
 ----
 ====
@@ -84,7 +84,7 @@ You can also build custom Crux JARs with your choice of modules - see the https:
 
 You can also start a standalone Crux node using Docker, using:
 
-`docker run -p 3000:3000 juxt/crux-in-memory:21.06-1.17.1`
+`docker run -p 3000:3000 juxt/crux-in-memory:1.17.1`
 
 Again, this opens up an HTTP server at http://localhost:3000[window=_blank].
 
@@ -103,8 +103,8 @@ deps.edn::
 ----
 {:deps {org.clojure/clojure {:mvn/version "1.10.3"}
 
-        pro.juxt.crux/crux-core {:mvn/version "{crux_version}-beta"}
-        pro.juxt.crux/crux-http-server {:mvn/version "{crux_version}-alpha"}}}
+        pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
+        pro.juxt.crux/crux-http-server {:mvn/version "{crux_version}"}}}
 ----
 ====
 

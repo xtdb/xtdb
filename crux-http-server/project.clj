@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-http-server "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-http-server "crux-git-version"
   :description "Crux HTTP Server"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
@@ -6,7 +6,7 @@
   :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
-                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [com.cognitect/transit-clj "1.0.324"]
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]

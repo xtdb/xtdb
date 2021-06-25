@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-dev "crux-dev-SNAPSHOT"
+(defproject pro.juxt.crux/crux-dev "crux-git-version"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
@@ -7,20 +7,20 @@
 
   :dependencies
   [[org.clojure/clojure "1.10.3"]
-   [pro.juxt.crux/crux-core "crux-git-version-beta"]
-   [pro.juxt.crux/crux-rocksdb "crux-git-version-beta"]
-   [pro.juxt.crux/crux-lmdb "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-kafka "crux-git-version-beta"]
-   [pro.juxt.crux/crux-kafka-connect "crux-git-version-beta"]
-   [pro.juxt.crux/crux-kafka-embedded "crux-git-version-beta"]
-   [pro.juxt.crux/crux-jdbc "crux-git-version-beta"]
-   [pro.juxt.crux/crux-metrics "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-http-server "crux-git-version-alpha"]
-   [pro.juxt.crux-labs/crux-rdf "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-sql "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-azure-blobs "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-google-cloud-storage "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-lucene "crux-git-version-alpha"]
+   [pro.juxt.crux/crux-core "crux-git-version"]
+   [pro.juxt.crux/crux-rocksdb "crux-git-version"]
+   [pro.juxt.crux/crux-lmdb "crux-git-version"]
+   [pro.juxt.crux/crux-kafka "crux-git-version"]
+   [pro.juxt.crux/crux-kafka-connect "crux-git-version"]
+   [pro.juxt.crux/crux-kafka-embedded "crux-git-version"]
+   [pro.juxt.crux/crux-jdbc "crux-git-version"]
+   [pro.juxt.crux/crux-metrics "crux-git-version"]
+   [pro.juxt.crux/crux-http-server "crux-git-version"]
+   [pro.juxt.crux-labs/crux-rdf "crux-git-version"]
+   [pro.juxt.crux/crux-sql "crux-git-version"]
+   [pro.juxt.crux/crux-azure-blobs "crux-git-version"]
+   [pro.juxt.crux/crux-google-cloud-storage "crux-git-version"]
+   [pro.juxt.crux/crux-lucene "crux-git-version"]
    [pro.juxt.crux/crux-test "crux-git-version"]
    [pro.juxt.crux/crux-bench "crux-git-version"]
 

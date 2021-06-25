@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-google-cloud-storage {:mvn/version "{crux_version}-alpha"}
+pro.juxt.crux/crux-google-cloud-storage {:mvn/version "{crux_version}"}
 ----
 
 pom.xml::
@@ -24,7 +24,7 @@ pom.xml::
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-google-cloud-storage</artifactId>
-    <version>{crux_version}-alpha</version>
+    <version>{crux_version}</version>
 </dependency>
 ----
 ====

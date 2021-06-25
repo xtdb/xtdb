@@ -5,7 +5,7 @@ https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query i
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-rocksdb {:mvn/version "21.06-1.17.1-beta"}
+pro.juxt.crux/crux-rocksdb {:mvn/version "1.17.1"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ pro.juxt.crux/crux-rocksdb {:mvn/version "21.06-1.17.1-beta"}
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-rocksdb</artifactId>
-    <version>21.06-1.17.1-beta</version>
+    <version>1.17.1</version>
 </dependency>
 ----
 

@@ -108,7 +108,7 @@ Crux puts no constraints on "types" and, as a schemaless database, has no notion
 "types" regarding the shapes of documents you save. However, some users find it
 useful to track a `type` attribute for their own purposes. The following example is
 not necessarily a recommended approach unless it is needed and it may cause a
-performance bottleneck on Crux versions prior to `21.06-1.17.1`. In the example
+performance bottleneck on Crux versions prior to `1.17.1`. In the example
 below, `:my.custom.ns` is an example namespace which would likely correspond to
 the name of the system using Crux. There is no relationship between the "type" of
 `:user` and the attribute `:user/name`. The type is only for the user's own

@@ -5,11 +5,11 @@
             :url "http://opensource.org/licenses/MIT"}
   :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
-                 [pro.juxt.crux/crux-jdbc "crux-git-version-beta"]
-                 [pro.juxt.crux/crux-http-server "crux-git-version-alpha"]
-                 [pro.juxt.crux/crux-rocksdb "crux-git-version-beta"]
-                 [pro.juxt.crux/crux-lmdb "crux-git-version-alpha"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-jdbc "crux-git-version"]
+                 [pro.juxt.crux/crux-http-server "crux-git-version"]
+                 [pro.juxt.crux/crux-rocksdb "crux-git-version"]
+                 [pro.juxt.crux/crux-lmdb "crux-git-version"]
 
                  ;; JDBC
                  [com.h2database/h2 "1.4.200"]
@@ -57,13 +57,13 @@
 
   :profiles {:dev {:dependencies []}
 
-             :test {:dependencies [[pro.juxt.crux/crux-kafka "crux-git-version-beta"]
-                                   [pro.juxt.crux/crux-kafka-connect "crux-git-version-beta"]
-                                   [pro.juxt.crux/crux-kafka-embedded "crux-git-version-beta"]
-                                   [pro.juxt.crux/crux-http-client "crux-git-version-beta"]
-                                   [pro.juxt.crux/crux-metrics "crux-git-version-alpha"]
-                                   [pro.juxt.crux-labs/crux-rdf "crux-git-version-alpha"]
-                                   [pro.juxt.crux/crux-sql "crux-git-version-alpha"]
+             :test {:dependencies [[pro.juxt.crux/crux-kafka "crux-git-version"]
+                                   [pro.juxt.crux/crux-kafka-connect "crux-git-version"]
+                                   [pro.juxt.crux/crux-kafka-embedded "crux-git-version"]
+                                   [pro.juxt.crux/crux-http-client "crux-git-version"]
+                                   [pro.juxt.crux/crux-metrics "crux-git-version"]
+                                   [pro.juxt.crux-labs/crux-rdf "crux-git-version"]
+                                   [pro.juxt.crux/crux-sql "crux-git-version"]
 
                                    ;; Uncomment to test Oracle, you'll need to locally install the JAR:
                                    ;; [com.oracle/ojdbc "19.3.0.0"]

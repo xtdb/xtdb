@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-google-cloud-storage "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-google-cloud-storage "crux-git-version"
   :description "Crux Google Cloud Storage Document Store"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
@@ -6,7 +6,7 @@
   :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [com.google.cloud/google-cloud-nio "0.122.4"]
 
                  ;; dep resolution

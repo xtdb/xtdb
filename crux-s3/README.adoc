@@ -5,7 +5,7 @@ This Crux module allows you to use AWS's Simple Storage Service (S3) as Crux's '
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-s3 {:mvn/version "21.06-1.17.1-beta"}
+pro.juxt.crux/crux-s3 {:mvn/version "1.17.1"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ pro.juxt.crux/crux-s3 {:mvn/version "21.06-1.17.1-beta"}
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-s3</artifactId>
-    <version>21.06-1.17.1-beta</version>
+    <version>1.17.1</version>
 </dependency>
 ----
 

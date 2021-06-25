@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-core "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-core "crux-git-version"
   :description "An open source document database with bitemporal graph queries"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
@@ -22,7 +22,7 @@
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-                            :dependencies [[pro.juxt.crux/crux-http-server "crux-git-version-alpha"]]}
+                            :dependencies [[pro.juxt.crux/crux-http-server "crux-git-version"]]}
              :test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]

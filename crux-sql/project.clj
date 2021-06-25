@@ -1,11 +1,11 @@
-(defproject pro.juxt.crux/crux-sql "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-sql "crux-git-version"
   :description "SQL for Crux using Apache Calcite"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
   :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [org.apache.calcite/calcite-core "1.22.0" :exclusions [com.google.code.findbugs/jsr305]]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]

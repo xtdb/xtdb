@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-s3 "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-s3 "crux-git-version"
   :description "Crux S3 integration"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
@@ -8,7 +8,7 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
 
-                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [software.amazon.awssdk/s3 "2.10.91"]
 
                  ;; dependency resolution
