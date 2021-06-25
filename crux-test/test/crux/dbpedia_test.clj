@@ -15,7 +15,7 @@
                                     (rdf/->tx-ops (rdf/ntriples "crux/Guernica_(Picasso).ntriples")))
                             (rdf/->default-language)))
 
-  (t/is (= #{[:http://dbpedia.org/resource/Pablo_Picasso]}
+  (t/is (= #{[(keyword "http://dbpedia.org/resource/Pablo_Picasso")]}
            (crux/q (crux/db *api*)
                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                      '{:find [e]
