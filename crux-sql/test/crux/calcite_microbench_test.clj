@@ -4,8 +4,7 @@
             [crux.api :as c]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.calcite :as cf]
-            [crux.fixtures.tpch :as tf]
-            [user :as user])
+            [crux.fixtures.tpch :as tf])
   (:import io.airlift.tpch.TpchTable
            java.sql.DriverManager
            java.sql.PreparedStatement))
@@ -34,6 +33,7 @@
     (->> rs resultset-seq (into []))))
 
 (comment
+  (require 'user)
   (load-docs! (user/crux-node))
   (fix/transact! (user/crux-node) (tf/tpch-tables->crux-sql-schemas))
   (def db (c/db (user/crux-node)))
