@@ -1,9 +1,8 @@
 (ns crux.fixtures.jdbc
   (:require [clojure.java.io :as io]
-            [crux.fixtures :as fix]
-            [crux.jdbc :as j]
             [clojure.test :as t]
-            [next.jdbc :as jdbc])
+            [crux.fixtures :as fix]
+            [crux.jdbc :as j])
   (:import com.opentable.db.postgres.embedded.EmbeddedPostgres))
 
 (defn- with-jdbc-opts [{:keys [pool-opts dialect db-spec]} f]

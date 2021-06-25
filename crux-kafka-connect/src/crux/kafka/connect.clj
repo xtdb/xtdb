@@ -1,6 +1,6 @@
 (ns crux.kafka.connect
-  (:require [cheshire.core :as json]
-            [cheshire.generate]
+  (:require [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json]
+            [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate :as json-gen]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.io :as cio]
@@ -17,7 +17,7 @@
            crux.kafka.connect.CruxSourceConnector
            crux.codec.EDNId))
 
-(cheshire.generate/add-encoder
+(json-gen/add-encoder
  EDNId
  (fn [c ^JsonGenerator json-generator]
    (.writeString json-generator (str (c/edn-id->original-id c)))))

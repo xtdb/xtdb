@@ -2,17 +2,16 @@
   "In-memory KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [crux.kv :as kv]
-            [crux.memory :as mem]
-            [crux.system :as sys]
-            [taoensso.nippy :as nippy]
             [crux.checkpoint :as cp]
             [crux.codec :as c]
             [crux.io :as cio]
-            [crux.kv.index-store :as kvi])
-  (:import [clojure.lang Box MapEntry]
-           java.io.Closeable
-           java.nio.file.Path))
+            [crux.kv :as kv]
+            [crux.kv.index-store :as kvi]
+            [crux.memory :as mem]
+            [crux.system :as sys]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+  (:import clojure.lang.Box
+           java.io.Closeable))
 
 (defn- persist-db [dir db]
   (let [file (io/file dir)]

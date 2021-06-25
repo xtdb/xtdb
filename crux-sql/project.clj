@@ -5,7 +5,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [cheshire "5.10.0"]
+                 [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [org.apache.calcite/calcite-core "1.22.0" :exclusions [com.google.code.findbugs/jsr305]]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
 

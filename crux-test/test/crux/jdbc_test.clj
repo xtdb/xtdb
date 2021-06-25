@@ -6,8 +6,8 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.lubm :as fl]
-            [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as jdbcr]))
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]))
 
 (t/use-fixtures :each fj/with-each-jdbc-node fix/with-node)
 

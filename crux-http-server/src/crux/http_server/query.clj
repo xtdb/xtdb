@@ -2,7 +2,6 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [clojure.string :as string]
             [crux.api :as crux]
             [crux.codec :as c]
             [crux.error :as err]
@@ -10,11 +9,11 @@
             [crux.http-server.json :as http-json]
             [crux.http-server.util :as util]
             [crux.io :as cio]
-            [muuntaja.core :as m]
-            [muuntaja.format.core :as mfc]
-            [muuntaja.format.edn :as mfe]
-            [muuntaja.format.transit :as mft]
-            [spec-tools.core :as st])
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.edn :as mfe]
+            [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.transit :as mft]
+            [juxt.clojars-mirrors.spec-tools.v0v10v5.spec-tools.core :as st])
   (:import [java.io Closeable OutputStream]
            [java.time Instant ZoneId]
            java.time.format.DateTimeFormatter
