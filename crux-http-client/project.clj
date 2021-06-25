@@ -5,7 +5,7 @@
             :url "http://opensource.org/licenses/MIT"}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [juxt/crux-core "crux-git-version-beta"]
-                 [clj-http "3.12.1"]
+                 [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                  [com.nimbusds/nimbus-jose-jwt "9.7"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}

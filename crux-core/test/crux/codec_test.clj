@@ -7,7 +7,7 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [crux.api :as crux]
-            [taoensso.nippy :as nippy]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [clojure.spec.alpha :as s])
   (:import crux.codec.Id
            java.math.BigDecimal

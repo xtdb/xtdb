@@ -10,8 +10,8 @@
 (defn archive [{:keys [version target-path confluent-hub-manifest group name] :as project} & args]
   (let [manifest  (leiningen.core.eval/eval-in-project
                    (assoc project :eval-in :leiningen)
-                   `(cheshire.core/generate-string ~confluent-hub-manifest)
-                   '(require 'cheshire.core))
+                   `(juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core/generate-string ~confluent-hub-manifest)
+                   '(require 'juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core))
         archive-dir (io/file target-path (str group "-" (:name confluent-hub-manifest) "-" version))
         lib-dir (io/file archive-dir "lib")
         etc-dir (io/file archive-dir "etc")

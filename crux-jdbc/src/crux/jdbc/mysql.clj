@@ -1,8 +1,8 @@
 (ns ^:no-doc crux.jdbc.mysql
-  (:require [crux.jdbc :as j]
-            [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as jdbcr]
-            [clojure.tools.logging :as log]))
+  (:require [clojure.tools.logging :as log]
+            [crux.jdbc :as j]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]))
 
 (defn- check-tx-time-col [pool]
   (when-not (= "timestamp"
