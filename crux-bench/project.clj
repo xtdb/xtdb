@@ -15,7 +15,7 @@
                  [pro.juxt.crux/crux-rocksdb "crux-git-version-beta"]
                  [pro.juxt.crux/crux-lmdb "crux-git-version-alpha"]
                  [pro.juxt.crux/crux-metrics "crux-git-version-alpha"]
-                 [pro.juxt.crux/crux-rdf "crux-git-version-alpha"]
+                 [pro.juxt.crux-labs/crux-rdf "crux-git-version-alpha"]
                  [pro.juxt.crux/crux-test "crux-git-version"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 

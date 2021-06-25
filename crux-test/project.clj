@@ -62,7 +62,7 @@
                                    [pro.juxt.crux/crux-kafka-embedded "crux-git-version-beta"]
                                    [pro.juxt.crux/crux-http-client "crux-git-version-beta"]
                                    [pro.juxt.crux/crux-metrics "crux-git-version-alpha"]
-                                   [pro.juxt.crux/crux-rdf "crux-git-version-alpha"]
+                                   [pro.juxt.crux-labs/crux-rdf "crux-git-version-alpha"]
                                    [pro.juxt.crux/crux-sql "crux-git-version-alpha"]
 
                                    ;; Uncomment to test Oracle, you'll need to locally install the JAR:

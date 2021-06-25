@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-graal "crux-git-version-alpha"
+(defproject pro.juxt.crux-labs/crux-graal "crux-git-version-alpha"
   :description "Crux Graal"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"

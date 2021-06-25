@@ -1,11 +1,11 @@
-(defproject pro.juxt.crux/crux-rdf "crux-git-version-alpha"
+(defproject pro.juxt.crux-labs/crux-rdf "crux-git-version"
   :description "Crux RDF"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :scm {:dir ".."}
+  :scm {:dir "../.."}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [org.eclipse.rdf4j/rdf4j-rio-ntriples "3.0.0"]
                  [org.eclipse.rdf4j/rdf4j-queryparser-sparql "3.0.0"]
                  [pro.juxt.clojars-mirrors.ring/ring-core "1.9.2" :scope "provided"]]

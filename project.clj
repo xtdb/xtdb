@@ -16,7 +16,7 @@
    [pro.juxt.crux/crux-jdbc "crux-git-version-beta"]
    [pro.juxt.crux/crux-metrics "crux-git-version-alpha"]
    [pro.juxt.crux/crux-http-server "crux-git-version-alpha"]
-   [pro.juxt.crux/crux-rdf "crux-git-version-alpha"]
+   [pro.juxt.crux-labs/crux-rdf "crux-git-version-alpha"]
    [pro.juxt.crux/crux-sql "crux-git-version-alpha"]
    [pro.juxt.crux/crux-azure-blobs "crux-git-version-alpha"]
    [pro.juxt.crux/crux-google-cloud-storage "crux-git-version-alpha"]
