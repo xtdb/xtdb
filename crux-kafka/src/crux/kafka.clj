@@ -277,14 +277,14 @@
                                       (for [^PartitionInfo partition-info (.partitionsFor end-offset-consumer doc-topic)]
                                         (TopicPartition. doc-topic (.partition partition-info)))))]
 
-      (loop [docs (db/fetch-docs local-document-store ids)]
+      (loop [doc-offsets (read-doc-offsets index-store)
+             docs (db/fetch-docs local-document-store ids)]
         (if (or (= (count docs) (count ids))
-                (let [doc-offsets (read-doc-offsets index-store)]
-                  (every? (fn [[tp end-offset]]
-                            (or (zero? end-offset)
-                                (when-let [consumed-offset (get doc-offsets tp)]
-                                  (>= consumed-offset end-offset))))
-                          @!end-offsets)))
+                (every? (fn [[tp end-offset]]
+                          (or (zero? end-offset)
+                              (when-let [consumed-offset (get doc-offsets tp)]
+                                (>= consumed-offset end-offset))))
+                        @!end-offsets))
           docs
 
           (do
@@ -293,7 +293,8 @@
             (when-let [indexing-error @!indexing-error]
               (throw (IllegalStateException. "document indexing error" indexing-error)))
 
-            (recur (into docs
+            (recur (read-doc-offsets index-store)
+                   (into docs
                          (db/fetch-docs local-document-store (set/difference ids (set (keys docs))))))))))))
 
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
