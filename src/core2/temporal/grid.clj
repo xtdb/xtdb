@@ -253,7 +253,7 @@
                                                       (dec (- min-axis-idx))
                                                       (long min-axis-idx))
                                        max-axis-idx (if partial-match-axis?
-                                                      (unchecked-dec-int (alength axis-scale))
+                                                      (alength axis-scale)
                                                       (Arrays/binarySearch axis-scale max-r))
                                        max-axis-idx (if (neg? max-axis-idx)
                                                       (dec (- max-axis-idx))
