@@ -277,12 +277,12 @@
                   (reify Consumer
                     (accept [_ idxs]
                       (let [^ints idxs idxs]
-                        (loop [m 0
+                        (loop [m (int 0)
                                cell-idx 0
                                cell-axis-mask 0]
                           (if (< m k-minus-one)
                             (let [^longs axis-idx+mask (aget ^objects (aget axis-idxs+masks m) (aget idxs m))]
-                              (recur (inc m)
+                              (recur (unchecked-inc-int m)
                                      (bit-or (bit-shift-left cell-idx axis-shift) (aget axis-idx+mask 0))
                                      (bit-or cell-axis-mask (aget axis-idx+mask 1))))
                             (when-let [^FixedSizeListVector cell (aget cells cell-idx)]
