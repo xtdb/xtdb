@@ -731,13 +731,10 @@
         (InnerNode. point-vec axis-value axis left (kd-tree-delete right allocator point) root?))))
 
   (kd-tree-range-search [kd-tree min-range max-range]
-    (let [axis-mask (range-bitmask min-range max-range)
-          partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
-          min-range (->longs min-range)
+    (let [min-range (->longs min-range)
           max-range (->longs max-range)
-          visit-left? (or partial-match-axis? (<= (aget min-range axis) axis-value))
-          visit-right? (or partial-match-axis? (<= axis-value (aget max-range axis)))
-          acc (LongStream/builder)]
+          visit-left? (< (aget min-range axis) axis-value)
+          visit-right? (<= axis-value (aget max-range axis))]
       (cond
         (and visit-left? (BitUtil/bitNot visit-right?))
         (kd-tree-range-search left min-range max-range)
@@ -745,9 +742,12 @@
         (and visit-right? (BitUtil/bitNot visit-left?))
         (kd-tree-range-search right min-range max-range)
 
-        :else
+        (and visit-left? visit-right?)
         (LongStream/concat (kd-tree-range-search left min-range max-range)
-                           (kd-tree-range-search right min-range max-range)))))
+                           (kd-tree-range-search right min-range max-range))
+
+        :else
+        (LongStream/empty))))
 
 
   (kd-tree-points [kd-tree deletes?]
