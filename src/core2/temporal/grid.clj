@@ -363,8 +363,7 @@
   IKdTreePointAccess
   (getPoint [this idx]
     (.getPoint (KdTreeVectorPointAccess. (aget cells (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
-               (bit-and idx cell-mask))
-    (ArrayList. ^List (seq (.getArrayPoint this idx))))
+               (bit-and idx cell-mask)))
   (getArrayPoint [this idx]
     (.getArrayPoint (KdTreeVectorPointAccess. (aget cells (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
                     (bit-and idx cell-mask)))
