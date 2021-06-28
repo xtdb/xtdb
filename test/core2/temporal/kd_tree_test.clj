@@ -4,6 +4,7 @@
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
   (:import [java.util Collection Date HashMap List Spliterator$OfLong Spliterators Random]
+           java.io.Closeable
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
            [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
@@ -45,12 +46,12 @@
     ;; Eva Nielsen buys the flat at Skovvej 30 in Aalborg on January 10,
     ;; 1998.
     (with-open [allocator (RootAllocator.)
-                ^Node kd-tree (temporal/insert-coordinates kd-tree
-                                                           allocator
-                                                           id-manager
-                                                           (temporal/->coordinates {:id 7797
-                                                                                    :row-id 1
-                                                                                    :tx-time-start #inst "1998-01-10"}))]
+                ^Closeable kd-tree (temporal/insert-coordinates kd-tree
+                                                                allocator
+                                                                id-manager
+                                                                (temporal/->coordinates {:id 7797
+                                                                                         :row-id 1
+                                                                                         :tx-time-start #inst "1998-01-10"}))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
@@ -311,8 +312,8 @@
                       (t/testing "rebuilding tree results in tree with same points"
                         (let [points (mapv vec (kd/kd-tree->seq kd-tree))]
                           (with-open [new-tree (kd/->node-kd-tree allocator (shuffle points))
-                                      ^Node rebuilt-tree (reduce (fn [acc point]
-                                                                   (kd/kd-tree-insert acc allocator point)) nil (shuffle points))]
+                                      ^Closeable rebuilt-tree (reduce (fn [acc point]
+                                                                        (kd/kd-tree-insert acc allocator point)) nil (shuffle points))]
                             (t/is (= (sort points)
                                      (sort (mapv vec (kd/kd-tree->seq new-tree)))))
                             (t/is (= (sort points)
@@ -324,11 +325,11 @@
     (util/delete-dir test-dir)
     (with-open [allocator (RootAllocator.)
                 kd-tree (kd/->node-kd-tree allocator points)
-                ^Node insert-kd-tree (reduce
-                                      (fn [acc point]
-                                        (kd/kd-tree-insert acc allocator point))
-                                      nil
-                                      points)
+                ^Closeable insert-kd-tree (reduce
+                                           (fn [acc point]
+                                             (kd/kd-tree-insert acc allocator point))
+                                           nil
+                                           points)
                 ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)
                 ^ArrowBufKdTree disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points {:k 2
                                                                                                                                          :batch-size 2
@@ -338,27 +339,32 @@
                                                                                                                                         :batch-size 2
                                                                                                                                         :compress-blocks? true})
                                                             (kd/->mmap-kd-tree allocator))]
-      (t/is (= [[7 2] [5 4] [2 3] [8 1]]
+      (t/is (= #{[7 2] [5 4] [2 3] [8 1]}
 
                (-> kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq kd-tree)))
+                   (->> (kd/kd-tree->seq kd-tree)
+                        (map vec) (set)))
 
                (-> insert-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq insert-kd-tree)))
+                   (->> (kd/kd-tree->seq insert-kd-tree)
+                        (map vec) (set)))
 
                (-> column-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq column-kd-tree)))
+                   (->> (kd/kd-tree->seq column-kd-tree)
+                        (map vec) (set)))
 
                (-> disk-kd-tree-from-points
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq disk-kd-tree-from-points)))
+                   (->> (kd/kd-tree->seq disk-kd-tree-from-points)
+                        (map vec) (set)))
 
                (-> disk-kd-tree-from-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq disk-kd-tree-from-tree))))
+                   (->> (kd/kd-tree->seq disk-kd-tree-from-tree)
+                        (map vec) (set))))
             "wikipedia-test")
 
       (t/testing "seq"
@@ -389,10 +395,10 @@
         (t/is (nil? (kd/->node-kd-tree allocator [])))
         (t/is (zero? (kd/kd-tree-size (kd/->node-kd-tree allocator []))))
 
-        (with-open [^Node kd-tree (kd/kd-tree-insert nil allocator [1 2])]
+        (with-open [^Closeable kd-tree (kd/kd-tree-insert nil allocator [1 2])]
           (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
 
-        (with-open [^Node kd-tree (kd/kd-tree-delete nil allocator [1 2])]
+        (with-open [^Closeable kd-tree (kd/kd-tree-delete nil allocator [1 2])]
           (t/is (empty? (kd/kd-tree->seq kd-tree)))
           (t/is (zero? (kd/kd-tree-size kd-tree)))))
 
@@ -450,9 +456,9 @@
                   (t/testing "layered merged tree"
                     (let [node-to-insert [10 10]
                           expected-nodes (set (map vec (kd/kd-tree->seq static-tree)))]
-                      (with-open [^Node delta-tree (-> nil
-                                                       (kd/kd-tree-insert allocator node-to-insert)
-                                                       (kd/kd-tree-delete allocator node-to-delete))
+                      (with-open [^Closeable delta-tree (-> nil
+                                                            (kd/kd-tree-insert allocator node-to-insert)
+                                                            (kd/kd-tree-delete allocator node-to-delete))
                                   ^VectorSchemaRoot static-delta-tree (kd/->column-kd-tree allocator delta-tree 2)
                                   merged-tree (kd/->merged-kd-tree (util/slice-root static-tree) static-delta-tree)]
                         (t/is (= 1 (kd/kd-tree-size static-delta-tree)))

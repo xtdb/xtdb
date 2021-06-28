@@ -88,12 +88,12 @@
                         (.count ^LongStream (kd/kd-tree-range-search simple-grid min-range max-range)))))))
 
           (prn :build-node-kd-tree-insert ns)
-          (with-open [^Node kd-tree (time
-                                     (reduce
-                                      (fn [acc point]
-                                        (kd/kd-tree-insert acc allocator point))
-                                      nil
-                                      points))]
+          (with-open [^Closeable kd-tree (time
+                                          (reduce
+                                           (fn [acc point]
+                                             (kd/kd-tree-insert acc allocator point))
+                                           (kd/->node-kd-tree allocator (take 1 points))
+                                           (rest points)))]
 
             (prn :range-queries-node-kd-tree-insert qs)
             (dotimes [_ ts]

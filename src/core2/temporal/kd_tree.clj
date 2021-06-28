@@ -13,6 +13,7 @@
             Spliterator Spliterator$OfLong Spliterators]
            [java.util.function BiPredicate Consumer Function IntFunction LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
+           org.apache.arrow.memory.util.hash.MurmurHasher
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.complex.FixedSizeListVector
@@ -21,6 +22,7 @@
            org.apache.arrow.vector.ipc.ArrowFileWriter
            [org.apache.arrow.vector.ipc.message ArrowBuffer ArrowFooter ArrowRecordBatch]
            org.apache.arrow.compression.CommonsCompressionFactory
+           org.roaringbitmap.RoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -70,7 +72,7 @@
     xs
     (long-array xs)))
 
-(declare ->node-kd-tree)
+(declare ->node-kd-tree ->inner-node-kd-tree)
 
 (deftype NilPointAccess []
   IKdTreePointAccess
@@ -92,7 +94,8 @@
 (extend-protocol KdTree
   nil
   (kd-tree-insert [_ allocator point]
-    (->node-kd-tree allocator [point]))
+    (-> (->inner-node-kd-tree allocator (count point))
+        (kd-tree-insert allocator point)))
   (kd-tree-delete [_ allocator point]
     (-> (kd-tree-insert nil allocator point)
         (kd-tree-delete allocator point)))
@@ -728,12 +731,13 @@
         (InnerNode. point-vec axis-value axis left (kd-tree-delete right allocator point) root?))))
 
   (kd-tree-range-search [kd-tree min-range max-range]
-    (let [min-range (->longs min-range)
+    (let [axis-mask (range-bitmask min-range max-range)
+          partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+          min-range (->longs min-range)
           max-range (->longs max-range)
-          min-match? (< (aget min-range axis) axis-value)
-          max-match? (<= axis-value (aget max-range axis))
-          visit-left? (and (boolean left) min-match?)
-          visit-right? (and (boolean right) max-match?)]
+          visit-left? (or partial-match-axis? (<= (aget min-range axis) axis-value))
+          visit-right? (or partial-match-axis? (<= axis-value (aget max-range axis)))
+          acc (LongStream/builder)]
       (cond
         (and visit-left? (BitUtil/bitNot visit-right?))
         (kd-tree-range-search left min-range max-range)
@@ -754,29 +758,26 @@
          (inc (long (kd-tree-height right)))))
 
   (kd-tree-retain [kd-tree allocator]
-    (let [^FixedSizeListVector point-vec (.point-vec kd-tree)]
-      (InnerNode. (if root?
-                    (.getTo (doto (.getTransferPair point-vec allocator)
-                              (.splitAndTransfer 0 (.getValueCount point-vec))))
-                    point-vec)
-                  axis-value
-                  axis
-                  (kd-tree-retain left allocator)
-                  (kd-tree-retain right allocator)
-                  root?)))
+    (InnerNode. (.getTo (doto (.getTransferPair point-vec allocator)
+                          (.splitAndTransfer 0 (.getValueCount point-vec))))
+                axis-value
+                axis
+                left
+                right
+                root?))
 
   (kd-tree-point-access [kd-tree]
-    (KdTreeVectorPointAccess. (.point-vec kd-tree) (kd-tree-dimensions kd-tree)))
+    (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
 
   (kd-tree-size [kd-tree]
     (+ (long (kd-tree-size left))
        (long (kd-tree-size right))))
 
   (kd-tree-value-count [kd-tree]
-    (.getValueCount ^FixedSizeListVector (.point-vec kd-tree)))
+    (.getValueCount point-vec))
 
   (kd-tree-dimensions [kd-tree]
-    (.getListSize ^FixedSizeListVector (.point-vec kd-tree)))
+    (.getListSize point-vec))
 
   Closeable
   (close [_]
@@ -785,7 +786,7 @@
 
 (declare ->leaf-node leaf-node-edit)
 
-(deftype LeafNode [^FixedSizeListVector point-vec ^int idx ^int axis ^int size ^boolean root?]
+(deftype LeafNode [^FixedSizeListVector point-vec ^RoaringBitmap superseded ^RoaringBitmap hashes ^int idx ^int axis ^int size ^boolean root?]
   KdTree
   (kd-tree-insert [kd-tree allocator point]
     (leaf-node-edit kd-tree allocator point false))
@@ -794,77 +795,98 @@
     (leaf-node-edit kd-tree allocator point true))
 
   (kd-tree-range-search [kd-tree min-range max-range]
-    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (kd-tree-dimensions kd-tree))
+    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))
           min-range (->longs min-range)
           max-range (->longs max-range)
-          axis-mask (range-bitmask min-range max-range)]
-      (-> ^LongStream (kd-tree-points kd-tree false)
-          (.filter (reify LongPredicate
-                     (test [_ x]
-                       (.isInRange access x min-range max-range axis-mask)))))))
+          axis-mask (range-bitmask min-range max-range)
+          acc (LongStream/builder)]
+      (dotimes [n size]
+        (let [x (+ idx n)]
+          (when (and (BitUtil/bitNot (.contains superseded n))
+                     (BitUtil/bitNot (.isDeleted access x))
+                     (.isInRange access x min-range max-range axis-mask))
+            (.add acc x))))
+      (.build acc)))
+
   (kd-tree-points [kd-tree deletes?]
-    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (kd-tree-dimensions kd-tree))]
-      (cond-> (LongStream/range idx (+ idx size))
-        (not deletes?) (.filter (reify LongPredicate
-                                  (test [_ x]
-                                    (BitUtil/bitNot (.isDeleted access x))))))))
+    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))
+          acc (LongStream/builder)]
+      (if deletes?
+        (dotimes [n size]
+          (let [x (+ idx n)]
+            (when (BitUtil/bitNot (.contains superseded n))
+              (.add acc x))))
+        (dotimes [n size]
+          (let [x (+ idx n)]
+            (when (and (BitUtil/bitNot (.contains superseded n))
+                       (BitUtil/bitNot (.isDeleted access x)))
+              (.add acc x)))))
+      (.build acc)))
 
   (kd-tree-height [kd-tree] 0)
 
   (kd-tree-retain [kd-tree allocator]
-    (if root?
-      (let [^FixedSizeListVector point-vec (.point-vec kd-tree)]
-        (LeafNode. (if root?
-                     (.getTo (doto (.getTransferPair point-vec allocator)
-                               (.splitAndTransfer 0 (.getValueCount point-vec))))
-                     point-vec)
-                   idx
-                   axis
-                   size
-                   root?))
-      (throw (UnsupportedOperationException.))))
+    (LeafNode. (.getTo (doto (.getTransferPair point-vec allocator)
+                         (.splitAndTransfer 0 (.getValueCount point-vec))))
+               superseded
+               hashes
+               idx
+               axis
+               size
+               root?))
 
   (kd-tree-point-access [kd-tree]
-    (KdTreeVectorPointAccess. (.point-vec kd-tree) (kd-tree-dimensions kd-tree)))
+    (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
 
   (kd-tree-size [kd-tree]
     (.count ^LongStream (kd-tree-points kd-tree false)))
 
   (kd-tree-value-count [kd-tree]
-    (.getValueCount ^FixedSizeListVector (.point-vec kd-tree)))
+    (.getValueCount point-vec))
 
   (kd-tree-dimensions [kd-tree]
-    (.getListSize ^FixedSizeListVector (.point-vec kd-tree)))
+    (.getListSize point-vec))
 
   Closeable
   (close [_]
     (when root?
       (util/try-close point-vec))))
 
+(def ^:private initial-murmur-hasher (MurmurHasher. 0))
+
 (defn- leaf-node-edit [^LeafNode kd-tree ^BufferAllocator allocator point deleted?]
-  (let [k (kd-tree-dimensions kd-tree)
+  (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
+        k (.getListSize point-vec)
+        ^RoaringBitmap superseded (.superseded kd-tree)
+        ^RoaringBitmap hashes (.hashes kd-tree)
         idx (.idx kd-tree)
         axis (.axis kd-tree)
         size (.size kd-tree)
         root? (.root? kd-tree)
         ^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec k)]
     (if (< size leaf-size)
-      (if (and (BitUtil/bitNot deleted?)
-               (pos? (.count ^LongStream (kd-tree-range-search kd-tree point point))))
-        kd-tree
-        (let [point-idx (+ idx size)]
-          (write-coordinates access point-idx point)
+      (let [point-idx (+ idx size)]
+        (write-coordinates access point-idx point)
+        (let [point-hash (.hashCode point-vec point-idx initial-murmur-hasher)]
           (if deleted?
             (.setNull point-vec point-idx)
             (.setNotNull point-vec point-idx))
-          (LeafNode. point-vec idx axis (inc size) root?)))
+          (if (.contains hashes point-hash)
+            (let [new-superseded (RoaringBitmap.)]
+              (dotimes [n size]
+                (when (.isInRange access (+ idx n) point point -1)
+                  (.add new-superseded n)))
+              (LeafNode. point-vec (RoaringBitmap/or new-superseded superseded) hashes idx axis (inc size) root?))
+            (let [new-hashes (.clone hashes)]
+              (.add new-hashes point-hash)
+              (LeafNode. point-vec superseded new-hashes idx axis (inc size) root?)))))
       (let [axis-value (-> ^LongStream (kd-tree-points kd-tree true)
                            (.map (reify LongUnaryOperator
                                    (applyAsLong [_ x]
                                      (.getCoordinate access x axis))))
                            (.sorted)
-                           (.skip (BitUtil/unsignedBitShiftRight size 1))
+                           (.skip (BitUtil/unsignedBitShiftRight leaf-size 1))
                            (.findFirst)
                            (.getAsLong))
             next-axis (next-axis axis k)
@@ -872,10 +894,19 @@
             right (->leaf-node point-vec next-axis)]
         (loop [n 0
                acc (InnerNode. point-vec axis-value axis left right (zero? idx))]
-          (if (= n size)
-            (kd-tree-insert acc allocator point)
-            (let [point (.getArrayPoint access (+ idx n))
-                  acc (if (.isDeleted access idx)
+          (cond
+            (= n leaf-size)
+            (if deleted?
+              (kd-tree-delete acc allocator point)
+              (kd-tree-insert acc allocator point))
+
+            (.contains superseded n)
+            (recur (inc n) acc)
+
+            :else
+            (let [point-idx (+ idx n)
+                  point (.getArrayPoint access point-idx)
+                  acc (if (.isDeleted access point-idx)
                         (kd-tree-delete acc allocator point)
                         (kd-tree-insert acc allocator point))]
               (recur (inc n) acc))))))))
@@ -886,7 +917,7 @@
   ([^FixedSizeListVector point-vec ^long axis root?]
    (let [idx (.getValueCount point-vec)]
      (.setValueCount point-vec (+ idx leaf-size))
-     (LeafNode. point-vec idx axis 0 root?))))
+     (LeafNode. point-vec (RoaringBitmap.) (RoaringBitmap.) idx axis 0 root?))))
 
 (defn ->inner-node-kd-tree [^BufferAllocator allocator ^long k]
   (let [^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)]
