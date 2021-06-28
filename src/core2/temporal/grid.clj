@@ -251,15 +251,15 @@
                                                       (Arrays/binarySearch axis-scale min-r))
                                        min-axis-idx (if (neg? min-axis-idx)
                                                       (dec (- min-axis-idx))
-                                                      (long min-axis-idx))
+                                                      min-axis-idx)
                                        max-axis-idx (if partial-match-axis?
                                                       (alength axis-scale)
                                                       (Arrays/binarySearch axis-scale max-r))
                                        max-axis-idx (if (neg? max-axis-idx)
                                                       (dec (- max-axis-idx))
-                                                      (long max-axis-idx))]
+                                                      max-axis-idx)]
                                  :let [mask (bit-and axis-mask (bit-shift-left 1 n))
-                                       axis-idxs+masks (-> (LongStream/range min-axis-idx (inc max-axis-idx))
+                                       axis-idxs+masks (-> (LongStream/range min-axis-idx (unchecked-inc-int max-axis-idx))
                                                            (.mapToObj (reify LongFunction
                                                                         (apply [_ x]
                                                                           (doto (long-array 2)
