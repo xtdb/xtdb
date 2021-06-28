@@ -6,6 +6,7 @@
   (:import [java.util Collection HashMap Random]
            [java.util.function LongSupplier Predicate]
            [java.util.stream LongStream]
+           java.io.Closeable
            [org.apache.arrow.memory RootAllocator]
            [org.apache.arrow.vector VectorSchemaRoot]
            [core2.temporal.kd_tree ArrowBufKdTree Node]
@@ -100,6 +101,23 @@
                (doseq [[query-id min-range max-range] queries]
                  (t/is (= (.get query->count query-id)
                           (.count ^LongStream (kd/kd-tree-range-search kd-tree min-range max-range))))))))
+
+
+          (prn :build-inner-node-kd-tree ns)
+          (with-open [^Closeable kd-tree (time
+                                          (reduce
+                                           (fn [acc point]
+                                             (kd/kd-tree-insert acc allocator point))
+                                           (kd/->inner-node-kd-tree allocator k )
+                                           points))]
+
+            (prn :range-queries-inner-node-kd-tree qs)
+            (dotimes [_ ts]
+              (time
+               (doseq [[query-id min-range max-range] queries]
+                 (t/is (= (.get query->count query-id)
+                          (.count ^LongStream (kd/kd-tree-range-search kd-tree min-range max-range))))))))
+
 
 
           (prn :build-node-kd-tree-bulk ns)
