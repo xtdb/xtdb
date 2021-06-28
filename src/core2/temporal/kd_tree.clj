@@ -716,68 +716,6 @@
 
 (def ^:private ^:const leaf-size 128)
 
-(deftype InnerNode [^FixedSizeListVector point-vec ^long axis-value ^int axis left right ^boolean root?]
-  KdTree
-  (kd-tree-insert [kd-tree allocator point]
-    (let [point (->longs point)]
-      (if (< (aget point axis) axis-value)
-        (InnerNode. point-vec axis-value axis (kd-tree-insert left allocator point) right root?)
-        (InnerNode. point-vec axis-value axis left (kd-tree-insert right allocator point) root?))))
-
-  (kd-tree-delete [kd-tree allocator point]
-    (let [point (->longs point)]
-      (if (< (aget point axis) axis-value)
-        (InnerNode. point-vec axis-value axis (kd-tree-delete left allocator point) right root?)
-        (InnerNode. point-vec axis-value axis left (kd-tree-delete right allocator point) root?))))
-
-  (kd-tree-range-search [kd-tree min-range max-range]
-    (let [min-range (->longs min-range)
-          max-range (->longs max-range)
-          visit-left? (< (aget min-range axis) axis-value)
-          visit-right? (<= axis-value (aget max-range axis))]
-      (if visit-left?
-        (if visit-right?
-          (LongStream/concat (kd-tree-range-search left min-range max-range)
-                             (kd-tree-range-search right min-range max-range))
-          (kd-tree-range-search left min-range max-range))
-        (if visit-right?
-          (kd-tree-range-search right min-range max-range)
-          (LongStream/empty)))))
-
-  (kd-tree-points [kd-tree deletes?]
-    (LongStream/concat (kd-tree-points left deletes?) (kd-tree-points right deletes?)))
-
-  (kd-tree-height [kd-tree]
-    (max (inc (long (kd-tree-height left)))
-         (inc (long (kd-tree-height right)))))
-
-  (kd-tree-retain [kd-tree allocator]
-    (InnerNode. (.getTo (doto (.getTransferPair point-vec allocator)
-                          (.splitAndTransfer 0 (.getValueCount point-vec))))
-                axis-value
-                axis
-                left
-                right
-                root?))
-
-  (kd-tree-point-access [kd-tree]
-    (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
-
-  (kd-tree-size [kd-tree]
-    (+ (long (kd-tree-size left))
-       (long (kd-tree-size right))))
-
-  (kd-tree-value-count [kd-tree]
-    (.getValueCount point-vec))
-
-  (kd-tree-dimensions [kd-tree]
-    (.getListSize point-vec))
-
-  Closeable
-  (close [_]
-    (when root?
-      (util/try-close point-vec))))
-
 (declare ->leaf-node leaf-node-edit)
 
 (deftype LeafNode [^FixedSizeListVector point-vec ^RoaringBitmap superseded ^RoaringBitmap hashes ^int idx ^int axis ^int size ^boolean root?]
@@ -834,6 +772,94 @@
 
   (kd-tree-size [kd-tree]
     (.count ^LongStream (kd-tree-points kd-tree false)))
+
+  (kd-tree-value-count [kd-tree]
+    (.getValueCount point-vec))
+
+  (kd-tree-dimensions [kd-tree]
+    (.getListSize point-vec))
+
+  Closeable
+  (close [_]
+    (when root?
+      (util/try-close point-vec))))
+
+(deftype InnerNode [^FixedSizeListVector point-vec ^long axis-value ^int axis left right ^boolean root?]
+  KdTree
+  (kd-tree-insert [kd-tree allocator point]
+    (let [point (->longs point)]
+      (if (< (aget point axis) axis-value)
+        (InnerNode. point-vec axis-value axis (kd-tree-insert left allocator point) right root?)
+        (InnerNode. point-vec axis-value axis left (kd-tree-insert right allocator point) root?))))
+
+  (kd-tree-delete [kd-tree allocator point]
+    (let [point (->longs point)]
+      (if (< (aget point axis) axis-value)
+        (InnerNode. point-vec axis-value axis (kd-tree-delete left allocator point) right root?)
+        (InnerNode. point-vec axis-value axis left (kd-tree-delete right allocator point) root?))))
+
+  (kd-tree-range-search [kd-tree min-range max-range]
+    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))
+          min-range (->longs min-range)
+          max-range (->longs max-range)
+          axis-mask (range-bitmask min-range max-range)
+          acc (LongStream/builder)
+          stack (doto (ArrayDeque.)
+                  (.push kd-tree))]
+      (loop [node (.poll stack)]
+        (cond
+          (instance? InnerNode node)
+          (let [^InnerNode node node
+                axis (.axis node)
+                axis-value (.axis-value node)
+                visit-left? (< (aget min-range axis) axis-value)
+                visit-right? (<= axis-value (aget max-range axis))]
+            (if visit-left?
+              (do (when visit-right?
+                    (.push stack (.right node)))
+                  (recur (.left node)))
+              (if visit-right?
+                (recur (.right node))
+                (recur (.poll stack)))))
+
+          (instance? LeafNode node)
+          (let [^LeafNode node node
+                size (.size node)
+                idx (.idx node)
+                ^RoaringBitmap superseded (.superseded node)]
+            (dotimes [n size]
+              (let [x (+ idx n)]
+                (when (and (BitUtil/bitNot (.contains superseded n))
+                           (BitUtil/bitNot (.isDeleted access x))
+                           (.isInRange access x min-range max-range axis-mask))
+                  (.add acc x))))
+            (recur (.poll stack)))
+
+          :else
+          (.build acc)))))
+
+  (kd-tree-points [kd-tree deletes?]
+    (LongStream/concat (kd-tree-points left deletes?) (kd-tree-points right deletes?)))
+
+  (kd-tree-height [kd-tree]
+    (max (inc (long (kd-tree-height left)))
+         (inc (long (kd-tree-height right)))))
+
+  (kd-tree-retain [kd-tree allocator]
+    (InnerNode. (.getTo (doto (.getTransferPair point-vec allocator)
+                          (.splitAndTransfer 0 (.getValueCount point-vec))))
+                axis-value
+                axis
+                left
+                right
+                root?))
+
+  (kd-tree-point-access [kd-tree]
+    (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
+
+  (kd-tree-size [kd-tree]
+    (+ (long (kd-tree-size left))
+       (long (kd-tree-size right))))
 
   (kd-tree-value-count [kd-tree]
     (.getValueCount point-vec))
