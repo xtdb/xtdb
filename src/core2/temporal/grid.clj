@@ -22,6 +22,18 @@
 
 ;; TODO:
 
+;; Try points-in-leaves kd-tree, easier to balance. Shared point
+;; array, leaves need to store offset into single, shared, point Arrow
+;; vector, current size and deletion mask in the persistent
+;; LeafNode. Deletion mask can be a long, hence the leaf size is (max)
+;; 64. On split, leaves are sorted on split axis and tree hence
+;; somewhat balanced. Median becomes new inner-node, points copied
+;; into two new leaf nodes. Deletes don't add new points, just flips
+;; the flag. Inserts increase size, and appends into its pre-allocated
+;; block of the shared vector. InnerNode is stores axis, split-values
+;; and left/right, which can be either inner or leaf nodes, and
+;; doesn't use Arrow directly. Not deleted once created.
+
 ;; Try implementing Elf:
 ;; https://wwwiti.cs.uni-magdeburg.de/iti_db/publikationen/ps/auto/thesisBroneske19.pdf
 
