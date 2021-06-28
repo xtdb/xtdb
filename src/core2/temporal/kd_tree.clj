@@ -735,20 +735,14 @@
           max-range (->longs max-range)
           visit-left? (< (aget min-range axis) axis-value)
           visit-right? (<= axis-value (aget max-range axis))]
-      (cond
-        (and visit-left? (BitUtil/bitNot visit-right?))
-        (kd-tree-range-search left min-range max-range)
-
-        (and visit-right? (BitUtil/bitNot visit-left?))
-        (kd-tree-range-search right min-range max-range)
-
-        (and visit-left? visit-right?)
-        (LongStream/concat (kd-tree-range-search left min-range max-range)
-                           (kd-tree-range-search right min-range max-range))
-
-        :else
-        (LongStream/empty))))
-
+      (if visit-left?
+        (if visit-right?
+          (LongStream/concat (kd-tree-range-search left min-range max-range)
+                             (kd-tree-range-search right min-range max-range))
+          (kd-tree-range-search left min-range max-range))
+        (if visit-right?
+          (kd-tree-range-search right min-range max-range)
+          (LongStream/empty)))))
 
   (kd-tree-points [kd-tree deletes?]
     (LongStream/concat (kd-tree-points left deletes?) (kd-tree-points right deletes?)))
