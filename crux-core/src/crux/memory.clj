@@ -2,7 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [crux.io :as cio]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
-  (:import [java.io DataInputStream DataOutputStream]
+  (:import crux.ByteUtils
+           [java.io DataInputStream DataOutputStream]
            java.nio.Buffer
            java.nio.ByteBuffer
            java.util.function.Supplier
