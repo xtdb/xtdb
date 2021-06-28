@@ -714,7 +714,7 @@
                                   (.toArray)
                                   (Arrays/asList)))))
 
-(def ^:private ^:const leaf-size 128)
+(def ^:private ^:const leaf-size 32)
 
 (declare ->leaf-node leaf-node-edit)
 
@@ -901,14 +901,13 @@
             (let [new-hashes (.clone hashes)]
               (.add new-hashes point-hash)
               (LeafNode. point-vec superseded new-hashes idx axis (inc size) root?)))))
-      (let [axis-value (-> ^LongStream (kd-tree-points kd-tree true)
-                           (.map (reify LongUnaryOperator
-                                   (applyAsLong [_ x]
-                                     (.getCoordinate access x axis))))
-                           (.sorted)
-                           (.skip (BitUtil/unsignedBitShiftRight leaf-size 1))
-                           (.findFirst)
-                           (.getAsLong))
+      (let [axis-values (-> (LongStream/range idx (+ idx size))
+                            (.map (reify LongUnaryOperator
+                                    (applyAsLong [_ x]
+                                      (.getCoordinate access x axis))))
+                            (.sorted)
+                            (.toArray))
+            axis-value (aget axis-values (BitUtil/unsignedBitShiftRight (alength axis-values) 1))
             next-axis (next-axis axis k)
             left (->leaf-node point-vec next-axis)
             right (->leaf-node point-vec next-axis)]
