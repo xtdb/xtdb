@@ -1,19 +1,21 @@
 (ns crux.lucene
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.bus :as bus]
             [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.query :as q]
-            [crux.system :as sys])
+            [crux.system :as sys]
+            [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [crux.tx.event :as txe])
   (:import crux.query.VarBinding
            java.io.Closeable
            java.nio.file.Path
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
            [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
-           [org.apache.lucene.index DirectoryReader IndexWriter IndexWriterConfig Term]
+           [org.apache.lucene.index IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
@@ -41,7 +43,7 @@
 (defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
   (IndexWriter. directory, (IndexWriterConfig. analyzer)))
 
-(defn- index-tx! [^IndexWriter index-writer tx]
+(defn- complete-tx! [^IndexWriter index-writer tx]
   (let [t (Term. "meta" "latest-completed-tx")
         d (doto (Document.)
             (.add (StringField. "meta", "latest-completed-tx" Field$Store/NO))
@@ -63,14 +65,6 @@
                   (Long/parseLong))))
       (finally
         (index-searcher-release-fn)))))
-
-(defn validate-lucene-store-up-to-date [index-store lucene-store]
-  (let [{:crux.tx/keys [tx-id] :as latest-tx} (db/latest-completed-tx index-store)
-        latest-lucene-tx-id (latest-completed-tx lucene-store)]
-    (when (and tx-id
-               (or (nil? latest-lucene-tx-id)
-                   (> tx-id latest-lucene-tx-id)))
-      (throw (IllegalStateException. "Lucene store latest tx mismatch")))))
 
 (defn search [lucene-store, ^Query q]
   (assert lucene-store)
@@ -209,36 +203,57 @@
 (defn ->analyzer [_]
   (StandardAnalyzer.))
 
+
+(defn- transform-tx-events [document-store tx-events]
+  (let [conformed-tx-events (map txc/<-tx-event tx-events)
+        docs (db/fetch-docs document-store
+                            (txc/conformed-tx-events->doc-hashes conformed-tx-events))]
+    (reduce (fn [acc {:keys [op] :as tx-event}]
+              (case op
+                :crux.tx/evict (-> acc (update :evicted-eids conj (:eid tx-event)))
+                :crux.tx/fn (let [{:keys [args-content-hash]} tx-event
+                                  ;; doc replaced by this point
+                                  nested-events (-> (db/fetch-docs document-store #{args-content-hash})
+                                                    (get args-content-hash)
+                                                    :crux.db.fn/tx-events)
+                                  {:keys [docs evicted-eids]} (transform-tx-events document-store nested-events)]
+                              {:docs (into (:docs acc) docs)
+                               :evicted-eids (into (:evicted-eids acc) evicted-eids)})
+                acc))
+            {:docs docs
+             :evicted-eids #{}}
+            conformed-tx-events)))
+
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
                         :spec ::sys/path}}
-   ::sys/deps {:bus :crux/bus
-               :document-store :crux/document-store
-               :index-store :crux/index-store
+   ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer
-               :analyzer `->analyzer}
+               :analyzer `->analyzer
+               :secondary-indices :crux/secondary-indices}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir index-store document-store bus analyzer indexer query-engine] :as opts}]
+  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices]}]
   (let [directory (FSDirectory/open db-dir)
         index-writer (->index-writer directory analyzer)
         searcher-manager (SearcherManager. index-writer false false nil)
         lucene-store (LuceneNode. directory analyzer index-writer searcher-manager indexer)]
     ;; Ensure lucene index exists for immediate queries:
     (.commit index-writer)
-    (validate-lucene-store-up-to-date index-store lucene-store)
     (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
-    (bus/listen bus {:crux/event-types #{:crux.tx/committing-tx :crux.tx/aborting-tx}
-                     :crux.bus/executor (reify java.util.concurrent.Executor
-                                          (execute [_ f]
-                                            (.run f)))}
-                (fn [ev]
-                  (when (= :crux.tx/committing-tx (:crux/event-type ev))
-                    (index! indexer index-writer (db/fetch-docs document-store (:doc-ids ev)))
-                    (when-let [evicting-eids (not-empty (:evicting-eids ev))]
-                      (evict! indexer index-writer evicting-eids)))
-                  (index-tx! index-writer (:submitted-tx ev))
-                  (.commit index-writer)
-                  (.maybeRefreshBlocking searcher-manager)))
+
+    (tx/register-index! secondary-indices
+                        (latest-completed-tx lucene-store)
+                        (fn [{:keys [::txe/tx-events committing?] :as tx}]
+                          (when committing?
+                            (let [{:keys [docs evicted-eids]} (transform-tx-events document-store tx-events)]
+                              (when-let [evicting-eids (not-empty evicted-eids)]
+                                (evict! indexer index-writer evicting-eids))
+                              (index! indexer index-writer docs)))
+
+                          (complete-tx! index-writer tx)
+                          (.commit index-writer) ; TODO aware of #1500
+                          (.maybeRefreshBlocking searcher-manager)))
+
     lucene-store))
