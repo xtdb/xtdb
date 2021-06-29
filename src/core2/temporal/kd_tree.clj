@@ -801,9 +801,8 @@
           max-range (->longs max-range)
           axis-mask (range-bitmask min-range max-range)
           acc (LongStream/builder)
-          stack (doto (ArrayDeque.)
-                  (.push kd-tree))]
-      (loop [node (.poll stack)]
+          stack (ArrayDeque.)]
+      (loop [node kd-tree]
         (cond
           (instance? InnerNode node)
           (let [^InnerNode node node
