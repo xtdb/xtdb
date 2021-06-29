@@ -739,19 +739,17 @@
       (.build acc)))
 
   (kd-tree-points [kd-tree deletes?]
-    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))
-          acc (LongStream/builder)]
-      (if deletes?
-        (dotimes [n size]
-          (let [x (+ idx n)]
-            (when (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
-              (.add acc x))))
-        (dotimes [n size]
-          (let [x (+ idx n)]
-            (when (and (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
-                       (BitUtil/bitNot (.isDeleted access x)))
-              (.add acc x)))))
-      (.build acc)))
+    (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))]
+      (cond-> (LongStream/range 0 size)
+        (pos? superseded) (.filter (reify LongPredicate
+                                     (test [_ n]
+                                       (BitUtil/bitNot (BitUtil/isLongBitSet superseded n)))))
+        true (.map (reify LongUnaryOperator
+                     (applyAsLong [_ n]
+                       (+ idx n))))
+        (BitUtil/bitNot deletes?) (.filter (reify LongPredicate
+                                             (test [_ x]
+                                               (BitUtil/bitNot (.isDeleted access x))))))))
 
   (kd-tree-height [kd-tree] 0)
 
@@ -823,12 +821,18 @@
                 size (.size node)
                 idx (.idx node)
                 superseded (.superseded node)]
-            (dotimes [n size]
-              (let [x (+ idx n)]
-                (when (and (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
-                           (BitUtil/bitNot (.isDeleted access x))
-                           (.isInRange access x min-range max-range axis-mask))
-                  (.add acc x))))
+            (if (zero? superseded)
+              (dotimes [n size]
+                (let [x (+ idx n)]
+                  (when (and (BitUtil/bitNot (.isDeleted access x))
+                             (.isInRange access x min-range max-range axis-mask))
+                    (.add acc x))))
+              (dotimes [n size]
+                (let [x (+ idx n)]
+                  (when (and (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
+                             (BitUtil/bitNot (.isDeleted access x))
+                             (.isInRange access x min-range max-range axis-mask))
+                    (.add acc x)))))
             (recur (.poll stack)))
 
           :else

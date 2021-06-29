@@ -330,9 +330,9 @@
                   (if-let [^FixedSizeListVector cell (aget cells cell-idx)]
                     (let [start-point-idx (bit-shift-left cell-idx cell-shift)]
                       (cond-> (LongStream/range 0 (.getValueCount cell))
-                        (not deletes?) (.filter (reify LongPredicate
-                                                  (test [_ x]
-                                                    (BitUtil/bitNot (.isNull cell x)))))
+                        (BitUtil/bitNot deletes?) (.filter (reify LongPredicate
+                                                             (test [_ x]
+                                                               (BitUtil/bitNot (.isNull cell x)))))
                         true (.map (reify LongUnaryOperator
                                      (applyAsLong [_ x]
                                        (+ start-point-idx x))))))
