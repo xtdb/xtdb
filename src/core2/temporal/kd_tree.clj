@@ -11,9 +11,8 @@
            [java.util ArrayDeque Arrays Deque HashMap
             LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
             Spliterator Spliterator$OfLong Spliterators]
-           [java.util.function BiPredicate Consumer Function IntFunction LongConsumer LongFunction LongPredicate LongSupplier LongUnaryOperator]
+           [java.util.function BiPredicate Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongBinaryOperator LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
-           org.apache.arrow.memory.util.hash.MurmurHasher
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.complex.FixedSizeListVector
@@ -22,7 +21,6 @@
            org.apache.arrow.vector.ipc.ArrowFileWriter
            [org.apache.arrow.vector.ipc.message ArrowBuffer ArrowFooter ArrowRecordBatch]
            org.apache.arrow.compression.CommonsCompressionFactory
-           org.roaringbitmap.RoaringBitmap
            org.roaringbitmap.longlong.Roaring64Bitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -718,7 +716,7 @@
 
 (declare ->leaf-node leaf-node-edit)
 
-(deftype LeafNode [^FixedSizeListVector point-vec ^RoaringBitmap superseded ^RoaringBitmap hashes ^int idx ^int axis ^int size ^boolean root?]
+(deftype LeafNode [^FixedSizeListVector point-vec ^long superseded ^int idx ^int axis ^int size ^boolean root?]
   KdTree
   (kd-tree-insert [kd-tree allocator point]
     (leaf-node-edit kd-tree allocator point false))
@@ -734,7 +732,7 @@
           acc (LongStream/builder)]
       (dotimes [n size]
         (let [x (+ idx n)]
-          (when (and (BitUtil/bitNot (.contains superseded n))
+          (when (and (BitUtil/bitNot (BitUtil/isBitSet superseded n))
                      (BitUtil/bitNot (.isDeleted access x))
                      (.isInRange access x min-range max-range axis-mask))
             (.add acc x))))
@@ -746,11 +744,11 @@
       (if deletes?
         (dotimes [n size]
           (let [x (+ idx n)]
-            (when (BitUtil/bitNot (.contains superseded n))
+            (when (BitUtil/bitNot (BitUtil/isBitSet superseded n))
               (.add acc x))))
         (dotimes [n size]
           (let [x (+ idx n)]
-            (when (and (BitUtil/bitNot (.contains superseded n))
+            (when (and (BitUtil/bitNot (BitUtil/isBitSet superseded n))
                        (BitUtil/bitNot (.isDeleted access x)))
               (.add acc x)))))
       (.build acc)))
@@ -761,7 +759,6 @@
     (LeafNode. (.getTo (doto (.getTransferPair point-vec allocator)
                          (.splitAndTransfer 0 (.getValueCount point-vec))))
                superseded
-               hashes
                idx
                axis
                size
@@ -826,10 +823,10 @@
           (let [^LeafNode node node
                 size (.size node)
                 idx (.idx node)
-                ^RoaringBitmap superseded (.superseded node)]
+                superseded (.superseded node)]
             (dotimes [n size]
               (let [x (+ idx n)]
-                (when (and (BitUtil/bitNot (.contains superseded n))
+                (when (and (BitUtil/bitNot (BitUtil/isBitSet superseded n))
                            (BitUtil/bitNot (.isDeleted access x))
                            (.isInRange access x min-range max-range axis-mask))
                   (.add acc x))))
@@ -872,14 +869,11 @@
     (when root?
       (util/try-close point-vec))))
 
-(def ^:private initial-murmur-hasher (MurmurHasher. 0))
-
 (defn- leaf-node-edit [^LeafNode kd-tree ^BufferAllocator allocator point deleted?]
   (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
         k (.getListSize point-vec)
-        ^RoaringBitmap superseded (.superseded kd-tree)
-        ^RoaringBitmap hashes (.hashes kd-tree)
+        superseded (.superseded kd-tree)
         idx (.idx kd-tree)
         axis (.axis kd-tree)
         size (.size kd-tree)
@@ -888,19 +882,17 @@
     (if (< size leaf-size)
       (let [point-idx (+ idx size)]
         (write-coordinates access point-idx point)
-        (let [point-hash (.hashCode point-vec point-idx initial-murmur-hasher)]
-          (if deleted?
-            (.setNull point-vec point-idx)
-            (.setNotNull point-vec point-idx))
-          (if (.contains hashes point-hash)
-            (let [new-superseded (RoaringBitmap.)]
-              (dotimes [n size]
-                (when (.isInRange access (+ idx n) point point -1)
-                  (.add new-superseded n)))
-              (LeafNode. point-vec (RoaringBitmap/or new-superseded superseded) hashes idx axis (inc size) root?))
-            (let [new-hashes (.clone hashes)]
-              (.add new-hashes point-hash)
-              (LeafNode. point-vec superseded new-hashes idx axis (inc size) root?)))))
+        (if deleted?
+          (.setNull point-vec point-idx)
+          (.setNotNull point-vec point-idx))
+        (let [new-superseded (-> (LongStream/range 0 size)
+                                 (.filter (reify LongPredicate
+                                            (test [_ n]
+                                              (.isInRange access (+ idx n) point point -1))))
+                                 (.reduce superseded (reify LongBinaryOperator
+                                                       (applyAsLong [_ acc n]
+                                                         (bit-or acc (bit-shift-left 1 n))))))]
+          (LeafNode. point-vec new-superseded idx axis (inc size) root?)))
       (let [axis-values (-> (LongStream/range idx (+ idx size))
                             (.map (reify LongUnaryOperator
                                     (applyAsLong [_ x]
@@ -919,7 +911,7 @@
               (kd-tree-delete acc allocator point)
               (kd-tree-insert acc allocator point))
 
-            (.contains superseded n)
+            (BitUtil/isBitSet superseded n)
             (recur (inc n) acc)
 
             :else
@@ -936,7 +928,7 @@
   ([^FixedSizeListVector point-vec ^long axis root?]
    (let [idx (.getValueCount point-vec)]
      (.setValueCount point-vec (+ idx leaf-size))
-     (LeafNode. point-vec (RoaringBitmap.) (RoaringBitmap.) idx axis 0 root?))))
+     (LeafNode. point-vec 0 idx axis 0 root?))))
 
 (defn ->inner-node-kd-tree [^BufferAllocator allocator ^long k]
   (let [^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)]
