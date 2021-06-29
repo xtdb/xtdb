@@ -5,14 +5,16 @@
   (:import [core2 BitUtil LongStack LRU]
            [core2.temporal IBlockCache IBlockCache$ClockBlockCache IBlockCache$LatestBlockCache SubtreeSpliterator]
            [java.io Closeable]
+           java.lang.ref.Cleaner
            java.nio.file.Path
            java.nio.channels.FileChannel$MapMode
            [clojure.lang IFn$LLO IFn$LL Murmur3]
            [java.util ArrayDeque Arrays Deque HashMap
             LinkedHashMap List Map Map$Entry PrimitiveIterator$OfLong
-            Spliterator Spliterator$OfLong Spliterators]
+            Queue Spliterator Spliterator$OfLong Spliterators]
            [java.util.function BiPredicate Consumer Function LongConsumer LongFunction LongPredicate LongSupplier LongBinaryOperator LongUnaryOperator]
            [java.util.stream LongStream StreamSupport]
+           java.util.concurrent.LinkedBlockingQueue
            [org.apache.arrow.memory ArrowBuf BufferAllocator ReferenceManager RootAllocator]
            [org.apache.arrow.vector BigIntVector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.complex.FixedSizeListVector
@@ -716,7 +718,9 @@
 
 (declare ->leaf-node leaf-node-edit)
 
-(deftype LeafNode [^FixedSizeListVector point-vec ^long superseded ^int idx ^int axis ^int size ^boolean root?]
+(defonce ^:private ^Cleaner leaf-cleaner (Cleaner/create))
+
+(deftype LeafNode [^FixedSizeListVector point-vec ^Queue leaf-pool ^long superseded ^int idx ^int axis ^int size ^boolean root? pool-token]
   KdTree
   (kd-tree-insert [kd-tree allocator point]
     (leaf-node-edit kd-tree allocator point false))
@@ -757,10 +761,12 @@
     (LeafNode. (.getTo (doto (.getTransferPair point-vec allocator)
                          (.splitAndTransfer 0 (.getValueCount point-vec))))
                superseded
+               leaf-pool
                idx
                axis
                size
-               root?))
+               root?
+               pool-token))
 
   (kd-tree-point-access [kd-tree]
     (KdTreeVectorPointAccess. point-vec (.getListSize point-vec)))
@@ -779,19 +785,19 @@
     (when root?
       (util/try-close point-vec))))
 
-(deftype InnerNode [^FixedSizeListVector point-vec ^long axis-value ^int axis left right ^boolean root?]
+(deftype InnerNode [^FixedSizeListVector point-vec ^Queue leaf-pool ^long axis-value ^int axis left right ^boolean root?]
   KdTree
   (kd-tree-insert [kd-tree allocator point]
     (let [point (->longs point)]
       (if (< (aget point axis) axis-value)
-        (InnerNode. point-vec axis-value axis (kd-tree-insert left allocator point) right root?)
-        (InnerNode. point-vec axis-value axis left (kd-tree-insert right allocator point) root?))))
+        (InnerNode. point-vec leaf-pool axis-value axis (kd-tree-insert left allocator point) right root?)
+        (InnerNode. point-vec leaf-pool axis-value axis left (kd-tree-insert right allocator point) root?))))
 
   (kd-tree-delete [kd-tree allocator point]
     (let [point (->longs point)]
       (if (< (aget point axis) axis-value)
-        (InnerNode. point-vec axis-value axis (kd-tree-delete left allocator point) right root?)
-        (InnerNode. point-vec axis-value axis left (kd-tree-delete right allocator point) root?))))
+        (InnerNode. point-vec leaf-pool axis-value axis (kd-tree-delete left allocator point) right root?)
+        (InnerNode. point-vec leaf-pool axis-value axis left (kd-tree-delete right allocator point) root?))))
 
   (kd-tree-range-search [kd-tree min-range max-range]
     (let [^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec (.getListSize point-vec))
@@ -848,6 +854,7 @@
   (kd-tree-retain [kd-tree allocator]
     (InnerNode. (.getTo (doto (.getTransferPair point-vec allocator)
                           (.splitAndTransfer 0 (.getValueCount point-vec))))
+                leaf-pool
                 axis-value
                 axis
                 left
@@ -875,12 +882,14 @@
 (defn- leaf-node-edit [^LeafNode kd-tree ^BufferAllocator allocator point deleted?]
   (let [point (->longs point)
         ^FixedSizeListVector point-vec (.point-vec kd-tree)
+        leaf-pool (.leaf-pool kd-tree)
         k (.getListSize point-vec)
         superseded (.superseded kd-tree)
         idx (.idx kd-tree)
         axis (.axis kd-tree)
         size (.size kd-tree)
         root? (.root? kd-tree)
+        pool-token (.pool-token kd-tree)
         ^IKdTreePointAccess access (KdTreeVectorPointAccess. point-vec k)]
     (if (< size leaf-size)
       (let [point-idx (+ idx size)]
@@ -895,7 +904,7 @@
                                  (.reduce superseded (reify LongBinaryOperator
                                                        (applyAsLong [_ acc n]
                                                          (bit-or acc (bit-shift-left 1 n))))))]
-          (LeafNode. point-vec new-superseded idx axis (inc size) root?)))
+          (LeafNode. point-vec leaf-pool new-superseded idx axis (inc size) root? pool-token)))
       (let [axis-values (-> (LongStream/range idx (+ idx size))
                             (.map (reify LongUnaryOperator
                                     (applyAsLong [_ x]
@@ -904,11 +913,10 @@
                             (.toArray))
             axis-value (aget axis-values (BitUtil/unsignedBitShiftRight (alength axis-values) 1))
             next-axis (next-axis axis k)
-            left (->leaf-node point-vec next-axis)
-            right (->leaf-node point-vec next-axis)
-            root? (zero? idx)]
+            left (->leaf-node point-vec leaf-pool next-axis)
+            right (->leaf-node point-vec leaf-pool next-axis)]
         (loop [n 0
-               acc (InnerNode. point-vec axis-value axis left right root?)]
+               acc (InnerNode. point-vec leaf-pool axis-value axis left right root?)]
           (cond
             (= n leaf-size)
             (if deleted?
@@ -927,16 +935,21 @@
               (recur (inc n) acc))))))))
 
 (defn- ->leaf-node
-  ([^FixedSizeListVector point-vec ^long axis]
-   (->leaf-node point-vec axis false))
-  ([^FixedSizeListVector point-vec ^long axis root?]
-   (let [idx (.getValueCount point-vec)]
-     (.setValueCount point-vec (+ idx leaf-size))
-     (LeafNode. point-vec 0 idx axis 0 root?))))
+  ([^FixedSizeListVector point-vec ^Queue leaf-pool ^long axis]
+   (->leaf-node point-vec leaf-pool axis false))
+  ([^FixedSizeListVector point-vec ^Queue leaf-pool ^long axis root?]
+   (let [idx (or (.poll leaf-pool)
+                 (let [idx (.getValueCount point-vec)]
+                   (.setValueCount point-vec (+ idx leaf-size))
+                   idx))
+         pool-token (Object.)]
+     (.register leaf-cleaner pool-token #(.offer leaf-pool idx))
+     (LeafNode. point-vec leaf-pool 0 idx axis 0 root? pool-token))))
 
 (defn ->inner-node-kd-tree [^BufferAllocator allocator ^long k]
-  (let [^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)]
-    (->leaf-node point-vec 0 true)))
+  (let [^FixedSizeListVector point-vec (.createVector ^Field (->point-field k) allocator)
+        leaf-pool (LinkedBlockingQueue.)]
+    (->leaf-node point-vec leaf-pool 0 true)))
 
 (def ^:private ^:const point-vec-idx 0)
 
