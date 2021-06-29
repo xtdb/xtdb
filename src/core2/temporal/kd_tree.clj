@@ -902,9 +902,10 @@
             axis-value (aget axis-values (BitUtil/unsignedBitShiftRight (alength axis-values) 1))
             next-axis (next-axis axis k)
             left (->leaf-node point-vec next-axis)
-            right (->leaf-node point-vec next-axis)]
+            right (->leaf-node point-vec next-axis)
+            root? (zero? idx)]
         (loop [n 0
-               acc (InnerNode. point-vec axis-value axis left right (zero? idx))]
+               acc (InnerNode. point-vec axis-value axis left right root?)]
           (cond
             (= n leaf-size)
             (if deleted?
