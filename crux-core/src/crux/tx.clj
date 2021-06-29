@@ -414,6 +414,18 @@
   [deps]
   (map->TxIndexer deps))
 
+(defprotocol ISecondaryIndices
+  (register-index! [_ after-tx-id process-tx-f]))
+
+(defrecord SecondaryIndices [!secondary-indices]
+  ISecondaryIndices
+  (register-index! [_ after-tx-id process-tx-f]
+    (swap! !secondary-indices conj {:after-tx-id after-tx-id
+                                    :process-tx-f process-tx-f})))
+
+(defn ->secondary-indices [_]
+  (->SecondaryIndices (atom #{})))
+
 (defrecord TxIngester [index-store !error ^Future job]
   db/TxIngester
   (ingester-error [_] @!error)
@@ -429,22 +441,56 @@
 (defn ->tx-ingester {::sys/deps {:tx-indexer :crux/tx-indexer
                                  :index-store :crux/index-store
                                  :tx-log :crux/tx-log
-                                 :bus :crux/bus}}
-  [{:keys [tx-log tx-indexer bus index-store]}]
+                                 :bus :crux/bus
+                                 :secondary-indices :crux/secondary-indices}}
+  [{:keys [tx-log tx-indexer bus index-store secondary-indices]}]
   (log/info "Started tx-ingester")
+
   (let [!error (atom nil)
-        job (db/subscribe tx-log
-                          (::tx-id (db/latest-completed-tx index-store))
-                          (fn [_fut tx]
-                            (try
-                              (let [in-flight-tx (db/begin-tx tx-indexer
-                                                              (select-keys tx [::tx-time ::tx-id])
-                                                              nil)]
-                                (if (db/index-tx-events in-flight-tx (::txe/tx-events tx))
-                                  (db/commit in-flight-tx)
-                                  (db/abort in-flight-tx)))
-                              (catch Throwable t
-                                (reset! !error t)
-                                (bus/send bus {:crux/event-type ::ingester-error, :ingester-error t})
-                                (throw t)))))]
-    (->TxIngester index-store !error job)))
+        secondary-indices @(:!secondary-indices secondary-indices)
+        latest-crux-tx-id (::tx-id (db/latest-completed-tx index-store))]
+    (letfn [(process-tx-f [{::keys [^long tx-id] :as tx}]
+              (doseq [{:keys [after-tx-id process-tx-f]} secondary-indices
+                      :when (or (nil? after-tx-id) (< ^long after-tx-id tx-id))]
+                (process-tx-f tx)))
+
+            (set-ingester-error! [t]
+              (reset! !error t)
+              (bus/send bus {:crux/event-type ::ingester-error, :ingester-error t}))]
+
+      ;; catching all the secondary indices up to where Crux is
+      (when (and latest-crux-tx-id (seq secondary-indices))
+        (let [after-tx-id (let [secondary-tx-ids (into #{} (map :after-tx-id) secondary-indices)]
+                            (when (every? some? secondary-tx-ids)
+                              (apply min secondary-tx-ids)))]
+          (try
+            (when (or (nil? after-tx-id)
+                      (< ^long after-tx-id ^long latest-crux-tx-id))
+              (with-open [log (db/open-tx-log tx-log after-tx-id)]
+                (doseq [{::keys [tx-id] :as tx} (->> (iterator-seq log)
+                                                     (take-while (comp #(<= ^long % ^long latest-crux-tx-id) ::tx-id)))]
+                  (process-tx-f (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))
+            (catch Throwable t
+              (set-ingester-error! t)
+              (throw t)))))
+
+      ;; moving on...
+      (let [job (db/subscribe tx-log
+                              latest-crux-tx-id
+                              (fn [_fut tx]
+                                (try
+                                  (let [in-flight-tx (db/begin-tx tx-indexer
+                                                                  (select-keys tx [::tx-time ::tx-id])
+                                                                  nil)
+                                        committing? (db/index-tx-events in-flight-tx (::txe/tx-events tx))]
+                                    (process-tx-f (assoc tx :committing? committing?))
+
+                                    (if committing?
+                                      (db/commit in-flight-tx)
+                                      (db/abort in-flight-tx)))
+
+                                  (catch Throwable t
+                                    (set-ingester-error! t)
+                                    (throw t)))))]
+
+        (->TxIngester index-store !error job)))))
