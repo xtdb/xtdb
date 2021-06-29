@@ -104,75 +104,77 @@
 
 
           (prn :build-inner-node-kd-tree ns)
-          (with-open [^Closeable kd-tree (time
-                                          (reduce
-                                           (fn [acc point]
-                                             (kd/kd-tree-insert acc allocator point))
-                                           (kd/->inner-node-kd-tree allocator k )
-                                           points))]
+          (with-open [^Closeable inner-node-kd-tree (time
+                                                     (reduce
+                                                      (fn [acc point]
+                                                        (kd/kd-tree-insert acc allocator point))
+                                                      (kd/->inner-node-kd-tree allocator k )
+                                                      points))]
 
             (prn :range-queries-inner-node-kd-tree qs)
             (dotimes [_ ts]
               (time
                (doseq [[query-id min-range max-range] queries]
                  (t/is (= (.get query->count query-id)
-                          (.count ^LongStream (kd/kd-tree-range-search kd-tree min-range max-range))))))))
+                          (.count ^LongStream (kd/kd-tree-range-search inner-node-kd-tree min-range max-range)))))))
 
 
 
-          (prn :build-node-kd-tree-bulk ns)
-          (with-open [^Node kd-tree (time
-                                     (kd/->node-kd-tree allocator points))]
+            (prn :build-node-kd-tree-bulk ns)
+            (with-open [^Node kd-tree (time
+                                       (kd/->node-kd-tree allocator points))]
 
-            (prn :range-queries-node-kd-tree-bulk qs)
-            (dotimes [_ ts]
-              (time
-               (doseq [[query-id min-range max-range] queries]
-                 (t/is (= (.get query->count query-id)
-                          (.count ^LongStream (kd/kd-tree-range-search kd-tree min-range max-range)))))))
-
-            (prn :build-column-kd-tree ns)
-            (with-open [^VectorSchemaRoot column-kd-tree (time
-                                                          (kd/->column-kd-tree allocator kd-tree k))]
-              (prn :range-queries-column-kd-tree qs)
+              (prn :range-queries-node-kd-tree-bulk qs)
               (dotimes [_ ts]
                 (time
                  (doseq [[query-id min-range max-range] queries]
                    (t/is (= (.get query->count query-id)
-                            (.count ^LongStream (kd/kd-tree-range-search column-kd-tree min-range max-range)))))))
+                            (.count ^LongStream (kd/kd-tree-range-search kd-tree min-range max-range)))))))
 
-              (prn :build-disk-kd-tree ns)
-              (with-open [^ArrowBufKdTree disk-kd-tree (time
-                                                        (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k)) points {:k k})
-                                                             (kd/->mmap-kd-tree allocator)))]
-                (prn :range-queries-disk-kd-tree qs)
+              (prn :build-column-kd-tree ns)
+              (with-open [^VectorSchemaRoot column-kd-tree (time
+                                                            (kd/->column-kd-tree allocator kd-tree k))]
+                (prn :range-queries-column-kd-tree qs)
                 (dotimes [_ ts]
                   (time
                    (doseq [[query-id min-range max-range] queries]
                      (t/is (= (.get query->count query-id)
-                              (.count ^LongStream (kd/kd-tree-range-search disk-kd-tree min-range max-range)))))))
+                              (.count ^LongStream (kd/kd-tree-range-search column-kd-tree min-range max-range)))))))
 
-                (prn :build-compressed-disk-kd-tree ns)
-                (with-open [^ArrowBufKdTree compressed-disk-kd-tree (time
-                                                                     (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k))
-                                                                                             points {:k k :compress-blocks? true})
-                                                                          (kd/->mmap-kd-tree allocator)))]
-                  (prn :range-queries-compressed-disk-kd-tree qs)
+                (prn :build-disk-kd-tree ns)
+                (with-open [^ArrowBufKdTree disk-kd-tree (time
+                                                          (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k)) points {:k k})
+                                                               (kd/->mmap-kd-tree allocator)))]
+                  (prn :range-queries-disk-kd-tree qs)
                   (dotimes [_ ts]
                     (time
                      (doseq [[query-id min-range max-range] queries]
                        (t/is (= (.get query->count query-id)
-                                (.count ^LongStream (kd/kd-tree-range-search compressed-disk-kd-tree min-range max-range)))))))
+                                (.count ^LongStream (kd/kd-tree-range-search disk-kd-tree min-range max-range)))))))
 
-                  (let [_ (prn :simple-grid->seq)
-                        simple-grid-seq (time (set (kd/kd-tree->seq simple-grid)))
-                        _ (prn :node-kd-tree->seq)
-                        kd-tree-seq (time (set (kd/kd-tree->seq kd-tree)))
-                        _ (prn :column-tree->seq)
-                        col-tree-seq (time (set (kd/kd-tree->seq column-kd-tree)))
-                        _ (prn :disk-tree->seq)
-                        disk-tree-seq (time (set (kd/kd-tree->seq disk-kd-tree)))
-                        _ (prn :compressed-disk-tree->seq)
-                        compressed-disk-tree-seq (time (set (kd/kd-tree->seq compressed-disk-kd-tree)))]
+                  (prn :build-compressed-disk-kd-tree ns)
+                  (with-open [^ArrowBufKdTree compressed-disk-kd-tree (time
+                                                                       (->> (kd/->disk-kd-tree allocator (.resolve test-dir (format "kd_tree_%d.arrow" k))
+                                                                                               points {:k k :compress-blocks? true})
+                                                                            (kd/->mmap-kd-tree allocator)))]
+                    (prn :range-queries-compressed-disk-kd-tree qs)
+                    (dotimes [_ ts]
+                      (time
+                       (doseq [[query-id min-range max-range] queries]
+                         (t/is (= (.get query->count query-id)
+                                  (.count ^LongStream (kd/kd-tree-range-search compressed-disk-kd-tree min-range max-range)))))))
 
-                    (t/is (= simple-grid-seq kd-tree-seq col-tree-seq disk-tree-seq compressed-disk-tree-seq))))))))))))
+                    (let [_ (prn :simple-grid->seq)
+                          simple-grid-seq (time (set (kd/kd-tree->seq simple-grid)))
+                          _ (prn :node-kd-tree->seq)
+                          kd-tree-seq (time (set (kd/kd-tree->seq kd-tree)))
+                          _ (prn :inner-node-tree->seq)
+                          inner-node-kd-tree-seq (time (set (kd/kd-tree->seq inner-node-kd-tree)))
+                          _ (prn :column-tree->seq)
+                          col-tree-seq (time (set (kd/kd-tree->seq column-kd-tree)))
+                          _ (prn :disk-tree->seq)
+                          disk-tree-seq (time (set (kd/kd-tree->seq disk-kd-tree)))
+                          _ (prn :compressed-disk-tree->seq)
+                          compressed-disk-tree-seq (time (set (kd/kd-tree->seq compressed-disk-kd-tree)))]
+
+                      (t/is (= simple-grid-seq kd-tree-seq col-tree-seq disk-tree-seq compressed-disk-tree-seq)))))))))))))
