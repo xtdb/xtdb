@@ -5,6 +5,10 @@ public final class BitUtil {
         return (mask >>> bit & 1) != 0;
     }
 
+    public static boolean isLongBitSet(final long mask, final int bit) {
+        return (mask >>> bit & 1) != 0;
+    }
+
     public static boolean bitNot(final boolean x) {
         return !x;
     }

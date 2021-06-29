@@ -712,7 +712,7 @@
                                   (.toArray)
                                   (Arrays/asList)))))
 
-(def ^:private ^:const leaf-size 32)
+(def ^:private ^:const leaf-size 64)
 
 (declare ->leaf-node leaf-node-edit)
 
@@ -732,7 +732,7 @@
           acc (LongStream/builder)]
       (dotimes [n size]
         (let [x (+ idx n)]
-          (when (and (BitUtil/bitNot (BitUtil/isBitSet superseded n))
+          (when (and (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
                      (BitUtil/bitNot (.isDeleted access x))
                      (.isInRange access x min-range max-range axis-mask))
             (.add acc x))))
@@ -744,11 +744,11 @@
       (if deletes?
         (dotimes [n size]
           (let [x (+ idx n)]
-            (when (BitUtil/bitNot (BitUtil/isBitSet superseded n))
+            (when (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
               (.add acc x))))
         (dotimes [n size]
           (let [x (+ idx n)]
-            (when (and (BitUtil/bitNot (BitUtil/isBitSet superseded n))
+            (when (and (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
                        (BitUtil/bitNot (.isDeleted access x)))
               (.add acc x)))))
       (.build acc)))
@@ -825,7 +825,7 @@
                 superseded (.superseded node)]
             (dotimes [n size]
               (let [x (+ idx n)]
-                (when (and (BitUtil/bitNot (BitUtil/isBitSet superseded n))
+                (when (and (BitUtil/bitNot (BitUtil/isLongBitSet superseded n))
                            (BitUtil/bitNot (.isDeleted access x))
                            (.isInRange access x min-range max-range axis-mask))
                   (.add acc x))))
@@ -911,7 +911,7 @@
               (kd-tree-delete acc allocator point)
               (kd-tree-insert acc allocator point))
 
-            (BitUtil/isBitSet superseded n)
+            (BitUtil/isLongBitSet superseded n)
             (recur (inc n) acc)
 
             :else
@@ -1008,7 +1008,7 @@
              (let [new-next-level-entries (LongStream/builder)]
                (dotimes [x (alength next-level-entries)]
                  (let [idx (aget next-level-entries x)
-                       partial-match-axis? (BitUtil/bitNot (BitUtil/isBitSet axis-mask axis))
+                       partial-match-axis? (BitUtil/bitNot (BitUtil/isLongBitSet axis-mask axis))
                        axis-value (if partial-match-axis?
                                     0
                                     (.getCoordinate access idx axis))
