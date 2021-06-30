@@ -80,7 +80,7 @@
         ms-2019 (.getTime #inst "2019")]
     (letfn [(transpose [[mins maxs]]
               (->> (map vector mins maxs)
-                   (zipmap [:eid-start :eid-end, :vt-start :vt-end, :tt-start :tt-end])
+                   (zipmap [:tt-end :id :tt-start :row-id :vt-start :vt-end])
                    (into {} (remove (comp #{[Long/MIN_VALUE Long/MAX_VALUE]} val)))))]
       (t/is (= {:vt-start [Long/MIN_VALUE ms-2019]
                 :vt-end [(inc ms-2019) Long/MAX_VALUE]}

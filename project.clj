@@ -14,7 +14,7 @@
                  [org.apache.arrow/arrow-compression "4.0.1"]
                  [org.apache.arrow/arrow-vector "4.0.1"]
                  [org.apache.arrow/arrow-memory-netty "4.0.1"]
-                 [org.roaringbitmap/RoaringBitmap "0.9.10"]]
+                 [org.roaringbitmap/RoaringBitmap "0.9.15"]]
 
   :profiles {:dev [:datasets :s3 :kafka
                    {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]

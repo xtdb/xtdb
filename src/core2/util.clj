@@ -111,6 +111,9 @@
 (defn path-exists [^Path path]
   (Files/exists path (make-array LinkOption 0)))
 
+(defn path-size ^long [^Path path]
+  (Files/size path))
+
 (defn delete-dir [^Path dir]
   (when (path-exists dir)
     (Files/walkFileTree dir file-deletion-visitor)))

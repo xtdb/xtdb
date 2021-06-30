@@ -254,6 +254,7 @@
                 op (aget op-type-ids op-type-id)
                 ^TemporalCoordinates temporal-coordinates (temporal/row-id->coordinates row-id)]
             (set! (.txTimeStart temporal-coordinates) tx-time-ms)
+            (set! (.validTimeStart temporal-coordinates) tx-time-ms)
             (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
@@ -283,16 +284,12 @@
 
             (set! (.validTimeStart temporal-coordinates)
                   (if-not (.isNull valid-time-start-vec per-op-offset)
-                    (do (copy-safe! (.getLiveRoot this (.getName valid-time-start-vec))
-                                    valid-time-start-vec per-op-offset row-id)
-                        (.get valid-time-start-vec per-op-offset))
+                    (.get valid-time-start-vec per-op-offset)
                     tx-time-ms))
 
             (set! (.validTimeEnd temporal-coordinates)
                   (if-not (.isNull valid-time-end-vec per-op-offset)
-                    (do (copy-safe! (.getLiveRoot this (.getName valid-time-end-vec))
-                                    valid-time-end-vec per-op-offset row-id)
-                        (.get valid-time-end-vec per-op-offset))
+                    (.get valid-time-end-vec per-op-offset)
                     (.getTime temporal/end-of-time)))))
 
         (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
