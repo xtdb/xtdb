@@ -259,9 +259,7 @@
                           ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
                           ^:volatile-mutable kd-tree
-                          ^boolean async-snapshot?
-                          ^boolean compress-temporal-index?
-                          ^long block-cache-size]
+                          ^boolean async-snapshot?]
   TemporalManagerPrivate
   (latestTemporalSnapshotIndex [this chunk-idx]
     (->> (.listObjects object-store "temporal-snapshot-")
@@ -463,20 +461,16 @@
                                       :object-store :core2/object-store
                                       :buffer-pool :core2/buffer-pool
                                       :metadata-manager :core2/metadata-manager}
-                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}
-                                      :compress-temporal-index? {:spec ::sys/boolean :default true}
-                                      :block-cache-size {:spec ::sys/int :default kd/default-block-cache-size}}}
+                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}}}
   [{:keys [^BufferAllocator allocator
            ^ObjectStore object-store
            ^IBufferPool buffer-pool
            ^IMetadataManager metadata-manager
-           async-snapshot?
-           compress-temporal-index?
-           block-cache-size]}]
+           async-snapshot?]}]
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
                             (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
-                            pool nil nil nil async-snapshot? compress-temporal-index? block-cache-size)
+                            pool nil nil nil async-snapshot?)
       (.populateKnownChunks))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^IInternalIdManager id-manager ^TemporalCoordinates coordinates]

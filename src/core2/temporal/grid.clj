@@ -11,7 +11,6 @@
            [org.apache.arrow.vector VectorLoader VectorSchemaRoot]
            org.apache.arrow.vector.types.pojo.Schema
            org.apache.arrow.vector.ipc.ArrowFileWriter
-           org.apache.arrow.compression.CommonsCompressionFactory
            java.util.concurrent.atomic.AtomicInteger
            [java.util ArrayList Arrays List]
            [java.util.function Consumer Function IntToLongFunction LongConsumer LongFunction LongPredicate LongUnaryOperator UnaryOperator]
@@ -19,45 +18,6 @@
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream]
            [java.nio.channels Channels FileChannel]
            java.nio.file.Path))
-
-;; TODO:
-
-;; Try points-in-leaves kd-tree, easier to balance. Shared point
-;; array, leaves need to store offset into single, shared, point Arrow
-;; vector, current size and deletion mask in the persistent
-;; LeafNode. Deletion mask can be a long, hence the leaf size is (max)
-;; 64. On split, leaves are sorted on split axis and tree hence
-;; somewhat balanced. Median becomes new inner-node, points copied
-;; into two new leaf nodes. Deletes don't add new points, just flips
-;; the flag. Inserts increase size, and appends into its pre-allocated
-;; block of the shared vector. InnerNode is stores axis, split-values
-;; and left/right, which can be either inner or leaf nodes, and
-;; doesn't use Arrow directly. Not deleted once created.
-
-;; Try implementing Elf:
-;; https://wwwiti.cs.uni-magdeburg.de/iti_db/publikationen/ps/auto/thesisBroneske19.pdf
-
-;; Try different hash-trees, like "HD-Tree: An Efficient
-;; High-Dimensional Virtual Index Structure Using a Half Decomposition
-;; Strategy", or the classic X-tree
-;; https://kops.uni-konstanz.de/bitstream/handle/123456789/5734/The_X_Tree.pdf?sequence=1&isAllowed=y
-
-;; Sanity check the slope interpolation.
-
-;; MultiDimensionalBin set! in updateNeighbour gets boxed. The reify
-;; in find-neighbour seems odd.
-
-;; Check node kd-tree edit, seems slow, protocol issues,
-;; MethodImplCache?
-
-;; Calculating the distance is the expensive step during find-neighbour.
-
-;; swapPoint is slow when building column trees. isInRange in general.
-;; ArrayDeque push is slow when editing nodes. Reduce as well, but
-;; likely due to deep trees?
-
-;; Sanity check and revisit "classic" depth first range search for
-;; column trees.
 
 ;; "Learning Multi-dimensional Indexes"
 ;; https://arxiv.org/pdf/1912.01668.pdf
@@ -212,21 +172,21 @@
                              axis-idx)]
         (recur (inc n) (bit-or (bit-shift-left idx axis-shift) axis-idx))))))
 
-(declare ->simple-grid-point-access)
+(declare ->grid-point-access)
 
-(deftype SimpleGrid [^ArrowBuf arrow-buf
-                     ^objects scales
-                     ^longs mins
-                     ^longs maxs
-                     ^objects cells
-                     ^doubles k-minus-one-slope+base
-                     ^int k
-                     ^int axis-shift
-                     ^int cell-shift
-                     ^long size
-                     ^long value-count
-                     ^AtomicInteger ref-cnt
-                     ^boolean deletes?]
+(deftype Grid [^ArrowBuf arrow-buf
+               ^objects scales
+               ^longs mins
+               ^longs maxs
+               ^objects cells
+               ^doubles k-minus-one-slope+base
+               ^int k
+               ^int axis-shift
+               ^int cell-shift
+               ^long size
+               ^long value-count
+               ^AtomicInteger ref-cnt
+               ^boolean deletes?]
   kd/KdTree
   (kd-tree-insert [this allocator point]
     (throw (UnsupportedOperationException.)))
@@ -344,7 +304,7 @@
       (throw (IllegalStateException. "grid closed")))
     this)
   (kd-tree-point-access [this]
-    (->simple-grid-point-access this))
+    (->grid-point-access this))
   (kd-tree-size [_] size)
   (kd-tree-value-count [_] value-count)
   (kd-tree-dimensions [_] k)
@@ -356,7 +316,7 @@
         (util/try-close cell))
       (util/try-close arrow-buf))))
 
-(deftype SimpleGridPointAccess [^objects cells ^int cell-shift ^int cell-mask ^int k]
+(deftype GridPointAccess [^objects cells ^int cell-shift ^int cell-mask ^int k]
   IKdTreePointAccess
   (getPoint [this idx]
     (.getPoint (KdTreeVectorPointAccess. (aget cells (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
@@ -379,41 +339,41 @@
     (.isInRange (KdTreeVectorPointAccess. (aget cells (BitUtil/unsignedBitShiftRight idx cell-shift)) k)
                 (bit-and idx cell-mask) min-range max-range mask)))
 
-(defn- ->simple-grid-point-access [^SimpleGrid grid]
+(defn- ->grid-point-access ^core2.temporal.kd_tree.IKdTreePointAccess [^Grid grid]
   (let [cell-shift (.cell-shift grid)
         cell-mask (dec (bit-shift-left 1 cell-shift))]
-    (SimpleGridPointAccess. (.cells grid) cell-shift cell-mask (.k grid))))
+    (GridPointAccess. (.cells grid) cell-shift cell-mask (.k grid))))
 
-(defn- ->grid-meta-json->simple-grid
-  ^core2.temporal.grid.SimpleGrid [arrow-buf
-                                   cells
-                                   {:keys [scales
-                                           mins
-                                           maxs
-                                           k-minus-one-slope+base
-                                           k
-                                           axis-shift
-                                           cell-shift
-                                           size
-                                           value-count
-                                           deletes?]}]
-  (SimpleGrid. arrow-buf
-               (object-array (map long-array scales))
-               (long-array mins)
-               (long-array maxs)
-               cells
-               (double-array k-minus-one-slope+base)
-               k
-               axis-shift
-               cell-shift
-               size
-               value-count
-               (AtomicInteger. 1)
-               deletes?))
+(defn- ->grid-meta-json->grid
+  ^core2.temporal.grid.Grid [arrow-buf
+                             cells
+                             {:keys [scales
+                                     mins
+                                     maxs
+                                     k-minus-one-slope+base
+                                     k
+                                     axis-shift
+                                     cell-shift
+                                     size
+                                     value-count
+                                     deletes?]}]
+  (Grid. arrow-buf
+         (object-array (map long-array scales))
+         (long-array mins)
+         (long-array maxs)
+         cells
+         (double-array k-minus-one-slope+base)
+         k
+         axis-shift
+         cell-shift
+         size
+         value-count
+         (AtomicInteger. 1)
+         deletes?))
 
 (def ^:private ^:const point-vec-idx 0)
 
-(defn ->arrow-buf-grid ^core2.temporal.grid.SimpleGrid [^ArrowBuf arrow-buf]
+(defn ->arrow-buf-grid ^core2.temporal.grid.Grid [^ArrowBuf arrow-buf]
   (let [footer (util/read-arrow-footer arrow-buf)
         schema (.getSchema footer)
         grid-meta (json/read-str (get (.getCustomMetadata schema) "grid-meta") :key-fn keyword)
@@ -422,25 +382,25 @@
                (for [block (.getRecordBatches footer)]
                  (with-open [arrow-record-batch (util/->arrow-record-batch-view block arrow-buf)
                              root (VectorSchemaRoot/create schema allocator)]
-                   (.load (VectorLoader. root CommonsCompressionFactory/INSTANCE) arrow-record-batch)
+                   (.load (VectorLoader. root) arrow-record-batch)
                    (when (pos? (.getRowCount root))
                      (.getTo (doto (.getTransferPair (.getVector root point-vec-idx) allocator)
                                (.transfer)))))))]
-    (->grid-meta-json->simple-grid arrow-buf cells grid-meta)))
+    (->grid-meta-json->grid arrow-buf cells grid-meta)))
 
-(defn ->mmap-grid ^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path]
+(defn ->mmap-grid ^core2.temporal.grid.Grid [^BufferAllocator allocator ^Path path]
   (let [nio-buffer (util/->mmap-path path)
         arrow-buf (util/->arrow-buf-view allocator nio-buffer)]
     (->arrow-buf-grid arrow-buf)))
 
 (defn ->disk-grid
-  (^core2.temporal.grid.SimpleGrid [^BufferAllocator allocator ^Path path points {:keys [^long max-histogram-bins
-                                                                                         ^long cell-size
-                                                                                         ^long k
-                                                                                         deletes?]
-                                                                                  :or {max-histogram-bins 128
-                                                                                       cell-size (* 8 1024)
-                                                                                       deletes? false}}]
+  (^core2.temporal.grid.Grid [^BufferAllocator allocator ^Path path points {:keys [^long max-histogram-bins
+                                                                                   ^long cell-size
+                                                                                   ^long k
+                                                                                   deletes?]
+                                                                            :or {max-histogram-bins 128
+                                                                                 cell-size (* 8 1024)
+                                                                                 deletes? false}}]
    (assert (number? k))
    (util/mkdirs (.getParent path))
    (let [^long total (kd/kd-tree-size points)
@@ -534,8 +494,8 @@
            (with-open [root (VectorSchemaRoot/create schema allocator)
                        ch (util/->file-channel path util/write-new-file-opts)
                        out (ArrowFileWriter. root nil ch)]
-             (let [^IKdTreePointAccess out-access (kd/kd-tree-point-access root)
-                   ^FixedSizeListVector point-vec (.getVector root point-vec-idx)]
+             (let [^FixedSizeListVector point-vec (.getVector root point-vec-idx)
+                   out-access (KdTreeVectorPointAccess. point-vec k)]
                (dotimes [n number-of-cells]
                  (.clear root)
                  (when-let [^Path cell-path (aget cell-paths n)]

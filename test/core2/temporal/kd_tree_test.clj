@@ -1,16 +1,11 @@
 (ns core2.temporal.kd-tree-test
   (:require [clojure.test :as t]
-            [core2.util :as util]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
-  (:import [java.util Collection Date HashMap List Spliterator$OfLong Spliterators Random]
+  (:import [java.util Date HashMap List]
            java.io.Closeable
            [org.apache.arrow.memory RootAllocator]
-           [org.apache.arrow.vector VectorSchemaRoot]
-           [org.apache.arrow.vector.ipc.message ArrowRecordBatch]
-           [org.apache.arrow.vector.complex FixedSizeListVector]
-           core2.temporal.IInternalIdManager
-           [core2.temporal.kd_tree ArrowBufKdTree MergedKdTree Node]))
+           core2.temporal.IInternalIdManager))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
 ;; chapter 10 "Bitemporal Tables".
@@ -311,89 +306,38 @@
 
                       (t/testing "rebuilding tree results in tree with same points"
                         (let [points (mapv vec (kd/kd-tree->seq kd-tree))]
-                          (with-open [new-tree (kd/->node-kd-tree allocator (shuffle points))
-                                      ^Closeable rebuilt-tree (reduce (fn [acc point]
-                                                                        (kd/kd-tree-insert acc allocator point)) nil (shuffle points))]
-                            (t/is (= (sort points)
-                                     (sort (mapv vec (kd/kd-tree->seq new-tree)))))
+                          (with-open [rebuilt-tree (kd/build-node-kd-tree allocator (shuffle points))]
                             (t/is (= (sort points)
                                      (sort (mapv vec (kd/kd-tree->seq rebuilt-tree)))))))))))))))))
 
 (t/deftest kd-tree-sanity-check
-  (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]
-        test-dir (util/->path "target/kd-tree-sanity-check")]
-    (util/delete-dir test-dir)
+  (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]]
     (with-open [allocator (RootAllocator.)
-                kd-tree (kd/->node-kd-tree allocator points)
-                ^Closeable insert-kd-tree (reduce
-                                           (fn [acc point]
-                                             (kd/kd-tree-insert acc allocator point))
-                                           nil
-                                           points)
-                ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator kd-tree 2)
-                ^ArrowBufKdTree disk-kd-tree-from-points (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_1.arrow") points {:k 2
-                                                                                                                                         :batch-size 2
-                                                                                                                                         :compress-blocks? false})
-                                                              (kd/->mmap-kd-tree allocator))
-                ^ArrowBufKdTree disk-kd-tree-from-tree (->> (kd/->disk-kd-tree allocator (.resolve test-dir "kd_tree_2.arrow") kd-tree {:k 2
-                                                                                                                                        :batch-size 2
-                                                                                                                                        :compress-blocks? true})
-                                                            (kd/->mmap-kd-tree allocator))]
+                insert-kd-tree (kd/build-node-kd-tree allocator points)]
       (t/is (= #{[7 2] [5 4] [2 3] [8 1]}
-
-               (-> kd-tree
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq kd-tree)
-                        (map vec) (set)))
 
                (-> insert-kd-tree
                    (kd/kd-tree-range-search [0 0] [8 4])
                    (->> (kd/kd-tree->seq insert-kd-tree)
-                        (map vec) (set)))
-
-               (-> column-kd-tree
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq column-kd-tree)
-                        (map vec) (set)))
-
-               (-> disk-kd-tree-from-points
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq disk-kd-tree-from-points)
-                        (map vec) (set)))
-
-               (-> disk-kd-tree-from-tree
-                   (kd/kd-tree-range-search [0 0] [8 4])
-                   (->> (kd/kd-tree->seq disk-kd-tree-from-tree)
                         (map vec) (set))))
             "wikipedia-test")
 
       (t/testing "seq"
-        (t/is (= (set (kd/kd-tree->seq kd-tree))
-                 (set (kd/kd-tree->seq column-kd-tree))
-                 (set (kd/kd-tree->seq disk-kd-tree-from-points))
-                 (set (kd/kd-tree->seq disk-kd-tree-from-tree)))))
+        (t/is (= (set points)
+                 (->> (kd/kd-tree->seq insert-kd-tree)
+                      (map vec) (set)))))
 
       (t/testing "height"
-        (t/is (= 2
-                 (kd/kd-tree-height kd-tree)
-                 (kd/kd-tree-height column-kd-tree)
-                 (kd/kd-tree-height disk-kd-tree-from-points)
-                 (kd/kd-tree-height disk-kd-tree-from-tree))))
+        (t/is (= 0
+                 (kd/kd-tree-height insert-kd-tree))))
 
       (t/testing "size"
         (t/is (= (count points)
-                 (kd/kd-tree-size kd-tree)
-                 (kd/kd-tree-size insert-kd-tree)
-                 (kd/kd-tree-size column-kd-tree)
-                 (kd/kd-tree-size disk-kd-tree-from-points)
-                 (kd/kd-tree-size disk-kd-tree-from-tree))))
+                 (kd/kd-tree-size insert-kd-tree))))
 
       (t/testing "empty tree"
-        (with-open [^Node kd-tree (kd/->node-kd-tree allocator [[1 2]])]
-          (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
-
-        (t/is (nil? (kd/->node-kd-tree allocator [])))
-        (t/is (zero? (kd/kd-tree-size (kd/->node-kd-tree allocator []))))
+        (with-open [^Closeable kd-tree (kd/->node-kd-tree allocator 2)]
+          (t/is (zero? (kd/kd-tree-size kd-tree))))
 
         (with-open [^Closeable kd-tree (kd/kd-tree-insert nil allocator [1 2])]
           (t/is (= [[1 2]] (kd/kd-tree->seq kd-tree))))
@@ -403,36 +347,32 @@
           (t/is (zero? (kd/kd-tree-size kd-tree)))))
 
       (t/testing "merge"
-        (with-open [new-tree-with-tombstone (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])]
+        (with-open [new-tree-with-tombstone (kd/build-node-kd-tree allocator [[4 7] [8 1] [2 3]])]
           (let [node-to-delete [2 1]
                 ^Node new-tree-with-tombstone (kd/kd-tree-delete new-tree-with-tombstone allocator node-to-delete)]
             (t/is (= 3 (kd/kd-tree-size new-tree-with-tombstone)))
-            (t/is (= 4 (kd/kd-tree-value-count new-tree-with-tombstone)))
-            (with-open [old-tree-with-node-to-be-deleted (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
-                        ^VectorSchemaRoot column-kd-tree (kd/->column-kd-tree allocator
-                                                                              new-tree-with-tombstone
-                                                                              2)
-                        ^Node merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted column-kd-tree)
-                        rebuilt-tree (kd/rebuild-node-kd-tree allocator merged-tree)]
-              (t/is (= 3 (kd/kd-tree-size column-kd-tree)))
-              (t/is (= 4 (kd/kd-tree-value-count column-kd-tree)))
+            (t/is (= Long/SIZE (kd/kd-tree-value-count new-tree-with-tombstone)))
+            (with-open [old-tree-with-node-to-be-deleted (kd/build-node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
+                        merged-tree (kd/merge-kd-trees allocator old-tree-with-node-to-be-deleted new-tree-with-tombstone)
+                        rebuilt-tree (kd/build-node-kd-tree allocator merged-tree)]
               (t/is (= 4 (kd/kd-tree-size old-tree-with-node-to-be-deleted)))
 
-              (t/is (= (set (kd/kd-tree->seq kd-tree))
+              (t/is (= (set (kd/kd-tree->seq insert-kd-tree))
                        (set (kd/kd-tree->seq merged-tree))
                        (set (kd/kd-tree->seq rebuilt-tree))))
 
-              (t/is (= (kd/kd-tree-size kd-tree)
+              (t/is (= (kd/kd-tree-size insert-kd-tree)
                        (kd/kd-tree-size merged-tree)
                        (kd/kd-tree-size rebuilt-tree)))
 
               (t/testing "merged tree"
-                (with-open [dynamic-tree (kd/->node-kd-tree allocator [[4 7] [8 1] [2 3]])
-                            old-tree (kd/->node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
-                            ^VectorSchemaRoot static-tree (kd/->column-kd-tree allocator old-tree 2)
+                (with-open [dynamic-tree (kd/build-node-kd-tree allocator [[4 7] [8 1] [2 3]])
+                            static-tree (kd/build-node-kd-tree allocator [[7 2] [5 4] [9 6] node-to-delete])
                             merged-tree (kd/->merged-kd-tree static-tree dynamic-tree)]
+                  (t/is (= 3 (kd/kd-tree-size dynamic-tree)))
+                  (t/is (= 4 (kd/kd-tree-size static-tree)))
                   (t/is (= 7 (kd/kd-tree-size merged-tree)))
-                  (t/is (= 2 (kd/kd-tree-height merged-tree)))
+                  (t/is (zero? (kd/kd-tree-height merged-tree)))
 
                   (let [unknown-node [0 0]
                         expected-nodes (set (map vec (kd/kd-tree->seq rebuilt-tree)))
@@ -459,107 +399,24 @@
                       (with-open [^Closeable delta-tree (-> nil
                                                             (kd/kd-tree-insert allocator node-to-insert)
                                                             (kd/kd-tree-delete allocator node-to-delete))
-                                  ^VectorSchemaRoot static-delta-tree (kd/->column-kd-tree allocator delta-tree 2)
-                                  merged-tree (kd/->merged-kd-tree (util/slice-root static-tree) static-delta-tree)]
+                                  static-delta-tree (kd/build-node-kd-tree allocator delta-tree)
+                                  merged-tree (kd/->merged-kd-tree (kd/kd-tree-retain static-tree allocator) static-delta-tree)]
                         (t/is (= 1 (kd/kd-tree-size static-delta-tree)))
-                        (t/is (= 2 (kd/kd-tree-value-count static-delta-tree)))
+                        (t/is (= Long/SIZE (kd/kd-tree-value-count static-delta-tree)))
 
                         (t/is (= 4 (kd/kd-tree-size merged-tree)))
-                        (t/is (= 6 (kd/kd-tree-value-count merged-tree)))
+                        (t/is (= (* 2 Long/SIZE) (kd/kd-tree-value-count merged-tree)))
 
                         (t/is (= (-> expected-nodes (conj node-to-insert) (disj node-to-delete))
                                  (set (map vec (kd/kd-tree->seq merged-tree))))))))
 
                   (t/testing "empty dynamic tree"
                     (let [node-to-insert [10 10]]
-                      (with-open [merged-tree (kd/->merged-kd-tree static-tree)]
+                      (with-open [merged-tree (kd/->merged-kd-tree (kd/kd-tree-retain static-tree allocator))]
                         (t/is (= 4 (kd/kd-tree-size merged-tree)))
                         (t/is (empty? (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert))))
-                        (with-open [^MergedKdTree merged-tree (kd/kd-tree-insert merged-tree allocator node-to-insert)]
+                        (with-open [^Closeable merged-tree (kd/kd-tree-insert merged-tree allocator node-to-insert)]
                           (t/is (= 5 (kd/kd-tree-size merged-tree)))
                           (t/is (= 4 (kd/kd-tree-size static-tree)))
                           (t/is (= [node-to-insert]
                                    (kd/kd-tree->seq merged-tree (kd/kd-tree-range-search merged-tree node-to-insert node-to-insert)))))))))))))))))
-
-(deftype ArrayKdTree [^objects points ^long k]
-  kd/KdTree
-  (kd-tree-point-access [_]
-    (reify core2.temporal.kd_tree.IKdTreePointAccess
-      (getCoordinate [_ idx axis]
-        (aget ^longs (aget points idx) axis))
-      (swapPoint [_ from-idx to-idx]
-        (let [tmp (aget points from-idx)]
-          (doto points
-            (aset from-idx (aget points to-idx))
-            (aset to-idx tmp))))))
-  (kd-tree-dimensions [_] k)
-  (kd-tree-value-count [_] (alength points)))
-
-(defn ->array-kd-tree [points k]
-  (ArrayKdTree. (object-array (map long-array points)) k))
-
-(defn ->subtree-seq [^long n ^long root]
-  (iterator-seq (Spliterators/iterator ^Spliterator$OfLong (kd/->subtree-spliterator n root))))
-
-(t/deftest test-breadth-first-kd-tree
-  (t/testing "zero-based index navigation"
-    (t/is (= 3 (@#'kd/balanced-parent 6)))
-
-    (t/is (= 5 (@#'kd/balanced-left-child 2)))
-    (t/is (= 6 (@#'kd/balanced-right-child 2)))
-
-    (t/is (= 11 (@#'kd/balanced-left-child 5)))
-    (t/is (= 12 (@#'kd/balanced-right-child 5)))
-
-    (t/is (= 6 (@#'kd/balanced-parent 12)))
-    (t/is (= 6 (@#'kd/balanced-parent 13)))
-
-    (t/is (= 0 (@#'kd/balanced-height 0)))
-    (t/is (= 1 (@#'kd/balanced-height 1)))
-    (t/is (= 2 (@#'kd/balanced-height 3)))
-    (t/is (= 3 (@#'kd/balanced-height 7))))
-
-  (t/testing "zero-based index predicates"
-    (t/is (@#'kd/balanced-root? 0))
-
-    (t/is (false? (@#'kd/balanced-valid? 21 31)))
-    (t/is (true? (@#'kd/balanced-valid? 21 13)))
-
-    (t/is (false? (@#'kd/balanced-leaf? 21 0)))
-    (t/is (false? (@#'kd/balanced-leaf? 21 2)))
-    (t/is (false? (@#'kd/balanced-leaf? 21 6)))
-    (t/is (false? (@#'kd/balanced-leaf? 21 9)))
-    (t/is (true? (@#'kd/balanced-leaf? 21 10)))
-    (t/is (true? (@#'kd/balanced-leaf? 21 15))))
-
-  (t/testing "subtree iterator"
-    (t/is (empty? (->subtree-seq 0 0)))
-
-    (t/is (= (range 1) (->subtree-seq 1 0)))
-    (t/is (= (range 2) (->subtree-seq 2 0)))
-    (t/is (= (range 3) (->subtree-seq 3 0)))
-    (t/is (= (range 15) (->subtree-seq 15 0)))
-    (t/is (= [1 3 4] (->subtree-seq 7 1)))
-    (t/is (= [1 3 4 7 8 9 10] (->subtree-seq 15 1)))
-    (t/is (= [3 7 8] (->subtree-seq 15 3)))
-    (t/is (= [4 9 10] (->subtree-seq 15 4)))
-    (t/is (= [2 5 6] (->subtree-seq 7 2)))
-    (t/is (= [2 5 6 11 12 13 14] (->subtree-seq 15 2)))
-    (t/is (= [5 11 12] (->subtree-seq 15 5)))
-    (t/is (= [6 13 14] (->subtree-seq 15 6))))
-
-  (t/testing "breadth first tree"
-    (let [points [[7 2] [5 4] [9 6] [4 7] [8 1] [2 3]]
-          ^ArrayKdTree kd-tree (->array-kd-tree points 2)]
-      (@#'kd/build-breadth-first-tree-in-place kd-tree true)
-      (t/is (= [[7 2] [5 4] [9 6] [2 3] [4 7] [8 1]]
-               (mapv vec (.points kd-tree))))
-
-      (let [rng (Random. 0)]
-        (doseq [k (range 2 10)]
-          (let [ns 1000
-                points (vec (for [n (range ns)]
-                              (long-array (repeatedly k #(.nextLong rng)))))
-                ^ArrayKdTree kd-tree (->array-kd-tree points k)]
-            (@#'kd/build-breadth-first-tree-in-place kd-tree true)
-            (t/is true)))))))

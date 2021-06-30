@@ -83,8 +83,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir
-                                       :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-                                       :compress-temporal-index? false})]
+                                       :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
             ^ObjectStore os (:core2/object-store system)
@@ -210,7 +209,7 @@
                 {:op :put, :doc {:_id #inst "2020-01-01"}}]]
     (util/delete-dir node-dir)
 
-    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock :compress-temporal-index? false})]
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
       (let [^ObjectStore os (:core2/object-store @(:!system node))]
 
         (-> (c2/submit-tx node tx-ops)
@@ -431,7 +430,7 @@
 
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (-> first-half-tx-instant
-                                          (tu/then-await-tx node (Duration/ofSeconds 5))))
+                                          (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (.tx-id second-half-tx-instant)))
 
                     (c2/with-db [db node]
@@ -440,7 +439,7 @@
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-instant (-> second-half-tx-instant
-                                                        (tu/then-await-tx node (Duration/ofSeconds 5)))))
+                                                        (tu/then-await-tx node (Duration/ofSeconds 10)))))
                     (t/is (= second-half-tx-instant (c2/latest-completed-tx node))))
 
                   (Thread/sleep 1000) ;; TODO for now
