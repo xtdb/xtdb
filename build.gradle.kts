@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "pro.juxt.crux"
-version = "0.0.3"
+version = "0.0.4-SNAPSHOT"
 
 java {
     withJavadocJar()

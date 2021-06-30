@@ -4,7 +4,7 @@ A Kotlin DSL for Crux which enables pretty transactions and queries
 
 == Quickstart
 
-Then add `crux-kotlin-dsl` as a dependency:
+Add `crux-kotlin-dsl` as a dependency:
 
 ```kotlin
 dependencies {
