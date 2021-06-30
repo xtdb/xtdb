@@ -17,10 +17,6 @@ java {
 
 repositories {
     mavenCentral()
-    maven {
-        name = "Clojars"
-        url = uri("https://repo.clojars.org/")
-    }
 }
 
 publishing {
@@ -89,7 +85,7 @@ dependencies {
     implementation(platform("org.jetbrains.kotlin:kotlin-bom"))
     implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk8")
 
-    api("juxt:crux-core:21.04-1.16.0-beta") {
+    api("pro.juxt.crux:crux-core:1.17.1") {
         isTransitive = true
     }
 
@@ -97,7 +93,7 @@ dependencies {
     testImplementation("org.junit.jupiter:junit-jupiter-api:5.6.0")
     testImplementation("org.junit.jupiter:junit-jupiter-params:5.6.0")
     testImplementation("com.natpryce:hamkrest:1.8.0.1")
-    testImplementation("juxt:crux-rocksdb:21.04-1.16.0-beta")
+    testImplementation("pro.juxt.crux:crux-rocksdb:1.17.1")
     testRuntimeOnly("org.junit.jupiter:junit-jupiter-engine:5.6.0")
 }
 
