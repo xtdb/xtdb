@@ -7,10 +7,10 @@ orbs:
   aws-s3: circleci/aws-s3@1.0.15
   node: circleci/node@1.1.6
   shellcheck: circleci/shellcheck@2.2.3
-  crux:
-    orbs:
-      go: circleci/go@0.2.0
-      docker: circleci/docker@0.5.20
+  go: circleci/go@0.2.0
+  docker: circleci/docker@0.5.20
+
+  crux-build:
     commands:
       deploy-artifacts:
         parameters:
@@ -21,9 +21,6 @@ orbs:
           artifact-name:
             type: string
         steps:
-          - docker/install-docker
-          - setup_remote_docker
-
           - run:
               command: |
                 cd crux-build
@@ -124,7 +121,7 @@ jobs:
       - store_test_results:
           path: "crux-test/target/test-results"
 
-  deploy-commit:
+  deploy-bench:
     docker:
       - image: circleci/clojure:openjdk-8-lein
 
@@ -133,6 +130,8 @@ jobs:
         - checkout
         - attach_workspace:
             at: ~/
+        - docker/install-docker
+        - setup_remote_docker
 
         - run: md5sum ~/crux/crux-bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
         - restore_cache:
@@ -151,7 +150,6 @@ jobs:
                 echo 'export BUILD_TAGS="master,master-$CIRCLE_SHA1,${BUILD_TAGS}"' >> $BASH_ENV
               fi
 
-        - setup_remote_docker
         - aws-ecr/build-and-push-image:
               dockerfile: 'Dockerfile'
               extra-build-args: '${BUILD_ARG}'
@@ -163,7 +161,7 @@ jobs:
               - ~/crux/crux-bench/data/
             key: v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
 
-  create-artifacts:
+  crux-build-artifacts:
     docker:
       - image: circleci/clojure:openjdk-8-tools-deps
     working_directory: ~/crux
@@ -171,17 +169,20 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
-      - crux/deploy-tar
-      - crux/deploy-artifacts:
+      - docker/install-docker
+      - setup_remote_docker
+
+      - crux-build/deploy-tar
+      - crux-build/deploy-artifacts:
           crux-edn: "crux-in-memory.edn"
           deps-edn: "deps-in-memory.edn"
           artifact-name: "crux-in-memory"
-      - crux/deploy-artifacts:
+      - crux-build/deploy-artifacts:
           crux-edn: "crux-standalone-rocksdb.edn"
           deps-edn: "deps-standalone-rocksdb.edn"
           artifact-name: "crux-standalone-rocksdb"
 
-  create-api-docs:
+  deploy-api-docs:
     docker:
       - image: circleci/clojure:openjdk-8-lein
     working_directory: ~/crux
@@ -225,13 +226,13 @@ workflows:
       - test:
           requires:
             - build
-      - create-api-docs:
+      - deploy-api-docs:
           requires:
             - build
           filters:
             branches:
               only: master
-      - deploy-commit:
+      - deploy-bench:
           requires:
             - build
           filters:
@@ -263,7 +264,7 @@ workflows:
               only: /.*/
             branches:
               ignore: /.*/
-      - create-artifacts:
+      - crux-build-artifacts:
           requires:
             - hold
           filters:
@@ -271,7 +272,7 @@ workflows:
               only: /.*/
             branches:
               ignore: /.*/
-      - create-api-docs:
+      - deploy-api-docs:
           requires:
             - hold
           filters:
