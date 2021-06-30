@@ -95,6 +95,18 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
 
+  mvn-deploy:
+    docker:
+      - image: circleci/clojure:openjdk-8-lein
+
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run:
+          command: |
+            ./lein-sub deploy
 
   test:
     docker:
@@ -243,6 +255,14 @@ workflows:
              only: /.*/
            branches:
              ignore: /.*/
+      - mvn-deploy:
+          requires:
+            - hold
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
       - create-artifacts:
           requires:
             - hold

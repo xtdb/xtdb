@@ -91,10 +91,14 @@
   :pedantic? :warn
   :global-vars {*warn-on-reflection* true}
 
+  :repositories {"snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"}}
+
   :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
+                                    :username [:gpg :env/sonatype_username]
+                                    :password [:gpg :env/sonatype_password]}
                         "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}}
+                                     :username [:gpg :env/sonatype_username]
+                                     :password [:gpg :env/sonatype_password]}}
 
   :pom-addition ([:developers
                   [:developer
