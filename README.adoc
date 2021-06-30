@@ -4,22 +4,11 @@ A Kotlin DSL for Crux which enables pretty transactions and queries
 
 == Quickstart
 
-Add Clojars to your repositories:
-
-```kotlin
-repositories {
-    maven {
-        name = "Clojars"
-        url = uri("https://repo.clojars.org/")
-    }
-}
-```
-
 Then add `crux-kotlin-dsl` as a dependency:
 
 ```kotlin
 dependencies {
-    implementation("pro.juxt.crux:crux-kotlin-dsl:0.0.1")
+    implementation("pro.juxt.crux:crux-kotlin-dsl:0.0.3")
     // ...
 }
 ```
@@ -30,7 +19,7 @@ Pre-Alpha: This library is experimental. If you need a stable Java/Kotlin API, u
 
 == Releasing
 
-To release a JAR to MavenCentral, you will need to follow three steps:
+To release a JAR to MavenCentral, you will need to follow four steps:
 
 1. Create a Sonatype user
 2. Create a GPG key

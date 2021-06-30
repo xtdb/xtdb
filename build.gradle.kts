@@ -8,7 +8,7 @@ plugins {
 }
 
 group = "pro.juxt.crux"
-version = "0.0.1-SNAPSHOT"
+version = "0.0.3"
 
 java {
     withJavadocJar()
@@ -45,16 +45,6 @@ publishing {
                     connection.set("scm:git:git://github.com/crux-labs/crux-kotlin-dsl.git")
                     developerConnection.set("scm:git:ssh://github.com:crux-labs/crux-kotlin-dsl.git")
                     url.set("https://github.com/crux-labs/crux-kotlin-dsl")
-                }
-                withXml {
-                    // yes, I believe any sane person would agree this is definitely better than
-                    // just typing out the XML by hand like a monkey.
-                    var repo = asNode().appendNode("repositories").appendNode("repository")
-                    repo.appendNode("id", "Clojars")
-                    repo.appendNode("name", "Clojars")
-                    repo.appendNode("url", "https://repo.clojars.org/")
-                    repo.appendNode("layout", "default")
-                    repo
                 }
             }
         }
