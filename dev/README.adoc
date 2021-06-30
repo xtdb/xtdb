@@ -28,6 +28,10 @@ The recommended way of running the full test suite is `./bin/build.sh`.
 
 The test suite relies on the `timeout` command line utility, this comes as a default on Linux but isn't preinstalled on MacOS. You can get it with `brew install coreutils && echo 'alias timeout=gtimeout' >> ~/.bashrc'`
 
+== Releasing
+
+See link:./RELEASING.adoc[RELEASING.adoc]
+
 [NOTE]
 ====
 The GNU version of `sed` is required for some scripts in this project. If developing on Mac (or other BSD variants), install GNU sed.
