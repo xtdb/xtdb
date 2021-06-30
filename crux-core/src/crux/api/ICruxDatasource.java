@@ -56,7 +56,7 @@ public interface ICruxDatasource extends Closeable {
      * Returns the requested data for the given entity ID, based on the projection spec
      *
      * e.g. `db.pull("[:film/name :film/year]", "spectre")`
-     *   => `{:film/name "Spectre", :film/year 2015}`
+     *   =&gt; `{:film/name "Spectre", :film/year 2015}`
      *
      * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#pull
      * @param eid entity ID
@@ -68,7 +68,7 @@ public interface ICruxDatasource extends Closeable {
      * Returns the requested data for the given entity IDs, based on the projection spec
      *
      * e.g. `db.pullMany("[:film/name :film/year]", Arrays.asList("spectre", "skyfall"))`
-     *   => `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
+     *   =&gt; `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
      *
      * @param projection An EQL projection spec as a String or Clojure data structure - see https://opencrux.com/reference/queries.html#pull
      * @param eids entity IDs
@@ -80,7 +80,7 @@ public interface ICruxDatasource extends Closeable {
      * Returns the requested data for the given entity IDs, based on the projection spec
      *
      * e.g. `db.pullMany("[:film/name :film/year]", "spectre", "skyfall")`
-     *   => `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
+     *   =&gt; `[{:film/name "Spectre", :film/year 2015}, {:film/name "Skyfall", :film/year 2012}]`
      *
      * @param projection An EQL projection spec - see https://opencrux.com/reference/queries.html#pull
      * @param eids entity IDs

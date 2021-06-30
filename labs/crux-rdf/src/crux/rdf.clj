@@ -8,13 +8,10 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.walk :as w]
-            [clojure.set :as set]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.db :as db]
             [crux.api :as crux])
   (:import java.io.StringReader
-           java.net.URLDecoder
            javax.xml.datatype.DatatypeConstants
            [org.eclipse.rdf4j.rio RDFHandler]
            [org.eclipse.rdf4j.rio.ntriples NTriplesParserFactory NTriplesUtil]

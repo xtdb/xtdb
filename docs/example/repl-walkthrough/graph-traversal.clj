@@ -1,5 +1,5 @@
 ;; load a repl with the latest crux-core dependency, e.g. using clj:
-;; $ clj -Sdeps '{:deps {juxt/crux-core {:mvn/version "RELEASE"}}}'
+;; $ clj -Sdeps '{:deps {pro.juxt.crux/crux-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.graph-traversal
   (:require [crux.api :as crux]

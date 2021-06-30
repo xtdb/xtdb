@@ -167,7 +167,6 @@ public final class HistoryOptions {
 
     /**
      * Not intended for public use, may be removed.
-     * @return
      */
     public IPersistentMap toMap() {
         IPersistentMap ret = PersistentArrayMap.EMPTY

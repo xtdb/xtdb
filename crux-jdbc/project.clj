@@ -1,11 +1,12 @@
-(defproject juxt/crux-jdbc "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-jdbc "crux-git-version"
   :description "Crux JDBC"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [org.clojure/java.data "1.0.86"]
                  [com.zaxxer/HikariCP "3.4.5"]
@@ -22,4 +23,14 @@
   :middleware [leiningen.project-version/middleware]
   :pedantic? :warn
 
-  :profiles {:dev {:dependencies [[com.opentable.components/otj-pg-embedded "0.13.1"]]}})
+  :profiles {:dev {:dependencies [[com.opentable.components/otj-pg-embedded "0.13.1"]]}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

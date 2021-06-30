@@ -1,8 +1,9 @@
-(defproject juxt/crux-core "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-core "crux-git-version"
   :description "An open source document database with bitemporal graph queries"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [org.slf4j/slf4j-api "1.7.30"]
@@ -15,17 +16,46 @@
                  [org.agrona/agrona "1.11.0"]
                  [com.github.jnr/jnr-ffi "2.2.4" :scope "provided"]
                  [pro.juxt.clojars-mirrors.edn-query-language/eql "2021.02.28"]]
+
+  :plugins [[lein-javadoc "0.3.0"]]
+
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-                            :dependencies [[juxt/crux-http-server "crux-git-version-alpha"]]}
-             :test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
+                            :dependencies [[pro.juxt.crux/crux-http-server "crux-git-version"]]}
+             :test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
+
   :middleware [leiningen.project-version/middleware]
   :aot [crux.main]
+
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
-  :pedantic? :warn)
+
+  :pedantic? :warn
+
+  :javadoc-opts {:package-names ["crux.api"]
+                 :output-dir "target/javadoc/out"
+                 :additional-args ["-windowtitle" "Crux Javadoc"
+                                   "-quiet"
+                                   "-Xdoclint:none"
+                                   "-link" "https://docs.oracle.com/javase/8/docs/api/"
+                                   "-link" "https://www.javadoc.io/static/org.clojure/clojure/1.10.3"]}
+
+  :classifiers {:sources {:prep-tasks ^:replace []}
+                :javadoc {:prep-tasks ^:replace ["javadoc"]
+                          :omit-source true
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

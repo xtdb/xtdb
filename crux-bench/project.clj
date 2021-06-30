@@ -1,16 +1,22 @@
-(defproject juxt/crux-bench "crux-git-version"
+(defproject pro.juxt.crux/crux-bench "crux-git-version"
+  :description "Crux Benchmarking tools"
+  :url "https://github.com/juxt/crux"
+  :license {:name "The MIT License"
+            :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "2.3.1"]
                  [org.clojure/tools.cli "1.0.206"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-jdbc "crux-git-version-beta"]
-                 [juxt/crux-kafka "crux-git-version-beta"]
-                 [juxt/crux-kafka-embedded "crux-git-version-beta"]
-                 [juxt/crux-rocksdb "crux-git-version-beta"]
-                 [juxt/crux-lmdb "crux-git-version-alpha"]
-                 [juxt/crux-metrics "crux-git-version-alpha"]
-                 [juxt/crux-rdf "crux-git-version-alpha"]
-                 [juxt/crux-test "crux-git-version"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-jdbc "crux-git-version"]
+                 [pro.juxt.crux/crux-kafka "crux-git-version"]
+                 [pro.juxt.crux/crux-kafka-embedded "crux-git-version"]
+                 [pro.juxt.crux/crux-rocksdb "crux-git-version"]
+                 [pro.juxt.crux/crux-lmdb "crux-git-version"]
+                 [pro.juxt.crux/crux-metrics "crux-git-version"]
+                 [pro.juxt.crux-labs/crux-rdf "crux-git-version"]
+                 [pro.juxt.crux/crux-test "crux-git-version"]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
@@ -52,4 +58,14 @@
 
   :profiles {:uberjar [:with-neo4j]
              :with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]
-                          :source-paths ["src-neo4j"]}})
+                          :source-paths ["src-neo4j"]}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

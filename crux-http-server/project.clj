@@ -1,11 +1,12 @@
-(defproject juxt/crux-http-server "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-http-server "crux-git-version"
   :description "Crux HTTP Server"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [com.cognitect/transit-clj "1.0.324"]
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
@@ -40,7 +41,7 @@
                              [expound "0.8.7"]]}
 
              :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
-                                   [juxt/crux-test "crux-git-version"]]}}
+                                   [pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"
@@ -53,4 +54,14 @@
   :jar-exclusions [#"public/cljs-out/dev/.*"]
   :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

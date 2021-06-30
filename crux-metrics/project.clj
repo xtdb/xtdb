@@ -1,10 +1,11 @@
-(defproject juxt/crux-metrics "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-metrics "crux-git-version"
   :description "Provides Metrics for Crux nodes"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [io.dropwizard.metrics/metrics-core "4.1.2"]]
 
   :profiles {:provided
@@ -22,4 +23,14 @@
              :dev
              {:dependencies
               [[ch.qos.logback/logback-classic "1.2.3"]]}}
-  :middleware [leiningen.project-version/middleware])
+  :middleware [leiningen.project-version/middleware]
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

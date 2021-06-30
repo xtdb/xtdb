@@ -10,7 +10,7 @@ set -e
       shift 2;
   else
       MODULES="crux-core
-crux-rdf
+labs/crux-rdf
 crux-metrics
 crux-rocksdb
 crux-lmdb

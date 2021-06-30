@@ -8,8 +8,8 @@ running Kafka available to connect to (such as during development).
 
 [source,clojure,subs=attributes+]
 ----
-juxt/crux-core {:mvn/version "{crux_version}-beta"}
-juxt/crux-kafka-embedded {:mvn/version "{crux_version}-beta"}
+pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
+pro.juxt.crux/crux-kafka-embedded {:mvn/version "{crux_version}"}
 ----
 
 [#embedded-kafka-start]

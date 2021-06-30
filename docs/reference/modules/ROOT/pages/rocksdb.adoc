@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-juxt/crux-rocksdb {:mvn/version "{crux_version}-beta"}
+pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
 ----
 
 pom.xml::
@@ -20,9 +20,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-rocksdb</artifactId>
-    <version>{crux_version}-beta</version>
+    <version>{crux_version}</version>
 </dependency>
 ----
 ====
