@@ -1,8 +1,15 @@
 (defproject pro.juxt.crux/crux-s3 "crux-git-version"
   :description "Crux S3 integration"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-javadoc "0.3.0"]
+            [lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
@@ -20,8 +27,6 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :plugins [[lein-javadoc "0.3.0"]]
-
   :profiles {:test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]
@@ -35,8 +40,6 @@
                   "-Werror"
                   "-proc:none"]
 
-  :pedantic? :warn
-
   :javadoc-opts {:package-names ["crux"]
                  :output-dir "target/javadoc/out"
                  :additional-args ["-windowtitle" "Crux S3 Javadoc"
@@ -49,14 +52,4 @@
   :classifiers {:sources {:prep-tasks ^:replace []}
                 :javadoc {:prep-tasks ^:replace ["javadoc"]
                           :omit-source true
-                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})

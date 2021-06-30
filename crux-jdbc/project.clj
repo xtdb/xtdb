@@ -1,9 +1,16 @@
 (defproject pro.juxt.crux/crux-jdbc "crux-git-version"
   :description "Crux JDBC"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [pro.juxt.crux/crux-core "crux-git-version"]
@@ -21,16 +28,5 @@
                  [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8" :scope "provided"]]
 
   :middleware [leiningen.project-version/middleware]
-  :pedantic? :warn
 
-  :profiles {:dev {:dependencies [[com.opentable.components/otj-pg-embedded "0.13.1"]]}}
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+  :profiles {:dev {:dependencies [[com.opentable.components/otj-pg-embedded "0.13.1"]]}})

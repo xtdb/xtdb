@@ -1,9 +1,17 @@
 (defproject pro.juxt.crux/crux-test "crux-git-version"
   :description "Crux Tests Project"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-junit "1.1.9"]
+            [lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [pro.juxt.crux/crux-core "crux-git-version"]
                  [pro.juxt.crux/crux-jdbc "crux-git-version"]
@@ -51,9 +59,6 @@
 
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
   :middleware [leiningen.project-version/middleware]
-  :global-vars {*warn-on-reflection* true}
-  :pedantic? :warn
-  :plugins [[lein-junit "1.1.9"]]
 
   :profiles {:dev {:dependencies []}
 
@@ -87,14 +92,4 @@
 
   ;; empty JARs to keep Maven Central happy
   :classifiers {:sources {:jar-exclusions [#""]}
-                :javadoc {:jar-exclusions [#""]}}
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+                :javadoc {:jar-exclusions [#""]}})

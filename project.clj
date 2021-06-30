@@ -80,7 +80,6 @@
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
-  :global-vars {*warn-on-reflection* true}
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
              :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}
@@ -89,4 +88,15 @@
              :with-google-cloud-storage-test {:jvm-opts ["-Dcrux.google.cloud-storage-test.bucket=crux-gcs-test"]}
              :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}}
 
-  :pedantic? :warn)
+  :pedantic? :warn
+  :global-vars {*warn-on-reflection* true}
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]]))

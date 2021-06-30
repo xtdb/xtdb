@@ -1,9 +1,17 @@
 (defproject pro.juxt.crux/crux-core "crux-git-version"
   :description "An open source document database with bitemporal graph queries"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-javadoc "0.3.0"]
+            [lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
                  [org.slf4j/slf4j-api "1.7.30"]
@@ -17,8 +25,6 @@
                  [com.github.jnr/jnr-ffi "2.2.4" :scope "provided"]
                  [pro.juxt.clojars-mirrors.edn-query-language/eql "2021.02.28"]]
 
-  :plugins [[lein-javadoc "0.3.0"]]
-
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
@@ -26,6 +32,7 @@
              :test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]
+
   :aot [crux.main]
 
   :java-source-paths ["src"]
@@ -34,8 +41,6 @@
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
-
-  :pedantic? :warn
 
   :javadoc-opts {:package-names ["crux.api"]
                  :output-dir "target/javadoc/out"
@@ -48,14 +53,4 @@
   :classifiers {:sources {:prep-tasks ^:replace []}
                 :javadoc {:prep-tasks ^:replace ["javadoc"]
                           :omit-source true
-                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})

@@ -1,8 +1,15 @@
 (defproject pro.juxt.crux/crux-sql "crux-git-version"
   :description "SQL for Crux using Apache Calcite"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-javadoc "0.3.0"]
+            [lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [pro.juxt.crux/crux-core "crux-git-version"]
@@ -25,8 +32,6 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [com.google.guava/guava "30.1.1-jre"]]
 
-  :plugins [[lein-javadoc "0.3.0"]]
-
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
@@ -43,14 +48,6 @@
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
 
-  :global-vars {*warn-on-reflection* true}
-  :pedantic? :warn
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
   :javadoc-opts {:package-names ["crux"]
                  :output-dir "target/javadoc/out"
                  :additional-args ["-windowtitle" "Crux SQL Javadoc"
@@ -63,9 +60,4 @@
   :classifiers {:sources {:prep-tasks ^:replace []}
                 :javadoc {:prep-tasks ^:replace ["javadoc"]
                           :omit-source true
-                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})

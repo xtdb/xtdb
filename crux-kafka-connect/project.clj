@@ -1,9 +1,21 @@
 (defproject pro.juxt.crux/crux-kafka-connect "crux-git-version"
   :description "Crux Kafka Connect"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-javadoc "0.3.0"]
+            [lein-parent "0.3.8"]
+            [lein-licenses "0.2.2"]
+            [thomasa/mranderson "0.5.1"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :mranderson {:unresolved-tree true}
+
   :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [pro.juxt.crux/crux-core "crux-git-version"]
                  [pro.juxt.crux/crux-http-client "crux-git-version"]
@@ -12,9 +24,16 @@
                  [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
                  [com.cognitect/transit-clj "1.0.324"]
                  [org.slf4j/slf4j-api "1.7.30"]]
+
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.6.0"]]}}
+
   :middleware [leiningen.project-version/middleware]
-  :aliases {"package" ["do" ["inline-deps"] ["with-profile" "+plugin.mranderson/config" "uberjar"] ["archive"]]}
+
+  :aliases {"package" ["do"
+                       ["inline-deps"]
+                       ["with-profile" "+plugin.mranderson/config" "uberjar"]
+                       ["archive"]]}
+
   :confluent-hub-manifest {:component_types ["sink" "source"]
                            :description "A Kafka Connect plugin for transferring data between Crux nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
                            :documentation_url "https://github.com/juxt/crux/tree/master/crux-kafka-connect"
@@ -37,16 +56,12 @@
                                   "Crux"]
 
                            :version "crux-git-version"}
+
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
-  :plugins [[lein-licenses "0.2.2"]
-            [thomasa/mranderson "0.5.1"]
-            [lein-javadoc "0.3.0"]]
-  :mranderson {:unresolved-tree true}
-  :pedantic? :warn
 
   :javadoc-opts {:package-names ["crux"]
                  :output-dir "target/javadoc/out"
@@ -60,14 +75,4 @@
   :classifiers {:sources {:prep-tasks ^:replace []}
                 :javadoc {:prep-tasks ^:replace ["javadoc"]
                           :omit-source true
-                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})

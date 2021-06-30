@@ -1,8 +1,14 @@
 (defproject pro.juxt.crux/crux-bench "crux-git-version"
   :description "Crux Benchmarking tools"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
@@ -54,18 +60,7 @@
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]
   :uberjar-name "crux-bench-standalone.jar"
-  :pedantic? :warn
 
   :profiles {:uberjar [:with-neo4j]
              :with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]
-                          :source-paths ["src-neo4j"]}}
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+                          :source-paths ["src-neo4j"]}})

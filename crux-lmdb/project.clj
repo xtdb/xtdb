@@ -14,15 +14,4 @@
                  [org.lwjgl/lwjgl "3.2.3" :classifier "natives-macos" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.3" :classifier "natives-macos" :native-prefix ""]
                  [org.lwjgl/lwjgl-lmdb "3.2.3"]]
-  :middleware [leiningen.project-version/middleware]
-  :pedantic? :warn
-
-  :pom-addition ([:developers
-                  [:developer
-                   [:id "juxt"]
-                   [:name "JUXT"]]])
-
-  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
-                                    :creds :gpg}
-                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
-                                     :creds :gpg}})
+  :middleware [leiningen.project-version/middleware])
