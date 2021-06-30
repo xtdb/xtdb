@@ -91,6 +91,14 @@ ossrhPassword=YOUR_SONATYPE_JIRA_PASSWORD
 ./gradlew publish
 ----
 
+=== (5) Release to Central:
+
+Go to https://oss.sonatype.org/#stagingRepositories and check the box next to the repository you just published
+
+Click "Close"
+
+When the operation is complete, click "Release"
+
 == References
 
 * https://www.juxt.pro/drafts/crux-kotlin (TODO: replace with real blog post)
