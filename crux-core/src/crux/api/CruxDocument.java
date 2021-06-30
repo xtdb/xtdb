@@ -36,7 +36,6 @@ public final class CruxDocument {
     /**
      * Creates a CruxDocument from a Clojure map. Not intended for public use, may be removed.
      * @param input
-     * @return
      */
     public static CruxDocument factory(IPersistentMap input) {
         if (input == null) return null;
@@ -113,7 +112,7 @@ public final class CruxDocument {
      * Static factory to create a Crux transaction function document.
      * @param id the id of the transaction function
      * @param rawFunction the function body, as a Clojure-code string.
-     * @return the function document, suitable for use in {@link Transaction.Builder#put(CruxDocument)}
+     * @return the function document, suitable for use in {@link crux.api.tx.Transaction.Builder#put(CruxDocument)}
      */
     public static CruxDocument createFunction(Object id, String rawFunction) {
         return new CruxDocument(id, PersistentArrayMap.EMPTY.assoc(FN_ID, Clojure.read(rawFunction)));

@@ -21,7 +21,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-juxt/crux-lucene {:mvn/version "{crux_version}-alpha"}
+pro.juxt.crux/crux-lucene {:mvn/version "{crux_version}"}
 ----
 
 pom.xml::
@@ -29,9 +29,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-lucene</artifactId>
-    <version>{crux_version}-alpha</version>
+    <version>{crux_version}</version>
 </dependency>
 ----
 ====

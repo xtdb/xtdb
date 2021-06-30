@@ -1,8 +1,14 @@
-(defproject juxt/crux-s3 "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-s3 "crux-git-version"
+  :description "Crux S3 integration"
+  :url "https://github.com/juxt/crux"
+  :license {:name "The MIT License"
+            :url "http://opensource.org/licenses/MIT"}
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
 
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
                  [software.amazon.awssdk/s3 "2.10.91"]
 
                  ;; dependency resolution
@@ -14,7 +20,9 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
+  :plugins [[lein-javadoc "0.3.0"]]
+
+  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
 
   :middleware [leiningen.project-version/middleware]
 
@@ -27,4 +35,28 @@
                   "-Werror"
                   "-proc:none"]
 
-  :pedantic? :warn)
+  :pedantic? :warn
+
+  :javadoc-opts {:package-names ["crux"]
+                 :output-dir "target/javadoc/out"
+                 :additional-args ["-windowtitle" "Crux S3 Javadoc"
+                                   "-quiet"
+                                   "-Xdoclint:none"
+                                   "-link" "https://docs.oracle.com/javase/8/docs/api/"
+                                   "-link" "https://www.javadoc.io/static/org.clojure/clojure/1.10.3"
+                                   "-link" "https://sdk.amazonaws.com/java/api/latest"]}
+
+  :classifiers {:sources {:prep-tasks ^:replace []}
+                :javadoc {:prep-tasks ^:replace ["javadoc"]
+                          :omit-source true
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :creds :gpg}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :creds :gpg}})

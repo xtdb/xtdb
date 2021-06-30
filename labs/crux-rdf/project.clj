@@ -1,22 +1,16 @@
-(defproject pro.juxt.crux/crux-lucene "crux-git-version"
-  :description "Crux Lucene integration"
+(defproject pro.juxt.crux-labs/crux-rdf "crux-git-version"
+  :description "Crux RDF"
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
-  :scm {:dir ".."}
+  :scm {:dir "../.."}
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [pro.juxt.crux/crux-core "crux-git-version"]
-
-                 [org.apache.lucene/lucene-core "8.6.1"]
-                 [org.apache.lucene/lucene-queryparser "8.6.1"]]
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [pro.juxt.crux/crux-test "crux-git-version"]
-                                  [pro.juxt.crux/crux-rocksdb "crux-git-version"]]}}
+                 [org.eclipse.rdf4j/rdf4j-rio-ntriples "3.0.0"]
+                 [org.eclipse.rdf4j/rdf4j-queryparser-sparql "3.0.0"]
+                 [pro.juxt.clojars-mirrors.ring/ring-core "1.9.2" :scope "provided"]]
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
   :middleware [leiningen.project-version/middleware]
-  :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"
-             "-Dclojure.spec.compile-asserts=true"
-             "-Dclojure.spec.check-asserts=true"]
-  :global-vars {*warn-on-reflection* true}
   :pedantic? :warn
 
   :pom-addition ([:developers

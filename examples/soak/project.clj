@@ -1,11 +1,11 @@
 (defproject juxt/soak "crux-git-version"
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "1.0.0"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-kafka "crux-git-version-beta"]
-                 [juxt/crux-rocksdb "crux-git-version-beta"]
-                 [juxt/crux-metrics "crux-git-version-alpha"]
-                 [juxt/crux-s3 "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-kafka "crux-git-version"]
+                 [pro.juxt.crux/crux-rocksdb "crux-git-version"]
+                 [pro.juxt.crux/crux-metrics "crux-git-version"]
+                 [pro.juxt.crux/crux-s3 "crux-git-version"]
 
                  [bidi "2.1.6"]
                  [hiccup "2.0.0-alpha2"]
