@@ -23,18 +23,13 @@
 (def mvn-group-override
   (System/getenv "CRUX_MVN_GROUP"))
 
-(def git-branch
-  (or (System/getenv "CRUX_BRANCH")
-      (System/getenv "CIRCLE_BRANCH")
-      (str/trim (:out (sh/sh "git" "branch" "--show-current")))))
-
 (defn middleware [project]
   (let [git-version (or (System/getenv "CRUX_VERSION")
                         (version-from-git))]
     (-> project
         (->> (postwalk (fn [x]
                          (if (= x "crux-git-version")
-                           (or git-version (str git-branch "-SNAPSHOT"))
+                           (or git-version "dev-SNAPSHOT")
                            x))))
         (cond-> mvn-group-override (-> (assoc :group mvn-group-override)
                                        (->> (postwalk (fn [x]
