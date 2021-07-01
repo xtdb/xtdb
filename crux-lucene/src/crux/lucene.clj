@@ -15,7 +15,7 @@
            java.time.Duration
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
-           [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
+           [org.apache.lucene.document Document Field$Store StringField TextField]
            [org.apache.lucene.index IndexWriter IndexWriterConfig Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
@@ -45,28 +45,15 @@
 (defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
   (IndexWriter. directory, (IndexWriterConfig. analyzer)))
 
-(defn- complete-tx! [^IndexWriter index-writer tx]
-  (let [t (Term. "meta" "latest-completed-tx")
-        d (doto (Document.)
-            (.add (StringField. "meta", "latest-completed-tx" Field$Store/NO))
-            (.add (StoredField. "latest-completed-tx" ^long (:crux.tx/tx-id tx))))]
-    (.updateDocument index-writer t d)))
-
 (defn- ->index-searcher [lucene-store]
   (let [^SearcherManager searcher-manager (:searcher-manager lucene-store)
         s (.acquire searcher-manager)]
     [s (fn [] (.release searcher-manager s))]))
 
-(defn latest-completed-tx [lucene-store]
-  (let [[^IndexSearcher index-searcher index-searcher-release-fn] (->index-searcher lucene-store)]
-    (try
-      (let [q (TermQuery. (Term. "meta" "latest-completed-tx"))]
-        (when-let [^ScoreDoc d (first (.-scoreDocs (.search index-searcher q 1)))]
-          (some-> (.doc index-searcher (.-doc d))
-                  (.get "latest-completed-tx")
-                  (Long/parseLong))))
-      (finally
-        (index-searcher-release-fn)))))
+(defn latest-completed-tx-id [^IndexWriter index-writer]
+  (some-> (into {} (.getLiveCommitData index-writer))
+          (get "crux.tx/tx-id")
+          (Long/parseLong)))
 
 (defn search [lucene-store, ^Query q]
   (assert lucene-store)
@@ -274,15 +261,15 @@
     (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
 
     (tx/register-index! secondary-indices
-                        (latest-completed-tx lucene-store)
-                        (fn [{:keys [::txe/tx-events committing?] :as tx}]
+                        (latest-completed-tx-id index-writer)
+                        (fn [{:keys [::tx/tx-id ::txe/tx-events committing?]}]
                           (when committing?
                             (let [{:keys [docs evicted-eids]} (transform-tx-events document-store tx-events)]
                               (when-let [evicting-eids (not-empty evicted-eids)]
                                 (evict! indexer index-writer evicting-eids))
                               (index! indexer index-writer docs)))
 
-                          (complete-tx! index-writer tx)
+                          (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)})
                           (.maybeRefreshBlocking searcher-manager)))
 
     lucene-store))

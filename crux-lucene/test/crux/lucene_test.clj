@@ -201,7 +201,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
 
-    (t/is (= 2 (lf/doc-count)))
+    (t/is (= 1 (lf/doc-count)))
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
@@ -239,7 +239,9 @@
       (t/is (empty? (c/q before-db q))))))
 
 (t/deftest test-ensure-lucene-store-keeps-last-tx
-  (let [latest-tx (fn [] (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))]
+  (letfn [(latest-tx []
+            (l/latest-completed-tx-id (-> @(:!system *api*)
+                                          (get-in [:crux.lucene/lucene-store :index-writer]))))]
     (t/is (not (latest-tx)))
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivank"}]])
 
@@ -371,7 +373,8 @@
                     [:crux.tx/put {:crux.db/id :test-id :name "2345"}]])
 
   (t/is (= (:crux.tx/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
-           (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))))
+           (l/latest-completed-tx-id (-> @(:!system *api*)
+                                         (get-in [::l/lucene-store :index-writer]))))))
 
 (defn escape-lucene-string [s]
   ;; note this does not handle all cases if spaces are involved, e.g. a trailing " OR" will not be accepted by the QueryParser
