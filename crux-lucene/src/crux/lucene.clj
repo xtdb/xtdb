@@ -12,6 +12,7 @@
   (:import crux.query.VarBinding
            java.io.Closeable
            java.nio.file.Path
+           java.time.Duration
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
            [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
@@ -21,10 +22,11 @@
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
            [org.apache.lucene.store Directory FSDirectory]))
 
-(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer]
+(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer ^Thread fsync-thread]
   Closeable
-  (close [this]
-    (.close ^IndexWriter index-writer)
+  (close [_]
+    (doto fsync-thread (.interrupt) (.join))
+    (cio/try-close index-writer)
     (cio/try-close directory)))
 
 (defn- ^String ->hash-str [eid]
@@ -224,21 +226,49 @@
              :evicted-eids #{}}
             conformed-tx-events)))
 
+(defn- fsync-loop [^IndexWriter index-writer ^Duration fsync-frequency]
+  (log/debug "Starting Lucene fsync-loop...")
+  (try
+    (while true
+      (try
+        (Thread/sleep (.toMillis fsync-frequency))
+        (log/debug "Committing Lucene IndexWriter...")
+        (.commit index-writer)
+        (log/debug "Committed Lucene IndexWriter.")
+
+        (catch InterruptedException e
+          (throw e))
+
+        (catch Throwable t
+          (log/warn t "error during Lucene IndexWriter commit"))))
+
+    (catch InterruptedException _
+      (log/debug "Stopped Lucene fsync-loop."))))
+
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :required? true
-                        :spec ::sys/path}}
+                        :spec ::sys/path}
+               :fsync-frequency {:required? true
+                                 :spec ::sys/duration
+                                 :default "PT5M"}}
    ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer
                :analyzer `->analyzer
                :secondary-indices :crux/secondary-indices}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices]}]
+  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices fsync-frequency]}]
   (let [directory (FSDirectory/open db-dir)
         index-writer (->index-writer directory analyzer)
         searcher-manager (SearcherManager. index-writer false false nil)
-        lucene-store (LuceneNode. directory analyzer index-writer searcher-manager indexer)]
+        lucene-store (LuceneNode. directory analyzer
+                                  index-writer searcher-manager
+                                  indexer
+                                  (doto (.newThread (cio/thread-factory "crux-lucene-fsync")
+                                                    #(fsync-loop index-writer fsync-frequency))
+                                    (.start)))]
+
     ;; Ensure lucene index exists for immediate queries:
     (.commit index-writer)
     (q/assoc-pred-ctx! query-engine ::lucene-store lucene-store)
@@ -253,7 +283,6 @@
                               (index! indexer index-writer docs)))
 
                           (complete-tx! index-writer tx)
-                          (.commit index-writer) ; TODO aware of #1500
                           (.maybeRefreshBlocking searcher-manager)))
 
     lucene-store))
