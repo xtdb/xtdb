@@ -3,11 +3,6 @@
             [crux.lucene :as l])
   (:import [org.apache.lucene.index DirectoryReader IndexReader IndexWriter]))
 
-(defn with-lucene-module [f]
-  (fix/with-tmp-dirs #{db-dir}
-    (fix/with-opts {::l/lucene-store {:db-dir db-dir}}
-      f)))
-
 (defn with-lucene-opts [lucene-opts]
   (fn [f]
     (fix/with-tmp-dirs #{db-dir}

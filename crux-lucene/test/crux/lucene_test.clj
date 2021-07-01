@@ -20,7 +20,7 @@
 ;; tests in this namespace depend on the `(defmethod q/pred-constraint 'lucene-text-search ...)`
 (require 'crux.lucene.multi-field)
 
-(t/use-fixtures :each lf/with-lucene-module fix/with-node)
+(t/use-fixtures :each (fix/with-opts {::l/lucene-store {}}) fix/with-node)
 
 (t/deftest test-empty-database-returns-empty
   (t/is (= 0 (count (c/q (c/db *api*) {:find '[?e]

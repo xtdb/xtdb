@@ -21,7 +21,7 @@
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
-           [org.apache.lucene.store FSDirectory IOContext]))
+           [org.apache.lucene.store ByteBuffersDirectory FSDirectory IOContext]))
 
 (defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer
                        cp-job ^Thread fsync-thread]
@@ -265,7 +265,6 @@
 
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
-                        :required? true
                         :spec ::sys/path}
                :fsync-frequency {:required? true
                                  :spec ::sys/duration
@@ -278,7 +277,9 @@
                :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
   [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer fsync-frequency]}]
-  (let [directory (FSDirectory/open db-dir)
+  (let [directory (if db-dir
+                    (FSDirectory/open db-dir)
+                    (ByteBuffersDirectory.))
         index-writer (->index-writer {:directory directory, :analyzer analyzer,
                                       :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))})
         searcher-manager (SearcherManager. index-writer false false nil)
