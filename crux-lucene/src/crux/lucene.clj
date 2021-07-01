@@ -45,19 +45,13 @@
 (defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
   (IndexWriter. directory, (IndexWriterConfig. analyzer)))
 
-(defn- ->index-searcher [lucene-store]
-  (let [^SearcherManager searcher-manager (:searcher-manager lucene-store)
-        s (.acquire searcher-manager)]
-    [s (fn [] (.release searcher-manager s))]))
-
 (defn latest-completed-tx-id [^IndexWriter index-writer]
   (some-> (into {} (.getLiveCommitData index-writer))
           (get "crux.tx/tx-id")
           (Long/parseLong)))
 
-(defn search [lucene-store, ^Query q]
-  (assert lucene-store)
-  (let [[^IndexSearcher index-searcher index-searcher-release-fn] (->index-searcher lucene-store)]
+(defn search [^SearcherManager searcher-manager, ^Query q]
+  (let [^IndexSearcher index-searcher (.acquire searcher-manager)]
     (try
       (let [q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
             score-docs (letfn [(docs-page [after]
@@ -76,29 +70,30 @@
           (log/debug (.explain index-searcher q (.-doc ^ScoreDoc (first score-docs)))))
 
         (cio/->cursor (fn []
-                        (index-searcher-release-fn))
+                        (.release searcher-manager index-searcher))
                       (->> score-docs
                            (map (fn [^ScoreDoc d]
                                   (vector (.doc index-searcher (.-doc d))
                                           (.-score d)))))))
       (catch Throwable t
-        (index-searcher-release-fn)
+        (.release searcher-manager index-searcher)
         (throw t)))))
 
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
-  (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
-    (let [arg-bindings (map (fn [a]
-                              (if (instance? VarBinding a)
-                                (q/bound-result-for-var index-snapshot a join-keys)
-                                a))
-                            (rest arg-bindings))
-          query (query-builder (:analyzer lucene-store) arg-bindings)
-          tuples (with-open [search-results ^crux.api.ICursor (search lucene-store query)]
-                   (->> search-results
-                        iterator-seq
-                        (results-resolver index-snapshot db)
-                        (into [])))]
-      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
+  (let [{:keys [searcher-manager]} lucene-store]
+    (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
+      (let [arg-bindings (map (fn [a]
+                                (if (instance? VarBinding a)
+                                  (q/bound-result-for-var index-snapshot a join-keys)
+                                  a))
+                              (rest arg-bindings))
+            query (query-builder (:analyzer lucene-store) arg-bindings)
+            tuples (with-open [search-results ^crux.api.ICursor (search searcher-manager query)]
+                     (->> search-results
+                          iterator-seq
+                          (results-resolver index-snapshot db)
+                          (into [])))]
+        (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples)))))
 
 (defn ^Query build-query
   "Standard build query fn, taking a single field/val lucene term string."
@@ -191,7 +186,6 @@
 
 (defn ->analyzer [_]
   (StandardAnalyzer.))
-
 
 (defn- transform-tx-events [document-store tx-events]
   (let [conformed-tx-events (map txc/<-tx-event tx-events)
