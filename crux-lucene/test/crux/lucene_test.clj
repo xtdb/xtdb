@@ -2,8 +2,9 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [crux.db :as db]
             [crux.api :as c]
+            [crux.checkpoint :as cp]
+            [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
@@ -11,8 +12,10 @@
             [crux.rocksdb :as rocks])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
+           [org.apache.lucene.index DirectoryReader Term]
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]))
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]
+           org.apache.lucene.store.FSDirectory))
 
 ;; tests in this namespace depend on the `(defmethod q/pred-constraint 'lucene-text-search ...)`
 (require 'crux.lucene.multi-field)
@@ -401,6 +404,20 @@
                                       :in    [input]
                                       :where [[(wildcard-text-search input) [[?e ?v]]]]}
                                  1)))))
+
+(t/deftest test-checkpoint
+  (fix/with-tmp-dirs #{lucene-dir cp-dir}
+    (with-open [node (crux.api/start-node {::l/lucene-store {:db-dir lucene-dir}})]
+      (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo, :foo "foo"}]])
+
+      (let [index-writer (-> @(:!system node)
+                             (get-in [::l/lucene-store :index-writer]))
+            src (#'l/checkpoint-src index-writer)]
+        (cp/save-checkpoint src cp-dir)))
+
+    (with-open [dir (FSDirectory/open (.toPath cp-dir))
+                rdr (DirectoryReader/open dir)]
+      (t/is (= 1 (.numDocs rdr))))))
 
 (comment
   (do

@@ -1,6 +1,7 @@
 (ns crux.lucene
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [crux.checkpoint :as cp]
             [crux.codec :as cc]
             [crux.db :as db]
             [crux.io :as cio]
@@ -10,22 +11,24 @@
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
   (:import crux.query.VarBinding
-           java.io.Closeable
+           [java.io Closeable File]
            java.nio.file.Path
            java.time.Duration
            org.apache.lucene.analysis.Analyzer
            org.apache.lucene.analysis.standard.StandardAnalyzer
            [org.apache.lucene.document Document Field$Store StringField TextField]
-           [org.apache.lucene.index IndexWriter IndexWriterConfig Term]
+           [org.apache.lucene.index IndexWriter IndexWriterConfig KeepOnlyLastCommitDeletionPolicy SnapshotDeletionPolicy Term]
            org.apache.lucene.queries.function.FunctionScoreQuery
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder DoubleValuesSource IndexSearcher Query ScoreDoc SearcherManager TermQuery TopDocs]
-           [org.apache.lucene.store Directory FSDirectory]))
+           [org.apache.lucene.store FSDirectory IOContext]))
 
-(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer ^Thread fsync-thread]
+(defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer
+                       cp-job ^Thread fsync-thread]
   Closeable
   (close [_]
     (doto fsync-thread (.interrupt) (.join))
+    (cio/try-close cp-job)
     (cio/try-close index-writer)
     (cio/try-close directory)))
 
@@ -42,13 +45,18 @@
 (def ^:const ^:private field-crux-attr "_crux_attr")
 (def ^:const ^:private field-crux-eid "_crux_eid")
 
-(defn- ^IndexWriter ->index-writer [^Directory directory ^Analyzer analyzer]
-  (IndexWriter. directory, (IndexWriterConfig. analyzer)))
+(defn- ^IndexWriter ->index-writer [{:keys [directory analyzer index-deletion-policy]}]
+  (IndexWriter. directory,
+                (cond-> (IndexWriterConfig. analyzer)
+                  index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy)))))
 
-(defn latest-completed-tx-id [^IndexWriter index-writer]
-  (some-> (into {} (.getLiveCommitData index-writer))
+(defn- user-data->tx-id [user-data]
+  (some-> user-data
           (get "crux.tx/tx-id")
           (Long/parseLong)))
+
+(defn latest-completed-tx-id [^IndexWriter index-writer]
+  (user-data->tx-id (into {} (.getLiveCommitData index-writer))))
 
 (defn search [^SearcherManager searcher-manager, ^Query q]
   (let [^IndexSearcher index-searcher (.acquire searcher-manager)]
@@ -207,6 +215,24 @@
              :evicted-eids #{}}
             conformed-tx-events)))
 
+(defn- checkpoint-src [^IndexWriter index-writer]
+  (let [^SnapshotDeletionPolicy snapshotter (.getIndexDeletionPolicy (.getConfig index-writer))]
+    (reify cp/CheckpointSource
+      (save-checkpoint [_ dir]
+        (.commit index-writer) ; RFC: do we need this?
+
+        (let [snapshot (.snapshot snapshotter)]
+          (try
+            (when-let [tx-id (user-data->tx-id (.getUserData snapshot))]
+              (let [src-dir (.getDirectory snapshot)
+                    io-ctx (IOContext.)]
+                (with-open [out-dir (FSDirectory/open (.toPath ^File dir))]
+                  (doseq [file-name (.getFileNames snapshot)]
+                    (.copyFrom out-dir src-dir file-name file-name io-ctx))))
+              {:tx {::tx/tx-id tx-id}})
+            (finally
+              (.release snapshotter snapshot))))))))
+
 (defn- fsync-loop [^IndexWriter index-writer ^Duration fsync-frequency]
   (log/debug "Starting Lucene fsync-loop...")
   (try
@@ -237,15 +263,20 @@
                :query-engine :crux/query-engine
                :indexer `->indexer
                :analyzer `->analyzer
-               :secondary-indices :crux/secondary-indices}
+               :secondary-indices :crux/secondary-indices
+               :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices fsync-frequency]}]
+  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer fsync-frequency]}]
   (let [directory (FSDirectory/open db-dir)
-        index-writer (->index-writer directory analyzer)
+        index-writer (->index-writer {:directory directory, :analyzer analyzer,
+                                      :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))})
         searcher-manager (SearcherManager. index-writer false false nil)
+        cp-job (when checkpointer
+                 (cp/start checkpointer (checkpoint-src index-writer) {::cp/cp-format "lucene-8"}))
         lucene-store (LuceneNode. directory analyzer
                                   index-writer searcher-manager
                                   indexer
+                                  cp-job
                                   (doto (.newThread (cio/thread-factory "crux-lucene-fsync")
                                                     #(fsync-loop index-writer fsync-frequency))
                                     (.start)))]
