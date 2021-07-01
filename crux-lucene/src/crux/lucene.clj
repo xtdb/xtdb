@@ -40,15 +40,26 @@
 (defn ^String keyword->k [k]
   (subs (str k) 1))
 
+(def ^:const ^:private index-version 1)
 (def ^:const ^:private field-crux-id "_crux_id")
 (def ^:const ^:private field-crux-val "_crux_val")
 (def ^:const ^:private field-crux-attr "_crux_attr")
 (def ^:const ^:private field-crux-eid "_crux_eid")
 
+(defn- validate-index-version [^IndexWriter writer]
+  (let [found-index-version (some-> (into {} (.getLiveCommitData writer))
+                                    (get "crux.lucene/index-version")
+                                    (Long/parseLong))]
+    (when-not (or (zero? (.numDocs (.getDocStats writer)))
+                  (= index-version found-index-version))
+      (throw (IllegalStateException. (format "Lucene index structure out of date - please remove the Lucene dir and re-index. (expected: %d, actual: %s)"
+                                             index-version found-index-version))))))
+
 (defn- ^IndexWriter ->index-writer [{:keys [directory analyzer index-deletion-policy]}]
-  (IndexWriter. directory,
-                (cond-> (IndexWriterConfig. analyzer)
-                  index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy)))))
+  (doto (IndexWriter. directory,
+                      (cond-> (IndexWriterConfig. analyzer)
+                        index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy))))
+    (validate-index-version)))
 
 (defn- user-data->tx-id [user-data]
   (some-> user-data
@@ -294,7 +305,8 @@
                                 (evict! indexer index-writer evicting-eids))
                               (index! indexer index-writer docs)))
 
-                          (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)})
+                          (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
+                                                            "crux.lucene/index-version" (str index-version)})
                           (.maybeRefreshBlocking searcher-manager)))
 
     lucene-store))
