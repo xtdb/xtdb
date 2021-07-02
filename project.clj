@@ -51,6 +51,7 @@
 
    ;; dependency conflict resolution
    [org.apache.commons/commons-lang3 "3.9"]
+   [commons-io "2.8.0"]
    [com.google.protobuf/protobuf-java "3.13.0"]
    [joda-time "2.9.9"]]
 

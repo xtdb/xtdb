@@ -19,8 +19,6 @@
 
                  ;; dependency conflict resolution:
                  [commons-logging "1.2"]
-                 [commons-io "2.6"]
-                 [commons-codec "1.15"]
                  [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
                  [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
                  [org.eclipse.jetty/jetty-security "9.4.36.v20210114"]
