@@ -48,16 +48,14 @@
                                  [?e :crux.db/id]]})))))
 
 (t/deftest test-evict
-  (let [lucene-q "name: Smith"
-        in-crux? (fn []
+  (let [in-crux? (fn []
                    (with-open [db (c/open-db *api*)]
                      (boolean (seq (c/q db {:find '[?e]
                                             :where '[[(lucene-text-search "name: Smith") [[?e]]]
                                                      [?e :crux.db/id]]})))))
         in-lucene-store? (fn []
-                           (let [lucene-store (:crux.lucene/lucene-store @(:!system *api*))]
-                             (with-open [search-results (lf/search lmf/build-lucene-text-query ["name: Smith"])]
-                               (boolean (seq (iterator-seq search-results))))))]
+                           (with-open [search-results (l/search *api* "name: Smith")]
+                             (boolean (seq (iterator-seq search-results)))))]
 
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Smith"}]])
 

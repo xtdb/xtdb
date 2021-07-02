@@ -31,7 +31,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
 
     (t/testing "using Lucene directly"
-      (with-open [search-results (lf/search l/build-query [:name "Ivan"])]
+      (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (ffirst docs) "_crux_val"))))))
@@ -74,9 +74,9 @@
                                :where
                                '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
-      (with-open [search-results (lf/search l/build-query [:name "Ivan"])]
+      (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
         (t/is (empty? (iterator-seq search-results))))
-      (with-open [search-results (lf/search l/build-query [:name "Derek"])]
+      (with-open [search-results (l/search *api* "Derek" {:default-field "name"})]
         (t/is (seq (iterator-seq search-results)))))
 
     (t/testing "Scores"

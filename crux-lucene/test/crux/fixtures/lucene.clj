@@ -13,9 +13,9 @@
   (:crux.lucene/lucene-store @(:!system *api*)))
 
 (defn ^crux.api.ICursor search [f & args]
-  (let [{:keys [analyzer searcher-manager]} (lucene-store)
+  (let [{:keys [analyzer]} (lucene-store)
         q (apply f analyzer args)]
-    (l/search searcher-manager q)))
+    (l/search *api* q)))
 
 (defn doc-count []
   (let [{:keys [^IndexWriter index-writer]} (lucene-store)

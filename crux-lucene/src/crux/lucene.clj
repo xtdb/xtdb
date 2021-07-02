@@ -69,7 +69,7 @@
 (defn latest-completed-tx-id [^IndexWriter index-writer]
   (user-data->tx-id (into {} (.getLiveCommitData index-writer))))
 
-(defn search [^SearcherManager searcher-manager, ^Query q]
+(defn- search* [{:keys [^SearcherManager searcher-manager]}, ^Query q]
   (let [^IndexSearcher index-searcher (.acquire searcher-manager)]
     (try
       (let [q (FunctionScoreQuery. q (DoubleValuesSource/fromQuery q))
@@ -98,31 +98,50 @@
         (.release searcher-manager index-searcher)
         (throw t)))))
 
+(defn- parse-query
+  ([lucene-store query] (parse-query lucene-store query {}))
+
+  ([{:keys [analyzer]} query {:keys [default-field], :or {default-field field-crux-val}}]
+   (cond
+     (instance? Query query) query
+     (string? query) (.parse (QueryParser. default-field analyzer)
+                             query))))
+
+(defn ^crux.api.ICursor search
+  ([node query]
+   (search node query {}))
+
+  ([node query {:keys [lucene-store-k],
+                :or {lucene-store-k ::lucene-store}
+                :as opts}]
+   (let [lucene-store (-> @(:!system node)
+                          (get lucene-store-k))]
+     (search* lucene-store
+              (parse-query lucene-store query opts)))))
+
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
-  (let [{:keys [searcher-manager]} lucene-store]
-    (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
-      (let [arg-bindings (map (fn [a]
-                                (if (instance? VarBinding a)
-                                  (q/bound-result-for-var index-snapshot a join-keys)
-                                  a))
-                              (rest arg-bindings))
-            query (query-builder (:analyzer lucene-store) arg-bindings)
-            tuples (with-open [search-results ^crux.api.ICursor (search searcher-manager query)]
-                     (->> search-results
-                          iterator-seq
-                          (results-resolver index-snapshot db)
-                          (into [])))]
-        (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples)))))
+  (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
+    (let [arg-bindings (map (fn [a]
+                              (if (instance? VarBinding a)
+                                (q/bound-result-for-var index-snapshot a join-keys)
+                                a))
+                            (rest arg-bindings))
+          query (query-builder (:analyzer lucene-store) arg-bindings)
+          tuples (with-open [search-results ^crux.api.ICursor (search* lucene-store query)]
+                   (->> search-results
+                        iterator-seq
+                        (results-resolver index-snapshot db)
+                        (into [])))]
+      (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
 
 (defn ^Query build-query
   "Standard build query fn, taking a single field/val lucene term string."
   [^Analyzer analyzer, [k v]]
   (when-not (string? v)
     (throw (IllegalArgumentException. "Lucene text search values must be String")))
-  (let [qp (QueryParser. (keyword->k k) analyzer)
-        b (doto (BooleanQuery$Builder.)
-            (.add (.parse qp v) BooleanClause$Occur/MUST))]
-    (.build b)))
+  (parse-query {:analyzer analyzer}
+               v
+               {:default-field (keyword->k k)}))
 
 (defn resolve-search-results-a-v
   "Given search results each containing a single A/V pair document,
