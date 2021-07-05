@@ -245,23 +245,28 @@
 
     (t/is (latest-tx))))
 
-(t/deftest test-ensure-lucene-store-keeps-up
+(t/deftest test-lucene-catches-up-at-startup
   ;; Note, an edge case is if users change Lucene configuration
   ;; (i.e. indexing strategy) - this start-up check does not account
   ;; for this:
 
-  (fix/with-tmp-dirs #{rocks-tmp-dir lucene-tmp-dir}
-    (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                  :db-dir rocks-tmp-dir}}})]
-      (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+  (fix/with-tmp-dirs #{rocks-tmp-dir}
+    (let [node-config {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store
+                                                :db-dir (io/file rocks-tmp-dir "tx")}}
+                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store
+                                                        :db-dir (io/file rocks-tmp-dir "docs")}}
+                       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                                     :db-dir (io/file rocks-tmp-dir "idx")}}}]
+      (with-open [node (c/start-node node-config)]
+        (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
 
-    (try
-      (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                    :db-dir rocks-tmp-dir}}
-                                      :crux.lucene/lucene-store {:db-dir lucene-tmp-dir}})])
-      (t/is false "Exception expected")
-      (catch Exception t
-        (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t))))))))
+      (fix/with-tmp-dirs #{lucene-tmp-dir}
+        (with-open [node (c/start-node (-> node-config
+                                           (assoc :crux.lucene/lucene-store {:db-dir lucene-tmp-dir})))]
+          (t/is (seq (c/q (c/db node)
+                          {:find '[?e ?v]
+                           :where '[[(text-search :name "Ivan") [[?e ?v]]]
+                                    [?e :crux.db/id]]}))))))))
 
 (defn- with-lucene-rocks-node* [{:keys [node-dir index-dir lucene-dir]} f]
   (with-open [node (c/start-node (merge {:crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
@@ -287,13 +292,9 @@
         (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
           (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])))
 
-      (let [old-fn crux.lucene/validate-lucene-store-up-to-date]
-        (with-redefs [crux.lucene/validate-lucene-store-up-to-date (fn [& args]
-                                                                     (Thread/sleep 1000)
-                                                                     (apply old-fn args))]
-          (fix/with-tmp-dirs #{lucene-dir}
-            (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
-              (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))))
+      (fix/with-tmp-dirs #{lucene-dir}
+        (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+          (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))
 
 (t/deftest test-lucene-node-restart
   (t/testing "test restart with nil indexes"

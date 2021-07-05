@@ -234,7 +234,8 @@
                                             :crux/tx-indexer 'crux.tx/->tx-indexer
                                             :crux/document-store 'crux.kv.document-store/->document-store
                                             :crux/tx-log 'crux.kv.tx-log/->tx-log
-                                            :crux/query-engine 'crux.query/->query-engine}]
+                                            :crux/query-engine 'crux.query/->query-engine
+                                            :crux/secondary-indices 'crux.tx/->secondary-indices}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
     (when (and (nil? @cio/malloc-arena-max)
