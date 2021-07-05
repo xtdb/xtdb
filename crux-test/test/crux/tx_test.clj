@@ -266,8 +266,8 @@
           (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events]
-  (let [{:keys [tx-ingester]} *api*
-        in-flight-tx (db/begin-tx tx-ingester tx nil)]
+  (let [{:keys [crux/tx-indexer]} @(:!system *api*)
+        in-flight-tx (db/begin-tx tx-indexer tx nil)]
     (db/index-tx-events in-flight-tx tx-events)
     (db/commit in-flight-tx)))
 

@@ -2,18 +2,14 @@
   (:require [clojure.set :as set]
             [crux.codec :as c]))
 
-;; tag::Index[]
 (defprotocol Index
   (seek-values [this k])
   (next-values [this]))
-;; end::Index[]
 
-;; tag::LayeredIndex[]
 (defprotocol LayeredIndex
   (open-level [this])
   (close-level [this])
   (max-depth [this]))
-;; end::LayeredIndex[]
 
 (defprotocol IndexStoreTx
   (index-docs [this docs])
@@ -22,14 +18,14 @@
   (commit-index-tx [this])
   (abort-index-tx [this]))
 
-;; tag::IndexStore[]
 (defprotocol IndexStore
   (exclusive-avs [this eids])
   (store-index-meta [this k v])
-  (latest-completed-tx [this])
   (tx-failed? [this tx-id])
   (begin-index-tx [index-store tx fork-at]))
-;; end::IndexStore[]
+
+(defprotocol LatestCompletedTx
+  (latest-completed-tx [this]))
 
 (defprotocol IndexMeta
   (-read-index-meta [this k not-found]))
@@ -47,7 +43,6 @@
   (^double value-cardinality [this attr])
   (^double eid-cardinality [this attr]))
 
-;; tag::IndexSnapshot[]
 (defprotocol IndexSnapshot
   (av [this a min-v])
   (ave [this a v min-e entity-resolver-fn])
@@ -61,23 +56,25 @@
   (encode-value [this value])
   (resolve-tx [this tx])
   (open-nested-index-snapshot ^java.io.Closeable [this]))
-;; end::IndexSnapshot[]
 
-;; tag::TxLog[]
 (defprotocol TxLog
   (submit-tx [this tx-events])
   (open-tx-log ^crux.api.ICursor [this after-tx-id])
-  (latest-submitted-tx [this]))
-;; end::TxLog[]
-
-(defprotocol TxIngester
-  (begin-tx [tx-ingester tx fork-at])
-  (ingester-error [tx-ingester]))
+  (latest-submitted-tx [this])
+  (^java.util.concurrent.CompletableFuture subscribe [_ after-tx-id f]
+   "f takes Future + tx - complete the future to stop the subscription.
+    or, outside of f, complete the future returned from this function to stop the subscription."))
 
 (defprotocol InFlightTx
   (index-tx-events [in-flight-tx tx-events])
   (commit [in-flight-tx])
   (abort [in-flight-tx]))
+
+(defprotocol TxIndexer
+  (begin-tx [tx-indexer tx fork-at]))
+
+(defprotocol TxIngester
+  (ingester-error [tx-ingester]))
 
 (defprotocol DocumentStore
   "Once `submit-docs` function returns successfully, any call to `fetch-docs` across the cluster must return the submitted docs."
