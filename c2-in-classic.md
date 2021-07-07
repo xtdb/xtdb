@@ -15,7 +15,8 @@ There's some mess here in the interim where we assume content hashes
 (with all the pain that entails) and also implicitly still an document
 store. Not technically that hard to fix, but breaking changes and
 migrations abound. Codec would need to keep existing until the final
-migration.
+migration. One can probably replace the document store with a simpler
+(and much smaller) id mapping if one preservers with the existing log.
 
 The ingest part of c2 mainly disappears, as it would be replaced by
 the existing parts of classic. Actual indexing would obviously remain.
