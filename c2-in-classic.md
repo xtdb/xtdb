@@ -9,10 +9,24 @@
 The first approach is to keep existing logs, and write the Arrow
 transactions inside the current processing, and initially add c2 as a
 secondary index in classic to get going. Later we can migrate the
-existing logs to an Arrow-first log. There's some mess here in the
-interim where we assume content hashes (with all the pain that
-entails) and also implicitly still an document store. Not technically
-that hard to fix, but breaking changes and migrations abound.
+existing logs to an Arrow-first log.
+
+There's some mess here in the interim where we assume content hashes
+(with all the pain that entails) and also implicitly still an document
+store. Not technically that hard to fix, but breaking changes and
+migrations abound. Codec would need to keep existing until the final
+migration.
+
+The ingest part of c2 mainly disappears, as it would be replaced by
+the existing parts of classic. Actual indexing would obviously remain.
+
+
+
+#### Document store
+
+This would be replaced eventually by the object store from c2, and
+internally they share some implementation details (like how to talk to
+S3 etc.), but it would probably be messy to try to reuse anything.
 
 
 #### Rollback
@@ -90,7 +104,28 @@ doable. Note that all data won't be needed to be copied, just the
 current slice and the current in-memory temporal index.
 
 
+#### Lucene
+
+Can stay as is initially if one uses regular checkpoints and the new
+secondary index mechanism to catch up.
+
+At a minimum, also requires porting the predicate to the c2 world.
+
+A more c2-native solution would be to have secondary indexes
+participate in finish chunk, and maybe also a collective LSM-style
+merge process. Temporal could maybe also use this capability if it
+existed.
+
+
 ### Datalog query (read side)
+
+Note that once one has c2 as a secondary index, one can speculatively
+try to compile queries using c2, and see if it accepts them, if it
+does, one proceed to execute queries using the logical plan. One can
+also have a A/B sanity mode that checks c2 returns the same results
+(probably not same order) as classic. Nudging away at this would mean
+one can eventually draw a line in the sand and promote c2 to the real
+index, and remove a lot of classic.
 
 
 #### Valid time in Datalog
@@ -166,7 +201,7 @@ work, but with good cost / benefit, and can be farmed out to someone
 else.
 
 
-### Advanced Datalog
+#### Advanced Datalog
 
 - `or` unions.
 - `or-join` semi-joins against unions.
@@ -176,9 +211,16 @@ Note that we don't support more than one variable in joins, so we
 either need to fix that in c2, or combine the joins with selects to do
 further filtering.
 
-### Rules
+
+#### Rules
 
 Some easier rules can be compiled to our fixpoint operator in c2, more
 advanced rules quite hard to do in the generic case. There's a
 potential direction where you create ad-hoc operators for them
 somehow. To be explored. Quite chunky piece of work risk-reward-wise.
+
+
+#### Calcite and other modules compiling to Datalog
+
+These may "just work", or if they rely on complicated parts of the
+classic engine, require rework.
