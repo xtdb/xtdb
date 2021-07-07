@@ -20,6 +20,14 @@ migration.
 The ingest part of c2 mainly disappears, as it would be replaced by
 the existing parts of classic. Actual indexing would obviously remain.
 
+Note that the external view of what's submitted to the log doesn't
+need to change, just the internal representation.
+
+As per c2's design, once the migration to c2 is done, the log doesn't
+need infinite retention. The Kafka document topic can also disappear
+and the document get baked into the main log (see Eviction below for
+further discussion).
+
 
 
 #### Document store
@@ -57,8 +65,8 @@ do a few additions:
 3. vectors or sets would become lists of scalars.
 4. the above implies that sets aren't really supported, JSON first
    model.
-5. introduce "components" similarly to Datomic, so we autoshred
-   non-scalars out to new documents with assigned internal ids.
+5. introduce "components" similar to Datomic, so we autoshred nested
+   maps out to new documents with assigned internal ids.
 6. on eviction (and potentially deletion, but its a bit slow), do
    cascading deletes of the internal ids.
 7. we can add a Nippy Arrow Type would we want to, but then that
@@ -93,6 +101,11 @@ various ways. A simple design I think may work is:
    nodes. If forced, cycle the nodes regularly to ensure this happens
    within regulatory time frames.
 
+Note that eviction in c2 only deals with the object store, not the
+transaction log, so if the log has infinite retention, one cannot
+guarantee data being removed there. If this is a deal-breaker, we
+could redesign the document topic with slightly different constraints
+than now, but reopens many issues with eviction and complexity.
 
 
 #### Speculative transactions
@@ -133,8 +146,8 @@ index, and remove a lot of classic.
 There's an old proposal for this to enable this via the triple
 bindings and add `[e a v vt-start vt-end]` to the engine. One would
 then do the normal temporal predicates against these values. A
-temporal join would be represented as an overlaps between two entities
-timestamps.
+temporal join would be represented as an overlaps between the time
+stamps of two entities.
 
 Transaction time is given by the query, but the idea was that if one
 access these columns, they override the default valid time of the
@@ -161,9 +174,9 @@ I think.
 
 #### Pull
 
-Would need to be partly rewritten unless I'm mistaken, but its not
+Would need to be partly rewritten unless I'm mistaken, but isn't
 fundamentally hard, especially not now when the Pull engine is based
-on the index store, it would be executed as recursive of scan calls.
+on the index store, it would be executed as recursive scan calls.
 
 
 #### Clojure predicates
