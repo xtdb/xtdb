@@ -131,3 +131,5 @@ papers:
 - [[https://arxiv.org/pdf/1610.09166.pdf][Push vs. Pull-Based Loop Fusion in Query Engines]]
 - [[https://www.researchgate.net/publication/220225069_The_Grid_File_An_Adaptable_Symmetric_Multikey_File_Structure][The Grid File: An Adaptable, Symmetric Multikey File Structure]]
 - [[https://arxiv.org/pdf/1912.01668.pdf][Learning Multi-dimensional Indexes]]
+- [[https://www.w3.org/Data/events/data-ws-2019/assets/slides/KeithWHare-2.pdf][Creating Bridges: RDF, Property Graph and SQL]]
+- [[https://partiql.org/assets/PartiQL-Specification.pdf][PartiQL Specification]]
