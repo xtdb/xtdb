@@ -3547,7 +3547,7 @@
   (let [parent-id 50
         expected (set (for [[id child-id] (partition 2 1 (range (inc parent-id) 101))]
                         [(str id "-" child-id)]))
-        expected-speedup-factor 5]
+        expected-speedup-factor 2.5] ;; speedup also benefits from warm-up (i.e. test could be cleaner)
     (let [free-vars-ns-start (System/nanoTime)
           result (api/q (api/db *api*)
                         {:find '[child-name]
