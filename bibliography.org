@@ -1,10 +1,13 @@
 * Bibliography
 ** Columnar:
 - [[https://www.cs.umd.edu/class/spring2015/cmsc724/abadi-column-stores.pdf][(Abadi) The Design and Implementation of Modern Columnar Store Systems]]
-- [[https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf][C-Store: A Column-oriented DBMS]]
 - [[https://arxiv.org/pdf/2004.14471.pdf][Mainlining Databases: Supporting Fast Transactional Workloads on Universal Columnar Data File Formats]]
   - [[https://db.in.tum.de/~muehlbau/papers/mvcc.pdf][Fast Serializable Multi-Version Concurrency Controlfor Main-Memory Database Systems]]
   - [[https://www.cs.cmu.edu/~pavlo/courses/fall2013/static/papers/p731-sikka.pdf][Efficient Transaction Processing in SAP HANA Database –The End of a Column Store Myth]]
+
+Column groups:
+- [[https://web.stanford.edu/class/cs345d-01/rl/cstore.pdf][C-Store: A Column-oriented DBMS]] (later 'Vertica')
+- [[http://www.cs.umd.edu/~abadi/papers/abadi-rdf-vldbj.pdf][SW-Store: a vertically partitioned DBMS for Semantic Web data management]]
 
 MonetDB/VectorWise:
 - [[http://www.cs.cmu.edu/~natassa/courses/15-823/syllabus/papers/boncz99database.pdf][Database Architecture Optimized for the new Bottleneck: Memory Access]]
