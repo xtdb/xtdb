@@ -34,12 +34,15 @@
          - DONE :order-by, :limit, group-by/aggregates
          - known predicates
          - DONE :in clauses, parameterisation
-     - TODO as-of API
+     - TODO as-of API (within query)
      - TODO basic WatDiv
+   - Remote-first API
+   - 'Running it' story - currently clone + lein repl, want a JAR
    - Documentation (README)
+   - CI
 3. Core2 as a viable alternative to Crux
+   - Arrowification - removal of type-ids
    - Features, functionality
-     - SQL.
      - Eviction
      - Full EDN Datalog
        - Rules, or-joins, not-joins, self-joins etc
@@ -48,6 +51,12 @@
        - Nested queries
      - Bitemporal features, interval algebra.
        - Expose valid-time
+     - Log mirror
+     - SQL.
+       - SQL:92/PartiQL (dynamic data?)
+       - SQL:2011 (temporal)
+       - SQL:2016? (nested data, JSON)
+       - Graph queries in SQL - SQL:2022, GQL (subset), SQL/PGQ
      - Multi-way WCOJ hash joins?
      - More logs/object-stores
        - Kinesis
@@ -64,3 +73,11 @@
    - Migration from Classic
    - Deployment, monitoring story
    - Documentation, marketing
+
+Ideas/Risks:
+- Semi option C-ification - column groups
+- Do we need to include tx-id somehow in the temporal index?
+- Postgres wire protocol
+- Temporal range queries
+- Temporal joins
+- Logical plan needs error handling if we're going to expose it to users. Also, it's EDN.
