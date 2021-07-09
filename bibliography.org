@@ -133,3 +133,4 @@ papers:
 - [[https://arxiv.org/pdf/1912.01668.pdf][Learning Multi-dimensional Indexes]]
 - [[https://www.w3.org/Data/events/data-ws-2019/assets/slides/KeithWHare-2.pdf][Creating Bridges: RDF, Property Graph and SQL]]
 - [[https://partiql.org/assets/PartiQL-Specification.pdf][PartiQL Specification]]
+- [[https://github.com/partiql/partiql-lang-kotlin][A implementation of PartiQL written in Kotlin]]
