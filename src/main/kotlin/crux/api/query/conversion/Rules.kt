@@ -7,5 +7,13 @@ import crux.api.underware.prefix
 import crux.api.underware.pv
 
 fun RuleDefinition.toEdn() = body.clauses.map(WhereClause::toEdn).prefix(
-    parameters.prefix(name).pl
+    if (boundParameters.isEmpty()) {
+        parameters
+    }
+    else {
+        parameters.prefix(boundParameters.pv)
+
+    }
+        .prefix(name)
+        .pl
 ).pv

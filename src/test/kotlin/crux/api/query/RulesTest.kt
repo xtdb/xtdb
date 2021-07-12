@@ -117,4 +117,33 @@ class RulesTest {
                 setOf("gimli", "gloin", "groin")
             )
         )
+
+    @Test
+    fun `recursive rules with bound variables`() {
+        assertThat(
+            db.q {
+                find {
+                    +dwarf
+                }
+
+                where {
+                    rule(descendentOf) ("farin", dwarf)
+                }
+
+                rules {
+                    def(descendentOf) [ancestor] (descendent) {
+                        descendent has fatherKey eq ancestor
+                    }
+
+                    def(descendentOf) [ancestor] (descendent) {
+                        descendent has fatherKey eq intermediate
+                        rule(descendentOf) (ancestor, intermediate)
+                    }
+                }
+            }.singleResultSet(),
+            equalTo(
+                setOf("gimli", "gloin", "groin")
+            )
+        )
+    }
 }
