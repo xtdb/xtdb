@@ -8,7 +8,7 @@ Add `crux-kotlin-dsl` as a dependency:
 
 ```kotlin
 dependencies {
-    implementation("pro.juxt.crux:crux-kotlin-dsl:0.0.3")
+    implementation("pro.juxt.crux:crux-kotlin-dsl:0.0.4")
     // ...
 }
 ```
