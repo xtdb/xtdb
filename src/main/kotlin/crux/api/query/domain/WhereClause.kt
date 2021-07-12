@@ -29,4 +29,13 @@ sealed class WhereClause {
     }
 
     data class RuleInvocation(val name: Symbol, val parameters: List<Any>): WhereClause()
+
+    data class SetToFunction(val target: Symbol, val type: Type, val i: Symbol, val j: Any): WhereClause() {
+        enum class Type(val symbol: Symbol) {
+            PLUS("+".sym),
+            MINUS("-".sym),
+            TIMES("*".sym),
+            DIVIDE("/".sym)
+        }
+    }
 }

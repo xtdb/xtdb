@@ -13,4 +13,8 @@ fun WhereClause.toEdn(): Any = when (this) {
         listOf(type.symbol, i, j).pl
     ).pv
     is WhereClause.RuleInvocation -> parameters.prefix(name).pl
+    is WhereClause.SetToFunction -> listOf(
+        listOf(type.symbol, i, j).pl,
+        target
+    ).pv
 }

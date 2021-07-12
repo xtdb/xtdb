@@ -41,4 +41,11 @@ class WhereContext private constructor(): ComplexBuilderContext<WhereClause, Whe
     fun rule(name: Symbol) = RuleDeclaration(name)
 
     operator fun RuleDeclaration.invoke(vararg params: Any) = add(RuleInvocation(name, params.toList()))
+
+    data class FunctionToSet(val type: SetToFunction.Type, val i: Symbol, val j: Any)
+    operator fun Symbol.plus(other: Any) = FunctionToSet(SetToFunction.Type.PLUS, this, other)
+    operator fun Symbol.times(other: Any) = FunctionToSet(SetToFunction.Type.TIMES, this, other)
+    operator fun Symbol.div(other: Any) = FunctionToSet(SetToFunction.Type.DIVIDE, this, other)
+    operator fun Symbol.minus(other: Any) = FunctionToSet(SetToFunction.Type.MINUS, this, other)
+    infix fun FunctionToSet.eq(target: Symbol) = add(SetToFunction(target, type, i, j))
 }

@@ -38,3 +38,4 @@ fun MutableCollection<MutableList<*>>.singleResultSet() = map { it[0] }.toSet()
 fun MutableCollection<MutableList<*>>.simplifiedResultSet() = map { it.toList() }.toSet()
 fun MutableCollection<MutableList<*>>.singleResultList() = map { it[0] }
 fun MutableCollection<MutableList<*>>.simplifiedResultList() = map { it.toList() }
+fun MutableCollection<MutableList<*>>.singleResult() = singleResultSet().single()
