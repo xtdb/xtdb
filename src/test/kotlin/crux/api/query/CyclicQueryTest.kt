@@ -82,7 +82,7 @@ class CyclicQueryTest {
                     def(pointsTo) [start, d0] (end, d2) {
                         start has next eq intermediate
                         d0 + 1 eq d1
-                        d0 lt 10
+                        d0 lt 5
                         rule(pointsTo) (intermediate, d1, end, d2)
                     }
                 }
@@ -119,7 +119,7 @@ class CyclicQueryTest {
                     def(pointsTo) [start, d0] (end, d2) {
                         start has next eq intermediate
                         d0 + 1 eq d1
-                        d0 lt 10
+                        d0 lt 5
                         rule(pointsTo) (intermediate, d1, end, d2)
                     }
                 }
