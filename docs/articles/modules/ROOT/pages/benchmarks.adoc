@@ -8,6 +8,16 @@ These suites cover a wide range of analysis at a variety of scale factors, inclu
 
 Officially published benchmark results are forthcoming, but in the meantime please feel welcome to explore `crux-bench` independently and get in touch if you need any assistance.
 
+.An example screenshot of the query benchmarks dashboard (May 2021)
+
+image::bench-dash-query.png?sanitize=true[Query benchmarks dashboard example,align="center"]
+
+.An example screenshot of the ingest benchmarks dashboard (May 2021)
+
+image::bench-dash-query.png?sanitize=true[Ingest benchmarks dashboard example,align="center"]
+
+For an example of independent benchmarking by the community, see the https://odpi.github.io/egeria-connector-crux/cts/testing-overview/["Crux Connector" performance analysis] by the Linux Foundation's Egeria project, which compares Crux against an existing JanusGraph Connector.
+
 [#tpch]
 == TPC-H
 
