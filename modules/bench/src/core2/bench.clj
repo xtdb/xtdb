@@ -3,7 +3,11 @@
             [clojure.tools.logging :as log]
             [core2.core :as c2])
   (:import core2.core.Node
-           java.util.UUID))
+           [java.nio.file Files Path]
+           java.nio.file.attribute.FileAttribute
+           java.util.UUID
+           software.amazon.awssdk.services.s3.model.GetObjectRequest
+           software.amazon.awssdk.services.s3.S3Client))
 
 (defn parse-args [arg-spec args]
   (let [{:keys [options summary errors]}
@@ -40,3 +44,18 @@
                    :core2/object-store {:core2/module 'core2.s3/->object-store
                                         :bucket "core2-bench"
                                         :prefix (str "node." node-id)}})))
+
+(defn tmp-file-path ^java.nio.file.Path [prefix suffix]
+  (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
+    (Files/delete)))
+
+(def ^S3Client s3-client (S3Client/create))
+
+(defn download-s3-dataset-file [s3-key ^Path tmp-path]
+  (.getObject s3-client
+              (-> (GetObjectRequest/builder)
+                  (.bucket "crux-datasets")
+                  (.key s3-key)
+                  ^GetObjectRequest (.build))
+              tmp-path)
+  tmp-path)

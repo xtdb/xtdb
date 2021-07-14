@@ -3,11 +3,7 @@
             [core2.bench :as bench]
             [core2.core :as c2]
             [core2.ts-devices :as tsd])
-  (:import java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
-           java.util.concurrent.TimeUnit
-           software.amazon.awssdk.services.s3.model.GetObjectRequest
-           software.amazon.awssdk.services.s3.S3Client))
+  (:import java.util.concurrent.TimeUnit))
 
 (def cli-arg-spec
   [[nil "--size <small|med|big>" "Size of ts-devices files to use"
@@ -16,19 +12,11 @@
     :parse-fn keyword
     :validate-fn (comp boolean #{:small :med :big})]])
 
-(def ^S3Client s3-client (S3Client/create))
-
 (defn download-file [size file-name]
-  (let [tmp-file (doto (Files/createTempFile (str "ts-devices." file-name) ".csv.gz"
-                                             (make-array FileAttribute 0))
-                   (Files/delete))]
-    (.getObject s3-client
-                (-> (GetObjectRequest/builder)
-                    (.bucket "crux-datasets")
-                    (.key (format "ts-devices/%s/devices_%s_%s.csv.gz"
-                                  (name size) (name size) file-name))
-                    ^GetObjectRequest (.build))
-                tmp-file)
+  (let [tmp-file (bench/tmp-file-path (str "ts-devices." file-name) ".csv.gz")]
+    (bench/download-s3-dataset-file (format "ts-devices/%s/devices_%s_%s.csv.gz"
+                                            (name size) (name size) file-name)
+                                    tmp-file)
     (.toFile tmp-file)))
 
 (defn ingest-tsd [node {:keys [device-info-file readings-file]}]
