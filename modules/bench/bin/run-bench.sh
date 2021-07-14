@@ -28,7 +28,7 @@ COMMAND='['
 if [[ "$#" -eq 0 ]]; then echo "No benchmark passed."; exit 1; fi
 
 case $1 in
-    tpch|ts-devices|multinode-tpch)
+    tpch|ts-devices|multinode-tpch|watdiv)
         COMMAND+='"'"core2.bench.$1"'"'
         shift 1;;
     *) echo "Unknown benchmark passed: $1"; exit 1;;
