@@ -49,30 +49,31 @@
       (io/reader)))
 
 (defn submit-ts-devices
-  ([tx-producer size]
-   (submit-ts-devices tx-producer size {}))
+  ([tx-producer]
+   (submit-ts-devices tx-producer {}))
 
-  ([tx-producer size {:keys [batch-size], :or {batch-size 1000}}]
-   (let [device-info-file (or (local-ts-devices-file size :device-info)
-                              (throw (IllegalArgumentException.
-                                      "Can't find device-info CSV")))
-         readings-file (or (local-ts-devices-file size :readings)
-                           (throw (IllegalArgumentException.
-                                   "Can't find readings CSV")))]
-     (with-open [device-info-rdr (gz-reader device-info-file)
-                 readings-rdr (gz-reader readings-file)]
-       (let [device-infos (map device-info-csv->doc (csv/read-csv device-info-rdr))
-             readings (map readings-csv->doc (csv/read-csv readings-rdr))
-             [initial-readings rest-readings] (split-at (count device-infos) readings)]
+  ([tx-producer {:keys [size batch-size device-info-file readings-file],
+                 :or {size :small
+                      batch-size 1000
+                      device-info-file (local-ts-devices-file size :device-info)
+                      readings-file (local-ts-devices-file size :readings)}}]
+   (assert device-info-file "Can't find device-info CSV")
+   (assert readings-file "Can't find readings CSV")
 
-         @(->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
-                 (cond-> {:op :put
-                          :doc doc}
-                   time (assoc :_valid-time-start time)))
-               (partition-all batch-size)
-               (reduce (fn [_acc tx-ops]
-                         (c2/submit-tx tx-producer tx-ops))
-                       nil)))))))
+   (with-open [device-info-rdr (gz-reader device-info-file)
+               readings-rdr (gz-reader readings-file)]
+     (let [device-infos (map device-info-csv->doc (csv/read-csv device-info-rdr))
+           readings (map readings-csv->doc (csv/read-csv readings-rdr))
+           [initial-readings rest-readings] (split-at (count device-infos) readings)]
+
+       @(->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
+               (cond-> {:op :put
+                        :doc doc}
+                 time (assoc :_valid-time-start time)))
+             (partition-all batch-size)
+             (reduce (fn [_acc tx-ops]
+                       (c2/submit-tx tx-producer tx-ops))
+                     nil))))))
 
 (comment
   (submit-ts-devices dev/node :small))

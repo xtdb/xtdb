@@ -31,15 +31,10 @@
                 tmp-file)
     (.toFile tmp-file)))
 
-(defn download-files [size]
-  {:device-info-file (download-file size "device_info")
-   :readings-file (download-file size "readings")})
-
 (defn ingest-tsd [node {:keys [device-info-file readings-file]}]
   (let [tx (bench/with-timing :submit-docs
-             (with-open [device-info-rdr (tsd/gz-reader device-info-file)
-                         readings-rdr (tsd/gz-reader readings-file)]
-               (tsd/submit-ts-devices node device-info-rdr readings-rdr)))]
+             (tsd/submit-ts-devices node {:device-info-file device-info-file
+                                          :readings-file readings-file}))]
     (bench/with-timing :await-tx
       @(-> (c2/await-tx-async node tx)
            (.orTimeout 5 TimeUnit/HOURS)))
@@ -53,7 +48,8 @@
                                       (System/exit 1))]
       (log/info "Opts: " (pr-str opts))
       (let [downloaded-files (bench/with-timing :download-files
-                               (download-files size))]
+                               {:device-info-file (download-file size "device_info")
+                                :readings-file (download-file size "readings")})]
         (with-open [node (bench/start-node)]
           (bench/with-timing :ingest
             (ingest-tsd node downloaded-files)))))

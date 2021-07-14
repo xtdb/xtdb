@@ -21,7 +21,7 @@
           (t/is (nil? (c2/latest-completed-tx node)))
 
           (let [^IMetadataManager mm (:core2/metadata-manager @(:!system node))
-                last-tx-instant (tsd/submit-ts-devices node :small)]
+                last-tx-instant (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-instant))
             (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofMinutes 15))))
