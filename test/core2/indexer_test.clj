@@ -365,7 +365,8 @@
               (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))))))))
 
-(t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
+;; FIXME https://github.com/juxt/crux-rnd/issues/26
+(t/deftest ^:skip-test can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
         node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)

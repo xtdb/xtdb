@@ -1,0 +1,70 @@
+# Check https://circleci.com/docs/2.0/language-clojure/ for more details
+version: 2.1
+
+executors:
+  clojure-lein:
+    docker:
+      - image: circleci/clojure:lein-2.9.5
+
+jobs:
+  setup:
+    executor: clojure-lein
+
+    working_directory: ~/core2
+
+    environment:
+      LEIN_ROOT: "true"
+      JVM_OPTS: -Xmx3200m
+
+    steps:
+      - checkout
+
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ checksum "project.clj" }}
+            # fallback to using the latest cache if no exact match is found
+            - v1-dependencies-
+
+      - run: lein deps :tree
+
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: v1-dependencies-{{ checksum "project.clj" }}
+
+      - persist_to_workspace:
+          root: ~/
+          paths:
+            - .m2
+            - core2
+
+  test:
+    executor: clojure-lein
+
+    working_directory: ~/core2
+
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run: lein test
+
+  integration-test:
+    executor: clojure-lein
+
+    working_directory: ~/core2
+
+    steps:
+      - attach_workspace:
+          at: ~/
+      - run: lein test :integration
+
+workflows:
+  build:
+    jobs:
+      - setup
+      - test:
+          requires:
+            - setup
+      - integration-test:
+          requires:
+            - setup

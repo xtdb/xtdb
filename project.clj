@@ -31,7 +31,7 @@
                     :source-paths ["dev"]
                     :java-source-paths ["src" "jmh"]
                     :resource-paths ["test-resources" "data"]
-                    :test-selectors {:default (complement (some-fn :integration :kafka :timescale))
+                    :test-selectors {:default (complement (some-fn :skip-test :integration :kafka :timescale))
                                      :integration :integration
                                      :kafka :kafka
                                      :timescale :timescale}}]
