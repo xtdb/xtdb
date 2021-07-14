@@ -45,7 +45,7 @@
       (finally
         (cio/delete-dir tmp-dir))))
 
-  ((t/join-fixtures [lf/with-lucene-module fix/with-node])
+  ((t/join-fixtures [(fix/with-opts {::l/lucene-store {}}) fix/with-node])
    (fn []
      (time
       (let [last-tx (->> (customers 50000)
@@ -66,7 +66,7 @@
   ;; IndexWriter + SearcherManager + .commit (per tx) = much faster
   ;; IndexWriter + SearcherManager = faster still, but we'll leave the .commit per tx where it is for now due to an inability for crux-lucene to recover from mismatched index scenarios, see the PR comments
 
-  ((t/join-fixtures [lf/with-lucene-module fix/with-node])
+  ((t/join-fixtures [(fix/with-opts {::l/lucene-store {}}) fix/with-node])
    (fn []
      (time
       (let [last-tx (->> (customers 1500)
