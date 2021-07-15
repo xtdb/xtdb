@@ -3,7 +3,12 @@
 set -xe
 
 (
-    cd $(dirname $0)/../../../
-    lein with-profile +bench uberjar
-    docker build -t juxt.core2/bench:latest -f modules/bench/Dockerfile .
+    cd $(dirname $0)/../../..
+    ./lein-sub install
+)
+
+(
+    cd $(dirname $0)/..
+    lein uberjar
+    docker build -t juxt.core2/bench:latest -f Dockerfile .
 )
