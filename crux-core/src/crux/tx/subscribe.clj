@@ -11,7 +11,7 @@
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
   (cio/thread-factory "crux-tx-subscription"))
 
-(defn- completable-thread [f]
+(defn completable-thread [f]
   (let [fut (CompletableFuture.)
         thread (doto (.newThread subscription-thread-factory
                                  (fn []

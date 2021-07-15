@@ -15,7 +15,7 @@
            java.nio.file.Path
            java.time.Duration
            [java.util Collection Date Map UUID]
-           java.util.concurrent.ExecutionException
+           [java.util.concurrent CompletableFuture ExecutionException]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
@@ -92,7 +92,7 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
-(defn- ensure-topic-exists [admin-client {:keys [create-topics? topic-name topic-config] :as topic-opts}]
+(defn- ensure-topic-exists [admin-client {:keys [create-topics?] :as topic-opts}]
   (when create-topics?
     (create-topic admin-client topic-opts)))
 
@@ -111,17 +111,20 @@
                                   (log/debug "Partitions assigned:" (str partitions))
                                   (seek-consumer consumer tp-offsets)))))
 
-(defn- consumer-seqs [^KafkaConsumer consumer ^Duration poll-duration]
+(defn- poll-consumer [^KafkaConsumer consumer ^Duration poll-duration]
+  (cio/with-nippy-thaw-all
+    (try
+      (.poll consumer poll-duration)
+      (catch InterruptException e
+        (Thread/interrupted)
+        (throw (.getCause e))))))
+
+(defn- consumer-seqs [consumer poll-duration]
   (lazy-seq
    (log/trace "polling")
-   (cio/with-nippy-thaw-all
-     (when-let [records (seq (try
-                               (.poll consumer poll-duration)
-                               (catch InterruptException e
-                                 (Thread/interrupted)
-                                 (throw (.getCause e)))))]
-       (log/tracef "got %d records" (count records))
-       (cons records (consumer-seqs consumer poll-duration))))))
+   (when-let [records (seq (poll-consumer consumer poll-duration))]
+     (log/tracef "got %d records" (count records))
+     (cons records (consumer-seqs consumer poll-duration)))))
 
 ;;;; TxLog
 
@@ -134,8 +137,39 @@
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
 
+(defn- open-consumer ^org.apache.kafka.clients.consumer.KafkaConsumer [{:keys [kafka-config tx-topic]} after-tx-id]
+  (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}]
+    (doto (->consumer {:kafka-config kafka-config})
+      (.assign (keys tp-offsets))
+      (seek-consumer tp-offsets))))
+
+(defn- handle-subscriber [{:keys [^Duration poll-wait-duration] :as tx-log} after-tx-id f]
+  (tx-sub/completable-thread
+   (fn [^CompletableFuture fut]
+     (with-open [consumer (open-consumer tx-log after-tx-id)]
+       (loop []
+         (->> (poll-consumer consumer poll-wait-duration)
+              (map tx-record->tx-log-entry)
+              (reduce (fn [_ tx]
+                        (when (Thread/interrupted)
+                          (throw (InterruptedException.)))
+
+                        (when (.isDone fut)
+                          (reduced nil))
+
+                        (f fut tx)
+
+                        true)
+                      false))
+
+         (cond
+           (.isDone fut) nil
+           (Thread/interrupted) (throw (InterruptedException.))
+           :else (recur)))))))
+
 (defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer,
                        tx-topic, kafka-config,
+                       ^Duration poll-wait-duration
                        ^Closeable consumer]
   db/TxLog
   (submit-tx [_ tx-events]
@@ -145,18 +179,15 @@
           {::tx/tx-id (.offset record-meta)
            ::tx/tx-time (Date. (.timestamp record-meta))}))))
 
-  (open-tx-log [_ after-tx-id]
-    (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
-          consumer (doto (->consumer {:kafka-config kafka-config})
-                     (.assign (keys tp-offsets))
-                     (seek-consumer tp-offsets))]
+  (open-tx-log [this after-tx-id]
+    (let [consumer (open-consumer this after-tx-id)]
       (cio/->cursor #(.close consumer)
-                    (->> (consumer-seqs consumer (Duration/ofSeconds 1))
+                    (->> (consumer-seqs consumer poll-wait-duration)
                          (mapcat identity)
                          (map tx-record->tx-log-entry)))))
 
   (subscribe [this after-tx-id f]
-    (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+    (handle-subscriber this after-tx-id f))
 
   (latest-submitted-tx [_]
     (let [tx-tp (TopicPartition. tx-topic 0)
@@ -178,8 +209,13 @@
     (cio/try-close consumer)))
 
 (defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
-                            :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}}
-  [{:keys [tx-topic-opts kafka-config]}]
+                            :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}
+                ::sys/args {:poll-wait-duration {:spec ::sys/duration
+                                                 :required? true
+                                                 :doc "How long to wait when polling Kafka"
+                                                 :default (Duration/ofSeconds 1)}}}
+
+  [{:keys [tx-topic-opts kafka-config poll-wait-duration]}]
   (let [latest-submitted-tx-consumer (->consumer {:kafka-config kafka-config})
         producer (->producer {:kafka-config kafka-config})
         tx-topic-opts (-> tx-topic-opts
@@ -195,7 +231,8 @@
     (map->KafkaTxLog {:producer producer
                       :latest-submitted-tx-consumer latest-submitted-tx-consumer
                       :tx-topic tx-topic
-                      :kafka-config kafka-config})))
+                      :kafka-config kafka-config
+                      :poll-wait-duration poll-wait-duration})))
 
 ;;;; DocumentStore
 (defn- submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
