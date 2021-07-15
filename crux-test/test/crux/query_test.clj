@@ -3872,3 +3872,27 @@
                                  [?a :foo ?foo-val]
                                  [(identity ?foo-val) ?foo]
                                  [?foo :bar ?bar]]})))))
+
+(t/deftest test-rules-binding-1569
+  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :a-1, :next :a-2}]
+                        [:crux.tx/put {:crux.db/id :a-2, :next :a-3}]
+                        [:crux.tx/put {:crux.db/id :a-3, :next :a-4}]
+                        [:crux.tx/put {:crux.db/id :a-4, :next :a-1}]
+
+                        [:crux.tx/put {:crux.db/id :b-1, :next :b-2}]
+                        [:crux.tx/put {:crux.db/id :b-2, :next :b-3}]
+                        [:crux.tx/put {:crux.db/id :b-3, :next :b-4}]
+                        [:crux.tx/put {:crux.db/id :b-4, :next :b-5}]
+                        [:crux.tx/put {:crux.db/id :b-5, :next :b-1}]])
+
+  #_ ; FIXME this returns all the B's too
+  (t/is (= #{[:a-3] [:a-2] [:a-1] [:a-4]}
+           (api/q (api/db *api*)
+                  '{:find [node]
+                    :where [[end :crux.db/id :a-1]
+                            (pointsTo node end)]
+                    :rules [[(pointsTo start end)
+                             [start :next end]]
+                            [(pointsTo start end)
+                             [start :next intermediate]
+                             (pointsTo end intermediate)]]}))))
