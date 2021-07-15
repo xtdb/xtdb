@@ -40,7 +40,7 @@
                              [metosin/reitit-spec "0.5.12"]
                              [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
-                             [tick "0.4.23-alpha"]
+                             [tick "0.4.32"]
                              [cljsjs/react-datetime "2.16.2-0"]
 
                              ;; dependency resolution
