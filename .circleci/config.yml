@@ -3,14 +3,13 @@ version: 2.1
 
 executors:
   clojure-lein:
+    working_directory: ~/core2
     docker:
       - image: circleci/clojure:lein-2.9.5
 
 jobs:
   setup:
     executor: clojure-lein
-
-    working_directory: ~/core2
 
     environment:
       LEIN_ROOT: "true"
@@ -19,18 +18,16 @@ jobs:
     steps:
       - checkout
 
+      - run: 'md5sum project.clj modules/*/project.clj > .circleci-cache-key'
+
       - restore_cache:
           keys:
-            - v1-dependencies-{{ checksum "project.clj" }}
+            - v1-dependencies-{{ checksum ".circleci-cache-key" }}
             # fallback to using the latest cache if no exact match is found
             - v1-dependencies-
 
-      - run: lein deps :tree
-
-      - save_cache:
-          paths:
-            - ~/.m2
-          key: v1-dependencies-{{ checksum "project.clj" }}
+      - run: './lein-sub install'
+      - run: './lein-sub deps'
 
       - persist_to_workspace:
           root: ~/
@@ -38,10 +35,22 @@ jobs:
             - .m2
             - core2
 
-  test:
+  cache-m2:
     executor: clojure-lein
 
-    working_directory: ~/core2
+    steps:
+      - attach_workspace:
+          at: ~/
+
+      - run: 'rm -rf ~/.m2/repository/pro/juxt/crux*'
+
+      - save_cache:
+          paths:
+            - ~/.m2
+          key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
+
+  test:
+    executor: clojure-lein
 
     steps:
       - attach_workspace:
@@ -50,8 +59,6 @@ jobs:
 
   integration-test:
     executor: clojure-lein
-
-    working_directory: ~/core2
 
     steps:
       - attach_workspace:
@@ -62,6 +69,9 @@ workflows:
   build:
     jobs:
       - setup
+      - cache-m2:
+          requires:
+            - setup
       - test:
           requires:
             - setup

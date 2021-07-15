@@ -2,6 +2,9 @@
 
 == Developing
 
+First time:
+- `./lein-sub install`
+
 - Start and connect to your REPL in the usual fashion
 - `(dev)`
 - `(go)`

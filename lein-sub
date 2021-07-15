@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+
+set -e
+
+(
+  cd "$(dirname "$0")"
+
+  if [ "$1" == "-s" ]; then
+      MODULES=$(echo "$2" | tr ":" "\n" )
+      shift 2;
+  else
+      MODULES="core
+modules/datasets
+modules/s3
+modules/kafka
+modules/jdbc
+modules/bench"
+  fi
+
+  for MODULE in $MODULES; do
+      (
+          echo --"$MODULE"
+          if [ "$MODULE" != "core" ]; then cd "$MODULE" > /dev/null; fi
+          lein "$@"
+      )
+  done
+)

@@ -1,10 +1,14 @@
-(defproject core2 "0.1.0-SNAPSHOT"
+(def core2-version
+  (or (System/getenv "CORE2_VERSION")
+      "dev-SNAPSHOT"))
+
+(defproject pro.juxt.crux-labs/core2 core2-version
   :description "Core2 Initiative"
   :url "https://github.com/juxt/crux-rnd"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
-  :dependencies [[org.clojure/clojure "1.10.3"]
+  :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging "1.1.0"]
                  [org.clojure/spec.alpha "0.2.194"]
                  [com.stuartsierra/dependency "1.0.0"]
@@ -16,60 +20,47 @@
                  [org.apache.arrow/arrow-memory-netty "4.0.1"]
                  [org.roaringbitmap/RoaringBitmap "0.9.15"]]
 
-  :profiles {:dev [:datasets :s3 :kafka
-                   {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
+  :managed-dependencies [[pro.juxt.crux-labs/core2 ~core2-version]
+                         [pro.juxt.crux-labs/core2-datasets ~core2-version]
+                         [pro.juxt.crux-labs/core2-kafka ~core2-version]
+                         [pro.juxt.crux-labs/core2-s3 ~core2-version]
+                         [pro.juxt.crux-labs/core2-jdbc ~core2-version]
+                         [pro.juxt.crux-labs/core2-bench ~core2-version]
+
+                         [org.clojure/clojure "1.10.3"]
+                         [software.amazon.awssdk/s3 "2.16.76"]
+                         [ch.qos.logback/logback-classic "1.2.3"]]
+
+  :profiles {:dev [:test
+                   {:dependencies [[ch.qos.logback/logback-classic]
                                    [org.clojure/tools.namespace "1.1.0"]
                                    [integrant "0.8.0"]
-                                   [integrant/repl "0.3.2"]
-
-                                   [org.clojure/test.check "1.1.0"]
-                                   [org.clojure/data.csv "1.0.0"]
-                                   [org.openjdk.jmh/jmh-core "1.32"]
-                                   [org.openjdk.jmh/jmh-generator-annprocess "1.32"]
-                                   [cheshire "5.10.0"]]
+                                   [integrant/repl "0.3.2"]]
                     :repl-options {:init-ns user}
                     :source-paths ["dev"]
-                    :java-source-paths ["src" "jmh"]
-                    :resource-paths ["test-resources" "data"]
-                    :test-selectors {:default (complement (some-fn :skip-test :integration :kafka :timescale))
-                                     :integration :integration
-                                     :kafka :kafka
-                                     :timescale :timescale}}]
+                    :resource-paths ["data"]}]
 
-             ;; TODO debate best way to multi-module this
-             ;; for now, I just want to ensure they're sufficiently isolated
-             :datasets {:source-paths ["modules/datasets/src"]
-                        :resource-paths ["modules/datasets/data"]
-                        :dependencies [[io.airlift.tpch/tpch "0.10"]
-                                       [org.clojure/data.csv "1.0.0"]
-                                       [software.amazon.awssdk/s3 "2.16.76"]]}
+             :test {:dependencies [[org.clojure/test.check "1.1.0"]
+                                   [org.clojure/data.csv "1.0.0"]
+                                   [pro.juxt.crux-labs/core2-datasets]
 
-             :s3 {:source-paths ["modules/s3/src"]
-                  :java-source-paths ["modules/s3/src"]
-                  :test-paths ["modules/s3/test"]
-                  :dependencies [[software.amazon.awssdk/s3 "2.16.76"]]}
+                                   [cheshire "5.10.0"]]
 
-             :kafka {:source-paths ["modules/kafka/src"]
-                     :test-paths ["modules/kafka/test"]
-                     :dependencies [[org.apache.kafka/kafka-clients "2.8.0"]]}
+                    :resource-paths ["test-resources"]}
 
-             :jdbc {:source-paths ["modules/jdbc/src"]
-                    :test-paths ["modules/jdbc/test"]
-                    :dependencies [[seancorfield/next.jdbc "1.2.659"]
-                                   [com.zaxxer/HikariCP "4.0.3"]
-                                   [org.postgresql/postgresql "42.2.20" :scope "provided"]]}
+             :jmh {:dependencies [[org.openjdk.jmh/jmh-core "1.32"]
+                                  [org.openjdk.jmh/jmh-generator-annprocess "1.32"]]
 
-             :bench [:s3 :kafka :datasets
-                     {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
-                      :resource-paths ["modules/bench/resources"]
-                      :source-paths ["modules/bench/src"]
-                      :test-paths ["modules/bench/test"]
-                      :main ^:skip-aot clojure.main
-                      :uberjar-name "core2-bench.jar"}]
+                   :java-source-paths ["src" "jmh"]}
 
              :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}}
 
-  :aliases {"jmh" ["trampoline" "run"
+  :test-selectors {:default (complement (some-fn :skip-test :integration :timescale))
+                   :integration :integration
+                   :timescale :timescale}
+
+  :aliases {"jmh" ["with-profile" "+jmh"
+                   "trampoline" "run"
                    "-m" "org.openjdk.jmh.Main"
                    "-f" "1"
                    "-rf" "json"
