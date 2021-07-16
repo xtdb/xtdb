@@ -343,7 +343,7 @@
 
 (defmethod q/pred-constraint 'or-text-search [_ pred-ctx]
   (let [resolver (partial l/resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
-    (l/pred-constraint build-or-query resolver pred-ctx)))
+    (l/pred-constraint build-or-query resolver pred-ctx false)))
 
 (t/deftest test-or-text-search
   (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
@@ -369,6 +369,17 @@
   (with-open [db (c/open-db *api*)]
     (t/is (= 1001 (count (c/q db {:find '[?e]
                                   :where '[[(text-search :description "Entity*") [[?e]]]]}))))))
+
+(t/deftest test-limit-results-using-alternative-predicate
+  (submit+await-tx (for [n (range 1000)] [:crux.tx/put {:crux.db/id n, :description (str "Entity " n)}]))
+  (submit+await-tx (for [n (range 400)] [:crux.tx/put {:crux.db/id n, :description (str "Entity v2 " n)}]))
+  (with-open [db (c/open-db *api*)]
+    (t/is (= 0 (count (c/q db {:find '[?e]
+                                 :where '[[(text-search-limit :description "Entity*" 0 0) [[?e]]]]}))))
+    (t/is (> 500 (count (c/q db {:find '[?e]
+                                 :where '[[(text-search-limit :description "Entity*" 500 500) [[?e]]]]}))))
+    (t/is (= 500 (count (c/q db {:find '[?e]
+                                 :where '[[(text-search-limit :description "Entity*" 1400 500) [[?e]]]]}))))))
 
 (t/deftest test-handle-incorrect-match-1456
   (submit+await-tx [[:crux.tx/put {:crux.db/id :test-id :name "1234"}]])

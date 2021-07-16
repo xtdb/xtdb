@@ -59,7 +59,7 @@
 (defmethod q/pred-constraint 'lucene-text-search [_ {::l/keys [lucene-store] :as pred-ctx}]
   (when-not (instance? LuceneMultiFieldIndexer (:indexer lucene-store))
     (throw (IllegalStateException. "Lucene multi field indexer not configured, consult the docs.")))
-  (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))
+  (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx false))
 
 (defn ->indexer
   [_]

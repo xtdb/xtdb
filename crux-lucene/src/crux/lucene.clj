@@ -119,7 +119,7 @@
      (search* lucene-store
               (parse-query lucene-store query opts)))))
 
-(defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
+(defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]} with-limits]
   (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
     (let [arg-bindings (map (fn [a]
                               (if (instance? VarBinding a)
@@ -127,10 +127,19 @@
                                 a))
                             (rest arg-bindings))
           query (query-builder (:analyzer lucene-store) arg-bindings)
+          [raw-limit result-limit] (when with-limits (take-last 2 arg-bindings))
+          raw-limit-fn (if (nil? raw-limit)
+                            identity
+                            (partial take raw-limit))
+          result-limit-fn (if (nil? result-limit)
+                            identity
+                            (partial take result-limit))
           tuples (with-open [search-results ^crux.api.ICursor (search* lucene-store query)]
                    (->> search-results
                         iterator-seq
+                        raw-limit-fn
                         (results-resolver index-snapshot db)
+                        result-limit-fn
                         (into [])))]
       (q/bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) tuples))))
 
@@ -158,7 +167,18 @@
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
   (let [resolver (partial resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
-    (pred-constraint #'build-query resolver pred-ctx)))
+    (pred-constraint #'build-query resolver pred-ctx false)))
+
+(defmethod q/pred-args-spec 'text-search-limit [_]
+  (s/cat :pred-fn  #{'text-search-limit} :args (s/spec (s/cat :attr keyword?
+                                                              :v (some-fn string? symbol?)
+                                                              :raw-limit int?
+                                                              :result-limit int?))
+         :return (s/? :crux.query/binding)))
+
+(defmethod q/pred-constraint 'text-search-limit [_ pred-ctx]
+  (let [resolver (partial resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
+    (pred-constraint #'build-query resolver pred-ctx true)))
 
 (defn- resolve-search-results-a-v-wildcard
   "Given search results each containing a single A/V pair document,
@@ -185,7 +205,7 @@
   (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v (some-fn string? symbol?))) :return (s/? :crux.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
-  (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v-wildcard pred-ctx))
+  (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v-wildcard pred-ctx false))
 
 (defprotocol LuceneIndexer
   (index! [this index-writer docs])
