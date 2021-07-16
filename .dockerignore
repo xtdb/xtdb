@@ -1,2 +1,2 @@
-modules/datasets/data/**/*.csv.gz
-!modules/datasets/data/*/small/*.csv.gz
+*
+!target/
