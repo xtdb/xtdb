@@ -6,7 +6,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.pprint :as pp]
-            [com.stuartsierra.dependency :as dep]
+            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
             [core2.error :as err]
             [core2.util :as util])
   (:import [java.io Closeable File Writer]

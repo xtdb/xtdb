@@ -1,7 +1,7 @@
 (ns core2.system-test
   (:require [core2.system :as sys]
             [clojure.test :as t]
-            [com.stuartsierra.dependency :as dep]))
+            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]))
 
 (t/deftest simplest-prep
   (let [{:keys [start-fn]} (-> (sys/prep-system {:foo (fn [opts]

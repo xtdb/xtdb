@@ -5,9 +5,9 @@
             [core2.object-store :as os]
             [core2.system :as sys]
             [core2.util :as util]
-            [next.jdbc :as jdbc]
-            [next.jdbc.connection :as jdbcc]
-            [next.jdbc.result-set :as jdbcr])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr])
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            core2.object_store.ObjectStore
            java.io.Closeable

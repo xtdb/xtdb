@@ -11,7 +11,7 @@
   :dependencies [[org.clojure/clojure]
                  [org.clojure/tools.logging "1.1.0"]
                  [org.clojure/spec.alpha "0.2.194"]
-                 [com.stuartsierra/dependency "1.0.0"]
+                 [pro.juxt.clojars-mirrors.com.stuartsierra/dependency "1.0.0"]
                  [org.clojure/data.json "2.3.1"]
                  [org.clojure/tools.cli "1.0.206"]
                  [org.apache.arrow/arrow-algorithm "4.0.1"]

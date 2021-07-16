@@ -3,7 +3,7 @@
             [core2.jdbc.postgresql :as c2-psql]
             [core2.object-store-test :as ost]
             [core2.system :as sys]
-            [next.jdbc :as jdbc]))
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]))
 
 (defn- with-obj-store [pool-opts f]
   (with-open [sys (-> (sys/prep-system {::c2-jdbc/object-store

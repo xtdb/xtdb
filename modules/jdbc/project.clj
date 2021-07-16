@@ -12,6 +12,10 @@
   :scm {:dir "../.."}
 
   :dependencies [[pro.juxt.crux-labs/core2]
-                 [seancorfield/next.jdbc "1.2.659"]
+                 [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [com.zaxxer/HikariCP "4.0.3"]
-                 [org.postgresql/postgresql "42.2.20" :scope "provided"]])
+                 [org.postgresql/postgresql "42.2.20" :scope "provided"]]
+
+  :profiles {:dev [:test]
+             :test {:dependencies [[org.clojure/data.csv "1.0.0"]
+                                   [cheshire "5.10.0"]]}})
