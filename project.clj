@@ -13,6 +13,7 @@
                  [org.clojure/spec.alpha "0.2.194"]
                  [pro.juxt.clojars-mirrors.com.stuartsierra/dependency "1.0.0"]
                  [org.clojure/data.json "2.3.1"]
+                 [org.clojure/data.csv "1.0.0"]
                  [org.clojure/tools.cli "1.0.206"]
                  [org.apache.arrow/arrow-algorithm "4.0.1"]
                  [org.apache.arrow/arrow-compression "4.0.1"]
