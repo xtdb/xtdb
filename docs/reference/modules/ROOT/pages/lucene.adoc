@@ -1,10 +1,10 @@
-= Lucene
+= Full-text Lucene search
 
 Full-text search module for Crux making use of https://lucene.apache.org/[Apache
 Lucene].
 
 `crux-lucene` runs in-process as part of the Crux node as a Crux module.
-The Lucene index is kept up to date synchronously when Crux transactions are processed on a node.
+The Lucene index is kept up-to-date asynchronously by hooking into the underlying Crux transactions processing on a node as a "secondary index".
 
 [WARNING]
 This module is in alpha and likely to change.
@@ -71,10 +71,13 @@ EDN::
 ----
 ====
 
-== Querying
+== Indexing
 
-All text fields in a document will be automatically indexed.
-You can then you use the in-built `text-search` fn in your datalog:
+All top-level text fields in a document are automatically indexed.
+
+== Datalog Querying
+
+You can use the built-in `text-search` function within in your Datalog queries:
 
 [source,clojure]
 ----
@@ -84,7 +87,7 @@ You can then you use the in-built `text-search` fn in your datalog:
 ----
 
 The destructuring available is `entity-id`, `matched-value` and `score`.
-For example, to return the full search results tuple:
+For example, to return the complete search results tuples:
 
 [source,clojure]
 ----
@@ -105,7 +108,9 @@ You can use standard Lucene fuzzy textual search capabilities:
  [?e :crux.db/id]]}
 ----
 
-This will return all entities with a `:name` attribute that starts with "Iva".
+This will return all entities with a `:name` attribute that starts with "Iva". Note that large result sets will be fully realized and there is currently no means to specify a limit.
+
+This module does not support "leading wildcard" searches, e.g. "*van", even though Lucene is technically capable of performing these queries.
 
 All query functions implemented in `crux-lucene` pass your query string directly to Lucene's `QueryParser.parse` using the `StandardAnalyzer`, without any escaping or other modifications.
 See the Lucene documentation for more information.
@@ -122,7 +127,7 @@ It's possible to supply var bindings to use in `text-search`:
 
 == Wildcard Attributes
 
-There is an an experimental wildcard search function, where you can search across all attributes:
+There is a wildcard search function, where you can search across all attributes:
 
 [source,clojure]
 ----
@@ -131,7 +136,7 @@ There is an an experimental wildcard search function, where you can search acros
  [?e :crux.db/id]]}
 ----
 
-Will return all entities that have an attribute with a value that matches "Iva".
+This will return all entities that have an attribute with a value that matches "Iva".
 The destructured binding also contains `a` which is the matched attribute.
 
 == Multi-field searches
@@ -183,6 +188,22 @@ It's possible to supply var bindings also, that are wired in using `format` when
 You can escape your input strings when constructing Lucene query strings by calling `org.apache.lucene.queryparser.classic.QueryParser/escape`. For example, this method would transform `"|&hello&|"` to `"\\|\\&hello\\&\\|"`.
 
 This is helpful to mitigate against injection attacks and other errors.
+
+== Searching outside of Datalog
+
+The more direct `crux.lucene/search` function is available to lazily return results, without the temporal filtering or other constraints of using Lucene via the `q` API.
+
+The function accepts 3 parameters (`node`, `query` and `opts`) and returns an iterable cursor of results that must be closed.
+
+The `query` parameter can be either a Lucene query string or an `org.apache.lucene.search.Query` object.
+
+The `opts` parameter accepts a map with a single `:default-field` entry. The value of this entry will be supplied to the Lucene `QueryParser` in the cases where the supplied `query` parameter is a Lucene query string.
+
+[source,clojure]
+----
+(with-open [search-results (crux.lucene/search node "Ivan")]
+  (into [] (iterator-seq search-results)))
+----
 
 == Checkpointing Lucene
 

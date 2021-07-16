@@ -17,7 +17,7 @@
 ** xref:kafka-connect.adoc[Kafka - Connect]
 ** xref:embedded-kafka.adoc[Kafka - Embedded]
 ** xref:sql.adoc[SQL]
-** xref:lucene.adoc[Full Text]
+** xref:lucene.adoc[Full-text Search]
 * Persistence Modules
 ** xref:s3.adoc[AWS S3]
 ** xref:azure-blobs.adoc[Azure Blobs]
