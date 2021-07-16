@@ -32,7 +32,7 @@
    ["-h" "--help"]])
 
 (defn parse-args [args]
-  (let [{:keys [options errors summary] :as parsed-opts} (cli/parse-opts args cli-options)]
+  (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)]
     (cond
       (seq errors) {::errors errors}
 
@@ -60,9 +60,12 @@
                                    (deliver shutdown? true)
                                    (shutdown-agents)
                                    (.join main-thread shutdown-ms)
-                                   (when (.isAlive main-thread)
-                                     (log/warn "could not stop node cleanly after" shutdown-ms "ms, forcing exit")
-                                     (.halt (Runtime/getRuntime) 1))))
+                                   (if (.isAlive main-thread)
+                                     (do
+                                       (log/warn "could not stop node cleanly after" shutdown-ms "ms, forcing exit")
+                                       (.halt (Runtime/getRuntime) 1))
+
+                                     (log/info "Node stopped."))))
                                "core2.shutdown-hook-thread"))
     shutdown?))
 
