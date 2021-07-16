@@ -1,4 +1,6 @@
 (defproject pro.juxt.crux-labs/core2-datasets "<inherited>"
+  :description "Core2 Datasets"
+
   :plugins [[lein-parent "0.3.8"]]
 
   :parent-project {:path "../../project.clj"

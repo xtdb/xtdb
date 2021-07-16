@@ -1,4 +1,6 @@
 (defproject pro.juxt.crux-labs/core2-bench "<inherited>"
+  :description "Core2 Benchmark suite"
+
   :plugins [[lein-parent "0.3.8"]]
 
   :parent-project {:path "../../project.clj"

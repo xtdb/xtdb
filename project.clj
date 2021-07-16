@@ -87,4 +87,23 @@
              #_"-Darrow.memory.debug.allocator=true"
              #_"-Darrow.enable_unsafe_memory_access=true"]
 
-  :global-vars {*warn-on-reflection* true})
+  :global-vars {*warn-on-reflection* true}
+
+  :pom-addition ([:developers
+                  [:developer
+                   [:id "juxt"]
+                   [:name "JUXT"]]])
+
+  :classifiers {:sources {:prep-tasks ^:replace []}
+                :javadoc {:prep-tasks ^:replace []
+                          :omit-source true
+                          :filespecs ^:replace []}}
+
+  :repositories {"snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"}}
+
+  :deploy-repositories {"releases" {:url "https://oss.sonatype.org/service/local/staging/deploy/maven2"
+                                    :username [:gpg :env/sonatype_username]
+                                    :password [:gpg :env/sonatype_password]}
+                        "snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"
+                                     :username [:gpg :env/sonatype_username]
+                                     :password [:gpg :env/sonatype_password]}})
