@@ -1,28 +1,80 @@
 = core2
 
-== Developing
+== Install
 
-First time:
-- `./lein-sub install`
+[source,clojure]
+----
+;; project.clj
+[pro.juxt.crux-labs/core2 "dev-SNAPSHOT"]
+[pro.juxt.crux-labs/core2-kafka "dev-SNAPSHOT"]
+[pro.juxt.crux-labs/core2-jdbc "dev-SNAPSHOT"]
+[pro.juxt.crux-labs/core2-s3 "dev-SNAPSHOT"]
 
-- Start and connect to your REPL in the usual fashion
-- `(dev)`
-- `(go)`
-- `node` is then bound to a started node, using `data/dev-node` as a persistent data directory
-- `lein test` to run unit tests, `lein test :integration` to run integration tests
-- To attach YourKit, `lein run with-profile +attach-yourkit repl :headless` (assumes YourKit in `/opt/yourkit` as installed by the AUR)
 
-== Links
+;; deps.edn
+{pro.juxt.crux-labs/core2 {:mvn/version "dev-SNAPSHOT"}
+ pro.juxt.crux-labs/core2-kafka {:mvn/version "dev-SNAPSHOT"}
+ pro.juxt.crux-labs/core2-jdbc {:mvn/version "dev-SNAPSHOT"}
+ pro.juxt.crux-labs/core2-s3 {:mvn/version "dev-SNAPSHOT"}}
+----
 
-- https://github.com/juxt/crux-rnd/projects/1[Kanban board]
-- https://app.circleci.com/pipelines/github/juxt/crux-rnd[Continuous Integration (CircleCI)]
-- link:bibliography.org[bibliography.org] - a list of light bedtime reading.
+==  Usage - differences to Classic
 
-== Differences to Classic
+=== Architecture
+
+Where Classic has a transaction log, document store and query indices, Core2 has a transaction log and an object store.
+
+* Classic transactions are split up into 'tx-events' and documents, with the former going on the tx-log and the latter to the doc-store.
+  In Core2, the transaction log doesn't need to have infinite retention, so we no longer need this split - transactions go straight on to the log, and the document store is obsolete.
+* Rather than each node having its own query indices, Core2 shares these between nodes in a cluster via the object store.
+  The object store is hence _the_ golden store, thanks to the transience of the transaction log.
+* The files stored in the object store are in https://arrow.apache.org/[Apache Arrow] format, the structure of which Core2 takes responsibility for maintaining - we no longer require a KV store.
+
+[cols="1,2*^"]
+|===
+| | Transaction Log | Object Store
+
+| AWS S3 | | ✓
+| Azure Blobs | | (soon)
+| Google Cloud Storage | | (soon)
+| FileSystem | ✓ | ✓
+| Kafka | ✓ | ✗
+| JDBC | (soon) | ✓
+| In-memory | ✓ | ✓
+| LMDB (KV) | ✗ | ✗
+| RocksDB (KV) | ✗ | ✗
+|===
+
+
+=== Setup
 
 Main require: `[core2.core :as c2]`
 
+Configuration is similar to Classic - take a look at the https://opencrux.com[opencrux.com] module docs for more information.
+
+You can still start a completely in-memory node using `(c2/start-node {})`.
+For a Kafka/JDBC node:
+
+[source,clojure]
+----
+(with-open [node (c2/start-node {:core2/log
+                                 {:core2/module 'core2.kafka/->log
+                                  :bootstrap-servers "localhost:9092"}
+
+                                 :core2/object-store
+                                 {:core2/module 'core2.jdbc/->object-store
+                                  :connection-pool {:dialect {:core2/module 'core2.jdbc.postgres/->dialect}
+                                                    :db-spec {:user "postgres"
+                                                              :password "postgres"
+                                                              :database "core2test"}}}})]
+  ;; ...
+  )
+----
+
+The CLI parameters, and EDN/JSON configuration file formats are the same as Classic.
+
 === Transactions
+
 Transactions are slightly different to Classic:
 
 - `[:crux.tx/put <doc>]` -> `{:op :put, :doc <doc>}`. Put and delete supported thus far.
@@ -82,6 +134,47 @@ There is also `c2/plan-ra` which accepts a lower-level relational algebra query 
   (c2/with-db [db node]
     (into [] (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
 ----
+
+== Developing Core2
+
+First time:
+- `./lein-sub install`
+
+- Start and connect to your REPL in the usual fashion
+- `(dev)`
+- `(go)`
+- `node` is then bound to a started node, using `data/dev-node` as a persistent data directory
+- `lein test` to run unit tests, `lein test :integration` to run integration tests
+- To attach YourKit, `lein run with-profile +attach-yourkit repl :headless` (assumes YourKit in `/opt/yourkit` as installed by the AUR)
+
+=== Links
+
+- https://github.com/juxt/crux-rnd/projects/1[Kanban board]
+- https://app.circleci.com/pipelines/github/juxt/crux-rnd[Continuous Integration (CircleCI)]
+- link:bibliography.org[bibliography.org] - a list of light bedtime reading.
+
+
+=== Building Core2
+
+==== Maven Central
+
+Core2 artifacts are deployed to Maven Central.
+
+* To deploy a `dev-SNAPSHOT` release, `./lein-sub deploy`
+* To deploy a release, `CORE2_VERSION=<version> ./lein-sub do install, deploy`, then head to the https://oss.sonatype.org/[Nexus UI] to close/release it.
+
+==== Uberjar
+
+* `./lein-sub do clean, install`
+* `lein uberjar` => `target/core2-standalone.jar`
+
+* `java -jar target/core2-standalone [--help]`
+
+==== Docker
+
+* `./bin/build-docker.sh [--clean]` => `juxt.crux-labs/core2:latest`
+* `CORE2_VERSION=<version> ./bin/build-docker.sh` to tag as a different version.
+
 
 == Copyright & License
 
