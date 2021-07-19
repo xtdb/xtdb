@@ -27,4 +27,6 @@
                  [mysql/mysql-connector-java "8.0.23" :scope "provided"]
                  [com.microsoft.sqlserver/mssql-jdbc "8.2.2.jre8" :scope "provided"]]
 
-  :profiles {:dev {:dependencies [[com.opentable.components/otj-pg-embedded "0.13.1"]]}})
+  :profiles {:dev [:test]
+             :test {:dependencies [[com.opentable.components/otj-pg-embedded "0.13.1"]
+                                   [pro.juxt.crux/crux-test]]}})
