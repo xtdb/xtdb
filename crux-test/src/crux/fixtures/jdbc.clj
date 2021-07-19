@@ -49,7 +49,7 @@
 
 (def ^:private jdbc-dialects
   #{:h2 :sqlite :embedded-postgres
-    :postgres :mysql :mssql})
+    #_:postgres #_:mysql #_:mssql})
 
 ;; Optional:
 ;; in `crux-jdbc`: `docker-compose up` (`docker-compose up -d` for background)
@@ -119,5 +119,13 @@
                   :crux/tx-log {:crux/module `j/->tx-log
                                 :connection-pool ::j/connection-pool}
                   :crux/document-store {:crux/module `j/->document-store,
+                                        :connection-pool ::j/connection-pool}}
+    f))
+
+(defn with-ds2-jdbc-node [f]
+  (fix/with-opts {::j/connection-pool *jdbc-opts*
+                  :crux/tx-log {:crux/module `j/->tx-log
+                                :connection-pool ::j/connection-pool}
+                  :crux/document-store {:crux/module `j/->document-store2,
                                         :connection-pool ::j/connection-pool}}
     f))

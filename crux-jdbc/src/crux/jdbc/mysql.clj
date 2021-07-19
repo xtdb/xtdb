@@ -25,7 +25,8 @@ WHERE table_schema=DATABASE()
             :IdxPresent)))
 
 (defn ->dialect [_]
-  (reify j/Dialect
+  (reify
+    j/Dialect
     (db-type [_] :mysql)
     (setup-schema! [_ ds]
       (jdbc/execute! ds ["
@@ -43,4 +44,21 @@ CREATE TABLE IF NOT EXISTS tx_events (
       (when-not (idx-exists? ds "tx_events_event_key_idx_2")
         (jdbc/execute! ds ["CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"]))
 
-      (check-tx-time-col ds))))
+      (check-tx-time-col ds))
+
+    j/Docs2Dialect
+    (setup-docs2-schema! [_ pool {:keys [table-name]}]
+      (doto pool
+        (jdbc/execute! [(format "
+CREATE TABLE IF NOT EXISTS %s (
+  doc_id VARCHAR(255) NOT NULL PRIMARY KEY,
+  doc LONGBLOB NOT NULL)"
+                                table-name)])))
+
+    (doc-upsert-sql+param-groups [_ docs {:keys [table-name]}]
+      (into [(format "
+INSERT INTO %s (doc_id, doc) VALUES (?, ?) AS new
+ON DUPLICATE KEY UPDATE doc = new.doc
+"
+                     table-name)]
+            docs))))

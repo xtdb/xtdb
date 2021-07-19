@@ -6,6 +6,7 @@
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [go halt reset reset-all]]
             [crux.io :as cio]
+            [crux.jdbc :as jdbc]
             [crux.lucene]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
@@ -60,6 +61,14 @@
                        :crux.http-server/server {}
                        :crux.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
+(def jdbc-config
+  {::crux {:node-opts {::jdbc/connection-pool {:dialect 'crux.jdbc.psql/->dialect
+                                               :db-spec {:dbname "cruxtest", :user "postgres", :password "postgres"}}
+                       :crux/tx-log {:crux/module `jdbc/->tx-log
+                                     :connection-pool ::jdbc/connection-pool}
+                       :crux/document-store {:crux/module `jdbc/->document-store2,
+                                             :connection-pool ::jdbc/connection-pool}}}})
+
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
                                  :zookeeper-port (cio/free-port)
@@ -84,6 +93,7 @@
                          :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
+;; swap for `jdbc-config` to use JDBC
 (ir/set-prep! (fn [] standalone-config))
 
 (defn crux-node []

@@ -16,7 +16,8 @@
                    "See https://github.com/juxt/crux/releases/tag/20.09-1.12.1 for more details."))))
 
 (defn ->dialect [_]
-  (reify j/Dialect
+  (reify
+    j/Dialect
     (db-type [_] :mssql)
 
     (setup-schema! [_ ds]
@@ -39,7 +40,29 @@ DROP INDEX tx_events.tx_events_event_key_idx"])
 IF NOT EXISTS (SELECT * FROM sys.indexes WHERE object_id = object_id('dbo.tx_events') AND NAME ='tx_events_event_key_idx_2')
 CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"])
 
-        (check-tx-time-col)))))
+        (check-tx-time-col)))
+
+    j/Docs2Dialect
+    (setup-docs2-schema! [_ pool {:keys [table-name]}]
+      (doto pool
+        (jdbc/execute! [(format "
+IF NOT EXISTS (SELECT * FROM sys.tables WHERE name='%s')
+CREATE TABLE %s (
+  doc_id VARCHAR(255) NOT NULL PRIMARY KEY,
+  doc VARBINARY(max) NOT NULL)"
+                                table-name table-name)])))
+
+    (doc-upsert-sql+param-groups [_ docs {:keys [table-name]}]
+      (into [(format "
+MERGE %s docs
+USING (VALUES (?, ?)) AS new_doc (doc_id, doc)
+ON (docs.doc_id = new_doc.doc_id)
+WHEN MATCHED
+  THEN UPDATE SET doc = new_doc.doc
+WHEN NOT MATCHED BY TARGET
+  THEN INSERT (doc_id, doc) VALUES (new_doc.doc_id, new_doc.doc);"
+                     table-name)]
+            docs))))
 
 (defmethod j/->date :mssql [^DateTimeOffset d _]
   (Date/from (.toInstant (.getOffsetDateTime d))))

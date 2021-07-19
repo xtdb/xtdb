@@ -8,12 +8,13 @@
             [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx :as tx]
+            [crux.tx.subscribe :as tx-sub]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [crux.tx.subscribe :as tx-sub])
-  (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+  (:import clojure.lang.MapEntry
+           [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
            java.sql.Timestamp
            java.time.Duration
@@ -22,6 +23,10 @@
 (defprotocol Dialect
   (setup-schema! [_ pool])
   (db-type [_]))
+
+(defprotocol Docs2Dialect
+  (setup-docs2-schema! [_ pool opts])
+  (doc-upsert-sql+param-groups [_ docs opts]))
 
 (defmulti ->date (fn [d dialect] (db-type dialect)) :default ::default)
 
@@ -127,6 +132,43 @@
    (assoc opts
           :document-cache document-cache
           :document-store (->JdbcDocumentStore pool dialect))))
+
+(defrecord JdbcDocumentStore2 [pool dialect table-name]
+  db/DocumentStore
+  (submit-docs [_ docs]
+    (jdbc/with-transaction [tx pool]
+      (let [docs (->> (for [[id doc] docs]
+                        (MapEntry/create (str id) (nippy/freeze doc)))
+                      (sort-by key))
+            [sql & param-groups] (doc-upsert-sql+param-groups dialect docs {:table-name table-name})]
+        (jdbc/execute-batch! tx sql param-groups {}))))
+
+  (fetch-docs [_ ids]
+    (cio/with-nippy-thaw-all
+      (->> (for [id-batch (partition-all 100 ids)
+                 row (jdbc/execute! pool (into [(format "SELECT DOC_ID, DOC FROM %s WHERE DOC_ID IN (%s)"
+                                                        table-name
+                                                        (->> (repeat (count id-batch) "?") (str/join ", ")))]
+                                               (map (comp str c/new-id) id-batch))
+                                    {:builder-fn jdbcr/as-unqualified-lower-maps})]
+             row)
+           (map (juxt (comp c/new-id c/hex->id-buffer :doc_id)
+                      #(-> (:doc %) (<-blob dialect))))
+           (into {})))))
+
+(defn ->document-store2 {::sys/deps {:connection-pool `->connection-pool
+                                     :document-cache 'crux.cache/->cache}
+                         ::sys/args {:table-name {:spec ::sys/string
+                                                  :required? true
+                                                  :default "docs"}}}
+  [{{:keys [pool dialect]} :connection-pool,
+    :keys [document-cache table-name] :as opts}]
+  (setup-docs2-schema! dialect pool {:table-name table-name})
+
+  (ds/->cached-document-store
+   (assoc opts
+          :document-cache document-cache
+          :document-store (->JdbcDocumentStore2 pool dialect table-name))))
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog

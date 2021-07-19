@@ -14,7 +14,9 @@
                                  (fn [f] (binding [*http-server-api* *api*] (f)))
                                  fh/with-http-client])
        :h2 (t/join-fixtures [fj/with-h2-opts fj/with-jdbc-node fix/with-node])
+       :h2-ds2 (t/join-fixtures [fj/with-h2-opts fj/with-ds2-jdbc-node fix/with-node])
        :sqlite (t/join-fixtures [fj/with-sqlite-opts fj/with-jdbc-node fix/with-node])
+       :sqlite-ds2 (t/join-fixtures [fj/with-sqlite-opts fj/with-ds2-jdbc-node fix/with-node])
        :local-kafka (-> (t/join-fixtures [fk/with-cluster-tx-log-opts
                                           fk/with-cluster-doc-store-opts
                                           fix/with-node])
@@ -31,9 +33,10 @@
                                 (with-meta {::embedded-kafka? true}))
        :kafka+remote-doc-store (-> (t/join-fixtures [fk/with-cluster-tx-log-opts fix/with-node])
                                    (with-meta {::embedded-kafka? true}))}
+
       #_(select-keys [:local-standalone])
       #_(select-keys [:local-standalone :remote])
-      #_(select-keys [:local-standalone :h2 :sqlite :remote])))
+      #_(select-keys [:local-standalone :h2-ds2 :sqlite-ds2 :remote])))
 
 (def ^:dynamic *node-type*)
 

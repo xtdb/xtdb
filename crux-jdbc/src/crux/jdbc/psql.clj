@@ -16,7 +16,8 @@
 
 (defn ->dialect {::sys/args {:drop-table? {:spec ::sys/boolean, :default false}}}
   [{:keys [drop-table?]}]
-  (reify j/Dialect
+  (reify
+    j/Dialect
     (db-type [_] :postgresql)
 
     (setup-schema! [_ pool]
@@ -35,4 +36,21 @@ CREATE TABLE IF NOT EXISTS tx_events (
 
         (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
         (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])
-        (check-tx-time-col)))))
+        (check-tx-time-col)))
+
+    j/Docs2Dialect
+    (setup-docs2-schema! [_ pool {:keys [table-name]}]
+      (doto pool
+        (jdbc/execute! [(format "
+CREATE TABLE IF NOT EXISTS %s (
+  doc_id VARCHAR NOT NULL PRIMARY KEY,
+  doc BYTEA NOT NULL)"
+                                table-name)])))
+
+    (doc-upsert-sql+param-groups [_ docs {:keys [table-name]}]
+      (into [(format "
+INSERT INTO %s (doc_id, doc) VALUES (?, ?)
+ON CONFLICT (doc_id) DO UPDATE SET doc = EXCLUDED.doc
+"
+                     table-name)]
+            docs))))
