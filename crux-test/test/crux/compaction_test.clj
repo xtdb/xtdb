@@ -4,7 +4,7 @@
             [crux.fixtures :as fix]
             [crux.fixtures.jdbc :as fj]))
 
-(t/use-fixtures :each fj/with-h2-opts)
+(t/use-fixtures :each fj/with-h2-opts fj/with-jdbc-node)
 
 (t/deftest test-compaction-leaves-replayable-log
   (let [tx (with-open [api (crux/start-node fix/*opts*)]

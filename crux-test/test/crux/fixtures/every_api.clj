@@ -13,8 +13,8 @@
                                  fix/with-node
                                  (fn [f] (binding [*http-server-api* *api*] (f)))
                                  fh/with-http-client])
-       :h2 (t/join-fixtures [fj/with-h2-opts fix/with-node])
-       :sqlite (t/join-fixtures [fj/with-sqlite-opts fix/with-node])
+       :h2 (t/join-fixtures [fj/with-h2-opts fj/with-jdbc-node fix/with-node])
+       :sqlite (t/join-fixtures [fj/with-sqlite-opts fj/with-jdbc-node fix/with-node])
        :local-kafka (-> (t/join-fixtures [fk/with-cluster-tx-log-opts
                                           fk/with-cluster-doc-store-opts
                                           fix/with-node])

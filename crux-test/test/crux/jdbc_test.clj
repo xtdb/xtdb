@@ -9,7 +9,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]))
 
-(t/use-fixtures :each fj/with-each-jdbc-node fix/with-node)
+(t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
