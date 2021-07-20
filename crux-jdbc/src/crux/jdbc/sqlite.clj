@@ -36,3 +36,6 @@ CREATE TABLE IF NOT EXISTS tx_events (
 
         (jdbc/execute! ["DROP INDEX IF EXISTS tx_events_event_key_idx"])
         (jdbc/execute! ["CREATE INDEX IF NOT EXISTS tx_events_event_key_idx_2 ON tx_events(event_key)"])))))
+
+(defmethod j/doc-exists-sql :sqlite [_ doc-id]
+  ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" doc-id])
