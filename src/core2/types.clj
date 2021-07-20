@@ -32,6 +32,7 @@
 
 (def struct-type (.getType Types$MinorType/STRUCT))
 (def dense-union-type (.getType Types$MinorType/DENSEUNION))
+(def list-type (.getType Types$MinorType/LIST))
 
 (def class->arrow-type
   {nil (->arrow-type :null)

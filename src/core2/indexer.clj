@@ -22,10 +22,11 @@
            java.util.concurrent.locks.StampedLock
            [java.util.function Consumer Function]
            org.apache.arrow.memory.BufferAllocator
-           [org.apache.arrow.vector BigIntVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
-           [org.apache.arrow.vector.complex DenseUnionVector StructVector]
+           [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
+           [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
-           [org.apache.arrow.vector.types.pojo Field Schema]))
+           org.apache.arrow.vector.types.UnionMode
+           [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -44,6 +45,15 @@
   (^void closeCols [])
   (^void finishChunk []))
 
+(defn- copy-duv-safe! [^DenseUnionVector src-vec, src-idx,
+                       ^DenseUnionVector dest-vec, dest-idx]
+  (let [type-id (.getTypeId src-vec src-idx)
+        offset (DenseUnionUtil/writeTypeId dest-vec dest-idx type-id)]
+    (.copyFromSafe (.getVectorByType dest-vec type-id)
+                   (.getOffset src-vec src-idx)
+                   offset
+                   (.getVectorByType src-vec type-id))))
+
 (defn- copy-safe! [^VectorSchemaRoot content-root ^ValueVector src-vec src-idx row-id]
   (let [^BigIntVector row-id-vec (.getVector content-root 0)
         ^DenseUnionVector field-vec (.getVector content-root 1)
@@ -52,13 +62,7 @@
     (.setSafe row-id-vec value-count ^int row-id)
 
     (if (instance? DenseUnionVector src-vec)
-      (let [^DenseUnionVector src-vec src-vec
-            type-id (.getTypeId ^DenseUnionVector src-vec src-idx)
-            offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
-        (.copyFromSafe (.getVectorByType field-vec type-id)
-                       (.getOffset src-vec src-idx)
-                       offset
-                       (.getVectorByType ^DenseUnionVector src-vec type-id)))
+      (copy-duv-safe! src-vec src-idx field-vec value-count)
 
       (let [type-id (t/arrow-type->type-id (.getType (.getField src-vec)))
             offset (DenseUnionUtil/writeTypeId field-vec (.getValueCount field-vec) type-id)]
@@ -144,6 +148,114 @@
         (when (empty? (.thread->count open-watermark))
           (.remove i))))))
 
+(def ^:private log-schema
+  (Schema. [(t/->field "_tx-id" (t/->arrow-type :bigint) false)
+            (t/->field "_tx-time" (t/->arrow-type :timestamp-milli) false)
+            (t/->field "ops" t/list-type true
+                       (t/->field "ops" t/struct-type false
+                                  (t/->field "_row-id" (t/->arrow-type :bigint) false)
+                                  (t/->field "op" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) false
+                                             (t/->field "put" t/struct-type false
+                                                        (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
+                                                        (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
+                                             (t/->field "delete" t/struct-type false
+                                                        (t/->primitive-dense-union-field "_id")
+                                                        (t/->field "_valid-time-start" (t/->arrow-type :timestamp-milli) true)
+                                                        (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true)))))]))
+
+(definterface ILogOpIndexer
+  (^void logPut [^long rowId, ^long txOpIdx])
+  (^void logDelete [^long rowId, ^long txOpIdx])
+  (^void endTx []))
+
+(definterface ILogIndexer
+  (^core2.indexer.ILogOpIndexer startTx [^core2.tx.TransactionInstant txInstant,
+                                         ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
+  (^java.nio.ByteBuffer writeLog [])
+  (^void clear [])
+  (^void close []))
+
+(defn- ->log-indexer [^BufferAllocator allocator]
+  (let [log-root (VectorSchemaRoot/create log-schema allocator)
+        ^BigIntVector tx-id-vec (.getVector log-root "_tx-id")
+        ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
+
+        ^ListVector ops-vec (.getVector log-root "ops")
+        ^StructVector ops-data-vec (.getDataVector ops-vec)
+        ^BigIntVector row-id-vec (.getChild ops-data-vec "_row-id")
+        ^DenseUnionVector op-vec (.getChild ops-data-vec "op")
+
+        ^StructVector put-vec (.getStruct op-vec 0)
+        ^TimeStampMilliVector put-vt-start-vec (.getChild put-vec "_valid-time-start")
+        ^TimeStampMilliVector put-vt-end-vec (.getChild put-vec "_valid-time-end")
+
+        ^StructVector delete-vec (.getStruct op-vec 1)
+        delete-id-vec (.getChild delete-vec "_id")
+        ^TimeStampMilliVector delete-vt-start-vec (.getChild delete-vec "_valid-time-start")
+        ^TimeStampMilliVector delete-vt-end-vec (.getChild delete-vec "_valid-time-end")]
+
+    (reify ILogIndexer
+      (startTx [_ tx-instant tx-root]
+        (let [tx-idx (.getRowCount log-root)]
+          (.setSafe tx-id-vec tx-idx (.tx-id tx-instant))
+          (.setSafe tx-time-vec tx-idx (.getTime ^Date (.tx-time tx-instant)))
+          (.setRowCount log-root (inc tx-idx))
+
+          (let [start-op-idx (.startNewValue ops-vec tx-idx)
+
+                ^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
+
+                tx-put-vec (.getStruct tx-ops-vec 0)
+                tx-put-vt-start-vec (.getChild tx-put-vec "_valid-time-start")
+                tx-put-vt-end-vec (.getChild tx-put-vec "_valid-time-end")
+
+                tx-delete-vec (.getStruct tx-ops-vec 1)
+                tx-delete-id-vec (.getChild tx-delete-vec "_id")
+                tx-delete-vt-start-vec (.getChild tx-delete-vec "_valid-time-start")
+                tx-delete-vt-end-vec (.getChild tx-delete-vec "_valid-time-end")]
+
+            (letfn [(log-op [^long row-id]
+                      (let [op-idx (.getValueCount ops-data-vec)]
+                        (util/set-value-count ops-data-vec (inc op-idx))
+                        (.setIndexDefined ops-data-vec op-idx)
+                        (.setSafe row-id-vec op-idx row-id)
+                        op-idx))]
+
+              (reify ILogOpIndexer
+                (logPut [_ row-id tx-op-idx]
+                  (let [op-idx (log-op row-id)
+                        dest-offset (DenseUnionUtil/writeTypeId op-vec op-idx 0)
+                        src-offset (.getOffset tx-ops-vec tx-op-idx)]
+                    (.setIndexDefined put-vec dest-offset)
+                    (.copyFromSafe put-vt-start-vec src-offset dest-offset tx-put-vt-start-vec)
+                    (.copyFromSafe put-vt-end-vec src-offset dest-offset tx-put-vt-end-vec)))
+
+                (logDelete [_ row-id tx-op-idx]
+                  (let [op-idx (log-op row-id)
+                        dest-offset (DenseUnionUtil/writeTypeId op-vec op-idx 1)
+                        src-offset (.getOffset tx-ops-vec tx-op-idx)]
+                    (.setIndexDefined delete-vec dest-offset)
+                    (.copyFromSafe delete-vt-start-vec src-offset dest-offset tx-delete-vt-start-vec)
+                    (.copyFromSafe delete-vt-end-vec src-offset dest-offset tx-delete-vt-end-vec)
+
+                    (copy-duv-safe! tx-delete-id-vec src-offset delete-id-vec dest-offset)))
+
+                (endTx [_]
+                  (.endValue ops-vec tx-idx (- (.getValueCount ops-data-vec) start-op-idx))))))))
+
+      (writeLog [_]
+        ;; TODO chunkify
+        (util/build-arrow-ipc-byte-buffer log-root :file
+          (fn [write-batch!]
+            (write-batch!))))
+
+      (clear [_]
+        (.clear log-root))
+
+      Closeable
+      (close [_]
+        (.close log-root)))))
+
 (deftype Indexer [^BufferAllocator allocator
                   ^ObjectStore object-store
                   ^IMetadataManager metadata-mgr
@@ -151,6 +263,7 @@
                   ^long max-rows-per-chunk
                   ^long max-rows-per-block
                   ^Map live-roots
+                  ^ILogIndexer log-indexer
                   ^Set open-watermarks
                   ^StampedLock open-watermarks-lock
                   ^:volatile-mutable ^Watermark watermark
@@ -238,12 +351,15 @@
       (.loadNextBatch sr)
 
       (let [^DenseUnionVector tx-ops-vec (.getVector tx-root "tx-ops")
+            op-count (.getValueCount tx-ops-vec)
             op-type-ids (object-array (mapv (fn [^Field field]
                                               (keyword (.getName field)))
                                             (.getChildren (.getField tx-ops-vec))))
             tx-time-ms (.getTime ^Date (.tx-time tx-instant))
-            row-id->temporal-coordinates (TreeMap.)]
-        (dotimes [tx-op-idx (.getValueCount tx-ops-vec)]
+            row-id->temporal-coordinates (TreeMap.)
+            log-op-idxer (.startTx log-indexer tx-instant tx-root)]
+
+        (dotimes [tx-op-idx op-count]
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
                 per-op-offset (.getOffset tx-ops-vec tx-op-idx)
                 op-vec (.getStruct tx-ops-vec op-type-id)
@@ -258,6 +374,7 @@
             (.put row-id->temporal-coordinates row-id temporal-coordinates)
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
+                     (.logPut log-op-idxer row-id tx-op-idx)
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
                        (when (= "_id" (.getName value-vec))
@@ -267,6 +384,7 @@
                                    value-vec per-op-offset row-id)))
 
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
+                        (.logDelete log-op-idxer row-id tx-op-idx)
                         (set! (.id temporal-coordinates) (t/get-object id-vec per-op-offset))
                         (set! (.tombstone temporal-coordinates) true)
 
@@ -292,6 +410,7 @@
                     (.get valid-time-end-vec per-op-offset)
                     (.getTime temporal/end-of-time)))))
 
+        (.endTx log-op-idxer)
         (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
 
         (.getValueCount tx-ops-vec))))
@@ -315,7 +434,8 @@
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
       (util/try-close live-root))
 
-    (.clear live-roots))
+    (.clear live-roots)
+    (.clear log-indexer))
 
   (finishChunk [this]
     (when-not (.isEmpty live-roots)
@@ -323,8 +443,10 @@
 
       (try
         (let [chunk-idx (.chunk-idx watermark)]
-          @(CompletableFuture/allOf (->> (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
-                                           (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-root)))
+          @(CompletableFuture/allOf (->> (cons
+                                          (.putObject object-store (format "log-%016x.arrow" chunk-idx) (.writeLog log-indexer))
+                                          (for [[^String col-name, ^VectorSchemaRoot live-root] live-roots]
+                                            (.putObject object-store (meta/->chunk-obj-key chunk-idx col-name) (.writeColumn this live-root))))
                                          (into-array CompletableFuture)))
           (.registerNewChunk temporal-mgr chunk-idx)
           (.registerNewChunk metadata-mgr live-roots chunk-idx max-rows-per-block)
@@ -345,6 +467,7 @@
   (close [this]
     (.closeCols this)
     (.close watermark)
+    (.close log-indexer)
     (let [stamp (.writeLock open-watermarks-lock)]
       (try
         (let [i (.iterator open-watermarks)]
@@ -396,6 +519,7 @@
               max-rows-per-chunk
               max-rows-per-block
               (ConcurrentSkipListMap.)
+              (->log-indexer allocator)
               (util/->identity-set)
               (StampedLock.)
               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)

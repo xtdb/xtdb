@@ -222,6 +222,28 @@
 
         (tu/check-json (.toPath (io/as-file (io/resource "can-handle-dynamic-cols-in-same-block"))) os)))))
 
+(t/deftest writes-log-file
+  (let [node-dir (util/->path "target/writes-log-file")
+        mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])]
+    (util/delete-dir node-dir)
+
+    (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
+      (let [^ObjectStore os (:core2/object-store @(:!system node))]
+
+        (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo"}}
+                                {:op :put, :doc {:_id "bar"}}])
+            (tu/then-await-tx node))
+
+        (-> (c2/submit-tx node [{:op :delete, :_id "foo", :_valid-time-start #inst "2020-04-01"}
+                                {:op :put, :doc {:_id "bar", :month "april"},
+                                 :_valid-time-start #inst "2020-04-01"
+                                 :_valid-time-end #inst "2020-05-01"}])
+            (tu/then-await-tx node))
+
+        (tu/finish-chunk node)
+
+        (tu/check-json (.toPath (io/as-file (io/resource "writes-log-file"))) os)))))
+
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
