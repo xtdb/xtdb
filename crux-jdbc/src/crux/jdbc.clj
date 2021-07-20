@@ -99,8 +99,9 @@
   db/DocumentStore
   (submit-docs [this id-and-docs]
     (jdbc/with-transaction [tx pool]
-      (doseq [[id doc] id-and-docs
-              :let [id (str id)]]
+      (doseq [[id doc] (->> (for [[id doc] id-and-docs]
+                              (MapEntry/create (str id) doc))
+                            (sort-by key))]
         (if (c/evicted-doc? doc)
           (do
             (insert-event! tx id doc "docs")
