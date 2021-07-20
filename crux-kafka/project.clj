@@ -1,11 +1,11 @@
-(defproject pro.juxt.crux/crux-kafka "crux-git-version"
+(defproject pro.juxt.crux/crux-kafka "<inherited>"
   :description "Crux Kafka"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -14,14 +14,12 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
                  [org.apache.kafka/kafka-clients "2.6.0" :exclusions [org.lz4/lz4-java]]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}}
-
-  :middleware [leiningen.project-version/middleware]
 
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

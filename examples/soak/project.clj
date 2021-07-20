@@ -1,11 +1,19 @@
-(defproject juxt/soak "crux-git-version"
+(defproject juxt/soak "<inherited>"
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "1.0.0"]
-                 [pro.juxt.crux/crux-core "crux-git-version"]
-                 [pro.juxt.crux/crux-kafka "crux-git-version"]
-                 [pro.juxt.crux/crux-rocksdb "crux-git-version"]
-                 [pro.juxt.crux/crux-metrics "crux-git-version"]
-                 [pro.juxt.crux/crux-s3 "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.crux/crux-kafka]
+                 [pro.juxt.crux/crux-rocksdb]
+                 [pro.juxt.crux/crux-metrics]
+                 [pro.juxt.crux/crux-s3]
 
                  [bidi "2.1.6"]
                  [hiccup "2.0.0-alpha2"]
@@ -25,7 +33,6 @@
                  [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
                  [org.apache.httpcomponents/httpclient "4.5.13"]]
 
-  :middleware [leiningen.project-version/middleware]
   :jvm-opts ["-Xms3g" "-Xmx3g"]
   :uberjar-name "crux-soak.jar"
   :pedantic? :warn)

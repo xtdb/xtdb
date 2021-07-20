@@ -1,10 +1,10 @@
-(defproject pro.juxt.crux/crux-metrics "crux-git-version"
+(defproject pro.juxt.crux/crux-metrics "<inherited>"
   :description "Provides Metrics for Crux nodes"
 
   :plugins [[lein-parent "0.3.8"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -12,7 +12,7 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
                  [io.dropwizard.metrics/metrics-core "4.1.2"]]
 
   :profiles {:provided {:dependencies
@@ -28,6 +28,4 @@
                          [clj-commons/iapetos "0.1.11"]]}
 
              :dev {:dependencies
-                   [[ch.qos.logback/logback-classic "1.2.3"]]}}
-
-  :middleware [leiningen.project-version/middleware])
+                   [[ch.qos.logback/logback-classic "1.2.3"]]}})

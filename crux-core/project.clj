@@ -1,11 +1,11 @@
-(defproject pro.juxt.crux/crux-core "crux-git-version"
+(defproject pro.juxt.crux/crux-core "<inherited>"
   :description "An open source document database with bitemporal graph queries"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -28,10 +28,8 @@
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-                            :dependencies [[pro.juxt.crux/crux-http-server "crux-git-version"]]}
-             :test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
-
-  :middleware [leiningen.project-version/middleware]
+                            :dependencies [[pro.juxt.crux/crux-http-server]]}
+             :test {:dependencies [[pro.juxt.crux/crux-test]]}}
 
   :aot [crux.main]
 

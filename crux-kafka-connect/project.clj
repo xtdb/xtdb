@@ -1,4 +1,6 @@
-(defproject pro.juxt.crux/crux-kafka-connect "crux-git-version"
+(def crux-version (or (System/getenv "CRUX_VERSION") "dev-SNAPSHOT"))
+
+(defproject pro.juxt.crux/crux-kafka-connect "<inherited>"
   :description "Crux Kafka Connect"
 
   :plugins [[lein-javadoc "0.3.0"]
@@ -7,7 +9,7 @@
             [thomasa/mranderson "0.5.1"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -17,8 +19,8 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core "crux-git-version"]
-                 [pro.juxt.crux/crux-http-client "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.crux/crux-http-client]
                  [org.clojure/tools.logging "1.1.0"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
@@ -26,8 +28,6 @@
                  [org.slf4j/slf4j-api "1.7.30"]]
 
   :profiles {:provided {:dependencies [[org.apache.kafka/connect-api "2.6.0"]]}}
-
-  :middleware [leiningen.project-version/middleware]
 
   :aliases {"package" ["do"
                        ["inline-deps"]
@@ -55,7 +55,7 @@
                            :tags ["Database"
                                   "Crux"]
 
-                           :version "crux-git-version"}
+                           :version ~crux-version}
 
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

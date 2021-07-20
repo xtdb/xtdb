@@ -1,11 +1,11 @@
-(defproject pro.juxt.crux/crux-http-server "crux-git-version"
+(defproject pro.juxt.crux/crux-http-server "<inherited>"
   :description "Crux HTTP Server"
 
   :plugins [[lein-parent "0.3.8"]
             [yogthos/lein-sass "0.1.10"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -14,7 +14,7 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
-                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
                  [com.cognitect/transit-clj "1.0.324"]
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
@@ -49,7 +49,7 @@
                              [expound "0.8.7"]]}
 
              :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
-                                   [pro.juxt.crux/crux-test "crux-git-version"]]}}
+                                   [pro.juxt.crux/crux-test]]}}
 
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"
@@ -60,6 +60,4 @@
 
   :resource-paths ["resources" "cljs-target" "src-cljs"]
   :jar-exclusions [#"public/cljs-out/dev/.*"]
-  :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
-
-  :middleware [leiningen.project-version/middleware])
+  :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"})

@@ -1,28 +1,46 @@
-(defproject pro.juxt.crux/crux-dev "crux-git-version"
+(def crux-version (or (System/getenv "CRUX_VERSION") "dev-SNAPSHOT"))
+
+(defproject pro.juxt.crux/crux-dev crux-version
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
-  :middleware [leiningen.project-version/middleware]
+  :managed-dependencies
+  [[pro.juxt.crux/crux-core ~crux-version]
+   [pro.juxt.crux/crux-rocksdb ~crux-version]
+   [pro.juxt.crux/crux-lmdb ~crux-version]
+   [pro.juxt.crux/crux-kafka ~crux-version]
+   [pro.juxt.crux/crux-kafka-connect ~crux-version]
+   [pro.juxt.crux/crux-kafka-embedded ~crux-version]
+   [pro.juxt.crux/crux-jdbc ~crux-version]
+   [pro.juxt.crux/crux-metrics ~crux-version]
+   [pro.juxt.crux/crux-http-server ~crux-version]
+   [pro.juxt.crux-labs/crux-rdf ~crux-version]
+   [pro.juxt.crux/crux-sql ~crux-version]
+   [pro.juxt.crux/crux-azure-blobs ~crux-version]
+   [pro.juxt.crux/crux-google-cloud-storage ~crux-version]
+   [pro.juxt.crux/crux-lucene ~crux-version]
+   [pro.juxt.crux/crux-test ~crux-version]
+   [pro.juxt.crux/crux-bench ~crux-version]]
 
   :dependencies
   [[org.clojure/clojure "1.10.3"]
-   [pro.juxt.crux/crux-core "crux-git-version"]
-   [pro.juxt.crux/crux-rocksdb "crux-git-version"]
-   [pro.juxt.crux/crux-lmdb "crux-git-version"]
-   [pro.juxt.crux/crux-kafka "crux-git-version"]
-   [pro.juxt.crux/crux-kafka-connect "crux-git-version"]
-   [pro.juxt.crux/crux-kafka-embedded "crux-git-version"]
-   [pro.juxt.crux/crux-jdbc "crux-git-version"]
-   [pro.juxt.crux/crux-metrics "crux-git-version"]
-   [pro.juxt.crux/crux-http-server "crux-git-version"]
-   [pro.juxt.crux-labs/crux-rdf "crux-git-version"]
-   [pro.juxt.crux/crux-sql "crux-git-version"]
-   [pro.juxt.crux/crux-azure-blobs "crux-git-version"]
-   [pro.juxt.crux/crux-google-cloud-storage "crux-git-version"]
-   [pro.juxt.crux/crux-lucene "crux-git-version"]
-   [pro.juxt.crux/crux-test "crux-git-version"]
-   [pro.juxt.crux/crux-bench "crux-git-version"]
+   [pro.juxt.crux/crux-core]
+   [pro.juxt.crux/crux-rocksdb]
+   [pro.juxt.crux/crux-lmdb]
+   [pro.juxt.crux/crux-kafka]
+   [pro.juxt.crux/crux-kafka-connect]
+   [pro.juxt.crux/crux-kafka-embedded]
+   [pro.juxt.crux/crux-jdbc]
+   [pro.juxt.crux/crux-metrics]
+   [pro.juxt.crux/crux-http-server]
+   [pro.juxt.crux-labs/crux-rdf]
+   [pro.juxt.crux/crux-sql]
+   [pro.juxt.crux/crux-azure-blobs]
+   [pro.juxt.crux/crux-google-cloud-storage]
+   [pro.juxt.crux/crux-lucene]
+   [pro.juxt.crux/crux-test]
+   [pro.juxt.crux/crux-bench]
 
    [org.apache.kafka/connect-api "2.6.0" :scope "provided"]
 
