@@ -3,8 +3,8 @@
 # Check https://circleci.com/docs/2.0/language-clojure/ for more details
 #
 orbs:
-  aws-ecr: circleci/aws-ecr@6.7.0
-  aws-s3: circleci/aws-s3@1.0.15
+  aws-ecr: circleci/aws-ecr@7.0.0
+  aws-s3: circleci/aws-s3@2.0.0
   node: circleci/node@1.1.6
   shellcheck: circleci/shellcheck@2.2.3
   go: circleci/go@0.2.0
