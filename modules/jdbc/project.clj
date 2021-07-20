@@ -12,6 +12,7 @@
   :scm {:dir "../.."}
 
   :dependencies [[pro.juxt.crux-labs/core2]
+                 [org.clojure/java.data "1.0.86"]
                  [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [com.zaxxer/HikariCP "4.0.3"]
                  [org.postgresql/postgresql "42.2.20" :scope "provided"]]
