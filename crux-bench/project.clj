@@ -1,10 +1,10 @@
-(defproject pro.juxt.crux/crux-bench "crux-git-version"
+(defproject pro.juxt.crux/crux-bench "<inherited>"
   :description "Crux Benchmarking tools"
 
   :plugins [[lein-parent "0.3.8"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -14,15 +14,15 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "2.3.1"]
                  [org.clojure/tools.cli "1.0.206"]
-                 [pro.juxt.crux/crux-core "crux-git-version"]
-                 [pro.juxt.crux/crux-jdbc "crux-git-version"]
-                 [pro.juxt.crux/crux-kafka "crux-git-version"]
-                 [pro.juxt.crux/crux-kafka-embedded "crux-git-version"]
-                 [pro.juxt.crux/crux-rocksdb "crux-git-version"]
-                 [pro.juxt.crux/crux-lmdb "crux-git-version"]
-                 [pro.juxt.crux/crux-metrics "crux-git-version"]
-                 [pro.juxt.crux-labs/crux-rdf "crux-git-version"]
-                 [pro.juxt.crux/crux-test "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.crux/crux-jdbc]
+                 [pro.juxt.crux/crux-kafka]
+                 [pro.juxt.crux/crux-kafka-embedded]
+                 [pro.juxt.crux/crux-rocksdb]
+                 [pro.juxt.crux/crux-lmdb]
+                 [pro.juxt.crux/crux-metrics]
+                 [pro.juxt.crux-labs/crux-rdf]
+                 [pro.juxt.crux/crux-test]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
@@ -54,8 +54,6 @@
                  [com.fasterxml.jackson.core/jackson-annotations "2.12.2"]
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
-
-  :middleware [leiningen.project-version/middleware]
 
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]

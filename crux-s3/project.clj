@@ -1,11 +1,11 @@
-(defproject pro.juxt.crux/crux-s3 "crux-git-version"
+(defproject pro.juxt.crux/crux-s3 "<inherited>"
   :description "Crux S3 integration"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]]
 
   :parent-project {:path "../project.clj"
-                   :inherit [:repositories :deploy-repositories
+                   :inherit [:version :repositories :deploy-repositories
                              :managed-dependencies
                              :pedantic? :global-vars
                              :license :url :pom-addition]}
@@ -15,7 +15,7 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
 
-                 [pro.juxt.crux/crux-core "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
                  [software.amazon.awssdk/s3 "2.10.91"]
 
                  ;; dependency resolution
@@ -27,9 +27,7 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test "crux-git-version"]]}}
-
-  :middleware [leiningen.project-version/middleware]
+  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test]]}}
 
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
 
