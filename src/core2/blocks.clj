@@ -3,7 +3,8 @@
             [core2.util :as util])
   (:import core2.ICursor
            java.util.Iterator
-           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]))
+           [org.apache.arrow.vector BigIntVector VectorSchemaRoot]
+           org.apache.arrow.vector.complex.ListVector))
 
 (deftype SliceCursor [^VectorSchemaRoot root
                       ^Iterator row-counts
@@ -51,3 +52,20 @@
                         (count-seq (+ start-row-id max-rows-per-block)
                                    (+ start-idx len))))))]
       (count-seq start-row-id 0))))
+
+(defn list-count-blocks [^ListVector list-vec, ^long max-els-per-block]
+  (let [row-count (.getValueCount list-vec)]
+    (letfn [(count-seq [row-idx]
+              (if-not (< row-idx row-count)
+                []
+                (let [max-list-idx (+ (.getElementStartIndex list-vec row-idx) max-els-per-block)
+                      ^long rows (loop [rows 1]
+                                   (let [end-row-idx (+ row-idx rows)]
+                                     (if (or (>= end-row-idx row-count)
+                                             (>= (.getElementStartIndex list-vec end-row-idx) max-list-idx))
+                                       rows
+                                       (recur (inc rows)))))
+                      next-row-idx (+ row-idx rows)]
+
+                  (cons rows (count-seq next-row-idx)))))]
+      (count-seq 0))))

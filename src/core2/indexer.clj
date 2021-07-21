@@ -175,7 +175,7 @@
   (^void clear [])
   (^void close []))
 
-(defn- ->log-indexer [^BufferAllocator allocator]
+(defn- ->log-indexer [^BufferAllocator allocator, ^long max-rows-per-block]
   (let [log-root (VectorSchemaRoot/create log-schema allocator)
         ^BigIntVector tx-id-vec (.getVector log-root "_tx-id")
         ^TimeStampMilliVector tx-time-vec (.getVector log-root "_tx-time")
@@ -244,10 +244,18 @@
                   (.endValue ops-vec tx-idx (- (.getValueCount ops-data-vec) start-op-idx))))))))
 
       (writeLog [_]
-        ;; TODO chunkify
-        (util/build-arrow-ipc-byte-buffer log-root :file
-          (fn [write-batch!]
-            (write-batch!))))
+        (with-open [write-root (VectorSchemaRoot/create log-schema allocator)]
+          (let [loader (VectorLoader. write-root)
+                row-counts (blocks/list-count-blocks ops-vec max-rows-per-block)]
+            (with-open [^ICursor slices (blocks/->slices log-root row-counts)]
+              (util/build-arrow-ipc-byte-buffer write-root :file
+                (fn [write-batch!]
+                  (.forEachRemaining slices
+                                     (reify Consumer
+                                       (accept [_ sliced-root]
+                                         (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                           (.load loader arb)
+                                           (write-batch!)))))))))))
 
       (clear [_]
         (.clear log-root))
@@ -415,21 +423,19 @@
 
         (.getValueCount tx-ops-vec))))
 
-
   (writeColumn [_this live-root]
     (with-open [write-root (VectorSchemaRoot/create (.getSchema live-root) allocator)]
       (let [loader (VectorLoader. write-root)
-            chunk-idx (.chunk-idx watermark)]
-        (util/build-arrow-ipc-byte-buffer write-root :file
-          (fn [write-batch!]
-            (let [row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)]
-              (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
-                (.forEachRemaining slices
-                                   (reify Consumer
-                                     (accept [_ sliced-root]
-                                       (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                         (.load loader arb)
-                                         (write-batch!))))))))))))
+            row-counts (blocks/row-id-aligned-blocks live-root (.chunk-idx watermark) max-rows-per-block)]
+        (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
+          (util/build-arrow-ipc-byte-buffer write-root :file
+            (fn [write-batch!]
+              (.forEachRemaining slices
+                                 (reify Consumer
+                                   (accept [_ sliced-root]
+                                     (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                       (.load loader arb)
+                                       (write-batch!)))))))))))
 
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
@@ -520,7 +526,7 @@
               max-rows-per-chunk
               max-rows-per-block
               (ConcurrentSkipListMap.)
-              (->log-indexer allocator)
+              (->log-indexer allocator max-rows-per-block)
               (util/->identity-set)
               (StampedLock.)
               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
