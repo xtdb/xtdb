@@ -64,7 +64,7 @@
                               (for [[k v-types] put-k-types]
                                 (->doc-field k v-types)))
         delete-id-field (->doc-field :_id (:_id put-k-types))
-        tx-schema (Schema. [(t/->field "tx-ops" t/dense-union-type false
+        tx-schema (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) false
                                        (t/->field "put" t/struct-type false
                                                   document-field
                                                   valid-time-start-field
@@ -122,8 +122,6 @@
                 (t/set-null! tx-op-offset)))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
-
-        (.syncSchema root)
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
