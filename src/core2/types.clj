@@ -92,18 +92,22 @@
   (get-object [this idx] (.getObject this ^int idx))
 
   TimeStampMilliVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (if (int? v)
-                                                    ^long v
-                                                    (.getTime (if (instance? LocalDateTime v)
-                                                                (util/local-date-time->date v)
-                                                                ^Date v)))))
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx (if (int? v)
+                              ^long v
+                              (.getTime (if (instance? LocalDateTime v)
+                                          (util/local-date-time->date v)
+                                          ^Date v)))))
+
   (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (Date. (.get this ^int idx)))
 
   DurationVector
-  (set-safe! [this idx v] (.setSafe this ^int idx (if (int? v)
-                                                    ^long v
-                                                    (.toMillis ^Duration v))))
+  (set-safe! [this idx v]
+    (.setSafe this ^int idx (if (int? v)
+                              ^long v
+                              (.toMillis ^Duration v))))
+
   (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.getObject this ^int idx))
 
@@ -118,44 +122,53 @@
   (get-object [this idx] (.getObject this ^int idx))
 
   VarBinaryVector
-  (set-safe! [this idx v] (cond
-                            (instance? ByteBuffer v)
-                            (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
+  (set-safe! [this idx v]
+    (cond
+      (instance? ByteBuffer v)
+      (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
 
-                            (bytes? v)
-                            (.setSafe this ^int idx ^bytes v)
+      (bytes? v)
+      (.setSafe this ^int idx ^bytes v)
 
-                            :else
-                            (throw (IllegalArgumentException.))))
+      :else
+      (throw (IllegalArgumentException.))))
+
   (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (.get this ^int idx))
 
   VarCharVector
-  (set-safe! [this idx v] (cond
-                            (instance? ByteBuffer v)
-                            (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
+  (set-safe! [this idx v]
+    (cond
+      (instance? ByteBuffer v)
+      (.setSafe this ^int idx ^ByteBuffer v (.position ^ByteBuffer v) (.remaining ^ByteBuffer v))
 
-                            (bytes? v)
-                            (.setSafe this ^int idx ^bytes v)
+      (bytes? v)
+      (.setSafe this ^int idx ^bytes v)
 
-                            (string? v)
-                            (.setSafe this ^int idx (.getBytes ^String v StandardCharsets/UTF_8))
+      (string? v)
+      (.setSafe this ^int idx (.getBytes ^String v StandardCharsets/UTF_8))
 
-                            (instance? Text v)
-                            (.setSafe this ^int idx ^Text v)
+      (instance? Text v)
+      (.setSafe this ^int idx ^Text v)
 
-                            :else
-                            (throw (IllegalArgumentException.))))
+      :else
+      (throw (IllegalArgumentException.))))
+
   (set-null! [this idx] (.setNull this ^int idx))
   (get-object [this idx] (String. (.get this ^int idx) StandardCharsets/UTF_8))
 
   DenseUnionVector
-  (set-safe! [this idx v] (let [type-id (arrow-type->type-id (class->arrow-type (class v)))
-                                offset (DenseUnionUtil/writeTypeId this idx type-id)]
-                            (set-safe! (.getVectorByType this (.getTypeId this idx)) offset v)))
-  (set-null! [this idx] (set-safe! this idx nil))
-  (get-object [this idx] (get-object (.getVectorByType this (.getTypeId this idx))
-                                     (.getOffset this idx))))
+  (set-safe! [this idx v]
+    (let [type-id (arrow-type->type-id (class->arrow-type (class v)))
+          offset (DenseUnionUtil/writeTypeId this idx type-id)]
+      (set-safe! (.getVectorByType this (.getTypeId this idx)) offset v)))
+
+  (set-null! [this idx]
+    (set-safe! this idx nil))
+
+  (get-object [this idx]
+    (get-object (.getVectorByType this (.getTypeId this idx))
+                (.getOffset this idx))))
 
 (defn ->primitive-dense-union-field
   (^org.apache.arrow.vector.types.pojo.Field [field-name]
