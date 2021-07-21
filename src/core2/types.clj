@@ -66,8 +66,15 @@
    (->arrow-type :duration-milli) Duration
    (->arrow-type :bit) Boolean})
 
-(defn arrow-type->type-id ^long [^ArrowType arrow-type]
-  (long (.getFlatbufID (.getTypeID arrow-type))))
+(def arrow-type->type-id
+  {(->arrow-type :null) 1,
+   (->arrow-type :bigint) 2,
+   (->arrow-type :float8) 3,
+   (->arrow-type :varbinary) 4,
+   (->arrow-type :varchar) 5,
+   (->arrow-type :bit) 6,
+   (->arrow-type :timestamp-milli) 10,
+   (->arrow-type :duration-milli) 18})
 
 (defn ->field ^org.apache.arrow.vector.types.pojo.Field [^String field-name ^ArrowType arrow-type nullable & children]
   (Field. field-name (FieldType. nullable arrow-type nil nil) children))
