@@ -121,10 +121,10 @@
         (keep (fn [col-name]
                 (when-let [root (-> (.column->root watermark)
                                     (get col-name))]
-                  (MapEntry/create col-name
-                                   (blocks/->slices root
-                                                    (.chunk-idx watermark)
-                                                    (.max-rows-per-block watermark))))))
+                  (let [row-counts (blocks/row-id-aligned-blocks root
+                                                                 (.chunk-idx watermark)
+                                                                 (.max-rows-per-block watermark))]
+                    (MapEntry/create col-name (blocks/->slices root row-counts))))))
         col-names))
 
 (defn- ->empty-watermark ^core2.tx.Watermark [^long chunk-idx ^TransactionInstant tx-instant temporal-watermark ^long max-rows-per-block]
@@ -422,13 +422,14 @@
             chunk-idx (.chunk-idx watermark)]
         (util/build-arrow-ipc-byte-buffer write-root :file
           (fn [write-batch!]
-            (with-open [^ICursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
-              (.forEachRemaining slices
-                                 (reify Consumer
-                                   (accept [_ sliced-root]
-                                     (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
-                                       (.load loader arb)
-                                       (write-batch!)))))))))))
+            (let [row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)]
+              (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
+                (.forEachRemaining slices
+                                   (reify Consumer
+                                     (accept [_ sliced-root]
+                                       (with-open [arb (.getRecordBatch (VectorUnloader. sliced-root))]
+                                         (.load loader arb)
+                                         (write-batch!))))))))))))
 
   (closeCols [_this]
     (doseq [^VectorSchemaRoot live-root (vals live-roots)]
