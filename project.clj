@@ -41,6 +41,12 @@
                     :source-paths ["dev"]
                     :resource-paths ["data"]}]
 
+             :with-modules {:dependencies [[pro.juxt.crux-labs/core2-datasets]
+                                           [pro.juxt.crux-labs/core2-kafka]
+                                           [pro.juxt.crux-labs/core2-s3]
+                                           [pro.juxt.crux-labs/core2-jdbc]
+                                           [pro.juxt.crux-labs/core2-bench]]}
+
              :test {:dependencies [[org.clojure/test.check "1.1.0"]
                                    [org.clojure/data.csv "1.0.0"]
                                    [pro.juxt.crux-labs/core2-datasets]
