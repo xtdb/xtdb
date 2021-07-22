@@ -43,11 +43,9 @@
   (alter-var-root #'node (constantly nil)))
 
 (def standalone-config
-  {::crux {:node-opts {:core2/log {:core2/module 'core2.log/->local-directory-log
-                                   :root-path (io/file dev-node-dir "log")}
-                       :core2/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
-                       :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
-                                            :root-path (io/file dev-node-dir "objects")}}}})
+  {::crux {:node-opts {:core2.log/local-directory-log {:root-path (io/file dev-node-dir "log")}
+                       :core2.buffer-pool/buffer-pool {:cache-path (io/file dev-node-dir "buffers")}
+                       :core2.object-store/file-system-object-store {:root-path (io/file dev-node-dir "objects")}}}})
 
 (ir/set-prep! (fn [] standalone-config))
 

@@ -4,11 +4,11 @@
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             [core2.metadata :as meta]
-            [core2.system :as sys]
             [core2.temporal :as temporal]
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [integrant.core :as ig])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
            core2.metadata.IMetadataManager
@@ -365,14 +365,19 @@
     (.clear open-watermarks)
     (set! (.watermark this) nil)))
 
-(defn ->indexer {::sys/deps {:allocator :core2/allocator
-                             :object-store :core2/object-store
-                             :metadata-mgr :core2/metadata-manager
-                             :temporal-mgr :core2/temporal-manager}
-                 ::sys/args {:max-rows-per-block {:spec ::sys/pos-int, :default 1000}
-                             :max-rows-per-chunk {:spec ::sys/pos-int, :default 100000}}}
-  [{:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
-           max-rows-per-chunk max-rows-per-block]}]
+(defmethod ig/prep-key ::indexer [_ opts]
+  (merge {:max-rows-per-block 1000
+          :max-rows-per-chunk 100000
+          :allocator (ig/ref :core2/allocator)
+          :object-store (ig/ref :core2/object-store)
+          :metadata-mgr (ig/ref ::meta/metadata-manager)
+          :temporal-mgr (ig/ref ::temporal/temporal-manager)}
+         opts))
+
+(defmethod ig/init-key ::indexer
+  [_ {:keys [allocator object-store metadata-mgr ^ITemporalManager temporal-mgr
+             max-rows-per-chunk max-rows-per-block]}]
+
   (let [[latest-row-id latest-tx] @(meta/with-latest-metadata metadata-mgr
                                      (juxt meta/latest-row-id meta/latest-tx))
         chunk-idx (if latest-row-id
@@ -396,3 +401,6 @@
               (->empty-watermark chunk-idx latest-tx (.getTemporalWatermark temporal-mgr) max-rows-per-block)
               (PriorityBlockingQueue.)
               nil)))
+
+(defmethod ig/halt-key! ::indexer [_ ^Indexer indexer]
+  (.close indexer))

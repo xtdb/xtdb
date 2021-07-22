@@ -2,7 +2,8 @@
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
             [core2.core :as c2]
-            [core2.tpch :as tpch])
+            [core2.tpch :as tpch]
+            [core2.temporal :as temporal])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
@@ -44,7 +45,7 @@
                     (test-node k node))
 
                   (.finishChunk ^core2.indexer.Indexer (.indexer primary-node))
-                  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (:core2/temporal-manager @(:!system primary-node)))
+                  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system primary-node)))
 
                   (log/info "Starting post finish-chunk node")
                   (with-open [^core2.core.Node secondary-node4 (start-node)]
@@ -55,10 +56,8 @@
 
 (comment
   (let [node-dir (Files/createTempDirectory "multinode-0.1" (make-array FileAttribute 0))
-        node-opts {:core2/log {:core2/module 'core2.log/->local-directory-log
-                               :root-path (.resolve node-dir "log")}
-                   :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
-                                        :root-path (.resolve node-dir "objects")}}]
+        node-opts {:core2.log/local-directory-log {:root-path (.resolve node-dir "log")}
+                   :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}}]
     (run-multinode {:scale-factor 0.1, :sleep-ms 60000}
                    (fn []
                      (c2/start-node node-opts)))))

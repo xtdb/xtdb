@@ -1,12 +1,12 @@
 (ns core2.temporal
   (:require [core2.metadata :as meta]
             core2.object-store
-            [core2.system :as sys]
             [core2.temporal.grid :as grid]
             [core2.temporal.kd-tree :as kd]
             core2.tx
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.DenseUnionUtil
            core2.metadata.IMetadataManager
@@ -19,7 +19,7 @@
            [java.util.concurrent CompletableFuture ConcurrentHashMap Executors ExecutorService]
            java.util.concurrent.atomic.AtomicLong
            [java.util.function Consumer Function LongConsumer LongFunction LongPredicate Predicate ToLongFunction]
-           [java.util.stream LongStream Stream]
+           [java.util.stream LongStream]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
@@ -457,16 +457,21 @@
     (set! (.kd-tree this) nil)
     (.clear id->internal-id)))
 
-(defn ->temporal-manager {::sys/deps {:allocator :core2/allocator
-                                      :object-store :core2/object-store
-                                      :buffer-pool :core2/buffer-pool
-                                      :metadata-manager :core2/metadata-manager}
-                          ::sys/args {:async-snapshot? {:spec ::sys/boolean :default true}}}
-  [{:keys [^BufferAllocator allocator
-           ^ObjectStore object-store
-           ^IBufferPool buffer-pool
-           ^IMetadataManager metadata-manager
-           async-snapshot?]}]
+(defmethod ig/prep-key ::temporal-manager [_ opts]
+  (merge {:allocator (ig/ref :core2/allocator)
+          :object-store (ig/ref :core2/object-store)
+          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)
+          :metadata-manager (ig/ref :core2.metadata/metadata-manager)
+          :async-snapshot? true}
+         opts))
+
+(defmethod ig/init-key ::temporal-manager
+  [_ {:keys [^BufferAllocator allocator
+             ^ObjectStore object-store
+             ^IBufferPool buffer-pool
+             ^IMetadataManager metadata-manager
+             async-snapshot?]}]
+
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
                             (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
@@ -529,3 +534,6 @@
                                         (aset valid-time-start-idx valid-time-end-ms)))))
      kd-tree
      overlap)))
+
+(defmethod ig/halt-key! ::temporal-manager [_ ^TemporalManager mgr]
+  (.close mgr))

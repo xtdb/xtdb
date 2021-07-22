@@ -2,8 +2,8 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [core2.object-store :as os]
-            [core2.system :as sys]
-            [core2.util :as util])
+            [core2.util :as util]
+            [integrant.core :as ig])
   (:import core2.object_store.ObjectStore
            core2.s3.S3Configurator
            java.io.Closeable
@@ -104,23 +104,29 @@
   (close [_]
     (.close client)))
 
+(defn- parse-prefix [prefix]
+  (cond
+    (string/blank? prefix) ""
+    (string/ends-with? prefix "/") prefix
+    :else (str prefix "/")))
+
+(s/def ::configurator #(instance? S3Configurator %))
 (s/def ::bucket string?)
-(s/def ::prefix (s/and string?
-                       (s/conformer (fn [prefix]
-                                      (cond
-                                        (string/blank? prefix) ""
-                                        (string/ends-with? prefix "/") prefix
-                                        :else (str prefix "/"))))))
+(s/def ::prefix string?)
 
-(defn ->object-store {::sys/args {:bucket {:required? true,
-                                           :spec ::bucket
-                                           :doc "S3 bucket"}
-                                  :prefix {:required? false,
-                                           :spec ::prefix
-                                           :doc "S3 prefix"}}
-                      ::sys/deps {:configurator (fn [_] (reify S3Configurator))}}
+(defmethod ig/prep-key ::object-store [_ opts]
+  (-> (merge {:configurator (reify S3Configurator)}
+             opts)
+      (util/maybe-update :prefix parse-prefix)))
 
-  [{:keys [bucket prefix ^S3Configurator configurator]}]
+(defmethod ig/pre-init-spec ::object-store [_]
+  (s/keys :req-un [::configurator ::bucket]
+          :opt-un [::prefix]))
+
+(defmethod ig/init-key ::object-store [_ {:keys [bucket prefix ^S3Configurator configurator]}]
   (->S3ObjectStore configurator
                    (.makeClient configurator)
                    bucket prefix))
+
+(defmethod ig/halt-key! ::object-store [_ os]
+  (util/try-close os))

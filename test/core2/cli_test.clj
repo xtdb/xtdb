@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.cli :as cli]
-            [core2.system :as sys]))
+            [integrant.core :as ig]))
 
 (def core2-cli-edn
   (io/resource "core2/cli-test.edn"))
@@ -20,13 +20,13 @@
                                 (apply (some-fn resources og) args))]
       (f))))
 
-(defn- ->foo [opts] opts)
+(defmethod ig/init-key ::foo [_ opts] opts)
 
 (t/deftest test-config-merging
   (letfn [(->system [cli-args]
             (-> (::cli/node-opts (cli/parse-args cli-args))
-                (sys/prep-system)
-                (sys/start-system)
+                ig/prep
+                ig/init
                 (->> (into {}))))]
     (t/testing "uses CLI supplied EDN file"
       (t/is (= {::foo {:bar {}}}

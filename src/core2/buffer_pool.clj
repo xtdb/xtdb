@@ -1,16 +1,16 @@
 (ns core2.buffer-pool
   (:require core2.object-store
-            [core2.system :as sys]
-            [core2.util :as util])
-  (:import core2.object_store.ObjectStore
+            [core2.util :as util]
+            [integrant.core :as ig])
+  (:import clojure.lang.MapEntry
            core2.LRU
-           clojure.lang.MapEntry
+           core2.object_store.ObjectStore
            java.io.Closeable
-           [java.nio.file Files Path]
+           java.nio.file.Path
+           [java.util Map Map$Entry UUID]
            java.util.concurrent.CompletableFuture
            java.util.concurrent.locks.StampedLock
            java.util.function.BiPredicate
-           [java.util Map Map$Entry LinkedHashMap UUID]
            [org.apache.arrow.memory ArrowBuf BufferAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -79,14 +79,11 @@
         (finally
           (.unlock buffers-lock stamp))))))
 
-(def default-buffer-cache-entries-size 1024)
-(def default-buffer-cache-bytes-size (* 512 1024 1024))
-
 (defn- buffer-cache-bytes-size ^long [^Map buffers]
   (long (reduce + (for [^ArrowBuf buffer (vals buffers)]
                     (.capacity buffer)))) )
 
-(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size ^Path cache-path]
+(defn- ->buffer-cache [^long cache-entries-size ^long cache-bytes-size]
   (LRU. 16 (reify BiPredicate
              (test [_ map entry]
                (let [entries-size (.size ^Map map)]
@@ -96,13 +93,20 @@
                        true)
                    false))))))
 
-(defn ->buffer-pool {::sys/deps {:allocator :core2/allocator
-                                 :object-store :core2/object-store}
-                     ::sys/args {:cache-path {:spec ::sys/path, :required? false}
-                                 :cache-entries-size {:spec ::sys/int :default default-buffer-cache-entries-size}
-                                 :cache-bytes-size {:spec ::sys/int :default default-buffer-cache-bytes-size}}}
-  [{:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
+(defmethod ig/prep-key ::buffer-pool [_ opts]
+  (-> (merge {:cache-entries-size 1024
+              :cache-bytes-size 536870912
+              :allocator (ig/ref :core2/allocator)
+              :object-store (ig/ref :core2/object-store)}
+             opts)
+      (util/maybe-update :cache-path util/->path)))
+
+(defmethod ig/init-key ::buffer-pool
+  [_ {:keys [^Path cache-path ^BufferAllocator allocator ^ObjectStore object-store ^long cache-entries-size ^long cache-bytes-size]}]
   (when cache-path
     (util/delete-dir cache-path)
     (util/mkdirs cache-path))
-  (->BufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size cache-path) (StampedLock.) cache-path))
+  (->BufferPool allocator object-store (->buffer-cache cache-entries-size cache-bytes-size) (StampedLock.) cache-path))
+
+(defmethod ig/halt-key! ::buffer-pool [_ ^BufferPool buffer-pool]
+  (.close buffer-pool))

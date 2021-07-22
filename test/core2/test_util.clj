@@ -6,7 +6,8 @@
             core2.object-store
             [core2.relation :as rel]
             [core2.types :as ty]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.temporal :as temporal])
   (:import core2.core.Node
            core2.ICursor
            core2.object_store.FileSystemObjectStore
@@ -28,13 +29,13 @@
     (binding [*allocator* allocator]
       (f))))
 
-(def ^:dynamic ^:private *node-opts* [])
+(def ^:dynamic ^:private *node-opts* {})
 (def ^:dynamic *node*)
 
 (defn with-opts
   ([opts] (partial with-opts opts))
   ([opts f]
-   (binding [*node-opts* (conj *node-opts* opts)]
+   (binding [*node-opts* (merge *node-opts* opts)]
      (f))))
 
 (defn with-node [f]
@@ -67,7 +68,7 @@
           (throw (IllegalStateException. "out of time")))))))
 
 (defn await-temporal-snapshot-build [^Node node]
-  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (:core2/temporal-manager @(:!system node))))
+  (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
 
 (defn finish-chunk [^Node node]
   (.finishChunk ^core2.indexer.Indexer (.indexer node))
@@ -151,19 +152,17 @@
 (defn ->local-node ^core2.core.Node [{:keys [^Path node-dir
                                              clock max-rows-per-block max-rows-per-chunk buffers-dir]
                                       :or {buffers-dir "buffers"}}]
-  (c2/start-node {:core2/log (cond-> {:core2/module 'core2.log/->local-directory-log
-                                      :root-path (.resolve node-dir "log")}
-                               clock (assoc :clock clock))
-                  :core2/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
-                  :core2/object-store {:core2/module 'core2.object-store/->file-system-object-store
-                                       :root-path (.resolve node-dir "objects")}
-                  :core2/indexer (->> {:max-rows-per-block max-rows-per-block
-                                       :max-rows-per-chunk max-rows-per-chunk}
-                                      (into {} (filter val)))}))
+  (c2/start-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
+                                                   clock (assoc :clock clock))
+                  :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
+                  :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
+                  :core2.indexer/indexer (->> {:max-rows-per-block max-rows-per-block
+                                               :max-rows-per-chunk max-rows-per-chunk}
+                                              (into {} (filter val)))}))
 
 (defn ->local-submit-node ^core2.core.SubmitNode [{:keys [^Path node-dir clock]}]
-  (c2/start-submit-node {:core2/log (cond-> {:root-path (.resolve node-dir "log")}
-                                      clock (assoc :clock clock))}))
+  (c2/start-submit-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
+                                                          clock (assoc :clock clock))}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

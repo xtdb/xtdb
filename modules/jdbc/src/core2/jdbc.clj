@@ -3,14 +3,13 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [core2.object-store :as os]
-            [core2.system :as sys]
             [core2.util :as util]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr])
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
+            [integrant.core :as ig])
   (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
            core2.object_store.ObjectStore
-           java.io.Closeable
            java.nio.ByteBuffer
            java.nio.file.Files
            java.util.concurrent.CompletableFuture
@@ -21,25 +20,29 @@
   (setup-object-store-schema! [dialect pool])
   (upsert-object-sql [dialect]))
 
-(defrecord HikariConnectionPool [^HikariDataSource pool dialect]
-  Closeable
-  (close [_]
-    (util/try-close pool)))
+(s/def ::dialect #(satisfies? Dialect %))
+(s/def ::db-spec (s/map-of keyword? any?))
+(s/def ::pool-opts (s/map-of keyword? any?))
 
-(defn ->connection-pool {::sys/deps {:dialect nil}
-                         ::sys/args {:pool-opts {:doc "Extra camelCase options to be set on HikariConfig"
-                                                 :spec (s/map-of ::sys/keyword any?)}
-                                     :db-spec {:doc "db-spec to be passed to next.jdbc"
-                                               :spec (s/map-of ::sys/keyword any?)
-                                               :required? true}}}
-  [{:keys [pool-opts dialect db-spec]}]
+(derive ::default-pool ::connection-pool)
+
+(defmethod ig/prep-key ::default-pool [_ opts]
+  (merge {:dialect (ig/ref ::dialect)}
+         opts))
+
+(defmethod ig/pre-init-spec ::default-pool [_]
+  (s/keys :req-un [::dialect ::db-spec]
+          :opt-un [::pool-opts]))
+
+(defmethod ig/init-key ::default-pool [_ {:keys [pool-opts dialect db-spec]}]
   (let [jdbc-url (-> (jdbcc/jdbc-url (merge {:dbtype (name (db-type dialect))} db-spec))
                      ;; mssql doesn't like trailing '?'
                      (str/replace #"\?$" ""))
-        pool-opts (merge pool-opts {:jdbcUrl jdbc-url})
-        pool (HikariDataSource. (jd/to-java HikariConfig pool-opts))]
+        pool-opts (merge pool-opts {:jdbcUrl jdbc-url})]
+    (HikariDataSource. (jd/to-java HikariConfig pool-opts))))
 
-    (->HikariConnectionPool pool dialect)))
+(defmethod ig/halt-key! ::default-pool [_ pool]
+  (util/try-close pool))
 
 (defn- get-object ^bytes [pool k]
   (or (-> (jdbc/execute-one! pool
@@ -91,7 +94,11 @@
     (CompletableFuture/completedFuture
      (jdbc/execute! pool ["DELETE FROM objects WHERE key = ?" k]))))
 
-(defn ->object-store {::sys/deps {:connection-pool `->connection-pool}}
-  [{{:keys [pool dialect]} :connection-pool}]
-  (setup-object-store-schema! dialect pool)
-  (->JDBCObjectStore pool dialect))
+(defmethod ig/prep-key ::object-store [_ opts]
+  (merge {:connection-pool (ig/ref ::connection-pool)
+          :dialect (ig/ref ::dialect)}
+         opts))
+
+(defmethod ig/init-key ::object-store [_ {:keys [connection-pool dialect]}]
+  (setup-object-store-schema! dialect connection-pool)
+  (->JDBCObjectStore connection-pool dialect))

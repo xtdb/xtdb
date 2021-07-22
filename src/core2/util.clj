@@ -1,18 +1,20 @@
 (ns core2.util
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
-           java.io.ByteArrayOutputStream
+           [java.io ByteArrayOutputStream File]
            java.lang.AutoCloseable
            [java.lang.invoke LambdaMetafactory MethodHandles MethodType]
            [java.lang.reflect Field Method]
+           java.net.URI
            java.nio.ByteBuffer
            [java.nio.channels Channels FileChannel FileChannel$MapMode SeekableByteChannel]
            java.nio.charset.StandardCharsets
-           [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path SimpleFileVisitor StandardCopyOption StandardOpenOption]
+           [java.nio.file CopyOption Files FileVisitResult LinkOption OpenOption Path Paths SimpleFileVisitor StandardCopyOption StandardOpenOption]
            java.nio.file.attribute.FileAttribute
-           [java.time LocalDateTime ZoneId]
+           [java.time Duration LocalDateTime ZoneId]
            [java.util ArrayList Collections Date IdentityHashMap LinkedHashMap LinkedList List Map$Entry Queue Spliterator UUID]
            [java.util.concurrent CompletableFuture Executors ExecutorService ThreadFactory TimeUnit]
            java.util.concurrent.atomic.AtomicInteger
@@ -29,6 +31,40 @@
            org.roaringbitmap.RoaringBitmap))
 
 (set! *unchecked-math* :warn-on-boxed)
+
+(defn maybe-update [m k f & args]
+  (if (contains? m k)
+    (apply update m k f args)
+    m))
+
+;;; Common specs
+
+(defn ->path ^Path [path-ish]
+  (cond
+    (instance? Path path-ish) path-ish
+    (instance? File path-ish) (.toPath ^File path-ish)
+    (uri? path-ish) (Paths/get ^URI path-ish)
+    (string? path-ish) (let [uri (URI. path-ish)]
+                         (if (.getScheme uri)
+                           (Paths/get uri)
+                           (Paths/get path-ish (make-array String 0))))
+    :else ::s/invalid))
+
+(s/def ::path
+  (s/and (s/conformer ->path) #(instance? Path %)))
+
+(s/def ::string-map (s/map-of string? string?))
+(s/def ::string-list (s/coll-of string?))
+
+(defn ->duration [d]
+  (cond
+    (instance? Duration d) d
+    (nat-int? d) (Duration/ofMillis d)
+    (string? d) (Duration/parse d)
+    :else ::s/invalid))
+
+(s/def ::duration
+  (s/and (s/conformer ->duration) #(instance? Duration %)))
 
 ;;; IO
 
@@ -123,9 +159,6 @@
 
 (defn mkdirs [^Path path]
   (Files/createDirectories path (make-array FileAttribute 0)))
-
-(defn ->path ^Path [^String path]
-  (.toPath (io/file path)))
 
 (defn ->temp-file ^Path [^String prefix ^String suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
