@@ -3,7 +3,7 @@
             [clojure.tools.logging :as log]
             [core2.tx :as tx]
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.tx.TransactionInstant
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]

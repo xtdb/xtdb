@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [core2.object-store :as os]
             [core2.test-util :as tu]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.object_store.ObjectStore
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets

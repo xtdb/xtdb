@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [core2.object-store :as os]
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.object_store.ObjectStore
            core2.s3.S3Configurator
            java.io.Closeable

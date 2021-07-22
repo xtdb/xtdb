@@ -8,7 +8,7 @@
             [core2.relation :as rel]
             [core2.tx-producer :as txp]
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.IReduceInit
            [core2.data_source IDataSourceFactory IQueryDataSource]
            [core2.indexer IChunkManager TransactionIndexer]

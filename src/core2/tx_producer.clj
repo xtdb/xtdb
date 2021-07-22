@@ -3,7 +3,7 @@
             core2.log
             [core2.types :as t]
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.DenseUnionUtil
            [core2.log LogWriter LogRecord]
            [java.util LinkedHashMap LinkedHashSet Set]

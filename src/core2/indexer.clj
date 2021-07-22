@@ -8,7 +8,7 @@
             [core2.tx :as tx]
             [core2.types :as t]
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
            core2.metadata.IMetadataManager

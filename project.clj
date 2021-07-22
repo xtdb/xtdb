@@ -20,7 +20,7 @@
                  [org.apache.arrow/arrow-vector "4.0.1"]
                  [org.apache.arrow/arrow-memory-netty "4.0.1"]
                  [org.roaringbitmap/RoaringBitmap "0.9.15"]
-                 [integrant "0.8.0"]]
+                 [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
 
   :managed-dependencies [[pro.juxt.crux-labs/core2 ~core2-version]
                          [pro.juxt.crux-labs/core2-datasets ~core2-version]

@@ -1,7 +1,7 @@
 (ns core2.object-store
   (:require [clojure.string :as str]
             [core2.util :as util]
-            [integrant.core :as ig]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.spec.alpha :as s])
   (:import java.io.Closeable
            java.nio.ByteBuffer

@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [core2.object-store-test :as os-test]
             [core2.s3 :as s3]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.util.UUID))
 
 (def bucket (System/getProperty "core2.s3-test.bucket"))

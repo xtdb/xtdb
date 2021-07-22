@@ -1,7 +1,7 @@
 (ns core2.jdbc.postgresql
   (:require [core2.jdbc :as j]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [integrant.core :as ig]))
+            [juxt.clojars-mirrors.integrant.core :as ig]))
 
 (derive ::dialect ::j/dialect)
 

@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [core2.cli :as cli]
-            [integrant.core :as ig]))
+            [juxt.clojars-mirrors.integrant.core :as ig]))
 
 (def core2-cli-edn
   (io/resource "core2/cli-test.edn"))

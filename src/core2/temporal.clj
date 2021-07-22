@@ -6,7 +6,7 @@
             core2.tx
             [core2.types :as t]
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.DenseUnionUtil
            core2.metadata.IMetadataManager

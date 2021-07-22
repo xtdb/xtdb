@@ -3,7 +3,7 @@
             [core2.log :as log]
             [core2.util :as util]
             [core2.tx :as tx]
-            [integrant.core :as ig]
+            [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.spec.alpha :as s])
   (:import [core2.log LogReader LogWriter]
            java.io.Closeable

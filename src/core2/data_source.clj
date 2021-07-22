@@ -3,7 +3,7 @@
             [core2.operator.scan :as scan]
             core2.tx
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.tx.TransactionInstant
            java.io.Closeable
            java.util.Date))

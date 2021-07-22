@@ -3,7 +3,7 @@
             [core2.jdbc.postgresql :as c2-psql]
             [core2.object-store-test :as ost]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [integrant.core :as ig]))
+            [juxt.clojars-mirrors.integrant.core :as ig]))
 
 (defn- with-obj-store [opts f]
   (let [sys (-> (merge opts {::c2-jdbc/object-store {}})

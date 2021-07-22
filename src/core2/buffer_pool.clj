@@ -1,7 +1,7 @@
 (ns core2.buffer-pool
   (:require core2.object-store
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.LRU
            core2.object_store.ObjectStore

@@ -3,7 +3,7 @@
             core2.indexer
             core2.log
             [core2.util :as util]
-            [integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.indexer.TransactionIndexer
            [core2.log LogReader LogRecord]
            java.io.Closeable
