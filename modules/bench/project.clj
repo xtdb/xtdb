@@ -12,9 +12,11 @@
   :scm {:dir "../.."}
 
   :dependencies [[pro.juxt.crux-labs/core2]
+                 [pro.juxt.crux-labs/core2-datasets]
                  [pro.juxt.crux-labs/core2-kafka]
                  [pro.juxt.crux-labs/core2-s3]
                  [pro.juxt.crux-labs/core2-jdbc]
+                 [org.clojure/data.csv]
                  [ch.qos.logback/logback-classic]]
 
   :main ^:skip-aot clojure.main

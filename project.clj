@@ -12,8 +12,8 @@
                  [org.clojure/tools.logging "1.1.0"]
                  [org.clojure/spec.alpha "0.2.194"]
                  [pro.juxt.clojars-mirrors.com.stuartsierra/dependency "1.0.0"]
-                 [org.clojure/data.json "2.3.1"]
-                 [org.clojure/data.csv "1.0.0"]
+                 [org.clojure/data.json]
+                 [org.clojure/data.csv]
                  [org.clojure/tools.cli "1.0.206"]
                  [org.apache.arrow/arrow-algorithm "4.0.1"]
                  [org.apache.arrow/arrow-compression "4.0.1"]
@@ -30,7 +30,9 @@
 
                          [org.clojure/clojure "1.10.3"]
                          [software.amazon.awssdk/s3 "2.16.76"]
-                         [ch.qos.logback/logback-classic "1.2.3"]]
+                         [ch.qos.logback/logback-classic "1.2.3"]
+                         [org.clojure/data.csv "1.0.0"]
+                         [org.clojure/data.json "2.3.1"]]
 
   :profiles {:dev [:test
                    {:dependencies [[ch.qos.logback/logback-classic]
