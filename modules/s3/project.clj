@@ -12,5 +12,7 @@
 
   :scm {:dir "../.."}
 
+  :java-source-paths ["src"]
+
   :dependencies [[pro.juxt.crux-labs/core2]
                  [software.amazon.awssdk/s3]])
