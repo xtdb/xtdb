@@ -356,14 +356,6 @@
     (t/is (= #{[:ivan] [:fred]} (c/q db {:find '[?e]
                                          :where '[[(or-text-search :name #{"Ivan" "Fred"}) [[?e ?v]]]]})))))
 
-(t/deftest test-cannot-use-multi-field-lucene-queries
-  (require 'crux.lucene.multi-field) ; for defmethods
-
-  (t/is (thrown-with-msg? java.lang.IllegalStateException #"Lucene multi field indexer not configured, consult the docs."
-                          (with-open [db (c/open-db *api*)]
-                            (c/q db {:find '[?e]
-                                     :where '[[(lucene-text-search "firstname: Fred") [[?e]]]]})))))
-
 (t/deftest results-not-limited-to-1000
   (submit+await-tx (for [n (range 1001)] [:crux.tx/put {:crux.db/id n, :description (str "Entity " n)}]))
   (with-open [db (c/open-db *api*)]
