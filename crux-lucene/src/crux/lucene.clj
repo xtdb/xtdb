@@ -201,7 +201,7 @@
                                  (for [v (cc/vectorize-value v)
                                        :when (string? v)]
                                    [a v]))))
-            :let [id-str (->hash-str (DocumentId. e a v))
+            :let [id-str (->hash-str (->DocumentId e a v))
                   doc (doto (Document.)
                         ;; To search for triples by e-a-v for deduping
                         (.add (StringField. field-crux-id, id-str, Field$Store/NO))
