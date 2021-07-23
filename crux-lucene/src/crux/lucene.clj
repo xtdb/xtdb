@@ -120,7 +120,7 @@
               (parse-query lucene-store query opts)))))
 
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
-  (fn pred-get-attr-constraint [index-snapshot db idx-id->idx join-keys]
+  (fn pred-lucene-constraint [index-snapshot db idx-id->idx join-keys]
     (let [arg-bindings (map (fn [a]
                               (if (instance? VarBinding a)
                                 (q/bound-result-for-var index-snapshot a join-keys)
