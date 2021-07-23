@@ -208,10 +208,11 @@
 
                                (log/debug "Starting" k)
                                (-> system
-                                   (assoc k (start-fn (reduce-kv (fn [acc k r]
-                                                                   (assoc acc k (get system r)))
-                                                                 opts
-                                                                 refs))))
+                                   (assoc k (start-fn (-> (reduce-kv (fn [acc k r]
+                                                                       (assoc acc k (get system r)))
+                                                                     (or opts {})
+                                                                     refs)
+                                                          (vary-meta assoc ::module-key k)))))
                                (catch Throwable e
                                  (->> (reverse (take-while (complement #{k}) start-order))
                                       (remove ref?)
