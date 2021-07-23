@@ -5,7 +5,7 @@
             [crux.lucene :as l]
             [crux.memory :as mem]
             [crux.query :as q])
-  (:import org.apache.lucene.analysis.Analyzer
+  (:import org.apache.lucene.analysis.standard.StandardAnalyzer
            [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
            [org.apache.lucene.index IndexWriter Term]
            org.apache.lucene.queryparser.classic.QueryParser
@@ -37,10 +37,10 @@
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query [q])))))
 
 (defn ^Query build-lucene-text-query
-  [^Analyzer analyzer, [q & args]]
+  [[q & args]]
   (when-not (string? q)
     (throw (IllegalArgumentException. "lucene-text-search query must be String")))
-  (.parse (QueryParser. "" analyzer) (apply format q args)))
+  (.parse (QueryParser. "" (StandardAnalyzer.)) (apply format q args)))
 
 (defn- resolve-search-results-content-hash
   "Given search results each containing a content-hash, perform a

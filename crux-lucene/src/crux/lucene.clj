@@ -99,9 +99,9 @@
         (throw t)))))
 
 (defn- parse-query
-  ([lucene-store query] (parse-query lucene-store query {}))
+  ([analyzer query] (parse-query analyzer query {}))
 
-  ([{:keys [analyzer]} query {:keys [default-field], :or {default-field field-crux-val}}]
+  ([analyzer query {:keys [default-field], :or {default-field field-crux-val}}]
    (cond
      (instance? Query query) query
      (string? query) (.parse (QueryParser. default-field analyzer)
@@ -111,13 +111,14 @@
   ([node query]
    (search node query {}))
 
-  ([node query {:keys [lucene-store-k],
-                :or {lucene-store-k ::lucene-store}
+  ([node query {:keys [lucene-store-k analyzer],
+                :or {lucene-store-k ::lucene-store
+                     analyzer (StandardAnalyzer.)}
                 :as opts}]
    (let [lucene-store (-> @(:!system node)
                           (get lucene-store-k))]
      (search* lucene-store
-              (parse-query lucene-store query opts)))))
+              (parse-query analyzer query opts)))))
 
 (defn pred-constraint [query-builder results-resolver {:keys [arg-bindings idx-id return-type tuple-idxs-in-join-order ::lucene-store]}]
   (fn pred-lucene-constraint [index-snapshot db idx-id->idx join-keys]
@@ -126,7 +127,7 @@
                                 (q/bound-result-for-var index-snapshot a join-keys)
                                 a))
                             (rest arg-bindings))
-          query (query-builder (:analyzer lucene-store) arg-bindings)
+          query (query-builder arg-bindings)
           tuples (with-open [search-results ^crux.api.ICursor (search* lucene-store query)]
                    (->> search-results
                         iterator-seq
@@ -136,10 +137,10 @@
 
 (defn ^Query build-query
   "Standard build query fn, taking a single field/val lucene term string."
-  [^Analyzer analyzer, [k v]]
+  [[k v]]
   (when-not (string? v)
     (throw (IllegalArgumentException. "Lucene text search values must be String")))
-  (parse-query {:analyzer analyzer}
+  (parse-query (StandardAnalyzer.)
                v
                {:default-field (keyword->k k)}))
 
@@ -173,10 +174,10 @@
 
 (defn ^Query build-query-wildcard
   "Wildcard query builder"
-  [^Analyzer analyzer, [v]]
+  [[v]]
   (when-not (string? v)
     (throw (IllegalArgumentException. "Lucene text search values must be String")))
-  (let [qp (QueryParser. field-crux-val analyzer)
+  (let [qp (QueryParser. field-crux-val (StandardAnalyzer.))
         b (doto (BooleanQuery$Builder.)
             (.add (.parse qp v) BooleanClause$Occur/MUST))]
     (.build b)))
