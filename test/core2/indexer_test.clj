@@ -3,6 +3,7 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.test :as t]
+            [core2.buffer-pool :as bp]
             [core2.core :as c2]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
@@ -13,7 +14,9 @@
             [core2.types :as ty]
             [core2.util :as util]
             [core2.indexer :as idx]
-            [clojure.tools.logging :as log])
+            [clojure.tools.logging :as log]
+            [core2.temporal :as temporal]
+            [core2.object-store :as os])
   (:import [core2.buffer_pool BufferPool IBufferPool]
            core2.core.Node
            core2.data_source.QueryDataSource
@@ -86,10 +89,10 @@
                                        :clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])})]
       (let [system @(:!system node)
             ^BufferAllocator a (:core2/allocator system)
-            ^ObjectStore os (:core2/object-store system)
-            ^IBufferPool bp (:core2/buffer-pool system)
-            ^IMetadataManager mm (:core2/metadata-manager system)
-            ^TemporalManager tm (:core2/temporal-manager system)]
+            ^ObjectStore os (::os/file-system-object-store system)
+            ^IBufferPool bp (::bp/buffer-pool system)
+            ^IMetadataManager mm (::meta/metadata-manager system)
+            ^TemporalManager tm (::temporal/temporal-manager system)]
 
         (t/is (every? nil? @(meta/with-latest-metadata mm
                               (juxt meta/latest-tx meta/latest-row-id))))
@@ -210,10 +213,10 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
-      (let [^ObjectStore os (:core2/object-store @(:!system node))]
+      (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
 
         (-> (c2/submit-tx node tx-ops)
-            (tu/then-await-tx node))
+            (tu/then-await-tx node (Duration/ofMillis 2000)))
 
         (tu/finish-chunk node)
 
@@ -251,8 +254,8 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :max-rows-per-chunk 3000, :max-rows-per-block 300})
                 info-reader (io/reader (io/resource "devices_mini_device_info.csv"))
                 readings-reader (io/reader (io/resource "devices_mini_readings.csv"))]
-      (let [^ObjectStore os (:core2/object-store @(:!system node))
-            ^IMetadataManager mm (:core2/metadata-manager @(:!system node))
+      (let [^ObjectStore os (::os/file-system-object-store @(:!system node))
+            ^IMetadataManager mm (::meta/metadata-manager @(:!system node))
             device-infos (map ts/device-info-csv->doc (csv/read-csv info-reader))
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
@@ -351,7 +354,7 @@
                                 (partition-all 100 tx-ops))]
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
-                  :let [os ^ObjectStore (:core2/object-store @(:!system node))]]
+                  :let [os ^ObjectStore (::os/file-system-object-store @(:!system node))]]
             (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 15))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
@@ -395,8 +398,8 @@
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [system @(:!system node)
                   ^ObjectStore os (:core2/object-store system)
-                  ^IMetadataManager mm (:core2/metadata-manager system)
-                  ^TemporalManager tm (:core2/temporal-manager system)]
+                  ^IMetadataManager mm (::meta/metadata-manager system)
+                  ^TemporalManager tm (::temporal/temporal-manager system)]
               (t/is (= first-half-tx-instant
                        (-> first-half-tx-instant
                            (tu/then-await-tx node (Duration/ofSeconds 5)))))
@@ -427,7 +430,7 @@
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
-                          :let [^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
+                          :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
 
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (-> first-half-tx-instant
@@ -448,7 +451,7 @@
 
                   (doseq [^Node node [new-node node]
                           :let [^ObjectStore os (:core2/object-store @(:!system node))
-                                ^TemporalManager tm (:core2/temporal-manager @(:!system node))]]
+                                ^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
 
                     (let [objs (.listObjects os)]
                       (t/is (= 11 (count (filter #(re-matches #"temporal-\p{XDigit}+.*" %) objs))))

@@ -1,10 +1,11 @@
 (ns core2.jdbc.postgresql
   (:require [core2.jdbc :as j]
-            [core2.system :as sys]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]))
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.integrant.core :as ig]))
 
-(defn ->dialect {::sys/args {:drop-tables? {:spec ::sys/boolean, :default false}}}
-  [{:keys [drop-tables?]}]
+(derive ::dialect ::j/dialect)
+
+(defmethod ig/init-key ::dialect [_ {:keys [drop-tables?]}]
   (reify j/Dialect
     (db-type [_] :postgresql)
 

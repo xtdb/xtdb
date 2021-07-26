@@ -1,8 +1,9 @@
 (ns core2.log
-  (:require [clojure.tools.logging :as log]
-            [core2.system :as sys]
+  (:require [clojure.spec.alpha :as s]
+            [clojure.tools.logging :as log]
             [core2.tx :as tx]
-            [core2.util :as util])
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            core2.tx.TransactionInstant
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
@@ -39,7 +40,10 @@
                    0)]
       (subvec records offset (min (+ offset limit) (count records))))))
 
-(defn ->log [_]
+(derive ::memory-log :core2/log)
+(derive ::memory-log :core2/log-writer)
+
+(defmethod ig/init-key ::memory-log [_ _]
   (InMemoryLog. (atom [])))
 
 (def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
@@ -108,7 +112,6 @@
 
   Closeable
   (close [_]
-    (util/try-close log-writer)
     (when log-channel
       (.close log-channel))))
 
@@ -168,17 +171,39 @@
           (finally
             (.clear elements)))))))
 
-(defn ->local-directory-log-writer {::sys/args {:root-path {:spec ::sys/path, :required? true}
-                                                :buffer-size {:spec ::sys/pos-int, :default 4096}
-                                                :clock {:spec #(instance? Clock %), :default (Clock/systemUTC)}}}
-  [{:keys [^Path root-path buffer-size clock]}]
+(s/def ::root-path ::util/path)
+
+(derive ::local-directory-log-writer :core2/log-writer)
+
+(defmethod ig/prep-key ::local-directory-log-writer [_ opts]
+  (-> (merge {:buffer-size 4096
+              :clock (Clock/systemUTC)}
+             opts)
+      (util/maybe-update :root-path util/->path)))
+
+(defmethod ig/init-key ::local-directory-log-writer [_ {:keys [^Path root-path buffer-size clock]}]
   (util/mkdirs root-path)
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "local-directory-log-writer-"))
         queue (ArrayBlockingQueue. buffer-size)
         append-loop-future (.submit pool ^Runnable #(writer-append-loop root-path queue clock buffer-size))]
     (->LocalDirectoryLogWriter root-path pool queue append-loop-future)))
 
-(defn ->local-directory-log {::sys/args (merge (::sys/args (meta #'->local-directory-log-writer))
-                                               {:root-path {:spec ::sys/path, :required? true}})}
-  [{:keys [root-path] :as opts}]
-  (->LocalDirectoryLog (->local-directory-log-writer opts) root-path nil))
+(defmethod ig/halt-key! ::local-directory-log-writer [_ writer]
+  (util/try-close writer))
+
+(derive ::local-directory-log :core2/log-writer)
+(derive ::local-directory-log :core2/log)
+
+(defmethod ig/prep-key ::local-directory-log [_ opts]
+  (ig/prep-key ::local-directory-log-writer opts))
+
+(defmethod ig/init-key ::local-directory-log [_ {:keys [root-path] :as opts}]
+  (let [writer (ig/init-key ::local-directory-log-writer opts)]
+    {:writer writer
+     :log (->LocalDirectoryLog writer root-path nil)}))
+
+(defmethod ig/resolve-key ::local-directory-log [_ {:keys [log]}] log)
+
+(defmethod ig/halt-key! ::local-directory-log [_ {:keys [writer log]}]
+  (util/try-close log)
+  (ig/halt-key! ::local-directory-log-writer writer))

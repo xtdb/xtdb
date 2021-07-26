@@ -1,7 +1,8 @@
 (ns core2.object-store
   (:require [clojure.string :as str]
-            [core2.system :as sys]
-            [core2.util :as util])
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.spec.alpha :as s])
   (:import java.io.Closeable
            java.nio.ByteBuffer
            [java.nio.file CopyOption Files FileSystems OpenOption Path StandardOpenOption]
@@ -68,8 +69,13 @@
   (close [_]
     (.clear os)))
 
-(defn ->object-store ^core2.object_store.ObjectStore [_]
+(defmethod ig/init-key ::memory-object-store [_ _]
   (->InMemoryObjectStore (ConcurrentSkipListMap.)))
+
+(defmethod ig/halt-key! ::memory-object-store [_ ^InMemoryObjectStore os]
+  (.close os))
+
+(derive ::memory-object-store :core2/object-store)
 
 (deftype FileSystemObjectStore [^Path root-path, ^ExecutorService pool]
   ObjectStore
@@ -122,9 +128,22 @@
   (close [_this]
     (util/shutdown-pool pool)))
 
-(defn ->file-system-object-store {::sys/args {:root-path {:spec ::sys/path, :required? true}
-                                              :pool-size {:spec ::sys/pos-int, :default 4}}}
-  [{:keys [root-path pool-size]}]
+(derive ::file-system-object-store :core2/object-store)
+
+(s/def ::root-path ::util/path)
+(s/def ::pool-size pos-int?)
+
+(defmethod ig/prep-key ::file-system-object-store [_ opts]
+  (-> (merge {:pool-size 4} opts)
+      (util/maybe-update :root-path util/->path)))
+
+(defmethod ig/pre-init-spec ::file-system-object-store [_]
+  (s/keys :req-un [::root-path ::pool-size]))
+
+(defmethod ig/init-key ::file-system-object-store [_ {:keys [root-path pool-size]}]
   (util/mkdirs root-path)
   (let [pool (Executors/newFixedThreadPool pool-size (util/->prefix-thread-factory "file-system-object-store-"))]
     (->FileSystemObjectStore root-path pool)))
+
+(defmethod ig/halt-key! ::file-system-object-store [_ ^FileSystemObjectStore os]
+  (.close os))

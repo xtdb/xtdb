@@ -50,23 +50,20 @@ Where Classic has a transaction log, document store and query indices, Core2 has
 
 Main require: `[core2.core :as c2]`
 
-Configuration is similar to Classic - take a look at the https://opencrux.com[opencrux.com] module docs for more information.
+Configuration uses https://github.com/weavejester/integrant[Integrant].
 
 You can still start a completely in-memory node using `(c2/start-node {})`.
 For a Kafka/JDBC node:
 
 [source,clojure]
 ----
-(with-open [node (c2/start-node {:core2/log
-                                 {:core2/module 'core2.kafka/->log
-                                  :bootstrap-servers "localhost:9092"}
+(with-open [node (c2/start-node {:core2.kafka/log {:bootstrap-servers "localhost:9092"}
 
-                                 :core2/object-store
-                                 {:core2/module 'core2.jdbc/->object-store
-                                  :connection-pool {:dialect {:core2/module 'core2.jdbc.postgres/->dialect}
-                                                    :db-spec {:user "postgres"
-                                                              :password "postgres"
-                                                              :database "core2test"}}}})]
+                                 :core2.jdbc.postgres/dialect {}
+                                 :core2.jdbc/default-pool {:db-spec {:user "postgres"
+                                                                     :password "postgres"
+                                                                     :database "core2test"}}
+                                 :core2.jdbc/object-store {}})]
   ;; ...
   )
 ----

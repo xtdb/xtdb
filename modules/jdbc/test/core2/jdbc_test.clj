@@ -2,26 +2,24 @@
   (:require [core2.jdbc :as c2-jdbc]
             [core2.jdbc.postgresql :as c2-psql]
             [core2.object-store-test :as ost]
-            [core2.system :as sys]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]))
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.integrant.core :as ig]))
 
-(defn- with-obj-store [pool-opts f]
-  (with-open [sys (-> (sys/prep-system {::c2-jdbc/object-store
-                                        {:connection-pool pool-opts}})
-                      (sys/start-system))]
-    (f (::c2-jdbc/object-store sys))))
+(defn- with-obj-store [opts f]
+  (let [sys (-> (merge opts {::c2-jdbc/object-store {}})
+                ig/prep
+                ig/init)]
+    (try
+      (f (::c2-jdbc/object-store sys))
+      (finally
+        (ig/halt! sys)))))
 
-(defn- setup-postgres []
-  (let [db-spec {:user "postgres", :password "postgres"}]
-
-    (with-open [conn (jdbc/get-connection {:dbtype "postgresql", :user "postgres", :password "postgres"})]
+(ost/def-obj-store-tests jdbc-postgres [f]
+  (let [db-spec {:user "postgres", :password "postgres", :database "core2test"}]
+    (with-open [conn (jdbc/get-connection (merge db-spec {:dbtype "postgresql"}))]
       (jdbc/execute! conn ["DROP DATABASE IF EXISTS core2test"])
       (jdbc/execute! conn ["CREATE DATABASE core2test"]))
 
-    {:dialect {:core2/module `c2-psql/->dialect
-               :drop-tables? true}
-     :db-spec (assoc db-spec :database "core2test")}))
-
-(ost/def-obj-store-tests jdbc-postgres [f]
-  (with-obj-store (setup-postgres)
-    f))
+    (with-obj-store {::c2-psql/dialect {:drop-tables? true}
+                     ::c2-jdbc/default-pool {:db-spec db-spec}}
+      f)))

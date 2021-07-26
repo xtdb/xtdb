@@ -1,7 +1,8 @@
 (ns core2.object-store-test
   (:require [clojure.test :as t]
             [core2.object-store :as os]
-            [core2.test-util :as tu])
+            [core2.test-util :as tu]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.object_store.ObjectStore
            java.nio.ByteBuffer
            java.nio.charset.StandardCharsets
@@ -63,8 +64,8 @@
      '~sym))
 
 (def-obj-store-tests in-mem [f]
-  (f (os/->object-store {})))
+  (f (ig/init-key ::os/memory-object-store {})))
 
 (def-obj-store-tests fs [f]
   (tu/with-tmp-dirs #{os-path}
-    (f (os/->file-system-object-store {:root-path os-path, :pool-size 2}))))
+    (f (ig/init-key ::os/file-system-object-store {:root-path os-path, :pool-size 2}))))

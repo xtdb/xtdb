@@ -1,9 +1,10 @@
 (ns core2.kafka
   (:require [clojure.java.io :as io]
             [core2.log :as log]
-            [core2.system :as sys]
             [core2.util :as util]
-            [core2.tx :as tx])
+            [core2.tx :as tx]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.spec.alpha :as s])
   (:import [core2.log LogReader LogWriter]
            java.io.Closeable
            java.nio.file.Path
@@ -124,42 +125,59 @@
 
         (throw (IllegalStateException. (format "Topic '%s' does not exist", topic-name))))))
 
-(def kafka-opt-spec
-  {:bootstrap-servers {:spec ::sys/string
-                       :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
-                       :required? true
-                       :default "localhost:9092"}
-   :properties-file {:spec ::sys/path
-                     :doc "Used for supplying Kafka connection properties to the underlying Kafka API."}
-   :properties-map {:spec ::sys/string-map
-                    :doc "Used for supplying Kafka connection properties to the underlying Kafka API."}
-   :topic-name {:required? true, :spec ::sys/string}
-   :replication-factor {:required? true
-                        :default 1
-                        :doc "Level of durability for Kafka"
-                        :spec ::sys/pos-int}
-   :create-topic? {:required? true
-                   :default true
-                   :doc "Create topic if it doesn't exist"
-                   :spec ::sys/boolean}
-   :topic-config {:spec ::sys/string-map}})
+(s/def ::bootstrap-servers string?)
+(s/def ::properties-file ::util/path)
+(s/def ::properties-map ::util/string-map)
+(s/def ::topic-name string?)
+(s/def ::replication-factor pos-int?)
+(s/def ::create-topic? boolean?)
+(s/def ::topic-config ::util/string-map)
 
-(defn ->log-writer {::sys/args kafka-opt-spec}
-  [{:keys [topic-name] :as kafka-opts}]
+(derive ::log-writer :core2/log-writer)
+
+(defmethod ig/prep-key ::log-writer [_ opts]
+  (-> (merge {:bootstrap-servers "localhost:9092"
+              :replication-factor 1
+              :create-topic? true}
+             opts)
+      (util/maybe-update :properties-file util/->path)))
+
+(defmethod ig/pre-init-spec ::log-writer [_]
+  (s/keys :req-un [::bootstrap-servers ::topic-name ::create-topic? ::replication-factor]
+          :opt-un [::properties-file ::properties-map ::topic-config]))
+
+(defmethod ig/init-key ::log-writer [_ {:keys [topic-name] :as kafka-opts}]
   (let [kafka-config (->kafka-config kafka-opts)]
     (ensure-topic-exists kafka-config kafka-opts)
     (KafkaLogWriter. (->producer kafka-config) topic-name)))
 
-(defn ->log {::sys/args (merge kafka-opt-spec
-                               {:poll-duration {:spec ::sys/duration
-                                                :required? true
-                                                :doc "How long to wait when polling Kafka"
-                                                :default (Duration/ofSeconds 1)}})}
-  [{:keys [topic-name poll-duration] :as kafka-opts}]
+(defmethod ig/halt-key! ::log-writer [_ writer]
+  (util/try-close writer))
+
+(defmethod ig/prep-key ::log [_ opts]
+  (-> (merge (ig/prep-key ::log-writer opts)
+             {:poll-duration "PT1S"})
+      (util/maybe-update :poll-duration util/->duration)))
+
+(s/def ::poll-duration ::util/duration)
+
+(defmethod ig/pre-init-spec ::log [_]
+  (s/and (ig/pre-init-spec ::log-writer)
+         (s/keys :req-un [::poll-duration])))
+
+(defmethod ig/init-key ::log [_ {:keys [topic-name poll-duration] :as kafka-opts}]
   (let [kafka-config (->kafka-config kafka-opts)
-        tp (TopicPartition. topic-name 0)]
-    (KafkaLog. (->log-writer kafka-opts)
-               (doto (->consumer kafka-config)
-                 (.assign #{tp}))
-               tp
-               poll-duration)))
+        tp (TopicPartition. topic-name 0)
+        writer (ig/init-key ::log-writer kafka-opts)]
+    {:writer (ig/init-key ::log-writer kafka-opts)
+     :log (KafkaLog. writer
+                     (doto (->consumer kafka-config)
+                       (.assign #{tp}))
+                     tp
+                     poll-duration)}))
+
+(defmethod ig/resolve-key ::log [_ {:keys [log]}] log)
+
+(defmethod ig/halt-key! ::log [_ {:keys [log writer]}]
+  (util/try-close log)
+  (ig/halt-key! ::log-writer writer))

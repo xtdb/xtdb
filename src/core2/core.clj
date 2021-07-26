@@ -1,14 +1,14 @@
 (ns core2.core
   (:require [clojure.pprint :as pp]
-            core2.data-source
-            [core2.indexer :as indexer]
+            [core2.data-source :as ds]
+            [core2.datalog :as d]
+            [core2.indexer :as idx]
             core2.ingest-loop
             [core2.operator :as op]
             [core2.relation :as rel]
-            [core2.system :as sys]
-            core2.tx-producer
+            [core2.tx-producer :as txp]
             [core2.util :as util]
-            [core2.datalog :as d])
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.IReduceInit
            [core2.data_source IDataSourceFactory IQueryDataSource]
            [core2.indexer IChunkManager TransactionIndexer]
@@ -16,9 +16,9 @@
            [java.io Closeable Writer]
            java.lang.AutoCloseable
            java.time.Duration
-           java.util.Date
            [java.util.concurrent CompletableFuture TimeUnit]
-           org.apache.arrow.memory.RootAllocator))
+           java.util.Date
+           [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -99,11 +99,17 @@
 (defmethod print-method Node [_node ^Writer w] (.write w "#<Core2Node>"))
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
-(defn ->node {::sys/deps {:indexer :core2/indexer
-                          :data-source-factory :core2/data-source-factory
-                          :tx-producer :core2/tx-producer}}
-  [deps]
+(defmethod ig/prep-key :core2/node [_ opts]
+  (merge {:indexer (ig/ref ::idx/indexer)
+          :data-source-factory (ig/ref ::ds/data-source-factory)
+          :tx-producer (ig/ref ::txp/tx-producer)}
+         opts))
+
+(defmethod ig/init-key :core2/node [_ deps]
   (map->Node (assoc deps :!system (atom nil))))
+
+(defmethod ig/halt-key! :core2/node [_ ^Node node]
+  (.close node))
 
 (defn open-ra ^core2.ICursor [query db-or-dbs]
   (let [allocator (RootAllocator.)]
@@ -127,27 +133,33 @@
   (let [[query srcs] (apply d/compile-query query params)]
     (plan-ra query srcs)))
 
-(defn ->allocator [_]
-  (RootAllocator.))
+(defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
+(defmethod ig/halt-key! :core2/allocator [_ ^BufferAllocator a] (.close a))
+
+(defn- with-default-impl [opts parent-k impl-k]
+  (cond-> opts
+    (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
 (defn start-node ^core2.core.Node [opts]
-  (let [system (-> (sys/prep-system (into [{:core2/node `->node
-                                            :core2/allocator `->allocator
-                                            :core2/indexer 'core2.indexer/->indexer
-                                            :core2/ingest-loop 'core2.ingest-loop/->ingest-loop
-                                            :core2/log 'core2.log/->log
-                                            :core2/tx-producer 'core2.tx-producer/->tx-producer
-                                            :core2/metadata-manager 'core2.metadata/->metadata-manager
-                                            :core2/temporal-manager 'core2.temporal/->temporal-manager
-                                            :core2/object-store 'core2.object-store/->object-store
-                                            :core2/buffer-pool 'core2.buffer-pool/->buffer-pool
-                                            :core2/data-source-factory 'core2.data-source/->data-source-factory}]
-                                          (cond-> opts (not (vector? opts)) vector)))
-                   (sys/start-system))]
+  (let [system (-> (into {:core2/node {}
+                          :core2/allocator {}
+                          ::idx/indexer {}
+                          :core2.ingest-loop/ingest-loop {}
+                          :core2.metadata/metadata-manager {}
+                          :core2.temporal/temporal-manager {}
+                          :core2.buffer-pool/buffer-pool {}
+                          ::ds/data-source-factory {}
+                          ::txp/tx-producer {}}
+                         opts)
+                   (with-default-impl :core2/log :core2.log/memory-log)
+                   (with-default-impl :core2/object-store :core2.object-store/memory-object-store)
+                   (doto ig/load-namespaces)
+                   ig/prep
+                   ig/init)]
 
     (-> (:core2/node system)
         (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(do (.close ^AutoCloseable system)
+        (assoc :close-fn #(do (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:core2/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
@@ -163,18 +175,25 @@
 (defmethod print-method SubmitNode [_node ^Writer w] (.write w "#<Core2SubmitNode>"))
 (defmethod pp/simple-dispatch SubmitNode [it] (print-method it *out*))
 
-(defn ->submit-node {::sys/deps {:tx-producer :core2/tx-producer}}
-  [{:keys [tx-producer]}]
+(defmethod ig/prep-key :core2/submit-node [_ opts]
+  (merge {:tx-producer (ig/ref :core2.tx-producer/tx-producer)}
+         opts))
+
+(defmethod ig/init-key :core2/submit-node [_ {:keys [tx-producer]}]
   (map->SubmitNode {:tx-producer tx-producer, :!system (atom nil)}))
 
+(defmethod ig/halt-key! :core2/submit-node [_ ^SubmitNode node]
+  (.close node))
+
 (defn start-submit-node ^core2.core.SubmitNode [opts]
-  (let [system (-> (sys/prep-system (into [{:core2/submit-node `->submit-node
-                                            :core2/tx-producer 'core2.tx-producer/->tx-producer
-                                            :core2/allocator `->allocator
-                                            :core2/log 'core2.log/->local-directory-log-writer}]
-                                          (cond-> opts (not (vector? opts)) vector)))
-                   (sys/start-system))]
+  (let [system (-> (into {:core2/submit-node {}
+                          :core2.tx-producer/tx-producer {}
+                          :core2/allocator {}}
+                         opts)
+                   ig/prep
+                   (doto ig/load-namespaces)
+                   ig/init)]
 
     (-> (:core2/submit-node system)
         (doto (-> :!system (reset! system)))
-        (assoc :close-fn #(.close ^AutoCloseable system)))))
+        (assoc :close-fn #(ig/halt! system)))))

@@ -1,9 +1,9 @@
 (ns core2.data-source
   (:require [core2.expression.temporal :as expr.temp]
             [core2.operator.scan :as scan]
-            [core2.system :as sys]
             core2.tx
-            [core2.util :as util])
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.tx.TransactionInstant
            java.io.Closeable
            java.util.Date))
@@ -48,10 +48,13 @@
   (close [_]
     (util/try-close watermark)))
 
-(defn ->data-source-factory {::sys/deps {:metadata-mgr :core2/metadata-manager
-                                         :temporal-mgr :core2/temporal-manager
-                                         :buffer-pool :core2/buffer-pool}}
-  [{:keys [metadata-mgr temporal-mgr buffer-pool]}]
+(defmethod ig/prep-key ::data-source-factory [_ opts]
+  (merge {:metadata-mgr (ig/ref :core2.metadata/metadata-manager)
+          :temporal-mgr (ig/ref :core2.temporal/temporal-manager)
+          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
+         opts))
+
+(defmethod ig/init-key ::data-source-factory [_ {:keys [metadata-mgr temporal-mgr buffer-pool]}]
   (reify
     IDataSourceFactory
     (openDataSource [_ watermark tx vt]

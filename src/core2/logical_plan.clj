@@ -1,8 +1,8 @@
 (ns core2.logical-plan
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [core2.system :as sys]
-            [core2.types :as types]))
+            [core2.types :as types]
+            [core2.util :as util]))
 
 ;; Partly based on
 ;; https://dbis-uibk.github.io/relax/help#relalg-reference
@@ -46,12 +46,12 @@
 
 (s/def ::csv
   (s/cat :op #{:csv}
-         :path ::sys/path
+         :path ::util/path
          :col-types (s/? (s/map-of ::column ::csv-col-type))))
 
 (s/def ::arrow
   (s/cat :op #{:arrow}
-         :path ::sys/path))
+         :path ::util/path))
 
 (defmethod ra-expr :project [_]
   (s/cat :op #{:π :pi :project}

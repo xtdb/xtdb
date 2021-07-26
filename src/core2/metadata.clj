@@ -5,10 +5,10 @@
             [core2.expression.comparator :as expr.comp]
             core2.object-store
             [core2.relation :as rel]
-            [core2.system :as sys]
             [core2.tx :as tx]
             [core2.types :as t]
-            [core2.util :as util])
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.buffer_pool.IBufferPool
            core2.ICursor
            core2.object_store.ObjectStore
@@ -278,9 +278,15 @@
   (close [_]
     (.clear known-chunks)))
 
-(defn ->metadata-manager {::sys/deps {:allocator :core2/allocator
-                                      :object-store :core2/object-store
-                                      :buffer-pool :core2/buffer-pool}}
-  [{:keys [allocator ^ObjectStore object-store buffer-pool]}]
+(defmethod ig/prep-key ::metadata-manager [_ opts]
+  (merge {:allocator (ig/ref :core2/allocator)
+          :object-store (ig/ref :core2/object-store)
+          :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
+         opts))
+
+(defmethod ig/init-key ::metadata-manager [_ {:keys [allocator ^ObjectStore object-store buffer-pool]}]
   (MetadataManager. allocator object-store buffer-pool
                     (ConcurrentSkipListSet. ^List (keep obj-key->chunk-idx (.listObjects object-store "metadata-")))))
+
+(defmethod ig/halt-key! ::metadata-manager [_ ^MetadataManager mgr]
+  (.close mgr))

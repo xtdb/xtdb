@@ -2,8 +2,8 @@
   (:require [clojure.tools.logging :as log]
             core2.indexer
             core2.log
-            [core2.system :as sys]
-            [core2.util :as util])
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.indexer.TransactionIndexer
            [core2.log LogReader LogRecord]
            java.io.Closeable
@@ -12,8 +12,7 @@
 
 (defn- ingest-loop [^LogReader log, ^TransactionIndexer indexer
                     {:keys [^Duration poll-sleep-duration ^long batch-size],
-                     :or {poll-sleep-duration (Duration/ofMillis 100)
-                          batch-size 100}}]
+                     :or {batch-size 100}}]
   (let [poll-sleep-ms (.toMillis poll-sleep-duration)]
     (try
       (while true
@@ -35,10 +34,17 @@
   (close [_]
     (util/shutdown-pool pool)))
 
-(defn ->ingest-loop {::sys/deps {:log :core2/log
-                                 :indexer :core2/indexer}
-                     ::sys/args {:poll-sleep-duration {:spec ::sys/duration, :default "PT0.1S"}}}
-  [{:keys [log indexer poll-sleep-duration]}]
+(defmethod ig/prep-key ::ingest-loop [_ opts]
+  (-> (merge {:log (ig/ref :core2/log)
+              :indexer (ig/ref :core2.indexer/indexer)
+              :poll-sleep-duration "PT0.1S"}
+             opts)
+      (util/maybe-update :poll-sleep-duration util/->duration)))
+
+(defmethod ig/init-key ::ingest-loop [_ {:keys [log indexer poll-sleep-duration]}]
   (let [pool (doto (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "ingest-loop-"))
-               (.submit ^Runnable #(ingest-loop log indexer poll-sleep-duration)))]
+               (.submit ^Runnable #(ingest-loop log indexer {:poll-sleep-duration poll-sleep-duration})))]
     (IngestLoop. pool)))
+
+(defmethod ig/halt-key! ::ingest-loop [_ ^IngestLoop il]
+  (.close il))

@@ -1,12 +1,16 @@
 (ns ^:no-doc core2.cli
-  (:require [clojure.edn :as edn]
+  (:require [clojure.data.json :as json]
+            [clojure.edn :as edn]
             [clojure.java.io :as io]
+            [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [core2.core :as c2]
-            [core2.util :as util]
-            [clojure.data.json :as json])
-  (:import java.io.File))
+            [core2.error :as err]
+            [core2.util :as util])
+  (:import java.io.File
+           java.net.URL
+           java.util.Map))
 
 (defn- if-it-exists [^File f]
   (when (.exists f)
@@ -31,6 +35,31 @@
 
    ["-h" "--help"]])
 
+(defprotocol OptsSource
+  (load-opts [src]))
+
+(alter-meta! #'load-opts assoc :private true)
+
+(defn- read-opts [src file-name]
+  (cond
+    (str/ends-with? file-name ".json") (json/read-str (slurp src) :key-fn keyword)
+    (str/ends-with? file-name ".edn") (edn/read-string (slurp src))
+    :else (throw (err/illegal-arg :unsupported-options-type
+                                  {::err/message (format "Unsupported options type: '%s'" file-name)}))))
+
+(extend-protocol OptsSource
+  Map
+  (load-opts [src] src)
+
+  File
+  (load-opts [src] (read-opts src (.getName src)))
+
+  URL
+  (load-opts [src] (read-opts src (.getFile src)))
+
+  nil
+  (load-opts [_] nil))
+
 (defn parse-args [args]
   (let [{:keys [options errors summary]} (cli/parse-opts args cli-options)]
     (cond
@@ -39,14 +68,16 @@
       (:help options) {::help summary}
 
       :else (let [{:keys [file edn json]} options]
-              {::node-opts [(or file
-                                (some-> (io/file "core2.edn") if-it-exists)
-                                (some-> (io/file "core2.json") if-it-exists)
-                                (io/resource "core2.edn")
-                                (io/resource "core2.json"))
+              {::node-opts (->> [(or file
+                                     (some-> (io/file "core2.edn") if-it-exists)
+                                     (some-> (io/file "core2.json") if-it-exists)
+                                     (io/resource "core2.edn")
+                                     (io/resource "core2.json"))
 
-                            json
-                            edn]}))))
+                                 json
+                                 edn]
+                                (map load-opts)
+                                (apply merge-with merge))}))))
 
 (defn- shutdown-hook-promise []
   ;; NOTE: This isn't registered until the node manages to start up
@@ -83,4 +114,6 @@
 
       :else (with-open [_node (c2/start-node node-opts)]
               (log/info "Node started")
-              @(shutdown-hook-promise)))))
+              @(shutdown-hook-promise)))
+
+    (shutdown-agents)))

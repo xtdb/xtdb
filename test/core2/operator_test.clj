@@ -3,13 +3,14 @@
             [core2.core :as c2]
             [core2.expression.metadata :as expr.meta]
             [core2.metadata :as meta]
-            [core2.test-util :as tu])
+            [core2.test-util :as tu]
+            [core2.indexer :as idx])
   (:import core2.data_source.QueryDataSource
            core2.metadata.IMetadataManager
            org.roaringbitmap.RoaringBitmap))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
+  (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
     (-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 0}}])
         (tu/then-await-tx node))
 
@@ -24,7 +25,7 @@
 
     (tu/finish-chunk node)
 
-    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
+    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
                          (into #{} (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
@@ -60,7 +61,7 @@
                            db))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (c2/start-node {:core2/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
+  (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
     (-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 1}}
                             {:op :put, :doc {:name "James", :_id 2}}
                             {:op :put, :doc {:name "Ivan", :_id 3}}])
@@ -73,7 +74,7 @@
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
-    (let [^IMetadataManager metadata-mgr (:core2/metadata-manager @(:!system node))]
+    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))]
       (c2/with-db [db node]
         (t/is (= #{0 3} (.knownChunks metadata-mgr)))
         (let [expected-match [(meta/map->ChunkMatch

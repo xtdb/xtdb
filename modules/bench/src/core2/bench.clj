@@ -1,7 +1,9 @@
 (ns core2.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [core2.core :as c2])
+            [core2.core :as c2]
+            [core2.kafka :as k]
+            [core2.s3 :as s3])
   (:import core2.core.Node
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
@@ -38,12 +40,10 @@
 
   ([node-id]
    (log/info "Starting node, id:" node-id)
-   (c2/start-node {:core2/log {:core2/module 'core2.kafka/->log
-                               :bootstrap-servers "localhost:9092"
-                               :topic-name (str "bench-log-" node-id)}
-                   :core2/object-store {:core2/module 'core2.s3/->object-store
-                                        :bucket "core2-bench"
-                                        :prefix (str "node." node-id)}})))
+   (c2/start-node {::k/log {:bootstrap-servers "localhost:9092"
+                            :topic-name (str "bench-log-" node-id)}
+                   ::s3/object-store {:bucket "core2-bench"
+                                      :prefix (str "node." node-id)}})))
 
 (defn tmp-file-path ^java.nio.file.Path [prefix suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
