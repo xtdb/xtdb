@@ -40,11 +40,11 @@
 (defn ^String keyword->k [k]
   (subs (str k) 1))
 
-(def ^:const ^:private index-version 1)
-(def ^:const ^:private field-crux-id "_crux_id")
-(def ^:const ^:private field-crux-val "_crux_val")
-(def ^:const ^:private field-crux-attr "_crux_attr")
-(def ^:const ^:private field-crux-eid "_crux_eid")
+(def ^:const index-version 1)
+(def ^:const field-crux-id "_crux_id")
+(def ^:const field-crux-val "_crux_val")
+(def ^:const field-crux-attr "_crux_attr")
+(def ^:const field-crux-eid "_crux_eid")
 
 (defn- validate-index-version [^IndexWriter writer]
   (let [found-index-version (some-> (into {} (.getLiveCommitData writer))
