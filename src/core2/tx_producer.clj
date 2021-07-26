@@ -3,7 +3,8 @@
             core2.log
             [core2.types :as t]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig])
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [clojure.spec.alpha :as s])
   (:import core2.DenseUnionUtil
            [core2.log LogWriter LogRecord]
            [java.util LinkedHashMap LinkedHashSet Set]
@@ -28,17 +29,18 @@
 
     doc-k-types))
 
-(defn- validate-tx-ops [tx-ops]
-  (doseq [{:keys [op _valid-time-start _valid-time-end] :as tx-op} tx-ops]
-    (case op
-      :put (assert (contains? (:doc tx-op) :_id))
-      :delete (assert (and (contains? tx-op :_id)
-                           (set/subset? (set (keys tx-op)) #{:op :_id :_valid-time-start :_valid-time-end}))))
+(s/def ::_id any?)
+(s/def ::doc (s/keys :req-un [::_id]))
+(s/def ::_valid-time-start inst?)
+(s/def ::_valid-time-end inst?)
 
-    (when _valid-time-start
-      (assert (inst? _valid-time-start)))
-    (when _valid-time-end
-      (assert (inst? _valid-time-end)))))
+(defmulti tx-op-spec :op)
+
+(defmethod tx-op-spec :put [_]
+  (s/keys :req-un [::doc]
+          :opt-un [::_valid-time-start ::_valid-time-end]))
+
+(s/def ::tx-op (s/multi-spec tx-op-spec :op))
 
 (defn- ->doc-field [k v-types]
   (let [v-types (sort-by t/arrow-type->type-id v-types)]
@@ -57,7 +59,8 @@
   (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (validate-tx-ops tx-ops)
+  (s/assert (s/coll-of ::tx-op :kind vector?) tx-ops)
+
   (let [tx-ops (vec tx-ops)
         put-k-types (->doc-k-types tx-ops)
         document-field (apply t/->field "document" t/struct-type false
