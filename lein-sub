@@ -12,6 +12,7 @@ set -e
       MODULES="
 api
 core
+server
 modules/datasets
 modules/s3
 modules/kafka

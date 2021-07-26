@@ -13,6 +13,7 @@
            core2.local_node.Node
            core2.object_store.FileSystemObjectStore
            core2.relation.IReadColumn
+           java.net.ServerSocket
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            [java.time Clock Duration Instant Period ZoneId]
@@ -193,3 +194,7 @@
          (with-tmp-dirs #{~@more-bindings}
            ~@body)))
     `(do ~@body)))
+
+(defn free-port ^long []
+  (with-open [s (ServerSocket. 0)]
+    (.getLocalPort s)))
