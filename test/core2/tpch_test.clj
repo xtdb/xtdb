@@ -52,7 +52,7 @@
                                  args)))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
-  (test-tpch-ingest 0.01 68))
+  (test-tpch-ingest 0.01 69))
 
 (t/deftest can-submit-tpch-docs-0.001
-  (test-tpch-ingest 0.001 68))
+  (test-tpch-ingest 0.001 69))

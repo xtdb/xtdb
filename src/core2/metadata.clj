@@ -135,33 +135,34 @@
                (.setIndexDefined min-vec column-idx)
                (.setIndexDefined max-vec column-idx)
 
-               (with-open [^ICursor slices (blocks/->slices live-root chunk-idx max-rows-per-block)]
-                 (let [start-block-idx (.startNewValue blocks-vec column-idx)
+               (let [row-counts (blocks/row-id-aligned-blocks live-root chunk-idx max-rows-per-block)]
+                 (with-open [^ICursor slices (blocks/->slices live-root row-counts)]
+                   (let [start-block-idx (.startNewValue blocks-vec column-idx)
 
-                       ^long end-block-idx
-                       (loop [block-idx start-block-idx]
-                         (if (.tryAdvance slices
-                                          (reify Consumer
-                                            (accept [_ sliced-root]
-                                              (let [^VectorSchemaRoot sliced-root sliced-root
-                                                    ^DenseUnionVector column-vec (.getVector sliced-root col-name)]
-                                                (.setValueCount blocks-data-vec (inc block-idx))
+                         ^long end-block-idx
+                         (loop [block-idx start-block-idx]
+                           (if (.tryAdvance slices
+                                            (reify Consumer
+                                              (accept [_ sliced-root]
+                                                (let [^VectorSchemaRoot sliced-root sliced-root
+                                                      ^DenseUnionVector column-vec (.getVector sliced-root col-name)]
+                                                  (.setValueCount blocks-data-vec (inc block-idx))
 
-                                                (.setValueCount column-vec (.getRowCount sliced-root))
+                                                  (.setValueCount column-vec (.getRowCount sliced-root))
 
-                                                (when (pos? (.getRowCount sliced-root))
-                                                  (.setIndexDefined blocks-data-vec block-idx)
+                                                  (when (pos? (.getRowCount sliced-root))
+                                                    (.setIndexDefined blocks-data-vec block-idx)
 
-                                                  (doseq [child-vec (.getChildrenFromFields column-vec)]
-                                                    (write-min-max child-vec blocks-min-vec blocks-max-vec block-idx)
+                                                    (doseq [child-vec (.getChildrenFromFields column-vec)]
+                                                      (write-min-max child-vec blocks-min-vec blocks-max-vec block-idx)
 
-                                                    (write-min-max child-vec min-vec max-vec column-idx))
+                                                      (write-min-max child-vec min-vec max-vec column-idx))
 
-                                                  (bloom/write-bloom blocks-bloom-vec block-idx column-vec))))))
-                           (recur (inc block-idx))
-                           block-idx))]
+                                                    (bloom/write-bloom blocks-bloom-vec block-idx column-vec))))))
+                             (recur (inc block-idx))
+                             block-idx))]
 
-                   (.endValue blocks-vec column-idx (- end-block-idx start-block-idx))))
+                     (.endValue blocks-vec column-idx (- end-block-idx start-block-idx)))))
 
                (bloom/write-bloom bloom-vec column-idx column-vec))))))
 
