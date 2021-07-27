@@ -24,12 +24,12 @@
 
 (defrecord LogRecord [^TransactionInstant tx ^ByteBuffer record])
 
-(deftype InMemoryLog [!records]
+(deftype InMemoryLog [!records ^Clock clock]
   LogWriter
   (appendRecord [_ record]
     (CompletableFuture/completedFuture
      (let [records (swap! !records (fn [records]
-                                     (conj records (->LogRecord (tx/->TransactionInstant (count records) (Date.)) record))))]
+                                     (conj records (->LogRecord (tx/->TransactionInstant (count records) (Date/from (.instant clock))) record))))]
        (nth records (dec (count records))))))
 
   LogReader
@@ -43,8 +43,11 @@
 (derive ::memory-log :core2/log)
 (derive ::memory-log :core2/log-writer)
 
-(defmethod ig/init-key ::memory-log [_ _]
-  (InMemoryLog. (atom [])))
+(defmethod ig/prep-key ::memory-log [_ opts]
+  (merge {:clock (Clock/systemUTC)} opts))
+
+(defmethod ig/init-key ::memory-log [_ {:keys [clock]}]
+  (InMemoryLog. (atom []) clock))
 
 (def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
 
