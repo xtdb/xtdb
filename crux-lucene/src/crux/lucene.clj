@@ -32,7 +32,7 @@
     (cio/try-close index-writer)
     (cio/try-close directory)))
 
-(defn- ^String ->hash-str [eid]
+(defn ^String ->hash-str [eid]
   (str (cc/new-id eid)))
 
 (defrecord DocumentId [e a v])
@@ -215,7 +215,7 @@
                         ;; Used for wildcard searches
                         (.add (TextField. field-crux-val, v, Field$Store/YES))
                         ;; Used for eviction
-                        (.add (TextField. field-crux-eid, (->hash-str e), Field$Store/YES))
+                        (.add (StringField. field-crux-eid, (->hash-str e), Field$Store/NO))
                         ;; Used for wildcard searches
                         (.add (StringField. field-crux-attr, (keyword->k a), Field$Store/YES)))]]
       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))

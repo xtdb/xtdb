@@ -27,7 +27,7 @@
                     ;; The actual term, which will be tokenized
                     (.add d (TextField. (l/keyword->k k), v, Field$Store/YES)))
                   ;; For eviction:
-                  (.add d (StringField. field-eid, (str (cc/new-id (:crux.db/id doc))), Field$Store/NO))
+                  (.add d (StringField. field-eid, (l/->hash-str (:crux.db/id doc)), Field$Store/NO))
                   d)))
          (.addDocuments ^IndexWriter index-writer)))
 
