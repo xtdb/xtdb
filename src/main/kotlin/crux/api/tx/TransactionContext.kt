@@ -1,6 +1,7 @@
 package crux.api.tx
 
 import crux.api.CruxDocument
+import crux.api.query.domain.CruxDocumentSerde
 import crux.api.underware.BuilderContext
 import java.util.*
 
@@ -33,6 +34,8 @@ class TransactionContext private constructor(): BuilderContext<Transaction> {
     infix fun IdWithValidTime.until(endValidTime: Date) = IdWithValidTimes(id, validTime, endValidTime)
     infix fun CruxDocument.at(validTime: Date) = DocAtValidTime(this, validTime)
     infix fun Any.at(validTime: Date) = IdAtValidTime(this, validTime)
+
+    infix fun <T> T.by(serde: CruxDocumentSerde<T>) = serde.toDocument(this)
 
     fun put(document: CruxDocument) = +PutOperation.create(document)
     fun put(data: DocWithValidTime) = +data.run{PutOperation.create(document, validTime)}

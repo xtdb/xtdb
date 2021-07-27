@@ -1,7 +1,9 @@
 package crux.api.tx
 
+import crux.api.CruxDocument
 import crux.api.CruxK
 import crux.api.TransactionInstant
+import crux.api.query.domain.CruxDocumentSerde
 import crux.api.tx.Transaction.*
 import crux.api.tx.TransactionContext.Companion.build
 import org.junit.jupiter.api.AfterAll
@@ -786,5 +788,84 @@ class TransactionTest {
                     }
                 }
             )
+    }
+
+    data class Person(val id: String, val forename: String, val surname: String)
+    object CruxPerson : CruxDocumentSerde<Person> {
+        private const val FORENAME = "forename"
+        private const val SURNAME = "surname"
+
+        override fun toDocument(obj: Person): CruxDocument =
+            CruxDocument.build(obj.id) {
+                it.put(FORENAME, obj.forename)
+                it.put(SURNAME, obj.surname)
+            }
+
+        override fun toObject(document: CruxDocument): Person =
+            Person(
+                document.id as String,
+                document.get(FORENAME) as String,
+                document.get(SURNAME) as String
+            )
+    }
+
+    @Nested
+    inner class CruxDocumentSerdeTests {
+        private fun aPersonWithDocument(): Pair<Person, CruxDocument> {
+            val id = UUID.randomUUID().toString()
+            return Pair(
+                Person(
+                    id,
+                    "Alistair",
+                    "O'Neill"
+                ),
+                CruxDocument.build(id) {
+                    it.put("forename", "Alistair")
+                    it.put("surname", "O'Neill")
+                }
+            )
+        }
+
+
+        @Test
+        fun `can put a person`() = crux.run {
+            val (person, document) = aPersonWithDocument()
+
+            submitTx {
+                put(person by CruxPerson)
+            }.await()
+
+            assert {
+                +document
+            }
+        }
+
+        @Test
+        fun `can put a person at time`() = crux.run {
+            val (person, document) = aPersonWithDocument()
+            submitTx {
+                put(person by CruxPerson from dates[1])
+            }.await()
+
+            assert {
+                document notAt dates[0]
+                document at dates[1]
+            }
+        }
+
+        @Test
+        fun `can put a document with end valid time`() = crux.run {
+            val (person, document) = aPersonWithDocument()
+
+            submitTx{
+                put(person by CruxPerson from dates[1] until dates[2])
+            }.await()
+
+            assert {
+                document notAt dates[0]
+                document at dates[1]
+                document notAt dates[2]
+            }
+        }
     }
 }
