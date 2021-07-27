@@ -330,17 +330,23 @@
 
 (defn compile-query [query & args]
   (let [conformed-query (conform-query query)
+        [query-opts args] (let [[maybe-opts & rest-args] args]
+                            (if (map? maybe-opts)
+                              [maybe-opts rest-args]
+                              [{} args]))
         {:keys [srcs table-keys]} (compile-srcs conformed-query args)]
-    [(-> (compile-where conformed-query {:table-keys table-keys})
-         (with-group-by conformed-query)
-         (with-order-by conformed-query)
-         (with-slice conformed-query)
-         (with-renamed-find-vars conformed-query))
-     srcs]))
+    {:query (-> (compile-where conformed-query {:table-keys table-keys})
+                (with-group-by conformed-query)
+                (with-order-by conformed-query)
+                (with-slice conformed-query)
+                (with-renamed-find-vars conformed-query))
+     :srcs srcs
+     :query-opts query-opts}))
 
 (comment
   (compile-query '{:find [?e1 ?e2 ?a1 ?a2]
                    :where [[?e1 :name "Ivan"]
                            [?e2 :name "Ivan"]
                            [?e1 :age ?a1]
-                           [?e2 :age ?a2]]}))
+                           [?e2 :age ?a2]]}
+                 :db))

@@ -67,5 +67,5 @@
                 #'tpch/tpch-q5-local-supplier-volume
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
-      (c2/with-db [db node]
+      (let [db (c2/db node)]
         (time (into [] (c2/plan-ra @!q db)))))))

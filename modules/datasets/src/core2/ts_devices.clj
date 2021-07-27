@@ -134,5 +134,5 @@
 
 (comment
   (time
-   (c2/with-db [db dev/node]
+   (let [db (c2/db dev/node)]
      (into [] (c2/plan-ra query-recent-battery-temperatures db)))))

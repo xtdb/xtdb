@@ -30,7 +30,7 @@
     (bench/with-timing :ingest
       (ingest-tpch node {:scale-factor 0.01}))
 
-    (c2/with-db [db node]
+    (let [db (c2/db node)]
       (bench/with-timing :cold-queries
         (query-tpch db))
 
@@ -50,7 +50,7 @@
         (bench/with-timing :ingest
           (ingest-tpch node opts))
 
-        (c2/with-db [db node]
+        (let [db (c2/db node)]
           (bench/with-timing :cold-queries
             (query-tpch db))
 

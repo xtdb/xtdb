@@ -33,7 +33,7 @@
                     query tpch/tpch-q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.core.Node node]
                           (log/info "awaiting" k "node")
-                          (c2/with-db [db node {:tx last-tx, :timeout (Duration/ofHours 1)}]
+                          (let [db (c2/db node {:tx last-tx, :timeout (Duration/ofHours 1)})]
                             (log/info "rows:"
                                       (->> (c2/plan-ra query (merge {'$ db} (::tpch/params (meta query))))
                                            (sequence)

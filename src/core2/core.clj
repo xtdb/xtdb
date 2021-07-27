@@ -10,8 +10,8 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.IReduceInit
-           [core2.data_source IDataSourceFactory IQueryDataSource]
-           [core2.indexer IChunkManager TransactionIndexer]
+           core2.data_source.IDataSourceFactory
+           core2.indexer.TransactionIndexer
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
@@ -28,34 +28,15 @@
   (await-tx-async
     ^java.util.concurrent.CompletableFuture #_<core2.tx.TransactionInstant> [node tx])
 
-  (open-db-async
+  (db-async
     ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node]
     ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node db-opts]))
-
-(defn with-db-async* [node db-opts f]
-  (-> (open-db-async node db-opts)
-      (util/then-apply (bound-fn [^IQueryDataSource db]
-                         (try
-                           (f db)
-                           (finally
-                             (util/try-close db)))))))
-
-(defmacro with-db-async [[db-binding node db-opts] & body]
-  `(with-db-async* ~node ~db-opts (bound-fn [~db-binding] ~@body)))
-
-(defmacro with-db [& args]
-  `@(with-db-async ~@args))
-
-(def ^:private with-db-arglists
-  '([[db-binding node] & body]
-    [[db-binding node {:keys [tx valid-time timeout]}] & body]))
-
-(alter-meta! #'with-db assoc :arglists with-db-arglists)
-(alter-meta! #'with-db-async assoc :arglists with-db-arglists)
 
 (defprotocol PSubmitNode
   (submit-tx
     ^java.util.concurrent.CompletableFuture [tx-producer tx-ops]))
+
+(defrecord DbSnapshot [data-source-factory ])
 
 (defrecord Node [^TransactionIndexer indexer
                  ^IDataSourceFactory data-source-factory
@@ -72,20 +53,17 @@
         (util/then-compose (fn [tx]
                              (.awaitTxAsync indexer tx)))))
 
-  (open-db-async [this]
-    (open-db-async this {}))
+  (db-async [this]
+    (db-async this {}))
 
-  (open-db-async [this db-opts]
-    (let [{:keys [valid-time tx ^Duration timeout]} db-opts]
+  (db-async [this db-opts]
+    (let [{:keys [tx ^Duration timeout]} db-opts]
       (-> (if tx
             (-> (await-tx-async this tx)
                 (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))
             (CompletableFuture/completedFuture (latest-completed-tx this)))
           (util/then-apply (fn [tx]
-                             (.openDataSource data-source-factory
-                                              (.getWatermark ^IChunkManager indexer)
-                                              tx
-                                              (or valid-time (Date.))))))))
+                             (.getDataSource data-source-factory tx))))))
 
   PSubmitNode
   (submit-tx [_ tx-ops]
@@ -95,6 +73,10 @@
   (close [_]
     (when close-fn
       (close-fn))))
+
+(defn db
+  ([node] @(db-async node))
+  ([node db-opts] @(db-async node db-opts)))
 
 (defmethod print-method Node [_node ^Writer w] (.write w "#<Core2Node>"))
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
@@ -111,27 +93,38 @@
 (defmethod ig/halt-key! :core2/node [_ ^Node node]
   (.close node))
 
-(defn open-ra ^core2.ICursor [query db-or-dbs]
-  (let [allocator (RootAllocator.)]
-    (try
-      (-> (op/open-ra allocator query (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs}))
-          (util/and-also-close allocator))
-      (catch Throwable t
-        (util/try-close allocator)
-        (throw t)))))
+(defn ^core2.ICursor open-ra
+  ([query db-or-dbs] (open-ra query db-or-dbs {}))
 
-(defn plan-ra [query db-or-dbs]
-  (reify IReduceInit
-    (reduce [_ f init]
-      (with-open [res (open-ra query db-or-dbs)]
-        (util/reduce-cursor (fn [acc rel]
-                              (reduce f acc (rel/rel->rows rel)))
-                            init
-                            res)))))
+  ([query db-or-dbs opts]
+   (let [allocator (RootAllocator.)]
+     (try
+       (-> (op/open-ra query
+                       (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs})
+                       (-> (merge {:default-valid-time (Date.)} opts)
+                           (assoc :allocator allocator)))
+           (util/and-also-close allocator))
+       (catch Throwable t
+         (util/try-close allocator)
+         (throw t))))))
+
+(defn plan-ra
+  ([query db-or-dbs] (plan-ra query db-or-dbs {}))
+  ([query db-or-dbs query-opts]
+   (reify IReduceInit
+     (reduce [_ f init]
+       (with-open [res (open-ra query db-or-dbs query-opts)]
+         (util/reduce-cursor (fn [acc rel]
+                               (reduce f acc (rel/rel->rows rel)))
+                             init
+                             res))))))
 
 (defn plan-q [query & params]
-  (let [[query srcs] (apply d/compile-query query params)]
-    (plan-ra query srcs)))
+  (let [{:keys [query srcs query-opts]} (apply d/compile-query query params)]
+    (plan-ra query srcs query-opts)))
+
+(alter-meta! #'plan-q assoc :arglists '([query & params]
+                                        [query opts & params]))
 
 (defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
 (defmethod ig/halt-key! :core2/allocator [_ ^BufferAllocator a] (.close a))

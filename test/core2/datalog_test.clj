@@ -14,7 +14,7 @@
    {:op :put, :doc {:_id "petr", :first-name "Petr", :last-name "Petrov"}}])
 
 (t/deftest test-scan
-  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
     (t/is (= [{:name "Ivan"}
               {:name "Petr"}]
              (run-query '{:find [?name]
@@ -29,7 +29,7 @@
           "returning eid")))
 
 (t/deftest test-basic-query
-  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
     (t/is (= [{:e "ivan"}]
              (run-query '{:find [?e]
                           :where [[?e :first-name "Ivan"]]}
@@ -52,7 +52,7 @@
           "literal eid")))
 
 (t/deftest test-order-by
-  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
              (run-query '{:find [?first-name]
                           :where [[?e :first-name ?first-name]]
@@ -89,12 +89,12 @@
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (t/deftest datascript-test-joins
-  (c2/with-db [db tu/*node*
-               {:tx (c2/submit-tx tu/*node*
-                                  [{:op :put, :doc {:_id 1, :name "Ivan", :age 15}}
-                                   {:op :put, :doc {:_id 2, :name "Petr", :age 37}}
-                                   {:op :put, :doc {:_id 3, :name "Ivan", :age 37}}
-                                   {:op :put, :doc {:_id 4, :age 15}}])}]
+  (let [db (c2/db tu/*node*
+                  {:tx (c2/submit-tx tu/*node*
+                                     [{:op :put, :doc {:_id 1, :name "Ivan", :age 15}}
+                                      {:op :put, :doc {:_id 2, :name "Petr", :age 37}}
+                                      {:op :put, :doc {:_id 3, :name "Ivan", :age 37}}
+                                      {:op :put, :doc {:_id 4, :age 15}}])})]
 
     (t/is (= #{{:e 1} {:e 2} {:e 3}}
              (set (run-query '{:find [?e]
@@ -152,8 +152,8 @@
           "cross join required here")))
 
 (t/deftest test-joins
-  (c2/with-db [db tu/*node*
-               {:tx (c2/submit-tx tu/*node* bond/tx-ops)}]
+  (let [db (c2/db tu/*node*
+                  {:tx (c2/submit-tx tu/*node* bond/tx-ops)})]
     (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
              (set (run-query '{:find [?film-name ?bond-name]
                                :in [$ ?film]
@@ -179,12 +179,12 @@
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
-  (c2/with-db [db tu/*node*
-               {:tx (c2/submit-tx tu/*node*
-                                  [{:op :put, :doc {:_id "Cerberus", :heads 3}}
-                                   {:op :put, :doc {:_id "Medusa", :heads 1}}
-                                   {:op :put, :doc {:_id "Cyclops", :heads 1}}
-                                   {:op :put, :doc {:_id "Chimera", :heads 1}}])}]
+  (let [db (c2/db tu/*node*
+                  {:tx (c2/submit-tx tu/*node*
+                                     [{:op :put, :doc {:_id "Cerberus", :heads 3}}
+                                      {:op :put, :doc {:_id "Medusa", :heads 1}}
+                                      {:op :put, :doc {:_id "Cyclops", :heads 1}}
+                                      {:op :put, :doc {:_id "Chimera", :heads 1}}])})]
     (t/is (= #{{:heads 1, :count-?heads 3} {:heads 3, :count-?heads 1}}
              (set (run-query '{:find [?heads (count ?heads)]
                                :where [[?monster :heads ?heads]]}
@@ -201,7 +201,7 @@
           "various aggs")))
 
 (t/deftest test-query-with-in-bindings
-  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
     (t/is (= #{{:e "ivan"}}
              (set (run-query '{:find [?e]
                                :in [$ ?name]
@@ -266,7 +266,7 @@
                                            ["Petr" "Petrov"]]))))))))
 
 (t/deftest test-in-arity-exceptions
-  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
     (t/is (thrown-with-msg? IllegalArgumentException
                             #":in arity mismatch"
                             (run-query '{:find [?e]
@@ -282,27 +282,27 @@
 (t/deftest test-multiple-sources
   (with-open [node1 (c2/start-node {})
               node2 (c2/start-node {})]
-    (c2/with-db [db1 node1
-                 {:tx (c2/submit-tx node1 [{:op :put, :doc {:_id "foo", :col1 "foo1"}}
-                                           {:op :put, :doc {:_id "bar", :col1 "bar1"}}])}]
-      (c2/with-db [db2 node2
-                   {:tx (c2/submit-tx node2 [{:op :put, :doc {:_id "foo", :col2 "foo2"}}
-                                             {:op :put, :doc {:_id "bar", :col2 "bar2"}}])}]
-        (t/is (= [{:col1 "foo1", :col2 "foo2"}
-                  {:col1 "bar1", :col2 "bar2"}]
-                 (run-query '{:find [?col1 ?col2]
-                              :in [$db1 $db2]
-                              :where [[$db1 ?e :col1 ?col1]
-                                      [$db2 ?e :col2 ?col2]]}
-                            db1 db2)))
+    (let [db1 (c2/db node1
+                     {:tx (c2/submit-tx node1 [{:op :put, :doc {:_id "foo", :col1 "foo1"}}
+                                               {:op :put, :doc {:_id "bar", :col1 "bar1"}}])})
+          db2 (c2/db node2
+                     {:tx (c2/submit-tx node2 [{:op :put, :doc {:_id "foo", :col2 "foo2"}}
+                                               {:op :put, :doc {:_id "bar", :col2 "bar2"}}])})]
+      (t/is (= [{:col1 "foo1", :col2 "foo2"}
+                {:col1 "bar1", :col2 "bar2"}]
+               (run-query '{:find [?col1 ?col2]
+                            :in [$db1 $db2]
+                            :where [[$db1 ?e :col1 ?col1]
+                                    [$db2 ?e :col2 ?col2]]}
+                          db1 db2)))
 
-        (t/is (= [{:e "foo", :col1 "foo1", :col2 "foo2"}
-                  {:e "bar", :col1 "bar1", :col2 "bar2"}]
-                 (run-query '{:find [?e ?col1 ?col2]
-                              :in [$db1 $db2]
-                              :where [[$db1 ?e :col1 ?col1]
-                                      [$db2 ?e :col2 ?col2]]}
-                            db1 db2)))))))
+      (t/is (= [{:e "foo", :col1 "foo1", :col2 "foo2"}
+                {:e "bar", :col1 "bar1", :col2 "bar2"}]
+               (run-query '{:find [?e ?col1 ?col2]
+                            :in [$db1 $db2]
+                            :where [[$db1 ?e :col1 ?col1]
+                                    [$db2 ?e :col2 ?col2]]}
+                          db1 db2))))))
 
 (t/deftest test-no-dbs
   (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
@@ -313,7 +313,7 @@
                             ["Petr" "Petrov"]])))))
 
 (t/deftest test-known-predicates
-  (c2/with-db [db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)}]
+  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
              (set (run-query '{:find [?first-name ?last-name]
                                :where [[?e :first-name ?first-name]
