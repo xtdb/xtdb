@@ -10,14 +10,13 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.IReduceInit
-           [core2.data_source IDataSourceFactory IQueryDataSource]
-           [core2.indexer IChunkManager TransactionIndexer]
+           core2.data_source.IDataSourceFactory
+           core2.indexer.TransactionIndexer
            core2.tx_producer.ITxProducer
            [java.io Closeable Writer]
            java.lang.AutoCloseable
            java.time.Duration
            [java.util.concurrent CompletableFuture TimeUnit]
-           java.util.Date
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -28,34 +27,15 @@
   (await-tx-async
     ^java.util.concurrent.CompletableFuture #_<core2.tx.TransactionInstant> [node tx])
 
-  (open-db-async
+  (db-async
     ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node]
     ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node db-opts]))
-
-(defn with-db-async* [node db-opts f]
-  (-> (open-db-async node db-opts)
-      (util/then-apply (bound-fn [^IQueryDataSource db]
-                         (try
-                           (f db)
-                           (finally
-                             (util/try-close db)))))))
-
-(defmacro with-db-async [[db-binding node db-opts] & body]
-  `(with-db-async* ~node ~db-opts (bound-fn [~db-binding] ~@body)))
-
-(defmacro with-db [& args]
-  `@(with-db-async ~@args))
-
-(def ^:private with-db-arglists
-  '([[db-binding node] & body]
-    [[db-binding node {:keys [tx valid-time timeout]}] & body]))
-
-(alter-meta! #'with-db assoc :arglists with-db-arglists)
-(alter-meta! #'with-db-async assoc :arglists with-db-arglists)
 
 (defprotocol PSubmitNode
   (submit-tx
     ^java.util.concurrent.CompletableFuture [tx-producer tx-ops]))
+
+(defrecord DbSnapshot [data-source-factory ])
 
 (defrecord Node [^TransactionIndexer indexer
                  ^IDataSourceFactory data-source-factory
@@ -72,20 +52,17 @@
         (util/then-compose (fn [tx]
                              (.awaitTxAsync indexer tx)))))
 
-  (open-db-async [this]
-    (open-db-async this {}))
+  (db-async [this]
+    (db-async this {}))
 
-  (open-db-async [this db-opts]
-    (let [{:keys [valid-time tx ^Duration timeout]} db-opts]
+  (db-async [this db-opts]
+    (let [{:keys [tx ^Duration timeout]} db-opts]
       (-> (if tx
             (-> (await-tx-async this tx)
                 (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))
             (CompletableFuture/completedFuture (latest-completed-tx this)))
           (util/then-apply (fn [tx]
-                             (.openDataSource data-source-factory
-                                              (.getWatermark ^IChunkManager indexer)
-                                              tx
-                                              (or valid-time (Date.))))))))
+                             (.getDataSource data-source-factory tx))))))
 
   PSubmitNode
   (submit-tx [_ tx-ops]
@@ -95,6 +72,10 @@
   (close [_]
     (when close-fn
       (close-fn))))
+
+(defn db
+  ([node] @(db-async node))
+  ([node db-opts] @(db-async node db-opts)))
 
 (defmethod print-method Node [_node ^Writer w] (.write w "#<Core2Node>"))
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))

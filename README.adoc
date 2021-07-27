@@ -79,31 +79,29 @@ Transactions are slightly different to Classic:
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 
 === DBs
-Core2 has the concept of 'db's, similar to `crux/open-db` but (as yet) without the ability to specify VT/TT.
-While there is `c2/await-tx-async` and `c2/open-db-async`, these (by their async nature) involve a bit of boilerplate.
-Instead, we have `with-db-async` and `with-db` (sync) macros, which combine awaiting a transaction, and opening/closing a DB:
+Core2 has the concept of 'db's, similar to `crux/db` but without the ability to specify VT.
+In Core2, the upper bound for the tx-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own tx-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
 
 [source,clojure]
 ----
 ;; simple case - use the latest tx the node has available:
-;; will return the result of the `with-db` block
-(c2/with-db [db node]
+(let [db (c2/db node)]
   ...)
 
 ;; or, to read your own writes (timeout optional):
-;; `with-db` will await the transaction
-(let [tx (c2/submit-tx node [...])]
-  (c2/with-db [db node {:tx tx, :timeout (Duration/ofMillis 250)}]
-    ...))
+;; `db` will await the transaction
+(let [tx (c2/submit-tx node [...])
+      db (c2/db node {:tx tx, :timeout (Duration/ofMillis 250)})]
+  ...)
 
 ;; in tests, we often inline `tx`:
-(c2/with-db [db node
-             {:tx (c2/submit-tx node [...])}]
+(let [db (c2/db node
+                {:tx (c2/submit-tx node [...])})]
   ...)
 ----
 
-`with-db-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the value returned from the block.
-(In fact, `with-db` just calls `with-db-async` and deref's it.)
+`db-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the value returned from the block.
+(In fact, `db` just calls `db-async` and deref's it.)
 
 === Queries
 In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-q`.
@@ -113,7 +111,7 @@ When finalised (by `reduce`) this will ensure the query results are adequately c
 [source,clojure]
 ----
 (with-open [node (c2/start-node {})]
-  (c2/with-db [db node]
+  (let [db (c2/db node)]
     (into [] (c2/plan-q '{:find [?e ?name]
                           :where [[?e :name ?name]]}
                         db))))
@@ -128,7 +126,7 @@ There is also `c2/plan-ra` which accepts a lower-level relational algebra query 
 [source,clojure]
 ----
 (with-open [node (c2/start-node {})]
-  (c2/with-db [db node]
+  (let [db (c2/db node)]
     (into [] (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
 ----
 

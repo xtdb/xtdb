@@ -123,26 +123,26 @@
 
 (t/deftest test-date-trunc
   (with-open [node (c2/start-node {})]
-    (let [tx (c2/submit-tx node [{:op :put, :doc {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}}])]
-      (c2/with-db [db node {:tx tx}]
-        (t/is (= [{:trunc #inst "2021-01-21"}]
-                 (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" date)}]
-                                        [:scan [date]]]
-                                      db))))
+    (let [tx (c2/submit-tx node [{:op :put, :doc {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}}])
+          db (c2/db node {:tx tx})]
+      (t/is (= [{:trunc #inst "2021-01-21"}]
+               (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" date)}]
+                                      [:scan [date]]]
+                                    db))))
 
-        (t/is (= [{:trunc #inst "2021-01-21T12:34"}]
-                 (into [] (c2/plan-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
-                                        [:scan [date]]]
-                                      db))))
+      (t/is (= [{:trunc #inst "2021-01-21T12:34"}]
+               (into [] (c2/plan-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
+                                      [:scan [date]]]
+                                    db))))
 
-        (t/is (= [{:trunc #inst "2021-01-21"}]
-                 (into [] (c2/plan-ra '[:select (> trunc #inst "2021")
-                                        [:project [{trunc (date-trunc "DAY" date)}]
-                                         [:scan [date]]]]
-                                      db))))
+      (t/is (= [{:trunc #inst "2021-01-21"}]
+               (into [] (c2/plan-ra '[:select (> trunc #inst "2021")
+                                      [:project [{trunc (date-trunc "DAY" date)}]
+                                       [:scan [date]]]]
+                                    db))))
 
-        (t/is (= [{:trunc #inst "2021-01-21"}]
-                 (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
-                                        [:project [{trunc (date-trunc "MINUTE" date)}]
-                                         [:scan [date]]]]
-                                      db))))))))
+      (t/is (= [{:trunc #inst "2021-01-21"}]
+               (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
+                                      [:project [{trunc (date-trunc "MINUTE" date)}]
+                                       [:scan [date]]]]
+                                    db)))))))

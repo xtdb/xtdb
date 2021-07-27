@@ -43,7 +43,7 @@
   ;; TODO currently fails because it doesn't like strings as attributes
 
   (with-open [query-rdr (io/reader query-file)]
-    (c2/with-db [db node]
+    (let [db (c2/db node)]
       (doseq [[idx query] (->> (line-seq query-rdr)
                                (map read-string)
                                (map-indexed vector))]

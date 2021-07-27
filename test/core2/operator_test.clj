@@ -2,10 +2,10 @@
   (:require [clojure.test :as t]
             [core2.core :as c2]
             [core2.expression.metadata :as expr.meta]
+            [core2.indexer :as idx]
             [core2.metadata :as meta]
-            [core2.test-util :as tu]
-            [core2.indexer :as idx])
-  (:import core2.data_source.QueryDataSource
+            [core2.test-util :as tu])
+  (:import core2.indexer.IChunkManager
            core2.metadata.IMetadataManager
            org.roaringbitmap.RoaringBitmap))
 
@@ -25,7 +25,8 @@
 
     (tu/finish-chunk node)
 
-    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))]
+    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))
+          ^IChunkManager indexer (::idx/indexer @(:!system node))]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
                          (into #{} (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
@@ -34,18 +35,19 @@
                          (into #{} (c2/plan-ra '[:scan [{name (> name ?name)}]]
                                                {'$ db, '?name "Ivan"})))))]
 
-        (c2/with-db [db node]
+        (let [db (c2/db node)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
-          (let [expected-match [(meta/map->ChunkMatch
-                                  {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
-            (t/is (= expected-match
-                     (meta/matching-chunks metadata-mgr (.watermark ^QueryDataSource db)
-                                           (expr.meta/->metadata-selector '(> name "Ivan") {})))
-                  "only needs to scan chunk 1, block 1")
-            (t/is (= expected-match
-                     (meta/matching-chunks metadata-mgr (.watermark ^QueryDataSource db)
-                                           (expr.meta/->metadata-selector '(> name ?name) {'?name "Ivan"})))
-                  "only needs to scan chunk 1, block 1"))
+          (with-open [watermark (.getWatermark indexer)]
+            (let [expected-match [(meta/map->ChunkMatch
+                                   {:chunk-idx 1, :block-idxs (doto (RoaringBitmap.) (.add 1))})]]
+              (t/is (= expected-match
+                       (meta/matching-chunks metadata-mgr watermark
+                                             (expr.meta/->metadata-selector '(> name "Ivan") {})))
+                    "only needs to scan chunk 1, block 1")
+              (t/is (= expected-match
+                       (meta/matching-chunks metadata-mgr watermark
+                                             (expr.meta/->metadata-selector '(> name ?name) {'?name "Ivan"})))
+                    "only needs to scan chunk 1, block 1")))
 
           (-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 5}}])
               (tu/then-await-tx node))
@@ -54,7 +56,7 @@
                              {:name "Jon"}}
                            db))
 
-        (c2/with-db [db node]
+        (let [db (c2/db node)]
           (test-query-ivan #{{:name "James"}
                              {:name "Jon"}
                              {:name "Jeremy"}}
@@ -74,18 +76,20 @@
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
-    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))]
-      (c2/with-db [db node]
+    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))
+          ^IChunkManager indexer (::idx/indexer @(:!system node))
+          db (c2/db node)]
+      (with-open [watermark (.getWatermark indexer)]
         (t/is (= #{0 3} (.knownChunks metadata-mgr)))
         (let [expected-match [(meta/map->ChunkMatch
                                {:chunk-idx 0, :block-idxs (doto (RoaringBitmap.) (.add 0))})]]
           (t/is (= expected-match
-                   (meta/matching-chunks metadata-mgr (.watermark ^QueryDataSource db)
+                   (meta/matching-chunks metadata-mgr watermark
                                          (expr.meta/->metadata-selector '(= name "Ivan") {})))
                 "only needs to scan chunk 0, block 0")
 
           (t/is (= expected-match
-                   (meta/matching-chunks metadata-mgr (.watermark ^QueryDataSource db)
+                   (meta/matching-chunks metadata-mgr watermark
                                          (expr.meta/->metadata-selector '(= name ?name) {'?name "Ivan"})))
                 "only needs to scan chunk 0, block 0"))
 
@@ -104,75 +108,75 @@
           _ (Thread/sleep 10) ; to prevent same-ms transactions
           {tt2 :tx-time, :as tx2} @(c2/submit-tx node
                                                  [{:op :put, :doc {:_id "my-doc",
-                                                                   :last-updated "tx2"}}])]
-      (c2/with-db [db node {:tx tx2}]
-        (letfn [(q [& temporal-constraints]
-                  (into #{} (map :last-updated)
-                        (c2/plan-ra [:scan (into '[last-updated]
-                                                  temporal-constraints)]
-                                    {'$ db, '?tt1 tt1, '?tt2 tt2})))]
-          (t/is (= #{"tx2"}
-                   (q)))
+                                                                   :last-updated "tx2"}}])
+          db (c2/db node {:tx tx2})]
+      (letfn [(q [& temporal-constraints]
+                (into #{} (map :last-updated)
+                      (c2/plan-ra [:scan (into '[last-updated]
+                                               temporal-constraints)]
+                                  {'$ db, '?tt1 tt1, '?tt2 tt2})))]
+        (t/is (= #{"tx2"}
+                 (q)))
+
+        (t/is (= #{"tx1"}
+                 (q '{_tx-time-start (<= _tx-time-start ?tt1)})))
+
+        (t/is (= #{}
+                 (q '{_tx-time-start (< _tx-time-start ?tt1)})))
+
+        (t/is (= #{"tx1" "tx2"}
+                 (q '{_tx-time-start (<= _tx-time-start ?tt2)})))
+
+        (t/is (= #{"tx2"}
+                 (q '{_tx-time-start (> _tx-time-start ?tt1)})))
+
+
+        (t/is (= #{}
+                 (q '{_tx-time-end (< _tx-time-end ?tt2)})))
+
+        (t/is (= #{"tx1"}
+                 (q '{_tx-time-end (<= _tx-time-end ?tt2)})))
+
+        (t/is (= #{"tx2"}
+                 (q '{_tx-time-end (> _tx-time-end ?tt2)})))
+
+        (t/is (= #{"tx1" "tx2"}
+                 (q '{_tx-time-end (>= _tx-time-end ?tt2)})))
+
+        (t/testing "multiple constraints"
+          (t/is (= #{"tx1"}
+                   (q '{_tx-time-start (and (<= _tx-time-start ?tt1)
+                                            (<= _tx-time-start ?tt2))})))
 
           (t/is (= #{"tx1"}
-                   (q '{_tx-time-start (<= _tx-time-start ?tt1)})))
-
-          (t/is (= #{}
-                   (q '{_tx-time-start (< _tx-time-start ?tt1)})))
-
-          (t/is (= #{"tx1" "tx2"}
-                   (q '{_tx-time-start (<= _tx-time-start ?tt2)})))
+                   (q '{_tx-time-start (and (<= _tx-time-start ?tt2)
+                                            (<= _tx-time-start ?tt1))})))
 
           (t/is (= #{"tx2"}
-                   (q '{_tx-time-start (> _tx-time-start ?tt1)})))
-
-
-          (t/is (= #{}
-                   (q '{_tx-time-end (< _tx-time-end ?tt2)})))
-
-          (t/is (= #{"tx1"}
-                   (q '{_tx-time-end (<= _tx-time-end ?tt2)})))
+                   (q '{_tx-time-end (and (> _tx-time-end ?tt2)
+                                          (> _tx-time-end ?tt1))})))
 
           (t/is (= #{"tx2"}
-                   (q '{_tx-time-end (> _tx-time-end ?tt2)})))
+                   (q '{_tx-time-end (and (> _tx-time-end ?tt1)
+                                          (> _tx-time-end ?tt2))}))))
 
-          (t/is (= #{"tx1" "tx2"}
-                   (q '{_tx-time-end (>= _tx-time-end ?tt2)})))
+        (t/is (= #{}
+                 (q '{_tx-time-start (<= _tx-time-start ?tt1)}
+                    '{_tx-time-end (< _tx-time-end ?tt2)})))
 
-          (t/testing "multiple constraints"
-            (t/is (= #{"tx1"}
-                     (q '{_tx-time-start (and (<= _tx-time-start ?tt1)
-                                              (<= _tx-time-start ?tt2))})))
+        (t/is (= #{"tx1"}
+                 (q '{_tx-time-start (<= _tx-time-start ?tt1)}
+                    '{_tx-time-end (<= _tx-time-end ?tt2)})))
 
-            (t/is (= #{"tx1"}
-                     (q '{_tx-time-start (and (<= _tx-time-start ?tt2)
-                                              (<= _tx-time-start ?tt1))})))
+        (t/is (= #{"tx1"}
+                 (q '{_tx-time-start (<= _tx-time-start ?tt1)}
+                    '{_tx-time-end (> _tx-time-end ?tt1)}))
+              "as of tt1")
 
-            (t/is (= #{"tx2"}
-                     (q '{_tx-time-end (and (> _tx-time-end ?tt2)
-                                            (> _tx-time-end ?tt1))})))
-
-            (t/is (= #{"tx2"}
-                     (q '{_tx-time-end (and (> _tx-time-end ?tt1)
-                                            (> _tx-time-end ?tt2))}))))
-
-          (t/is (= #{}
-                   (q '{_tx-time-start (<= _tx-time-start ?tt1)}
-                      '{_tx-time-end (< _tx-time-end ?tt2)})))
-
-          (t/is (= #{"tx1"}
-                   (q '{_tx-time-start (<= _tx-time-start ?tt1)}
-                      '{_tx-time-end (<= _tx-time-end ?tt2)})))
-
-          (t/is (= #{"tx1"}
-                   (q '{_tx-time-start (<= _tx-time-start ?tt1)}
-                      '{_tx-time-end (> _tx-time-end ?tt1)}))
-                "as of tt1")
-
-          (t/is (= #{"tx2"}
-                   (q '{_tx-time-start (<= _tx-time-start ?tt2)}
-                      '{_tx-time-end (> _tx-time-end ?tt2)}))
-                "as of tt2"))))))
+        (t/is (= #{"tx2"}
+                 (q '{_tx-time-start (<= _tx-time-start ?tt2)}
+                    '{_tx-time-end (> _tx-time-end ?tt2)}))
+              "as of tt2")))))
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"

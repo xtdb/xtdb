@@ -11,7 +11,7 @@
         _ (Thread/sleep 10) ; prevent same-ms transactions
         !tx2 (c2/submit-tx tu/*node* [{:op :put, :doc {:_id "my-doc", :last-updated "tx2"}}])]
 
-    (c2/with-db [db tu/*node* {:tx !tx2}]
+    (let [db (c2/db tu/*node* {:tx !tx2})]
       (t/is (= #{{:last-updated "tx2"}}
                (into #{} (c2/plan-ra '[:scan [last-updated]] db))))
 
@@ -20,7 +20,7 @@
                                       :where [[?e :last-updated ?last-updated]]}
                                     db)))))
 
-    (c2/with-db [db tu/*node* {:tx !tx1}]
+    (let [db (c2/db tu/*node* {:tx !tx1})]
       (t/is (= #{{:last-updated "tx1"}}
                (into #{} (c2/plan-ra '[:scan [last-updated]] db))))
 
@@ -33,20 +33,20 @@
   (let [{:keys [tx-time] :as tx1} @(c2/submit-tx tu/*node* [{:op :put, :doc {:_id "doc", :version 1}}
                                                             {:op :put,
                                                              :doc {:_id "doc-with-vt"}
-                                                             :_valid-time-start #inst "2021"}])]
-    (c2/with-db [db tu/*node* {:tx tx1}]
-      (t/is (= {"doc" {:_id "doc",
-                       :_valid-time-start tx-time
-                       :_valid-time-end temporal/end-of-time
-                       :_tx-time-start tx-time
-                       :_tx-time-end temporal/end-of-time}
-                "doc-with-vt" {:_id "doc-with-vt",
-                               :_valid-time-start #inst "2021"
-                               :_valid-time-end temporal/end-of-time
-                               :_tx-time-start tx-time
-                               :_tx-time-end temporal/end-of-time}}
-               (->> (c2/plan-ra '[:scan [_id
-                                         _valid-time-start _valid-time-end
-                                         _tx-time-start _tx-time-end]]
-                                db)
-                    (into {} (map (juxt :_id identity)))))))))
+                                                             :_valid-time-start #inst "2021"}])
+        db (c2/db tu/*node* {:tx tx1})]
+    (t/is (= {"doc" {:_id "doc",
+                     :_valid-time-start tx-time
+                     :_valid-time-end temporal/end-of-time
+                     :_tx-time-start tx-time
+                     :_tx-time-end temporal/end-of-time}
+              "doc-with-vt" {:_id "doc-with-vt",
+                             :_valid-time-start #inst "2021"
+                             :_valid-time-end temporal/end-of-time
+                             :_tx-time-start tx-time
+                             :_tx-time-end temporal/end-of-time}}
+             (->> (c2/plan-ra '[:scan [_id
+                                       _valid-time-start _valid-time-end
+                                       _tx-time-start _tx-time-end]]
+                              db)
+                  (into {} (map (juxt :_id identity))))))))

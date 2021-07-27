@@ -3,27 +3,27 @@
             [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.test :as t]
+            [clojure.tools.logging :as log]
             [core2.buffer-pool :as bp]
             [core2.core :as c2]
+            [core2.indexer :as idx]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
+            [core2.object-store :as os]
+            [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd]
             [core2.test-util :as tu]
             [core2.ts-devices :as ts]
             [core2.tx :as tx]
             [core2.types :as ty]
-            [core2.util :as util]
-            [core2.indexer :as idx]
-            [clojure.tools.logging :as log]
-            [core2.temporal :as temporal]
-            [core2.object-store :as os])
+            [core2.util :as util])
   (:import [core2.buffer_pool BufferPool IBufferPool]
            core2.core.Node
-           core2.data_source.QueryDataSource
+           core2.indexer.IChunkManager
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
-           [core2.tx TransactionInstant Watermark]
+           core2.tx.TransactionInstant
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -74,9 +74,6 @@
            :mem-free 7.20742332E8,
            :mem-used 2.79257668E8}}]])
 
-(defn db-watermark ^core2.tx.Watermark [^QueryDataSource db]
-  (.watermark db))
-
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
         last-tx-instant (tx/->TransactionInstant 6256 #inst "2020-01-02")
@@ -92,7 +89,8 @@
             ^ObjectStore os (::os/file-system-object-store system)
             ^IBufferPool bp (::bp/buffer-pool system)
             ^IMetadataManager mm (::meta/metadata-manager system)
-            ^TemporalManager tm (::temporal/temporal-manager system)]
+            ^TemporalManager tm (::temporal/temporal-manager system)
+            ^IChunkManager idx (::idx/indexer system)]
 
         (t/is (every? nil? @(meta/with-latest-metadata mm
                               (juxt meta/latest-tx meta/latest-row-id))))
@@ -105,9 +103,8 @@
                  (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 2))))
 
         (t/testing "watermark"
-          (c2/with-db [db node]
-            (let [watermark (db-watermark db)
-                  column->root (.column->root watermark)
+          (with-open [watermark (.getWatermark idx)]
+            (let [column->root (.column->root watermark)
                   first-column (first column->root)
                   last-column (last column->root)]
               (t/is (zero? (.chunk-idx watermark)))
@@ -124,16 +121,15 @@
                     "device-info-demo000001" -6688467811848818630
                     "reading-demo000001" -8292973307042192125}
                    (.id->internal-id tm)))
-          (c2/with-db [db node]
-            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark (db-watermark db))))))))
+          (with-open [watermark (.getWatermark idx)]
+            (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
 
         (tu/finish-chunk node)
 
-        (c2/with-db [db node]
-          (let [watermark (db-watermark db)]
-            (t/is (= 4 (.chunk-idx watermark)))
-            (t/is (zero? (.row-count watermark)))
-            (t/is (empty? (.column->root watermark)))))
+        (with-open [watermark (.getWatermark idx)]
+          (t/is (= 4 (.chunk-idx watermark)))
+          (t/is (zero? (.row-count watermark)))
+          (t/is (empty? (.column->root watermark))))
 
         (t/is (= [last-tx-instant (dec total-number-of-ops)]
                  @(meta/with-latest-metadata mm
@@ -228,7 +224,7 @@
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
-      (let [^ObjectStore os (:core2/object-store @(:!system node))]
+      (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
 
         (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo"}}
                                 {:op :put, :doc {:_id "bar"}}])
@@ -419,9 +415,10 @@
 
           (with-open [node (tu/->local-node (assoc node-opts :buffers-dir "buffers-1"))]
             (let [system @(:!system node)
-                  ^ObjectStore os (:core2/object-store system)
+                  ^ObjectStore os (::os/file-system-object-store system)
                   ^IMetadataManager mm (::meta/metadata-manager system)
-                  ^TemporalManager tm (::temporal/temporal-manager system)]
+                  ^TemporalManager tm (::temporal/temporal-manager system)
+                  ^IChunkManager idx (::idx/indexer system)]
               (t/is (= first-half-tx-instant
                        (-> first-half-tx-instant
                            (tu/then-await-tx node (Duration/ofSeconds 5)))))
@@ -452,15 +449,16 @@
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
-                          :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
+                          :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))
+                                ^IChunkManager idx (::idx/indexer @(:!system node))]]
 
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (-> first-half-tx-instant
                                           (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (.tx-id second-half-tx-instant)))
 
-                    (c2/with-db [db node]
-                      (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark (db-watermark db)))) 3500))
+                    (with-open [watermark (.getWatermark idx)]
+                      (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark watermark))) 3500))
                       (t/is (>= (count (.id->internal-id tm)) 2000))))
 
                   (doseq [^Node node [new-node node]]
@@ -472,7 +470,7 @@
                   (tu/await-temporal-snapshot-build node)
 
                   (doseq [^Node node [new-node node]
-                          :let [^ObjectStore os (:core2/object-store @(:!system node))
+                          :let [^ObjectStore os (::os/file-system-object-store @(:!system node))
                                 ^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
 
                     (let [objs (.listObjects os)]
@@ -486,7 +484,7 @@
 
 (t/deftest test-await-fails-fast
   (with-open [node (c2/start-node {})]
-    (with-redefs [idx/copy-safe! (fn [& args]
+    (with-redefs [idx/copy-safe! (fn [& _args]
                                    (throw (UnsupportedOperationException. "oh no!")))
                   log/log* (let [log* log/log*]
                              (fn [logger level throwable message]

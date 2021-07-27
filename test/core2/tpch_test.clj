@@ -23,7 +23,7 @@
                       (tu/then-await-tx node))]
       (tu/finish-chunk node)
 
-      (c2/with-db [db node {:tx last-tx, :timeout (Duration/ofMinutes 1)}]
+      (let [db (c2/db node {:tx last-tx, :timeout (Duration/ofMinutes 1)})]
         (binding [*node* node, *db* db]
           (f))))))
 
