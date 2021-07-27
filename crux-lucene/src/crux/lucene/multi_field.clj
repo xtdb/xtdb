@@ -14,7 +14,7 @@
 (def ^:const ^:private field-content-hash "_crux_content_hash")
 (def ^:const ^:private field-eid "_crux_eid")
 
-(defrecord LuceneMultiFieldIndexer []
+(defrecord MultiFieldIndexer []
   l/LuceneIndexer
 
   (index! [this index-writer docs]
@@ -61,4 +61,4 @@
 
 (defn ->indexer
   [_]
-  (LuceneMultiFieldIndexer.))
+  (MultiFieldIndexer.))

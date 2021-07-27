@@ -196,7 +196,7 @@
   (index! [this index-writer docs])
   (evict! [this index-writer eids]))
 
-(defrecord LuceneAveIndexer []
+(defrecord EavIndexer []
   LuceneIndexer
 
   (index! [_ index-writer docs]
@@ -226,7 +226,7 @@
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn ->indexer [_]
-  (LuceneAveIndexer.))
+  (EavIndexer.))
 
 (defn ->analyzer [_]
   (StandardAnalyzer.))
