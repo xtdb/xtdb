@@ -1,20 +1,26 @@
 (ns core2.server
-  (:require [juxt.clojars-mirrors.integrant.core :as ig]
-            [ring.adapter.jetty9 :as j]
+  (:require [clojure.instant :as inst]
+            [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [ring.util.response :as resp]
-            [reitit.http :as http]
-            [reitit.swagger :as r.swagger]
-            [reitit.http.coercion :as r.coercion]
-            [reitit.coercion.spec :as rc.spec]
-            [reitit.http.interceptors.parameters :as ri.parameters]
-            [reitit.http.interceptors.muuntaja :as ri.muuntaja]
-            [reitit.http.interceptors.exception :as ri.exception]
-            [reitit.interceptor.sieppari :as r.sieppari]
-            [muuntaja.core :as m]
             [core2.api :as c2]
-            [core2.util :as util])
-  (:import org.eclipse.jetty.server.Server))
+            [core2.datalog :as d]
+            [core2.local-node :as node]
+            [core2.util :as util]
+            [juxt.clojars-mirrors.integrant.core :as ig]
+            [muuntaja.core :as m]
+            [reitit.coercion.spec :as rc.spec]
+            [reitit.http :as http]
+            [reitit.http.coercion :as r.coercion]
+            [reitit.http.interceptors.exception :as ri.exception]
+            [reitit.http.interceptors.muuntaja :as ri.muuntaja]
+            [reitit.http.interceptors.parameters :as ri.parameters]
+            [reitit.interceptor.sieppari :as r.sieppari]
+            [reitit.swagger :as r.swagger]
+            [ring.adapter.jetty9 :as j]
+            [ring.util.response :as resp]
+            [spec-tools.core :as st])
+  (:import java.time.Duration
+           org.eclipse.jetty.server.Server))
 
 (defn- get-status [_req]
   ;; TODO currently empty to pass healthcheck, we'll want something more later.
@@ -24,6 +30,43 @@
   (-> (c2/submit-tx node (get-in req [:parameters :body]))
       (util/then-apply (fn [tx]
                          {:status 200, :body (into {} tx)}))))
+
+(s/def ::tx-id int?)
+
+(s/def ::tx-time
+  (st/spec inst?
+           {:decode/string (fn [_ s]
+                             (cond
+                               (inst? s) s
+                               (string? s) (inst/read-instant-date s)))}))
+
+
+(s/def ::default-valid-time inst?)
+
+(s/def ::tx
+  (st/spec (s/keys :req-un [(or ::tx-id ::tx-time)])
+           {:decode/map (fn [_ m]
+                          (c2/map->TransactionInstant m))
+            :decode/string (fn [_ s]
+                             (c2/map->TransactionInstant s))}))
+
+(s/def ::basis
+  (s/keys :opt-un [::default-valid-time ::tx]))
+
+(s/def ::basis-timeout
+  (st/spec (s/nilable #(instance? Duration %))
+           {:decode/string (fn [_ s] (Duration/parse s))}))
+
+(s/def ::query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout])))
+(s/def ::params (s/nilable (s/coll-of any? :kind vector?)))
+
+(s/def ::query-body
+  (s/keys :req-un [::query], :opt-un [::params]))
+
+(defn handle-query [{:keys [node parameters]}]
+  (let [{{:keys [query params]} :body} parameters]
+    {:status 200
+     :body (into [] (apply c2/plan-query node query params))}))
 
 (defn- handle-ex-info [ex _req]
   {:status 400
@@ -37,7 +80,7 @@
   (http/router
    [["/status" {:summary "Status"
                 :description "Get status information from the node"
-                :get get-status}]
+                :get #(get-status %)}]
 
     ["/tx" {:name :tx
             :summary "Transaction"
@@ -46,6 +89,11 @@
             ;; TODO spec-tools doesn't handle multi-spec with a vector,
             ;; so we just check for vector and then conform later.
             :parameters {:body vector?}}]
+
+    ["/query" {:name :query
+               :summary "Query"
+               :post {:handler #(handle-query %)
+                      :parameters {:body ::query-body}}}]
 
     ["/latest-completed-tx" {:get (fn [{:keys [node]}]
                                     (resp/response (into {} (c2/latest-completed-tx node))))
@@ -58,15 +106,18 @@
             :handler (r.swagger/create-swagger-handler)}}]]
 
    {:data {:muuntaja m/instance
-           :coercion rc.spec/coercion
+           :coercion (rc.spec/create (-> rc.spec/default-options
+                                         (assoc-in [:transformers :body :default]
+                                                   (st/type-transformer
+                                                    st/strip-extra-keys-transformer
+                                                    st/string-transformer))))
            :interceptors [r.swagger/swagger-feature
                           (ri.parameters/parameters-interceptor)
                           (ri.muuntaja/format-interceptor)
                           (ri.exception/exception-interceptor
                            (merge ri.exception/default-handlers
                                   {core2.IllegalArgumentException handle-ex-info
-                                   :muuntaja/decode handle-muuntaja-decode-error
-                                   ::ri.exception/wrap ri.exception/wrap-log-to-console}))
+                                   :muuntaja/decode handle-muuntaja-decode-error}))
 
                           (r.coercion/coerce-request-interceptor)
                           (r.coercion/coerce-response-interceptor)
@@ -77,7 +128,7 @@
             (update ctx :request merge opts))})
 
 (defmethod ig/prep-key :core2/server [_ opts]
-  (merge {:node (ig/ref :core2/node)
+  (merge {:node (ig/ref ::node/node)
           :read-only? true
           :port 3000}
          opts))

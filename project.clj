@@ -47,7 +47,8 @@
                                    [org.clojure/data.csv "1.0.0"]
                                    [pro.juxt.crux-labs/core2-datasets]
 
-                                   [cheshire "5.10.0"]]
+                                   [cheshire "5.10.0"]
+                                   [hato "0.8.2"]]
                     :resource-paths ["test-resources"]}
 
              :jmh {:dependencies [[org.openjdk.jmh/jmh-core "1.32"]

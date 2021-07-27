@@ -1,8 +1,8 @@
 (ns core2.server-test
-  (:require [core2.server :as server]
-            [core2.test-util :as tu]
-            [clojure.test :as t]
+  (:require [clojure.test :as t]
             [core2.log :as log]
+            [core2.server :as server]
+            [core2.test-util :as tu]
             [hato.client :as hato]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [reitit.core :as r]))
@@ -45,6 +45,20 @@
                   :body (pr-str tx-ops)})
       :body))
 
+(defn query [q-body]
+  (-> (hato/post (url-for :query)
+                 {:accept :edn
+                  :as :clojure
+                  :content-type :edn
+                  :body (pr-str q-body)})
+      :body))
+
 (t/deftest test-simple-query
-  (t/is (= {:tx-id 0, :tx-time #inst "2020-01-01"}
-           (submit-tx [[:put {:_id "foo"}]]))))
+  (let [tx {:tx-id 0, :tx-time #inst "2020-01-01"}]
+    (t/is (= tx (submit-tx [[:put {:_id "foo"}]])))
+
+    (t/is (= [{:id "foo"}]
+             (query {:query (-> '{:find [?id]
+                                  :where [[?e :_id ?id]]}
+                                (assoc :basis {:tx tx}
+                                       :basis-timeout "PT1S"))})))))
