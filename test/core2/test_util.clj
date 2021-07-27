@@ -5,16 +5,16 @@
             [core2.json :as c2-json]
             core2.object-store
             [core2.relation :as rel]
+            [core2.temporal :as temporal]
             [core2.types :as ty]
-            [core2.util :as util]
-            [core2.temporal :as temporal])
+            [core2.util :as util])
   (:import core2.core.Node
            core2.ICursor
            core2.object_store.FileSystemObjectStore
            core2.relation.IReadColumn
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
-           [java.time Clock Duration ZoneId]
+           [java.time Clock Duration Instant Period ZoneId]
            [java.util ArrayList Date LinkedList]
            java.util.concurrent.TimeUnit
            java.util.function.Consumer
@@ -57,15 +57,21 @@
    @(-> (c2/await-tx-async node tx)
         (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
-(defn ->mock-clock ^java.time.Clock [^Iterable dates]
-  (let [times-iterator (.iterator dates)]
-    (proxy [Clock] []
-      (getZone []
-        (ZoneId/of "UTC"))
-      (instant []
-        (if (.hasNext times-iterator)
-          (.toInstant ^Date (.next times-iterator))
-          (throw (IllegalStateException. "out of time")))))))
+(defn ^java.time.Clock ->mock-clock
+  ([]
+   (->mock-clock (->> (iterate #(.plus ^Instant % (Period/ofDays 1))
+                               (.toInstant #inst "2020-01-01"))
+                      (map #(Date/from %)))))
+
+  ([^Iterable dates]
+   (let [times-iterator (.iterator dates)]
+     (proxy [Clock] []
+       (getZone []
+         (ZoneId/of "UTC"))
+       (instant []
+         (if (.hasNext times-iterator)
+           (.toInstant ^Date (.next times-iterator))
+           (throw (IllegalStateException. "out of time"))))))))
 
 (defn await-temporal-snapshot-build [^Node node]
   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system node))))
