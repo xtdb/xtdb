@@ -1,12 +1,11 @@
 (ns crux.lucene.multi-field
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as cc]
-            [crux.db :as db]
             [crux.lucene :as l]
             [crux.memory :as mem]
             [crux.query :as q])
   (:import org.apache.lucene.analysis.Analyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
            [org.apache.lucene.index IndexWriter Term]
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search Query TermQuery]))

@@ -65,6 +65,9 @@
    [io.prometheus/simpleclient_hotspot "0.8.1"]
    [clj-commons/iapetos "0.1.9"]
 
+   ;; crux-lucene test dep
+   [org.apache.lucene/lucene-analyzers-common "8.9.0"]
+
    ;; crux-test test dep
    [criterium "0.4.5"]
 

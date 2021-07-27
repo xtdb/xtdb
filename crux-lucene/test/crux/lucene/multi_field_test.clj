@@ -1,11 +1,9 @@
 (ns crux.lucene.multi-field-test
   (:require [clojure.test :as t]
             [crux.api :as c]
-            [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
-            [crux.lucene :as l]
-            [crux.lucene.multi-field :as lmf])
+            [crux.lucene :as l])
   (:import org.apache.lucene.queryparser.classic.ParseException))
 
 (t/use-fixtures :each (lf/with-lucene-opts {:indexer 'crux.lucene.multi-field/->indexer}) fix/with-node)

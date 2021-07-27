@@ -14,8 +14,9 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [pro.juxt.crux/crux-core]
 
-                 [org.apache.lucene/lucene-core "8.6.1"]
-                 [org.apache.lucene/lucene-queryparser "8.6.1"]]
+                 [org.apache.lucene/lucene-core "8.9.0"]
+                 [org.apache.lucene/lucene-queryparser "8.9.0"]
+                 [org.apache.lucene/lucene-analyzers-common "8.9.0" :scope "test"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
                                   [pro.juxt.crux/crux-test]
