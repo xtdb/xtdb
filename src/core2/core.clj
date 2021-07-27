@@ -17,6 +17,7 @@
            java.lang.AutoCloseable
            java.time.Duration
            [java.util.concurrent CompletableFuture TimeUnit]
+           java.util.Date
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -92,27 +93,38 @@
 (defmethod ig/halt-key! :core2/node [_ ^Node node]
   (.close node))
 
-(defn open-ra ^core2.ICursor [query db-or-dbs]
-  (let [allocator (RootAllocator.)]
-    (try
-      (-> (op/open-ra allocator query (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs}))
-          (util/and-also-close allocator))
-      (catch Throwable t
-        (util/try-close allocator)
-        (throw t)))))
+(defn ^core2.ICursor open-ra
+  ([query db-or-dbs] (open-ra query db-or-dbs {}))
 
-(defn plan-ra [query db-or-dbs]
-  (reify IReduceInit
-    (reduce [_ f init]
-      (with-open [res (open-ra query db-or-dbs)]
-        (util/reduce-cursor (fn [acc rel]
-                              (reduce f acc (rel/rel->rows rel)))
-                            init
-                            res)))))
+  ([query db-or-dbs opts]
+   (let [allocator (RootAllocator.)]
+     (try
+       (-> (op/open-ra query
+                       (if (map? db-or-dbs) db-or-dbs {'$ db-or-dbs})
+                       (-> (merge {:default-valid-time (Date.)} opts)
+                           (assoc :allocator allocator)))
+           (util/and-also-close allocator))
+       (catch Throwable t
+         (util/try-close allocator)
+         (throw t))))))
+
+(defn plan-ra
+  ([query db-or-dbs] (plan-ra query db-or-dbs {}))
+  ([query db-or-dbs query-opts]
+   (reify IReduceInit
+     (reduce [_ f init]
+       (with-open [res (open-ra query db-or-dbs query-opts)]
+         (util/reduce-cursor (fn [acc rel]
+                               (reduce f acc (rel/rel->rows rel)))
+                             init
+                             res))))))
 
 (defn plan-q [query & params]
-  (let [[query srcs] (apply d/compile-query query params)]
-    (plan-ra query srcs)))
+  (let [{:keys [query srcs query-opts]} (apply d/compile-query query params)]
+    (plan-ra query srcs query-opts)))
+
+(alter-meta! #'plan-q assoc :arglists '([query & params]
+                                        [query opts & params]))
 
 (defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
 (defmethod ig/halt-key! :core2/allocator [_ ^BufferAllocator a] (.close a))

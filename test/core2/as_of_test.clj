@@ -18,6 +18,12 @@
       (t/is (= #{{:last-updated "tx2"}}
                (into #{} (c2/plan-q '{:find [?last-updated]
                                       :where [[?e :last-updated ?last-updated]]}
+                                    db))))
+
+      (t/is (= #{{:last-updated "tx1"}}
+               (into #{} (c2/plan-q '{:find [?last-updated]
+                                      :where [[?e :last-updated ?last-updated]]}
+                                    {:default-valid-time (:tx-time @!tx1)}
                                     db)))))
 
     (let [db (c2/db tu/*node* {:tx !tx1})]

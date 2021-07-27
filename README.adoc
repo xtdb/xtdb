@@ -121,6 +121,19 @@ These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, 
 
 Note the param order is query then database (different to Classic, same as other EDN Datalog databases) - this is because Core2 queries can accept multiple DBs.
 
+Queries also accept a `:default-valid-time` option after the query itself, before any params, which applies to any entities that don't specify other valid-time constraints.
+This is for repeatable queries - it defaults to 'now' if not provided.
+
+[source,clojure]
+----
+(with-open [node (c2/start-node {})]
+  (let [db (c2/db node)]
+    (into [] (c2/plan-q '{:find [?e ?name]
+                          :where [[?e :name ?name]]}
+                        {:default-valid-time #inst "..."}
+                        db))))
+----
+
 There is also `c2/plan-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
 
 [source,clojure]
