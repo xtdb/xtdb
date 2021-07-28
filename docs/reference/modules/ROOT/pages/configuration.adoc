@@ -75,6 +75,7 @@ All three are backed by local KV stores by default, but they can be independentl
 
 | xref:s3.adoc[AWS S3] | | ✓ |
 | xref:azure-blobs.adoc[Azure Blobs] | | ✓ |
+| xref:corda.adoc[DLT - Corda] footnote:[configured via its own entry point - see the module docs for more information] | ✓ | ✓ |
 | xref:google-cloud-storage.adoc[Google Cloud Storage] | | ✓ |
 | xref:kafka.adoc[Kafka] | ✓ | ✓ |
 | xref:jdbc.adoc[JDBC] | ✓ | ✓ |
@@ -83,8 +84,6 @@ All three are backed by local KV stores by default, but they can be independentl
 | xref:rocksdb.adoc[RocksDB] (KV) | ✓ | ✓ | ✓
 | xref:xodus.adoc[Xodus] (KV) footnote:[via third-party `crux-xodus` module] | ✓ | ✓ | ✓
 |===
-
-
 
 For specific details and examples of how to configure each of these modules, see their individual sections.
 
