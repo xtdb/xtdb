@@ -39,6 +39,7 @@ used to express complex joins and recursive graph traversals.
 * Development:
   * [Kanban board](https://github.com/juxt/crux/projects/1)
   * CircleCI build: [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
+  * [Developer Documentation](https://github.com/juxt/crux/tree/master/dev)
 
 ## Unbundled Architecture
 
@@ -70,10 +71,6 @@ projects.
 Project directories are published to Clojars independently so that you can
 maintain granular dependencies on precisely the individual components needed
 for your application.
-
-## Developing Crux
-
-See the [https://github.com/juxt/crux/tree/master/dev](dev) directory README for instructions on how to develop Crux.
 
 ## Copyright & License
 The MIT License (MIT)
