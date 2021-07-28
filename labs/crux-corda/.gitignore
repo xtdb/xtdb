@@ -1,0 +1,15 @@
+# Clojure
+.cpcache
+.nrepl-port
+
+# Gradle
+.gradle/
+build/
+gradle.properties
+
+# IntelliJ
+*.iml
+*.iws
+*.ipr
+.idea
+
