@@ -43,3 +43,6 @@ CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"])
 
 (defmethod j/->date :mssql [^DateTimeOffset d _]
   (Date/from (.toInstant (.getOffsetDateTime d))))
+
+(defmethod j/doc-exists-sql :mssql [_ doc-id]
+  ["SELECT EVENT_OFFSET from tx_events WITH (rowlock,updlock) WHERE EVENT_KEY = ? AND COMPACTED = 0" doc-id])

@@ -6,7 +6,7 @@
             [crux.tx :as tx])
   (:import (java.util TimeZone)))
 
-(t/use-fixtures :each fj/with-each-jdbc-node)
+(t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node)
 
 (defmacro with-tz [tz-str & body]
   `(let [tz-str# ~tz-str

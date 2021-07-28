@@ -13,7 +13,8 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [crux.tx.subscribe :as tx-sub])
-  (:import [com.zaxxer.hikari HikariConfig HikariDataSource]
+  (:import clojure.lang.MapEntry
+           [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
            java.sql.Timestamp
            java.time.Duration
@@ -81,13 +82,18 @@
     {::tx/tx-id (long (:event_offset tx-result))
      ::tx/tx-time (-> (:tx_time tx-result) (->date dialect))}))
 
+(defmulti doc-exists-sql
+  (fn [dialect doc-id]
+    (db-type dialect))
+  :default ::default)
+
+(defmethod doc-exists-sql ::default [_ doc-id]
+  ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0 ORDER BY EVENT_OFFSET FOR UPDATE" doc-id])
+
 (defn- insert-event! [pool event-key v topic]
   (let [b (nippy/freeze v)]
     (jdbc/execute-one! pool ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
-
-(defn- doc-exists? [pool k]
-  (not-empty (jdbc/execute-one! pool ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
 (defn- update-doc! [pool k doc]
   (jdbc/execute! pool ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze doc) k]))
@@ -97,19 +103,20 @@
 
 (defrecord JdbcDocumentStore [pool dialect]
   db/DocumentStore
-  (submit-docs [this id-and-docs]
+  (submit-docs [_ id-and-docs]
     (jdbc/with-transaction [tx pool]
-      (doseq [[id doc] id-and-docs
-              :let [id (str id)]]
+      (doseq [[id doc] (->> (for [[id doc] id-and-docs]
+                              (MapEntry/create (str id) doc))
+                            (sort-by key))]
         (if (c/evicted-doc? doc)
           (do
             (insert-event! tx id doc "docs")
             (evict-doc! tx id doc))
-          (if-not (doc-exists? tx id)
+          (if-not (not-empty (jdbc/execute-one! tx (doc-exists-sql dialect id)))
             (insert-event! tx id doc "docs")
             (update-doc! tx id doc))))))
 
-  (fetch-docs [this ids]
+  (fetch-docs [_ ids]
     (cio/with-nippy-thaw-all
       (->> (for [id-batch (partition-all 100 ids)
                  row (jdbc/execute! pool (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s)"

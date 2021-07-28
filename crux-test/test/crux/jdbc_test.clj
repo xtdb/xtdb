@@ -7,9 +7,10 @@
             [crux.fixtures.jdbc :as fj]
             [crux.fixtures.lubm :as fl]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
-            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]))
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
+            [crux.jdbc :as j]))
 
-(t/use-fixtures :each fj/with-each-jdbc-node fix/with-node)
+(t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:crux.db/id :origin-man :name "Adam"}
@@ -99,3 +100,20 @@
              (api/q db
                     '{:find [(pull ?e [*])]
                       :where [[?e :crux.db/id :foo]]})))))
+
+(t/deftest test-deadlock
+  ;; SQLite doesn't support writing from multiple threads
+  ;; TODO fix :h2 and :mssql - better than they were but still fail this test.
+
+  (when-not (#{:sqlite :h2 :mssql}
+             (-> @(:!system *api*)
+                 (get-in [::j/connection-pool :dialect])
+                 j/db-type))
+    (let [eids #{:foo :bar :baz :quux}]
+      (->> (for [_ (range 100)]
+             (future
+               (api/submit-tx *api* (for [eid (shuffle eids)]
+                                      [:crux.tx/put {:crux.db/id eid}]))))
+           doall
+           (run! deref))
+      (t/is true))))
