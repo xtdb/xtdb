@@ -36,10 +36,7 @@ used to express complex joins and recursive graph traversals.
   ```
 * [Release notes](https://github.com/juxt/crux/releases)
 * Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/juxt/crux/discussions) | crux@juxt.pro
-* Development:
-  * [Kanban board](https://github.com/juxt/crux/projects/1)
-  * CircleCI build: [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
-  * [Developer Documentation](https://github.com/juxt/crux/tree/master/dev)
+* [Developing Crux](https://github.com/juxt/crux/tree/master/dev)
 
 ## Unbundled Architecture
 
