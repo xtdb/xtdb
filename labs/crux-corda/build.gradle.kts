@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 allprojects {
-    group = "pro.juxt.crux"
+    group = "pro.juxt.crux-labs"
     version = "0.0.1-SNAPSHOT"
 
     repositories {

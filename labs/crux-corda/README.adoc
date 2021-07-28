@@ -1,6 +1,6 @@
 = Crux Corda
 
-A https://opencrux.com[Crux] library that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
+A https://opencrux.com[Crux] module that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
 
 .build.gradle.kts
 [source,kotlin]
@@ -38,6 +38,7 @@ User documentation will live on the https://opencrux.com/reference[Crux document
 * Testing: `./gradlew test`
 * CI: unlike Crux, this is done through a manual https://github.com/juxt/crux/actions/workflows/test-corda.yaml[GitHub action]
 * REPL: `./gradlew clojureRepl`
+
 * Entry points:
 ** `crux-corda/src/main/kotlin/crux/corda/CruxCorda.kt` - entry point for the Crux driver, adds extension functions to `AppServiceHub`
 ** `crux-corda/src/main/clojure/crux/corda.clj` - the implementation of the Crux driver
@@ -46,3 +47,24 @@ User documentation will live on the https://opencrux.com/reference[Crux document
 ** `examples/iou-contract/src/main/kotlin/com/example/contract/IOUState.kt` - example of a Corda state with a Crux mapping
 ** `examples/iou-workflow/src/main/kotlin/com/example/service/CruxService.kt` - example of a CordaService that starts a Crux node
 ** `examples/iou-workflow/src/test/kotlin/com/example/workflow/IOUFlowTests.kt` - E2E test for the IOU app
+
+== Releasing
+
+We release `crux-corda` to Maven Central (OSSRH).
+
+=== One-time setup:
+
+See https://www.juxt.pro/blog/maven-central to get access to the JUXT groupId.
+
+.~/.gradle/gradle.properties:
+[source,properties]
+----
+signing.gnupg.keyName=...
+
+ossrhUsername=...
+ossrhPassword=...
+----
+
+=== Then
+
+`./gradlew publish`, and head to https://oss.sonatype.org/ to confirm the release.
