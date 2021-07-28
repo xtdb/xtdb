@@ -1,6 +1,6 @@
 = Crux Corda
 
-A https://opencrux.com[Crux] library that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
+A https://opencrux.com[Crux] module that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
 
 .build.gradle.kts
 [source,kotlin]
