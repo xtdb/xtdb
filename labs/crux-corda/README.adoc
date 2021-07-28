@@ -36,6 +36,7 @@ User documentation will live on the https://opencrux.com/reference[Crux document
 
 
 * Testing: `./gradlew test`
+* CI: unlike Crux, this is done through a manual https://github.com/juxt/crux/actions/workflows/test-corda.yaml[GitHub action]
 * REPL: `./gradlew clojureRepl`
 * Entry points:
 ** `crux-corda/src/main/kotlin/crux/corda/CruxCorda.kt` - entry point for the Crux driver, adds extension functions to `AppServiceHub`
