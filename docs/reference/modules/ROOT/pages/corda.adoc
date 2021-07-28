@@ -1,0 +1,82 @@
+= Corda
+
+https://github.com/juxt/crux-corda[Crux-corda] is a library meant to run within a https://corda.net[Corda] Distributed Ledger which pipes verified https://docs.corda.net/docs/corda-os/4.8/api-transactions.html[Corda transactions] into a https://opencrux.com[Crux] node, in order to enable Crux bitemporal querying.
+
+WARNING: This library is in alpha and could change.
+WARNING: `crux-corda` is currently compatible with `crux` no __later__ than version https://github.com/juxt/crux/releases/tag/21.01-1.14.0[`21.01-1.14.0-beta`]
+WARNING: `crux-corda` has not yet been released to Maven. In order to use the software, it is necessary to clone the https://github.com/juxt/crux-corda[repository]
+NOTE: This documentation assumes you have a minimal knowledge of Corda and have gone through basic tutorials such as the `IOU CorDApp` from the official https://docs.corda.net/docs/corda-os/4.7/hello-world-introduction.html[Hello World tutorial]
+NOTE: Corda uses primarily https://gradle.org[Gradle] as a build tool.
+
+== Setup
+
+=== CruxState interface
+
+`crux.corda.state.CruxState` is interface that allow objects be ingested in `crux-corda`.
+
+.link:/iou-contract/src/main/kotlin/com/example/contract/IOUState.kt[] - example of a Corda State implementing `CruxState`
+[source,kotlin]
+----
+@BelongsToContract(IOUContract::class)
+data class IOUState(val value: Int,
+                    val lender: Party,
+                    val borrower: Party,
+                    override val linearId: UniqueIdentifier = UniqueIdentifier()) :
+    LinearState, CruxState {
+
+    override val cruxId = linearId.id
+    override val cruxDoc: Map<String, Any> = mapOf(
+        "iou-state/value" to value,
+        "iou-state/lender" to lender.name.toString(),
+        "iou-state/borrower" to borrower.name.toString())
+}
+----
+
+=== Crux node
+
+A Crux node can be instantiated within a `net.corda.core.node.services.CordaService` decorator so it's registered as a node service, and available within Corda at runtime.
+
+Within the `@CordaService` decorated class itself, the Crux node *must* be instantiated by calling `net.corda.core.node.AppServiceHub.startCruxNode()` with the `AppServiceHub` member instead of Crux's native `crux.api.Crux.startNode()`.
+
+`AppServiceHub.startCruxNode()` is but a wrapper around `Crux.startNode()`, Crux can be configured using the later's API.
+
+WARNING: Crux *must* be configured with `crux.corda.withCordaTxLog()`, which is the default behavior of `AppServiceHub.startCruxNode()`. By default, `CordaTxLog` is configured to only pipe Corda States that implement `CruxState` into Crux, but this behavior can be modified as shown below.
+
+The Document Mapper is a module needed by `CordaTxLog` that receives all (output) Corda States resulting from validated transactions. `crux-corda` expects the document mapper to return a list of `CruxState` objects or `null`.
+
+In the listing below, `doc` refers to an output Corda State resulting from a validated transaction.
+
+.`AppServiceHub.startCruxNode()`'s default behaviour reimplemented.
+[source,kotlin]
+----
+@CordaService
+class CruxService(private val serviceHub: AppServiceHub) : SingletonSerializableAsToken() {
+    val node = serviceHub.startCruxNode {
+        withCordaTxLog {
+            withDocumentMapping { doc ->
+                if (doc is CruxState) listOf(doc)
+                else null
+            }
+        }
+    }
+}
+----
+
+
+== Querying Crux
+
+Refer to the https://opencrux.com/reference/{crux_version}/queries.html[Queries API] directly.
+
+[source,kotlin]
+----
+val cruxNode = serviceHub.cordaService(CruxService::class.java)
+
+cruxNode.db().query("""
+    {:find [?l ?b ?v]
+     :where [[?iou :iou-state/lender ?l]
+             [?iou :iou-state/borrower ?b]
+             [?iou :iou-state/value ?v]]}
+    """.trimIndent())
+----
+
+TIP: Keep in mind the Crux database is not global, but local to each Corda node. You can't query facts that have happened in other nodes unless explicitly shared with yours through a Corda Flow.

@@ -18,6 +18,7 @@
 ** xref:embedded-kafka.adoc[Kafka - Embedded]
 ** xref:sql.adoc[SQL]
 ** xref:lucene.adoc[Full Text]
+** xref:corda.adoc[DLT - Corda]
 * Persistence Modules
 ** xref:s3.adoc[AWS S3]
 ** xref:azure-blobs.adoc[Azure Blobs]
