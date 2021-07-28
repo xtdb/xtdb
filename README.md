@@ -68,7 +68,7 @@ with interfaces for the pluggable storage components (Kafka, LMDB, RocksDB
 etc.). Implementations of these storage options are located in their own
 projects.
 
-Project directories are published to Clojars independently so that you can
+Project directories are published to Maven independently so that you can
 maintain granular dependencies on precisely the individual components needed
 for your application.
 
