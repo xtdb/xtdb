@@ -4,7 +4,8 @@
             [core2.types :as t]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [core2.error :as err])
   (:import core2.DenseUnionUtil
            [core2.log LogWriter LogRecord]
            [java.util LinkedHashMap LinkedHashSet Set]
@@ -29,18 +30,36 @@
 
     doc-k-types))
 
-(s/def ::_id any?)
+(s/def ::id any?)
 (s/def ::doc (s/keys :req-un [::_id]))
 (s/def ::_valid-time-start inst?)
 (s/def ::_valid-time-end inst?)
 
-(defmulti tx-op-spec :op)
+(defmulti tx-op-spec first)
 
 (defmethod tx-op-spec :put [_]
-  (s/keys :req-un [::doc]
-          :opt-un [::_valid-time-start ::_valid-time-end]))
+  (s/cat :op #{:put}
+         :doc ::doc
+         :vt-opts (s/? (s/keys :opt-un [::_valid-time-start ::_valid-time-end]))))
 
-(s/def ::tx-op (s/multi-spec tx-op-spec :op))
+(defmethod tx-op-spec :delete [_]
+  (s/cat :op #{:delete}
+         :_id ::id
+         :vt-opts (s/? (s/keys :opt-un [::_valid-time-start ::_valid-time-end]))))
+
+(s/def ::tx-op
+  (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))
+
+(s/def ::tx-ops (s/coll-of ::tx-op :kind sequential?))
+
+(defn- conform-tx-ops [tx-ops]
+  (let [parsed-tx-ops (s/conform ::tx-ops tx-ops)]
+    (when (s/invalid? parsed-tx-ops)
+      (throw (err/illegal-arg :invalid-tx-ops
+                              {::err/message (s/explain ::tx-ops tx-ops)
+                               :tx-ops tx-ops
+                               :explain-data (s/explain-data ::tx-ops tx-ops)})))
+    parsed-tx-ops))
 
 (defn- ->doc-field [k v-types]
   (let [v-types (sort-by t/arrow-type->type-id v-types)]
@@ -59,9 +78,7 @@
   (t/->field "_valid-time-end" (t/->arrow-type :timestamp-milli) true))
 
 (defn serialize-tx-ops ^java.nio.ByteBuffer [tx-ops ^BufferAllocator allocator]
-  (s/assert (s/coll-of ::tx-op :kind vector?) tx-ops)
-
-  (let [tx-ops (vec tx-ops)
+  (let [tx-ops (conform-tx-ops tx-ops)
         put-k-types (->doc-k-types tx-ops)
         document-field (apply t/->field "document" t/struct-type false
                               (for [[k v-types] put-k-types]
@@ -80,7 +97,7 @@
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
 
         (dotimes [tx-op-n (count tx-ops)]
-          (let [{:keys [op _valid-time-start _valid-time-end] :as tx-op} (nth tx-ops tx-op-n)
+          (let [{:keys [op vt-opts] :as tx-op} (nth tx-ops tx-op-n)
                 op-type-id (case op :put 0, :delete 1)
                 ^StructVector op-vec (.getStruct tx-ops-duv op-type-id)
                 tx-op-offset (DenseUnionUtil/writeTypeId tx-ops-duv tx-op-n op-type-id)
@@ -112,17 +129,18 @@
 
                           (util/set-value-count id-duv (inc (.getValueCount id-duv))))))
 
-            (if _valid-time-start
-              (t/set-safe! valid-time-start-vec tx-op-offset _valid-time-start)
-              (doto valid-time-start-vec
-                (util/set-value-count (inc tx-op-offset))
-                (t/set-null! tx-op-offset)))
+            (let [{:keys [_valid-time-start _valid-time-end]} vt-opts]
+              (if _valid-time-start
+                (t/set-safe! valid-time-start-vec tx-op-offset _valid-time-start)
+                (doto valid-time-start-vec
+                  (util/set-value-count (inc tx-op-offset))
+                  (t/set-null! tx-op-offset)))
 
-            (if _valid-time-end
-              (t/set-safe! valid-time-end-vec tx-op-offset _valid-time-end)
-              (doto valid-time-end-vec
-                (util/set-value-count (inc tx-op-offset))
-                (t/set-null! tx-op-offset)))))
+              (if _valid-time-end
+                (t/set-safe! valid-time-end-vec tx-op-offset _valid-time-end)
+                (doto valid-time-end-vec
+                  (util/set-value-count (inc tx-op-offset))
+                  (t/set-null! tx-op-offset))))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
 

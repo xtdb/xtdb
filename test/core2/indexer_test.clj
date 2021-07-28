@@ -31,14 +31,12 @@
            org.apache.arrow.vector.complex.StructVector))
 
 (def txs
-  [[{:op :put
-     :doc {:_id "device-info-demo000000",
+  [[[:put {:_id "device-info-demo000000",
            :api-version "23",
            :manufacturer "iobeam",
            :model "pinto",
-           :os-name "6.0.1"}}
-    {:op :put
-     :doc {:_id "reading-demo000000",
+           :os-name "6.0.1"}]
+    [:put {:_id "reading-demo000000",
            :device-id "device-info-demo000000",
            :cpu-avg-15min 8.654,
            :rssi -50.0,
@@ -51,15 +49,13 @@
            :battery-temperature 89.5,
            :cpu-avg-1min 24.81,
            :mem-free 4.10011078E8,
-           :mem-used 5.89988922E8}}]
-   [{:op :put
-     :doc {:_id "device-info-demo000001",
+           :mem-used 5.89988922E8}]]
+   [[:put {:_id "device-info-demo000001",
            :api-version "23",
            :manufacturer "iobeam",
            :model "mustang",
-           :os-name "6.0.1"}}
-    {:op :put
-     :doc {:_id "reading-demo000001",
+           :os-name "6.0.1"}]
+    [:put {:_id "reading-demo000001",
            :device-id "device-info-demo000001",
            :cpu-avg-15min 8.822,
            :rssi -61.0,
@@ -72,7 +68,7 @@
            :battery-temperature 93.7,
            :cpu-avg-1min 4.93,
            :mem-free 7.20742332E8,
-           :mem-used 2.79257668E8}}]])
+           :mem-used 2.79257668E8}]]])
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
@@ -200,12 +196,12 @@
 (t/deftest can-handle-dynamic-cols-in-same-block
   (let [node-dir (util/->path "target/can-handle-dynamic-cols-in-same-block")
         mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02" #inst "2020-01-03"])
-        tx-ops [{:op :put, :doc {:_id "foo"}}
-                {:op :put, :doc {:_id 24.0}}
-                {:op :put, :doc {:_id "bar"}}
-                {:op :put, :doc {:_id #inst "2021-01-01"}}
-                {:op :put, :doc {:_id 52.0}}
-                {:op :put, :doc {:_id #inst "2020-01-01"}}]]
+        tx-ops [[:put {:_id "foo"}]
+                [:put {:_id 24.0}]
+                [:put {:_id "bar"}]
+                [:put {:_id #inst "2021-01-01"}]
+                [:put {:_id 52.0}]
+                [:put {:_id #inst "2020-01-01"}]]]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
@@ -226,14 +222,14 @@
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
       (let [^ObjectStore os (::os/file-system-object-store @(:!system node))]
 
-        (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo"}}
-                                {:op :put, :doc {:_id "bar"}}])
+        (-> (c2/submit-tx node [[:put {:_id "foo"}]
+                                [:put {:_id "bar"}]])
             (tu/then-await-tx node))
 
-        (-> (c2/submit-tx node [{:op :delete, :_id "foo", :_valid-time-start #inst "2020-04-01"}
-                                {:op :put, :doc {:_id "bar", :month "april"},
-                                 :_valid-time-start #inst "2020-04-01"
-                                 :_valid-time-end #inst "2020-05-01"}])
+        (-> (c2/submit-tx node [[:delete "foo" {:_valid-time-start #inst "2020-04-01"}]
+                                [:put {:_id "bar", :month "april"},
+                                 {:_valid-time-start #inst "2020-04-01"
+                                  :_valid-time-end #inst "2020-05-01"}]])
             (tu/then-await-tx node))
 
         (tu/finish-chunk node)
@@ -278,8 +274,7 @@
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
             tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     {:op :put
-                      :doc doc})]
+                     [:put doc])]
 
         (t/is (= 11000 (count tx-ops)))
 
@@ -360,8 +355,7 @@
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
             tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     {:op :put
-                      :doc doc})]
+                     [:put doc])]
 
         (t/is (= 11000 (count tx-ops)))
 
@@ -399,8 +393,7 @@
             readings (map ts/readings-csv->doc (csv/read-csv readings-reader))
             [initial-readings rest-readings] (split-at (count device-infos) readings)
             tx-ops (for [doc (concat (interleave device-infos initial-readings) rest-readings)]
-                     {:op :put
-                      :doc doc})
+                     [:put doc])
             [first-half-tx-ops second-half-tx-ops] (split-at (/ (count tx-ops) 2) tx-ops)]
 
         (t/is (= 5500 (count first-half-tx-ops)))
@@ -491,5 +484,5 @@
                                (when-not (instance? UnsupportedOperationException throwable)
                                  (log* logger level throwable message))))]
       (t/is (thrown-with-msg? Exception #"oh no!"
-                              (-> (c2/submit-tx node [{:op :put, :doc {:_id "foo", :count 42}}])
+                              (-> (c2/submit-tx node [[:put {:_id "foo", :count 42}]])
                                   (tu/then-await-tx node (Duration/ofSeconds 1))))))))

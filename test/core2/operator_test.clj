@@ -11,16 +11,16 @@
 
 (t/deftest test-find-gt-ivan
   (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
-    (-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 0}}])
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :_id 0}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
 
-    (c2/submit-tx node [{:op :put, :doc {:name "Dan", :_id 1}}
-                        {:op :put, :doc {:name "Ivan", :_id 2}}])
+    (c2/submit-tx node [[:put {:name "Dan", :_id 1}]
+                        [:put {:name "Ivan", :_id 2}]])
 
-    (-> (c2/submit-tx node [{:op :put, :doc {:name "James", :_id 3}}
-                            {:op :put, :doc {:name "Jon", :_id 4}}])
+    (-> (c2/submit-tx node [[:put {:name "James", :_id 3}]
+                            [:put {:name "Jon", :_id 4}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
@@ -49,7 +49,7 @@
                                              (expr.meta/->metadata-selector '(> name ?name) {'?name "Ivan"})))
                     "only needs to scan chunk 1, block 1")))
 
-          (-> (c2/submit-tx node [{:op :put, :doc {:name "Jeremy", :_id 5}}])
+          (-> (c2/submit-tx node [[:put {:name "Jeremy", :_id 5}]])
               (tu/then-await-tx node))
 
           (test-query-ivan #{{:name "James"}
@@ -64,15 +64,15 @@
 
 (t/deftest test-find-eq-ivan
   (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
-    (-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 1}}
-                            {:op :put, :doc {:name "James", :_id 2}}
-                            {:op :put, :doc {:name "Ivan", :_id 3}}])
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :_id 1}]
+                            [:put {:name "James", :_id 2}]
+                            [:put {:name "Ivan", :_id 3}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
 
-    (-> (c2/submit-tx node [{:op :put, :doc {:name "Håkan", :_id 1}}
-                            {:op :put, :doc {:name "James", :_id 2}}])
+    (-> (c2/submit-tx node [[:put {:name "Håkan", :_id 1}]
+                            [:put {:name "James", :_id 2}]])
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
@@ -103,12 +103,10 @@
 (t/deftest test-temporal-bounds
   (with-open [node (c2/start-node {})]
     (let [{tt1 :tx-time} @(c2/submit-tx node
-                                        [{:op :put, :doc {:_id "my-doc",
-                                                          :last-updated "tx1"}}])
+                                        [[:put {:_id "my-doc", :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions
           {tt2 :tx-time, :as tx2} @(c2/submit-tx node
-                                                 [{:op :put, :doc {:_id "my-doc",
-                                                                   :last-updated "tx2"}}])
+                                                 [[:put {:_id "my-doc", :last-updated "tx2"}]])
           db (c2/db node {:tx tx2})]
       (letfn [(q [& temporal-constraints]
                 (into #{} (map :last-updated)

@@ -10,14 +10,12 @@
   (with-open [a (RootAllocator.)]
     (t/is (= (json/parse-string (slurp (io/resource "can-write-tx-to-arrow-ipc-streaming-format/expected.json")))
              (-> (txp/serialize-tx-ops
-                  [{:op :put
-                    :doc {:_id "device-info-demo000000",
+                  [[:put {:_id "device-info-demo000000",
                           :api-version "23",
                           :manufacturer "iobeam",
                           :model "pinto",
-                          :os-name "6.0.1"}}
-                   {:op :put
-                    :doc {:_id "reading-demo000000",
+                          :os-name "6.0.1"}]
+                   [:put {:_id "reading-demo000000",
                           :cpu-avg-15min 8.654,
                           :rssi -50.0,
                           :cpu-avg-5min 10.802,
@@ -29,7 +27,7 @@
                           :battery-temperature 89.5,
                           :cpu-avg-1min 24.81,
                           :mem-free 4.10011078E8,
-                          :mem-used 5.89988922E8}}]
+                          :mem-used 5.89988922E8}]]
                   a)
                  (c2-json/arrow-streaming->json)
                  (json/parse-string))))))

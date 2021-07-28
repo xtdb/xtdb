@@ -7,9 +7,9 @@
 
 (t/deftest test-simple-scan
   (with-open [node (c2/start-node {})]
-    (let [tx (c2/submit-tx node [{:op :put, :doc {:_id "foo", :col1 "foo1"}}
-                                 {:op :put, :doc {:_id "bar", :col1 "bar1", :col2 "bar2"}}
-                                 {:op :put, :doc {:_id "foo", :col2 "baz2"}}])
+    (let [tx (c2/submit-tx node [[:put {:_id "foo", :col1 "foo1"}]
+                                 [:put {:_id "bar", :col1 "bar1", :col2 "bar2"}]
+                                 [:put {:_id "foo", :col2 "baz2"}]])
           db (c2/db node {:tx tx})]
       (t/is (= [{:_id "bar", :col1 "bar1", :col2 "bar2"}]
                (into [] (c2/plan-ra '[:scan [_id col1 col2]] db)))))))
@@ -18,9 +18,9 @@
   (with-open [node1 (c2/start-node {})
               node2 (c2/start-node {})]
     (let [db1 (c2/db node1
-                     {:tx (c2/submit-tx node1 [{:op :put, :doc {:_id "foo", :col1 "col1"}}])})
+                     {:tx (c2/submit-tx node1 [[:put {:_id "foo", :col1 "col1"}]])})
           db2 (c2/db node2
-                     {:tx (c2/submit-tx node2 [{:op :put, :doc {:_id "foo", :col2 "col2"}}])})]
+                     {:tx (c2/submit-tx node2 [[:put {:_id "foo", :col2 "col2"}]])})]
       (t/is (= [{:_id "foo", :col1 "col1", :col2 "col2"}]
                (into [] (c2/plan-ra '[:join {_id _id}
                                       [:scan $db1 [_id col1]]

@@ -69,7 +69,9 @@
                                       [pro.juxt.crux-labs/core2-s3]
                                       [pro.juxt.crux-labs/core2-jdbc]]
                        :uberjar-name "core2-standalone.jar"
-                       :resource-paths ["uberjar"]}}
+                       :resource-paths ["uberjar"]}
+
+             :no-asserts {:jvm-opts ["-da" "-Dclojure.spec.check-asserts=false"]}}
 
   :test-selectors {:default (complement (some-fn :skip-test :integration :timescale))
                    :integration :integration
@@ -97,6 +99,7 @@
              "-XX:MaxDirectMemorySize=2G"
              "-Dio.netty.tryReflectionSetAccessible=true"
              "-Darrow.enable_null_check_for_get=false"
+             "-Dclojure.spec.check-asserts=true"
              "--illegal-access=warn" ;; needed on JDK16 to allow Netty/Arrow access DirectBuffer internals
              #_"--add-modules=jdk.incubator.vector" ;; doesn't work if it doesn't exist, like on JDK11.
              #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead

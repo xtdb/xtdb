@@ -29,9 +29,8 @@
                                       (map read-string)
                                       (partition-all 100))]
                  (c2/submit-tx node (for [doc doc-batch]
-                                      {:op :put,
-                                       ;; TODO Core2 doesn't support set vals yet
-                                       :doc (->> doc (into {} (remove (comp set? val))))})))))]
+                                      ;; TODO Core2 doesn't support set vals yet
+                                      [:put (->> doc (into {} (remove (comp set? val))))])))))]
     (bench/with-timing :await-tx
       @(-> (c2/await-tx-async node tx)
            (.orTimeout 5 TimeUnit/HOURS)))

@@ -123,7 +123,7 @@
 
 (t/deftest test-date-trunc
   (with-open [node (c2/start-node {})]
-    (let [tx (c2/submit-tx node [{:op :put, :doc {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}}])
+    (let [tx (c2/submit-tx node [[:put {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}]])
           db (c2/db node {:tx tx})]
       (t/is (= [{:trunc #inst "2021-01-21"}]
                (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" date)}]

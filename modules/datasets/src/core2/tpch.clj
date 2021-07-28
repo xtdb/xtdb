@@ -60,7 +60,7 @@
                                                   (reduce (fn [[_!last-tx last-doc-count] batch]
                                                             [(c2/submit-tx tx-producer
                                                                            (vec (for [doc batch]
-                                                                                  {:op :put, :doc doc})))
+                                                                                  [:put doc])))
                                                              (+ last-doc-count (count batch))])
                                                           [nil 0]))]
                     (log/debug "Transacted" doc-count (.getTableName t))

@@ -74,7 +74,7 @@ The CLI parameters, and EDN/JSON configuration file formats are the same as Clas
 
 Transactions are slightly different to Classic:
 
-- `[:crux.tx/put <doc>]` -> `{:op :put, :doc <doc>}`. Put and delete supported thus far.
+- `[:crux.tx/put <doc>]` -> `[:put <doc>]`. Put and delete supported thus far.
 - `:crux.db/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 

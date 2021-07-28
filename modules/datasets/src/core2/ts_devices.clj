@@ -67,9 +67,8 @@
            [initial-readings rest-readings] (split-at (count device-infos) readings)]
 
        @(->> (for [{:keys [time] :as doc} (concat (interleave device-infos initial-readings) rest-readings)]
-               (cond-> {:op :put
-                        :doc doc}
-                 time (assoc :_valid-time-start time)))
+               (cond-> [:put doc]
+                 time (conj {:_valid-time-start time})))
              (partition-all batch-size)
              (reduce (fn [_acc tx-ops]
                        (c2/submit-tx tx-producer tx-ops))

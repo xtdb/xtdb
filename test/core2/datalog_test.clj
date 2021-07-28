@@ -10,8 +10,8 @@
   (into [] (apply c2/plan-q query args)))
 
 (def ivan+petr
-  [{:op :put, :doc {:_id "ivan", :first-name "Ivan", :last-name "Ivanov"}}
-   {:op :put, :doc {:_id "petr", :first-name "Petr", :last-name "Petrov"}}])
+  [[:put {:_id "ivan", :first-name "Ivan", :last-name "Ivanov"}]
+   [:put {:_id "petr", :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest test-scan
   (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
@@ -91,10 +91,10 @@
 (t/deftest datascript-test-joins
   (let [db (c2/db tu/*node*
                   {:tx (c2/submit-tx tu/*node*
-                                     [{:op :put, :doc {:_id 1, :name "Ivan", :age 15}}
-                                      {:op :put, :doc {:_id 2, :name "Petr", :age 37}}
-                                      {:op :put, :doc {:_id 3, :name "Ivan", :age 37}}
-                                      {:op :put, :doc {:_id 4, :age 15}}])})]
+                                     [[:put {:_id 1, :name "Ivan", :age 15}]
+                                      [:put {:_id 2, :name "Petr", :age 37}]
+                                      [:put {:_id 3, :name "Ivan", :age 37}]
+                                      [:put {:_id 4, :age 15}]])})]
 
     (t/is (= #{{:e 1} {:e 2} {:e 3}}
              (set (run-query '{:find [?e]
@@ -181,10 +181,10 @@
 (t/deftest datascript-test-aggregates
   (let [db (c2/db tu/*node*
                   {:tx (c2/submit-tx tu/*node*
-                                     [{:op :put, :doc {:_id "Cerberus", :heads 3}}
-                                      {:op :put, :doc {:_id "Medusa", :heads 1}}
-                                      {:op :put, :doc {:_id "Cyclops", :heads 1}}
-                                      {:op :put, :doc {:_id "Chimera", :heads 1}}])})]
+                                     [[:put {:_id "Cerberus", :heads 3}]
+                                      [:put {:_id "Medusa", :heads 1}]
+                                      [:put {:_id "Cyclops", :heads 1}]
+                                      [:put {:_id "Chimera", :heads 1}]])})]
     (t/is (= #{{:heads 1, :count-?heads 3} {:heads 3, :count-?heads 1}}
              (set (run-query '{:find [?heads (count ?heads)]
                                :where [[?monster :heads ?heads]]}
@@ -283,11 +283,11 @@
   (with-open [node1 (c2/start-node {})
               node2 (c2/start-node {})]
     (let [db1 (c2/db node1
-                     {:tx (c2/submit-tx node1 [{:op :put, :doc {:_id "foo", :col1 "foo1"}}
-                                               {:op :put, :doc {:_id "bar", :col1 "bar1"}}])})
+                     {:tx (c2/submit-tx node1 [[:put {:_id "foo", :col1 "foo1"}]
+                                               [:put {:_id "bar", :col1 "bar1"}]])})
           db2 (c2/db node2
-                     {:tx (c2/submit-tx node2 [{:op :put, :doc {:_id "foo", :col2 "foo2"}}
-                                               {:op :put, :doc {:_id "bar", :col2 "bar2"}}])})]
+                     {:tx (c2/submit-tx node2 [[:put {:_id "foo", :col2 "foo2"}]
+                                               [:put {:_id "bar", :col2 "bar2"}]])})]
       (t/is (= [{:col1 "foo1", :col2 "foo2"}
                 {:col1 "bar1", :col2 "bar2"}]
                (run-query '{:find [?col1 ?col2]
