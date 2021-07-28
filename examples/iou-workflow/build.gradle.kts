@@ -22,7 +22,7 @@ dependencies {
     cordaCompile(cordaGroup, "corda-jackson", cordaVersion)
     cordaCompile(cordaGroup, "corda-rpc", cordaVersion)
     cordaRuntime(cordaGroup, "corda", cordaVersion)
-    cordapp(project(":iou-contract"))
+    cordapp(project(":examples:iou-contract"))
     cordapp(project(":crux-corda-state"))
     cordapp(project(":crux-corda"))
     implementation("pro.juxt.crux", "crux-core", "1.17.1-rc1")
