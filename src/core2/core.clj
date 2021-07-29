@@ -29,8 +29,8 @@
     ^java.util.concurrent.CompletableFuture #_<core2.tx.TransactionInstant> [node tx])
 
   (db-async
-    ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node]
-    ^java.util.concurrent.CompletableFuture #_<core2.data_source.IQueryDataSource> [node db-opts]))
+    ^java.util.concurrent.CompletableFuture #_<core2.data_source.IDataSource> [node]
+    ^java.util.concurrent.CompletableFuture #_<core2.data_source.IDataSource> [node db-opts]))
 
 (defprotocol PSubmitNode
   (submit-tx

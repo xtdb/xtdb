@@ -7,7 +7,7 @@
   (:import core2.indexer.IChunkManager
            core2.tx.TransactionInstant))
 
-(definterface IQueryDataSource
+(definterface IDataSource
   (^core2.ICursor scan [^java.util.List #_<String> colNames,
                         metadataPred
                         ^java.util.Map #_#_<String, IColumnSelector> colPreds
@@ -15,11 +15,11 @@
                         ^longs temporalMaxRange]))
 
 (definterface IDataSourceFactory
-  (^core2.data_source.IQueryDataSource getDataSource [^core2.tx.TransactionInstant tx]))
+  (^core2.data_source.IDataSource getDataSource [^core2.tx.TransactionInstant tx]))
 
-(deftype QueryDataSource [metadata-mgr temporal-mgr buffer-pool ^IChunkManager indexer,
-                          ^TransactionInstant tx]
-  IQueryDataSource
+(deftype DataSource [metadata-mgr temporal-mgr buffer-pool ^IChunkManager indexer,
+                     ^TransactionInstant tx]
+  IDataSource
   (scan [_ col-names metadata-pred col-preds temporal-min-range temporal-max-range]
     (when-let [tx-time (.tx-time tx)]
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
@@ -51,4 +51,4 @@
   (reify
     IDataSourceFactory
     (getDataSource [_ tx]
-      (QueryDataSource. metadata-mgr temporal-mgr buffer-pool indexer tx))))
+      (DataSource. metadata-mgr temporal-mgr buffer-pool indexer tx))))

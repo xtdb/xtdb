@@ -19,7 +19,7 @@
             [core2.operator.table :as table]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
-           core2.data_source.IQueryDataSource
+           core2.data_source.IDataSource
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
            org.apache.arrow.memory.BufferAllocator))
 
@@ -72,11 +72,11 @@
                           (vals selects)))
         metadata-pred (expr.meta/->metadata-selector (cons 'and args) srcs)
 
-        ^IQueryDataSource db (or (get srcs (or source '$))
-                                 (throw (err/illegal-arg :unknown-db
-                                                         {::err/message "Query refers to unknown db"
-                                                          :db source
-                                                          :srcs (keys srcs)})))]
+        ^IDataSource db (or (get srcs (or source '$))
+                            (throw (err/illegal-arg :unknown-db
+                                                    {::err/message "Query refers to unknown db"
+                                                     :db source
+                                                     :srcs (keys srcs)})))]
     (fn [{:keys [default-valid-time]}]
       (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
         ;; scan doesn't use our allocator because it mostly pulls from the buffer pool
