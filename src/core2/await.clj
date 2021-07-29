@@ -22,29 +22,26 @@
   ^java.util.concurrent.CompletableFuture
   [^TransactionInstant awaited-tx, ->latest-completed-tx, ^PriorityBlockingQueue awaiters]
 
-  (let [fut (CompletableFuture.)]
-    (or (try
-          (let [completed-tx (->latest-completed-tx)]
-            (when (await-done? awaited-tx completed-tx)
-              ;; fast path - don't bother with the PBQ unless we need to
-              (.complete fut awaited-tx)
-              true))
+  (or (try
+        ;; fast path - don't bother with the PBQ unless we need to
+        (when (await-done? awaited-tx (->latest-completed-tx))
+          (CompletableFuture/completedFuture awaited-tx))
+        (catch Exception e
+          (CompletableFuture/failedFuture (->ingester-ex e))))
+
+      (let [fut (CompletableFuture.)
+            awaiting-tx (AwaitingTx. awaited-tx fut)]
+        (.offer awaiters awaiting-tx)
+
+        (try
+          (when (await-done? awaited-tx (->latest-completed-tx))
+            (.remove awaiters awaiting-tx)
+            (.complete fut awaited-tx))
           (catch Exception e
             (.completeExceptionally fut (->ingester-ex e))
             true))
 
-        (let [awaiting-tx (AwaitingTx. awaited-tx fut)]
-          (.offer awaiters awaiting-tx)
-
-          (try
-            (let [completed-tx (->latest-completed-tx)]
-              (when (await-done? awaited-tx completed-tx)
-                (.remove awaiters awaiting-tx)
-                (.complete fut awaited-tx)))
-            (catch Exception e
-              (.completeExceptionally fut (->ingester-ex e))
-              true))))
-    fut))
+        fut)))
 
 (defn notify-tx [completed-tx ^PriorityBlockingQueue awaiters]
   (while (when-let [^AwaitingTx awaiting-tx (.peek awaiters)]
