@@ -12,7 +12,7 @@
             [crux.rocksdb :as rocks])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
-           [org.apache.lucene.index DirectoryReader Term]
+           [org.apache.lucene.index DirectoryReader]
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]
            org.apache.lucene.store.FSDirectory))

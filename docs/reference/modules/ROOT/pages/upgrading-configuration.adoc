@@ -2,4 +2,4 @@
 
 Upgrading a node from Crux version `1.X.n` to `1.Y.n` generally requires rebuilding the node's local KV index store from the golden stores, i.e. the transaction log and the document store.
 
-You can perform this rebuild process by simply shutting down your node and removing the KV store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `crux-lucene` is enabled). Crux will then rebuild the indices when the node is restarted.
+You can perform this rebuild process by simply shutting down your node and removing the index-store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `crux-lucene` is enabled). Crux will then rebuild the indices when the node is restarted.

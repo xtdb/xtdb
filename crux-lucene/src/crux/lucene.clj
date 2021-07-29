@@ -32,7 +32,7 @@
     (cio/try-close index-writer)
     (cio/try-close directory)))
 
-(defn- ^String ->hash-str [eid]
+(defn ^String ->hash-str [eid]
   (str (cc/new-id eid)))
 
 (defrecord DocumentId [e a v])
@@ -40,11 +40,11 @@
 (defn ^String keyword->k [k]
   (subs (str k) 1))
 
-(def ^:const ^:private index-version 1)
-(def ^:const ^:private field-crux-id "_crux_id")
-(def ^:const ^:private field-crux-val "_crux_val")
-(def ^:const ^:private field-crux-attr "_crux_attr")
-(def ^:const ^:private field-crux-eid "_crux_eid")
+(def ^:const index-version 1)
+(def ^:const field-crux-id "_crux_id")
+(def ^:const field-crux-val "_crux_val")
+(def ^:const field-crux-attr "_crux_attr")
+(def ^:const field-crux-eid "_crux_eid")
 
 (defn- validate-index-version [^IndexWriter writer]
   (let [found-index-version (some-> (into {} (.getLiveCommitData writer))
@@ -108,6 +108,26 @@
                              query))))
 
 (defn ^crux.api.ICursor search
+  "Lazily search a crux-lucene index in its raw form, without temporal filtering.
+
+  query   Either an unparsed query string or an `org.apache.lucene.search.Query`
+  opts    (optional map)   
+          - `:lucene-store-k` (Keyword):
+              Run the search against specified module key (defaults to `:crux.lucene/lucene-store` when not specified)
+
+  The analyzer defined in the module configuration will be used for unparsed query strings. Supply a Query to use a different analyzer.
+
+  Returns a Cursor of result tuples. Each tuple contains the matched `org.apache.lucene.document.Document` and the score (Double).
+
+  Once you've consumed as much of the sequence as you need to, you'll need to `.close` the sequence.
+
+  A common way to do this is using `with-open`:
+
+  (with-open [res (l/search node query-string)]
+    (let [results (iterator-seq res)]
+      ...))
+
+  Once the sequence is closed, attempting to iterate it is undefined."
   ([node query]
    (search node query {}))
 
@@ -196,7 +216,7 @@
   (index! [this index-writer docs])
   (evict! [this index-writer eids]))
 
-(defrecord LuceneAveIndexer []
+(defrecord EavIndexer []
   LuceneIndexer
 
   (index! [_ index-writer docs]
@@ -215,7 +235,7 @@
                         ;; Used for wildcard searches
                         (.add (TextField. field-crux-val, v, Field$Store/YES))
                         ;; Used for eviction
-                        (.add (TextField. field-crux-eid, (->hash-str e), Field$Store/YES))
+                        (.add (StringField. field-crux-eid, (->hash-str e), Field$Store/NO))
                         ;; Used for wildcard searches
                         (.add (StringField. field-crux-attr, (keyword->k a), Field$Store/YES)))]]
       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
@@ -226,7 +246,7 @@
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn ->indexer [_]
-  (LuceneAveIndexer.))
+  (EavIndexer.))
 
 (defn ->analyzer [_]
   (StandardAnalyzer.))
@@ -255,7 +275,7 @@
   (let [^SnapshotDeletionPolicy snapshotter (.getIndexDeletionPolicy (.getConfig index-writer))]
     (reify cp/CheckpointSource
       (save-checkpoint [_ dir]
-        (.commit index-writer) ; RFC: do we need this?
+        (.commit index-writer)
 
         (let [snapshot (.snapshot snapshotter)]
           (try

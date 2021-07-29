@@ -1,12 +1,11 @@
 (ns crux.lucene.multi-field
   (:require [clojure.spec.alpha :as s]
             [crux.codec :as cc]
-            [crux.db :as db]
             [crux.lucene :as l]
             [crux.memory :as mem]
             [crux.query :as q])
   (:import org.apache.lucene.analysis.Analyzer
-           [org.apache.lucene.document Document Field Field$Store StoredField StringField TextField]
+           [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
            [org.apache.lucene.index IndexWriter Term]
            org.apache.lucene.queryparser.classic.QueryParser
            [org.apache.lucene.search Query TermQuery]))
@@ -14,7 +13,7 @@
 (def ^:const ^:private field-content-hash "_crux_content_hash")
 (def ^:const ^:private field-eid "_crux_eid")
 
-(defrecord LuceneMultiFieldIndexer []
+(defrecord MultiFieldIndexer []
   l/LuceneIndexer
 
   (index! [this index-writer docs]
@@ -27,7 +26,7 @@
                     ;; The actual term, which will be tokenized
                     (.add d (TextField. (l/keyword->k k), v, Field$Store/YES)))
                   ;; For eviction:
-                  (.add d (StringField. field-eid, (str (cc/new-id (:crux.db/id doc))), Field$Store/NO))
+                  (.add d (StringField. field-eid, (l/->hash-str (:crux.db/id doc)), Field$Store/NO))
                   d)))
          (.addDocuments ^IndexWriter index-writer)))
 
@@ -61,4 +60,4 @@
 
 (defn ->indexer
   [_]
-  (LuceneMultiFieldIndexer.))
+  (MultiFieldIndexer.))
