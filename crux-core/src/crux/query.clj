@@ -1,33 +1,32 @@
 (ns ^:no-doc crux.query
-  (:require [clojure.set :as set]
+  (:require [clojure.java.io :as io]
+            [clojure.pprint :as pp]
+            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
-            [clojure.java.io :as io]
-            [com.stuartsierra.dependency :as dep]
+            [crux.api :as api]
+            [crux.bus :as bus]
             [crux.cache :as cache]
             [crux.cache.lru :as lru]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.error :as err]
             [crux.index :as idx]
             [crux.io :as cio]
             [crux.memory :as mem]
             [crux.pull :as pull]
-            [crux.bus :as bus]
-            [crux.api :as api]
-            [crux.tx :as tx]
-            [crux.error :as err]
-            [crux.tx.conform :as txc]
-            [taoensso.nippy :as nippy]
-            [edn-query-language.core :as eql]
             [crux.system :as sys]
-            [clojure.pprint :as pp])
+            [crux.tx :as tx]
+            [crux.tx.conform :as txc]
+            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
+            [juxt.clojars-mirrors.eql.v2021v02v28.edn-query-language.core :as eql]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import [clojure.lang Box ExceptionInfo]
-           (crux.api HistoryOptions HistoryOptions$SortOrder)
            crux.codec.EntityTx
-           (java.io Closeable Writer)
-           (java.util Collection Comparator Date List UUID)
-           (java.util.concurrent Future Executors ScheduledExecutorService TimeoutException TimeUnit)))
+           [java.io Closeable Writer]
+           [java.util Collection Comparator Date List UUID]
+           [java.util.concurrent Executors Future ScheduledExecutorService TimeoutException TimeUnit]))
 
 (defn logic-var? [x]
   (and (symbol? x)
@@ -1758,7 +1757,7 @@
                               (with-upper-bound :asc (inc tx-id))))
         (dissoc :start-tx :end-tx))))
 
-(defrecord QueryDatasource [document-store index-store bus tx-ingester
+(defrecord QueryDatasource [document-store index-store bus tx-indexer
                             ^Date valid-time ^Date tx-time ^Long tx-id
                             ^ScheduledExecutorService interrupt-executor
                             conform-cache query-cache pull-cache
@@ -1904,15 +1903,14 @@
                       {::tx/tx-time (Date.)
                        ::tx/tx-id 0}))
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
-          in-flight-tx (db/begin-tx tx-ingester tx {::db/valid-time valid-time
+          in-flight-tx (db/begin-tx tx-indexer tx {::db/valid-time valid-time
                                                     ::tx/tx-time tx-time
                                                     ::tx/tx-id tx-id})]
 
       (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
-        (api/db in-flight-tx valid-time))))
-  )
+        (api/db in-flight-tx valid-time)))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
   (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-id tx-id}))))
@@ -1942,13 +1940,12 @@
           resolved-tx (with-open [index-snapshot (db/open-index-snapshot index-store)]
                         (db/resolve-tx index-snapshot (:crux.tx/tx basis)))]
 
-      ;; we create a new tx-ingester mainly so that it doesn't share state with the main one (!error)
-      ;; we couldn't have QueryEngine depend on the main one anyway, because of a cyclic dependency
+      ;; we can't have QueryEngine depend on the main tx-indexer, because of a cyclic dependency
       (map->QueryDatasource (assoc this
-                                   :tx-ingester (tx/->tx-ingester {:index-store index-store
-                                                                   :document-store document-store
-                                                                   :bus bus
-                                                                   :query-engine this})
+                                   :tx-indexer (tx/->tx-indexer {:index-store index-store
+                                                                 :document-store document-store
+                                                                 :bus bus
+                                                                 :query-engine this})
                                    :pred-ctx @!pred-ctx
                                    :valid-time valid-time
                                    :tx-time (:crux.tx/tx-time resolved-tx)

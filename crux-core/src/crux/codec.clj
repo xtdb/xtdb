@@ -6,7 +6,7 @@
             [crux.query-state :as cqs]
             [crux.io :as cio]
             [crux.memory :as mem]
-            [taoensso.nippy :as nippy])
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import [clojure.lang APersistentMap APersistentSet BigInt IHashEq Keyword]
            crux.codec.MathCodec
            java.io.Writer

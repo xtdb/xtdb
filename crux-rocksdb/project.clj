@@ -1,12 +1,18 @@
-(defproject juxt/crux-rocksdb "crux-git-version-beta"
+(defproject pro.juxt.crux/crux-rocksdb "<inherited>"
   :description "Crux RocksDB"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-metrics "crux-git-version-alpha" :scope "provided"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.crux/crux-metrics :scope "provided"]
                  [org.rocksdb/rocksdbjni "6.12.7"]
-                 [com.github.jnr/jnr-ffi "2.1.12"]]
-  :middleware [leiningen.project-version/middleware]
-  :pedantic? :warn)
+                 [com.github.jnr/jnr-ffi "2.1.12"]])

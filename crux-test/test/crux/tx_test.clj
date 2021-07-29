@@ -1,34 +1,29 @@
 (ns crux.tx-test
-  (:require [clojure.test :as t]
-            [clojure.java.io :as io]
+  (:require [clojure.java.io :as io]
+            [clojure.string :as string]
+            [clojure.test :as t]
+            [clojure.tools.logging.impl :as log-impl]
+            [crux.api :as api]
+            [crux.api :as crux]
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.tx :as tx]
-            [crux.kv :as kv]
-            [crux.api :as api]
             [crux.rdf :as rdf]
-            [crux.query :as q]
-            [crux.node :as n]
-            [crux.io :as cio]
-            [taoensso.nippy :as nippy]
-            [crux.tx.event :as txe]
-            [clojure.string :as string]
-            [crux.tx.conform :as txc]
-            [crux.api :as crux])
-  (:import [java.util Date UUID Collections HashMap HashSet]
-           [java.time Duration]
-           [crux.codec EntityTx]
-           [clojure.lang Keyword PersistentArrayMap]
-           [java.net URL URI]))
+            [crux.system :as sys]
+            [crux.tx :as tx]
+            [crux.tx.event :as txe])
+  (:import [clojure.lang ExceptionInfo Keyword PersistentArrayMap]
+           [java.net URI URL]
+           java.time.Duration
+           [java.util Collections Date HashMap HashSet UUID]))
 
 (t/use-fixtures :each fix/with-node fix/with-silent-test-check
   (fn [f]
     (f)
     (#'tx/reset-tx-fn-error)))
 
-(def picasso-id :http://dbpedia.org/resource/Pablo_Picasso)
+(def picasso-id (keyword "http://dbpedia.org/resource/Pablo_Picasso"))
 (def picasso-eid (c/new-id picasso-id))
 
 (def picasso
@@ -53,15 +48,15 @@
                                    :vt valid-time
                                    :tt tx-time
                                    :tx-id tx-id})
-                 (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-id))))
+                 (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") tx-time tx-id))))
 
       (t/testing "cannot see entity before valid or transact time"
-        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" tx-id)))
-        (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time -1))))
+        (t/is (nil? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") #inst "2018-05-20" tx-id)))
+        (t/is (nil? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") tx-time -1))))
 
       (t/testing "can see entity after valid or transact time"
-        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-22" tx-id)))
-        (t/is (some? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso tx-time tx-id))))
+        (t/is (some? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") #inst "2018-05-22" tx-id)))
+        (t/is (some? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") tx-time tx-id))))
 
       (t/testing "can see entity history"
         (t/is (= [(c/map->EntityTx {:eid picasso-eid
@@ -69,7 +64,7 @@
                                     :vt valid-time
                                     :tt tx-time
                                     :tx-id tx-id})]
-                 (db/entity-history index-snapshot :http://dbpedia.org/resource/Pablo_Picasso :desc {})))))
+                 (db/entity-history index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") :desc {})))))
 
     (t/testing "add new version of entity in the past"
       (let [new-picasso (assoc picasso :foo :bar)
@@ -85,9 +80,9 @@
                                      :vt new-valid-time
                                      :tt new-tx-time
                                      :tx-id new-tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
+                   (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id)))
 
-          (t/is (nil? (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso #inst "2018-05-20" -1))))))
+          (t/is (nil? (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") #inst "2018-05-20" -1))))))
 
     (t/testing "add new version of entity in the future"
       (let [new-picasso (assoc picasso :baz :boz)
@@ -103,13 +98,13 @@
                                      :vt new-valid-time
                                      :tt new-tx-time
                                      :tx-id new-tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
+                   (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id)))
           (t/is (= (c/map->EntityTx {:eid picasso-eid
                                      :content-hash content-hash
                                      :vt valid-time
                                      :tt tx-time
                                      :tx-id tx-id})
-                   (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time tx-id))))
+                   (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time tx-id))))
 
         (t/testing "can correct entity at earlier valid time"
           (let [new-picasso (assoc picasso :bar :foo)
@@ -127,24 +122,24 @@
                                          :vt new-valid-time
                                          :tt new-tx-time
                                          :tx-id new-tx-id})
-                       (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id)))
+                       (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id)))
 
               (t/is (= prev-tx-id
-                       (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso prev-tx-time prev-tx-id)))))))
+                       (:tx-id (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") prev-tx-time prev-tx-id)))))))
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
                 {new-tx-time :crux.tx/tx-time
                  new-tx-id   :crux.tx/tx-id}
-                (fix/submit+await-tx [[:crux.tx/delete :http://dbpedia.org/resource/Pablo_Picasso new-valid-time]])]
+                (fix/submit+await-tx [[:crux.tx/delete (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time]])]
             (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-              (t/is (nil? (.content-hash (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso new-valid-time new-tx-id))))
+              (t/is (nil? (.content-hash (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id))))
               (t/testing "first version of entity is still visible in the past"
-                (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot :http://dbpedia.org/resource/Pablo_Picasso valid-time new-tx-id))))))))))
+                (t/is (= tx-id (:tx-id (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") valid-time new-tx-id))))))))))
 
     (t/testing "can retrieve history of entity"
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
-        (t/is (= 5 (count (db/entity-history index-snapshot :http://dbpedia.org/resource/Pablo_Picasso :desc
+        (t/is (= 5 (count (db/entity-history index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") :desc
                                              {:with-corrections? true}))))))))
 
 (t/deftest test-can-cas-entity
@@ -266,8 +261,8 @@
           (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events]
-  (let [{:keys [tx-ingester]} *api*
-        in-flight-tx (db/begin-tx tx-ingester tx nil)]
+  (let [{:keys [crux/tx-indexer]} @(:!system *api*)
+        in-flight-tx (db/begin-tx tx-indexer tx nil)]
     (db/index-tx-events in-flight-tx tx-events)
     (db/commit in-flight-tx)))
 
@@ -993,7 +988,7 @@
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
         !latch (promise)]
-    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-tx ::tx/committing-tx ::tx/indexed-tx}}
+    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
                 (fn [evt]
                   (swap! !events conj evt)
                   (when (= ::tx/indexed-tx (:crux/event-type evt))
@@ -1008,10 +1003,6 @@
         (t/is false))
 
       (t/is (= [{:crux/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
-                {:crux/event-type ::tx/committing-tx,
-                 :submitted-tx submitted-tx,
-                 :evicting-eids #{}
-                 :doc-ids doc-ids}
                 {:crux/event-type ::tx/indexed-tx,
                  :submitted-tx submitted-tx,
                  :committed? true
@@ -1024,7 +1015,7 @@
                                    #crux/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
                                    #crux/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
-                   (update 2 dissoc :bytes-indexed)))))))
+                   (update 1 dissoc :bytes-indexed)))))))
 
 (t/deftest await-fails-quickly-738
   (with-redefs [tx/index-tx-event (fn [_ _ _]
@@ -1339,3 +1330,101 @@
     (t/is (= (select-keys tx [::tx/tx-id]) (api/latest-submitted-tx *api*)))
     (t/is (= tx (api/latest-completed-tx *api*)))
     (t/is (api/tx-committed? *api* tx))))
+
+(t/deftest handles-secondary-indices
+  (letfn [(with-persistent-golden-stores [node-config db-dir]
+            (-> node-config
+                (assoc :crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                                                :db-dir (io/file db-dir "txs")}}
+                       :crux/document-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                                                        :db-dir (io/file db-dir "docs")}})))
+
+          (with-persistent-indices [node-config idx-dir]
+            (-> node-config
+                (assoc :crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+                                                     :db-dir idx-dir}})))
+
+          (with-secondary-index [node-config after-tx-id process-tx-f]
+            (-> node-config
+                (assoc ::index2 (-> (fn [{:keys [secondary-indices]}]
+                                      (tx/register-index! secondary-indices after-tx-id process-tx-f)
+                                      nil)
+                                    (with-meta {::sys/deps {:secondary-indices :crux/secondary-indices}
+                                                ::sys/before #{[:crux/tx-ingester]}})))))]
+
+    (t/testing "indexes into secondary indices"
+      (let [!txs (atom [])]
+        (with-open [node (crux/start-node (-> {}
+                                              (with-secondary-index nil
+                                                (fn [tx]
+                                                  (swap! !txs conj tx)))))]
+          (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]])
+          (t/is (= [0] (map ::tx/tx-id @!txs))))))
+
+    (t/testing "secondary indices catch up to Crux indices on node startup"
+      (fix/with-tmp-dirs #{db-dir idx-dir}
+        (with-open [node (crux/start-node (-> {}
+                                              (with-persistent-golden-stores db-dir)
+                                              (with-persistent-indices idx-dir)))]
+          (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]]))
+
+        (let [!txs (atom [])]
+          (with-open [_node (crux/start-node (-> {}
+                                                (with-persistent-golden-stores db-dir)
+                                                (with-persistent-indices idx-dir)
+                                                (with-secondary-index nil
+                                                  (fn [tx]
+                                                    (swap! !txs conj tx)))))]
+            ;; NOTE: don't need `sync` - should happen before node becomes available.
+            (t/is (= [0] (map ::tx/tx-id @!txs)))))))
+
+    (t/testing "Crux catches up without replaying tx to secondary indices"
+      (fix/with-tmp-dirs #{db-dir}
+        (let [!txs (atom [])]
+          (with-open [node (crux/start-node (-> {}
+                                                (with-persistent-golden-stores db-dir)
+                                                (with-secondary-index nil
+                                                  (fn [tx]
+                                                    (swap! !txs conj tx)))))]
+            (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]]))
+
+          (with-open [node (crux/start-node (-> {}
+                                                (with-persistent-golden-stores db-dir)
+                                                (with-secondary-index 0
+                                                  (fn [tx]
+                                                    (swap! !txs conj tx)))))]
+            (crux/sync node)
+            (t/is (= 0 (::tx/tx-id (crux/latest-completed-tx node))))
+            (t/is (= [0] (map ::tx/tx-id @!txs)))))))
+
+    (with-redefs [log-impl/enabled? (constantly false)]
+      (t/testing "handles secondary indexes blowing up"
+        (with-open [node (crux/start-node (-> {}
+                                              (with-secondary-index nil
+                                                (fn [_tx]
+                                                  (throw (ex-info "boom!" {}))))))]
+
+          (t/is (thrown-with-msg? ExceptionInfo #"boom!"
+                                  (try
+                                    (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]])
+                                    (catch Exception e
+                                      (throw (.getCause e))))))
+          (t/is (nil? (crux/latest-completed-tx node)))))
+
+      (t/testing "handles secondary indexes blowing up on startup"
+        (fix/with-tmp-dirs #{db-dir idx-dir}
+          (with-open [node (crux/start-node (-> {}
+                                                (with-persistent-golden-stores db-dir)
+                                                (with-persistent-indices idx-dir)))]
+            (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]]))
+
+          (t/is (thrown-with-msg? ExceptionInfo #"boom!"
+                                  (try
+                                    (crux/start-node (-> {}
+                                                         (with-persistent-golden-stores db-dir)
+                                                         (with-persistent-indices idx-dir)
+                                                         (with-secondary-index nil
+                                                           (fn [_tx]
+                                                             (throw (ex-info "boom!" {}))))))
+                                    (catch Exception e
+                                      (throw (.getCause e)))))))))))

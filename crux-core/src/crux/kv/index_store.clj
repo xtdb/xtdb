@@ -1089,33 +1089,16 @@
                         (atom #{}) thread-mgr
                         (nop-cache/->nop-cache {}) (nop-cache/->nop-cache {}) (HashMap.))))
 
-  ;; TODO, make use of this fn in unindex-eids
-  (exclusive-avs [_ eids]
-    (with-open [snapshot (kv/new-snapshot kv-store)
-                ecav-i (kv/new-iterator snapshot)
-                av-i (kv/new-iterator snapshot)]
-      (doall
-       (for [eid eids
-             :let [eid-value-buffer (c/->value-buffer eid)]
-             ecav-key (all-keys-in-prefix ecav-i (encode-ecav-key-to nil eid-value-buffer))
-             :let [quad ^Quad (decode-ecav-key-from ecav-key (.capacity eid-value-buffer))
-                   attr-buf (c/->id-buffer (.attr quad))
-                   value-buf ^DirectBuffer (.value quad)
-                   ave-k (encode-ave-key-to nil attr-buf value-buf)]
-             :when (empty? (->> (all-keys-in-prefix av-i ave-k)
-                                (remove (comp #(= eid-value-buffer %)
-                                              #(decode-ave-key->e-from % (.capacity value-buf))))))]
-         [attr-buf value-buf]))))
-
   (store-index-meta [_ k v]
     (store-meta kv-store k v))
-
-  (latest-completed-tx [_]
-    (latest-completed-tx kv-store))
 
   (tx-failed? [_ tx-id]
     (with-open [snapshot (kv/new-snapshot kv-store)]
       (some? (kv/get-value snapshot (encode-failed-tx-id-key-to nil tx-id)))))
+
+  db/LatestCompletedTx
+  (latest-completed-tx [_]
+    (latest-completed-tx kv-store))
 
   db/IndexMeta
   (-read-index-meta [_ k not-found]

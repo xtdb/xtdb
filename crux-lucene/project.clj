@@ -1,19 +1,26 @@
-(defproject juxt/crux-lucene "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-lucene "<inherited>"
   :description "Crux Lucene integration"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core]
 
                  [org.apache.lucene/lucene-core "8.6.1"]
                  [org.apache.lucene/lucene-queryparser "8.6.1"]]
+
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [juxt/crux-test "crux-git-version"]
-                                  [juxt/crux-rocksdb "crux-git-version-beta"]]}}
-  :middleware [leiningen.project-version/middleware]
+                                  [pro.juxt.crux/crux-test]
+                                  [pro.juxt.crux/crux-rocksdb]]}}
+
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"
-             "-Dclojure.spec.check-asserts=true"]
-  :global-vars {*warn-on-reflection* true}
-  :pedantic? :warn)
+             "-Dclojure.spec.check-asserts=true"])

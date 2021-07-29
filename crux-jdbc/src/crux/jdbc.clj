@@ -1,5 +1,6 @@
 (ns crux.jdbc
   (:require [clojure.java.data :as jd]
+            [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [crux.codec :as c]
             [crux.db :as db]
@@ -7,15 +8,17 @@
             [crux.io :as cio]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [next.jdbc :as jdbc]
-            [next.jdbc.connection :as jdbcc]
-            [next.jdbc.result-set :as jdbcr]
-            [taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s])
-  (:import (com.zaxxer.hikari HikariDataSource HikariConfig)
-           java.util.Date
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [crux.tx.subscribe :as tx-sub])
+  (:import clojure.lang.MapEntry
+           [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
-           java.sql.Timestamp))
+           java.sql.Timestamp
+           java.time.Duration
+           java.util.Date))
 
 (defprotocol Dialect
   (setup-schema! [_ pool])
@@ -79,13 +82,18 @@
     {::tx/tx-id (long (:event_offset tx-result))
      ::tx/tx-time (-> (:tx_time tx-result) (->date dialect))}))
 
+(defmulti doc-exists-sql
+  (fn [dialect doc-id]
+    (db-type dialect))
+  :default ::default)
+
+(defmethod doc-exists-sql ::default [_ doc-id]
+  ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0 ORDER BY EVENT_OFFSET FOR UPDATE" doc-id])
+
 (defn- insert-event! [pool event-key v topic]
   (let [b (nippy/freeze v)]
     (jdbc/execute-one! pool ["INSERT INTO tx_events (EVENT_KEY, V, TOPIC, COMPACTED) VALUES (?,?,?,0)" event-key b topic]
                        {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps})))
-
-(defn- doc-exists? [pool k]
-  (not-empty (jdbc/execute-one! pool ["SELECT EVENT_OFFSET from tx_events WHERE EVENT_KEY = ? AND COMPACTED = 0" k])))
 
 (defn- update-doc! [pool k doc]
   (jdbc/execute! pool ["UPDATE tx_events SET V = ? WHERE TOPIC = 'docs' AND EVENT_KEY = ?" (nippy/freeze doc) k]))
@@ -95,19 +103,20 @@
 
 (defrecord JdbcDocumentStore [pool dialect]
   db/DocumentStore
-  (submit-docs [this id-and-docs]
+  (submit-docs [_ id-and-docs]
     (jdbc/with-transaction [tx pool]
-      (doseq [[id doc] id-and-docs
-              :let [id (str id)]]
+      (doseq [[id doc] (->> (for [[id doc] id-and-docs]
+                              (MapEntry/create (str id) doc))
+                            (sort-by key))]
         (if (c/evicted-doc? doc)
           (do
             (insert-event! tx id doc "docs")
             (evict-doc! tx id doc))
-          (if-not (doc-exists? tx id)
+          (if-not (not-empty (jdbc/execute-one! tx (doc-exists-sql dialect id)))
             (insert-event! tx id doc "docs")
             (update-doc! tx id doc))))))
 
-  (fetch-docs [this ids]
+  (fetch-docs [_ ids]
     (cio/with-nippy-thaw-all
       (->> (for [id-batch (partition-all 100 ids)
                  row (jdbc/execute! pool (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s)"
@@ -128,12 +137,12 @@
 
 (defrecord JdbcTxLog [pool dialect ^Closeable tx-consumer]
   db/TxLog
-  (submit-tx [this tx-events]
+  (submit-tx [_ tx-events]
     (let [tx (-> (insert-event! pool nil tx-events "txs")
                  (tx-result->tx-data pool dialect))]
       (delay tx)))
 
-  (open-tx-log [this after-tx-id]
+  (open-tx-log [_ after-tx-id]
     (let [conn (jdbc/get-connection pool)
           stmt (jdbc/prepare conn
                              ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
@@ -146,7 +155,10 @@
                                  :crux.tx/tx-time (-> (:tx_time y) (->date dialect))
                                  :crux.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
-  (latest-submitted-tx [this]
+  (subscribe [this after-tx-id f]
+    (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))
+
+  (latest-submitted-tx [_]
     (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
@@ -156,17 +168,6 @@
   (close [_]
     (cio/try-close tx-consumer)))
 
-(defn ->ingest-only-tx-log {::sys/deps {:connection-pool `->connection-pool}}
+(defn ->tx-log {::sys/deps {:connection-pool `->connection-pool}}
   [{{:keys [pool dialect]} :connection-pool}]
   (map->JdbcTxLog {:pool pool, :dialect dialect}))
-
-(defn ->tx-log {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
-                                  (::sys/deps (meta #'->ingest-only-tx-log)))
-                ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
-                                  (::sys/args (meta #'->ingest-only-tx-log)))}
-  [opts]
-  (let [tx-log (->ingest-only-tx-log opts)]
-    (-> tx-log
-        (assoc :tx-consumer (tx/->polling-tx-consumer opts
-                                                      (fn [after-tx-id]
-                                                        (db/open-tx-log tx-log after-tx-id)))))))

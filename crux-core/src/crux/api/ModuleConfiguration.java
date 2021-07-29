@@ -50,9 +50,9 @@ public final class ModuleConfiguration {
          *
          * If it is not explicitly provided, Crux will use the key that this module is referenced by.
          * e.g. if it is included under a `"crux.rocksdb/kv-store"` key,
-         * Crux will use the `"crux.rocksdb/->kv-store"` Clojure function to construct the module.
+         * Crux will use the `"crux.rocksdb/-&gt;kv-store"` Clojure function to construct the module.
          *
-         * @param module the module constructor, e.g. `"crux.rocksdb/->kv-store"`
+         * @param module the module constructor, e.g. `"crux.rocksdb/-&gt;kv-store"`
          * @return this
          */
         public Builder module(String module) {

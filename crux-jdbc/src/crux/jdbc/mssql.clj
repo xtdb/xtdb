@@ -1,10 +1,10 @@
 (ns ^:no-doc crux.jdbc.mssql
-  (:require [crux.jdbc :as j]
-            [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as jdbcr]
-            [clojure.tools.logging :as log])
-  (:import microsoft.sql.DateTimeOffset
-           java.util.Date))
+  (:require [clojure.tools.logging :as log]
+            [crux.jdbc :as j]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
+            [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr])
+  (:import java.util.Date
+           microsoft.sql.DateTimeOffset))
 
 (defn- check-tx-time-col [ds]
   (when-not (= "datetimeoffset"
@@ -43,3 +43,6 @@ CREATE INDEX tx_events_event_key_idx_2 ON tx_events(event_key)"])
 
 (defmethod j/->date :mssql [^DateTimeOffset d _]
   (Date/from (.toInstant (.getOffsetDateTime d))))
+
+(defmethod j/doc-exists-sql :mssql [_ doc-id]
+  ["SELECT EVENT_OFFSET from tx_events WITH (rowlock,updlock) WHERE EVENT_KEY = ? AND COMPACTED = 0" doc-id])

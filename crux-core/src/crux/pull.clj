@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.pull
   (:require [crux.codec :as c]
             [crux.db :as db]
-            [edn-query-language.core :as eql]
+            [juxt.clojars-mirrors.eql.v2021v02v28.edn-query-language.core :as eql]
             [clojure.string :as string])
   (:import clojure.lang.MapEntry))
 

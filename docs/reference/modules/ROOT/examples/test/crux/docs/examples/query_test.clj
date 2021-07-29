@@ -438,36 +438,36 @@
             '{:find [(pull ?user [*])]
               :where [[?user :user/id 1]]})
            ;; end::pull-query-6[]
+           ))
+
+    (t/is (=
+           ;; tag::pull-many-query-1-r[]
+           {:user/name "Ivan", :user/profession :doctor}
+           ;; end::pull-many-query-1-r[]
+
+           ;; tag::pull-many-query-1[]
+           ;; using `pull`:
+           (crux/pull
+            (crux/db node)
+            [:user/name :user/profession]
+            :ivan)
+           ;; end::pull-many-query-1[]
+           ))
+
+    (t/is (=
+           ;; tag::pull-many-query-2-r[]
+           [{:user/name "Ivan", :user/profession :doctor},
+            {:user/name "Sergei", :user/profession :lawyer}]
+           ;; end::pull-many-query-2-r[]
+
+           ;; tag::pull-many-query-2[]
+           ;; using `pull-many`:
+           (crux/pull-many
+            (crux/db node)
+            [:user/name :user/profession]
+            [:ivan :sergei])
+           ;; end::pull-many-query-2[]
            ))))
-
-(comment
-  ;; TODO resurrected from git history, need to be tested though
-
-  ;; tag::pull[]
-  ;; using `pull`:
-  (crux/pull
-   (crux/db node)
-   [:user/name :user/profession]
-   :ivan)
-  ;; end::pull[]
-
-  ;; tag::pull-r[]
-  ;; => {:user/name "Ivan", :user/profession :doctor}
-  ;; end::pull-r[]
-
-  ;; tag::pull-many[]
-  ;; using `pull-many`:
-  (crux/pull-many
-   (crux/db node)
-   [:user/name :user/profession]
-   [:ivan :sergei])
-  ;; end::pull-many[]
-
-  ;; tag::pull-many-r[]
-  ;; => [{:user/name "Ivan", :user/profession :doctor},
-  ;;     {:user/name "Sergei", :user/profession :lawyer}]
-  ;; end::pull-many-r[]
-  )
 
 (t/deftest test-return-maps
   (fix/submit+await-tx

@@ -1,25 +1,20 @@
 (ns crux.s3
-  (:require [crux.db :as db]
-            [crux.io :as cio]
-            [crux.document-store :as ds]
-            [crux.node :as n]
-            [clojure.spec.alpha :as s]
-            [taoensso.nippy :as nippy]
+  (:require [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
+            [crux.db :as db]
+            [crux.document-store :as ds]
+            [crux.io :as cio]
             [crux.system :as sys])
-  (:import (crux.s3 S3Configurator)
-           (clojure.lang MapEntry)
-           (java.io Closeable)
-           (java.util.concurrent CompletableFuture)
-           (java.util.function BiFunction)
-           (software.amazon.awssdk.core ResponseBytes)
-           (software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer)
-           (software.amazon.awssdk.services.s3 S3AsyncClient)
-           (software.amazon.awssdk.services.s3.model GetObjectRequest PutObjectRequest
-                                                     ListObjectsV2Request ListObjectsV2Response
-                                                     CommonPrefix S3Object
-                                                     NoSuchKeyException)))
+  (:import clojure.lang.MapEntry
+           crux.s3.S3Configurator
+           java.io.Closeable
+           java.util.concurrent.CompletableFuture
+           java.util.function.BiFunction
+           [software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer]
+           software.amazon.awssdk.core.ResponseBytes
+           [software.amazon.awssdk.services.s3.model CommonPrefix GetObjectRequest ListObjectsV2Request ListObjectsV2Response NoSuchKeyException PutObjectRequest S3Object]
+           software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (defn ^:no-doc put-objects [{:keys [^S3Configurator configurator ^S3AsyncClient client bucket prefix]} objs]
   (->> (for [[path ^AsyncRequestBody request-body] objs]

@@ -1,6 +1,6 @@
 (ns crux.azure.blobs
-  (:require [clj-http.client :as http]
-            [taoensso.nippy :as nippy]
+  (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [crux.db :as db]
             [crux.io :as cio]
             [crux.system :as sys]

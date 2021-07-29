@@ -1,0 +1,54 @@
+= Releasing Crux
+
+We could automate more of this than we do, but here's a checklist in the meantime.
+
+You can kick off a couple of these in parallel (particularly, `lein build` takes ~10 mins) but note the various 'await' items.
+
+Version number is `Major.Minor.Patch`, e.g. `1.17.1`.
+We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[BreakVer].
+
+## Git tag:
+
+1. find/replace `<previous-version>` -> `<next-version>`, commit
+2. `git tag --annotate --sign <next-version>` (magit `t -a -s t`), add release notes to tag.
+3. `git push origin master <next-version>`
+
+## CircleCI
+1. Await https://app.circleci.com/pipelines/github/juxt/crux[CircleCI build]
+2. Manually approve hold - this kicks off the Maven deploy, building the API docs, deploying Docker images etc.
+
+## JARs:
+1. Head over to https://oss.sonatype.org, 'Log in', 'Staging Repositories'
+2. 'Close' the repo (performs validations)
+3. 'Release' the repo
+4. Check https://repo1.maven.org/maven2/pro/juxt/crux to see when the artifacts have been mirrored across Maven Central.
+
+## Artifacts:
+
+1. Await CircleCI.
+2. Await JAR upload (above) - required for Docker images.
+3. Retrieve artifacts from build: crux-builder.tar.gz, crux-in-memory.jar
+
+## Docs:
+1. Await CircleCI.
+2. Create a `docs-v<next-release>` branch
+3. Update `docs/reference/antora.yml`:
+   * Delete `prerelease: indeed` and `display-version: master` lines
+   * Update `version: master` to `version: <next-release>`
+4. Commit, push branch to the main JUXT Crux repo
+5. Head over to `crux-site`, build and deploy the site
+   * Build using `./bin/build-site.sh`
+   * Deploy using `./bin/deploy-site.sh`
+
+## Github release:
+1. Locate tag on https://github.com/juxt/crux/releases[releases page], click 'Edit tag'
+2. Copy release notes into release description
+3. Await artifacts, upload artifacts to release
+4. Await JARs deploying, and ensure 'docs' section is complete - people get notified at this point.
+5. 'Publish release'
+
+## Publicise:
+
+* Zulip
+* Clojurians' Slack
+* Twitter, if appropriate

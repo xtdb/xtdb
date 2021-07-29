@@ -1,5 +1,5 @@
 (ns crux.bench
-  (:require [clj-http.client :as client]
+  (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as client]
             [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as string]

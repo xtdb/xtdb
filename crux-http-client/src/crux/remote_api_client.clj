@@ -7,12 +7,13 @@
             [crux.io :as cio]
             [crux.query-state :as qs]
             [crux.tx :as tx]
-            [crux.api :as api])
+            [crux.api :as api]
+            [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http])
   (:import com.nimbusds.jwt.SignedJWT
-           [crux.api HistoryOptions$SortOrder ICruxAPI ICruxDatasource RemoteClientOptions NodeOutOfSyncException]
+           [crux.api RemoteClientOptions]
            [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Instant
-           (java.util Date Map)
+           (java.util Date)
            java.util.function.Supplier))
 
 (defn- edn-list->lazy-seq [in]
@@ -42,9 +43,7 @@
   optionally :as with the value :stream.
 
   Expects :body, :status and :headers in the response map. Should not
-  throw exceptions based on status codes of completed requests.
-
-  Defaults to using clj-http or http-kit if available."
+  throw exceptions based on status codes of completed requests."
        :dynamic true}
   *internal-http-request-fn*)
 
@@ -55,6 +54,11 @@
      (constantly
       (binding [*warn-on-reflection* false]
         (or (try
+              (let [f (requiring-resolve 'juxt.clojars-mirrclj-http.client/request)]
+                (fn [opts]
+                  (f (merge  opts))))
+              (catch IOException _e))
+            (try
               (let [f (requiring-resolve 'clj-http.client/request)]
                 (fn [opts]
                   (f (merge {:as "UTF-8" :throw-exceptions false} opts))))
@@ -73,15 +77,17 @@
 (defn- api-request-sync
   ([url {:keys [body http-opts ->jwt-token]}]
    (let [{:keys [body status] :as result}
-         (*internal-http-request-fn* (merge {:url url
-                                             :method :post
-                                             :headers (merge (when body
-                                                               {"Content-Type" "application/edn"})
-                                                             (when ->jwt-token
-                                                               {"Authorization" (str "Bearer " (->jwt-token))}))
-                                             :body (some-> body cio/pr-edn-str)
-                                             :accept :edn}
-                                            (update http-opts :query-params #(into {} (remove (comp nil? val) %)))))]
+         (http/request (merge {:url url
+                               :method :post
+                               :headers (merge (when body
+                                                 {"Content-Type" "application/edn"})
+                                               (when ->jwt-token
+                                                 {"Authorization" (str "Bearer " (->jwt-token))}))
+                               :body (some-> body cio/pr-edn-str)
+                               :accept :edn
+                               :as "UTF-8"
+                               :throw-exceptions false}
+                              (update http-opts :query-params #(into {} (remove (comp nil? val) %)))))]
      (cond
        (= 404 status)
        nil

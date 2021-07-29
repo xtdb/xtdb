@@ -7,7 +7,7 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [crux.api :as crux]
-            [taoensso.nippy :as nippy]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [clojure.spec.alpha :as s])
   (:import crux.codec.Id
            java.math.BigDecimal
@@ -148,7 +148,7 @@
                   :where [[e #crux/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]})))
 
   (t/testing "URL and keyword are same id"
-    (t/is (= (c/new-id :http://xmlns.com/foaf/0.1/firstName)
+    (t/is (= (c/new-id (keyword "http://xmlns.com/foaf/0.1/firstName"))
              #crux/id "http://xmlns.com/foaf/0.1/firstName"))
     (t/is (= (c/new-id (URL. "http://xmlns.com/foaf/0.1/firstName"))
              #crux/id ":http://xmlns.com/foaf/0.1/firstName"))

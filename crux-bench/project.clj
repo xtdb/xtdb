@@ -1,19 +1,31 @@
-(defproject juxt/crux-bench "crux-git-version"
+(defproject pro.juxt.crux/crux-bench "<inherited>"
+  :description "Crux Benchmarking tools"
+
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [org.clojure/data.json "2.0.2"]
+                 [org.clojure/data.json "2.3.1"]
                  [org.clojure/tools.cli "1.0.206"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-jdbc "crux-git-version-beta"]
-                 [juxt/crux-kafka "crux-git-version-beta"]
-                 [juxt/crux-kafka-embedded "crux-git-version-beta"]
-                 [juxt/crux-rocksdb "crux-git-version-beta"]
-                 [juxt/crux-lmdb "crux-git-version-alpha"]
-                 [juxt/crux-metrics "crux-git-version-alpha"]
-                 [juxt/crux-rdf "crux-git-version-alpha"]
-                 [juxt/crux-test "crux-git-version"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.crux/crux-jdbc]
+                 [pro.juxt.crux/crux-kafka]
+                 [pro.juxt.crux/crux-kafka-embedded]
+                 [pro.juxt.crux/crux-rocksdb]
+                 [pro.juxt.crux/crux-lmdb]
+                 [pro.juxt.crux/crux-metrics]
+                 [pro.juxt.crux-labs/crux-rdf]
+                 [pro.juxt.crux/crux-test]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
-                 [clj-http "3.12.1"]
+                 [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                  [software.amazon.awssdk/s3 "2.16.32"]
                  [com.amazonaws/aws-java-sdk-ses "1.11.988"]
                  [com.amazonaws/aws-java-sdk-logs "1.11.988"]
@@ -43,12 +55,9 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :middleware [leiningen.project-version/middleware]
-
   :resource-paths ["resources" "data"]
   :jvm-opts ["-Xms3g" "-Xmx3g"]
   :uberjar-name "crux-bench-standalone.jar"
-  :pedantic? :warn
 
   :profiles {:uberjar [:with-neo4j]
              :with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]

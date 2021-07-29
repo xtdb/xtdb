@@ -3,22 +3,22 @@
             [clojure.java.io :as io]
             [clojure.java.shell :as sh]
             [clojure.spec.alpha :as s]
-            [clojure.tools.logging :as log]
             [clojure.string :as str]
-            [taoensso.nippy :as nippy])
-  (:import [crux.api ICursor]
-           [java.io Closeable DataInputStream DataOutputStream File IOException Reader]
-           [java.lang AutoCloseable]
-           [java.lang.ref PhantomReference ReferenceQueue]
+            [clojure.tools.logging :as log]
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+  (:import crux.api.ICursor
+           [java.io DataInputStream DataOutputStream File IOException Reader]
+           java.lang.AutoCloseable
            [java.lang.management BufferPoolMXBean ManagementFactory]
+           [java.lang.ref PhantomReference ReferenceQueue]
            java.net.ServerSocket
            [java.nio.file Files FileVisitResult SimpleFileVisitor]
            java.nio.file.attribute.FileAttribute
            java.text.SimpleDateFormat
            java.time.Duration
            [java.util Collections Comparator Date IdentityHashMap Iterator Map PriorityQueue Properties]
-           [java.util.concurrent ThreadFactory]
-           java.util.concurrent.locks.StampedLock))
+           java.util.concurrent.locks.StampedLock
+           java.util.concurrent.ThreadFactory))
 
 (s/def ::port (s/int-in 1 65536))
 
@@ -254,7 +254,7 @@
   (when-not (Thread/getDefaultUncaughtExceptionHandler)
     (Thread/setDefaultUncaughtExceptionHandler uncaught-exception-handler)))
 
-(defn thread-factory [name-prefix]
+(defn thread-factory ^java.util.concurrent.ThreadFactory [name-prefix]
   (let [idx (atom 0)]
     (reify ThreadFactory
       (newThread [_ r]

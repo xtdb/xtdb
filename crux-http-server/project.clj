@@ -1,29 +1,34 @@
-(defproject juxt/crux-http-server "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-http-server "<inherited>"
   :description "Crux HTTP Server"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-parent "0.3.8"]
+            [yogthos/lein-sass "0.1.10"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
-                 [hiccup "2.0.0-alpha2"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [metosin/reitit "0.5.12"]
-                 [ring/ring-core "1.9.2"]
-                 [info.sunng/ring-jetty9-adapter "0.14.2"]
-                 [org.eclipse.jetty/jetty-alpn-openjdk8-server "9.4.36.v20210114"]
-                 [ring/ring-codec "1.1.3"]
-                 [ring-cors "0.1.13"]
-                 [metosin/muuntaja "0.6.8"]
+                 [pro.juxt.crux/crux-core]
                  [com.cognitect/transit-clj "1.0.324"]
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
 
-                 [camel-snake-kebab "0.4.2"]]
+                 [pro.juxt.clojars-mirrors.hiccup/hiccup "2.0.0-alpha2"]
+                 [pro.juxt.clojars-mirrors.crux/crux-http-server-deps "0.0.2"]
+                 [pro.juxt.clojars-mirrors.camel-snake-kebab/camel-snake-kebab "0.4.2"]]
 
   :clean-targets ^{:protect false} ["target"]
   :profiles {:dev
              {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-              :dependencies [[org.clojure/clojurescript "1.10.844"]
+              :dependencies [[metosin/reitit-dev "0.5.12"]
+
+                             [org.clojure/clojurescript "1.10.844"]
                              [ch.qos.logback/logback-classic "1.2.3"]
                              [cljsjs/codemirror "5.44.0-1"]
                              [com.bhauman/figwheel-main "0.2.12"
@@ -31,32 +36,28 @@
                              [com.bhauman/rebel-readline-cljs "0.1.4"]
                              [reagent "0.10.0"]
                              [re-frame "0.12.0"]
+                             [metosin/reitit-frontend "0.5.12"]
+                             [metosin/reitit-spec "0.5.12"]
                              [fork "1.2.5"]
                              [day8.re-frame/http-fx "v0.2.0"]
-                             [tick "0.4.23-alpha"]
+                             [tick "0.4.32"]
                              [cljsjs/react-datetime "2.16.2-0"]
 
                              ;; dependency resolution
                              [com.bhauman/spell-spec "0.1.2"]
                              [ring/ring-devel "1.8.1"]
                              [expound "0.8.7"]]}
-             :sass-from-root {:sass {:source "crux-http-server/resources/public/scss/"
-                                     :target "crux-http-server/cljs-target/public/css/"}}
 
-             :test {:dependencies [[clj-http "3.12.1"]
-                                   [juxt/crux-test "crux-git-version"]]}}
+             :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
+                                   [pro.juxt.crux/crux-test]]}}
 
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"
                           ["clean"]
                           ["run" "-m" "figwheel.main" "-O" "advanced" "-bo" "dev"]
                           ["sass"]]
-            "install" ["do"
-                       ["with-profiles" "+sass-from-root" "build:cljs"]
-                       "install"]}
-  :plugins [[yogthos/lein-sass "0.1.10"]]
+            "install" ["do" "build:cljs" "install"]}
+
   :resource-paths ["resources" "cljs-target" "src-cljs"]
   :jar-exclusions [#"public/cljs-out/dev/.*"]
-  :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"}
-  :middleware [leiningen.project-version/middleware]
-  :pedantic? :warn)
+  :sass {:source "resources/public/scss/" :target "cljs-target/public/css/"})

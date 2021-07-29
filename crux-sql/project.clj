@@ -1,18 +1,24 @@
-(defproject juxt/crux-sql "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-sql "<inherited>"
   :description "SQL for Crux using Apache Calcite"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-javadoc "0.3.0"]
+            [lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [cheshire "5.10.0"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [org.apache.calcite/calcite-core "1.22.0" :exclusions [com.google.code.findbugs/jsr305]]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
 
                  ;; dependency conflict resolution:
                  [commons-logging "1.2"]
-                 [commons-io "2.6"]
-                 [commons-codec "1.15"]
                  [org.eclipse.jetty/jetty-server "9.4.36.v20210114"]
                  [org.eclipse.jetty/jetty-util "9.4.36.v20210114"]
                  [org.eclipse.jetty/jetty-security "9.4.36.v20210114"]
@@ -25,16 +31,29 @@
                  [com.google.guava/guava "30.1.1-jre"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
-  :middleware [leiningen.project-version/middleware]
+             :test {:dependencies [[pro.juxt.crux/crux-test]]}}
+
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
                   "-XDignore.symbol.file"
                   "-Xlint:all,-options,-path"
                   "-Werror"
                   "-proc:none"]
+
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
-  :global-vars {*warn-on-reflection* true}
-  :pedantic? :warn)
+
+  :javadoc-opts {:package-names ["crux"]
+                 :output-dir "target/javadoc/out"
+                 :additional-args ["-windowtitle" "Crux SQL Javadoc"
+                                   "-quiet"
+                                   "-Xdoclint:none"
+                                   "-link" "https://docs.oracle.com/javase/8/docs/api/"
+                                   "-link" "https://www.javadoc.io/static/org.clojure/clojure/1.10.3"
+                                   "-link" "https://javadoc.io/static/org.apache.calcite/calcite-core/1.16.0"]}
+
+  :classifiers {:sources {:prep-tasks ^:replace []}
+                :javadoc {:prep-tasks ^:replace ["javadoc"]
+                          :omit-source true
+                          :filespecs ^:replace [{:type :path, :path "target/javadoc/out"}]}})

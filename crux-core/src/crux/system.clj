@@ -6,7 +6,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [clojure.pprint :as pp]
-            [com.stuartsierra.dependency :as dep]
+            [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
             [crux.io :as cio]
             [crux.error :as err])
   (:import [java.io Closeable File Writer]
@@ -208,10 +208,11 @@
 
                                (log/debug "Starting" k)
                                (-> system
-                                   (assoc k (start-fn (reduce-kv (fn [acc k r]
-                                                                   (assoc acc k (get system r)))
-                                                                 opts
-                                                                 refs))))
+                                   (assoc k (start-fn (-> (reduce-kv (fn [acc k r]
+                                                                       (assoc acc k (get system r)))
+                                                                     (or opts {})
+                                                                     refs)
+                                                          (vary-meta assoc ::module-key k)))))
                                (catch Throwable e
                                  (->> (reverse (take-while (complement #{k}) start-order))
                                       (remove ref?)

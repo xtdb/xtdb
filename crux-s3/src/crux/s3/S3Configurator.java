@@ -31,8 +31,8 @@ public interface S3Configurator {
 
 class NippySerde {
     private static final IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
-    private static final IFn fastFreeze = (IFn) requiringResolve.invoke(Clojure.read("taoensso.nippy/fast-freeze"));
-    private static final IFn fastThaw = (IFn) requiringResolve.invoke(Clojure.read("taoensso.nippy/fast-thaw"));
+    private static final IFn fastFreeze = (IFn) requiringResolve.invoke(Clojure.read("juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy/fast-freeze"));
+    private static final IFn fastThaw = (IFn) requiringResolve.invoke(Clojure.read("juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy/fast-thaw"));
 
     static byte[] freeze(Object doc) {
         return (byte[]) fastFreeze.invoke(doc);

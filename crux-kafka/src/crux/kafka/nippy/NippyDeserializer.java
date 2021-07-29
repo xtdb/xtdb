@@ -9,8 +9,8 @@ public class NippyDeserializer implements Deserializer<Object> {
     private static final IFn thaw;
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("taoensso.nippy"));
-        thaw = Clojure.var("taoensso.nippy/fast-thaw");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy"));
+        thaw = Clojure.var("juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy/fast-thaw");
     }
 
     public void close() {

@@ -20,8 +20,8 @@ public class JsonSerializer implements Serializer<Object> {
     private static final IFn generateString;
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("cheshire.generate"));
-        IFn addEncoder = Clojure.var("cheshire.generate/add-encoder");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate"));
+        IFn addEncoder = Clojure.var("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate/add-encoder");
         Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
         IFn ednIdtoOriginalId = Clojure.var("crux.codec/edn-id->original-id");
         Class<?> ednIdClass =  (Class<?>) Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId"));
@@ -35,8 +35,8 @@ public class JsonSerializer implements Serializer<Object> {
                     }
                 }
             });
-        Clojure.var("clojure.core/require").invoke(Clojure.read("cheshire.core"));
-        generateString = Clojure.var("cheshire.core/generate-string");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core"));
+        generateString = Clojure.var("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core/generate-string");
     }
 
     public void close() {

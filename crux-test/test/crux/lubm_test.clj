@@ -40,15 +40,15 @@
 ;; This query bears large input and high selectivity. It queries about just one class and
 ;; one property and does not assume any hierarchy information or inference.
 (t/deftest test-lubm-query-01
-  (t/is (= #{[:http://www.Department0.University0.edu/GraduateStudent101]
-             [:http://www.Department0.University0.edu/GraduateStudent124]
-             [:http://www.Department0.University0.edu/GraduateStudent142]
-             [:http://www.Department0.University0.edu/GraduateStudent44]}
+  (t/is (= #{[(keyword "http://www.Department0.University0.edu/GraduateStudent101")]
+             [(keyword "http://www.Department0.University0.edu/GraduateStudent124")]
+             [(keyword "http://www.Department0.University0.edu/GraduateStudent142")]
+             [(keyword "http://www.Department0.University0.edu/GraduateStudent44")]}
            (api/q (api/db *api*)
                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                     '{:find [x]
                       :where [[x :rdf/type :ub/GraduateStudent]
-                              [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]})))))
+                              [x :ub/takesCourse #=(keyword "http://www.Department0.University0.edu/GraduateCourse0")]]})))))
 
 ;; TODO: subOrganizationOf is transitive, should use rules.
 
@@ -67,12 +67,12 @@
 
 ;; This query is similar to Query 1 but class Publication has a wide hierarchy.
 (t/deftest test-lubm-query-03
-  (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor0/Publication0]
-             [:http://www.Department0.University0.edu/AssistantProfessor0/Publication1]
-             [:http://www.Department0.University0.edu/AssistantProfessor0/Publication2]
-             [:http://www.Department0.University0.edu/AssistantProfessor0/Publication3]
-             [:http://www.Department0.University0.edu/AssistantProfessor0/Publication4]
-             [:http://www.Department0.University0.edu/AssistantProfessor0/Publication5]}
+  (t/is (= #{[(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication0")]
+             [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication1")]
+             [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication2")]
+             [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication3")]
+             [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication4")]
+             [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication5")]}
            (api/q (api/db *api*)
                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                     '{:find [x]
@@ -84,7 +84,7 @@
                       :where [[x :rdf/type t]
                               (sub-class-of? t :ub/Publication)
                               [x :ub/publicationAuthor
-                               :http://www.Department0.University0.edu/AssistantProfessor0]]})))))
+                               #=(keyword "http://www.Department0.University0.edu/AssistantProfessor0")]]})))))
 
 
 ;; This query has small input and high selectivity. It assumes subClassOf relationship
@@ -102,12 +102,12 @@
                                    (sub-class-of? supertype root-type)]]
                           :where [[x :rdf/type t]
                                   (sub-class-of? t :ub/Professor)
-                                  [x :ub/worksFor :http://www.Department0.University0.edu]
+                                  [x :ub/worksFor #=(keyword "http://www.Department0.University0.edu")]
                                   [x :ub/name y1]
                                   [x :ub/emailAddress y2]
                                   [x :ub/telephone y3]]}))]
     (t/is (= 34 (count result)))
-    #_(t/is (contains? result [:http://www.Department0.University0.edu/AssistantProfessor0
+    #_(t/is (contains? result [(keyword ":http://www.Department0.University0.edu/AssistantProfessor0")
                                "AssistantProfessor0"
                                "AssistantProfessor0@Department0.University0.edu"
                                "xxx-xxx-xxxx"]))))
@@ -132,8 +132,8 @@
                                  :where [[x :rdf/type t]
                                          (person? t)
                                          ;; [x :ub/memberOf :http://www.Department0.University0.edu]
-                                         (or [x :ub/memberOf :http://www.Department0.University0.edu]
-                                             [x :ub/worksFor :http://www.Department0.University0.edu])]}))))))
+                                         (or [x :ub/memberOf #=(keyword "http://www.Department0.University0.edu")]
+                                             [x :ub/worksFor #=(keyword "http://www.Department0.University0.edu")])]}))))))
 
 ;; TODO: Should use rules. Should return 7790 with lubm10.ntriples.
 
@@ -168,7 +168,7 @@
                                         (or [y :rdf/type :ub/Course]
                                             [y :rdf/type :ub/GraduateCourse])
                                         [x :ub/takesCourse y]
-                                        [:http://www.Department0.University0.edu/AssociateProfessor0
+                                        [#=(keyword "http://www.Department0.University0.edu/AssociateProfessor0")
                                          :ub/teacherOf
                                          y]]}))))))
 
@@ -187,7 +187,7 @@
                                              [x :rdf/type :ub/GraduateStudent])
                                          [y :rdf/type :ub/Department]
                                          [x :ub/memberOf y]
-                                         [y :ub/subOrganizationOf :http://www.University0.edu]
+                                         [y :ub/subOrganizationOf #=(keyword "http://www.University0.edu")]
                                          [x :ub/emailAddress z]]}))))))
 
 ;; TODO: Should use rules.
@@ -236,7 +236,7 @@
                                        (or [x :rdf/type :ub/Student]
                                            [x :rdf/type :ub/UndergraduateStudent]
                                            [x :rdf/type :ub/GraduateStudent])
-                                       [x :ub/takesCourse :http://www.Department0.University0.edu/GraduateCourse0]]}))))))
+                                       [x :ub/takesCourse #=(keyword "http://www.Department0.University0.edu/GraduateCourse0")]]}))))))
 
 ;; TODO: should use transitive rule.
 ;; Should return 224 with lubm10.ntriples.
@@ -256,7 +256,7 @@
                                         [x :ub/subOrganizationOf d]
                                         [d :rdf/type :ub/Department]
                                         ;; [x :ub/subOrganizationOf :http://www.University0.edu]
-                                        [d :ub/subOrganizationOf :http://www.University0.edu]]}))))))
+                                        [d :ub/subOrganizationOf #=(keyword "http://www.University0.edu")]]}))))))
 
 ;; TODO: FullProfessor should really be Chair.
 ;; Should return 15 with lubm10.ntriples.
@@ -274,7 +274,7 @@
                                 :where [[x :rdf/type :ub/FullProfessor]
                                         [y :rdf/type :ub/Department]
                                         [x :ub/worksFor y]
-                                        [y :ub/subOrganizationOf :http://www.University0.edu]]})))))
+                                        [y :ub/subOrganizationOf #=(keyword "http://www.University0.edu")]]})))))
 
   ;; TODO: actual result, should use rules.
   #_(t/is (= 1 (count (api/q (api/db *api*)
@@ -282,7 +282,7 @@
                                '{:find [x y]
                                  :where [[y :rdf/type :ub/Department]
                                          [x :ub/headOf y]
-                                         [y :ub/subOrganizationOf :http://www.University0.edu]]}))))))
+                                         [y :ub/subOrganizationOf (keyword "http://www.University0.edu")]]}))))))
 
 ;; TODO: should use rules.
 
@@ -293,7 +293,7 @@
 ;; hasAlumnus. Therefore, this query assumes subPropertyOf relationships between
 ;; degreeFrom and its subproperties, and also requires inference about inverseOf.
 (t/deftest test-lubm-query-13
-  (t/is (= #{[:http://www.Department0.University0.edu/AssistantProfessor2]}
+  (t/is (= #{[(keyword "http://www.Department0.University0.edu/AssistantProfessor2")]}
            (api/q (api/db *api*)
                   (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
                                     :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
@@ -319,9 +319,9 @@
                                   [x :rdf/type :ub/TeachingAssistant]
                                   [x :rdf/type :ub/ResearchAssistant])
                               ;; [:http://www.University0.edu :ub/hasAlumnus x]
-                              (or [x :ub/undergraduateDegreeFrom :http://www.University0.edu]
-                                  [x :ub/mastersDegreeFrom :http://www.University0.edu]
-                                  [x :ub/doctoralDegreeFrom :http://www.University0.edu])]})))))
+                              (or [x :ub/undergraduateDegreeFrom #=(keyword "http://www.University0.edu")]
+                                  [x :ub/mastersDegreeFrom #=(keyword "http://www.University0.edu")]
+                                  [x :ub/doctoralDegreeFrom #=(keyword "http://www.University0.edu")])]})))))
 
 ;; TODO: Should return 5916 with lubm10.ntriples, which we do.
 

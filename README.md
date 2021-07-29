@@ -18,27 +18,25 @@ used to express complex joins and recursive graph traversals.
 ## Quick Links
 
 * [Documentation](https://opencrux.com)
-* [Maven releases - Clojars](https://clojars.org/juxt/crux-core)
+* [Maven releases](https://repo1.maven.org/maven2/pro/juxt/crux/)
   ```xml
   <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-core</artifactId>
-    <version>21.06-1.17.1-beta</version>
+    <version>1.17.1</version>
   </dependency>
   ```
 
   ```clojure
-  [juxt/crux-core "21.06-1.17.1-beta"]
+  [pro.juxt.crux/crux-core "1.17.1"]
   ```
 
   ```clojure
-  juxt/crux-core {:mvn/version "21.06-1.17.1-beta"}
+  pro.juxt.crux/crux-core {:mvn/version "1.17.1"}
   ```
 * [Release notes](https://github.com/juxt/crux/releases)
 * Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/juxt/crux/discussions) | crux@juxt.pro
-* Development:
-  * [Kanban board](https://github.com/juxt/crux/projects/1)
-  * CircleCI build: [![CircleCI](https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b)](https://circleci.com/gh/juxt/crux)
+* [Developing Crux](https://github.com/juxt/crux/tree/master/dev)
 
 ## Unbundled Architecture
 
@@ -67,13 +65,9 @@ with interfaces for the pluggable storage components (Kafka, LMDB, RocksDB
 etc.). Implementations of these storage options are located in their own
 projects.
 
-Project directories are published to Clojars independently so that you can
+Project directories are published to Maven independently so that you can
 maintain granular dependencies on precisely the individual components needed
 for your application.
-
-## Developing Crux
-
-See the [https://github.com/juxt/crux/tree/master/dev](dev) directory README for instructions on how to develop Crux.
 
 ## Copyright & License
 The MIT License (MIT)

@@ -3,13 +3,12 @@
 Full-text search module for Crux making use of https://lucene.apache.org/[Apache
 Lucene].
 
-`crux-lucene` runs in-process as part of the Crux node as a Crux
-module. The Lucene index is kept up to date synchronously when Crux
-transactions are processed on a node.
+`crux-lucene` runs in-process as part of the Crux node as a Crux module.
+The Lucene index is kept up to date synchronously when Crux transactions are processed on a node.
 
-WARNING: This module is in alpha and likely to change. In particular,
-we might rationalize/combine the different query functions available
-(see https://github.com/juxt/crux/issues/1318).
+[WARNING]
+This module is in alpha and likely to change.
+In particular, we might rationalize/combine the different query functions available (see https://github.com/juxt/crux/issues/1318).
 
 == Setup
 
@@ -21,7 +20,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-juxt/crux-lucene {:mvn/version "{crux_version}-alpha"}
+pro.juxt.crux/crux-lucene {:mvn/version "{crux_version}"}
 ----
 
 pom.xml::
@@ -29,9 +28,9 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>juxt</groupId>
+    <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-lucene</artifactId>
-    <version>{crux_version}-alpha</version>
+    <version>{crux_version}</version>
 </dependency>
 ----
 ====
@@ -47,7 +46,8 @@ JSON::
 ----
 {
   "crux.lucene/lucene-store": {
-        "db-dir": "lucene",
+    // omit `"db-dir"` to start an in-memory-only Lucene store.
+    "db-dir": "lucene",
   }
 }
 ----
@@ -57,6 +57,7 @@ Clojure::
 [source,clojure]
 ----
 {...
+ ; omit `:db-dir` to start an in-memory-only Lucene store.
  :crux.lucene/lucene-store {:db-dir "lucene-dir"}}
 ----
 
@@ -65,21 +66,15 @@ EDN::
 [source,clojure]
 ----
 {...
+ ; omit `:db-dir` to start an in-memory-only Lucene store.
  :crux.lucene/lucene-store {:db-dir "lucene-dir"}}
 ----
 ====
 
-WARNING: You must have a fresh node to add Lucene configuration to. If
-you add Lucene configuration to a populated Crux node, you will
-receive an exception when the node starts up: `Lucene store latest tx
-mismatch`. To remedy this, you must wipe the index directories for the
-Crux node and restart. The Lucene index will then be populated as part
-of the normal Crux node ingestion process.
-
 == Querying
 
-All text fields in a document will be automatically indexed. You can
-then you use the in-built `text-search` fn in your datalog:
+All text fields in a document will be automatically indexed.
+You can then you use the in-built `text-search` fn in your datalog:
 
 [source,clojure]
 ----
@@ -88,8 +83,8 @@ then you use the in-built `text-search` fn in your datalog:
  [?e :crux.db/id]]}
 ----
 
-The destructuring available is `entity-id`, `matched-value` and
-`score`. For example, to return the full search results tuple:
+The destructuring available is `entity-id`, `matched-value` and `score`.
+For example, to return the full search results tuple:
 
 [source,clojure]
 ----
@@ -98,8 +93,8 @@ The destructuring available is `entity-id`, `matched-value` and
  [?e :crux.db/id]]}
 ----
 
-In the above example, `?e` is the entity ID of the matched search
-rsult. `?v` is the matched value and `?s` is the matched score.
+In the above example, `?e` is the entity ID of the matched search result.
+`?v` is the matched value and `?s` is the matched score.
 
 You can use standard Lucene fuzzy textual search capabilities:
 
@@ -112,25 +107,22 @@ You can use standard Lucene fuzzy textual search capabilities:
 
 This will return all entities with a `:name` attribute that starts with "Iva".
 
-All query functions implemented in `crux-lucene` pass your query string directly
-to Lucene's `QueryParser.parse` using the `StandardAnalyzer`, without any
-escaping or other modifications. See the Lucene documentation for more
-information.
+All query functions implemented in `crux-lucene` pass your query string directly to Lucene's `QueryParser.parse` using the `StandardAnalyzer`, without any escaping or other modifications.
+See the Lucene documentation for more information.
 
 It's possible to supply var bindings to use in `text-search`:
 
 [source,clojure]
 ----
-(c/q db '{:find  [?v]
-          :in    [input]
+(c/q db '{:find [?v]
+          :in [input]
           :where [[(text-search :name input) [[?e ?v]]]]}
      "Ivan")
 ----
 
 == Wildcard Attributes
 
-There is an an experimental wildcard search function, where you can
-search across all attributes:
+There is an an experimental wildcard search function, where you can search across all attributes:
 
 [source,clojure]
 ----
@@ -139,14 +131,12 @@ search across all attributes:
  [?e :crux.db/id]]}
 ----
 
-Will return all entities that have an attribute with a value that
-matches "Iva". The destructured binding also contains `a` which is the
-matched attribute.
+Will return all entities that have an attribute with a value that matches "Iva".
+The destructured binding also contains `a` which is the matched attribute.
 
 == Multi-field searches
 
-There is an entirely different search-function available for
-multi-field searches using Lucene in Crux: `lucene-text-search`:
+There is an entirely different search-function available for multi-field searches using Lucene in Crux: `lucene-text-search`:
 
 [source,clojure]
 ----
@@ -156,36 +146,30 @@ multi-field searches using Lucene in Crux: `lucene-text-search`:
 
 This `lucene-text-search` takes a Lucene query string.
 
-WARNING: If you use `lucene-text-search`, you cannot use the search
-functions listed above - `wildcard-text-search` and
-`text-search`. This is because the way we index documents into Lucene
-is different.
+[WARNING]
+If you use `lucene-text-search`, you cannot use the search functions listed above - `wildcard-text-search` and `text-search`.
+This is because the way we index documents into Lucene is different.
 
-NOTE: In the normal case for `text-search` and `wildcard-text-search`,
-we index each A/V pair in a Crux document as individual documents in
-Lucene. This allows for a large degree of structural sharing, which
-will help in the case where there is a lot historical data in
-Crux. This is targeted to ease the disk-space taken up by Lucene, but
-also for query efficiency reasons.
+[NOTE]
+In the normal case for `text-search` and `wildcard-text-search`, we index each A/V pair in a Crux document as individual documents in Lucene.
+This allows for a large degree of structural sharing, which will help in the case where there is a lot historical data in Crux.
+This is targeted to ease the disk-space taken up by Lucene, but also for query efficiency reasons.
 
-NOTE: `lucene-text-search` indexs a single document per
-document-version in Crux. The downside of this is structural sharing
-impacting disk space, but the upside is taking advantage of more of
-the Lucene query language capability, and to perform queries taking
-into account multiple fields.
+[NOTE]
+`lucene-text-search` indexs a single document per document-version in Crux.
+The downside of this is structural sharing impacting disk space, but the upside is taking advantage of more of the Lucene query language capability, and to perform queries taking into account multiple fields.
 
 To enable `lucene-text-search`, you must configure the Lucene Indexer, such like:
 
 [source,clojure]
 ----
 {...
- :crux.lucene/lucene-store {:db-dir "lucene-dir" :indexer 'crux.lucene.multi-field/->indexer}}
+ :crux.lucene/lucene-store {:indexer 'crux.lucene.multi-field/->indexer}}
 ----
 
 === Bindings
 
-It's possible to supply var bindings also, that are wired in using
-`format` when the vars are bound.
+It's possible to supply var bindings also, that are wired in using `format` when the vars are bound.
 
 [source,clojure]
 ----
@@ -199,3 +183,59 @@ It's possible to supply var bindings also, that are wired in using
 You can escape your input strings when constructing Lucene query strings by calling `org.apache.lucene.queryparser.classic.QueryParser/escape`. For example, this method would transform `"|&hello&|"` to `"\\|\\&hello\\&\\|"`.
 
 This is helpful to mitigate against injection attacks and other errors.
+
+== Checkpointing Lucene
+
+For more details about checkpointing in Crux, see the xref:checkpointing.adoc[main Checkpointing docs].
+
+You can set up checkpointing on your Lucene store too, in addition to the main Crux query indices.
+This means that a new node starting up will be able to download a checkpoint of a reasonably recent Lucene store from a central location rather than having to replay all of the transactions.
+
+The parameters are the same as for the main Crux query indices, except applied to your Lucene store component:
+
+[tabs]
+====
+JSON::
++
+[source,json]
+----
+{
+  "crux.lucene/index-store": {
+    "db-dir": "lucene-dir",
+    "checkpointer": {
+      "crux/module": "crux.checkpoint/->checkpointer",
+      "store": {
+        "crux/module": "crux.checkpoint/->filesystem-checkpoint-store",
+        "path": "/path/to/cp-store"
+      },
+      "approx-frequency": "PT6H"
+    }
+  },
+  ...
+}
+----
+
+Clojure::
++
+[source,clojure]
+----
+{:crux.lucene/lucene-store {:db-dir "lucene-dir"
+                            :checkpointer {:crux/module 'crux.checkpoint/->checkpointer
+                                           :store {:crux/module 'crux.checkpoint/->filesystem-checkpoint-store
+                                                   :path "/path/to/cp-store"}
+                                           :approx-frequency (Duration/ofHours 6)}}}
+ ...}
+----
+
+EDN::
++
+[source,clojure]
+----
+{:crux.lucene/lucene-store {:db-dir "lucene-dir"
+                            :checkpointer {:crux/module crux.checkpoint/->checkpointer
+                                           :store {:crux/module crux.checkpoint/->filesystem-checkpoint-store
+                                                   :path "/path/to/cp-store"}
+                                           :approx-frequency "PT6H"}}}
+ ...}
+----
+====

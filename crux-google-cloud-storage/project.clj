@@ -1,11 +1,19 @@
-(defproject juxt/crux-google-cloud-storage "crux-git-version-alpha"
+(defproject pro.juxt.crux/crux-google-cloud-storage "<inherited>"
   :description "Crux Google Cloud Storage Document Store"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [juxt/crux-core "crux-git-version-beta"]
+                 [pro.juxt.crux/crux-core]
                  [com.google.cloud/google-cloud-nio "0.122.4"]
 
                  ;; dep resolution
@@ -15,17 +23,6 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [com.google.guava/guava "30.1.1-jre"]]
 
-  :profiles {:test {:dependencies [[juxt/crux-test "crux-git-version"]]}}
+  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test]]}}
 
-  :middleware [leiningen.project-version/middleware]
-
-  :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-
-  :java-source-paths ["src"]
-  :javac-options ["-source" "8" "-target" "8"
-                  "-XDignore.symbol.file"
-                  "-Xlint:all,-options,-path"
-                  "-Werror"
-                  "-proc:none"]
-
-  :pedantic? :warn)
+  :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"])

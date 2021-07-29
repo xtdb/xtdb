@@ -22,7 +22,7 @@
            java.util.Date))
 
 (def crux-version
-  (when-let [pom-file (io/resource "META-INF/maven/juxt/crux-core/pom.properties")]
+  (when-let [pom-file (io/resource "META-INF/maven/pro.juxt.crux/crux-core/pom.properties")]
     (with-open [in (io/reader pom-file)]
       (let [{:strs [version revision]} (cio/load-properties in)]
         {:crux.version/version version
@@ -32,7 +32,7 @@
   (when @closed?
     (throw (IllegalStateException. "Crux node is closed"))))
 
-(defn- await-tx [{:keys [bus tx-ingester] :as node} tx-k awaited-tx ^Duration timeout]
+(defn- await-tx [{:keys [bus tx-ingester]} tx-k awaited-tx ^Duration timeout]
   (let [tx-v (get awaited-tx tx-k)
         fut (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
                             :->result (letfn [(tx->result [tx]
@@ -40,7 +40,7 @@
                                                   {:tx tx}))]
                                         (fn
                                           ([] (or
-                                               (tx->result (api/latest-completed-tx node))
+                                               (tx->result (db/latest-completed-tx tx-ingester))
                                                (when-let [ingester-error (db/ingester-error tx-ingester)]
                                                  {:ingester-error ingester-error})))
                                           ([{:keys [crux/event-type] :as ev}]
@@ -59,7 +59,7 @@
     (cond
       ingester-error (throw (Exception. "Transaction ingester aborted." ingester-error))
       timeout? (throw (TimeoutException. (str "Timed out waiting for: " (pr-str awaited-tx)
-                                              ", index has: " (pr-str (api/latest-completed-tx node)))))
+                                              ", index has: " (pr-str (db/latest-completed-tx tx-ingester)))))
       node-closing? (throw (InterruptedException. "Node closed."))
       tx tx)))
 

@@ -2,8 +2,9 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [crux.db :as db]
             [crux.api :as c]
+            [crux.checkpoint :as cp]
+            [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
             [crux.lucene :as l]
@@ -11,13 +12,15 @@
             [crux.rocksdb :as rocks])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
+           [org.apache.lucene.index DirectoryReader Term]
            org.apache.lucene.queryparser.classic.QueryParser
-           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]))
+           [org.apache.lucene.search BooleanClause$Occur BooleanQuery$Builder Query]
+           org.apache.lucene.store.FSDirectory))
 
 ;; tests in this namespace depend on the `(defmethod q/pred-constraint 'lucene-text-search ...)`
 (require 'crux.lucene.multi-field)
 
-(t/use-fixtures :each lf/with-lucene-module fix/with-node)
+(t/use-fixtures :each (fix/with-opts {::l/lucene-store {}}) fix/with-node)
 
 (t/deftest test-empty-database-returns-empty
   (t/is (= 0 (count (c/q (c/db *api*) {:find '[?e]
@@ -28,7 +31,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
 
     (t/testing "using Lucene directly"
-      (with-open [search-results (lf/search l/build-query [:name "Ivan"])]
+      (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
           (t/is (= "Ivan" (.get ^Document (ffirst docs) "_crux_val"))))))
@@ -71,9 +74,9 @@
                                :where
                                '[[(text-search :name "Ivan") [[?e]]]
                                  [?e :crux.db/id]]}))))
-      (with-open [search-results (lf/search l/build-query [:name "Ivan"])]
+      (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
         (t/is (empty? (iterator-seq search-results))))
-      (with-open [search-results (lf/search l/build-query [:name "Derek"])]
+      (with-open [search-results (l/search *api* "Derek" {:default-field "name"})]
         (t/is (seq (iterator-seq search-results)))))
 
     (t/testing "Scores"
@@ -201,7 +204,7 @@
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
     (submit+await-tx [[:crux.tx/put {:crux.db/id "ivan" :name "Ivan"}]])
 
-    (t/is (= 2 (lf/doc-count)))
+    (t/is (= 1 (lf/doc-count)))
 
     (with-open [db (c/open-db *api*)]
       (t/is (= prior-score (c/q db q))))))
@@ -239,29 +242,36 @@
       (t/is (empty? (c/q before-db q))))))
 
 (t/deftest test-ensure-lucene-store-keeps-last-tx
-  (let [latest-tx (fn [] (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))]
+  (letfn [(latest-tx []
+            (l/latest-completed-tx-id (-> @(:!system *api*)
+                                          (get-in [:crux.lucene/lucene-store :index-writer]))))]
     (t/is (not (latest-tx)))
     (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivank"}]])
 
     (t/is (latest-tx))))
 
-(t/deftest test-ensure-lucene-store-keeps-up
+(t/deftest test-lucene-catches-up-at-startup
   ;; Note, an edge case is if users change Lucene configuration
   ;; (i.e. indexing strategy) - this start-up check does not account
   ;; for this:
 
-  (fix/with-tmp-dirs #{rocks-tmp-dir lucene-tmp-dir}
-    (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                  :db-dir rocks-tmp-dir}}})]
-      (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
+  (fix/with-tmp-dirs #{rocks-tmp-dir}
+    (let [node-config {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store
+                                                :db-dir (io/file rocks-tmp-dir "tx")}}
+                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store
+                                                        :db-dir (io/file rocks-tmp-dir "docs")}}
+                       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
+                                                     :db-dir (io/file rocks-tmp-dir "idx")}}}]
+      (with-open [node (c/start-node node-config)]
+        (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]]))
 
-    (try
-      (with-open [node (c/start-node {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                    :db-dir rocks-tmp-dir}}
-                                      :crux.lucene/lucene-store {:db-dir lucene-tmp-dir}})])
-      (t/is false "Exception expected")
-      (catch Exception t
-        (t/is (= "Lucene store latest tx mismatch" (ex-message (ex-cause t))))))))
+      (fix/with-tmp-dirs #{lucene-tmp-dir}
+        (with-open [node (c/start-node (-> node-config
+                                           (assoc :crux.lucene/lucene-store {:db-dir lucene-tmp-dir})))]
+          (t/is (seq (c/q (c/db node)
+                          {:find '[?e ?v]
+                           :where '[[(text-search :name "Ivan") [[?e ?v]]]
+                                    [?e :crux.db/id]]}))))))))
 
 (defn- with-lucene-rocks-node* [{:keys [node-dir index-dir lucene-dir]} f]
   (with-open [node (c/start-node (merge {:crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
@@ -287,13 +297,9 @@
         (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
           (submit+await-tx *api* [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])))
 
-      (let [old-fn crux.lucene/validate-lucene-store-up-to-date]
-        (with-redefs [crux.lucene/validate-lucene-store-up-to-date (fn [& args]
-                                                                     (Thread/sleep 1000)
-                                                                     (apply old-fn args))]
-          (fix/with-tmp-dirs #{lucene-dir}
-            (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
-              (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))))
+      (fix/with-tmp-dirs #{lucene-dir}
+        (with-lucene-rocks-node {:node-dir node-dir :lucene-dir lucene-dir}
+          (t/is (= (c/entity (c/db *api*) :ivan) {:crux.db/id :ivan :name "Ivan"})))))))
 
 (t/deftest test-lucene-node-restart
   (t/testing "test restart with nil indexes"
@@ -350,14 +356,6 @@
     (t/is (= #{[:ivan] [:fred]} (c/q db {:find '[?e]
                                          :where '[[(or-text-search :name #{"Ivan" "Fred"}) [[?e ?v]]]]})))))
 
-(t/deftest test-cannot-use-multi-field-lucene-queries
-  (require 'crux.lucene.multi-field) ; for defmethods
-
-  (t/is (thrown-with-msg? java.lang.IllegalStateException #"Lucene multi field indexer not configured, consult the docs."
-                          (with-open [db (c/open-db *api*)]
-                            (c/q db {:find '[?e]
-                                     :where '[[(lucene-text-search "firstname: Fred") [[?e]]]]})))))
-
 (t/deftest results-not-limited-to-1000
   (submit+await-tx (for [n (range 1001)] [:crux.tx/put {:crux.db/id n, :description (str "Entity " n)}]))
   (with-open [db (c/open-db *api*)]
@@ -370,7 +368,8 @@
                     [:crux.tx/put {:crux.db/id :test-id :name "2345"}]])
 
   (t/is (= (:crux.tx/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
-           (l/latest-completed-tx (:crux.lucene/lucene-store @(:!system *api*))))))
+           (l/latest-completed-tx-id (-> @(:!system *api*)
+                                         (get-in [::l/lucene-store :index-writer]))))))
 
 (defn escape-lucene-string [s]
   ;; note this does not handle all cases if spaces are involved, e.g. a trailing " OR" will not be accepted by the QueryParser
@@ -397,6 +396,20 @@
                                       :in    [input]
                                       :where [[(wildcard-text-search input) [[?e ?v]]]]}
                                  1)))))
+
+(t/deftest test-checkpoint
+  (fix/with-tmp-dirs #{lucene-dir cp-dir}
+    (with-open [node (crux.api/start-node {::l/lucene-store {:db-dir lucene-dir}})]
+      (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo, :foo "foo"}]])
+
+      (let [index-writer (-> @(:!system node)
+                             (get-in [::l/lucene-store :index-writer]))
+            src (#'l/checkpoint-src index-writer)]
+        (cp/save-checkpoint src cp-dir)))
+
+    (with-open [dir (FSDirectory/open (.toPath cp-dir))
+                rdr (DirectoryReader/open dir)]
+      (t/is (= 1 (.numDocs rdr))))))
 
 (comment
   (do

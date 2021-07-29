@@ -1,14 +1,23 @@
-(defproject juxt/crux-test "crux-git-version"
+(defproject pro.juxt.crux/crux-test "<inherited>"
   :description "Crux Tests Project"
-  :url "https://github.com/juxt/crux"
-  :license {:name "The MIT License"
-            :url "http://opensource.org/licenses/MIT"}
+
+  :plugins [[lein-junit "1.1.9"]
+            [lein-parent "0.3.8"]]
+
+  :parent-project {:path "../project.clj"
+                   :inherit [:version :repositories :deploy-repositories
+                             :managed-dependencies
+                             :pedantic? :global-vars
+                             :license :url :pom-addition]}
+
+  :scm {:dir ".."}
+
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [juxt/crux-core "crux-git-version-beta"]
-                 [juxt/crux-jdbc "crux-git-version-beta"]
-                 [juxt/crux-http-server "crux-git-version-alpha"]
-                 [juxt/crux-rocksdb "crux-git-version-beta"]
-                 [juxt/crux-lmdb "crux-git-version-alpha"]
+                 [pro.juxt.crux/crux-core]
+                 [pro.juxt.crux/crux-jdbc]
+                 [pro.juxt.crux/crux-http-server]
+                 [pro.juxt.crux/crux-rocksdb]
+                 [pro.juxt.crux/crux-lmdb]
 
                  ;; JDBC
                  [com.h2database/h2 "1.4.200"]
@@ -49,27 +58,23 @@
                "../docs/about/modules/ROOT/examples/test"]
 
   :jvm-opts ["-server" "-Xmx8g" "-Dlogback.configurationFile=test-resources/logback-test.xml"]
-  :middleware [leiningen.project-version/middleware]
-  :global-vars {*warn-on-reflection* true}
-  :pedantic? :warn
-  :plugins [[lein-junit "1.1.9"]]
 
   :profiles {:dev {:dependencies []}
 
-             :test {:dependencies [[juxt/crux-kafka "crux-git-version-beta"]
-                                   [juxt/crux-kafka-connect "crux-git-version-beta"]
-                                   [juxt/crux-kafka-embedded "crux-git-version-beta"]
-                                   [juxt/crux-http-client "crux-git-version-beta"]
-                                   [juxt/crux-metrics "crux-git-version-alpha"]
-                                   [juxt/crux-rdf "crux-git-version-alpha"]
-                                   [juxt/crux-sql "crux-git-version-alpha"]
+             :test {:dependencies [[pro.juxt.crux/crux-kafka]
+                                   [pro.juxt.crux/crux-kafka-connect]
+                                   [pro.juxt.crux/crux-kafka-embedded]
+                                   [pro.juxt.crux/crux-http-client]
+                                   [pro.juxt.crux/crux-metrics]
+                                   [pro.juxt.crux-labs/crux-rdf]
+                                   [pro.juxt.crux/crux-sql]
 
                                    ;; Uncomment to test Oracle, you'll need to locally install the JAR:
                                    ;; [com.oracle/ojdbc "19.3.0.0"]
 
                                    ;; General:
                                    [ch.qos.logback/logback-classic "1.2.3"]
-                                   [clj-http "3.12.1"]
+                                   [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
 
                                    ;; Outer tests:
                                    [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
@@ -82,4 +87,8 @@
                                    [com.nimbusds/nimbus-jose-jwt "9.7"]
 
                                    ;; Kafka connect tests
-                                   [org.apache.kafka/connect-api "2.6.0"]]}})
+                                   [org.apache.kafka/connect-api "2.6.0"]]}}
+
+  ;; empty JARs to keep Maven Central happy
+  :classifiers {:sources {:jar-exclusions [#""]}
+                :javadoc {:jar-exclusions [#""]}})

@@ -1,5 +1,6 @@
 (ns crux.kafka
   (:require [clojure.java.io :as io]
+            [clojure.set :as set]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
             [crux.db :as db]
@@ -7,18 +8,19 @@
             [crux.status :as status]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [clojure.set :as set])
-  (:import [crux.kafka.nippy NippyDeserializer NippySerializer]
+            [crux.tx.subscribe :as tx-sub])
+  (:import clojure.lang.MapEntry
+           [crux.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
            [java.util Collection Date Map UUID]
-           java.util.concurrent.ExecutionException
+           [java.util.concurrent CompletableFuture ExecutionException]
            [org.apache.kafka.clients.admin AdminClient NewTopic TopicDescription]
            [org.apache.kafka.clients.consumer ConsumerRebalanceListener ConsumerRecord KafkaConsumer]
            [org.apache.kafka.clients.producer KafkaProducer ProducerRecord RecordMetadata]
-           [org.apache.kafka.common.errors InterruptException TopicExistsException]
-           [org.apache.kafka.common PartitionInfo TopicPartition]))
+           [org.apache.kafka.common PartitionInfo TopicPartition]
+           [org.apache.kafka.common.errors InterruptException TopicExistsException]))
 
 (defn ->kafka-config {::sys/args {:bootstrap-servers {:spec ::sys/string
                                                       :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
@@ -90,7 +92,7 @@
           (when-not (instance? TopicExistsException cause)
             (throw e)))))))
 
-(defn- ensure-topic-exists [admin-client {:keys [create-topics? topic-name topic-config] :as topic-opts}]
+(defn- ensure-topic-exists [admin-client {:keys [create-topics?] :as topic-opts}]
   (when create-topics?
     (create-topic admin-client topic-opts)))
 
@@ -109,17 +111,20 @@
                                   (log/debug "Partitions assigned:" (str partitions))
                                   (seek-consumer consumer tp-offsets)))))
 
-(defn- consumer-seqs [^KafkaConsumer consumer ^Duration poll-duration]
+(defn- poll-consumer [^KafkaConsumer consumer ^Duration poll-duration]
+  (cio/with-nippy-thaw-all
+    (try
+      (.poll consumer poll-duration)
+      (catch InterruptException e
+        (Thread/interrupted)
+        (throw (.getCause e))))))
+
+(defn- consumer-seqs [consumer poll-duration]
   (lazy-seq
    (log/trace "polling")
-   (cio/with-nippy-thaw-all
-     (when-let [records (seq (try
-                               (.poll consumer poll-duration)
-                               (catch InterruptException e
-                                 (Thread/interrupted)
-                                 (throw (.getCause e)))))]
-       (log/tracef "got %d records" (count records))
-       (cons records (consumer-seqs consumer poll-duration))))))
+   (when-let [records (seq (poll-consumer consumer poll-duration))]
+     (log/tracef "got %d records" (count records))
+     (cons records (consumer-seqs consumer poll-duration)))))
 
 ;;;; TxLog
 
@@ -132,29 +137,59 @@
    :crux.tx/tx-id (.offset record)
    :crux.tx/tx-time (Date. (.timestamp record))})
 
+(defn- open-consumer ^org.apache.kafka.clients.consumer.KafkaConsumer [{:keys [kafka-config tx-topic]} after-tx-id]
+  (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}]
+    (doto (->consumer {:kafka-config kafka-config})
+      (.assign (keys tp-offsets))
+      (seek-consumer tp-offsets))))
+
+(defn- handle-subscriber [{:keys [^Duration poll-wait-duration] :as tx-log} after-tx-id f]
+  (tx-sub/completable-thread
+   (fn [^CompletableFuture fut]
+     (with-open [consumer (open-consumer tx-log after-tx-id)]
+       (loop []
+         (->> (poll-consumer consumer poll-wait-duration)
+              (map tx-record->tx-log-entry)
+              (reduce (fn [_ tx]
+                        (when (Thread/interrupted)
+                          (throw (InterruptedException.)))
+
+                        (when (.isDone fut)
+                          (reduced nil))
+
+                        (f fut tx)
+
+                        true)
+                      false))
+
+         (cond
+           (.isDone fut) nil
+           (Thread/interrupted) (throw (InterruptedException.))
+           :else (recur)))))))
+
 (defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer,
                        tx-topic, kafka-config,
+                       ^Duration poll-wait-duration
                        ^Closeable consumer]
   db/TxLog
-  (submit-tx [this tx-events]
-    (try
-      (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
-        (delay
-         (let [record-meta ^RecordMetadata @tx-send-future]
-           {::tx/tx-id (.offset record-meta)
-            ::tx/tx-time (Date. (.timestamp record-meta))})))))
+  (submit-tx [_ tx-events]
+    (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
+      (delay
+        (let [record-meta ^RecordMetadata @tx-send-future]
+          {::tx/tx-id (.offset record-meta)
+           ::tx/tx-time (Date. (.timestamp record-meta))}))))
 
   (open-tx-log [this after-tx-id]
-    (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}
-          consumer (doto (->consumer {:kafka-config kafka-config})
-                     (.assign (keys tp-offsets))
-                     (seek-consumer tp-offsets))]
+    (let [consumer (open-consumer this after-tx-id)]
       (cio/->cursor #(.close consumer)
-                    (->> (consumer-seqs consumer (Duration/ofSeconds 1))
+                    (->> (consumer-seqs consumer poll-wait-duration)
                          (mapcat identity)
                          (map tx-record->tx-log-entry)))))
 
-  (latest-submitted-tx [this]
+  (subscribe [this after-tx-id f]
+    (handle-subscriber this after-tx-id f))
+
+  (latest-submitted-tx [_]
     (let [tx-tp (TopicPartition. tx-topic 0)
           end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
       (when (pos? end-offset)
@@ -173,9 +208,14 @@
   (close [_]
     (cio/try-close consumer)))
 
-(defn ->ingest-only-tx-log {::sys/deps {:kafka-config `->kafka-config
-                                        :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}}
-  [{:keys [tx-topic-opts kafka-config]}]
+(defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
+                            :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}
+                ::sys/args {:poll-wait-duration {:spec ::sys/duration
+                                                 :required? true
+                                                 :doc "How long to wait when polling Kafka"
+                                                 :default (Duration/ofSeconds 1)}}}
+
+  [{:keys [tx-topic-opts kafka-config poll-wait-duration]}]
   (let [latest-submitted-tx-consumer (->consumer {:kafka-config kafka-config})
         producer (->producer {:kafka-config kafka-config})
         tx-topic-opts (-> tx-topic-opts
@@ -191,37 +231,8 @@
     (map->KafkaTxLog {:producer producer
                       :latest-submitted-tx-consumer latest-submitted-tx-consumer
                       :tx-topic tx-topic
-                      :kafka-config kafka-config})))
-
-(defn ->tx-log {::sys/deps (merge (::sys/deps (meta #'tx/->polling-tx-consumer))
-                                  (::sys/deps (meta #'->ingest-only-tx-log)))
-                ::sys/args (merge (::sys/args (meta #'tx/->polling-tx-consumer))
-                                  (::sys/args (meta #'->ingest-only-tx-log))
-                                  {:poll-wait-duration {:spec ::sys/duration
-                                                        :required? true
-                                                        :doc "How long to wait when polling Kafka"
-                                                        :default (Duration/ofSeconds 1)}})}
-  [{:keys [kafka-config tx-topic-opts poll-wait-duration] :as opts}]
-  (let [tx-log (->ingest-only-tx-log opts)
-        tx-topic (:topic-name tx-topic-opts)
-        tp (TopicPartition. tx-topic 0)
-        consumer (doto (->consumer {:kafka-config kafka-config})
-                   (.assign #{tp}))
-        polling-consumer (tx/->polling-tx-consumer opts
-                                                   (fn [after-tx-id]
-                                                     (let [expected-position (or (some-> after-tx-id inc) 0)]
-                                                       (when-not (= (.position consumer tp) expected-position)
-                                                         (seek-consumer consumer {tp expected-position})))
-
-                                                     (cio/->cursor (fn [])
-                                                                   (->> (consumer-seqs consumer poll-wait-duration)
-                                                                        (mapcat identity)
-                                                                        (map tx-record->tx-log-entry)))))]
-    (-> tx-log
-        (assoc :consumer (reify Closeable
-                           (close [_]
-                             (cio/try-close polling-consumer)
-                             (cio/try-close consumer)))))))
+                      :kafka-config kafka-config
+                      :poll-wait-duration poll-wait-duration})))
 
 ;;;; DocumentStore
 (defn- submit-docs [id-and-docs {:keys [^KafkaProducer producer, doc-topic]}]
@@ -265,7 +276,13 @@
 
   db/DocumentStore
   (submit-docs [this id-and-docs]
-    (submit-docs id-and-docs this))
+    (submit-docs id-and-docs this)
+
+    ;; for #1256 - let's fast-track tx-fn doc replacements straight into the local doc-store to prevent the race condition.
+    ;; we don't do this for all docs because of put/evict ordering - would prefer the topic to be the authority on this.
+    (some->> (seq (->> id-and-docs
+                       (filter (comp (some-fn :crux.db.fn/tx-events :crux.db.fn/failed?) val))))
+             (db/submit-docs local-document-store)))
 
   (fetch-docs [_ ids]
     (let [ids (set ids)
@@ -277,14 +294,14 @@
                                       (for [^PartitionInfo partition-info (.partitionsFor end-offset-consumer doc-topic)]
                                         (TopicPartition. doc-topic (.partition partition-info)))))]
 
-      (loop [docs (db/fetch-docs local-document-store ids)]
+      (loop [doc-offsets (read-doc-offsets index-store)
+             docs (db/fetch-docs local-document-store ids)]
         (if (or (= (count docs) (count ids))
-                (let [doc-offsets (read-doc-offsets index-store)]
-                  (every? (fn [[tp end-offset]]
-                            (or (zero? end-offset)
-                                (when-let [consumed-offset (get doc-offsets tp)]
-                                  (>= consumed-offset end-offset))))
-                          @!end-offsets)))
+                (every? (fn [[tp end-offset]]
+                          (or (zero? end-offset)
+                              (when-let [consumed-offset (get doc-offsets tp)]
+                                (>= consumed-offset end-offset))))
+                        @!end-offsets))
           docs
 
           (do
@@ -293,11 +310,13 @@
             (when-let [indexing-error @!indexing-error]
               (throw (IllegalStateException. "document indexing error" indexing-error)))
 
-            (recur (into docs
+            (recur (read-doc-offsets index-store)
+                   (into docs
                          (db/fetch-docs local-document-store (set/difference ids (set (keys docs))))))))))))
 
 (defn doc-record->id+doc [^ConsumerRecord doc-record]
-  [(c/new-id (.key doc-record)) (.value doc-record)])
+  (MapEntry/create (c/new-id (.key doc-record))
+                   (.value doc-record)))
 
 (defn- index-doc-log [{:keys [local-document-store index-store !indexing-error doc-topic-opts kafka-config group-id poll-wait-duration]}]
   (let [doc-topic (:topic-name doc-topic-opts)

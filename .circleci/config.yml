@@ -3,13 +3,14 @@
 # Check https://circleci.com/docs/2.0/language-clojure/ for more details
 #
 orbs:
-  aws-ecr: circleci/aws-ecr@6.7.0
-  aws-s3: circleci/aws-s3@1.0.15
+  aws-ecr: circleci/aws-ecr@7.0.0
+  aws-s3: circleci/aws-s3@2.0.0
   node: circleci/node@1.1.6
-  crux:
-    orbs:
-      go: circleci/go@0.2.0
-      docker: circleci/docker@0.5.20
+  shellcheck: circleci/shellcheck@2.2.3
+  go: circleci/go@0.2.0
+  docker: circleci/docker@0.5.20
+
+  crux-build:
     commands:
       deploy-artifacts:
         parameters:
@@ -20,9 +21,6 @@ orbs:
           artifact-name:
             type: string
         steps:
-          - docker/install-docker
-          - setup_remote_docker
-
           - run:
               command: |
                 cd crux-build
@@ -65,6 +63,7 @@ jobs:
 
     steps:
       - checkout
+      - shellcheck/install
 
       - run: md5sum **/project.clj > .circleci-cache-key
 
@@ -74,11 +73,13 @@ jobs:
           # fallback to using the latest cache if no exact match is found
           - v1-dependencies-
 
+      - run: shellcheck ./lein-sub
+
       - run:
           command: |
             rm -rf ~/.m2/juxt/crux-*
             export LEIN_JVM_OPTS=-Xmx2G
-            lein sub install
+            ./lein-sub install
 
       # one for when we can get CircleCI Clojars deploys working again
       # - run: ./.circleci/bin/deploy_clojars.sh
@@ -91,6 +92,18 @@ jobs:
             - ~/.m2
           key: v1-dependencies-{{ checksum ".circleci-cache-key" }}
 
+  mvn-deploy:
+    docker:
+      - image: circleci/clojure:openjdk-8-lein
+
+    working_directory: ~/crux
+    steps:
+      - checkout
+      - attach_workspace:
+          at: ~/
+      - run:
+          command: |
+            ./lein-sub deploy
 
   test:
     docker:
@@ -101,11 +114,14 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
-      - run: lein do sub test, check
+      - run:
+          command: |
+            ./lein-sub check
+            ./lein-sub test
       - store_test_results:
           path: "crux-test/target/test-results"
 
-  deploy-commit:
+  deploy-bench:
     docker:
       - image: circleci/clojure:openjdk-8-lein
 
@@ -114,6 +130,8 @@ jobs:
         - checkout
         - attach_workspace:
             at: ~/
+        - docker/install-docker
+        - setup_remote_docker
 
         - run: md5sum ~/crux/crux-bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
         - restore_cache:
@@ -123,7 +141,7 @@ jobs:
               - v1-dataset-
 
         - run: sh ./crux-bench/bin/download-dataset.sh
-        - run: lein sub -s crux-bench uberjar
+        - run: ./lein-sub -s crux-bench uberjar
         - run:
             command: |
               echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV
@@ -132,7 +150,6 @@ jobs:
                 echo 'export BUILD_TAGS="master,master-$CIRCLE_SHA1,${BUILD_TAGS}"' >> $BASH_ENV
               fi
 
-        - setup_remote_docker
         - aws-ecr/build-and-push-image:
               dockerfile: 'Dockerfile'
               extra-build-args: '${BUILD_ARG}'
@@ -144,7 +161,7 @@ jobs:
               - ~/crux/crux-bench/data/
             key: v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
 
-  create-artifacts:
+  crux-build-artifacts:
     docker:
       - image: circleci/clojure:openjdk-8-tools-deps
     working_directory: ~/crux
@@ -152,17 +169,20 @@ jobs:
       - checkout
       - attach_workspace:
           at: ~/
-      - crux/deploy-tar
-      - crux/deploy-artifacts:
+      - docker/install-docker
+      - setup_remote_docker
+
+      - crux-build/deploy-tar
+      - crux-build/deploy-artifacts:
           crux-edn: "crux-in-memory.edn"
           deps-edn: "deps-in-memory.edn"
           artifact-name: "crux-in-memory"
-      - crux/deploy-artifacts:
+      - crux-build/deploy-artifacts:
           crux-edn: "crux-standalone-rocksdb.edn"
           deps-edn: "deps-standalone-rocksdb.edn"
           artifact-name: "crux-standalone-rocksdb"
 
-  create-api-docs:
+  deploy-api-docs:
     docker:
       - image: circleci/clojure:openjdk-8-lein
     working_directory: ~/crux
@@ -206,13 +226,13 @@ workflows:
       - test:
           requires:
             - build
-      - create-api-docs:
+      - deploy-api-docs:
           requires:
             - build
           filters:
             branches:
               only: master
-      - deploy-commit:
+      - deploy-bench:
           requires:
             - build
           filters:
@@ -236,7 +256,7 @@ workflows:
              only: /.*/
            branches:
              ignore: /.*/
-      - create-artifacts:
+      - mvn-deploy:
           requires:
             - hold
           filters:
@@ -244,7 +264,15 @@ workflows:
               only: /.*/
             branches:
               ignore: /.*/
-      - create-api-docs:
+      - crux-build-artifacts:
+          requires:
+            - hold
+          filters:
+            tags:
+              only: /.*/
+            branches:
+              ignore: /.*/
+      - deploy-api-docs:
           requires:
             - hold
           filters:

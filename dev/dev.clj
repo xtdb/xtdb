@@ -2,21 +2,17 @@
   "Internal development namespace for Crux. For end-user usage, see
   examples.clj"
   (:require [crux.api :as crux]
-            [clojure.tools.namespace.repl :as ctn]
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
-            [integrant.repl :as ir :refer [clear go suspend resume halt reset reset-all]]
+            [integrant.repl :as ir :refer [go halt reset reset-all]]
             [crux.io :as cio]
             [crux.lucene]
             [crux.kafka :as k]
             [crux.kafka.embedded :as ek]
             [crux.rocksdb :as rocks]
-            [clojure.java.io :as io]
-            [crux.system :as sys])
+            [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)
-           (java.io Closeable File)
-           java.nio.file.attribute.FileAttribute
-           java.nio.file.Files
+           java.io.Closeable
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory))
 

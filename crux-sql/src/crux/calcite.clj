@@ -1,23 +1,21 @@
 (ns crux.calcite
-  (:require [cheshire.core :as json]
-            [clojure.edn :as edn]
+  (:require [clojure.edn :as edn]
+            [clojure.instant :as inst]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
             [crux.api :as crux]
             [crux.calcite.types]
-            [crux.system :as sys]
             [crux.error :as err]
-            [clojure.string :as str]
-            [clojure.instant :as inst])
+            [crux.system :as sys]
+            [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json])
   (:import clojure.lang.Symbol
-           [crux.calcite CruxTable CruxCalcitePrepareImpl$PreparedSQL]
+           [crux.calcite CruxCalcitePrepareImpl$PreparedSQL CruxTable]
            [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
-           java.util.UUID
            [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
-           [java.util List Properties WeakHashMap]
+           [java.util List Properties UUID WeakHashMap]
            [org.apache.calcite.adapter.enumerable EnumUtils RexImpTable RexImpTable$NullAs RexToLixTranslator]
            org.apache.calcite.adapter.java.JavaTypeFactory
            org.apache.calcite.avatica.jdbc.JdbcMeta
