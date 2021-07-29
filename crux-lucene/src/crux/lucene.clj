@@ -108,6 +108,26 @@
                              query))))
 
 (defn ^crux.api.ICursor search
+  "Lazily search a crux-lucene index in its raw form, without temporal filtering.
+
+  query   Either an unparsed query string or an `org.apache.lucene.search.Query`
+  opts    (optional map)   
+          - `:lucene-store-k` (Keyword):
+              Run the search against specified module key (defaults to `:crux.lucene/lucene-store` when not specified)
+
+  The analyzer defined in the module configuration will be used for unparsed query strings. Supply a Query to use a different analyzer.
+
+  Returns a Cursor of result tuples. Each tuple contains the matched `org.apache.lucene.document.Document` and the score (Double).
+
+  Once you've consumed as much of the sequence as you need to, you'll need to `.close` the sequence.
+
+  A common way to do this is using `with-open`:
+
+  (with-open [res (l/search node query-string)]
+    (let [results (iterator-seq res)]
+      ...))
+
+  Once the sequence is closed, attempting to iterate it is undefined."
   ([node query]
    (search node query {}))
 
@@ -255,7 +275,7 @@
   (let [^SnapshotDeletionPolicy snapshotter (.getIndexDeletionPolicy (.getConfig index-writer))]
     (reify cp/CheckpointSource
       (save-checkpoint [_ dir]
-        (.commit index-writer) ; RFC: do we need this?
+        (.commit index-writer)
 
         (let [snapshot (.snapshot snapshotter)]
           (try
