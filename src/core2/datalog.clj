@@ -3,8 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [core2.error :as err]
-            [core2.logical-plan :as lp]
-            [core2.expression :as expr])
+            [core2.logical-plan :as lp])
   (:import clojure.lang.MapEntry))
 
 (s/def ::logic-var

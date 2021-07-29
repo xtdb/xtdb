@@ -26,6 +26,6 @@
 
   (t/testing "requires same columns"
     (t/is (thrown? IllegalArgumentException
-                   (into [] (c2/plan-ra '[:table table]
-                                        {'table [{:a 12, :b "foo"}
-                                                 {:a 100}]}))))))
+                   (into [] (c2/plan-ra '[:table $table]
+                                        {'$table [{:a 12, :b "foo"}
+                                                  {:a 100}]}))))))
