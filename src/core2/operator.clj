@@ -1,6 +1,5 @@
 (ns core2.operator
   (:require [clojure.spec.alpha :as s]
-            core2.data-source
             [core2.error :as err]
             [core2.expression :as expr]
             [core2.expression.metadata :as expr.meta]
@@ -17,11 +16,14 @@
             [core2.operator.set :as set-op]
             [core2.operator.slice :as slice]
             [core2.operator.table :as table]
+            [core2.relation :as rel]
+            core2.snapshot
             [core2.util :as util])
-  (:import clojure.lang.MapEntry
-           core2.data_source.IDataSource
+  (:import [clojure.lang IReduceInit MapEntry]
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
-           org.apache.arrow.memory.BufferAllocator))
+           core2.snapshot.ISnapshot
+           java.util.Date
+           [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (defmulti emit-op
   (fn [ra-expr srcs]
@@ -72,11 +74,11 @@
                           (vals selects)))
         metadata-pred (expr.meta/->metadata-selector (cons 'and args) srcs)
 
-        ^IDataSource db (or (get srcs (or source '$))
-                            (throw (err/illegal-arg :unknown-db
-                                                    {::err/message "Query refers to unknown db"
-                                                     :db source
-                                                     :srcs (keys srcs)})))]
+        ^ISnapshot db (or (get srcs (or source '$))
+                          (throw (err/illegal-arg :unknown-db
+                                                  {::err/message "Query refers to unknown db"
+                                                   :db source
+                                                   :srcs (keys srcs)})))]
     (fn [{:keys [default-valid-time]}]
       (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
         ;; scan doesn't use our allocator because it mostly pulls from the buffer pool
@@ -272,17 +274,34 @@
         (let [inner-f (emit-op relation srcs)]
           (inner-f opts))))))
 
-(s/def ::allocator #(instance? BufferAllocator %))
-(s/def ::default-valid-time inst?)
+(defn open-ra ^core2.ICursor [query src-or-srcs query-opts]
+  (let [srcs (cond
+               (nil? src-or-srcs) {}
+               (map? src-or-srcs) src-or-srcs
+               :else {'$ src-or-srcs})]
+    (when-not (s/valid? ::lp/logical-plan query)
+      (throw (err/illegal-arg :malformed-query
+                              {:plan query
+                               :srcs srcs
+                               :explain (s/explain-data ::lp/logical-plan query)})))
 
-(defn open-ra ^core2.ICursor [lp srcs query-opts]
-  {:pre [(s/valid? (s/keys :req-un [::allocator ::default-valid-time]) query-opts)]}
+    (let [allocator (RootAllocator.)]
+      (try
+        (let [op-f (emit-op (s/conform ::lp/logical-plan query) srcs)]
+          (-> (op-f (-> (merge {:default-valid-time (Date.)} query-opts)
+                        (assoc :allocator allocator)))
+              (util/and-also-close allocator)))
+        (catch Throwable t
+          (util/try-close allocator)
+          (throw t))))))
 
-  (when-not (s/valid? ::lp/logical-plan lp)
-    (throw (err/illegal-arg :malformed-query
-                            {:plan lp
-                             :srcs srcs
-                             :explain (s/explain-data ::lp/logical-plan lp)})))
-
-  (let [op-f (emit-op (s/conform ::lp/logical-plan lp) srcs)]
-    (op-f query-opts)))
+(defn plan-ra
+  ([query src-or-srcs] (plan-ra query src-or-srcs {}))
+  ([query src-or-srcs query-opts]
+   (reify IReduceInit
+     (reduce [_ f init]
+       (with-open [res (open-ra query src-or-srcs query-opts)]
+         (util/reduce-cursor (fn [acc rel]
+                               (reduce f acc (rel/rel->rows rel)))
+                             init
+                             res))))))

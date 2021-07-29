@@ -4,7 +4,9 @@
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]
             [core2.test-util :as tu]
-            [core2.types :as ty])
+            [core2.types :as ty]
+            [core2.snapshot :as snap]
+            [core2.operator :as op])
   (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -124,25 +126,25 @@
 (t/deftest test-date-trunc
   (with-open [node (c2/start-node {})]
     (let [tx (c2/submit-tx node [[:put {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}]])
-          db (c2/db node {:tx tx})]
+          db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
       (t/is (= [{:trunc #inst "2021-01-21"}]
-               (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" date)}]
+               (into [] (op/plan-ra '[:project [{trunc (date-trunc "DAY" date)}]
                                       [:scan [date]]]
                                     db))))
 
       (t/is (= [{:trunc #inst "2021-01-21T12:34"}]
-               (into [] (c2/plan-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
+               (into [] (op/plan-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
                                       [:scan [date]]]
                                     db))))
 
       (t/is (= [{:trunc #inst "2021-01-21"}]
-               (into [] (c2/plan-ra '[:select (> trunc #inst "2021")
+               (into [] (op/plan-ra '[:select (> trunc #inst "2021")
                                       [:project [{trunc (date-trunc "DAY" date)}]
                                        [:scan [date]]]]
                                     db))))
 
       (t/is (= [{:trunc #inst "2021-01-21"}]
-               (into [] (c2/plan-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
+               (into [] (op/plan-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
                                       [:project [{trunc (date-trunc "MINUTE" date)}]
                                        [:scan [date]]]]
                                     db)))))))

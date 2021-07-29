@@ -2,7 +2,10 @@
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
             [core2.core :as c2]
-            [core2.tpch :as tpch])
+            [core2.tpch :as tpch]
+            [core2.operator :as op]
+            [core2.snapshot :as snap]
+            [core2.test-util :as tu])
   (:import core2.core.Node
            java.util.concurrent.TimeUnit))
 
@@ -21,7 +24,7 @@
     (bench/with-timing (str "query " (:name (meta q)))
       (let [q @q]
         (try
-          (count (sequence (c2/plan-ra q (merge {'$ db} (::tpch/params (meta q))))))
+          (count (sequence (op/plan-ra q (merge {'$ db} (::tpch/params (meta q))))))
           (catch Exception e
             (.printStackTrace e)))))))
 
@@ -30,7 +33,7 @@
     (bench/with-timing :ingest
       (ingest-tpch node {:scale-factor 0.01}))
 
-    (let [db (c2/db node)]
+    (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory))]
       (bench/with-timing :cold-queries
         (query-tpch db))
 
@@ -50,7 +53,7 @@
         (bench/with-timing :ingest
           (ingest-tpch node opts))
 
-        (let [db (c2/db node)]
+        (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory))]
           (bench/with-timing :cold-queries
             (query-tpch db))
 

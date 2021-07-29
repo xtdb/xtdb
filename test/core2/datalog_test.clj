@@ -6,337 +6,360 @@
 
 (t/use-fixtures :each tu/with-node)
 
-(defn run-query [query & args]
-  (into [] (apply c2/plan-q query args)))
-
 (def ivan+petr
   [[:put {:_id "ivan", :first-name "Ivan", :last-name "Ivanov"}]
    [:put {:_id "petr", :first-name "Petr", :last-name "Petrov"}]])
 
 (t/deftest test-scan
-  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
+  (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:name "Ivan"}
               {:name "Petr"}]
-             (run-query '{:find [?name]
-                          :where [[?e :first-name ?name]]}
-                        db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?name]
+                                   :where [[?e :first-name ?name]]}
+                                 {:basis-tx tx})
+                  (into []))))
 
     (t/is (= [{:e "ivan", :name "Ivan"}
               {:e "petr", :name "Petr"}]
-             (run-query '{:find [?e ?name]
-                          :where [[?e :first-name ?name]]}
-                        db))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e ?name]
+                                   :where [[?e :first-name ?name]]}
+                                 {:basis-tx tx})
+                  (into [])))
           "returning eid")))
 
 (t/deftest test-basic-query
-  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
+  (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:e "ivan"}]
-             (run-query '{:find [?e]
-                          :where [[?e :first-name "Ivan"]]}
-                        db))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e]
+                                   :where [[?e :first-name "Ivan"]]}
+                                 {:basis-tx tx})
+                  (into [])))
           "query by single field")
 
     (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-             (run-query '{:find [?first-name ?last-name]
-                          :where [[?e :first-name "Petr"]
-                                  [?e :first-name ?first-name]
-                                  [?e :last-name ?last-name]]}
-                        db))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name ?last-name]
+                                   :where [[?e :first-name "Petr"]
+                                           [?e :first-name ?first-name]
+                                           [?e :last-name ?last-name]]}
+                                 {:basis-tx tx})
+                  (into [])))
           "returning the queried field")
 
     (t/is (= [{:first-name "Petr", :last-name "Petrov"}]
-             (run-query '{:find [?first-name ?last-name]
-                          :where [["petr" :first-name ?first-name]
-                                  ["petr" :last-name ?last-name]]}
-                        db))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name ?last-name]
+                                   :where [["petr" :first-name ?first-name]
+                                           ["petr" :last-name ?last-name]]}
+                                 {:basis-tx tx})
+                  (into [])))
           "literal eid")))
 
 (t/deftest test-order-by
-  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
+  (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= [{:first-name "Ivan"} {:first-name "Petr"}]
-             (run-query '{:find [?first-name]
-                          :where [[?e :first-name ?first-name]]
-                          :order-by [?first-name]}
-                        db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name]
+                                   :where [[?e :first-name ?first-name]]
+                                   :order-by [?first-name]}
+                                 {:basis-tx tx})
+                  (into []))))
 
     (t/is (= [{:first-name "Petr"} {:first-name "Ivan"}]
-             (run-query '{:find [?first-name]
-                          :where [[?e :first-name ?first-name]]
-                          :order-by [?first-name :desc]}
-                        db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name]
+                                   :where [[?e :first-name ?first-name]]
+                                   :order-by [?first-name :desc]}
+                                 {:basis-tx tx})
+                  (into []))))
 
     (t/is (= [{:first-name "Ivan"}]
-             (run-query '{:find [?first-name]
-                          :where [[?e :first-name ?first-name]]
-                          :order-by [?first-name]
-                          :limit 1}
-                        db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name]
+                                   :where [[?e :first-name ?first-name]]
+                                   :order-by [?first-name]
+                                   :limit 1}
+                                 {:basis-tx tx})
+                  (into []))))
 
     (t/is (= [{:first-name "Petr"}]
-             (run-query '{:find [?first-name]
-                          :where [[?e :first-name ?first-name]]
-                          :order-by [?first-name :desc]
-                          :limit 1}
-                        db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name]
+                                   :where [[?e :first-name ?first-name]]
+                                   :order-by [?first-name :desc]
+                                   :limit 1}
+                                 {:basis-tx tx})
+                  (into []))))
 
     (t/is (= [{:first-name "Petr"}]
-             (run-query '{:find [?first-name]
-                          :where [[?e :first-name ?first-name]]
-                          :order-by [?first-name]
-                          :limit 1
-                          :offset 1}
-                        db)))))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name]
+                                   :where [[?e :first-name ?first-name]]
+                                   :order-by [?first-name]
+                                   :limit 1
+                                   :offset 1}
+                                 {:basis-tx tx})
+                  (into []))))))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query.cljc#L12-L36
 (t/deftest datascript-test-joins
-  (let [db (c2/db tu/*node*
-                  {:tx (c2/submit-tx tu/*node*
-                                     [[:put {:_id 1, :name "Ivan", :age 15}]
-                                      [:put {:_id 2, :name "Petr", :age 37}]
-                                      [:put {:_id 3, :name "Ivan", :age 37}]
-                                      [:put {:_id 4, :age 15}]])})]
+  (let [tx (c2/submit-tx tu/*node*
+                         [[:put {:_id 1, :name "Ivan", :age 15}]
+                          [:put {:_id 2, :name "Petr", :age 37}]
+                          [:put {:_id 3, :name "Ivan", :age 37}]
+                          [:put {:_id 4, :age 15}]])]
 
     (t/is (= #{{:e 1} {:e 2} {:e 3}}
-             (set (run-query '{:find [?e]
-                               :where [[?e :name]]}
-                             db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e]
+                                   :where [[?e :name]]}
+                                 {:basis-tx tx})
+                  (into #{})))
           "testing without V")
 
     (t/is (= #{{:e 1, :v 15} {:e 3, :v 37}}
-             (set (run-query '{:find [?e ?v]
-                               :where [[?e :name "Ivan"]
-                                       [?e :age ?v]]}
-                             db))))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e ?v]
+                                   :where [[?e :name "Ivan"]
+                                           [?e :age ?v]]}
+                                 {:basis-tx tx})
+                  (into #{}))))
 
     (t/is (= #{{:e1 1, :e2 1}
                {:e1 2, :e2 2}
                {:e1 3, :e2 3}
                {:e1 1, :e2 3}
                {:e1 3, :e2 1}}
-             (set (run-query '{:find [?e1 ?e2]
-                               :where [[?e1 :name ?n]
-                                       [?e2 :name ?n]]}
-                             db))))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e1 ?e2]
+                                   :where [[?e1 :name ?n]
+                                           [?e2 :name ?n]]}
+                                 {:basis-tx tx})
+                  (into #{}))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 3, :e2 3, :n "Ivan"}
                {:e 3, :e2 2, :n "Petr"}}
-             (set (run-query '{:find [?e ?e2 ?n]
-                               :where [[?e :name "Ivan"]
-                                       [?e :age ?a]
-                                       [?e2 :age ?a]
-                                       [?e2 :name ?n]]}
-                             db))))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e ?e2 ?n]
+                                   :where [[?e :name "Ivan"]
+                                           [?e :age ?a]
+                                           [?e2 :age ?a]
+                                           [?e2 :name ?n]]}
+                                 {:basis-tx tx})
+                  (into #{}))))
 
     (t/is (= #{{:e 1, :e2 1, :n "Ivan"}
                {:e 2, :e2 2, :n "Petr"}
                {:e 3, :e2 3, :n "Ivan"}}
-             (set (run-query '{:find [?e ?e2 ?n]
-                               :where [[?e :name ?n]
-                                       [?e :age ?a]
-                                       [?e2 :name ?n]
-                                       [?e2 :age ?a]]}
-                             db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e ?e2 ?n]
+                                   :where [[?e :name ?n]
+                                           [?e :age ?a]
+                                           [?e2 :name ?n]
+                                           [?e2 :age ?a]]}
+                                 {:basis-tx tx})
+                  (into #{})))
           "multi-param join")
 
     (t/is (= #{{:e1 1, :e2 1, :a1 15, :a2 15}
                {:e1 1, :e2 3, :a1 15, :a2 37}
                {:e1 3, :e2 1, :a1 37, :a2 15}
                {:e1 3, :e2 3, :a1 37, :a2 37}}
-             (set (run-query '{:find [?e1 ?e2 ?a1 ?a2]
-                               :where [[?e1 :name "Ivan"]
-                                       [?e2 :name "Ivan"]
-                                       [?e1 :age ?a1]
-                                       [?e2 :age ?a2]]}
-                             db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e1 ?e2 ?a1 ?a2]
+                                   :where [[?e1 :name "Ivan"]
+                                           [?e2 :name "Ivan"]
+                                           [?e1 :age ?a1]
+                                           [?e2 :age ?a2]]}
+                                 {:basis-tx tx})
+                  (into #{})))
           "cross join required here")))
 
 (t/deftest test-joins
-  (let [db (c2/db tu/*node*
-                  {:tx (c2/submit-tx tu/*node* bond/tx-ops)})]
+  (let [tx (c2/submit-tx tu/*node* bond/tx-ops)]
     (t/is (= #{{:film-name "Skyfall", :bond-name "Daniel Craig"}}
-             (set (run-query '{:find [?film-name ?bond-name]
-                               :in [$ ?film]
-                               :where [[?film :film/name ?film-name]
-                                       [?film :film/bond ?bond]
-                                       [?bond :person/name ?bond-name]]}
-                             db
-                             "skyfall")))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?film-name ?bond-name]
+                                   :in [?film]
+                                   :where [[?film :film/name ?film-name]
+                                           [?film :film/bond ?bond]
+                                           [?bond :person/name ?bond-name]]}
+                                 {:basis-tx tx}
+                                 "skyfall")
+                  (into #{})))
           "one -> one")
 
     (t/is (= #{{:film-name "Casino Royale", :bond-name "Daniel Craig"}
                {:film-name "Quantum of Solace", :bond-name "Daniel Craig"}
                {:film-name "Skyfall", :bond-name "Daniel Craig"}
                {:film-name "Spectre", :bond-name "Daniel Craig"}}
-             (set (run-query '{:find [?film-name ?bond-name]
-                               :in [$ ?bond]
-                               :where [[?film :film/name ?film-name]
-                                       [?film :film/bond ?bond]
-                                       [?bond :person/name ?bond-name]]}
-                             db
-                             "daniel-craig")))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?film-name ?bond-name]
+                                   :in [?bond]
+                                   :where [[?film :film/name ?film-name]
+                                           [?film :film/bond ?bond]
+                                           [?bond :person/name ?bond-name]]}
+                                 {:basis-tx tx}
+                                 "daniel-craig")
+                  (into #{})))
           "one -> many")))
 
 ;; https://github.com/tonsky/datascript/blob/1.1.0/test/datascript/test/query_aggregates.cljc#L14-L39
 (t/deftest datascript-test-aggregates
-  (let [db (c2/db tu/*node*
-                  {:tx (c2/submit-tx tu/*node*
-                                     [[:put {:_id "Cerberus", :heads 3}]
-                                      [:put {:_id "Medusa", :heads 1}]
-                                      [:put {:_id "Cyclops", :heads 1}]
-                                      [:put {:_id "Chimera", :heads 1}]])})]
+  (let [tx (c2/submit-tx tu/*node*
+                         [[:put {:_id "Cerberus", :heads 3}]
+                          [:put {:_id "Medusa", :heads 1}]
+                          [:put {:_id "Cyclops", :heads 1}]
+                          [:put {:_id "Chimera", :heads 1}]])]
     (t/is (= #{{:heads 1, :count-?heads 3} {:heads 3, :count-?heads 1}}
-             (set (run-query '{:find [?heads (count ?heads)]
-                               :where [[?monster :heads ?heads]]}
-                             db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?heads (count ?heads)]
+                                   :where [[?monster :heads ?heads]]}
+                                 {:basis-tx tx})
+                  (into #{})))
           "head frequency")
 
     (t/is (= #{{:sum-?heads 6, :min-?heads 1, :max-?heads 3, :count-?heads 4}}
-             (set (run-query '{:find [(sum ?heads)
-                                      (min ?heads)
-                                      (max ?heads)
-                                      (count ?heads)]
-                               :where [[?monster :heads ?heads]]}
-                             db)))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [(sum ?heads)
+                                          (min ?heads)
+                                          (max ?heads)
+                                          (count ?heads)]
+                                   :where [[?monster :heads ?heads]]}
+                                 {:basis-tx tx})
+                  (into #{})))
           "various aggs")))
 
 (t/deftest test-query-with-in-bindings
-  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
+  (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:e "ivan"}}
-             (set (run-query '{:find [?e]
-                               :in [$ ?name]
-                               :where [[?e :first-name ?name]]}
-                             db
-                             "Ivan")))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e]
+                                   :in [?name]
+                                   :where [[?e :first-name ?name]]}
+                                 {:basis-tx tx}
+                                 "Ivan")
+                  (into #{})))
           "single arg")
 
     (t/is (= #{{:e "ivan"}}
-             (set (run-query '{:find [?e]
-                               :in [$ ?first-name ?last-name]
-                               :where [[?e :first-name ?first-name]
-                                       [?e :last-name ?last-name]]}
-                             db
-                             "Ivan" "Ivanov")))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e]
+                                   :in [?first-name ?last-name]
+                                   :where [[?e :first-name ?first-name]
+                                           [?e :last-name ?last-name]]}
+                                 {:basis-tx tx}
+                                 "Ivan" "Ivanov")
+                  (into #{})))
           "multiple args")
 
     (t/is (= #{{:e "ivan"}}
-             (set (run-query '{:find [?e]
-                               :in [$ [?first-name]]
-                               :where [[?e :first-name ?first-name]]}
-                             db
-                             ["Ivan"])))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e]
+                                   :in [[?first-name]]
+                                   :where [[?e :first-name ?first-name]]}
+                                 {:basis-tx tx}
+                                 ["Ivan"])
+                  (into #{})))
           "tuple with 1 var")
 
     (t/is (= #{{:e "ivan"}}
-             (set (run-query '{:find [?e]
-                               :in [$ [?first-name ?last-name]]
-                               :where [[?e :first-name ?first-name]
-                                       [?e :last-name ?last-name]]}
-                             db
-                             ["Ivan" "Ivanov"])))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?e]
+                                   :in [[?first-name ?last-name]]
+                                   :where [[?e :first-name ?first-name]
+                                           [?e :last-name ?last-name]]}
+                                 {:basis-tx tx}
+                                 ["Ivan" "Ivanov"])
+                  (into #{})))
           "tuple with 2 vars")
 
     (t/testing "collection"
       (let [query '{:find [?e]
-                    :in [$ [?first-name ...]]
+                    :in [[?first-name ...]]
                     :where [[?e :first-name ?first-name]]}]
         (t/is (= #{{:e "petr"}}
-                 (set (run-query query db ["Petr"]))))
+                 (->> (c2/plan-query tu/*node* query {:basis-tx tx} ["Petr"])
+                      (into #{}))))
 
         (t/is (= #{{:e "ivan"} {:e "petr"}}
-                 (set (run-query query db ["Ivan" "Petr"]))))))
+                 (->> (c2/plan-query tu/*node* query {:basis-tx tx} ["Ivan" "Petr"])
+                      (into #{}))))))
 
     (t/testing "relation"
       (let [query '{:find [?e]
-                    :in [$ [[?first-name ?last-name]]]
+                    :in [[[?first-name ?last-name]]]
                     :where [[?e :first-name ?first-name]
                             [?e :last-name ?last-name]]}]
 
         (t/is (= #{{:e "ivan"}}
-                 (set (run-query query db [{:first-name "Ivan", :last-name "Ivanov"}]))))
+                 (->> (c2/plan-query tu/*node* query {:basis-tx tx}
+                                     [{:first-name "Ivan", :last-name "Ivanov"}])
+                      (into #{}))))
 
         (t/is (= #{{:e "ivan"}}
-                 (set (run-query query db [["Ivan" "Ivanov"]]))))
+                 (->> (c2/plan-query tu/*node* query {:basis-tx tx}
+                                     [["Ivan" "Ivanov"]])
+                      (into #{}))))
 
         (t/is (= #{{:e "ivan"} {:e "petr"}}
-                 (set (run-query query db [{:first-name "Ivan", :last-name "Ivanov"}
-                                           {:first-name "Petr", :last-name "Petrov"}]))))
+                 (->> (c2/plan-query tu/*node* query {:basis-tx tx}
+                                     [{:first-name "Ivan", :last-name "Ivanov"}
+                                      {:first-name "Petr", :last-name "Petrov"}])
+                      (into #{}))))
         (t/is (= #{{:e "ivan"} {:e "petr"}}
-                 (set (run-query query db [["Ivan" "Ivanov"]
-                                           ["Petr" "Petrov"]]))))))))
+                 (->> (c2/plan-query tu/*node* query {:basis-tx tx}
+                                     [["Ivan" "Ivanov"]
+                                      ["Petr" "Petrov"]])
+                      (into #{}))))))))
 
 (t/deftest test-in-arity-exceptions
-  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
+  (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (thrown-with-msg? IllegalArgumentException
                             #":in arity mismatch"
-                            (run-query '{:find [?e]
-                                         :in []}
-                                       db)))
-
-    (t/is (thrown-with-msg? IllegalArgumentException
-                            #":in arity mismatch"
-                            (run-query '{:find [?e]
-                                         :in [$ ?foo]}
-                                       db)))))
-
-(t/deftest test-multiple-sources
-  (with-open [node1 (c2/start-node {})
-              node2 (c2/start-node {})]
-    (let [db1 (c2/db node1
-                     {:tx (c2/submit-tx node1 [[:put {:_id "foo", :col1 "foo1"}]
-                                               [:put {:_id "bar", :col1 "bar1"}]])})
-          db2 (c2/db node2
-                     {:tx (c2/submit-tx node2 [[:put {:_id "foo", :col2 "foo2"}]
-                                               [:put {:_id "bar", :col2 "bar2"}]])})]
-      (t/is (= [{:col1 "foo1", :col2 "foo2"}
-                {:col1 "bar1", :col2 "bar2"}]
-               (run-query '{:find [?col1 ?col2]
-                            :in [$db1 $db2]
-                            :where [[$db1 ?e :col1 ?col1]
-                                    [$db2 ?e :col2 ?col2]]}
-                          db1 db2)))
-
-      (t/is (= [{:e "foo", :col1 "foo1", :col2 "foo2"}
-                {:e "bar", :col1 "bar1", :col2 "bar2"}]
-               (run-query '{:find [?e ?col1 ?col2]
-                            :in [$db1 $db2]
-                            :where [[$db1 ?e :col1 ?col1]
-                                    [$db2 ?e :col2 ?col2]]}
-                          db1 db2))))))
-
-(t/deftest test-no-dbs
-  (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}
-             {:first-name "Petr", :last-name "Petrov"}}
-           (set (run-query '{:find [?first-name ?last-name]
-                             :in [[[?first-name ?last-name]]]}
-                           [["Ivan" "Ivanov"]
-                            ["Petr" "Petrov"]])))))
+                            (->> (c2/plan-query tu/*node*
+                                                '{:find [?e]
+                                                  :in [?foo]}
+                                                {:basis-tx tx})
+                                 (into []))))))
 
 (t/deftest test-known-predicates
-  (let [db (c2/db tu/*node* {:tx (c2/submit-tx tu/*node* ivan+petr)})]
+  (let [tx (c2/submit-tx tu/*node* ivan+petr)]
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
-             (set (run-query '{:find [?first-name ?last-name]
-                               :where [[?e :first-name ?first-name]
-                                       [?e :last-name ?last-name]
-                                       [(< ?first-name "James")]]}
-                             db))))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name ?last-name]
+                                   :where [[?e :first-name ?first-name]
+                                           [?e :last-name ?last-name]
+                                           [(< ?first-name "James")]]}
+                                 {:basis-tx tx})
+                  (into #{}))))
 
     (t/is (= #{{:first-name "Ivan", :last-name "Ivanov"}}
-             (set (run-query '{:find [?first-name ?last-name]
-                               :where [[?e :first-name ?first-name]
-                                       [?e :last-name ?last-name]
-                                       [(<= ?first-name "Ivan")]]}
-                             db))))
+             (->> (c2/plan-query tu/*node*
+                                 '{:find [?first-name ?last-name]
+                                   :where [[?e :first-name ?first-name]
+                                           [?e :last-name ?last-name]
+                                           [(<= ?first-name "Ivan")]]}
+                                 {:basis-tx tx})
+                  (into #{}))))
 
-    (t/is (empty? (run-query '{:find [?first-name ?last-name]
-                               :where [[?e :first-name ?first-name]
-                                       [?e :last-name ?last-name]
-                                       [(<= ?first-name "Ivan")]
-                                       [(> ?last-name "Ivanov")]]}
-                             db)))
+    (t/is (empty? (->> (c2/plan-query tu/*node*
+                                      '{:find [?first-name ?last-name]
+                                        :where [[?e :first-name ?first-name]
+                                                [?e :last-name ?last-name]
+                                                [(<= ?first-name "Ivan")]
+                                                [(> ?last-name "Ivanov")]]}
+                                      {:basis-tx tx})
+                       (into []))))
 
-    (t/is (empty? (run-query '{:find [?first-name ?last-name]
-                               :where [[?e :first-name ?first-name]
-                                       [?e :last-name ?last-name]
-                                       [(< ?first-name "Ivan")]]}
-                             db)))))
+    (t/is (empty? (->> (c2/plan-query tu/*node*
+                                      '{:find [?first-name ?last-name]
+                                        :where [[?e :first-name ?first-name]
+                                                [?e :last-name ?last-name]
+                                                [(< ?first-name "Ivan")]]}
+                                      {:basis-tx tx})
+                       (into []))))))

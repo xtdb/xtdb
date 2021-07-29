@@ -410,8 +410,7 @@
             (let [system @(:!system node)
                   ^ObjectStore os (::os/file-system-object-store system)
                   ^IMetadataManager mm (::meta/metadata-manager system)
-                  ^TemporalManager tm (::temporal/temporal-manager system)
-                  ^IChunkManager idx (::idx/indexer system)]
+                  ^TemporalManager tm (::temporal/temporal-manager system)]
               (t/is (= first-half-tx-instant
                        (-> first-half-tx-instant
                            (tu/then-await-tx node (Duration/ofSeconds 5)))))

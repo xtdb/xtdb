@@ -78,70 +78,87 @@ Transactions are slightly different to Classic:
 - `:crux.db/id` -> `:_id`. Valid ID types currently strings, numbers, dates.
 - `c2/submit-tx` returns `CompletableFuture`, deref it to get the transaction details.
 
-=== DBs
-Core2 has the concept of 'db's, similar to `crux/db` but without the ability to specify VT.
-In Core2, the upper bound for the tx-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own tx-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
-
-[source,clojure]
-----
-;; simple case - use the latest tx the node has available:
-(let [db (c2/db node)]
-  ...)
-
-;; or, to read your own writes (timeout optional):
-;; `db` will await the transaction
-(let [tx (c2/submit-tx node [...])
-      db (c2/db node {:tx tx, :timeout (Duration/ofMillis 250)})]
-  ...)
-
-;; in tests, we often inline `tx`:
-(let [db (c2/db node
-                {:tx (c2/submit-tx node [...])})]
-  ...)
-----
-
-`db-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the value returned from the block.
-(In fact, `db` just calls `db-async` and deref's it.)
-
 === Queries
-In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-q`.
+In a similar manner to `next.jdbc`[https://github.com/seancorfield/next-jdbc], execute Datalog queries in Core2 using `c2/plan-query`.
 This returns a reducible sequence that you can pass to (say) `reduce`, `into` or `run!`.
 When finalised (by `reduce`) this will ensure the query results are adequately closed.
 
 [source,clojure]
 ----
 (with-open [node (c2/start-node {})]
-  (let [db (c2/db node)]
-    (into [] (c2/plan-q '{:find [?e ?name]
-                          :where [[?e :name ?name]]}
-                        db))))
+  (->> (c2/plan-query node
+                      '{:find [?e ?name]
+                        :where [[?e :name ?name]]})
+       (into [])))
 ----
 
 These queries currently return a vector of maps `[{:e ..., :name ...}, {...}]`, although this is only because it's what was closest to what we had available at the time.
 
-Note the param order is query then database (different to Classic, same as other EDN Datalog databases) - this is because Core2 queries can accept multiple DBs.
+=== Bases
+Core2 doesn't have the concept of DBs - instead, we pass the node and (optionally) a 'basis' to queries.
+In Core2, the upper bound for the tx-time is applied per-source; the default upper bound for VT is applied at the query level - this is because each data source has their own tx-time timeline, but VT is assumed to be a single timeline, consistent across data sources.
 
-Queries also accept a `:default-valid-time` option after the query itself, before any params, which applies to any entities that don't specify other valid-time constraints.
+[source,clojure]
+----
+;; simple case - use the latest tx the node has available:
+(->> (c2/plan-query node '{...})
+     (into []))
+
+;; or, to read your own writes (timeout optional):
+;; `plan-query` will await the transaction
+(->> (c2/plan-query node
+                    '{...}
+                    {:basis-tx tx,
+                     :basis-timeout (Duration/ofSeconds 1)})
+     (into []))
+----
+
+The `plan-query` functions take the node, the query, optionally the basis-map, and then a variable number of params.
+
+Params are passed after the basis map if both are present:
+
+[source,clojure]
+----
+(->> (c2/plan-query tu/*node*
+                    '{:find [?e]
+                      :in [?first-name ?last-name]
+                      :where [[?e :first-name ?first-name]
+                              [?e :last-name ?last-name]]}
+                    {:basis-tx tx}
+                    "Ivan" "Ivanov")
+     (into #{}))
+----
+
+Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multiple sources to Datalog queries, I propose we include them as a named map in the basis-opts:
+
+[source,clojure]
+----
+;; something like this, anyway.
+(->> (c2/plan-query node
+                    '{:find [...]
+                      :where [[$db1 ...], [$db2 ...]]}
+                    {'$db1 {:basis-tx tx}
+                     '$db2 {:basis-tx tx}
+                     :basis-timeout (Duration/ofSeconds 1)})
+     (into []))
+----
+
+`plan-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
+(In fact, `plan-query` just calls `plan-query-async` and deref's it.)
+
+The basis-opts can also contain a `:default-valid-time` option, which applies to any entities that don't specify other valid-time constraints.
 This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]
 ----
-(with-open [node (c2/start-node {})]
-  (let [db (c2/db node)]
-    (into [] (c2/plan-q '{:find [?e ?name]
-                          :where [[?e :name ?name]]}
-                        {:default-valid-time #inst "..."}
-                        db))))
+(->> (c2/plan-query node
+                    '{:find [?e ?name]
+                      :where [[?e :name ?name]]}
+                    {:default-valid-time #inst "..."})
+     (into []))
 ----
 
-There is also `c2/plan-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
-
-[source,clojure]
-----
-(with-open [node (c2/start-node {})]
-  (let [db (c2/db node)]
-    (into [] (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
-----
+There is also `op/plan-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
 
 == Developing Core2
 

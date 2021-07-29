@@ -7,7 +7,8 @@
             [core2.relation :as rel]
             [core2.temporal :as temporal]
             [core2.types :as ty]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.snapshot :as snap])
   (:import core2.core.Node
            core2.ICursor
            core2.object_store.FileSystemObjectStore
@@ -42,6 +43,10 @@
   (with-open [node (c2/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
+
+(defn component
+  ([k] (component *node* k))
+  ([node k] (get @(:!system node) k)))
 
 (defn ->list ^java.util.List [^ValueVector v]
   (let [acc (ArrayList.)]

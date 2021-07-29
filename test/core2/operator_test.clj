@@ -4,10 +4,13 @@
             [core2.expression.metadata :as expr.meta]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
-            [core2.test-util :as tu])
+            [core2.test-util :as tu]
+            [core2.snapshot :as snap]
+            [core2.operator :as op])
   (:import core2.indexer.IChunkManager
            core2.metadata.IMetadataManager
-           org.roaringbitmap.RoaringBitmap))
+           org.roaringbitmap.RoaringBitmap
+           core2.snapshot.ISnapshotFactory))
 
 (t/deftest test-find-gt-ivan
   (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
@@ -25,17 +28,18 @@
 
     (tu/finish-chunk node)
 
-    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))
-          ^IChunkManager indexer (::idx/indexer @(:!system node))]
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+          ^IChunkManager indexer (tu/component node ::idx/indexer)
+          ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
-                         (into #{} (c2/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
+                         (into #{} (op/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
 
                 (t/is (= expected
-                         (into #{} (c2/plan-ra '[:scan [{name (> name ?name)}]]
+                         (into #{} (op/plan-ra '[:scan [{name (> name ?name)}]]
                                                {'$ db, '?name "Ivan"})))))]
 
-        (let [db (c2/db node)]
+        (let [db (snap/snapshot snapshot-factory)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
           (with-open [watermark (.getWatermark indexer)]
             (let [expected-match [(meta/map->ChunkMatch
@@ -56,7 +60,7 @@
                              {:name "Jon"}}
                            db))
 
-        (let [db (c2/db node)]
+        (let [db (snap/snapshot snapshot-factory)]
           (test-query-ivan #{{:name "James"}
                              {:name "Jon"}
                              {:name "Jeremy"}}
@@ -76,9 +80,10 @@
         (tu/then-await-tx node))
 
     (tu/finish-chunk node)
-    (let [^IMetadataManager metadata-mgr (::meta/metadata-manager @(:!system node))
-          ^IChunkManager indexer (::idx/indexer @(:!system node))
-          db (c2/db node)]
+    (let [^IMetadataManager metadata-mgr (tu/component node ::meta/metadata-manager)
+          ^IChunkManager indexer (tu/component node ::idx/indexer)
+          ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)
+          db (snap/snapshot snapshot-factory)]
       (with-open [watermark (.getWatermark indexer)]
         (t/is (= #{0 3} (.knownChunks metadata-mgr)))
         (let [expected-match [(meta/map->ChunkMatch
@@ -94,10 +99,10 @@
                 "only needs to scan chunk 0, block 0"))
 
         (t/is (= #{{:name "Ivan"}}
-                 (into #{} (c2/plan-ra '[:scan [{name (= name "Ivan")}]] db))))
+                 (into #{} (op/plan-ra '[:scan [{name (= name "Ivan")}]] db))))
 
         (t/is (= #{{:name "Ivan"}}
-                 (into #{} (c2/plan-ra '[:scan [{name (= name ?name)}]]
+                 (into #{} (op/plan-ra '[:scan [{name (= name ?name)}]]
                                        {'$ db, '?name "Ivan"}))))))))
 
 (t/deftest test-temporal-bounds
@@ -107,10 +112,10 @@
           _ (Thread/sleep 10) ; to prevent same-ms transactions
           {tt2 :tx-time, :as tx2} @(c2/submit-tx node
                                                  [[:put {:_id "my-doc", :last-updated "tx2"}]])
-          db (c2/db node {:tx tx2})]
+          db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx2)]
       (letfn [(q [& temporal-constraints]
                 (into #{} (map :last-updated)
-                      (c2/plan-ra [:scan (into '[last-updated]
+                      (op/plan-ra [:scan (into '[last-updated]
                                                temporal-constraints)]
                                   {'$ db, '?tt1 tt1, '?tt2 tt2})))]
         (t/is (= #{"tx2"}
@@ -178,7 +183,7 @@
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"
-    (with-open [fixpoint-cursor (c2/open-ra '[:fixpoint Fact
+    (with-open [fixpoint-cursor (op/open-ra '[:fixpoint Fact
                                               [:table $table]
                                               [:select
                                                (<= a 8)
@@ -186,7 +191,8 @@
                                                 [{a (+ a 1)}
                                                  {b (* (+ a 1) b)}]
                                                 Fact]]]
-                                            {'$table [{:a 0 :b 1}]})]
+                                            {'$table [{:a 0 :b 1}]}
+                                            {})]
       (t/is (= [[{:a 0, :b 1}]
                 [{:a 1, :b 1}]
                 [{:a 2, :b 2}]
@@ -199,7 +205,7 @@
                (tu/<-cursor fixpoint-cursor)))))
 
   (t/testing "transitive closure"
-    (with-open [fixpoint-cursor (c2/open-ra '[:fixpoint Path
+    (with-open [fixpoint-cursor (op/open-ra '[:fixpoint Path
                                               [:table $table]
                                               [:project [x y]
                                                [:join {z z}
@@ -208,7 +214,8 @@
                                             {'$table [{:x "a" :y "b"}
                                                       {:x "b" :y "c"}
                                                       {:x "c" :y "d"}
-                                                      {:x "d" :y "a"}]})]
+                                                      {:x "d" :y "a"}]}
+                                            {})]
 
       (t/is (= [[{:x "a", :y "b"}
                  {:x "b", :y "c"}
@@ -230,7 +237,7 @@
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
-           (into [] (c2/plan-ra '[:assign [X [:table $x]
+           (into [] (op/plan-ra '[:assign [X [:table $x]
                                            Y [:table $y]]
                                   [:join {a b} X Y]]
                                 '{$x [{:a 1}]
@@ -238,7 +245,7 @@
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
-             (into [] (c2/plan-ra '[:assign [X [:table $x]
+             (into [] (op/plan-ra '[:assign [X [:table $x]
                                              Y [:join {a b} X [:table $y]]
                                              X Y]
                                     X]

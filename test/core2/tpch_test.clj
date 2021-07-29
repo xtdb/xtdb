@@ -1,11 +1,12 @@
 (ns core2.tpch-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [core2.core :as c2]
             [core2.json :as c2-json]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
-            [core2.util :as util])
+            [core2.util :as util]
+            [core2.operator :as op]
+            [core2.snapshot :as snap])
   (:import [java.nio.file Files LinkOption Path]
            [java.time Clock Duration ZoneId]))
 
@@ -23,7 +24,9 @@
                       (tu/then-await-tx node))]
       (tu/finish-chunk node)
 
-      (let [db (c2/db node {:tx last-tx, :timeout (Duration/ofMinutes 1)})]
+      (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory)
+                              last-tx
+                              (Duration/ofMinutes 1))]
         (binding [*node* node, *db* db]
           (f))))))
 
@@ -47,7 +50,7 @@
 (defn run-query
   ([q] (run-query q {}))
   ([q args]
-   (into [] (c2/plan-ra q (merge {'$ *db*}
+   (into [] (op/plan-ra q (merge {'$ *db*}
                                  (::tpch/params (meta q))
                                  args)))))
 

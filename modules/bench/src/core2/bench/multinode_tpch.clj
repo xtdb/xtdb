@@ -3,7 +3,10 @@
             [core2.bench :as bench]
             [core2.core :as c2]
             [core2.tpch :as tpch]
-            [core2.temporal :as temporal])
+            [core2.temporal :as temporal]
+            [core2.operator :as op]
+            [core2.test-util :as tu]
+            [core2.snapshot :as snap])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
@@ -33,9 +36,10 @@
                     query tpch/tpch-q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.core.Node node]
                           (log/info "awaiting" k "node")
-                          (let [db (c2/db node {:tx last-tx, :timeout (Duration/ofHours 1)})]
+                          (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory)
+                                                  last-tx (Duration/ofHours 1))]
                             (log/info "rows:"
-                                      (->> (c2/plan-ra query (merge {'$ db} (::tpch/params (meta query))))
+                                      (->> (op/plan-ra query (merge {'$ db} (::tpch/params (meta query))))
                                            (sequence)
                                            (count)))))]
                   (doseq [[k node] {:primary primary-node

@@ -1,25 +1,27 @@
-(ns core2.data-source
+(ns core2.snapshot
   (:require [core2.expression.temporal :as expr.temp]
             [core2.indexer :as idx]
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
-  (:import core2.indexer.IChunkManager
-           core2.tx.TransactionInstant))
+  (:import [core2.indexer IChunkManager TransactionIndexer]
+           core2.tx.TransactionInstant
+           java.time.Duration
+           [java.util.concurrent CompletableFuture TimeUnit]))
 
-(definterface IDataSource
+(definterface ISnapshot
   (^core2.ICursor scan [^java.util.List #_<String> colNames,
                         metadataPred
                         ^java.util.Map #_#_<String, IColumnSelector> colPreds
                         ^longs temporalMinRange
                         ^longs temporalMaxRange]))
 
-(definterface IDataSourceFactory
-  (^core2.data_source.IDataSource getDataSource [^core2.tx.TransactionInstant tx]))
+(definterface ISnapshotFactory
+  (^java.util.concurrent.CompletableFuture #_<ISnapshot> snapshot [^core2.tx.TransactionInstant tx]))
 
-(deftype DataSource [metadata-mgr temporal-mgr buffer-pool ^IChunkManager indexer,
-                     ^TransactionInstant tx]
-  IDataSource
+(deftype Snapshot [metadata-mgr temporal-mgr buffer-pool ^IChunkManager indexer,
+                   ^TransactionInstant tx]
+  ISnapshot
   (scan [_ col-names metadata-pred col-preds temporal-min-range temporal-max-range]
     (when-let [tx-time (.tx-time tx)]
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
@@ -40,15 +42,37 @@
           (util/try-close watermark)
           (throw t))))))
 
-(defmethod ig/prep-key ::data-source-factory [_ opts]
+(defmethod ig/prep-key ::snapshot-factory [_ opts]
   (merge {:indexer (ig/ref ::idx/indexer)
           :metadata-mgr (ig/ref :core2.metadata/metadata-manager)
           :temporal-mgr (ig/ref :core2.temporal/temporal-manager)
           :buffer-pool (ig/ref :core2.buffer-pool/buffer-pool)}
          opts))
 
-(defmethod ig/init-key ::data-source-factory [_ {:keys [indexer metadata-mgr temporal-mgr buffer-pool]}]
+(defmethod ig/init-key ::snapshot-factory [_ {:keys [^TransactionIndexer indexer metadata-mgr temporal-mgr buffer-pool]}]
   (reify
-    IDataSourceFactory
-    (getDataSource [_ tx]
-      (DataSource. metadata-mgr temporal-mgr buffer-pool indexer tx))))
+    ISnapshotFactory
+    (snapshot [_ tx]
+      (-> (if tx
+            (.awaitTxAsync indexer tx)
+            (CompletableFuture/completedFuture (.latestCompletedTx indexer)))
+          (util/then-apply (fn [tx]
+                             (Snapshot. metadata-mgr temporal-mgr buffer-pool indexer tx)))))))
+
+(defn snapshot-async ^java.util.concurrent.CompletableFuture [^ISnapshotFactory snapshot-factory, tx]
+  (-> (if-not (instance? CompletableFuture tx)
+        (CompletableFuture/completedFuture tx)
+        tx)
+      (util/then-compose (fn [tx]
+                           (.snapshot snapshot-factory tx)))))
+
+(defn snapshot
+  ([^ISnapshotFactory snapshot-factory]
+   (snapshot snapshot-factory nil))
+
+  ([^ISnapshotFactory snapshot-factory, tx]
+   (snapshot snapshot-factory tx nil))
+
+  ([^ISnapshotFactory snapshot-factory, tx, ^Duration timeout]
+   @(-> (snapshot-async snapshot-factory tx)
+        (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS)))))

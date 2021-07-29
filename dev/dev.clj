@@ -5,7 +5,9 @@
             [core2.tpch :as tpch]
             [core2.util :as util]
             [integrant.core :as i]
-            [integrant.repl :as ir])
+            [integrant.repl :as ir]
+            [core2.operator :as op]
+            [core2.snapshot :as snap])
   (:import [ch.qos.logback.classic Level Logger]
            java.time.Duration
            org.slf4j.LoggerFactory))
@@ -67,5 +69,5 @@
                 #'tpch/tpch-q5-local-supplier-volume
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
-      (let [db (c2/db node)]
-        (time (into [] (c2/plan-ra @!q db)))))))
+      (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory))]
+        (time (into [] (op/plan-ra @!q db)))))))

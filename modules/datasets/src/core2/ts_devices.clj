@@ -3,7 +3,10 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [core2.core :as c2])
+            [core2.core :as c2]
+            [core2.snapshot :as snap]
+            [core2.test-util :as tu]
+            [core2.operator :as op])
   (:import java.util.zip.GZIPInputStream))
 
 (defn device-info-csv->doc [[device-id api-version manufacturer model os-name]]
@@ -133,5 +136,5 @@
 
 (comment
   (time
-   (let [db (c2/db dev/node)]
-     (into [] (c2/plan-ra query-recent-battery-temperatures db)))))
+   (let [db (snap/snapshot (tu/component dev/node ::snap/snapshot-factory))]
+     (into [] (op/plan-ra query-recent-battery-temperatures db)))))

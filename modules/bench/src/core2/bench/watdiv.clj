@@ -1,7 +1,8 @@
 (ns core2.bench.watdiv
   (:require [clojure.java.io :as io]
             [core2.bench :as bench]
-            [core2.core :as c2])
+            [core2.core :as c2]
+            [core2.test-util :as tu])
   (:import java.util.concurrent.TimeUnit))
 
 (comment
@@ -42,12 +43,13 @@
   ;; TODO currently fails because it doesn't like strings as attributes
 
   (with-open [query-rdr (io/reader query-file)]
-    (let [db (c2/db node)]
+    (let [basis-tx (c2/latest-completed-tx node)]
       (doseq [[idx query] (->> (line-seq query-rdr)
                                (map read-string)
                                (map-indexed vector))]
         (bench/with-timing (keyword (str "query-" idx))
-          (count (into [] (c2/plan-q query db))))))))
+          (count (->> (c2/plan-query tu/*node* query {:basis-tx basis-tx})
+                      (into []))))))))
 
 (comment
   (with-open [node (c2/start-node {})]
