@@ -13,13 +13,10 @@
             [crux.tx.conform :as txc]
             [crux.tx.event :as txe])
   (:import clojure.lang.MapEntry
-           crux.api.ICursor
            crux.codec.EntityTx
            java.io.Closeable
-           java.time.Duration
-           [java.util.concurrent CompletableFuture Future]
-           java.util.Date
-           java.util.function.BiConsumer))
+           [java.util.concurrent Future]
+           java.util.Date))
 
 (set! *unchecked-math* :warn-on-boxed)
 
