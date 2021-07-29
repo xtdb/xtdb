@@ -154,6 +154,8 @@ include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags
 
 Match checks the state of an entity - if the entity doesn't match the provided document, the transaction will not continue.
 
+Use the `hasTxCommitted` (`tx-committed?`) API to check whether the transaction was successfully committed or not due to a failed match operation.
+
 [tabs]
 ====
 Java::
@@ -184,7 +186,7 @@ include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags
 <3> (optional) <<valid-time,`valid time`>>
 <4> Operation(s) to perform if the document is matched
 
-If the document supplied is `nil`, the match only passes if there does not exist a Document with the given ID.
+If the document supplied is `nil`, the match only passes if there does not exist a document with the given ID.
 --
 ====
 
