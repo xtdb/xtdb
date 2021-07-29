@@ -8,6 +8,7 @@
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
+            [crux.error :as err]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.rdf :as rdf]
             [crux.system :as sys]
@@ -1428,3 +1429,17 @@
                                                              (throw (ex-info "boom!" {}))))))
                                     (catch Exception e
                                       (throw (.getCause e)))))))))))
+
+(t/deftest tx-committed-throws-correctly-1579
+  (let [tx (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])]
+    (t/is (api/tx-committed? *api* tx))
+    (t/is (api/tx-committed? *api* {:crux.tx/tx-id 0}))
+
+    (t/is (thrown? crux.IllegalArgumentException (api/tx-committed? *api* nil)))
+    (t/is (thrown? crux.IllegalArgumentException (api/tx-committed? *api* {})))
+    (t/is (thrown? crux.IllegalArgumentException (api/tx-committed? *api* {:crux.tx/tx-id nil})))
+    (t/is (thrown? ClassCastException (api/tx-committed? *api* {:crux.tx/tx-id :a})))
+
+    ;; "skipped" tx-ids (e.g. handling Kafka offsets), and negative or non-integer tx-ids are also incorrect but not currently detected
+    #_
+    (t/is (thrown? crux.api.NodeOutOfSyncException (api/tx-committed? *api* {:crux.tx/tx-id -1.5})))))

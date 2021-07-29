@@ -126,14 +126,17 @@
         (merge crux-version
                (status (dissoc @!system :crux/node))))))
 
-  (tx-committed? [this {:keys [::tx/tx-id ::tx/tx-time] :as submitted-tx}]
+  (tx-committed? [this {:keys [::tx/tx-id] :as submitted-tx}]
     (cio/with-read-lock lock
-      (cio/with-read-lock lock
-        (ensure-node-open this)
-        (let [{latest-tx-id ::tx/tx-id, :as latest-tx} (api/latest-completed-tx this)]
-          (if (and tx-id (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id))))
-            (throw (err/node-out-of-sync {:requested submitted-tx, :available latest-tx}))
-            (not (db/tx-failed? index-store tx-id)))))))
+      (ensure-node-open this)
+      (let [{latest-tx-id ::tx/tx-id, :as latest-tx} (api/latest-completed-tx this)]
+        (cond
+          (nil? tx-id) (throw (err/illegal-arg :invalid-tx {:tx submitted-tx}))
+
+          (or (nil? latest-tx-id) (pos? (compare tx-id latest-tx-id)))
+          (throw (err/node-out-of-sync {:requested submitted-tx, :available latest-tx}))
+
+          :else (not (db/tx-failed? index-store tx-id))))))
 
   (sync [this] (api/sync this nil))
 
