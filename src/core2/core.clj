@@ -36,8 +36,6 @@
   (submit-tx
     ^java.util.concurrent.CompletableFuture [tx-producer tx-ops]))
 
-(defrecord DbSnapshot [data-source-factory ])
-
 (defrecord Node [^TransactionIndexer indexer
                  ^IDataSourceFactory data-source-factory
                  ^ITxProducer tx-producer
