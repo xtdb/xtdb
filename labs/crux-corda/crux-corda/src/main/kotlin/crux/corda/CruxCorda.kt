@@ -4,16 +4,18 @@ package crux.corda
 
 import clojure.java.api.Clojure
 import clojure.lang.AFunction
+import clojure.lang.IFn
 import clojure.lang.Keyword
 import crux.api.*
 import crux.corda.state.CruxState
 import net.corda.core.crypto.SecureHash
 import net.corda.core.node.AppServiceHub
+import net.corda.core.node.ServiceHub
 
 @Suppress("unused")
 private val CRUX_CORDA_SERVICE = Clojure.`var`("clojure.core", "require")(Clojure.read("crux.corda"))
 
-private val SYNC_TXS = Clojure.`var`("crux.corda/sync-txs")
+private val NOTIFY_TX = Clojure.`var`("crux.corda/notify-tx")
 private val TO_CRUX_TX = Clojure.`var`("crux.corda/->crux-tx")
 
 @Suppress("unused")
@@ -55,19 +57,15 @@ fun AppServiceHub.startCruxNode(configurator: NodeConfiguration.Builder.() -> Un
     val node = Crux.startNode {
         it.with("crux.corda/service-hub") {
             it.set("crux/module", object : AFunction() {
-                override fun invoke(deps: Any): Any {
-                    return hub
-                }
+                override fun invoke(deps: Any) = hub
             })
         }
         it.withCordaTxLog()
         configurator(it)
     }
 
-    SYNC_TXS(node)
-
     validatedTransactions.updates.subscribe {
-        SYNC_TXS(node)
+        NOTIFY_TX(it.id, node)
     }
 
     registerUnloadHandler { node.close() }

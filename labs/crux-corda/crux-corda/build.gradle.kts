@@ -10,16 +10,9 @@ plugins {
 val cordaGroup = "net.corda"
 val cordaVersion = "4.5"
 
-cordapp {
-    workflow {
-        targetPlatformVersion = 4
-        minimumPlatformVersion = 4
-    }
-}
-
 dependencies {
     implementation("org.clojure", "clojure", "1.10.0")
-    implementation("pro.juxt.crux", "crux-core", "1.17.1-rc1")
+    implementation("pro.juxt.crux", "crux-core", "1.18.0-rc1")
     implementation("pro.juxt.clojars-mirrors.com.github.seancorfield", "next.jdbc", "1.2.674")
     implementation(project(":crux-corda-state"))
 

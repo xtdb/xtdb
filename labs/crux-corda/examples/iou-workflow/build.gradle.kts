@@ -25,7 +25,7 @@ dependencies {
     cordapp(project(":examples:iou-contract"))
     cordapp(project(":crux-corda-state"))
     cordapp(project(":crux-corda"))
-    implementation("pro.juxt.crux", "crux-core", "1.17.1-rc1")
+    implementation("pro.juxt.crux", "crux-core", "1.18.0-rc1")
 
     testImplementation("junit", "junit", "4.12")
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)
