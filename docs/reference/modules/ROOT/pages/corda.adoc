@@ -6,8 +6,6 @@ NOTE: For an introduction to Corda, check out the  https://docs.corda.net/docs/c
 
 == Setup
 
-WARNING: `crux-corda` has not yet been released to Maven.
-
 [tabs]
 ====
 build.gradle.kts::
@@ -15,10 +13,10 @@ build.gradle.kts::
 [source,kotlin]
 ----
 // Main library
-implementation("pro.juxt.crux-labs", "crux-corda", "NOT RELEASED YET")
+implementation("pro.juxt.crux-labs", "crux-corda", "{crux_version}")
 
 // Library for inclusion in contract JARs
-implementation("pro.juxt.crux-labs", "crux-corda-state", "NOT RELEASED YET")
+implementation("pro.juxt.crux-labs", "crux-corda-state", "{crux_version}")
 ----
 
 pom.xml::
@@ -28,14 +26,14 @@ pom.xml::
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
     <artifactId>crux-corda</artifactId>
-    <version><!-- NOT RELEASED YET --></version>
+    <version>{crux_version}</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
     <artifactId>crux-corda-state</artifactId>
-    <version><!-- NOT RELEASED YET --></version>
+    <version>{crux_version}</version>
 </dependency>
 ----
 ====
