@@ -4,7 +4,7 @@ plugins {
 }
 
 val cordaGroup = "net.corda"
-val cordaVersion = "4.5"
+val cordaVersion = "4.8"
 
 cordapp {
     contract {

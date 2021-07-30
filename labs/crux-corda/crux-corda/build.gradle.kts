@@ -8,7 +8,7 @@ plugins {
 }
 
 val cordaGroup = "net.corda"
-val cordaVersion = "4.5"
+val cordaVersion = "4.8"
 
 dependencies {
     implementation("org.clojure", "clojure", "1.10.0")
