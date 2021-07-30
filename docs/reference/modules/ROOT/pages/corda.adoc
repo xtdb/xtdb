@@ -10,7 +10,7 @@ NOTE: For an introduction to Corda, check out the  https://docs.corda.net/docs/c
 ====
 build.gradle.kts::
 +
-[source,kotlin]
+[source,kotlin,subs=attributes+]
 ----
 // Main library
 implementation("pro.juxt.crux-labs", "crux-corda", "{crux_version}")
@@ -21,7 +21,7 @@ implementation("pro.juxt.crux-labs", "crux-corda-state", "{crux_version}")
 
 pom.xml::
 +
-[source,xml]
+[source,xml,subs=attributes+]
 ----
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
