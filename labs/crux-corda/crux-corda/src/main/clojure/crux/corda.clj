@@ -1,6 +1,8 @@
 (ns crux.corda
   (:require [crux.api :as crux]
             [crux.tx :as tx]
+            [crux.tx.event :as txe]
+            [crux.tx.subscribe :as tx-sub]
             [crux.db :as db]
             [crux.codec :as c]
             [crux.system :as sys]
@@ -10,10 +12,13 @@
             [crux.io :as cio])
   (:import (crux.corda.state CruxState)
            (crux.api ICursor)
+           kotlin.jvm.functions.Function1
            (net.corda.core.crypto SecureHash)
            (net.corda.core.node AppServiceHub)
            (net.corda.core.transactions SignedTransaction)
-           (net.corda.core.contracts TransactionState StateAndRef)))
+           (net.corda.core.contracts TransactionState StateAndRef)
+           net.corda.core.node.services.vault.SessionScope
+           org.hibernate.jdbc.ReturningWork))
 
 (set! *warn-on-reflection* true)
 
@@ -89,59 +94,89 @@
         new-docs (->> (.getOutputs ledger-tx)
                       (mapcat #(->crux-docs % opts))
                       (into {} (map (juxt c/new-id identity))))]
-    {::tx/tx-events (concat (for [deleted-id (set/difference consumed-ids (set (keys new-docs)))]
-                              [::tx/delete deleted-id])
+    {::txe/tx-events (concat (for [deleted-id (set/difference consumed-ids (set (keys new-docs)))]
+                               [::tx/delete deleted-id])
 
-                            (for [[new-doc-id new-doc] new-docs]
-                              [::tx/put (:crux.db/id new-doc) new-doc-id]))
+                             (for [[new-doc-id new-doc] new-docs]
+                               [::tx/put (:crux.db/id new-doc) new-doc-id]))
      :docs new-docs}))
 
-(defn- ^ICursor open-tx-log [{:keys [dialect ^AppServiceHub service-hub] :as tx-log} after-tx-id]
-  (let [stmt (jdbc/prepare (.jdbcSession service-hub)
-                           (if after-tx-id
-                             ["SELECT * FROM crux_txs WHERE crux_tx_id > ? ORDER BY crux_tx_id"
-                              after-tx-id]
-                             ["SELECT * FROM crux_txs ORDER BY crux_tx_id"]))
-        rs (.executeQuery stmt)]
-    (->> (for [row (resultset-seq rs)]
-           (let [{:keys [corda-tx-id] :as tx} (tx-row->tx row dialect)
-                 corda-tx (->corda-tx corda-tx-id service-hub)]
-             (merge (select-keys tx [::tx/tx-id ::tx/tx-time])
-                    (transform-corda-tx corda-tx tx-log))))
-         (cio/->cursor #(run! cio/try-close [rs stmt])))))
+(defn- with-database-connection [^AppServiceHub service-hub, f]
+  ;; eugh.
+  (-> (.getDatabase service-hub)
+      (.transaction (reify Function1
+                      (invoke [_ session-scope]
+                        (.doReturningWork (.getSession ^SessionScope session-scope)
+                                          (reify ReturningWork
+                                            (execute [_ conn]
+                                              (f conn)))))))))
 
-(defrecord CordaTxLog [dialect ^AppServiceHub service-hub, document-mapper]
+(defn- latest-submitted-tx [{:keys [^AppServiceHub service-hub dialect]}]
+  (with-database-connection service-hub
+    (fn [conn]
+      (some-> (jdbc/execute-one! conn
+                                 ["SELECT * FROM crux_txs ORDER BY crux_tx_id DESC LIMIT 1"]
+                                 {:builder-fn jdbcr/as-unqualified-lower-maps})
+              (tx-row->tx dialect)
+              (select-keys [::tx/tx-id ::tx/tx-time])))))
+
+(defn- ^ICursor open-tx-log [{:keys [dialect ^AppServiceHub service-hub] :as tx-log} after-tx-id]
+  (let [last-tx-id (::tx/tx-id (latest-submitted-tx tx-log))]
+    (letfn [(tx-log-query [after-tx-id]
+              (if after-tx-id
+                ["SELECT * FROM crux_txs WHERE crux_tx_id <= ? AND crux_tx_id > ? ORDER BY crux_tx_id LIMIT 100"
+                 last-tx-id after-tx-id]
+                ["SELECT * FROM crux_txs WHERE crux_tx_id <= ? ORDER BY crux_tx_id LIMIT 100"
+                 last-tx-id]))
+
+            (tx-log* [after-tx-id]
+              (lazy-seq
+               (when-let [txs (seq (with-database-connection service-hub
+                                     (fn [conn]
+                                       (->> (for [row (jdbc/execute! conn (tx-log-query after-tx-id)
+                                                                     {:builder-fn jdbcr/as-unqualified-lower-maps})]
+                                              (let [{:keys [corda-tx-id] :as tx} (tx-row->tx row dialect)
+                                                    corda-tx (->corda-tx corda-tx-id service-hub)]
+                                                (merge (select-keys tx [::tx/tx-id ::tx/tx-time])
+                                                       (transform-corda-tx corda-tx tx-log))))
+                                            vec))))]
+                 (concat txs (tx-log* (::tx/tx-id (last txs)))))))]
+      (cio/->cursor #() (tx-log* after-tx-id)))))
+
+(defrecord CordaTxLog [dialect, ^AppServiceHub service-hub, document-store
+                       document-mapper subscriber-handler]
   db/TxLog
-  (submit-tx [this tx-events]
+  (submit-tx [_this _tx-events]
     (throw (UnsupportedOperationException.
             "CordaTxLog does not support submit-tx - submit transactions directly to Corda")))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id]
     (let [txs (open-tx-log this after-tx-id)]
-      (cio/->cursor #(cio/try-close txs)
-                    (->> (iterator-seq txs)
-                         (map #(select-keys % [::tx/tx-id ::tx/tx-time ::tx/tx-events]))))))
+      (cio/->cursor #(cio/try-close txs) (iterator-seq txs))))
 
   (latest-submitted-tx [this]
-    (some-> (jdbc/execute-one! (.jdbcSession service-hub)
-                               ["SELECT * FROM crux_txs ORDER BY crux_tx_id DESC LIMIT 1"]
-                               {:builder-fn jdbcr/as-unqualified-lower-maps})
-            (tx-row->tx dialect)
-            (select-keys [::tx/tx-id ::tx/tx-time]))))
+    (latest-submitted-tx this))
 
-(defn sync-txs [{{:keys [tx-log tx-ingester document-store] :as crux-node} :node}]
-  (with-open [txs (open-tx-log tx-log (::tx/tx-id (crux/latest-completed-tx crux-node)))]
-    (doseq [{:keys [docs ::tx/tx-events] :as tx} (iterator-seq txs)]
-      (let [in-flight-tx (db/begin-tx tx-ingester tx nil)]
-        (try
-          (db/submit-docs document-store docs)
-          (db/index-tx-events in-flight-tx tx-events)
-          (db/commit in-flight-tx)
-          (catch Exception e
-            (.printStackTrace e)
-            (db/abort in-flight-tx)
-            ;; TODO behaviour here? abort consumption entirely?
-            ))))))
+  (subscribe [this after-tx-id f]
+    (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id
+                                        (fn [fut {:keys [docs] :as tx}]
+                                          (db/submit-docs document-store docs)
+                                          (prn :docs-here docs)
+                                          (let [index-docs @#'crux.tx/index-docs]
+                                            (with-redefs [crux.tx/index-docs (-> (fn [{:keys [!tx] :as thing} docs]
+                                                                                   (when-not (::replaced? (meta index-docs))
+                                                                                     (locking index-docs
+                                                                                       (prn :index-docs-before @!tx docs)))
+                                                                                   (let [res (index-docs thing docs)]
+                                                                                     (when-not (::replaced? (meta index-docs))
+                                                                                       (locking index-docs
+                                                                                         (prn :index-docs-after @!tx docs)))
+                                                                                     res))
+                                                                                 (vary-meta assoc ::replaced? true))]
+                                              (f fut tx)))))))
+
+(defn notify-tx [^SecureHash corda-tx-id {{{:keys [subscriber-handler]} :tx-log} :node, :as node}]
+  (tx-sub/notify-tx! subscriber-handler (->crux-tx corda-tx-id node)))
 
 (defn ->document-mapper [_]
   (fn [doc]
@@ -149,10 +184,10 @@
       [doc])))
 
 (defn ->tx-log {::sys/deps {:dialect 'crux.corda.h2/->dialect
-                            :tx-ingester :crux/tx-ingester
                             :document-store :crux/document-store
                             :service-hub ::service-hub
                             :document-mapper `->document-mapper}}
   [{:keys [dialect ^AppServiceHub service-hub] :as opts}]
   (setup-tx-schema! dialect (.jdbcSession service-hub))
-  (map->CordaTxLog opts))
+  (map->CordaTxLog (assoc opts
+                          :subscriber-handler (tx-sub/->notifying-subscriber-handler (latest-submitted-tx opts)))))
