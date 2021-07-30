@@ -7,7 +7,7 @@ Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-lucene {:mvn/version "1.17.1"}
+pro.juxt.crux/crux-lucene {:mvn/version "1.18.0"}
 ----
 
 .pom.xml
@@ -16,7 +16,7 @@ pro.juxt.crux/crux-lucene {:mvn/version "1.17.1"}
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-lucene</artifactId>
-    <version>1.17.1</version>
+    <version>1.18.0</version>
 </dependency>
 ----
 
