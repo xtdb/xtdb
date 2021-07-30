@@ -12,7 +12,7 @@ val cordaVersion = "4.8"
 
 dependencies {
     implementation("org.clojure", "clojure", "1.10.0")
-    implementation("pro.juxt.crux", "crux-core", "1.18.0-rc1")
+    implementation("pro.juxt.crux", "crux-core", version.toString())
     implementation("pro.juxt.clojars-mirrors.com.github.seancorfield", "next.jdbc", "1.2.674")
     implementation(project(":crux-corda-state"))
 
