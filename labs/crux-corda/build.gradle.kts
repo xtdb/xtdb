@@ -9,6 +9,7 @@ allprojects {
         jcenter()
         maven { url = uri("https://ci-artifactory.corda.r3cev.com/artifactory/corda") }
         maven { url = uri("https://repo.gradle.org/gradle/libs-releases") }
+        maven { url = uri("https://repo.clojars.org") }
     }
 
     tasks.withType(KotlinCompile::class.java).all {
