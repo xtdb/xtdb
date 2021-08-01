@@ -101,17 +101,16 @@
 ;; tag::history-range[]
 
 ; Passing the additional 'opts' map with the start/end bounds.
-; As we are returning results in :asc order, the :start map contains the earlier coordinates -
-; If returning history range in descending order, we pass the later coordinates to the :start map
+; As we are returning results in :asc order, the map contains the earlier starting coordinates -
+; If returning history range in descending order, we pass the later coordinates as start coordinates to the map
 (api/entity-history
  (api/db node)
  :ids.persons/Jeff
  :asc
- {:start {:crux.db/valid-time #inst "2015-05-18T09:20:27.966" ; valid-time-start
-          :crux.tx/tx-time #inst "2015-05-18T09:20:27.966"} ; tx-time-start
-  :end {:crux.db/valid-time #inst "2020-05-18T09:20:27.966" ; valid-time-end
-        :crux.tx/tx-time #inst "2020-05-18T09:20:27.966"} ; tx-time-end
-  })
+ {:start-valid-time #inst "2015-05-18T09:20:27.966"
+  :start-tx-time #inst "2015-05-18T09:20:27.966"
+  :end-valid-time #inst "2020-05-18T09:20:27.966"
+  :end-tx-time #inst "2020-05-18T09:20:27.966"})
 
 ; yields
 [{:crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00",
