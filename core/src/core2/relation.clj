@@ -4,13 +4,13 @@
   (:import [core2.relation IAppendColumn IAppendRelation IReadColumn IReadRelation]
            java.nio.ByteBuffer
            java.time.Duration
-           [java.util ArrayList Collection Date Set HashMap HashSet LinkedHashMap List Map Map$Entry Set]
+           [java.util ArrayList Collection Date HashMap HashSet LinkedHashMap List Map Map$Entry Set]
            java.util.function.Function
            [java.util.stream IntStream IntStream$Builder]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BaseVariableWidthVector BigIntVector BitVector DurationVector Float8Vector NullVector TimeStampMilliVector ValueVector VarBinaryVector VarCharVector VectorSchemaRoot]
            org.apache.arrow.vector.complex.DenseUnionVector
-           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType]))
+           [org.apache.arrow.vector.types.pojo ArrowType Field]))
 
 (definterface IAppendColumnPrivate
   (^org.apache.arrow.vector.ValueVector _getAppendVector [^org.apache.arrow.vector.types.pojo.ArrowType arrowType])

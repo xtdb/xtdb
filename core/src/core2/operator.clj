@@ -79,10 +79,8 @@
                                                   {::err/message "Query refers to unknown db"
                                                    :db source
                                                    :srcs (keys srcs)})))]
-    (fn [{:keys [default-valid-time]}]
+    (fn [{:keys [allocator default-valid-time]}]
       (let [[^longs temporal-min-range, ^longs temporal-max-range] (expr.temp/->temporal-min-max-range selects srcs)]
-        ;; scan doesn't use our allocator because it mostly pulls from the buffer pool
-
         (when-not (or (contains? col-preds "_valid-time-start")
                       (contains? col-preds "_valid-time-end"))
           (expr.temp/apply-constraint temporal-min-range temporal-max-range
@@ -90,7 +88,7 @@
           (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                       '> "_valid-time-end" default-valid-time))
 
-        (.scan db col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
+        (.scan db allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range)))))
 
 (defmethod emit-op :table [{[table-type table-arg] :table} srcs]
   (let [rows (case table-type
@@ -141,8 +139,8 @@
 (defmethod emit-op :select [{:keys [predicate relation]} srcs]
   (let [selector (expr/->expression-relation-selector predicate srcs)]
     (unary-op relation srcs
-              (fn [_opts inner]
-                (select/->select-cursor inner selector)))))
+              (fn [{:keys [allocator]} inner]
+                (select/->select-cursor allocator inner selector)))))
 
 (defmethod emit-op :project [{:keys [projections relation]} srcs]
   (let [projection-specs (for [[p-type arg] projections]

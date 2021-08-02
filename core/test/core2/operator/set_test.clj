@@ -171,6 +171,7 @@
                                 (reify core2.operator.set.IFixpointCursorFactory
                                   (createCursor [_ cursor-factory]
                                     (select/->select-cursor
+                                     tu/*allocator*
                                      (project/->project-cursor
                                       tu/*allocator*
                                       (.createCursor cursor-factory)

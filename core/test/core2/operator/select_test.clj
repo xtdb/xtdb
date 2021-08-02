@@ -17,7 +17,7 @@
                                       {:a 0, :b 15}]
                                      [{:a 100, :b 83}]
                                      [{:a 83, :b 100}]])
-                select-cursor (select/->select-cursor cursor
+                select-cursor (select/->select-cursor tu/*allocator* cursor
                                                       (reify IRelationSelector
                                                         (select [_ in-rel]
                                                           (let [idxs (RoaringBitmap.)

@@ -1,9 +1,11 @@
 (ns core2.operator.select
-  (:require [core2.relation :as rel]
+  (:require [core2.coalesce :as coalesce]
+            [core2.relation :as rel]
             [core2.util :as util])
   (:import core2.ICursor
            core2.relation.IReadRelation
-           java.util.function.Consumer))
+           java.util.function.Consumer
+           org.apache.arrow.memory.BufferAllocator))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -32,5 +34,6 @@
   (close [_]
     (util/try-close in-cursor)))
 
-(defn ->select-cursor ^core2.ICursor [^ICursor in-cursor, ^IRelationSelector selector]
-  (SelectCursor. in-cursor selector))
+(defn ->select-cursor ^core2.ICursor [^BufferAllocator allocator, ^ICursor in-cursor, ^IRelationSelector selector]
+  (-> (SelectCursor. in-cursor selector)
+      (coalesce/->coalescing-cursor allocator)))

@@ -1,12 +1,11 @@
 (ns core2.operator.scan
   (:require [core2.align :as align]
             [core2.bloom :as bloom]
+            [core2.coalesce :as coalesce]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
-            core2.operator.select
             [core2.relation :as rel]
             [core2.temporal :as temporal]
-            core2.tx
             [core2.types :as t]
             [core2.util :as util])
   (:import clojure.lang.MapEntry
@@ -18,6 +17,7 @@
            core2.tx.Watermark
            [java.util HashMap LinkedList List Map Queue]
            [java.util.function BiFunction Consumer]
+           org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector BigIntVector VarBinaryVector VectorSchemaRoot]
            [org.apache.arrow.vector.complex ListVector StructVector]
            [org.roaringbitmap IntConsumer RoaringBitmap]
@@ -225,7 +225,8 @@
     (doseq [^ICursor chunk (vals chunks)]
       (util/try-close chunk))))
 
-(defn ->scan-cursor ^core2.operator.scan.ScanCursor [^IMetadataManager metadata-manager
+(defn ->scan-cursor ^core2.operator.scan.ScanCursor [^BufferAllocator allocator
+                                                     ^IMetadataManager metadata-manager
                                                      ^ITemporalManager temporal-manager
                                                      ^IBufferPool buffer-pool
                                                      ^Watermark watermark
@@ -234,7 +235,8 @@
                                                      ^Map col-preds
                                                      ^longs temporal-min-range, ^longs temporal-max-range]
   (let [matching-chunks (LinkedList. (or (meta/matching-chunks metadata-manager watermark metadata-pred) []))]
-    (ScanCursor. buffer-pool temporal-manager metadata-manager watermark
-                 matching-chunks col-names col-preds
-                 temporal-min-range temporal-max-range
-                 #_chunks nil #_live-chunk-done? false)))
+    (-> (ScanCursor. buffer-pool temporal-manager metadata-manager watermark
+                     matching-chunks col-names col-preds
+                     temporal-min-range temporal-max-range
+                     #_chunks nil #_live-chunk-done? false)
+        (coalesce/->coalescing-cursor allocator))))

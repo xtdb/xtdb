@@ -11,7 +11,8 @@
            [java.util.concurrent CompletableFuture TimeUnit]))
 
 (definterface ISnapshot
-  (^core2.ICursor scan [^java.util.List #_<String> colNames,
+  (^core2.ICursor scan [^org.apache.arrow.memory.BufferAllocator allocator
+                        ^java.util.List #_<String> colNames,
                         metadataPred
                         ^java.util.Map #_#_<String, IColumnSelector> colPreds
                         ^longs temporalMinRange
@@ -23,7 +24,7 @@
 (deftype Snapshot [metadata-mgr temporal-mgr buffer-pool ^IChunkManager indexer,
                    ^TransactionInstant tx]
   ISnapshot
-  (scan [_ col-names metadata-pred col-preds temporal-min-range temporal-max-range]
+  (scan [_ allocator col-names metadata-pred col-preds temporal-min-range temporal-max-range]
     (when-let [tx-time (.tx-time tx)]
       (expr.temp/apply-constraint temporal-min-range temporal-max-range
                                   '<= "_tx-time-start" tx-time)
@@ -35,7 +36,7 @@
 
     (let [watermark (.getWatermark indexer)]
       (try
-        (-> (scan/->scan-cursor metadata-mgr temporal-mgr buffer-pool
+        (-> (scan/->scan-cursor allocator metadata-mgr temporal-mgr buffer-pool
                                 watermark col-names metadata-pred col-preds
                                 temporal-min-range temporal-max-range)
             (util/and-also-close watermark))
