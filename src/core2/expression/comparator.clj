@@ -30,6 +30,10 @@
   {:code `(expr/compare-nio-buffers-unsigned ~@emitted-args)
    :return-type Long})
 
+(defmethod expr/codegen-call [:compare Boolean Boolean] [{:keys [emitted-args]}]
+  {:code `(Boolean/compare ~@emitted-args)
+   :return-type Long})
+
 (defmethod expr/codegen-call [:compare Comparable Comparable] [{:keys [emitted-args]}]
   {:code `(.compareTo ~@emitted-args)
    :return-type Long})
