@@ -54,10 +54,10 @@
   (group-by/->count-not-null-spec from-name to-name))
 
 (defmethod emit-op :scan [{:keys [source columns]} srcs]
-  (let [col-names (for [[col-type arg] columns]
-                    (str (case col-type
-                           :column arg
-                           :select (key (first arg)))))
+  (let [col-names (distinct (for [[col-type arg] columns]
+                              (str (case col-type
+                                     :column arg
+                                     :select (key (first arg))))))
         selects (->> (for [[col-type arg] columns
                            :when (= col-type :select)]
                        (first arg))

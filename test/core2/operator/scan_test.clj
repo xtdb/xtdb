@@ -26,3 +26,10 @@
                                       [:scan $db1 [_id col1]]
                                       [:scan $db2 [_id col2]]]
                                     {'$db1 db1, '$db2 db2})))))))
+
+(t/deftest test-duplicates-in-scan-1
+  (with-open [node (c2/start-node {})]
+    (let [tx (c2/submit-tx node [[:put {:_id "foo"}]])
+          db (c2/db node {:tx tx})]
+      (t/is (= [{:_id "foo"}]
+               (into [] (c2/plan-ra '[:scan [_id _id]] db)))))))
