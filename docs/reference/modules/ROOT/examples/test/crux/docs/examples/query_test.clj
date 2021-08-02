@@ -716,6 +716,20 @@
            ))
 
     (t/is (=
+           #{["Ivan"] ["Ivanova"]}
+           ;; tag::or-3[]
+           (crux/q
+            (crux/db node)
+            '{:find [name]
+              :where [[e :name name]
+                      (or (and [e :sex :female]
+                               [(= name "Ivanova")])
+                          (and [e :sex :male]
+                               [(any? name)]))]})
+           ;; end::or-3[]
+           ))
+
+    (t/is (=
            #{[:ivan-ivanov-1] [:ivan-ivanov-2]}
            (crux/q
             (crux/db node)
