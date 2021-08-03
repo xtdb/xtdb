@@ -14,7 +14,7 @@ image::bench-dash-query.png?sanitize=true[Query benchmarks dashboard example,ali
 
 .An example screenshot of the ingest benchmarks dashboard (May 2021)
 
-image::bench-dash-query.png?sanitize=true[Ingest benchmarks dashboard example,align="center"]
+image::bench-dash-ingest.png?sanitize=true[Ingest benchmarks dashboard example,align="center"]
 
 For an example of independent benchmarking by the community, see the https://odpi.github.io/egeria-connector-crux/cts/testing-overview/["Crux Connector" performance analysis] by the Linux Foundation's Egeria project, which compares Crux against an existing JanusGraph Connector.
 
