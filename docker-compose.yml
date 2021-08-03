@@ -1,5 +1,29 @@
 version: '2'
 services:
+  postgres:
+    image: postgres:13.2
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_PASSWORD: postgres
+
+  mysql:
+    image: mysql:8.0.21
+    ports:
+      - "3306:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: my-secret-pw
+
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2017-latest-ubuntu
+    ports:
+      - "1433:1433"
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: "yourStrong(!)Password"
+      MSSQL_PID: Express
+
+
   zookeeper:
     image: confluentinc/cp-zookeeper:6.1.1
     hostname: zookeeper
@@ -10,10 +34,10 @@ services:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
 
-  broker:
+  kafka:
     image: confluentinc/cp-kafka:6.1.1
-    hostname: broker
-    container_name: broker
+    hostname: kafka
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:
