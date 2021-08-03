@@ -8,6 +8,7 @@
         <option value="file://$PROJECT_DIR$/modules/jdbc/project.clj" />
         <option value="file://$PROJECT_DIR$/modules/kafka/project.clj" />
         <option value="file://$PROJECT_DIR$/modules/s3/project.clj" />
+        <option value="file://$PROJECT_DIR$/core/project.clj" />
         <option value="file://$PROJECT_DIR$/project.clj" />
       </list>
     </option>

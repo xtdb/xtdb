@@ -5,14 +5,14 @@
 [source,clojure]
 ----
 ;; project.clj
-[pro.juxt.crux-labs/core2 "dev-SNAPSHOT"]
+[pro.juxt.crux-labs/core2-core "dev-SNAPSHOT"]
 [pro.juxt.crux-labs/core2-kafka "dev-SNAPSHOT"]
 [pro.juxt.crux-labs/core2-jdbc "dev-SNAPSHOT"]
 [pro.juxt.crux-labs/core2-s3 "dev-SNAPSHOT"]
 
 
 ;; deps.edn
-{pro.juxt.crux-labs/core2 {:mvn/version "dev-SNAPSHOT"}
+{pro.juxt.crux-labs/core2-core {:mvn/version "dev-SNAPSHOT"}
  pro.juxt.crux-labs/core2-kafka {:mvn/version "dev-SNAPSHOT"}
  pro.juxt.crux-labs/core2-jdbc {:mvn/version "dev-SNAPSHOT"}
  pro.juxt.crux-labs/core2-s3 {:mvn/version "dev-SNAPSHOT"}}

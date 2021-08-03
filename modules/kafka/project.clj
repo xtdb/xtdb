@@ -11,5 +11,5 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2]
+  :dependencies [[pro.juxt.crux-labs/core2-core]
                  [org.apache.kafka/kafka-clients "2.8.0"]])

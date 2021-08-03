@@ -9,7 +9,8 @@ set -e
       MODULES=$(echo "$2" | tr ":" "\n" )
       shift 2;
   else
-      MODULES="core
+      MODULES="
+core
 modules/datasets
 modules/s3
 modules/kafka
@@ -20,7 +21,7 @@ modules/bench"
   for MODULE in $MODULES; do
       (
           echo --"$MODULE"
-          if [ "$MODULE" != "core" ]; then cd "$MODULE" > /dev/null; fi
+          cd "$MODULE" > /dev/null
           lein "$@"
       )
   done

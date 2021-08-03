@@ -11,7 +11,7 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2]
+  :dependencies [[pro.juxt.crux-labs/core2-core]
                  [io.airlift.tpch/tpch "0.10"]
                  [org.clojure/data.csv "1.0.0"]
                  [software.amazon.awssdk/s3]]
