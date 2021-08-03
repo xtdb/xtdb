@@ -476,13 +476,13 @@
                     (t/is (= 2000 (count (.id->internal-id tm))))))))))))))
 
 (t/deftest test-await-fails-fast
-  (with-open [node (c2/start-node {})]
-    (with-redefs [idx/copy-safe! (fn [& _args]
-                                   (throw (UnsupportedOperationException. "oh no!")))
-                  log/log* (let [log* log/log*]
-                             (fn [logger level throwable message]
-                               (when-not (instance? UnsupportedOperationException throwable)
-                                 (log* logger level throwable message))))]
+  (with-redefs [idx/copy-safe! (fn [& _args]
+                                 (throw (UnsupportedOperationException. "oh no!")))
+                log/log* (let [log* log/log*]
+                           (fn [logger level throwable message]
+                             (when-not (instance? UnsupportedOperationException throwable)
+                               (log* logger level throwable message))))]
+    (with-open [node (c2/start-node {})]
       (t/is (thrown-with-msg? Exception #"oh no!"
                               (-> (c2/submit-tx node [[:put {:_id "foo", :count 42}]])
                                   (tu/then-await-tx node (Duration/ofSeconds 1))))))))
