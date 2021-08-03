@@ -35,7 +35,7 @@
              :test {:dependencies [[pro.juxt.crux-labs/core2-datasets]
                                    [org.clojure/test.check "1.1.0"]
 
-                                   [cheshire "5.10.0"]]
+                                   [cheshire]]
 
                     :resource-paths ["test-resources"]}}
 

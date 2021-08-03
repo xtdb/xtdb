@@ -19,7 +19,9 @@
                          [software.amazon.awssdk/s3 "2.16.76"]
                          [ch.qos.logback/logback-classic "1.2.3"]
                          [org.clojure/data.csv "1.0.0"]
-                         [org.clojure/data.json "2.3.1"]]
+                         [org.clojure/data.json "2.3.1"]
+
+                         [cheshire "5.10.0"]]
 
   :profiles {:dev [:test
                    {:dependencies [[pro.juxt.crux-labs/core2-api]
