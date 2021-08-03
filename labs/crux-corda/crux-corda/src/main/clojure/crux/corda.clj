@@ -161,19 +161,7 @@
     (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id
                                         (fn [fut {:keys [docs] :as tx}]
                                           (db/submit-docs document-store docs)
-                                          (prn :docs-here docs)
-                                          (let [index-docs @#'crux.tx/index-docs]
-                                            (with-redefs [crux.tx/index-docs (-> (fn [{:keys [!tx] :as thing} docs]
-                                                                                   (when-not (::replaced? (meta index-docs))
-                                                                                     (locking index-docs
-                                                                                       (prn :index-docs-before @!tx docs)))
-                                                                                   (let [res (index-docs thing docs)]
-                                                                                     (when-not (::replaced? (meta index-docs))
-                                                                                       (locking index-docs
-                                                                                         (prn :index-docs-after @!tx docs)))
-                                                                                     res))
-                                                                                 (vary-meta assoc ::replaced? true))]
-                                              (f fut tx)))))))
+                                          (f fut tx)))))
 
 (defn notify-tx [^SecureHash corda-tx-id {{{:keys [subscriber-handler]} :tx-log} :node, :as node}]
   (tx-sub/notify-tx! subscriber-handler (->crux-tx corda-tx-id node)))
