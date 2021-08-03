@@ -380,8 +380,7 @@
               (t/is (= 2 (count (filter #(re-matches #"chunk-.*-api-version.*" %) objs))))
               (t/is (= 11 (count (filter #(re-matches #"chunk-.*-battery-level.*" %) objs)))))))))))
 
-;; FIXME https://github.com/juxt/crux-rnd/issues/26
-(t/deftest ^:skip-test can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
+(t/deftest can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state
   (let [node-dir (util/->path "target/can-ingest-ts-devices-mini-with-stop-start-and-reach-same-state")
         node-opts {:node-dir node-dir, :max-rows-per-chunk 1000, :max-rows-per-block 100}]
     (util/delete-dir node-dir)
@@ -441,17 +440,14 @@
 
                 (with-open [new-node (tu/->local-node (assoc node-opts :buffers-dir "buffers-2"))]
                   (doseq [^Node node [new-node node]
-                          :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))
-                                ^IChunkManager idx (::idx/indexer @(:!system node))]]
+                          :let [^TemporalManager tm (::temporal/temporal-manager @(:!system node))]]
 
                     (t/is (<= (.tx-id first-half-tx-instant)
                               (.tx-id (-> first-half-tx-instant
                                           (tu/then-await-tx node (Duration/ofSeconds 10))))
                               (.tx-id second-half-tx-instant)))
 
-                    (with-open [watermark (.getWatermark idx)]
-                      (t/is (>= (count (kd/kd-tree->seq (.temporal-watermark watermark))) 3500))
-                      (t/is (>= (count (.id->internal-id tm)) 2000))))
+                    (t/is (>= (count (.id->internal-id tm)) 2000)))
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-instant (-> second-half-tx-instant
