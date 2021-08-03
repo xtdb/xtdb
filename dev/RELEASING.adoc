@@ -10,6 +10,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 ## Git tag:
 
 1. find/replace `<previous-version>` -> `<next-version>`, commit
+  * next release only: remove Corda version override in docs, and remove this note
 2. `git tag --annotate --sign <next-version>` (magit `t -a -s t`), add release notes to tag.
 3. `git push origin master <next-version>`
 
