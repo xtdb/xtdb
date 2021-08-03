@@ -1,6 +1,6 @@
 (ns dev
   (:require [clojure.java.io :as io]
-            [core2.core :as c2]
+            [core2.local-node :as node]
             [core2.test-util :as tu]
             [core2.tpch :as tpch]
             [core2.util :as util]
@@ -37,7 +37,7 @@
 (def node)
 
 (defmethod i/init-key ::crux [_ {:keys [node-opts]}]
-  (alter-var-root #'node (constantly (c2/start-node node-opts)))
+  (alter-var-root #'node (constantly (node/start-node node-opts)))
   node)
 
 (defmethod i/halt-key! ::crux [_ node]

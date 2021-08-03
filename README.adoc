@@ -5,14 +5,14 @@
 [source,clojure]
 ----
 ;; project.clj
-[pro.juxt.crux-labs/core2 "dev-SNAPSHOT"]
+[pro.juxt.crux-labs/core2-core "dev-SNAPSHOT"]
 [pro.juxt.crux-labs/core2-kafka "dev-SNAPSHOT"]
 [pro.juxt.crux-labs/core2-jdbc "dev-SNAPSHOT"]
 [pro.juxt.crux-labs/core2-s3 "dev-SNAPSHOT"]
 
 
 ;; deps.edn
-{pro.juxt.crux-labs/core2 {:mvn/version "dev-SNAPSHOT"}
+{pro.juxt.crux-labs/core2-core {:mvn/version "dev-SNAPSHOT"}
  pro.juxt.crux-labs/core2-kafka {:mvn/version "dev-SNAPSHOT"}
  pro.juxt.crux-labs/core2-jdbc {:mvn/version "dev-SNAPSHOT"}
  pro.juxt.crux-labs/core2-s3 {:mvn/version "dev-SNAPSHOT"}}
@@ -48,22 +48,22 @@ Where Classic has a transaction log, document store and query indices, Core2 has
 
 === Setup
 
-Main require: `[core2.core :as c2]`
+Main require: `[core2.api :as c2]`
 
 Configuration uses https://github.com/weavejester/integrant[Integrant].
 
-You can still start a completely in-memory node using `(c2/start-node {})`.
+You can still start a completely in-memory node using `(core2.local-node/start-node {})`.
 For a Kafka/JDBC node:
 
 [source,clojure]
 ----
-(with-open [node (c2/start-node {:core2.kafka/log {:bootstrap-servers "localhost:9092"}
+(with-open [node (node/start-node {:core2.kafka/log {:bootstrap-servers "localhost:9092"}
 
-                                 :core2.jdbc.postgres/dialect {}
-                                 :core2.jdbc/default-pool {:db-spec {:user "postgres"
-                                                                     :password "postgres"
-                                                                     :database "core2test"}}
-                                 :core2.jdbc/object-store {}})]
+                                   :core2.jdbc.postgres/dialect {}
+                                   :core2.jdbc/default-pool {:db-spec {:user "postgres"
+                                                                       :password "postgres"
+                                                                       :database "core2test"}}
+                                   :core2.jdbc/object-store {}})]
   ;; ...
   )
 ----
@@ -85,7 +85,7 @@ When finalised (by `reduce`) this will ensure the query results are adequately c
 
 [source,clojure]
 ----
-(with-open [node (c2/start-node {})]
+(with-open [node (node/start-node {})]
   (->> (c2/plan-query node
                       '{:find [?e ?name]
                         :where [[?e :name ?name]]})

@@ -2,27 +2,13 @@
   (or (System/getenv "CORE2_VERSION")
       "dev-SNAPSHOT"))
 
-(defproject pro.juxt.crux-labs/core2 core2-version
-  :description "Core2 Initiative"
+(defproject pro.juxt.crux-labs/core2-dev core2-version
   :url "https://github.com/juxt/crux-rnd"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
-  :dependencies [[org.clojure/clojure]
-                 [org.clojure/tools.logging "1.1.0"]
-                 [org.clojure/spec.alpha "0.2.194"]
-                 [pro.juxt.clojars-mirrors.com.stuartsierra/dependency "1.0.0"]
-                 [org.clojure/data.json]
-                 [org.clojure/data.csv]
-                 [org.clojure/tools.cli "1.0.206"]
-                 [org.apache.arrow/arrow-algorithm "4.0.1"]
-                 [org.apache.arrow/arrow-compression "4.0.1"]
-                 [org.apache.arrow/arrow-vector "4.0.1"]
-                 [org.apache.arrow/arrow-memory-netty "4.0.1"]
-                 [org.roaringbitmap/RoaringBitmap "0.9.15"]
-                 [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
-
-  :managed-dependencies [[pro.juxt.crux-labs/core2 ~core2-version]
+  :managed-dependencies [[pro.juxt.crux-labs/core2-api ~core2-version]
+                         [pro.juxt.crux-labs/core2-core ~core2-version]
                          [pro.juxt.crux-labs/core2-datasets ~core2-version]
                          [pro.juxt.crux-labs/core2-kafka ~core2-version]
                          [pro.juxt.crux-labs/core2-s3 ~core2-version]
@@ -33,22 +19,26 @@
                          [software.amazon.awssdk/s3 "2.16.76"]
                          [ch.qos.logback/logback-classic "1.2.3"]
                          [org.clojure/data.csv "1.0.0"]
-                         [org.clojure/data.json "2.3.1"]]
+                         [org.clojure/data.json "2.3.1"]
+
+                         [cheshire "5.10.0"]]
 
   :profiles {:dev [:test
-                   {:dependencies [[ch.qos.logback/logback-classic]
+                   {:dependencies [[pro.juxt.crux-labs/core2-api]
+                                   [pro.juxt.crux-labs/core2-core]
+                                   [pro.juxt.crux-labs/core2-datasets]
+                                   [pro.juxt.crux-labs/core2-kafka]
+                                   [pro.juxt.crux-labs/core2-s3]
+                                   [pro.juxt.crux-labs/core2-jdbc]
+                                   [pro.juxt.crux-labs/core2-bench]
+
+                                   [ch.qos.logback/logback-classic]
                                    [org.clojure/tools.namespace "1.1.0"]
                                    [integrant "0.8.0"]
                                    [integrant/repl "0.3.2"]]
                     :repl-options {:init-ns user}
                     :source-paths ["dev"]
                     :resource-paths ["data"]}]
-
-             :with-modules {:dependencies [[pro.juxt.crux-labs/core2-datasets]
-                                           [pro.juxt.crux-labs/core2-kafka]
-                                           [pro.juxt.crux-labs/core2-s3]
-                                           [pro.juxt.crux-labs/core2-jdbc]
-                                           [pro.juxt.crux-labs/core2-bench]]}
 
              :test {:dependencies [[org.clojure/test.check "1.1.0"]
                                    [org.clojure/data.csv "1.0.0"]
@@ -69,13 +59,10 @@
                                       [pro.juxt.crux-labs/core2-s3]
                                       [pro.juxt.crux-labs/core2-jdbc]]
                        :uberjar-name "core2-standalone.jar"
-                       :resource-paths ["uberjar"]}
+                       :resource-paths ["uberjar"]
+                       :main ^:skip-aot core2.main}
 
              :no-asserts {:jvm-opts ["-da" "-Dclojure.spec.check-asserts=false"]}}
-
-  :test-selectors {:default (complement (some-fn :skip-test :integration :timescale))
-                   :integration :integration
-                   :timescale :timescale}
 
   :aliases {"jmh" ["with-profile" "+jmh"
                    "trampoline" "run"
@@ -83,17 +70,6 @@
                    "-f" "1"
                    "-rf" "json"
                    "-rff" "target/jmh-result.json"]}
-
-  :main core2.main
-  :aot [core2.main]
-
-  :java-source-paths ["src"]
-
-  :javac-options ["-source" "11" "-target" "11"
-                  "-XDignore.symbol.file"
-                  "-Xlint:all,-options,-path"
-                  "-Werror"
-                  "-proc:none"]
 
   :jvm-opts ["-Xmx2G"
              "-XX:MaxDirectMemorySize=2G"
@@ -112,11 +88,6 @@
                   [:developer
                    [:id "juxt"]
                    [:name "JUXT"]]])
-
-  :classifiers {:sources {:prep-tasks ^:replace []}
-                :javadoc {:prep-tasks ^:replace []
-                          :omit-source true
-                          :filespecs ^:replace []}}
 
   :repositories {"snapshots" {:url "https://oss.sonatype.org/content/repositories/snapshots"}}
 

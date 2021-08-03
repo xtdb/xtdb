@@ -1,7 +1,7 @@
 (ns core2.bench.multinode-tpch
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
-            [core2.core :as c2]
+            [core2.local-node :as node]
             [core2.tpch :as tpch]
             [core2.temporal :as temporal]
             [core2.operator :as op]
@@ -14,7 +14,7 @@
 
 (defn run-multinode [{:keys [scale-factor sleep-ms]} start-node]
   (log/info "Starting primary node")
-  (with-open [^core2.core.Node primary-node (start-node)]
+  (with-open [^core2.local_node.Node primary-node (start-node)]
     (let [!last-tx (future
                      (let [last-tx (tpch/submit-docs! primary-node scale-factor)]
                        (log/info "last submitted tx:" last-tx)
@@ -23,18 +23,18 @@
         (Thread/sleep sleep-ms)
 
         (log/info "Starting secondary node 1")
-        (with-open [^core2.core.Node secondary-node1 (start-node)]
+        (with-open [^core2.local_node.Node secondary-node1 (start-node)]
           (Thread/sleep sleep-ms)
 
           (log/info "Starting secondary node 2")
-          (with-open [^core2.core.Node secondary-node2 (start-node)]
+          (with-open [^core2.local_node.Node secondary-node2 (start-node)]
             (Thread/sleep sleep-ms)
 
             (log/info "Starting secondary node 3")
-            (with-open [^core2.core.Node secondary-node3 (start-node)]
+            (with-open [^core2.local_node.Node secondary-node3 (start-node)]
               (let [last-tx @!last-tx
                     query tpch/tpch-q1-pricing-summary-report]
-                (letfn [(test-node [k ^core2.core.Node node]
+                (letfn [(test-node [k ^core2.local_node.Node node]
                           (log/info "awaiting" k "node")
                           (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory)
                                                   last-tx (Duration/ofHours 1))]
@@ -52,7 +52,7 @@
                   (.awaitSnapshotBuild ^core2.temporal.TemporalManagerPrivate (::temporal/temporal-manager @(:!system primary-node)))
 
                   (log/info "Starting post finish-chunk node")
-                  (with-open [^core2.core.Node secondary-node4 (start-node)]
+                  (with-open [^core2.local_node.Node secondary-node4 (start-node)]
                     (test-node :secondary4 secondary-node4)))))))
 
         (finally
@@ -64,7 +64,7 @@
                    :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}}]
     (run-multinode {:scale-factor 0.1, :sleep-ms 60000}
                    (fn []
-                     (c2/start-node node-opts)))))
+                     (node/start-node node-opts)))))
 
 (defn -main [& args]
   (try

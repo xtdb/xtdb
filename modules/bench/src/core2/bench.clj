@@ -1,10 +1,10 @@
 (ns core2.bench
   (:require [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [core2.core :as c2]
             [core2.kafka :as k]
+            [core2.local-node :as node]
             [core2.s3 :as s3])
-  (:import core2.core.Node
+  (:import core2.local_node.Node
            [java.nio.file Files Path]
            java.nio.file.attribute.FileAttribute
            java.util.UUID
@@ -35,15 +35,15 @@
 (defn finish-chunk [^Node node]
   (.finishChunk ^core2.indexer.Indexer (.indexer node)))
 
-(defn ^core2.core.Node start-node
+(defn ^core2.local_node.Node start-node
   ([] (start-node (str (UUID/randomUUID))))
 
   ([node-id]
    (log/info "Starting node, id:" node-id)
-   (c2/start-node {::k/log {:bootstrap-servers "localhost:9092"
-                            :topic-name (str "bench-log-" node-id)}
-                   ::s3/object-store {:bucket "core2-bench"
-                                      :prefix (str "node." node-id)}})))
+   (node/start-node {::k/log {:bootstrap-servers "localhost:9092"
+                              :topic-name (str "bench-log-" node-id)}
+                     ::s3/object-store {:bucket "core2-bench"
+                                        :prefix (str "node." node-id)}})))
 
 (defn tmp-file-path ^java.nio.file.Path [prefix suffix]
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))

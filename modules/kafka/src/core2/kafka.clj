@@ -1,5 +1,6 @@
 (ns core2.kafka
   (:require [clojure.java.io :as io]
+            [core2.api :as c2]
             [core2.log :as log]
             [core2.util :as util]
             [core2.tx :as tx]
@@ -42,7 +43,7 @@
                (onCompletion [_ record-metadata e]
                  (if e
                    (.completeExceptionally fut e)
-                   (.complete fut (log/->LogRecord (tx/->TransactionInstant (.offset record-metadata)
+                   (.complete fut (log/->LogRecord (c2/->TransactionInstant (.offset record-metadata)
                                                                             (Date. (.timestamp record-metadata)))
                                                    record))))))
       fut))
@@ -63,7 +64,7 @@
 
     (try
       (->> (for [^ConsumerRecord record (.poll consumer poll-duration)]
-             (log/->LogRecord (tx/->TransactionInstant (.offset record) (Date. (.timestamp record)))
+             (log/->LogRecord (c2/->TransactionInstant (.offset record) (Date. (.timestamp record)))
                               (.value record)))
            (into [] (take limit)))
       (catch InterruptException e

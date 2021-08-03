@@ -18,7 +18,7 @@ jobs:
     steps:
       - checkout
 
-      - run: 'md5sum project.clj modules/*/project.clj > .circleci-cache-key'
+      - run: 'md5sum project.clj */project.clj modules/*/project.clj > .circleci-cache-key'
 
       - restore_cache:
           keys:
@@ -55,7 +55,9 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/
-      - run: lein test
+
+      # TODO should test the other modules too
+      - run: "./lein-sub -s core test"
 
   integration-test:
     executor: clojure-lein
@@ -63,7 +65,9 @@ jobs:
     steps:
       - attach_workspace:
           at: ~/
-      - run: lein test :integration
+
+      # TODO should test the other modules too
+      - run: "./lein-sub -s core test :integration"
 
 workflows:
   build:

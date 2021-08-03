@@ -1,7 +1,7 @@
 (ns core2.bench.ts-devices
   (:require [clojure.tools.logging :as log]
             [core2.bench :as bench]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.ts-devices :as tsd])
   (:import java.util.concurrent.TimeUnit))
 
