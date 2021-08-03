@@ -1,4 +1,4 @@
-(ns core2.core-test
+(ns core2.tx-producer-test
   (:require [cheshire.core :as json]
             [clojure.java.io :as io]
             [clojure.test :as t]

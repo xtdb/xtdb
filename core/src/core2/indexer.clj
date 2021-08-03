@@ -1,5 +1,6 @@
 (ns core2.indexer
   (:require [clojure.tools.logging :as log]
+            core2.api
             [core2.await :as await]
             [core2.blocks :as blocks]
             [core2.bloom :as bloom]
@@ -14,7 +15,8 @@
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal ITemporalManager TemporalCoordinates]
-           [core2.tx TransactionInstant Watermark]
+           core2.api.TransactionInstant
+           core2.tx.Watermark
            java.io.Closeable
            [java.util Collections Date Map Map$Entry Set TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
@@ -35,12 +37,12 @@
   (^core2.tx.Watermark getWatermark []))
 
 (definterface TransactionIndexer
-  (^core2.tx.TransactionInstant indexTx [^core2.tx.TransactionInstant tx ^java.nio.ByteBuffer txOps])
-  (^core2.tx.TransactionInstant latestCompletedTx [])
-  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.tx.TransactionInstant tx]))
+  (^core2.api.TransactionInstant indexTx [^core2.api.TransactionInstant tx ^java.nio.ByteBuffer txOps])
+  (^core2.api.TransactionInstant latestCompletedTx [])
+  (^java.util.concurrent.CompletableFuture #_<TransactionInstant> awaitTxAsync [^core2.api.TransactionInstant tx]))
 
 (definterface IndexerPrivate
-  (^int indexTx [^core2.tx.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops, ^long nextRowId])
+  (^int indexTx [^core2.api.TransactionInstant tx-instant, ^java.nio.ByteBuffer tx-ops, ^long nextRowId])
   (^java.nio.ByteBuffer writeColumn [^org.apache.arrow.vector.VectorSchemaRoot live-root])
   (^void closeCols [])
   (^void finishChunk []))
@@ -169,7 +171,7 @@
   (^void endTx []))
 
 (definterface ILogIndexer
-  (^core2.indexer.ILogOpIndexer startTx [^core2.tx.TransactionInstant txInstant,
+  (^core2.indexer.ILogOpIndexer startTx [^core2.api.TransactionInstant txInstant,
                                          ^org.apache.arrow.vector.VectorSchemaRoot txRoot])
   (^java.nio.ByteBuffer writeLog [])
   (^void clear [])

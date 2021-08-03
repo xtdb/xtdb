@@ -1,6 +1,6 @@
 (ns core2.ts-devices-small-test
   (:require [clojure.test :as t]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.metadata :as meta]
             [core2.test-util :as tu]
             [core2.ts-devices :as tsd]

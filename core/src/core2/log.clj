@@ -1,11 +1,12 @@
 (ns core2.log
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [core2.api :as c2]
             [core2.tx :as tx]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
-           core2.tx.TransactionInstant
+           core2.api.TransactionInstant
            [java.io BufferedInputStream BufferedOutputStream Closeable DataInputStream DataOutputStream EOFException]
            java.nio.ByteBuffer
            [java.nio.channels Channels ClosedByInterruptException FileChannel]
@@ -29,7 +30,7 @@
   (appendRecord [_ record]
     (CompletableFuture/completedFuture
      (let [records (swap! !records (fn [records]
-                                     (conj records (->LogRecord (tx/->TransactionInstant (count records) (Date/from (.instant clock))) record))))]
+                                     (conj records (->LogRecord (c2/->TransactionInstant (count records) (Date/from (.instant clock))) record))))]
        (nth records (dec (count records))))))
 
   LogReader
@@ -100,7 +101,7 @@
                                     time-ms (.readLong log-in)
                                     record (byte-array size)]
                                 (when (= size (.read log-in record))
-                                  (->LogRecord (tx/->TransactionInstant offset (Date. time-ms)) (ByteBuffer/wrap record))))
+                                  (->LogRecord (c2/->TransactionInstant offset (Date. time-ms)) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
@@ -147,7 +148,7 @@
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
-                      (.set elements n (MapEntry/create f (->LogRecord (tx/->TransactionInstant offset (Date. time-ms)) record)))
+                      (.set elements n (MapEntry/create f (->LogRecord (c2/->TransactionInstant offset (Date. time-ms)) record)))
                       (recur (inc n) (+ offset header-size size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)

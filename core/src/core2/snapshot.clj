@@ -1,11 +1,12 @@
 (ns core2.snapshot
-  (:require [core2.expression.temporal :as expr.temp]
+  (:require core2.api
+            [core2.expression.temporal :as expr.temp]
             [core2.indexer :as idx]
             [core2.operator.scan :as scan]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import [core2.indexer IChunkManager TransactionIndexer]
-           core2.tx.TransactionInstant
+           core2.api.TransactionInstant
            java.time.Duration
            [java.util.concurrent CompletableFuture TimeUnit]))
 
@@ -17,7 +18,7 @@
                         ^longs temporalMaxRange]))
 
 (definterface ISnapshotFactory
-  (^java.util.concurrent.CompletableFuture #_<ISnapshot> snapshot [^core2.tx.TransactionInstant tx]))
+  (^java.util.concurrent.CompletableFuture #_<ISnapshot> snapshot [^core2.api.TransactionInstant tx]))
 
 (deftype Snapshot [metadata-mgr temporal-mgr buffer-pool ^IChunkManager indexer,
                    ^TransactionInstant tx]

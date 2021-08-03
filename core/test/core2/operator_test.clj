@@ -1,19 +1,20 @@
 (ns core2.operator-test
   (:require [clojure.test :as t]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.expression.metadata :as expr.meta]
             [core2.indexer :as idx]
             [core2.metadata :as meta]
-            [core2.test-util :as tu]
+            [core2.local-node :as node]
+            [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.operator :as op])
+            [core2.test-util :as tu])
   (:import core2.indexer.IChunkManager
            core2.metadata.IMetadataManager
-           org.roaringbitmap.RoaringBitmap
-           core2.snapshot.ISnapshotFactory))
+           core2.snapshot.ISnapshotFactory
+           org.roaringbitmap.RoaringBitmap))
 
 (t/deftest test-find-gt-ivan
-  (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
+  (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 2}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :_id 0}]])
         (tu/then-await-tx node))
 
@@ -67,7 +68,7 @@
                            db))))))
 
 (t/deftest test-find-eq-ivan
-  (with-open [node (c2/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
+  (with-open [node (node/start-node {::idx/indexer {:max-rows-per-chunk 10, :max-rows-per-block 3}})]
     (-> (c2/submit-tx node [[:put {:name "Håkan", :_id 1}]
                             [:put {:name "James", :_id 2}]
                             [:put {:name "Ivan", :_id 3}]])
@@ -106,7 +107,7 @@
                                        {'$ db, '?name "Ivan"}))))))))
 
 (t/deftest test-temporal-bounds
-  (with-open [node (c2/start-node {})]
+  (with-open [node (node/start-node {})]
     (let [{tt1 :tx-time} @(c2/submit-tx node
                                         [[:put {:_id "my-doc", :last-updated "tx1"}]])
           _ (Thread/sleep 10) ; to prevent same-ms transactions

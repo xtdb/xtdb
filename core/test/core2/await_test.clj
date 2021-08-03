@@ -1,11 +1,11 @@
 (ns core2.await-test
   (:require [clojure.test :as t]
-            [core2.await :as await]
-            [core2.tx :as tx])
+            [core2.api :as c2]
+            [core2.await :as await])
   (:import java.util.concurrent.PriorityBlockingQueue))
 
 (defn- ->tx [tx-id]
-  (tx/->TransactionInstant tx-id nil))
+  (c2/->TransactionInstant tx-id nil))
 
 (t/deftest test-await
   (t/is (= (->tx 2)

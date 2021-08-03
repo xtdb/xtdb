@@ -4,11 +4,12 @@
             [clojure.java.io :as io]
             [clojure.test :as t]
             [clojure.tools.logging :as log]
+            [core2.api :as c2]
             [core2.buffer-pool :as bp]
-            [core2.core :as c2]
             [core2.indexer :as idx]
             [core2.json :as c2-json]
             [core2.metadata :as meta]
+            [core2.local-node :as node]
             [core2.object-store :as os]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd]
@@ -17,13 +18,13 @@
             [core2.tx :as tx]
             [core2.types :as ty]
             [core2.util :as util])
-  (:import [core2.buffer_pool BufferPool IBufferPool]
-           core2.core.Node
+  (:import core2.api.TransactionInstant
+           [core2.buffer_pool BufferPool IBufferPool]
+           core2.local_node.Node
            core2.indexer.IChunkManager
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            core2.temporal.TemporalManager
-           core2.tx.TransactionInstant
            java.nio.file.Files
            java.time.Duration
            [org.apache.arrow.memory ArrowBuf BufferAllocator]
@@ -72,7 +73,7 @@
 
 (t/deftest can-build-chunk-as-arrow-ipc-file-format
   (let [node-dir (util/->path "target/can-build-chunk-as-arrow-ipc-file-format")
-        last-tx-instant (tx/->TransactionInstant 6256 #inst "2020-01-02")
+        last-tx-instant (c2/->TransactionInstant 6256 #inst "2020-01-02")
         total-number-of-ops (count (for [tx-ops txs
                                          op tx-ops]
                                      op))]
@@ -239,7 +240,7 @@
 (t/deftest can-stop-node-without-writing-chunks
   (let [node-dir (util/->path "target/can-stop-node-without-writing-chunks")
         mock-clock (tu/->mock-clock [#inst "2020-01-01" #inst "2020-01-02"])
-        last-tx-instant (tx/->TransactionInstant 6256 #inst "2020-01-02")]
+        last-tx-instant (c2/->TransactionInstant 6256 #inst "2020-01-02")]
     (util/delete-dir node-dir)
 
     (with-open [node (tu/->local-node {:node-dir node-dir, :clock mock-clock})]
@@ -477,7 +478,7 @@
                            (fn [logger level throwable message]
                              (when-not (instance? UnsupportedOperationException throwable)
                                (log* logger level throwable message))))]
-    (with-open [node (c2/start-node {})]
+    (with-open [node (node/start-node {})]
       (t/is (thrown-with-msg? Exception #"oh no!"
                               (-> (c2/submit-tx node [[:put {:_id "foo", :count 42}]])
                                   (tu/then-await-tx node (Duration/ofSeconds 1))))))))

@@ -1,7 +1,7 @@
 (ns core2.tpch
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [core2.core :as c2])
+            [core2.api :as c2])
   (:import [io.airlift.tpch TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            [java.time Instant Period]
            java.util.Date))

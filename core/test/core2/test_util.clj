@@ -1,16 +1,16 @@
 (ns core2.test-util
   (:require [cheshire.core :as json]
             [clojure.test :as t]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.json :as c2-json]
+            [core2.local-node :as node]
             core2.object-store
             [core2.relation :as rel]
             [core2.temporal :as temporal]
             [core2.types :as ty]
-            [core2.util :as util]
-            [core2.snapshot :as snap])
-  (:import core2.core.Node
-           core2.ICursor
+            [core2.util :as util])
+  (:import core2.ICursor
+           core2.local_node.Node
            core2.object_store.FileSystemObjectStore
            core2.relation.IReadColumn
            [java.nio.file Files Path]
@@ -40,7 +40,7 @@
      (f))))
 
 (defn with-node [f]
-  (with-open [node (c2/start-node *node-opts*)]
+  (with-open [node (node/start-node *node-opts*)]
     (binding [*node* node]
       (f))))
 
@@ -55,11 +55,11 @@
     acc))
 
 (defn then-await-tx
-  (^core2.tx.TransactionInstant [tx node]
-   @(c2/await-tx-async node tx))
+  (^core2.api.TransactionInstant [tx node]
+   @(node/await-tx-async node tx))
 
-  (^core2.tx.TransactionInstant [tx node ^Duration timeout]
-   @(-> (c2/await-tx-async node tx)
+  (^core2.api.TransactionInstant [tx node ^Duration timeout]
+   @(-> (node/await-tx-async node tx)
         (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
 
 (defn ^java.time.Clock ->mock-clock
@@ -160,20 +160,20 @@
             :when (.endsWith (str path) ".json")]
       (check-json-file (.resolve expected-path (.getFileName path)) path))))
 
-(defn ->local-node ^core2.core.Node [{:keys [^Path node-dir
+(defn ->local-node ^core2.local_node.Node [{:keys [^Path node-dir
                                              clock max-rows-per-block max-rows-per-chunk buffers-dir]
                                       :or {buffers-dir "buffers"}}]
-  (c2/start-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
-                                                   clock (assoc :clock clock))
-                  :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
-                  :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
-                  :core2.indexer/indexer (->> {:max-rows-per-block max-rows-per-block
-                                               :max-rows-per-chunk max-rows-per-chunk}
-                                              (into {} (filter val)))}))
+  (node/start-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
+                                                     clock (assoc :clock clock))
+                    :core2.buffer-pool/buffer-pool {:cache-path (.resolve node-dir ^String buffers-dir)}
+                    :core2.object-store/file-system-object-store {:root-path (.resolve node-dir "objects")}
+                    :core2.indexer/indexer (->> {:max-rows-per-block max-rows-per-block
+                                                 :max-rows-per-chunk max-rows-per-chunk}
+                                                (into {} (filter val)))}))
 
-(defn ->local-submit-node ^core2.core.SubmitNode [{:keys [^Path node-dir clock]}]
-  (c2/start-submit-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
-                                                          clock (assoc :clock clock))}))
+(defn ->local-submit-node ^core2.local_node.SubmitNode [{:keys [^Path node-dir clock]}]
+  (node/start-submit-node {:core2.log/local-directory-log (cond-> {:root-path (.resolve node-dir "log")}
+                                                            clock (assoc :clock clock))}))
 
 (defn with-tmp-dir* [prefix f]
   (let [dir (Files/createTempDirectory prefix (make-array FileAttribute 0))]

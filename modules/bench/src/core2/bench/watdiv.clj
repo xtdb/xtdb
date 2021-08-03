@@ -1,7 +1,8 @@
 (ns core2.bench.watdiv
   (:require [clojure.java.io :as io]
             [core2.bench :as bench]
-            [core2.core :as c2]
+            [core2.api :as c2]
+            [core2.local-node :as node]
             [core2.test-util :as tu])
   (:import java.util.concurrent.TimeUnit))
 
@@ -33,7 +34,7 @@
                                       ;; TODO Core2 doesn't support set vals yet
                                       [:put (->> doc (into {} (remove (comp set? val))))])))))]
     (bench/with-timing :await-tx
-      @(-> (c2/await-tx-async node tx)
+      @(-> (node/await-tx-async node tx)
            (.orTimeout 5 TimeUnit/HOURS)))
 
     (bench/with-timing :finish-chunk
@@ -52,7 +53,7 @@
                       (into []))))))))
 
 (comment
-  (with-open [node (c2/start-node {})]
+  (with-open [node (node/start-node {})]
     (ingest-watdiv node (io/file "/tmp/watdiv-10M.edn"))
     (query-watdiv node (io/file "/tmp/watdiv-stress-100-queries.1.edn"))))
 

@@ -1,6 +1,6 @@
 (ns core2.await
-  (:require [core2.tx :as tx])
-  (:import core2.tx.TransactionInstant
+  (:require core2.api)
+  (:import core2.api.TransactionInstant
            [java.util.concurrent CompletableFuture PriorityBlockingQueue]))
 
 (deftype AwaitingTx [^TransactionInstant tx, ^CompletableFuture fut]

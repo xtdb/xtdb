@@ -14,5 +14,6 @@
 
   :java-source-paths ["src"]
 
-  :dependencies [[pro.juxt.crux-labs/core2-core]
+  :dependencies [[pro.juxt.crux-labs/core2-api]
+                 [pro.juxt.crux-labs/core2-core]
                  [software.amazon.awssdk/s3]])

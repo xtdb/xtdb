@@ -1,5 +1,6 @@
-(ns core2.core
+(ns core2.local-node
   (:require [clojure.pprint :as pp]
+            [core2.api :as api]
             [core2.datalog :as d]
             [core2.indexer :as idx]
             core2.ingest-loop
@@ -14,33 +15,23 @@
            [java.io Closeable Writer]
            java.lang.AutoCloseable
            java.time.Duration
-           [java.util.concurrent CompletableFuture ExecutionException TimeUnit]
+           [java.util.concurrent CompletableFuture TimeUnit]
            java.util.Date
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (set! *unchecked-math* :warn-on-boxed)
-
-(defprotocol PClient
-  (latest-completed-tx ^core2.tx.TransactionInstant [node])
-
-  ;; we may want to go to `open-query-async`/`Stream` instead, when we have a Java API
-  (-plan-query-async ^java.util.concurrent.CompletableFuture [node query basis params]))
 
 (defprotocol PNode
   ;; TODO in theory we shouldn't need this, but it's still used in tests
   (await-tx-async
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx]))
 
-(defprotocol PSubmitNode
-  (submit-tx
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [tx-producer tx-ops]))
-
 (defrecord Node [^TransactionIndexer indexer
                  ^ISnapshotFactory snapshot-factory
                  ^ITxProducer tx-producer
                  !system
                  close-fn]
-  PClient
+  api/PClient
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
   (-plan-query-async [_ query basis params]
@@ -61,7 +52,7 @@
         (util/then-compose (fn [tx]
                              (.awaitTxAsync indexer tx)))))
 
-  PSubmitNode
+  api/PSubmitNode
   (submit-tx [_ tx-ops]
     (.submitTx tx-producer tx-ops))
 
@@ -70,37 +61,19 @@
     (when close-fn
       (close-fn))))
 
-(defn ^java.util.concurrent.CompletableFuture plan-query-async [node query & params]
-  (let [[basis params] (let [[maybe-basis & more-params] params]
-                         (if (map? maybe-basis)
-                           [maybe-basis more-params]
-                           [{} params]))]
-    (-plan-query-async node query basis params)))
-
-(defn plan-query [node query & params]
-  (try
-    @(apply plan-query-async node query params)
-    (catch ExecutionException e
-      (throw (.getCause e)))))
-
-(let [arglists '([node query & params]
-                 [node query basis-opts & params])]
-  (alter-meta! #'plan-query-async assoc :arglists arglists)
-  (alter-meta! #'plan-query assoc :arglists arglists))
-
 (defmethod print-method Node [_node ^Writer w] (.write w "#<Core2Node>"))
 (defmethod pp/simple-dispatch Node [it] (print-method it *out*))
 
-(defmethod ig/prep-key :core2/node [_ opts]
+(defmethod ig/prep-key ::node [_ opts]
   (merge {:indexer (ig/ref ::idx/indexer)
           :snapshot-factory (ig/ref ::snap/snapshot-factory)
           :tx-producer (ig/ref ::txp/tx-producer)}
          opts))
 
-(defmethod ig/init-key :core2/node [_ deps]
+(defmethod ig/init-key ::node [_ deps]
   (map->Node (assoc deps :!system (atom nil))))
 
-(defmethod ig/halt-key! :core2/node [_ ^Node node]
+(defmethod ig/halt-key! ::node [_ ^Node node]
   (.close node))
 
 (defmethod ig/init-key :core2/allocator [_ _] (RootAllocator.))
@@ -110,8 +83,8 @@
   (cond-> opts
     (not (ig/find-derived opts parent-k)) (assoc impl-k {})))
 
-(defn start-node ^core2.core.Node [opts]
-  (let [system (-> (into {:core2/node {}
+(defn start-node ^core2.local_node.Node [opts]
+  (let [system (-> (into {::node {}
                           :core2/allocator {}
                           ::idx/indexer {}
                           :core2.ingest-loop/ingest-loop {}
@@ -127,13 +100,13 @@
                    ig/prep
                    ig/init)]
 
-    (-> (:core2/node system)
+    (-> (::node system)
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(do (ig/halt! system)
                               #_(println (.toVerboseString ^RootAllocator (:core2/allocator system))))))))
 
 (defrecord SubmitNode [^ITxProducer tx-producer, !system, close-fn]
-  PSubmitNode
+  api/PSubmitNode
   (submit-tx [_ tx-ops]
     (.submitTx tx-producer tx-ops))
 
@@ -145,18 +118,18 @@
 (defmethod print-method SubmitNode [_node ^Writer w] (.write w "#<Core2SubmitNode>"))
 (defmethod pp/simple-dispatch SubmitNode [it] (print-method it *out*))
 
-(defmethod ig/prep-key :core2/submit-node [_ opts]
+(defmethod ig/prep-key ::submit-node [_ opts]
   (merge {:tx-producer (ig/ref :core2.tx-producer/tx-producer)}
          opts))
 
-(defmethod ig/init-key :core2/submit-node [_ {:keys [tx-producer]}]
+(defmethod ig/init-key ::submit-node [_ {:keys [tx-producer]}]
   (map->SubmitNode {:tx-producer tx-producer, :!system (atom nil)}))
 
-(defmethod ig/halt-key! :core2/submit-node [_ ^SubmitNode node]
+(defmethod ig/halt-key! ::submit-node [_ ^SubmitNode node]
   (.close node))
 
-(defn start-submit-node ^core2.core.SubmitNode [opts]
-  (let [system (-> (into {:core2/submit-node {}
+(defn start-submit-node ^core2.local_node.SubmitNode [opts]
+  (let [system (-> (into {::submit-node {}
                           :core2.tx-producer/tx-producer {}
                           :core2/allocator {}}
                          opts)
@@ -164,6 +137,6 @@
                    (doto ig/load-namespaces)
                    ig/init)]
 
-    (-> (:core2/submit-node system)
+    (-> (::submit-node system)
         (doto (-> :!system (reset! system)))
         (assoc :close-fn #(ig/halt! system)))))

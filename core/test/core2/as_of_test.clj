@@ -1,6 +1,6 @@
 (ns core2.as-of-test
   (:require [clojure.test :as t]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.test-util :as tu]
             [core2.temporal :as temporal]
             [core2.snapshot :as snap]

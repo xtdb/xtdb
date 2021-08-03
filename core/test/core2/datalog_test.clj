@@ -2,7 +2,7 @@
   (:require [core2.james-bond :as bond]
             [clojure.test :as t]
             [core2.test-util :as tu]
-            [core2.core :as c2]))
+            [core2.api :as c2]))
 
 (t/use-fixtures :each tu/with-node)
 

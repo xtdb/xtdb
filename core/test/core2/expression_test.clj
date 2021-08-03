@@ -1,12 +1,13 @@
 (ns core2.expression-test
   (:require [clojure.test :as t]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.expression :as expr]
             [core2.expression.temporal :as expr.temp]
-            [core2.test-util :as tu]
-            [core2.types :as ty]
+            [core2.local-node :as node]
+            [core2.operator :as op]
             [core2.snapshot :as snap]
-            [core2.operator :as op])
+            [core2.test-util :as tu]
+            [core2.types :as ty])
   (:import org.apache.arrow.vector.types.pojo.Schema))
 
 (t/use-fixtures :each tu/with-allocator)
@@ -124,7 +125,7 @@
                              '{?tt #inst "2019", ?vt #inst "2018"}))))))))
 
 (t/deftest test-date-trunc
-  (with-open [node (c2/start-node {})]
+  (with-open [node (node/start-node {})]
     (let [tx (c2/submit-tx node [[:put {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
       (t/is (= [{:trunc #inst "2021-01-21"}]

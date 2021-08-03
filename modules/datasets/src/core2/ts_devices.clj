@@ -3,7 +3,7 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [core2.core :as c2]
+            [core2.api :as c2]
             [core2.snapshot :as snap]
             [core2.test-util :as tu]
             [core2.operator :as op])

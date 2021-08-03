@@ -11,7 +11,8 @@
 
   :scm {:dir "../.."}
 
-  :dependencies [[pro.juxt.crux-labs/core2-core]
+  :dependencies [[pro.juxt.crux-labs/core2-api]
+                 [pro.juxt.crux-labs/core2-core]
                  [pro.juxt.crux-labs/core2-datasets]
                  [pro.juxt.crux-labs/core2-kafka]
                  [pro.juxt.crux-labs/core2-s3]

@@ -5,7 +5,7 @@
             [clojure.string :as str]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [core2.core :as c2]
+            [core2.local-node :as node]
             [core2.error :as err]
             [core2.util :as util])
   (:import java.io.File
@@ -112,7 +112,7 @@
 
       help (println help)
 
-      :else (with-open [_node (c2/start-node node-opts)]
+      :else (with-open [_node (node/start-node node-opts)]
               (log/info "Node started")
               @(shutdown-hook-promise)))
 

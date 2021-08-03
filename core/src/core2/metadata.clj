@@ -1,5 +1,6 @@
 (ns core2.metadata
-  (:require [core2.blocks :as blocks]
+  (:require [core2.api :as c2]
+            [core2.blocks :as blocks]
             [core2.bloom :as bloom]
             core2.buffer-pool
             [core2.expression.comparator :as expr.comp]
@@ -216,7 +217,7 @@
 (defn latest-tx [_chunk-idx ^VectorSchemaRoot metadata-root]
   (let [metadata-idxs (->metadata-idxs metadata-root)
         ^StructVector max-vec (.getVector metadata-root "max")]
-    (tx/->TransactionInstant (-> max-vec
+    (c2/->TransactionInstant (-> max-vec
                                  ^BigIntVector
                                  (.getChild (type->field-name (t/->arrow-type :bigint)))
                                  (.get (.columnIndex metadata-idxs "_tx-id")))

@@ -11,24 +11,29 @@
                              :javac-options]}
 
 
-  :scm {:dir "../.."}
+  :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure]
+                 [pro.juxt.crux-labs/core2-api]
+
                  [org.clojure/tools.logging "1.1.0"]
                  [org.clojure/spec.alpha "0.2.194"]
                  [org.clojure/data.json]
                  [org.clojure/data.csv]
                  [org.clojure/tools.cli "1.0.206"]
+
                  [org.apache.arrow/arrow-algorithm "4.0.1"]
                  [org.apache.arrow/arrow-compression "4.0.1"]
                  [org.apache.arrow/arrow-vector "4.0.1"]
                  [org.apache.arrow/arrow-memory-netty "4.0.1"]
+
                  [org.roaringbitmap/RoaringBitmap "0.9.15"]
+
                  [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
 
-  :profiles {:test {:dependencies [[org.clojure/test.check "1.1.0"]
-                                   [org.clojure/data.csv "1.0.0"]
-                                   [pro.juxt.crux-labs/core2-datasets]
+  :profiles {:dev [:test]
+             :test {:dependencies [[pro.juxt.crux-labs/core2-datasets]
+                                   [org.clojure/test.check "1.1.0"]
 
                                    [cheshire "5.10.0"]]
 
