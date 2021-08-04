@@ -1,11 +1,15 @@
 (ns core2.api
-  (:import java.util.Date
-           java.util.concurrent.ExecutionException))
+  (:import java.io.Writer
+           java.util.concurrent.ExecutionException
+           java.util.Date))
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time]
   Comparable
   (compareTo [_ other]
     (- tx-id (.tx-id ^TransactionInstant other))))
+
+(defmethod print-method TransactionInstant [tx-instant ^Writer w]
+  (.write w (str "#core2/tx-instant " (select-keys tx-instant [:tx-id :tx-time]))))
 
 (defprotocol PClient
   (latest-completed-tx ^core2.api.TransactionInstant [node])
