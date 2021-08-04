@@ -19,7 +19,7 @@
 
 (defprotocol PSubmitNode
   (submit-tx
-    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [tx-producer tx-ops]))
+    ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx-ops]))
 
 (defn plan-query [node query & params]
   (try

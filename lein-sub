@@ -13,6 +13,7 @@ set -e
 api
 core
 server
+client
 modules/datasets
 modules/s3
 modules/kafka
