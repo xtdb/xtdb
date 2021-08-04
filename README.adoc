@@ -108,7 +108,8 @@ In Core2, the upper bound for the tx-time is applied per-source; the default upp
 ;; `plan-query` will await the transaction
 (->> (c2/plan-query node
                     (-> '{:find ..., :where ...}
-                        (assoc :basis {:tx tx, :timeout (Duration/ofSeconds 1)})))
+                        (assoc :basis {:tx tx}
+                                 :basis-timeout (Duration/ofSeconds 1))))
      (into []))
 ----
 
@@ -135,8 +136,8 @@ Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multip
                     (-> '{:find [...]
                           :where [[$db1 ...], [$db2 ...]]}
                         (assoc :basis {'$db1 {:tx tx}
-                                       '$db2 {:tx tx}
-                                       :timeout (Duration/ofSeconds 1)})))
+                                       '$db2 {:tx tx}}
+                               :basis-timeout (Duration/ofSeconds 1))))
      (into []))
 ----
 

@@ -35,12 +35,13 @@
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
   (plan-query-async [_ query params]
-    (let [{:keys [default-valid-time tx ^Duration timeout], :or {default-valid-time (Date.)}} (:basis query)]
+    (let [{:keys [basis ^Duration basis-timeout]} query
+          {:keys [default-valid-time tx], :or {default-valid-time (Date.)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
-          (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
+          (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
-              (let [{:keys [query srcs]} (-> (dissoc query :basis)
+              (let [{:keys [query srcs]} (-> (dissoc query :basis :basis-timeout)
                                              (d/compile-query params))]
                 (op/plan-ra query (merge srcs {'$ db}) {:default-valid-time default-valid-time})))))))
 
