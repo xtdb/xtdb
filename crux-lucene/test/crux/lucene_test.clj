@@ -4,6 +4,7 @@
             [clojure.test :as t]
             [crux.api :as c]
             [crux.checkpoint :as cp]
+            [crux.codec :as cc]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
@@ -410,6 +411,17 @@
     (with-open [dir (FSDirectory/open (.toPath cp-dir))
                 rdr (DirectoryReader/open dir)]
       (t/is (= 1 (.numDocs rdr))))))
+
+(t/deftest test-cardinality-returned-by-search-results-a-v
+  (submit+await-tx (for [n (range 1000)] [:crux.tx/put {:crux.db/id n, :foo "bar"}]))
+  (with-open [db (c/open-db *api*)]
+    (with-open [search-iterator (l/search *api* "Ivan" {:default-field "name"})]
+      (let [search-results (iterator-seq search-iterator)]
+        (t/is (<= (count search-results)
+                  (count (l/resolve-search-results-a-v (cc/->id-buffer :foo)
+                                                       (:index-snapshot db)
+                                                       db
+                                                       search-results))))))))
 
 (comment
   (do
