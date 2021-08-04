@@ -171,12 +171,14 @@
 (defn resolve-search-results-a-v
   "Given search results each containing a single A/V pair document,
   perform a temporal resolution against A/V to resolve the eid."
-  [attr index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
-  (mapcat (fn [[^Document doc score]]
-            (let [v (.get ^Document doc field-crux-val)]
-              (for [eid (doall (db/ave index-snapshot attr v nil entity-resolver-fn))]
-                [(db/decode-value index-snapshot eid) v score])))
-          search-results))
+  [attr index-snapshot {:keys [entity-resolver-fn]} search-results]
+  (->> search-results
+       (map (fn [[^Document doc score]]
+              [attr (.get ^Document doc field-crux-val) score]))
+       distinct ; could distinct by virtue of the `ave` call instead if eid was reversible
+       (mapcat (fn [[a v score]]
+                 (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
+                   [(db/decode-value index-snapshot eid) v score])))))
 
 (defmethod q/pred-args-spec 'text-search [_]
   (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? q/logic-var?) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :crux.query/binding)))
@@ -188,13 +190,16 @@
 (defn- resolve-search-results-a-v-wildcard
   "Given search results each containing a single A/V pair document,
   perform a temporal resolution against A/V to resolve the eid."
-  [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
-  (mapcat (fn [[^Document doc score]]
-            (let [v (.get ^Document doc field-crux-val)
-                  a (keyword (.get ^Document doc field-crux-attr))]
-              (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
-                [(db/decode-value index-snapshot eid) v a score])))
-          search-results))
+  [index-snapshot {:keys [entity-resolver-fn]} search-results]
+  (->> search-results
+       (map (fn [[^Document doc score]]
+              [(keyword (.get ^Document doc field-crux-attr))
+               (.get ^Document doc field-crux-val)
+               score]))
+       distinct
+       (mapcat (fn [[a v score]]
+                 (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
+                   [(db/decode-value index-snapshot eid) v a score])))))
 
 (defn ^Query build-query-wildcard
   "Wildcard query builder"
