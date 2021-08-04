@@ -49,7 +49,7 @@
                                (map read-string)
                                (map-indexed vector))]
         (bench/with-timing (keyword (str "query-" idx))
-          (count (->> (c2/plan-query tu/*node* (assoc query :basis-tx basis-tx))
+          (count (->> (c2/plan-query tu/*node* (assoc query :basis {:tx basis-tx}))
                       (into []))))))))
 
 (comment
