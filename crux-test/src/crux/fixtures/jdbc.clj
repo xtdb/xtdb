@@ -121,3 +121,12 @@
                   :crux/document-store {:crux/module `j/->document-store,
                                         :connection-pool ::j/connection-pool}}
     f))
+
+(t/deftest test-jdbc-url
+  (when (:postgres jdbc-dialects)
+    (let [jdbc-url "jdbc:postgresql://127.0.0.1:5432/postgres?user=postgres&password=postgres"]
+      (with-postgres-opts {:jdbcUrl jdbc-url}
+        (fn []
+          (fix/with-node
+            (fn []
+              (t/is true))))))))
