@@ -21,6 +21,7 @@
                          [ch.qos.logback/logback-classic "1.2.3"]
                          [org.clojure/data.csv "1.0.0"]
                          [org.clojure/data.json "2.3.1"]
+                         [com.cognitect/transit-clj "1.0.324"]
 
                          [cheshire "5.10.0"]
                          [hato "0.8.2"]]

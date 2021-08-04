@@ -2,6 +2,7 @@
   (:require [clojure.instant :as inst]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [cognitect.transit :as transit]
             [core2.api :as c2]
             [core2.datalog :as d]
             [core2.local-node :as node]
@@ -19,7 +20,8 @@
             [ring.adapter.jetty9 :as j]
             [ring.util.response :as resp]
             [spec-tools.core :as st])
-  (:import java.time.Duration
+  (:import core2.api.TransactionInstant
+           java.time.Duration
            org.eclipse.jetty.server.Server))
 
 (defn- get-status [_req]
@@ -29,7 +31,7 @@
 (defn handle-tx [{:keys [node] :as req}]
   (-> (c2/submit-tx node (get-in req [:parameters :body]))
       (util/then-apply (fn [tx]
-                         {:status 200, :body (into {} tx)}))))
+                         {:status 200, :body tx}))))
 
 (s/def ::tx-id int?)
 
@@ -42,20 +44,12 @@
 
 
 (s/def ::default-valid-time inst?)
-
-(s/def ::tx
-  (st/spec (s/keys :req-un [(or ::tx-id ::tx-time)])
-           {:decode/map (fn [_ m]
-                          (c2/map->TransactionInstant m))
-            :decode/string (fn [_ s]
-                             (c2/map->TransactionInstant s))}))
-
-(s/def ::basis
-  (s/keys :opt-un [::default-valid-time ::tx]))
+(s/def ::tx #(instance? TransactionInstant %))
+(s/def ::basis (s/keys :opt-un [::default-valid-time ::tx]))
 
 (s/def ::basis-timeout
   (st/spec (s/nilable #(instance? Duration %))
-           {:decode/string (fn [_ s] (Duration/parse s))}))
+           {:decode/string (fn [_ s] (some-> s Duration/parse))}))
 
 (s/def ::query (s/merge ::d/query (s/keys :opt-un [::basis ::basis-timeout])))
 (s/def ::params (s/nilable (s/coll-of any? :kind vector?)))
@@ -75,6 +69,22 @@
 (defn- handle-muuntaja-decode-error [ex _req]
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.")}})
+
+(def tj-read-handlers
+  {"core2/duration" (transit/read-handler #(Duration/parse %))
+   "core2/tx-instant" (transit/read-handler c2/map->TransactionInstant)})
+
+(def tj-write-handlers
+  {Duration (transit/write-handler "core2/duration" str)
+   TransactionInstant (transit/write-handler "core2/tx-instant" #(into {} %))})
+
+(def ^:private muuntaja
+  (m/create (-> m/default-options
+                (m/select-formats #{"application/transit+json" "application/edn"})
+                (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
+                          tj-read-handlers)
+                (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
+                          tj-write-handlers))))
 
 (def router
   (http/router
@@ -105,12 +115,8 @@
             :swagger {:info {:title "Core2 API"}}
             :handler (r.swagger/create-swagger-handler)}}]]
 
-   {:data {:muuntaja m/instance
-           :coercion (rc.spec/create (-> rc.spec/default-options
-                                         (assoc-in [:transformers :body :default]
-                                                   (st/type-transformer
-                                                    st/strip-extra-keys-transformer
-                                                    st/string-transformer))))
+   {:data {:muuntaja muuntaja
+           :coercion rc.spec/coercion
            :interceptors [r.swagger/swagger-feature
                           (ri.parameters/parameters-interceptor)
                           (ri.muuntaja/format-interceptor)

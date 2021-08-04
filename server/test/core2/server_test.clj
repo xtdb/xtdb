@@ -5,7 +5,8 @@
             [core2.test-util :as tu]
             [hato.client :as hato]
             [juxt.clojars-mirrors.integrant.core :as ig]
-            [reitit.core :as r]))
+            [reitit.core :as r])
+  (:import java.time.Duration))
 
 (def ^:private ^:dynamic *port*)
 (def ^:private ^:dynamic *server*)
@@ -37,28 +38,34 @@
           (-> (r/match-by-name server/router endpoint)
               r/match->path)))
 
+(def transit-opts
+  {:decode {:handlers server/tj-read-handlers}
+   :encode {:handlers server/tj-write-handlers}})
+
 (defn submit-tx [tx-ops]
   (-> (hato/post (url-for :tx)
-                 {:accept :edn
-                  :as :clojure
-                  :content-type :edn
-                  :body (pr-str tx-ops)})
+                 {:accept :transit+json
+                  :as :transit+json
+                  :content-type :transit+json
+                  :form-params tx-ops
+                  :transit-opts transit-opts})
       :body))
 
 (defn query [q-body]
   (-> (hato/post (url-for :query)
-                 {:accept :edn
-                  :as :clojure
-                  :content-type :edn
-                  :body (pr-str q-body)})
+                 {:accept :transit+json
+                  :as :transit+json
+                  :content-type :transit+json
+                  :form-params q-body
+                  :transit-opts transit-opts})
       :body))
 
 (t/deftest test-simple-query
-  (let [tx {:tx-id 0, :tx-time #inst "2020-01-01"}]
+  (let [tx #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"}]
     (t/is (= tx (submit-tx [[:put {:_id "foo"}]])))
 
     (t/is (= [{:id "foo"}]
              (query {:query (-> '{:find [?id]
                                   :where [[?e :_id ?id]]}
                                 (assoc :basis {:tx tx}
-                                       :basis-timeout "PT1S"))})))))
+                                       :basis-timeout (Duration/ofSeconds 1)))})))))
