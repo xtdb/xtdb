@@ -21,17 +21,17 @@
 
     (t/is (= #{{:last-updated "tx2"}}
              (->> (c2/plan-query tu/*node*
-                                 '{:find [?last-updated]
-                                   :where [[?e :last-updated ?last-updated]]}
-                                 {:basis-tx !tx2})
+                                 (-> '{:find [?last-updated]
+                                       :where [[?e :last-updated ?last-updated]]}
+                                     (assoc :basis {:tx !tx2})))
                   (into #{}))))
 
     (t/is (= #{{:last-updated "tx1"}}
              (->> (c2/plan-query tu/*node*
-                                 '{:find [?last-updated]
-                                   :where [[?e :last-updated ?last-updated]]}
-                                 {:default-valid-time (:tx-time @!tx1)
-                                  :basis-tx !tx2})
+                                 (-> '{:find [?last-updated]
+                                       :where [[?e :last-updated ?last-updated]]}
+
+                                     (assoc :basis {:default-valid-time (:tx-time @!tx1), :tx !tx2})))
                   (into #{}))))
 
     (t/testing "at tx1"
@@ -41,9 +41,9 @@
 
       (t/is (= #{{:last-updated "tx1"}}
                (->> (c2/plan-query tu/*node*
-                                   '{:find [?last-updated]
-                                     :where [[?e :last-updated ?last-updated]]}
-                                   {:basis-tx !tx1})
+                                   (-> '{:find [?last-updated]
+                                         :where [[?e :last-updated ?last-updated]]}
+                                       (assoc :basis {:tx !tx1})))
                     (into #{})))))))
 
 (t/deftest test-valid-time

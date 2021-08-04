@@ -107,24 +107,21 @@ In Core2, the upper bound for the tx-time is applied per-source; the default upp
 ;; or, to read your own writes (timeout optional):
 ;; `plan-query` will await the transaction
 (->> (c2/plan-query node
-                    '{...}
-                    {:basis-tx tx,
-                     :basis-timeout (Duration/ofSeconds 1)})
+                    (-> '{:find ..., :where ...}
+                        (assoc :basis {:tx tx, :timeout (Duration/ofSeconds 1)})))
      (into []))
 ----
 
-The `plan-query` functions take the node, the query, optionally the basis-map, and then a variable number of params.
-
-Params are passed after the basis map if both are present:
+The `plan-query` functions take the node, the query, and then a variable number of params.
 
 [source,clojure]
 ----
 (->> (c2/plan-query tu/*node*
-                    '{:find [?e]
-                      :in [?first-name ?last-name]
-                      :where [[?e :first-name ?first-name]
-                              [?e :last-name ?last-name]]}
-                    {:basis-tx tx}
+                    (-> '{:find [?e]
+                          :in [?first-name ?last-name]
+                          :where [[?e :first-name ?first-name]
+                                  [?e :last-name ?last-name]]}
+                        (assoc :basis {:tx tx}))
                     "Ivan" "Ivanov")
      (into #{}))
 ----
@@ -135,26 +132,26 @@ Unlike Datomic, `$` shouldn't be included in `:in` - if/when we reinstate multip
 ----
 ;; something like this, anyway.
 (->> (c2/plan-query node
-                    '{:find [...]
-                      :where [[$db1 ...], [$db2 ...]]}
-                    {'$db1 {:basis-tx tx}
-                     '$db2 {:basis-tx tx}
-                     :basis-timeout (Duration/ofSeconds 1)})
+                    (-> '{:find [...]
+                          :where [[$db1 ...], [$db2 ...]]}
+                        (assoc :basis {'$db1 {:tx tx}
+                                       '$db2 {:tx tx}
+                                       :timeout (Duration/ofSeconds 1)})))
      (into []))
 ----
 
 `plan-query-async` is the same, except it runs entirely asynchronously and returns a `CompletableFuture` of the query plan.
 (In fact, `plan-query` just calls `plan-query-async` and deref's it.)
 
-The basis-opts can also contain a `:default-valid-time` option, which applies to any entities that don't specify other valid-time constraints.
+The basis map can also contain a `:default-valid-time` option, which applies to any entities that don't specify other valid-time constraints.
 This is for repeatable queries - it defaults to 'now' if not provided.
 
 [source,clojure]
 ----
 (->> (c2/plan-query node
-                    '{:find [?e ?name]
-                      :where [[?e :name ?name]]}
-                    {:default-valid-time #inst "..."})
+                    (-> '{:find [?e ?name]
+                          :where [[?e :name ?name]]}
+                        (assoc :basis {:default-valid-time #inst "..."})))
      (into []))
 ----
 

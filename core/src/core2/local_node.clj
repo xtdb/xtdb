@@ -34,14 +34,14 @@
   api/PClient
   (latest-completed-tx [_] (.latestCompletedTx indexer))
 
-  (-plan-query-async [_ query basis params]
-    (let [{:keys [default-valid-time basis-tx ^Duration basis-timeout],
-           :or {default-valid-time (Date.)}} basis]
-      (-> (snap/snapshot-async snapshot-factory basis-tx)
-          (cond-> basis-timeout (.orTimeout (.toMillis basis-timeout) TimeUnit/MILLISECONDS))
+  (plan-query-async [_ query params]
+    (let [{:keys [default-valid-time tx ^Duration timeout], :or {default-valid-time (Date.)}} (:basis query)]
+      (-> (snap/snapshot-async snapshot-factory tx)
+          (cond-> timeout (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))
           (util/then-apply
             (fn [db]
-              (let [{:keys [query srcs]} (d/compile-query query params)]
+              (let [{:keys [query srcs]} (-> (dissoc query :basis)
+                                             (d/compile-query params))]
                 (op/plan-ra query (merge srcs {'$ db}) {:default-valid-time default-valid-time})))))))
 
   PNode
