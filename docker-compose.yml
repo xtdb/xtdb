@@ -1,5 +1,10 @@
 version: '2'
 services:
+  core2:
+    build: .
+    ports:
+      - "3000:3000"
+
   postgres:
     image: postgres:13.2
     ports:
