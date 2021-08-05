@@ -88,7 +88,7 @@
                                          (for [v (cc/vectorize-value v)
                                                :when (string? v)]
                                            [a v]))))
-            :let [id-str (l/->hash-str (l/->DocumentId e a v))
+            :let [id-str (l/->hash-str {:e e :a a :v v})
                   doc (doto (Document.)
                         ;; To search for triples by e-a-v for deduping
                         (.add (StringField. l/field-crux-id, id-str, Field$Store/NO))
@@ -208,7 +208,7 @@
                                        :when (string? v)]
                                    [a v]))))
             :when (contains? #{:product/title :product/description} a) ;; example - don't index all attributes
-            :let [id-str (l/->hash-str (l/->DocumentId e a v))
+            :let [id-str (l/->hash-str {:e e :a a :v v})
                   doc (doto (Document.)
                         ;; To search for triples by e-a-v for deduping
                         (.add (StringField. l/field-crux-id, id-str, Field$Store/NO))
