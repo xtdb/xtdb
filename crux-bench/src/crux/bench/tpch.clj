@@ -1,6 +1,5 @@
 (ns crux.bench.tpch
-  (:require [clojure.java.io :as io]
-            [crux.api :as crux]
+  (:require [crux.api :as crux]
             [crux.bench :as bench]
             [crux.fixtures.tpch :as tpch]))
 
@@ -13,6 +12,14 @@
                     (if (= 0.01 scale-factor)
                       (tpch/validate-tpch-query actual (tpch/parse-tpch-result n))
                       (boolean actual))))))
+
+(defn run-tpch-ingest-only [node {:keys [scale-factor], :or {scale-factor 0.01}}]
+  (bench/with-bench-ns :tpch-ingest-only
+    (bench/with-crux-dimensions
+      (bench/run-bench :ingest
+                       (bench/with-additional-index-metrics node
+                         (tpch/load-docs! node scale-factor tpch/tpch-entity->pkey-doc)
+                         {:success true})))))
 
 (defn run-tpch [node {:keys [scale-factor] :as opts}]
   (let [{:keys [scale-factor] :as opts} (assoc opts :scale-factor (or scale-factor 0.01))]

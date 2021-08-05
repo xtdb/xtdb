@@ -20,6 +20,7 @@
                  [pro.juxt.crux/crux-kafka-embedded]
                  [pro.juxt.crux/crux-rocksdb]
                  [pro.juxt.crux/crux-lmdb]
+                 [pro.juxt.crux/crux-lucene]
                  [pro.juxt.crux/crux-metrics]
                  [pro.juxt.crux-labs/crux-rdf]
                  [pro.juxt.crux/crux-test]

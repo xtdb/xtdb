@@ -225,6 +225,15 @@
       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
+   "rocksdb-lucene"
+   (fn [data-dir]
+     {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :crux.lucene/lucene-store {:db-dir (io/file data-dir "lucene")}
+
+      :crux.metrics.cloudwatch/reporter cw-reporter-opts})
+
    "standalone-rocksdb-with-metrics"
    (fn [data-dir]
      {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}

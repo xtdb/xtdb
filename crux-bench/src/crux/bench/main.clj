@@ -41,18 +41,25 @@
                      (bench/with-comparison-times)
                      (doto post-to-slack)))))
 
-   :tpch-stress (fn [nodes {:keys [tpch-query-count tpch-field-count] :as opts}]
+   :tpch-stress (fn [nodes {:keys [tpch-query-count tpch-field-count]}]
                   (bench/with-nodes [node nodes]
                     (-> (bench/with-comparison-times
                           (tpch-stress/run-tpch-stress-test node {:query-count tpch-query-count
                                                                   :field-count tpch-field-count}))
                         (doto post-to-slack))))
 
-   :tpch (fn [nodes {:keys [tpch-scale-factor] :as opts}]
+   :tpch (fn [nodes {:keys [tpch-scale-factor]}]
            (bench/with-nodes [node nodes]
              (-> (bench/with-comparison-times
                    (tpch/run-tpch node {:scale-factor tpch-scale-factor}))
                  (doto post-to-slack))))
+
+   :tpch-ingest (fn [_nodes {:keys [tpch-scale-factor]}]
+                  (bench/with-nodes [node (select-keys bench/nodes ["rocksdb-lucene"])]
+                    (-> (bench/with-comparison-times
+                          (tpch/run-tpch-ingest-only node {:scale-factor tpch-scale-factor}))
+                        (doto post-to-slack))))
+
    :lmdb-tpch (fn [_ _]
                 (bench/with-nodes [node (select-keys bench/nodes ["standalone-lmdb" "kafka-lmdb"])]
                   (-> (bench/with-comparison-times
@@ -64,7 +71,7 @@
         (cli/parse-opts args
                         [[nil "--nodes node1,node2" "Node types"
                           :id :selected-nodes
-                          :default (set (keys (dissoc bench/nodes "standalone-lmdb" "kafka-lmdb")))
+                          :default (set (keys (dissoc bench/nodes "standalone-lmdb" "kafka-lmdb" "rocksdb-lucene")))
                           :parse-fn #(set (string/split % #","))]
 
                          [nil "--tests test1,test2" "Tests to run"
