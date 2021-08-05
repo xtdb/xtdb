@@ -31,6 +31,8 @@
 
                  [pro.juxt.clojars-mirrors.integrant/integrant "0.8.0"]]
 
+  :java-source-paths ["src"]
+
   :profiles {:dev [:test]
              :test {:dependencies [[pro.juxt.crux-labs/core2-datasets]
                                    [cheshire]
@@ -43,14 +45,6 @@
                    :timescale :timescale}
 
   :aot [core2.main]
-
-  :java-source-paths ["src"]
-
-  :javac-options ["-source" "11" "-target" "11"
-                  "-XDignore.symbol.file"
-                  "-Xlint:all,-options,-path"
-                  "-Werror"
-                  "-proc:none"]
 
   :classifiers {:sources {:prep-tasks ^:replace []}
                 :javadoc {:prep-tasks ^:replace []

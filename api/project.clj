@@ -10,8 +10,9 @@
                              :license :url :pom-addition
                              :javac-options]}
 
-
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure]
-                 [com.cognitect/transit-clj nil :scope "provided"]])
+                 [com.cognitect/transit-clj nil :scope "provided"]]
+
+  :java-source-paths ["src"])

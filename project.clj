@@ -91,6 +91,14 @@
              #_"-Darrow.memory.debug.allocator=true"
              #_"-Darrow.enable_unsafe_memory_access=true"]
 
+  :java-source-paths ["src"]
+
+  :javac-options ["-source" "11" "-target" "11"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
+
   :global-vars {*warn-on-reflection* true}
 
   :pom-addition ([:developers
