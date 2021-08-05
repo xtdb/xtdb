@@ -32,8 +32,6 @@
                  !system
                  close-fn]
   api/PClient
-  (latest-completed-tx [_] (.latestCompletedTx indexer))
-
   (plan-query-async [_ query params]
     (let [{:keys [basis ^Duration basis-timeout]} query
           {:keys [default-valid-time tx], :or {default-valid-time (Date.)}} basis]
@@ -54,7 +52,7 @@
                              (.awaitTxAsync indexer tx)))))
 
   api/PStatus
-  (status [_] {})
+  (status [_] {:latest-completed-tx (.latestCompletedTx indexer)})
 
   api/PSubmitNode
   (submit-tx [_ tx-ops]

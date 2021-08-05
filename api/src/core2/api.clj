@@ -12,8 +12,6 @@
   (.write w (str "#core2/tx-instant " (select-keys tx-instant [:tx-id :tx-time]))))
 
 (defprotocol PClient
-  (latest-completed-tx ^core2.api.TransactionInstant [node])
-
   ;; we may want to go to `open-query-async`/`Stream` instead, when we have a Java API
   (plan-query-async ^java.util.concurrent.CompletableFuture [node query params]))
 
@@ -40,8 +38,4 @@
            :description "Submits a transaction to the cluster"}]
 
    ["/query" {:name :query
-              :summary "Query"}]
-
-   ["/latest-completed-tx" {:name :latest-completed-tx
-                            :summary "Latest completed transaction"
-                            :description "Get the latest transaction to have been indexed by this node"}]])
+              :summary "Query"}]])

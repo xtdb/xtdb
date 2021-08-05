@@ -1,6 +1,7 @@
 (ns core2.test-util
   (:require [cheshire.core :as json]
             [clojure.test :as t]
+            [core2.api :as c2]
             [core2.json :as c2-json]
             [core2.local-node :as node]
             core2.object-store
@@ -61,6 +62,9 @@
   (^core2.api.TransactionInstant [tx node ^Duration timeout]
    @(-> (node/await-tx-async node tx)
         (.orTimeout (.toMillis timeout) TimeUnit/MILLISECONDS))))
+
+(defn latest-completed-tx ^core2.api.TransactionInstant [node]
+  (:latest-completed-tx (c2/status node)))
 
 (defn ^java.time.Clock ->mock-clock
   ([]

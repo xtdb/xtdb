@@ -20,14 +20,14 @@
 
       (with-open [node (tu/->local-node {:node-dir node-dir})]
         (binding [*node* node]
-          (t/is (nil? (c2/latest-completed-tx node)))
+          (t/is (nil? (tu/latest-completed-tx node)))
 
           (let [^IMetadataManager mm (::meta/metadata-manager @(:!system node))
                 last-tx-instant (tsd/submit-ts-devices node {:size :small})]
 
             (log/info "transactions submitted, last tx" (pr-str last-tx-instant))
             (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofMinutes 15))))
-            (t/is (= last-tx-instant (c2/latest-completed-tx node)))
+            (t/is (= last-tx-instant (tu/latest-completed-tx node)))
             (tu/finish-chunk node)
 
             (t/is (= [last-tx-instant (dec 1001000)]

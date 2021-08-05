@@ -44,12 +44,6 @@
                             (reduce [_ f init]
                               (reduce f init (:body resp))))))))))
 
-  (latest-completed-tx [client]
-    (-> (hato/get (url-for client :latest-completed-tx)
-                  {:accept :transit+json
-                   :as :transit+json})
-        :body))
-
   c2/PSubmitNode
   (submit-tx [client tx-ops]
     (-> ^CompletableFuture

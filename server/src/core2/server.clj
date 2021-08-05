@@ -88,10 +88,7 @@
                :parameters {:body vector?}}}
 
    :query {:post {:handler #(handle-query %)
-                  :parameters {:body ::query-body}}}
-
-   :latest-completed-tx {:get {:handler (fn [{:keys [node]}]
-                                          (resp/response (into {} (c2/latest-completed-tx node))))}}})
+                  :parameters {:body ::query-body}}}})
 
 (def router
   (http/router c2/http-routes
