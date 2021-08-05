@@ -15,4 +15,6 @@
                  [hato]
                  [com.cognitect/transit-clj]]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux-labs/core2-server]]}})
+  :profiles {:test {:dependencies [[pro.juxt.crux-labs/core2-core]
+                                   [pro.juxt.crux-labs/core2-server]
+                                   [cheshire]]}})

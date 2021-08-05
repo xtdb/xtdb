@@ -7,6 +7,9 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.time.Duration))
 
+(defmethod ig/init-key ::clock [_ _]
+  (tu/->mock-clock))
+
 (defn- with-client [f]
   (let [port (tu/free-port)
         sys (-> {:core2/server {:node tu/*node*, :port port}}
@@ -18,9 +21,6 @@
         (f))
       (finally
         (ig/halt! sys)))))
-
-(defmethod ig/init-key ::clock [_ _]
-  (tu/->mock-clock))
 
 (t/use-fixtures :each
   (tu/with-opts {::clock {}
