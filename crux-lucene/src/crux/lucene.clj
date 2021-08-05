@@ -53,10 +53,11 @@
       (throw (IllegalStateException. (format "Lucene index structure out of date - please remove the Lucene dir and re-index. (expected: %d, actual: %s)"
                                              index-version found-index-version))))))
 
-(defn- ^IndexWriter ->index-writer [{:keys [directory analyzer index-deletion-policy]}]
+(defn- ^IndexWriter ->index-writer [{:keys [directory analyzer index-deletion-policy ram-buffer-size-mb]}]
   (doto (IndexWriter. directory,
                       (cond-> (IndexWriterConfig. analyzer)
-                        index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy))))
+                        index-deletion-policy (doto (.setIndexDeletionPolicy index-deletion-policy))
+                        ram-buffer-size-mb (doto (.setRAMBufferSizeMB ^Double ram-buffer-size-mb))))
     (validate-index-version)))
 
 (defn- user-data->tx-id [user-data]
@@ -320,7 +321,9 @@
                         :spec ::sys/path}
                :fsync-frequency {:required? true
                                  :spec ::sys/duration
-                                 :default "PT5M"}}
+                                 :default "PT5M"}
+               :index-writer-ram-buffer-size-mb {:doc "RAM buffer size for the IndexWriter, default is ~16MB"
+                                                 :spec ::sys/double}}
    ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer
@@ -328,12 +331,13 @@
                :secondary-indices :crux/secondary-indices
                :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer fsync-frequency] :as opts}]
+  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer fsync-frequency index-writer-ram-buffer-size-mb] :as opts}]
   (let [directory (if db-dir
                     (FSDirectory/open db-dir)
                     (ByteBuffersDirectory.))
         index-writer (->index-writer {:directory directory, :analyzer analyzer,
-                                      :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))})
+                                      :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))
+                                      :ram-buffer-size-mb index-writer-ram-buffer-size-mb})
         searcher-manager (SearcherManager. index-writer false false nil)
         cp-job (when checkpointer
                  (cp/start checkpointer (checkpoint-src index-writer) {::cp/cp-format "lucene-8"}))
