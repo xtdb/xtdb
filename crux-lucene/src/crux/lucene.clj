@@ -111,7 +111,7 @@
   "Lazily search a crux-lucene index in its raw form, without temporal filtering.
 
   query   Either an unparsed query string or an `org.apache.lucene.search.Query`
-  opts    (optional map)   
+  opts    (optional map)
           - `:lucene-store-k` (Keyword):
               Run the search against specified module key (defaults to `:crux.lucene/lucene-store` when not specified)
 
@@ -289,15 +289,20 @@
             (finally
               (.release snapshotter snapshot))))))))
 
-(defn- fsync-loop [^IndexWriter index-writer ^Duration fsync-frequency]
+(defn fsync [{:keys [^IndexWriter index-writer ^SearcherManager searcher-manager]}]
+  (log/debug "Committing Lucene IndexWriter...")
+  (.commit index-writer)
+  (log/debug "Committed Lucene IndexWriter.")
+
+  (.maybeRefresh searcher-manager))
+
+(defn- fsync-loop [deps ^Duration fsync-frequency]
   (log/debug "Starting Lucene fsync-loop...")
   (try
     (while true
       (try
         (Thread/sleep (.toMillis fsync-frequency))
-        (log/debug "Committing Lucene IndexWriter...")
-        (.commit index-writer)
-        (log/debug "Committed Lucene IndexWriter.")
+        (fsync deps)
 
         (catch InterruptedException e
           (throw e))
@@ -313,7 +318,11 @@
                         :spec ::sys/path}
                :fsync-frequency {:required? true
                                  :spec ::sys/duration
-                                 :default "PT5M"}}
+                                 :default "PT5M"}
+               :disable-refresh? {:required? true
+                                  :default false
+                                  :doc "Disable synchronous maybeRefreshBlocking calls during ingestion at the cost of full consistency with the main KV index-store. These calls can have a dramatic, negative ingestion performance impact when replaying small transactions."
+                                  :spec ::sys/boolean}}
    ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer
@@ -321,13 +330,15 @@
                :secondary-indices :crux/secondary-indices
                :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer fsync-frequency] :as opts}]
+  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer
+           fsync-frequency disable-refresh?]
+    :as opts}]
   (let [directory (if db-dir
                     (FSDirectory/open db-dir)
                     (ByteBuffersDirectory.))
         index-writer (->index-writer {:directory directory, :analyzer analyzer,
                                       :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))})
-        searcher-manager (SearcherManager. index-writer false false nil)
+        searcher-manager (SearcherManager. index-writer true false nil)
         cp-job (when checkpointer
                  (cp/start checkpointer (checkpoint-src index-writer) {::cp/cp-format "lucene-8"}))
         lucene-store (LuceneNode. directory analyzer
@@ -335,7 +346,7 @@
                                   indexer
                                   cp-job
                                   (doto (.newThread (cio/thread-factory "crux-lucene-fsync")
-                                                    #(fsync-loop index-writer fsync-frequency))
+                                                    #(fsync-loop {:index-writer index-writer, :searcher-manager searcher-manager} fsync-frequency))
                                     (.start)))]
 
     ;; Ensure lucene index exists for immediate queries:
@@ -356,6 +367,7 @@
 
                           (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
                                                             "crux.lucene/index-version" (str index-version)})
-                          (.maybeRefreshBlocking searcher-manager)))
+                          (when-not disable-refresh?
+                            (.maybeRefreshBlocking searcher-manager))))
 
     lucene-store))
