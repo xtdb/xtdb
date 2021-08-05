@@ -21,6 +21,9 @@
   (submit-tx
     ^java.util.concurrent.CompletableFuture #_<TransactionInstant> [node tx-ops]))
 
+(defprotocol PStatus
+  (status [node]))
+
 (defn plan-query [node query & params]
   (try
     @(plan-query-async node query params)

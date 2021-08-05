@@ -53,6 +53,9 @@
         (util/then-compose (fn [tx]
                              (.awaitTxAsync indexer tx)))))
 
+  api/PStatus
+  (status [_] {})
+
   api/PSubmitNode
   (submit-tx [_ tx-ops]
     (.submitTx tx-producer tx-ops))

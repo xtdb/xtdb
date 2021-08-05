@@ -1,7 +1,6 @@
 (ns core2.test-util
   (:require [cheshire.core :as json]
             [clojure.test :as t]
-            [core2.api :as c2]
             [core2.json :as c2-json]
             [core2.local-node :as node]
             core2.object-store

@@ -65,6 +65,13 @@
                       (apply [_ resp]
                         (:body resp))))))
 
+  c2/PStatus
+  (status [client]
+    (-> (hato/get (url-for client :status)
+                  {:accept :transit+json
+                   :as :transit+json})
+        :body))
+
   AutoCloseable
   (close [_]))
 

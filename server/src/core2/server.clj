@@ -25,9 +25,9 @@
            java.time.Duration
            org.eclipse.jetty.server.Server))
 
-(defn- get-status [_req]
+(defn- handle-status [{:keys [node] :as _req}]
   ;; TODO currently empty to pass healthcheck, we'll want something more later.
-  {:status 200, :body {}})
+  {:status 200, :body (c2/status node)})
 
 (defn handle-tx [{:keys [node] :as req}]
   (-> (c2/submit-tx node (get-in req [:parameters :body]))
@@ -80,7 +80,7 @@
                           c2.transit/tj-write-handlers))))
 
 (def handlers
-  {:status {:get #(get-status %)}
+  {:status {:get #(handle-status %)}
 
    :tx {:post {:handler #(handle-tx %)
                ;; TODO spec-tools doesn't handle multi-spec with a vector,
