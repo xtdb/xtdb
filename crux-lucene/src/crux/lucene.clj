@@ -225,7 +225,12 @@
 
   (index! [_ index-writer docs]
     (let [k-str-bufs (->> (into #{} (mapcat keys) (vals docs))
-                          (into {} (map (juxt identity keyword->k))))]
+                          (into {} (map (juxt identity keyword->k))))
+          ldoc (Document.)
+          sf1 (StringField. field-crux-id "" Field$Store/NO)
+          tf2 (TextField. field-crux-val "" Field$Store/YES)
+          sf2 (StringField. field-crux-eid "" Field$Store/NO)
+          sf3 (StringField. field-crux-attr "" Field$Store/YES)]
      (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
              :let [e-str (->hash-str e)]
              [a v] (->> (dissoc crux-doc :crux.db/id)
@@ -233,20 +238,26 @@
                                   (for [v (cc/vectorize-value v)
                                         :when (string? v)]
                                     [a v]))))
-             :let [k-str (get k-str-bufs a)
+             :let [k-str ^String (get k-str-bufs a)
                    id-str (str e-str k-str v)
-                   doc (doto (Document.)
+                   doc (doto ldoc
                          ;; To search for triples by e-a-v for deduping
-                         (.add (StringField. field-crux-id, id-str, Field$Store/NO))
+                         (.add (doto sf1 (.setStringValue id-str)))
                          ;; The actual term, which will be tokenized
-                         (.add (TextField. k-str, v, Field$Store/YES))
+                         (.add (TextField. k-str, v, Field$Store/YES)) ; tf1
                          ;; Used for wildcard searches
-                         (.add (TextField. field-crux-val, v, Field$Store/YES))
+                         (.add (doto tf2 (.setStringValue v)))
                          ;; Used for eviction
-                         (.add (StringField. field-crux-eid, e-str, Field$Store/NO))
+                         (.add (doto sf2 (.setStringValue e-str)))
                          ;; Used for wildcard searches
-                         (.add (StringField. field-crux-attr, ^String k-str, Field$Store/YES)))]]
-       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc))))
+                         (.add (doto sf3 (.setStringValue k-str))))]]
+       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)
+       (doto ldoc
+         (.removeFields field-crux-id)
+         (.removeFields k-str)
+         (.removeFields field-crux-val)
+         (.removeFields field-crux-eid)
+         (.removeFields field-crux-attr)))))
 
   (evict! [_ index-writer eids]
     (let [qs (for [eid eids]
