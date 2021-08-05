@@ -323,11 +323,12 @@
                         :spec ::sys/path}
                :fsync-frequency {:required? true
                                  :spec ::sys/duration
-                                 :default "PT5M"}
+                                 :default "PT5M"
+                                 :doc "Approx. time between IO-intensive Lucene `.commit` operations."}
                :disable-refresh? {:required? true
+                                  :spec ::sys/boolean
                                   :default false
-                                  :doc "Disable synchronous maybeRefreshBlocking calls during ingestion at the cost of full consistency with the main KV index-store. These calls can have a dramatic, negative ingestion performance impact when replaying small transactions."
-                                  :spec ::sys/boolean}}
+                                  :doc "Disable synchronous maybeRefreshBlocking calls during ingestion at the cost of full consistency with the main KV index-store. These calls can have a dramatic, negative ingestion performance impact when replaying small transactions."}}
    ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer

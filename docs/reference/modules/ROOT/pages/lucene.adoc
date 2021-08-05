@@ -67,6 +67,12 @@ EDN::
 ----
 ====
 
+== Parameters
+
+* `db-dir` (string/`File`/`Path`): Path to Lucene data directory
+* `fsync-frequency` (string/`Integer`/`Duration`): Approx. time between IO-intensive Lucene `.commit` operations
+* `disable-refresh?` (boolean, default false): Disable synchronous maybeRefreshBlocking calls during ingestion at the cost of full consistency with the main KV index-store. These calls can have a dramatic, negative ingestion performance impact when replaying small transactions
+
 == Indexing
 
 All top-level text fields in a document are automatically indexed.
