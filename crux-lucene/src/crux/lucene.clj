@@ -35,8 +35,6 @@
 (defn ^String ->hash-str [eid]
   (str (cc/new-id eid)))
 
-(defrecord DocumentId [e a v])
-
 (defn ^String keyword->k [k]
   (subs (str k) 1))
 
@@ -225,25 +223,29 @@
   LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
-            [a v] (->> (dissoc crux-doc :crux.db/id)
-                       (mapcat (fn [[a v]]
-                                 (for [v (cc/vectorize-value v)
-                                       :when (string? v)]
-                                   [a v]))))
-            :let [id-str (->hash-str (->DocumentId e a v))
-                  doc (doto (Document.)
-                        ;; To search for triples by e-a-v for deduping
-                        (.add (StringField. field-crux-id, id-str, Field$Store/NO))
-                        ;; The actual term, which will be tokenized
-                        (.add (TextField. (keyword->k a), v, Field$Store/YES))
-                        ;; Used for wildcard searches
-                        (.add (TextField. field-crux-val, v, Field$Store/YES))
-                        ;; Used for eviction
-                        (.add (StringField. field-crux-eid, (->hash-str e), Field$Store/NO))
-                        ;; Used for wildcard searches
-                        (.add (StringField. field-crux-attr, (keyword->k a), Field$Store/YES)))]]
-      (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
+    (let [k-str-bufs (->> (into #{} (mapcat keys) (vals docs))
+                          (into {} (map (juxt identity keyword->k))))]
+     (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
+             :let [e-str (->hash-str e)]
+             [a v] (->> (dissoc crux-doc :crux.db/id)
+                        (mapcat (fn [[a v]]
+                                  (for [v (cc/vectorize-value v)
+                                        :when (string? v)]
+                                    [a v]))))
+             :let [k-str (get k-str-bufs a)
+                   id-str (str e-str k-str v)
+                   doc (doto (Document.)
+                         ;; To search for triples by e-a-v for deduping
+                         (.add (StringField. field-crux-id, id-str, Field$Store/NO))
+                         ;; The actual term, which will be tokenized
+                         (.add (TextField. k-str, v, Field$Store/YES))
+                         ;; Used for wildcard searches
+                         (.add (TextField. field-crux-val, v, Field$Store/YES))
+                         ;; Used for eviction
+                         (.add (StringField. field-crux-eid, e-str, Field$Store/NO))
+                         ;; Used for wildcard searches
+                         (.add (StringField. field-crux-attr, ^String k-str, Field$Store/YES)))]]
+       (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc))))
 
   (evict! [_ index-writer eids]
     (let [qs (for [eid eids]
