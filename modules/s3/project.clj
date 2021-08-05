@@ -16,4 +16,9 @@
 
   :dependencies [[pro.juxt.crux-labs/core2-api]
                  [pro.juxt.crux-labs/core2-core]
-                 [software.amazon.awssdk/s3]])
+                 [software.amazon.awssdk/s3]
+
+                 [cheshire nil :scope "test"]]
+
+  :test-selectors {:default (complement :s3)
+                   :s3 :s3})

@@ -18,6 +18,9 @@
                  [com.zaxxer/HikariCP "4.0.3"]
                  [org.postgresql/postgresql "42.2.20" :scope "provided"]]
 
-  :profiles {:dev [:test]
-             :test {:dependencies [[org.clojure/data.csv "1.0.0"]
-                                   [cheshire "5.10.0"]]}})
+  :profiles {:test {:dependencies [[org.clojure/data.csv "1.0.0"]
+
+                                   [cheshire]]}}
+
+  :test-selectors {:default (complement :requires-docker)
+                   :with-docker :requires-docker})

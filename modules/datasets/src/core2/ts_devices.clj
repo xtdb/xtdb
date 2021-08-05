@@ -5,7 +5,6 @@
             [clojure.string :as str]
             [core2.api :as c2]
             [core2.snapshot :as snap]
-            [core2.test-util :as tu]
             [core2.operator :as op])
   (:import java.util.zip.GZIPInputStream))
 
@@ -135,6 +134,8 @@
                                      (= model "focus"))}]]]]]]])
 
 (comment
+  (require '[core2.test-util :as tu])
+
   (time
    (let [db (snap/snapshot (tu/component dev/node ::snap/snapshot-factory))]
      (into [] (op/plan-ra query-recent-battery-temperatures db)))))

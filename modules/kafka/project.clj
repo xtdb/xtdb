@@ -15,4 +15,7 @@
                  [pro.juxt.crux-labs/core2-core]
                  [org.apache.kafka/kafka-clients "2.8.0"]]
 
-  :profiles {:test {:dependencies [[cheshire]]}})
+  :profiles {:test {:dependencies [[cheshire]]}}
+
+  :test-selectors {:default (complement :requires-docker)
+                   :with-docker :requires-docker})

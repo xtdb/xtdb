@@ -8,7 +8,7 @@
             [core2.operator :as op])
   (:import java.util.UUID))
 
-(t/deftest ^:kafka test-kafka
+(t/deftest ^:requires-docker test-kafka
   (let [topic-name (str "core2.kafka-test." (UUID/randomUUID))]
     (with-open [node (node/start-node {::k/log {:topic-name topic-name}})]
       (let [tx (c2/submit-tx node [[:put {:_id "foo"}]])

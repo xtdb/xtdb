@@ -58,7 +58,8 @@
 (defmacro def-obj-store-tests [sym [binding] & body]
   `(do
      ~@(for [test-name (keys os-tests)]
-         `(t/deftest ~(symbol (str sym "-" test-name))
+         `(t/deftest ~(-> (symbol (str sym "-" test-name))
+                          (with-meta (meta sym)))
             (let [~binding (get os-tests '~test-name)]
               ~@body)))
      '~sym))

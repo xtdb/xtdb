@@ -5,7 +5,9 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import java.util.UUID))
 
-(def bucket (System/getProperty "core2.s3-test.bucket"))
+(def bucket
+  (or (System/getProperty "core2.s3-test.bucket")
+      "crux-s3-test"))
 
 (def ^:dynamic *obj-store*)
 
@@ -22,5 +24,5 @@
           (finally
             (ig/halt! sys)))))))
 
-(os-test/def-obj-store-tests s3 [f]
+(os-test/def-obj-store-tests ^:s3 s3 [f]
   (f *obj-store*))

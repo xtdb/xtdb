@@ -167,8 +167,6 @@ First time:
 - `(dev)`
 - `(go)`
 - `node` is then bound to a started node, using `dev/dev-node` as a persistent data directory
-- `lein test` to run unit tests, `lein test :integration` to run integration tests
-- To attach YourKit, `lein run with-profile +attach-yourkit repl :headless` (assumes YourKit in `/opt/yourkit` as installed by the AUR)
 
 === Links
 
@@ -176,6 +174,18 @@ First time:
 - https://app.circleci.com/pipelines/github/juxt/crux-rnd[Continuous Integration (CircleCI)]
 - link:bibliography.org[bibliography.org] - a list of light bedtime reading.
 
+=== Testing
+
+* Can test individual modules by `lein test`
+* Test all with `./lein-sub test`; `./lein-sub test :integration` for longer tests
+* Some tests have external dependencies which require `docker-compose`:
+  * `docker-compose up` (`docker-compose up <postgres|kafka>` etc for individual containers),
+  * `lein test :with-docker` / `./lein-sub test :with-docker`
+  * `docker-compose down`
+
+=== Profiling
+
+To attach YourKit, `lein run with-profile +attach-yourkit repl :headless` (assumes YourKit in `/opt/yourkit` as installed by the AUR)
 
 === Building Core2
 
