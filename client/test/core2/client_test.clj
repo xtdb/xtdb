@@ -33,8 +33,9 @@
     (t/is (= #core2/tx-instant {:tx-id 0, :tx-time #inst "2020-01-01"} @!tx))
 
     (t/is (= [{:id "foo"}]
-             (->> (c2/plan-query tu/*node* (-> '{:find [?id]
-                                                 :where [[?e :_id ?id]]}
-                                               (assoc :basis {:tx !tx}
-                                                      :basis-timeout (Duration/ofSeconds 1))))
+             (->> (c2/plan-query tu/*node*
+                                 (-> '{:find [?id]
+                                       :where [[?e :_id ?id]]}
+                                     (assoc :basis {:tx !tx}
+                                            :basis-timeout (Duration/ofSeconds 1))))
                   (into []))))))

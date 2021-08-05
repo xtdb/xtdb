@@ -1,8 +1,9 @@
 (ns core2.server-test
   (:require [clojure.test :as t]
+            [core2.api :as c2]
             [core2.log :as log]
-            [core2.server :as server]
             [core2.test-util :as tu]
+            [core2.transit :as c2.transit]
             [hato.client :as hato]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [reitit.core :as r])
@@ -35,12 +36,12 @@
 (defn url-for [endpoint]
   (format "http://localhost:%d%s"
           *port*
-          (-> (r/match-by-name server/router endpoint)
+          (-> (r/match-by-name (r/router c2/http-routes) endpoint)
               r/match->path)))
 
 (def transit-opts
-  {:decode {:handlers server/tj-read-handlers}
-   :encode {:handlers server/tj-write-handlers}})
+  {:decode {:handlers c2.transit/tj-read-handlers}
+   :encode {:handlers c2.transit/tj-write-handlers}})
 
 (defn submit-tx [tx-ops]
   (-> (hato/post (url-for :tx)

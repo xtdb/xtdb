@@ -26,3 +26,19 @@
     @(plan-query-async node query params)
     (catch ExecutionException e
       (throw (.getCause e)))))
+
+(def http-routes
+  [["/status" {:name :status
+               :summary "Status"
+               :description "Get status information from the node"}]
+
+   ["/tx" {:name :tx
+           :summary "Transaction"
+           :description "Submits a transaction to the cluster"}]
+
+   ["/query" {:name :query
+              :summary "Query"}]
+
+   ["/latest-completed-tx" {:name :latest-completed-tx
+                            :summary "Latest completed transaction"
+                            :description "Get the latest transaction to have been indexed by this node"}]])

@@ -2,10 +2,10 @@
   (:require [clojure.instant :as inst]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [cognitect.transit :as transit]
             [core2.api :as c2]
             [core2.datalog :as d]
             [core2.local-node :as node]
+            [core2.transit :as c2.transit]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
@@ -19,7 +19,8 @@
             [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
             [ring.util.response :as resp]
-            [spec-tools.core :as st])
+            [spec-tools.core :as st]
+            [reitit.core :as r])
   (:import core2.api.TransactionInstant
            java.time.Duration
            org.eclipse.jetty.server.Server))
@@ -70,64 +71,48 @@
   {:status 400
    :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.")}})
 
-(def tj-read-handlers
-  {"core2/duration" (transit/read-handler #(Duration/parse %))
-   "core2/tx-instant" (transit/read-handler c2/map->TransactionInstant)})
-
-(def tj-write-handlers
-  {Duration (transit/write-handler "core2/duration" str)
-   TransactionInstant (transit/write-handler "core2/tx-instant" #(into {} %))})
-
 (def ^:private muuntaja
   (m/create (-> m/default-options
                 (m/select-formats #{"application/transit+json" "application/edn"})
                 (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
-                          tj-read-handlers)
+                          c2.transit/tj-read-handlers)
                 (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
-                          tj-write-handlers))))
+                          c2.transit/tj-write-handlers))))
+
+(def handlers
+  {:status {:get #(get-status %)}
+
+   :tx {:post {:handler #(handle-tx %)
+               ;; TODO spec-tools doesn't handle multi-spec with a vector,
+               ;; so we just check for vector and then conform later.
+               :parameters {:body vector?}}}
+
+   :query {:post {:handler #(handle-query %)
+                  :parameters {:body ::query-body}}}
+
+   :latest-completed-tx {:get {:handler (fn [{:keys [node]}]
+                                          (resp/response (into {} (c2/latest-completed-tx node))))}}})
 
 (def router
-  (http/router
-   [["/status" {:summary "Status"
-                :description "Get status information from the node"
-                :get #(get-status %)}]
+  (http/router c2/http-routes
+               {:expand (fn [{route-name :name, :as route} opts]
+                          (r/expand (cond-> route
+                                      route-name (merge (get handlers route-name)))
+                                    opts))
 
-    ["/tx" {:name :tx
-            :summary "Transaction"
-            :description "Submits a transaction to the cluster"
-            :post #(handle-tx %)
-            ;; TODO spec-tools doesn't handle multi-spec with a vector,
-            ;; so we just check for vector and then conform later.
-            :parameters {:body vector?}}]
+                :data {:muuntaja muuntaja
+                       :coercion rc.spec/coercion
+                       :interceptors [r.swagger/swagger-feature
+                                      (ri.parameters/parameters-interceptor)
+                                      (ri.muuntaja/format-interceptor)
+                                      (ri.exception/exception-interceptor
+                                       (merge ri.exception/default-handlers
+                                              {core2.IllegalArgumentException handle-ex-info
+                                               :muuntaja/decode handle-muuntaja-decode-error}))
 
-    ["/query" {:name :query
-               :summary "Query"
-               :post {:handler #(handle-query %)
-                      :parameters {:body ::query-body}}}]
-
-    ["/latest-completed-tx" {:get (fn [{:keys [node]}]
-                                    (resp/response (into {} (c2/latest-completed-tx node))))
-                             :summary "Latest completed transaction"
-                             :description "Get the latest transaction to have been indexed by this node"}]
-
-    ["/swagger.json"
-     {:get {:no-doc true
-            :swagger {:info {:title "Core2 API"}}
-            :handler (r.swagger/create-swagger-handler)}}]]
-
-   {:data {:muuntaja muuntaja
-           :coercion rc.spec/coercion
-           :interceptors [r.swagger/swagger-feature
-                          (ri.parameters/parameters-interceptor)
-                          (ri.muuntaja/format-interceptor)
-                          (ri.exception/exception-interceptor
-                           (merge ri.exception/default-handlers
-                                  {core2.IllegalArgumentException handle-ex-info
-                                   :muuntaja/decode handle-muuntaja-decode-error}))
-
-                          (r.coercion/coerce-request-interceptor)
-                          (r.coercion/coerce-response-interceptor)
-                          (r.coercion/coerce-exceptions-interceptor)]}}))
+                                      (r.coercion/coerce-request-interceptor)
+                                      (r.coercion/coerce-response-interceptor)
+                                      (r.coercion/coerce-exceptions-interceptor)]}}))
 
 (defn- with-opts [opts]
   {:enter (fn [ctx]
@@ -144,12 +129,9 @@
                                                {:executor r.sieppari/executor
                                                 :interceptors [[with-opts (select-keys opts [:node :read-only?])]]})
 
-                            (merge {:port port
-                                    :h2c? true
-                                    :h2? true}
+                            (merge {:port port, :h2c? true, :h2? true}
                                    jetty-opts
-                                   {:async? true
-                                    :join? false}))]
+                                   {:async? true, :join? false}))]
     (log/info "HTTP server started on port: " port)
     server))
 

@@ -13,4 +13,5 @@
 
   :scm {:dir ".."}
 
-  :dependencies [[org.clojure/clojure]])
+  :dependencies [[org.clojure/clojure]
+                 [com.cognitect/transit-clj nil :scope "provided"]])
