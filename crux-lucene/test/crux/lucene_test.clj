@@ -4,6 +4,7 @@
             [clojure.test :as t]
             [crux.api :as c]
             [crux.checkpoint :as cp]
+            [crux.codec :as cc]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
             [crux.fixtures.lucene :as lf]
@@ -410,6 +411,35 @@
     (with-open [dir (FSDirectory/open (.toPath cp-dir))
                 rdr (DirectoryReader/open dir)]
       (t/is (= 1 (.numDocs rdr))))))
+
+(t/deftest test-cardinality-returned-by-search-results-a-v
+  (submit+await-tx (for [n (range 1000)] [:crux.tx/put {:crux.db/id n, :foo "bar"}]))
+  (with-open [db (c/open-db *api*)]
+    (with-open [search-iterator (l/search *api* "Ivan" {:default-field "name"})]
+      (let [search-results (iterator-seq search-iterator)]
+        (t/is (<= (count search-results)
+                  (count (l/resolve-search-results-a-v (cc/->id-buffer :foo)
+                                                       (:index-snapshot db)
+                                                       db
+                                                       search-results))))))))
+
+(t/deftest test-async-refresh
+  (fix/with-tmp-dirs #{lucene-dir}
+    (with-open [node (crux.api/start-node {::l/lucene-store {:db-dir lucene-dir
+                                                             :disable-refresh? true}})]
+      (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo, :foo "foo"}]])
+
+      (t/is (= #{}
+               (c/q (c/db node)
+                    {:find '[?e]
+                     :where '[[(text-search :foo "foo") [[?e]]]]})))
+
+      (l/fsync (:crux.lucene/lucene-store @(:!system node)))
+
+      (t/is (= #{[:foo]}
+               (c/q (c/db node)
+                    {:find '[?e]
+                     :where '[[(text-search :foo "foo") [[?e]]]]}))))))
 
 (comment
   (do
