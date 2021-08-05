@@ -308,7 +308,7 @@
             (finally
               (.release snapshotter snapshot))))))))
 
-(defn- fsync-loop [^IndexWriter index-writer ^Duration fsync-frequency]
+(defn- fsync-loop [^IndexWriter index-writer ^SearcherManager searcher-manager ^Duration fsync-frequency]
   (log/debug "Starting Lucene fsync-loop...")
   (try
     (while true
@@ -317,6 +317,8 @@
         (log/debug "Committing Lucene IndexWriter...")
         (.commit index-writer)
         (log/debug "Committed Lucene IndexWriter.")
+
+        (.maybeRefresh searcher-manager)
 
         (catch InterruptedException e
           (throw e))
@@ -334,7 +336,11 @@
                                  :spec ::sys/duration
                                  :default "PT5M"}
                :index-writer-ram-buffer-size-mb {:doc "RAM buffer size for the IndexWriter, default is ~16MB"
-                                                 :spec ::sys/double}}
+                                                 :spec ::sys/double}
+               :disable-refresh? {:required? true
+                                  :default false
+                                  :doc ""
+                                  :spec ::sys/boolean}}
    ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer
@@ -342,14 +348,16 @@
                :secondary-indices :crux/secondary-indices
                :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer fsync-frequency index-writer-ram-buffer-size-mb] :as opts}]
+  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer
+           fsync-frequency index-writer-ram-buffer-size-mb disable-refresh?]
+    :as opts}]
   (let [directory (if db-dir
                     (FSDirectory/open db-dir)
                     (ByteBuffersDirectory.))
         index-writer (->index-writer {:directory directory, :analyzer analyzer,
                                       :index-deletion-policy (SnapshotDeletionPolicy. (KeepOnlyLastCommitDeletionPolicy.))
                                       :ram-buffer-size-mb index-writer-ram-buffer-size-mb})
-        searcher-manager (SearcherManager. index-writer false false nil)
+        searcher-manager (SearcherManager. index-writer true false nil)
         cp-job (when checkpointer
                  (cp/start checkpointer (checkpoint-src index-writer) {::cp/cp-format "lucene-8"}))
         lucene-store (LuceneNode. directory analyzer
@@ -357,7 +365,7 @@
                                   indexer
                                   cp-job
                                   (doto (.newThread (cio/thread-factory "crux-lucene-fsync")
-                                                    #(fsync-loop index-writer fsync-frequency))
+                                                    #(fsync-loop index-writer searcher-manager fsync-frequency))
                                     (.start)))]
 
     ;; Ensure lucene index exists for immediate queries:
@@ -378,6 +386,7 @@
 
                           (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
                                                             "crux.lucene/index-version" (str index-version)})
-                          (.maybeRefreshBlocking searcher-manager)))
+                          (when-not disable-refresh?
+                            (.maybeRefreshBlocking searcher-manager))))
 
     lucene-store))
