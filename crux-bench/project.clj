@@ -20,6 +20,7 @@
                  [pro.juxt.crux/crux-kafka-embedded]
                  [pro.juxt.crux/crux-rocksdb]
                  [pro.juxt.crux/crux-lmdb]
+                 [pro.juxt.crux/crux-lucene]
                  [pro.juxt.crux/crux-metrics]
                  [pro.juxt.crux-labs/crux-rdf]
                  [pro.juxt.crux/crux-test]
@@ -29,7 +30,7 @@
                  [software.amazon.awssdk/s3 "2.16.32"]
                  [com.amazonaws/aws-java-sdk-ses "1.11.988"]
                  [com.amazonaws/aws-java-sdk-logs "1.11.988"]
-                 [com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/*]]
+
 
                  ;; rdf
                  [org.eclipse.rdf4j/rdf4j-repository-sparql "3.0.0"]
@@ -59,6 +60,7 @@
   :jvm-opts ["-Xms3g" "-Xmx3g"]
   :uberjar-name "crux-bench-standalone.jar"
 
-  :profiles {:uberjar [:with-neo4j]
-             :with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]
-                          :source-paths ["src-neo4j"]}})
+  :profiles {:with-neo4j {:dependencies [[org.neo4j/neo4j "4.0.0"]]
+                          :source-paths ["src-neo4j"]}
+             :with-datomic {:dependencies [[com.datomic/datomic-free "0.9.5697" :exclusions [org.slf4j/*]]]
+                            :source-paths ["src-datomic"]}})
