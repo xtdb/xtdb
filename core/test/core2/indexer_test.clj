@@ -113,10 +113,10 @@
                        [(key last-column) (.getRowCount ^VectorSchemaRoot (val last-column))])))))
 
         (t/testing "temporal"
-          (t/is (= {"device-info-demo000000" -4962768465676381896
-                    "reading-demo000000" 4437113781045784766
-                    "device-info-demo000001" -6688467811848818630
-                    "reading-demo000001" -8292973307042192125}
+          (t/is (= {"device-info-demo000000" 0
+                    "reading-demo000000" 72057594037927936
+                    "device-info-demo000001" 144115188075855872
+                    "reading-demo000001" 216172782113783808}
                    (.id->internal-id tm)))
           (with-open [watermark (.getWatermark idx)]
             (t/is (= 4 (count (kd/kd-tree->seq (.temporal-watermark watermark)))))))
@@ -368,7 +368,7 @@
 
           (doseq [^Node node (shuffle (take 6 (cycle [node-1 node-2 node-3])))
                   :let [os ^ObjectStore (::os/file-system-object-store @(:!system node))]]
-            (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 15))))
+            (t/is (= last-tx-instant (tu/then-await-tx last-tx-instant node (Duration/ofSeconds 20))))
             (t/is (= last-tx-instant (c2/latest-completed-tx node)))
 
             (Thread/sleep 1000) ;; TODO for now
@@ -452,7 +452,7 @@
 
                   (doseq [^Node node [new-node node]]
                     (t/is (= second-half-tx-instant (-> second-half-tx-instant
-                                                        (tu/then-await-tx node (Duration/ofSeconds 10)))))
+                                                        (tu/then-await-tx node (Duration/ofSeconds 15)))))
                     (t/is (= second-half-tx-instant (c2/latest-completed-tx node))))
 
                   (Thread/sleep 1000) ;; TODO for now

@@ -32,7 +32,7 @@
         id->internal-id-map (doto (HashMap.)
                               (.put 7797 7797))
         id-manager (reify IInternalIdManager
-                     (getOrCreateInternalId [_ id]
+                     (getOrCreateInternalId [_ id _]
                        (.get id->internal-id-map id))
                      (isKnownId [_ id]
                        (.containsKey id->internal-id-map id)))

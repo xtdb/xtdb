@@ -135,7 +135,7 @@
                                                       ^org.roaringbitmap.longlong.Roaring64Bitmap row-id-bitmap]))
 
 (definterface IInternalIdManager
-  (^long getOrCreateInternalId [^Object id])
+  (^long getOrCreateInternalId [^Object id ^long row-id])
   (^boolean isKnownId [^Object id]))
 
 (definterface TemporalManagerPrivate
@@ -191,6 +191,9 @@
   (if (bytes? id)
     (ByteBuffer/wrap id)
     id))
+
+(defn- ->big-endian-internal-id ^long [^long row-id]
+  (Long/reverseBytes row-id))
 
 (defn- wrap-with-current-entity-cache [kd-tree ^Map current-entities-cache]
   (reify
@@ -253,8 +256,6 @@
                           ^IMetadataManager metadata-manager
                           ^AtomicLong id-counter
                           ^Map id->internal-id
-                          ^Roaring64Bitmap known-ids
-                          ^Random rng
                           ^ExecutorService snapshot-pool
                           ^:unsynchronized-mutable snapshot-future
                           ^:unsynchronized-mutable kd-tree-snapshot-idx
@@ -318,9 +319,10 @@
                              (reify Consumer
                                (accept [_ id-root]
                                  (let [^VectorSchemaRoot id-root id-root
+                                       ^BigIntVector row-id-vec (.getVector id-root 0)
                                        id-vec (.getVector id-root 1)]
-                                   (dotimes [n (.getValueCount id-vec)]
-                                     (.getOrCreateInternalId this (t/get-object id-vec n)))))))))
+                                   (dotimes [n (.getRowCount id-root)]
+                                     (.getOrCreateInternalId this (t/get-object id-vec n) (.get row-id-vec n)))))))))
       (when-let [temporal-chunk-idx (last known-chunks)]
         (.reloadTemporalIndex this temporal-chunk-idx (.latestTemporalSnapshotIndex this temporal-chunk-idx)))))
 
@@ -349,16 +351,12 @@
           (util/delete-file path)))))
 
   IInternalIdManager
-  (getOrCreateInternalId [_ id]
+  (getOrCreateInternalId [_ id row-id]
     (.computeIfAbsent id->internal-id
                       (normalize-id id)
                       (reify Function
-                        (apply [_ x]
-                          (loop [id (.nextLong rng)]
-                            (if (.contains known-ids id)
-                              (recur (.nextLong rng))
-                              (do (.addLong known-ids id)
-                                  id)))))))
+                        (apply [_ _]
+                          (->big-endian-internal-id row-id)))))
 
   (isKnownId [_ id]
     (.containsKey id->internal-id (normalize-id id)))
@@ -474,14 +472,14 @@
 
   (let [pool (Executors/newSingleThreadExecutor (util/->prefix-thread-factory "temporal-snapshot-"))]
     (doto (TemporalManager. allocator object-store buffer-pool metadata-manager
-                            (AtomicLong.) (ConcurrentHashMap.) (Roaring64Bitmap.) (Random. 0)
+                            (AtomicLong.) (ConcurrentHashMap.)
                             pool nil nil nil async-snapshot?)
       (.populateKnownChunks))))
 
 (defn insert-coordinates [kd-tree ^BufferAllocator allocator ^IInternalIdManager id-manager ^TemporalCoordinates coordinates]
   (let [new-id? (not (.isKnownId id-manager (.id coordinates)))
-        id (.getOrCreateInternalId id-manager (.id coordinates))
         row-id (.rowId coordinates)
+        id (.getOrCreateInternalId id-manager (.id coordinates) row-id)
         tx-time-start-ms (.txTimeStart coordinates)
         valid-time-start-ms (.validTimeStart coordinates)
         valid-time-end-ms (.validTimeEnd coordinates)
