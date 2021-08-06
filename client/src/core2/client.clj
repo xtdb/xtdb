@@ -2,7 +2,8 @@
   (:require [core2.api :as c2]
             [core2.transit :as c2.transit]
             [hato.client :as hato]
-            [reitit.core :as r])
+            [reitit.core :as r]
+            [core2.error :as err])
   (:import clojure.lang.IReduceInit
            java.lang.AutoCloseable
            java.util.concurrent.CompletableFuture
@@ -15,9 +16,27 @@
 (def router
   (r/router c2/http-routes))
 
-(defn url-for [{:keys [base-url]} endpoint]
-  (str base-url (-> (r/match-by-name router endpoint)
-                    (r/match->path))))
+(defn- handle-err [e]
+  (throw (or (when-let [body (:body (ex-data e))]
+               (when (::err/error-type (ex-data body))
+                 body))
+             e)))
+
+(defn- request
+  ([client request-method endpoint]
+   (request client request-method endpoint {}))
+
+  ([client request-method endpoint opts]
+   (hato/request (merge {:accept :transit+json
+                         :as :transit+json
+                         :request-method request-method
+                         :url (str (:base-url client)
+                                   (-> (r/match-by-name router endpoint)
+                                       (r/match->path)))
+                         :transit-opts transit-opts
+                         :async? true}
+                        opts)
+                 identity handle-err)))
 
 (defrecord Core2Client [base-url]
   c2/PClient
@@ -29,15 +48,11 @@
       (-> !basis-tx
           (.thenCompose (reify Function
                           (apply [_ basis-tx]
-                            (hato/post (url-for client :query)
-                                       {:accept :transit+json
-                                        :as :transit+json
-                                        :content-type :transit+json
-                                        :form-params {:query (-> query
-                                                                 (assoc-in [:basis :tx] basis-tx))
-                                                      :params params}
-                                        :transit-opts transit-opts
-                                        :async? true}))))
+                            (request client :post :query
+                                     {:content-type :transit+json
+                                      :form-params {:query (-> query
+                                                               (assoc-in [:basis :tx] basis-tx))
+                                                    :params params}}))))
           (.thenApply (reify Function
                         (apply [_ resp]
                           (reify IReduceInit
@@ -47,13 +62,9 @@
   c2/PSubmitNode
   (submit-tx [client tx-ops]
     (-> ^CompletableFuture
-        (hato/post (url-for client :tx)
-                   {:accept :transit+json
-                    :as :transit+json
-                    :content-type :transit+json
-                    :form-params tx-ops
-                    :transit-opts transit-opts
-                    :async? true})
+        (request client :post :tx
+                 {:content-type :transit+json
+                  :form-params {:tx-ops tx-ops}})
 
         (.thenApply (reify Function
                       (apply [_ resp]
@@ -61,9 +72,7 @@
 
   c2/PStatus
   (status [client]
-    (-> (hato/get (url-for client :status)
-                  {:accept :transit+json
-                   :as :transit+json})
+    (-> @(request client :get :status)
         :body))
 
   AutoCloseable

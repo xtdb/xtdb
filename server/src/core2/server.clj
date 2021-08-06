@@ -9,18 +9,19 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
+            [reitit.coercion :as r.coercion]
             [reitit.coercion.spec :as rc.spec]
             [reitit.http :as http]
-            [reitit.http.coercion :as r.coercion]
+            [reitit.http.coercion :as rh.coercion]
             [reitit.http.interceptors.exception :as ri.exception]
             [reitit.http.interceptors.muuntaja :as ri.muuntaja]
             [reitit.http.interceptors.parameters :as ri.parameters]
             [reitit.interceptor.sieppari :as r.sieppari]
             [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
-            [ring.util.response :as resp]
             [spec-tools.core :as st]
-            [reitit.core :as r])
+            [reitit.core :as r]
+            [core2.error :as err])
   (:import core2.api.TransactionInstant
            java.time.Duration
            org.eclipse.jetty.server.Server))
@@ -76,12 +77,18 @@
           :parameters {:body ::query-body}}})
 
 (defn- handle-ex-info [ex _req]
+  {:status 400, :body ex})
+
+(defn- handle-request-coercion-error [ex _req]
   {:status 400
-   :body (ex-data ex)})
+   :body (err/illegal-arg :malformed-request
+                          (merge (r.coercion/encode-error (ex-data ex))
+                                 {::err/message "Malformed request."}))})
 
 (defn- handle-muuntaja-decode-error [ex _req]
   {:status 400
-   :body {:error (str "Malformed " (-> ex ex-data :format pr-str) " request.")}})
+   :body (err/illegal-arg :malformed-request
+                          {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
 
 (def ^:private muuntaja
   (m/create (-> m/default-options
@@ -89,7 +96,8 @@
                 (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
                           c2.transit/tj-read-handlers)
                 (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
-                          c2.transit/tj-write-handlers))))
+                          c2.transit/tj-write-handlers)
+                (assoc-in [:http :encode-response-body?] (constantly true)))))
 
 (def router
   (http/router c2/http-routes
@@ -101,16 +109,22 @@
                 :data {:muuntaja muuntaja
                        :coercion rc.spec/coercion
                        :interceptors [r.swagger/swagger-feature
-                                      (ri.parameters/parameters-interceptor)
-                                      (ri.muuntaja/format-interceptor)
-                                      (ri.exception/exception-interceptor
-                                       (merge ri.exception/default-handlers
-                                              {core2.IllegalArgumentException handle-ex-info
-                                               :muuntaja/decode handle-muuntaja-decode-error}))
+                                      [ri.parameters/parameters-interceptor]
+                                      [ri.muuntaja/format-negotiate-interceptor]
 
-                                      (r.coercion/coerce-request-interceptor)
-                                      (r.coercion/coerce-response-interceptor)
-                                      (r.coercion/coerce-exceptions-interceptor)]}}))
+                                      [ri.muuntaja/format-response-interceptor]
+
+                                      [ri.exception/exception-interceptor
+                                       (-> (merge ri.exception/default-handlers
+                                                  {core2.IllegalArgumentException handle-ex-info
+                                                   ::r.coercion/request-coercion handle-request-coercion-error
+                                                   :muuntaja/decode handle-muuntaja-decode-error
+                                                   ::ri.exception/wrap (fn [handler e req]
+                                                                         #_(log/warn e "response error")
+                                                                         (handler e req))}))]
+
+                                      [ri.muuntaja/format-request-interceptor]
+                                      [rh.coercion/coerce-request-interceptor]]}}))
 
 (defn- with-opts [opts]
   {:enter (fn [ctx]
