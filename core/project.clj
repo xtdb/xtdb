@@ -33,7 +33,8 @@
 
   :profiles {:dev [:test]
              :test {:dependencies [[pro.juxt.crux-labs/core2-datasets]
-                                   [cheshire]]
+                                   [cheshire]
+                                   [ch.qos.logback/logback-classic]]
 
                     :resource-paths ["test-resources"]}}
 
