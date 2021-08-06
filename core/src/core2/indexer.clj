@@ -12,12 +12,13 @@
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import clojure.lang.MapEntry
            [core2 DenseUnionUtil ICursor]
+           core2.api.TransactionInstant
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
            [core2.temporal ITemporalManager TemporalCoordinates]
-           core2.api.TransactionInstant
            core2.tx.Watermark
            java.io.Closeable
+           java.lang.AutoCloseable
            [java.util Collections Date Map Map$Entry Set TreeMap]
            [java.util.concurrent CompletableFuture ConcurrentHashMap ConcurrentSkipListMap PriorityBlockingQueue]
            java.util.concurrent.atomic.AtomicInteger
@@ -27,8 +28,8 @@
            [org.apache.arrow.vector BigIntVector TimeStampMilliVector TimeStampVector ValueVector VectorLoader VectorSchemaRoot VectorUnloader]
            [org.apache.arrow.vector.complex DenseUnionVector ListVector StructVector]
            org.apache.arrow.vector.ipc.ArrowStreamReader
-           org.apache.arrow.vector.types.UnionMode
-           [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]))
+           [org.apache.arrow.vector.types.pojo ArrowType$Union Field Schema]
+           org.apache.arrow.vector.types.UnionMode))
 
 (set! *unchecked-math* :warn-on-boxed)
 
@@ -376,7 +377,7 @@
 
                 ^TimeStampVector valid-time-start-vec (.getChild op-vec "_valid-time-start")
                 ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
-                row-id (+ next-row-id per-op-offset)
+                row-id (+ next-row-id tx-op-idx)
                 op (aget op-type-ids op-type-id)
                 ^TemporalCoordinates temporal-coordinates (temporal/row-id->coordinates row-id)]
             (set! (.txTimeStart temporal-coordinates) tx-time-ms)
@@ -535,5 +536,5 @@
               (PriorityBlockingQueue.)
               nil)))
 
-(defmethod ig/halt-key! ::indexer [_ ^Indexer indexer]
+(defmethod ig/halt-key! ::indexer [_ ^AutoCloseable indexer]
   (.close indexer))
