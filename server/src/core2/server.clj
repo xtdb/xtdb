@@ -25,14 +25,23 @@
            java.time.Duration
            org.eclipse.jetty.server.Server))
 
-(defn- handle-status [{:keys [node] :as _req}]
-  ;; TODO currently empty to pass healthcheck, we'll want something more later.
-  {:status 200, :body (c2/status node)})
+(defmulti ^:private route-handler :name, :default ::default)
 
-(defn handle-tx [{:keys [node] :as req}]
-  (-> (c2/submit-tx node (get-in req [:parameters :body]))
-      (util/then-apply (fn [tx]
-                         {:status 200, :body tx}))))
+(s/def ::tx-ops vector?)
+
+(defmethod route-handler :status [_]
+  {:get (fn [{:keys [node] :as _req}]
+          {:status 200, :body (c2/status node)})})
+
+(defmethod route-handler :tx [_]
+  {:post {:handler (fn [{:keys [node] :as req}]
+                     (-> (c2/submit-tx node (get-in req [:parameters :body :tx-ops]))
+                         (util/then-apply (fn [tx]
+                                            {:status 200, :body tx}))))
+
+          ;; TODO spec-tools doesn't handle multi-spec with a vector,
+          ;; so we just check for vector and then conform later.
+          :parameters {:body (s/keys :req-un [::tx-ops])}}})
 
 (s/def ::tx-id int?)
 
@@ -58,10 +67,13 @@
 (s/def ::query-body
   (s/keys :req-un [::query], :opt-un [::params]))
 
-(defn handle-query [{:keys [node parameters]}]
-  (let [{{:keys [query params]} :body} parameters]
-    {:status 200
-     :body (into [] (apply c2/plan-query node query params))}))
+(defmethod route-handler :query [_]
+  {:post {:handler (fn [{:keys [node parameters]}]
+                     (let [{{:keys [query params]} :body} parameters]
+                       {:status 200
+                        :body (into [] (apply c2/plan-query node query params))}))
+
+          :parameters {:body ::query-body}}})
 
 (defn- handle-ex-info [ex _req]
   {:status 400
@@ -79,22 +91,11 @@
                 (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
                           c2.transit/tj-write-handlers))))
 
-(def handlers
-  {:status {:get #(handle-status %)}
-
-   :tx {:post {:handler #(handle-tx %)
-               ;; TODO spec-tools doesn't handle multi-spec with a vector,
-               ;; so we just check for vector and then conform later.
-               :parameters {:body vector?}}}
-
-   :query {:post {:handler #(handle-query %)
-                  :parameters {:body ::query-body}}}})
-
 (def router
   (http/router c2/http-routes
                {:expand (fn [{route-name :name, :as route} opts]
                           (r/expand (cond-> route
-                                      route-name (merge (get handlers route-name)))
+                                      route-name (merge (route-handler route)))
                                     opts))
 
                 :data {:muuntaja muuntaja
