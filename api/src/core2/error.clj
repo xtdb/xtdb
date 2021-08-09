@@ -1,4 +1,5 @@
-(ns core2.error)
+(ns core2.error
+  (:import java.io.Writer))
 
 (defn illegal-arg
   ([k] (illegal-arg k {}))
@@ -14,3 +15,10 @@
                                               ::message message}
                                              data)
                                       cause))))
+
+(defmethod print-method core2.IllegalArgumentException
+  [e, ^Writer w]
+  (.write w (str "#core2/illegal-arg " (ex-data e))))
+
+(defn -iae-reader [data]
+  (illegal-arg (::error-key data) data))

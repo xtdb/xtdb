@@ -51,6 +51,7 @@
 ;; 'triple' ;)
 (s/def ::triple
   (s/and vector?
+         (s/conformer identity vec)
          (s/cat :src (s/? ::lp/source)
                 :e (s/or :literal ::eid, :logic-var ::logic-var)
                 :a keyword?

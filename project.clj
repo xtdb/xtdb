@@ -9,6 +9,8 @@
 
   :managed-dependencies [[pro.juxt.crux-labs/core2-api ~core2-version]
                          [pro.juxt.crux-labs/core2-core ~core2-version]
+                         [pro.juxt.crux-labs/core2-server ~core2-version]
+                         [pro.juxt.crux-labs/core2-client ~core2-version]
                          [pro.juxt.crux-labs/core2-datasets ~core2-version]
                          [pro.juxt.crux-labs/core2-kafka ~core2-version]
                          [pro.juxt.crux-labs/core2-s3 ~core2-version]
@@ -20,12 +22,18 @@
                          [ch.qos.logback/logback-classic "1.2.3"]
                          [org.clojure/data.csv "1.0.0"]
                          [org.clojure/data.json "2.3.1"]
+                         [com.cognitect/transit-clj "1.0.324"]
 
-                         [cheshire "5.10.0"]]
+                         [cheshire "5.10.0"]
+                         [pro.juxt.clojars-mirrors.hato/hato "0.8.2"]
+
+                         [pro.juxt.clojars-mirrors.metosin/reitit-core "0.5.15"]]
 
   :profiles {:dev [:test
                    {:dependencies [[pro.juxt.crux-labs/core2-api]
                                    [pro.juxt.crux-labs/core2-core]
+                                   [pro.juxt.crux-labs/core2-server]
+                                   [pro.juxt.crux-labs/core2-client]
                                    [pro.juxt.crux-labs/core2-datasets]
                                    [pro.juxt.crux-labs/core2-kafka]
                                    [pro.juxt.crux-labs/core2-s3]
@@ -44,8 +52,8 @@
                                    [org.clojure/data.csv "1.0.0"]
                                    [pro.juxt.crux-labs/core2-datasets]
 
-                                   [cheshire "5.10.0"]]
-
+                                   [cheshire "5.10.0"]
+                                   [pro.juxt.clojars-mirrors.hato/hato]]
                     :resource-paths ["test-resources"]}
 
              :jmh {:dependencies [[org.openjdk.jmh/jmh-core "1.32"]
@@ -55,7 +63,10 @@
 
              :attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
 
-             :uberjar {:dependencies [[pro.juxt.crux-labs/core2-kafka]
+             :uberjar {:dependencies [[pro.juxt.crux-labs/core2-core]
+                                      [pro.juxt.crux-labs/core2-server]
+                                      [pro.juxt.crux-labs/core2-client]
+                                      [pro.juxt.crux-labs/core2-kafka]
                                       [pro.juxt.crux-labs/core2-s3]
                                       [pro.juxt.crux-labs/core2-jdbc]]
                        :uberjar-name "core2-standalone.jar"
@@ -81,6 +92,14 @@
              #_"--add-modules=ALL-SYSTEM" ;; enables all incubator modules instead
              #_"-Darrow.memory.debug.allocator=true"
              #_"-Darrow.enable_unsafe_memory_access=true"]
+
+  :java-source-paths ["src"]
+
+  :javac-options ["-source" "11" "-target" "11"
+                  "-XDignore.symbol.file"
+                  "-Xlint:all,-options,-path"
+                  "-Werror"
+                  "-proc:none"]
 
   :global-vars {*warn-on-reflection* true}
 
