@@ -39,9 +39,7 @@
                           (let [db (snap/snapshot (util/component node ::snap/snapshot-factory)
                                                   last-tx (Duration/ofHours 1))]
                             (log/info "rows:"
-                                      (->> (op/plan-ra query (merge {'$ db} (::tpch/params (meta query))))
-                                           (sequence)
-                                           (count)))))]
+                                      (count (op/query-ra query (merge {'$ db} (::tpch/params (meta query))))))))]
                   (doseq [[k node] {:primary primary-node
                                     :secondary1 secondary-node1
                                     :secondary2 secondary-node2

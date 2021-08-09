@@ -138,4 +138,4 @@
 
   (time
    (let [db (snap/snapshot (tu/component dev/node ::snap/snapshot-factory))]
-     (into [] (op/plan-ra query-recent-battery-temperatures db)))))
+     (op/query-ra query-recent-battery-temperatures db))))

@@ -156,7 +156,7 @@ This is for repeatable queries - it defaults to 'now' if not provided.
      (into []))
 ----
 
-There is also `op/plan-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
+There is also `op/query-ra` which accepts a lower-level relational algebra query - have a look in `core2.logical-plan` for what can go into these plans, and `core2.tpch-queries` for examples.
 
 == Developing Core2
 

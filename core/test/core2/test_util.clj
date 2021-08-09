@@ -131,7 +131,7 @@
     (.forEachRemaining cursor
                        (reify Consumer
                          (accept [_ rel]
-                           (vswap! !res conj! (vec (rel/rel->rows rel))))))
+                           (vswap! !res conj! (rel/rel->rows rel)))))
     (persistent! @!res)))
 
 (t/deftest round-trip-cursor

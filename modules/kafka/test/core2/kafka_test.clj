@@ -14,4 +14,4 @@
       (let [tx (c2/submit-tx node [[:put {:_id "foo"}]])
             db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
         (t/is (= [{:_id "foo"}]
-                 (into [] (op/plan-ra '[:scan [_id]] db))))))))
+                 (op/query-ra '[:scan [_id]] db)))))))

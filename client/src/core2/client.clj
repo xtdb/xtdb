@@ -1,10 +1,11 @@
 (ns core2.client
   (:require [core2.api :as c2]
+            [core2.error :as err]
             [core2.transit :as c2.transit]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
-            [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r]
-            [core2.error :as err])
+            [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r])
   (:import clojure.lang.IReduceInit
+           core2.IResultSet
            java.lang.AutoCloseable
            java.util.concurrent.CompletableFuture
            java.util.function.Function))
@@ -40,7 +41,7 @@
 
 (defrecord Core2Client [base-url]
   c2/PClient
-  (plan-query-async [client query params]
+  (-open-query-async [client query params]
     (let [basis-tx (get-in query [:basis :tx])
           ^CompletableFuture !basis-tx (if (instance? CompletableFuture basis-tx)
                                          basis-tx
@@ -55,9 +56,10 @@
                                                     :params params}}))))
           (.thenApply (reify Function
                         (apply [_ resp]
-                          (reify IReduceInit
-                            (reduce [_ f init]
-                              (reduce f init (:body resp))))))))))
+                          (let [it (.iterator ^Iterable (:body resp))]
+                            (reify IResultSet
+                              (hasNext [_] (.hasNext it))
+                              (next [_] (.next it))))))))))
 
   c2/PSubmitNode
   (submit-tx [client tx-ops]

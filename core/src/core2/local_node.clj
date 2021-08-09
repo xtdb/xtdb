@@ -32,7 +32,7 @@
                  !system
                  close-fn]
   api/PClient
-  (plan-query-async [_ query params]
+  (-open-query-async [_ query params]
     (let [{:keys [basis ^Duration basis-timeout]} query
           {:keys [default-valid-time tx], :or {default-valid-time (Date.)}} basis]
       (-> (snap/snapshot-async snapshot-factory tx)
@@ -41,7 +41,7 @@
             (fn [db]
               (let [{:keys [query srcs]} (-> (dissoc query :basis :basis-timeout)
                                              (d/compile-query params))]
-                (op/plan-ra query (merge srcs {'$ db}) {:default-valid-time default-valid-time})))))))
+                (op/open-ra query (merge srcs {'$ db}) {:default-valid-time default-valid-time})))))))
 
   PNode
   (await-tx-async [_ tx]

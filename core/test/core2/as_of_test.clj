@@ -16,8 +16,8 @@
         !tx2 (c2/submit-tx tu/*node* [[:put {:_id "my-doc", :last-updated "tx2"}]])]
 
     (t/is (= #{{:last-updated "tx2"}}
-             (into #{} (op/plan-ra '[:scan [last-updated]]
-                                   (snap/snapshot snapshot-factory !tx2)))))
+             (set (op/query-ra '[:scan [last-updated]]
+                               (snap/snapshot snapshot-factory !tx2)))))
 
     (t/is (= #{{:last-updated "tx2"}}
              (->> (c2/plan-query tu/*node*
@@ -36,8 +36,8 @@
 
     (t/testing "at tx1"
       (t/is (= #{{:last-updated "tx1"}}
-               (into #{} (op/plan-ra '[:scan [last-updated]]
-                                     (snap/snapshot snapshot-factory !tx1)))))
+               (set (op/query-ra '[:scan [last-updated]]
+                                 (snap/snapshot snapshot-factory !tx1)))))
 
       (t/is (= #{{:last-updated "tx1"}}
                (->> (c2/plan-query tu/*node*
@@ -65,8 +65,8 @@
                              :_valid-time-end temporal/end-of-time
                              :_tx-time-start tx-time
                              :_tx-time-end temporal/end-of-time}}
-             (->> (op/plan-ra '[:scan [_id
-                                       _valid-time-start _valid-time-end
-                                       _tx-time-start _tx-time-end]]
-                              db)
+             (->> (op/query-ra '[:scan [_id
+                                        _valid-time-start _valid-time-end
+                                        _tx-time-start _tx-time-end]]
+                               db)
                   (into {} (map (juxt :_id identity))))))))

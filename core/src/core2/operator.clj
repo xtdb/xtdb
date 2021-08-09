@@ -19,10 +19,12 @@
             [core2.relation :as rel]
             core2.snapshot
             [core2.util :as util])
-  (:import [clojure.lang IReduceInit MapEntry]
+  (:import clojure.lang.MapEntry
+           [core2 ICursor IResultSet]
            [core2.operator.set ICursorFactory IFixpointCursorFactory]
            core2.snapshot.ISnapshot
-           java.util.Date
+           [java.util Date List NoSuchElementException]
+           java.util.function.Consumer
            [org.apache.arrow.memory BufferAllocator RootAllocator]))
 
 (defmulti emit-op
@@ -272,7 +274,32 @@
         (let [inner-f (emit-op relation srcs)]
           (inner-f opts))))))
 
-(defn open-ra ^core2.ICursor [query src-or-srcs query-opts]
+;; we have to use our own class (rather than `Spliterators.iterator`) because we
+;; need to call rel->rows eagerly - the rel may have been reused/closed after
+;; the tryAdvance returns.
+(deftype CursorResultSet [^BufferAllocator allocator
+                          ^ICursor cursor
+                          ^:unsynchronized-mutable ^List next-values]
+  IResultSet
+  (hasNext [res]
+    (or (not (empty? next-values))
+        (and (.tryAdvance cursor
+                          (reify Consumer
+                            (accept [_ rel]
+                              (set! (.-next-values res) (rel/rel->rows rel)))))
+             (not (empty? next-values)))))
+
+  (next [this]
+    (let [[next-value & more-values] (or (seq (.next-values this))
+                                         (throw (NoSuchElementException.)))]
+      (set! (.next-values this) more-values)
+      next-value))
+
+  (close [_]
+    (util/try-close cursor)
+    (util/try-close allocator)))
+
+(defn open-ra ^core2.IResultSet [query src-or-srcs query-opts]
   (let [srcs (cond
                (nil? src-or-srcs) {}
                (map? src-or-srcs) src-or-srcs
@@ -285,21 +312,16 @@
 
     (let [allocator (RootAllocator.)]
       (try
-        (let [op-f (emit-op (s/conform ::lp/logical-plan query) srcs)]
-          (-> (op-f (-> (merge {:default-valid-time (Date.)} query-opts)
-                        (assoc :allocator allocator)))
-              (util/and-also-close allocator)))
+        (let [op-f (emit-op (s/conform ::lp/logical-plan query) srcs)
+              cursor (op-f (-> (merge {:default-valid-time (Date.)} query-opts)
+                               (assoc :allocator allocator)))]
+          (CursorResultSet. allocator cursor nil))
         (catch Throwable t
           (util/try-close allocator)
           (throw t))))))
 
-(defn plan-ra
-  ([query src-or-srcs] (plan-ra query src-or-srcs {}))
+(defn query-ra
+  ([query src-or-srcs] (query-ra query src-or-srcs {}))
   ([query src-or-srcs query-opts]
-   (reify IReduceInit
-     (reduce [_ f init]
-       (with-open [res (open-ra query src-or-srcs query-opts)]
-         (util/reduce-cursor (fn [acc rel]
-                               (reduce f acc (rel/rel->rows rel)))
-                             init
-                             res))))))
+   (with-open [res (open-ra query src-or-srcs query-opts)]
+     (vec (iterator-seq res)))))

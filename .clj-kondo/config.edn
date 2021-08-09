@@ -1,1 +1,2 @@
-{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn}}
+{:lint-as {core2.object-store-test/def-obj-store-tests clojure.core/defn}
+ :linters {:not-empty? {:level :off}}}

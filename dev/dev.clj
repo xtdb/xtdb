@@ -71,4 +71,4 @@
                 #'tpch/tpch-q9-product-type-profit-measure]]
       (prn !q)
       (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory))]
-        (time (into [] (op/plan-ra @!q db)))))))
+        (time (op/query-ra @!q db))))))

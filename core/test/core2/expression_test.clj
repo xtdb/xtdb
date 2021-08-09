@@ -129,23 +129,23 @@
     (let [tx (c2/submit-tx node [[:put {:_id "foo", :date #inst "2021-01-21T12:34:56Z"}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx)]
       (t/is (= [{:trunc #inst "2021-01-21"}]
-               (into [] (op/plan-ra '[:project [{trunc (date-trunc "DAY" date)}]
-                                      [:scan [date]]]
-                                    db))))
+               (op/query-ra '[:project [{trunc (date-trunc "DAY" date)}]
+                              [:scan [date]]]
+                            db)))
 
       (t/is (= [{:trunc #inst "2021-01-21T12:34"}]
-               (into [] (op/plan-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
-                                      [:scan [date]]]
-                                    db))))
+               (op/query-ra '[:project [{trunc (date-trunc "MINUTE" date)}]
+                              [:scan [date]]]
+                            db)))
 
       (t/is (= [{:trunc #inst "2021-01-21"}]
-               (into [] (op/plan-ra '[:select (> trunc #inst "2021")
-                                      [:project [{trunc (date-trunc "DAY" date)}]
-                                       [:scan [date]]]]
-                                    db))))
+               (op/query-ra '[:select (> trunc #inst "2021")
+                              [:project [{trunc (date-trunc "DAY" date)}]
+                               [:scan [date]]]]
+                            db)))
 
       (t/is (= [{:trunc #inst "2021-01-21"}]
-               (into [] (op/plan-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
-                                      [:project [{trunc (date-trunc "MINUTE" date)}]
-                                       [:scan [date]]]]
-                                    db)))))))
+               (op/query-ra '[:project [{trunc (date-trunc "DAY" trunc)}]
+                              [:project [{trunc (date-trunc "MINUTE" date)}]
+                               [:scan [date]]]]
+                            db))))))

@@ -24,7 +24,7 @@
     (bench/with-timing (str "query " (:name (meta q)))
       (let [q @q]
         (try
-          (count (sequence (op/plan-ra q (merge {'$ db} (::tpch/params (meta q))))))
+          (count (op/query-ra q (merge {'$ db} (::tpch/params (meta q)))))
           (catch Exception e
             (.printStackTrace e)))))))
 

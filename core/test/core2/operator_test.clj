@@ -34,11 +34,11 @@
           ^ISnapshotFactory snapshot-factory (tu/component node ::snap/snapshot-factory)]
       (letfn [(test-query-ivan [expected db]
                 (t/is (= expected
-                         (into #{} (op/plan-ra '[:scan [{name (> name "Ivan")}]] db))))
+                         (set (op/query-ra '[:scan [{name (> name "Ivan")}]] db))))
 
                 (t/is (= expected
-                         (into #{} (op/plan-ra '[:scan [{name (> name ?name)}]]
-                                               {'$ db, '?name "Ivan"})))))]
+                         (set (op/query-ra '[:scan [{name (> name ?name)}]]
+                                           {'$ db, '?name "Ivan"})))))]
 
         (let [db (snap/snapshot snapshot-factory)]
           (t/is (= #{0 1} (.knownChunks metadata-mgr)))
@@ -100,11 +100,11 @@
                 "only needs to scan chunk 0, block 0"))
 
         (t/is (= #{{:name "Ivan"}}
-                 (into #{} (op/plan-ra '[:scan [{name (= name "Ivan")}]] db))))
+                 (set (op/query-ra '[:scan [{name (= name "Ivan")}]] db))))
 
         (t/is (= #{{:name "Ivan"}}
-                 (into #{} (op/plan-ra '[:scan [{name (= name ?name)}]]
-                                       {'$ db, '?name "Ivan"}))))))))
+                 (set (op/query-ra '[:scan [{name (= name ?name)}]]
+                                   {'$ db, '?name "Ivan"}))))))))
 
 (t/deftest test-temporal-bounds
   (with-open [node (node/start-node {})]
@@ -115,10 +115,10 @@
                                                  [[:put {:_id "my-doc", :last-updated "tx2"}]])
           db (snap/snapshot (tu/component node ::snap/snapshot-factory) tx2)]
       (letfn [(q [& temporal-constraints]
-                (into #{} (map :last-updated)
-                      (op/plan-ra [:scan (into '[last-updated]
+                (->> (op/query-ra [:scan (into '[last-updated]
                                                temporal-constraints)]
-                                  {'$ db, '?tt1 tt1, '?tt2 tt2})))]
+                                  {'$ db, '?tt1 tt1, '?tt2 tt2})
+                     (into #{} (map :last-updated))))]
         (t/is (= #{"tx2"}
                  (q)))
 
@@ -184,71 +184,68 @@
 
 (t/deftest test-fixpoint-operator
   (t/testing "factorial"
-    (with-open [fixpoint-cursor (op/open-ra '[:fixpoint Fact
-                                              [:table $table]
-                                              [:select
-                                               (<= a 8)
-                                               [:project
-                                                [{a (+ a 1)}
-                                                 {b (* (+ a 1) b)}]
-                                                Fact]]]
-                                            {'$table [{:a 0 :b 1}]}
-                                            {})]
-      (t/is (= [[{:a 0, :b 1}]
-                [{:a 1, :b 1}]
-                [{:a 2, :b 2}]
-                [{:a 3, :b 6}]
-                [{:a 4, :b 24}]
-                [{:a 5, :b 120}]
-                [{:a 6, :b 720}]
-                [{:a 7, :b 5040}]
-                [{:a 8, :b 40320}]]
-               (tu/<-cursor fixpoint-cursor)))))
+    (t/is (= [{:a 0, :b 1}
+              {:a 1, :b 1}
+              {:a 2, :b 2}
+              {:a 3, :b 6}
+              {:a 4, :b 24}
+              {:a 5, :b 120}
+              {:a 6, :b 720}
+              {:a 7, :b 5040}
+              {:a 8, :b 40320}]
+             (op/query-ra '[:fixpoint Fact
+                            [:table $table]
+                            [:select
+                             (<= a 8)
+                             [:project
+                              [{a (+ a 1)}
+                               {b (* (+ a 1) b)}]
+                              Fact]]]
+                          {'$table [{:a 0 :b 1}]}
+                          {}))))
 
   (t/testing "transitive closure"
-    (with-open [fixpoint-cursor (op/open-ra '[:fixpoint Path
-                                              [:table $table]
-                                              [:project [x y]
-                                               [:join {z z}
-                                                [:rename {y z} Path]
-                                                [:rename {x z} Path]]]]
-                                            {'$table [{:x "a" :y "b"}
-                                                      {:x "b" :y "c"}
-                                                      {:x "c" :y "d"}
-                                                      {:x "d" :y "a"}]}
-                                            {})]
-
-      (t/is (= [[{:x "a", :y "b"}
-                 {:x "b", :y "c"}
-                 {:x "c", :y "d"}
-                 {:x "d", :y "a"}]
-                [{:x "d", :y "b"}
-                 {:x "a", :y "c"}
-                 {:x "b", :y "d"}
-                 {:x "c", :y "a"}]
-                [{:x "c", :y "b"}
-                 {:x "d", :y "c"}
-                 {:x "a", :y "d"}
-                 {:x "b", :y "a"}]
-                [{:x "b", :y "b"}
-                 {:x "c", :y "c"}
-                 {:x "d", :y "d"}
-                 {:x "a", :y "a"}]]
-               (tu/<-cursor fixpoint-cursor))))))
+    (t/is (= [{:x "a", :y "b"}
+              {:x "b", :y "c"}
+              {:x "c", :y "d"}
+              {:x "d", :y "a"}
+              {:x "d", :y "b"}
+              {:x "a", :y "c"}
+              {:x "b", :y "d"}
+              {:x "c", :y "a"}
+              {:x "c", :y "b"}
+              {:x "d", :y "c"}
+              {:x "a", :y "d"}
+              {:x "b", :y "a"}
+              {:x "b", :y "b"}
+              {:x "c", :y "c"}
+              {:x "d", :y "d"}
+              {:x "a", :y "a"}]
+             (op/query-ra '[:fixpoint Path
+                            [:table $table]
+                            [:project [x y]
+                             [:join {z z}
+                              [:rename {y z} Path]
+                              [:rename {x z} Path]]]]
+                          {'$table [{:x "a" :y "b"}
+                                    {:x "b" :y "c"}
+                                    {:x "c" :y "d"}
+                                    {:x "d" :y "a"}]}
+                          {})))))
 
 (t/deftest test-assignment-operator
   (t/is (= [{:a 1 :b 1}]
-           (into [] (op/plan-ra '[:assign [X [:table $x]
-                                           Y [:table $y]]
-                                  [:join {a b} X Y]]
-                                '{$x [{:a 1}]
-                                  $y [{:b 1}]}))))
+           (op/query-ra '[:assign [X [:table $x]
+                                   Y [:table $y]]
+                          [:join {a b} X Y]]
+                        '{$x [{:a 1}]
+                          $y [{:b 1}]})))
 
   (t/testing "can see earlier assignments"
     (t/is (= [{:a 1 :b 1}]
-             (into [] (op/plan-ra '[:assign [X [:table $x]
-                                             Y [:join {a b} X [:table $y]]
-                                             X Y]
-                                    X]
-                                  '{$x [{:a 1}]
-                                    $y [{:b 1}]}))))))
+             (op/query-ra '[:assign [X [:table $x]
+                                     Y [:join {a b} X [:table $y]]
+                                     X Y]
+                            X]
+                          '{$x [{:a 1}]
+                            $y [{:b 1}]})))))

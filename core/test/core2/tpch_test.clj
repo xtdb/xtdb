@@ -50,9 +50,9 @@
 (defn run-query
   ([q] (run-query q {}))
   ([q args]
-   (into [] (op/plan-ra q (merge {'$ *db*}
-                                 (::tpch/params (meta q))
-                                 args)))))
+   (op/query-ra q (merge {'$ *db*}
+                         (::tpch/params (meta q))
+                         args))))
 
 (t/deftest ^:integration can-submit-tpch-docs-0.01
   (test-tpch-ingest 0.01 69))

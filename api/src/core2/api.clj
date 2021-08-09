@@ -1,7 +1,10 @@
 (ns core2.api
-  (:import java.io.Writer
-           java.util.concurrent.ExecutionException
-           java.util.Date))
+  (:import clojure.lang.IReduceInit
+           core2.IResultSet
+           java.io.Writer
+           [java.util.concurrent CompletableFuture ExecutionException]
+           java.util.Date
+           java.util.function.Function))
 
 (defrecord TransactionInstant [^long tx-id, ^Date tx-time]
   Comparable
@@ -12,8 +15,8 @@
   (.write w (str "#core2/tx-instant " (select-keys tx-instant [:tx-id :tx-time]))))
 
 (defprotocol PClient
-  ;; we may want to go to `open-query-async`/`Stream` instead, when we have a Java API
-  (plan-query-async ^java.util.concurrent.CompletableFuture [node query params]))
+  ;; we may want to go to `Stream` instead, when we have a Java API
+  (-open-query-async ^java.util.concurrent.CompletableFuture [node query params]))
 
 (defprotocol PSubmitNode
   (submit-tx
@@ -22,11 +25,41 @@
 (defprotocol PStatus
   (status [node]))
 
+(defmacro ^:private rethrowing-cause [form]
+  `(try
+     ~form
+     (catch ExecutionException e#
+       (throw (.getCause e#)))))
+
+(defn open-query-async ^java.util.concurrent.CompletableFuture [node query & params]
+  (-open-query-async node query params))
+
+(defn open-query ^core2.IResultSet [node query & params]
+  (-> @(-open-query-async node query params)
+      rethrowing-cause))
+
+(defn plan-query-async [node query & params]
+  (-> (-open-query-async node query params)
+      (.thenApply (reify Function
+                    (apply [_ res]
+                      (with-open [res ^IResultSet res]
+                        (reify IReduceInit
+                          (reduce [_ f init]
+                            (reduce f init (iterator-seq res))))))))))
+
 (defn plan-query [node query & params]
-  (try
-    @(plan-query-async node query params)
-    (catch ExecutionException e
-      (throw (.getCause e)))))
+  (-> @(apply plan-query-async node query params)
+      rethrowing-cause))
+
+(defn query-async ^java.util.concurrent.CompletableFuture [node query & params]
+  (-> ^CompletableFuture (apply plan-query-async node query params)
+      (.thenApply (reify Function
+                    (apply [_ res]
+                      (into [] res))))))
+
+(defn query [node query & params]
+  (-> @(apply query-async node query params)
+      rethrowing-cause))
 
 (def http-routes
   [["/status" {:name :status

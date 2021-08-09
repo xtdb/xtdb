@@ -457,8 +457,8 @@
   (let [cols (.readColumns rel)
         ks (for [^IReadColumn col cols]
              (keyword (.getName col)))]
-    (map (fn [idx]
-           (zipmap ks
-                   (for [^IReadColumn col cols]
-                     (.getObject col idx))))
-          (range (.rowCount rel)))))
+    (mapv (fn [idx]
+            (zipmap ks
+                    (for [^IReadColumn col cols]
+                      (.getObject col idx))))
+           (range (.rowCount rel)))))

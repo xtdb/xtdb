@@ -599,14 +599,3 @@
 
 (defn ->identity-set []
   (Collections/newSetFromMap (IdentityHashMap.)))
-
-(defn reduce-cursor [f init ^Spliterator cursor]
-  (let [!acc (volatile! init)]
-    (while (and (.tryAdvance cursor
-                             (reify Consumer
-                               (accept [_ rel]
-                                 (vswap! !acc f rel))))
-                (not (reduced? @!acc))))
-    (let [acc @!acc]
-      (cond-> acc
-        (reduced? acc) deref))))
