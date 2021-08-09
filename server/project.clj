@@ -13,23 +13,21 @@
 
   :dependencies [[pro.juxt.crux-labs/core2-api]
                  [pro.juxt.crux-labs/core2-core]
-                 #_[pro.juxt.clojars-mirrors.crux/crux-http-server-deps "0.0.2"]
 
                  [ring/ring-core "1.9.4"]
-                 [info.sunng/ring-jetty9-adapter "0.14.2"]
-                 [org.eclipse.jetty/jetty-alpn-openjdk8-server "9.4.36.v20210114"]
+                 [info.sunng/ring-jetty9-adapter "0.15.2"]
+                 [org.eclipse.jetty/jetty-alpn-server "10.0.6"]
 
                  [metosin/muuntaja "0.6.8"]
-                 [metosin/jsonista "0.3.1"]
-                 [metosin/reitit-core "0.5.12"]
-                 [metosin/reitit-interceptors "0.5.12"]
-                 [metosin/reitit-ring "0.5.12"]
-                 [metosin/reitit-http "0.5.12"]
-                 [metosin/reitit-sieppari "0.5.13"]
-                 [metosin/reitit-swagger "0.5.12"]
-                 [metosin/reitit-spec "0.5.12"]
+                 [metosin/jsonista "0.3.3"]
+                 [metosin/reitit-core "0.5.15"]
+                 [metosin/reitit-interceptors "0.5.15"]
+                 [metosin/reitit-ring "0.5.15"]
+                 [metosin/reitit-http "0.5.15"]
+                 [metosin/reitit-sieppari "0.5.15"]
+                 [metosin/reitit-swagger "0.5.15"]
+                 [metosin/reitit-spec "0.5.15"]
 
                  [com.cognitect/transit-clj]]
 
-  :profiles {:test {:dependencies [[cheshire]
-                                   [hato]]}})
+  :profiles {:test {:dependencies [[cheshire]]}})
