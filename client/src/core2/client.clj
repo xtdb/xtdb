@@ -1,7 +1,7 @@
 (ns core2.client
   (:require [core2.api :as c2]
             [core2.transit :as c2.transit]
-            [hato.client :as hato]
+            [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
             [reitit.core :as r]
             [core2.error :as err])
   (:import clojure.lang.IReduceInit

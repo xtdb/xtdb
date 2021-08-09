@@ -25,7 +25,9 @@
                          [com.cognitect/transit-clj "1.0.324"]
 
                          [cheshire "5.10.0"]
-                         [hato "0.8.2"]]
+                         [pro.juxt.clojars-mirrors.hato/hato "0.8.2"]
+
+                         [metosin/reitit-core "0.5.12"]]
 
   :profiles {:dev [:test
                    {:dependencies [[pro.juxt.crux-labs/core2-api]
@@ -51,7 +53,7 @@
                                    [pro.juxt.crux-labs/core2-datasets]
 
                                    [cheshire "5.10.0"]
-                                   [hato "0.8.2"]]
+                                   [pro.juxt.clojars-mirrors.hato/hato]]
                     :resource-paths ["test-resources"]}
 
              :jmh {:dependencies [[org.openjdk.jmh/jmh-core "1.32"]

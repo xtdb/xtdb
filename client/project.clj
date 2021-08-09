@@ -12,7 +12,8 @@
   :scm {:dir ".."}
 
   :dependencies [[pro.juxt.crux-labs/core2-api]
-                 [hato]
+                 [pro.juxt.clojars-mirrors.hato/hato]
+                 [metosin/reitit-core]
                  [com.cognitect/transit-clj]]
 
   :profiles {:test {:dependencies [[pro.juxt.crux-labs/core2-core]
