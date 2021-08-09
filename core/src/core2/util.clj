@@ -66,6 +66,9 @@
 (s/def ::duration
   (s/and (s/conformer ->duration) #(instance? Duration %)))
 
+(defn component
+  ([node k] (get @(:!system node) k)))
+
 ;;; IO
 
 (defn ->seekable-byte-channel ^java.nio.channels.SeekableByteChannel [^ByteBuffer buffer]

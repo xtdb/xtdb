@@ -56,6 +56,7 @@ jobs:
       - attach_workspace:
           at: ~/
 
+      - run: './lein-sub check'
       - run: "./lein-sub test"
 
   integration-test:

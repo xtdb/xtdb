@@ -5,8 +5,8 @@
             [core2.tpch :as tpch]
             [core2.temporal :as temporal]
             [core2.operator :as op]
-            [core2.test-util :as tu]
-            [core2.snapshot :as snap])
+            [core2.snapshot :as snap]
+            [core2.util :as util])
   (:import java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            java.time.Duration
@@ -36,7 +36,7 @@
                     query tpch/tpch-q1-pricing-summary-report]
                 (letfn [(test-node [k ^core2.local_node.Node node]
                           (log/info "awaiting" k "node")
-                          (let [db (snap/snapshot (tu/component node ::snap/snapshot-factory)
+                          (let [db (snap/snapshot (util/component node ::snap/snapshot-factory)
                                                   last-tx (Duration/ofHours 1))]
                             (log/info "rows:"
                                       (->> (op/plan-ra query (merge {'$ db} (::tpch/params (meta query))))

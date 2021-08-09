@@ -2,8 +2,7 @@
   (:require [clojure.java.io :as io]
             [core2.bench :as bench]
             [core2.api :as c2]
-            [core2.local-node :as node]
-            [core2.test-util :as tu])
+            [core2.local-node :as node])
   (:import java.util.concurrent.TimeUnit))
 
 (comment
@@ -49,7 +48,7 @@
                                (map read-string)
                                (map-indexed vector))]
         (bench/with-timing (keyword (str "query-" idx))
-          (count (->> (c2/plan-query tu/*node* (assoc query :basis {:tx basis-tx}))
+          (count (->> (c2/plan-query node (assoc query :basis {:tx basis-tx}))
                       (into []))))))))
 
 (comment

@@ -46,7 +46,7 @@
 
 (defn component
   ([k] (component *node* k))
-  ([node k] (get @(:!system node) k)))
+  ([node k] (util/component node k)))
 
 (defn ->list ^java.util.List [^ValueVector v]
   (let [acc (ArrayList.)]
