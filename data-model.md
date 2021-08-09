@@ -26,36 +26,47 @@ As we have limited time and resources, and also limited interest in debating thi
 2. Should nesting be native to the data model and queries, or accessed via special functions (like in SQL:2016 JSON, or classic's maps).
 3. Do we agree that querying arbitrary Arrow is a strategic important goal?
 
-
 Here's a subset of options I made up. They are not really mutually exclusive. Estimates are rough guesses.
 
 #### Do nothing (free, for now)
 
+##### +
 + Frees us up fully to focus elsewhere.
+
+##### -
 - Limited type system, no nesting.
 - Hard to integrate external Arrow as we make assumptions about the format.
 - Once we have users, this will likely require migrations if we want to change it.
 
 #### Decouple the query engine from the DBMS (1 week)
 
+##### +
 + Adds ability to query any external Arrow.
 + Should be able to add nested types incrementally to our indexing later.
 + Arrow query engine as library.
+
+##### -
 - Limited type system on ingest, no nesting.
 - Requires building some awareness of full Arrow in the expression engine.
 
 #### Add list support (1-2 weeks)
 
+##### +
 + Adds support for lists of the basic scalars, non-nested. SQL Array-like.
+
+##### -
 - Limited type system, no proper nesting.
 - Hard to integrate external Arrow if we make assumptions about the format.
 - Once we have users, this will likely require migrations if we want to change it.
 
 #### Full Arrow internal support (2-4 weeks)
 
+##### +
 + Arguably best state to be in, internal and external data both first class citizens.
 + Full Arrow type system with nesting of both lists and maps.
 + No migrations later.
+
+##### -
 - Will take longer to build, larger initial investment.
 - Adds complexity where we currently can make assumptions.
 - Arrow isn't super suited to lots of dynamic nested data where shapes may differ.
