@@ -22,10 +22,10 @@
                  [org.clojure/data.csv]
                  [org.clojure/tools.cli "1.0.206"]
 
-                 [org.apache.arrow/arrow-algorithm "4.0.1"]
-                 [org.apache.arrow/arrow-compression "4.0.1"]
-                 [org.apache.arrow/arrow-vector "4.0.1"]
-                 [org.apache.arrow/arrow-memory-netty "4.0.1"]
+                 [org.apache.arrow/arrow-algorithm "5.0.0"]
+                 [org.apache.arrow/arrow-compression "5.0.0"]
+                 [org.apache.arrow/arrow-vector "5.0.0"]
+                 [org.apache.arrow/arrow-memory-netty "5.0.0"]
 
                  [org.roaringbitmap/RoaringBitmap "0.9.15"]
 

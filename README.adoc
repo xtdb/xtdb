@@ -208,6 +208,19 @@ Core2 artifacts are deployed to Maven Central.
 * `./bin/build-docker.sh [--clean]` => `juxt.crux-labs/core2:latest`
 * `CORE2_VERSION=<version> ./bin/build-docker.sh` to tag as a different version.
 
+== Arrow Fork
+
+We maintain a fork of [Arrow](https://github.com/apache/arrow) to fix a couple of issues in `DenseUnionVector` - see [this diff](https://github.com/apache/arrow/compare/master...juxt:master) for more details.
+
+To upgrade Arrow:
+
+* Usual bump in `project.clj`
+* Clone the [Arrow repo](https://github.com/apache/arrow), add the [JUXT fork](https://github.com/juxt/arrow) as a remote.
+* Rebase `juxt/master` on `apache/master`
+* `cd java`, `mvn package`
+* `cp vector/target/classes/org/apache/arrow/vector/complex/DenseUnionVector* <path-to-core2>/core/resources/org/apache/arrow/vector/complex/`
+* Test
+* Push (`--force-with-lease`) to JUXT fork, and commit to Core2.
 
 == Copyright & License
 
