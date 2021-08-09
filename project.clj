@@ -27,7 +27,7 @@
                          [cheshire "5.10.0"]
                          [pro.juxt.clojars-mirrors.hato/hato "0.8.2"]
 
-                         [metosin/reitit-core "0.5.12"]]
+                         [pro.juxt.clojars-mirrors.metosin/reitit-core "0.5.15"]]
 
   :profiles {:dev [:test
                    {:dependencies [[pro.juxt.crux-labs/core2-api]
