@@ -43,13 +43,12 @@
   ;; TODO currently fails because it doesn't like strings as attributes
 
   (with-open [query-rdr (io/reader query-file)]
-    (let [basis-tx (c2/latest-completed-tx node)]
-      (doseq [[idx query] (->> (line-seq query-rdr)
-                               (map read-string)
-                               (map-indexed vector))]
-        (bench/with-timing (keyword (str "query-" idx))
-          (count (->> (c2/plan-query node (assoc query :basis {:tx basis-tx}))
-                      (into []))))))))
+    (doseq [[idx query] (->> (line-seq query-rdr)
+                             (map read-string)
+                             (map-indexed vector))]
+      (bench/with-timing (keyword (str "query-" idx))
+        (count (->> (c2/plan-query node query)
+                    (into [])))))))
 
 (comment
   (with-open [node (node/start-node {})]
