@@ -14,3 +14,5 @@ pom.xml.asc
 
 # Ignore Gradle build output directory
 build
+
+*.iml
