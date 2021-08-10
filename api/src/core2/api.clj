@@ -2,7 +2,7 @@
   (:import clojure.lang.IReduceInit
            core2.IResultSet
            java.io.Writer
-           [java.util.concurrent CompletableFuture ExecutionException]
+           java.util.concurrent.ExecutionException
            java.util.Date
            java.util.function.Function))
 
@@ -38,28 +38,29 @@
   (-> @(-open-query-async node query params)
       rethrowing-cause))
 
-(defn plan-query-async [node query & params]
-  (-> (-open-query-async node query params)
-      (.thenApply (reify Function
-                    (apply [_ res]
-                      (with-open [res ^IResultSet res]
-                        (reify IReduceInit
-                          (reduce [_ f init]
+(defn plan-query-async
+  "Calling `reduce` on the result from `plan-query-async` yields a `CompletableFuture`."
+  [node query & params]
+
+  (reify IReduceInit
+    (reduce [_ f init]
+      (-> (-open-query-async node query params)
+          (.thenApply (reify Function
+                        (apply [_ res]
+                          (with-open [^IResultSet res res]
                             (reduce f init (iterator-seq res))))))))))
 
 (defn plan-query [node query & params]
-  (-> @(apply plan-query-async node query params)
-      rethrowing-cause))
+  (reify IReduceInit
+    (reduce [_ f init]
+      (-> @(reduce f init (apply plan-query-async node query params))
+          rethrowing-cause))))
 
 (defn query-async ^java.util.concurrent.CompletableFuture [node query & params]
-  (-> ^CompletableFuture (apply plan-query-async node query params)
-      (.thenApply (reify Function
-                    (apply [_ res]
-                      (into [] res))))))
+  (into [] (apply plan-query-async node query params)))
 
 (defn query [node query & params]
-  (-> @(apply query-async node query params)
-      rethrowing-cause))
+  (into [] (apply plan-query node query params)))
 
 (def http-routes
   [["/status" {:name :status
