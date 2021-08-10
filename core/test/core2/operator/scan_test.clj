@@ -38,3 +38,18 @@
       (t/is (= [{:_id "foo"}]
                (op/query-ra '[:scan [_id _id]]
                             (snap/snapshot sf tx)))))))
+
+(t/deftest test-only-scanning-temporal-cols-45
+  (with-open [node (node/start-node {})]
+    (let [snapshot-factory (tu/component node ::snap/snapshot-factory)
+          tx @(c2/submit-tx node [[:put {:_id "doc"}]])]
+
+      (t/is (op/query-ra '[:scan [_id
+                                  _valid-time-start _valid-time-end
+                                  _tx-time-start _tx-time-end]]
+                         (snap/snapshot snapshot-factory tx)))
+
+      #_ ; FIXME hangs
+      (t/is (op/query-ra '[:scan [_valid-time-start _valid-time-end
+                                  _tx-time-start _tx-time-end]]
+                         (snap/snapshot snapshot-factory tx))))))
