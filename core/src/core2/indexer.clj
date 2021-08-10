@@ -398,7 +398,11 @@
                                     id-vec per-op-offset row-id)
 
                         (copy-safe! (.getLiveRoot this (.getName tombstone-vec))
-                                    tombstone-vec 0 row-id)))
+                                    tombstone-vec 0 row-id))
+
+              :evict (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
+                       ;; TODO should we log the evict in the log-op-idxer?
+                       (.indexEvict temporal-idxer (t/get-object id-vec per-op-offset) row-id)))
 
             (copy-safe! (.getLiveRoot this (.getName tx-time-vec))
                         tx-time-vec 0 row-id)
@@ -407,7 +411,10 @@
                         tx-id-vec 0 row-id)))
 
         (.endTx log-op-idxer)
-        (.endTx temporal-idxer)
+        (let [evicted-row-ids (.endTx temporal-idxer)]
+          (when-not (.isEmpty evicted-row-ids)
+            ;; TODO create work item
+            ))
 
         (.getValueCount tx-ops-vec))))
 

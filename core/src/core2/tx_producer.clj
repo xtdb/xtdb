@@ -24,7 +24,7 @@
     (doseq [{:keys [op] :as tx-op} tx-ops
             [k v] (case op
                     :put (:doc tx-op)
-                    :delete (select-keys tx-op [:_id]))]
+                    (:delete :evict) (select-keys tx-op [:_id]))]
       (let [^Set field-types (.computeIfAbsent doc-k-types k (util/->jfn (fn [_] (LinkedHashSet.))))]
         (.add field-types (t/class->arrow-type (type v)))))
 
@@ -46,6 +46,11 @@
   (s/cat :op #{:delete}
          :_id ::id
          :vt-opts (s/? (s/keys :opt-un [::_valid-time-start ::_valid-time-end]))))
+
+(defmethod tx-op-spec :evict [_]
+  ;; eventually this could have vt/tt start/end?
+  (s/cat :op #{:evict}
+         :_id ::id))
 
 (s/def ::tx-op
   (s/and vector? (s/multi-spec tx-op-spec (fn [v _] v))))
@@ -83,8 +88,11 @@
         document-field (apply t/->field "document" t/struct-type false
                               (for [[k v-types] put-k-types]
                                 (->doc-field k v-types)))
+        ;; TODO these two use the put-k-types, I guess we could split them out?
         delete-id-field (->doc-field :_id (:_id put-k-types))
-        tx-schema (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array [0 1])) false
+        evict-id-field (->doc-field :_id (:_id put-k-types))
+
+        tx-schema (Schema. [(t/->field "tx-ops" (ArrowType$Union. UnionMode/Dense (int-array (range 3))) false
                                        (t/->field "put" t/struct-type false
                                                   document-field
                                                   valid-time-start-field
@@ -92,17 +100,18 @@
                                        (t/->field "delete" t/struct-type false
                                                   delete-id-field
                                                   valid-time-start-field
-                                                  valid-time-end-field))])]
+                                                  valid-time-end-field)
+                                       (t/->field "evict" t/struct-type false
+                                                  evict-id-field))])]
+
     (with-open [root (VectorSchemaRoot/create tx-schema allocator)]
       (let [^DenseUnionVector tx-ops-duv (.getVector root "tx-ops")]
 
         (dotimes [tx-op-n (count tx-ops)]
           (let [{:keys [op vt-opts] :as tx-op} (nth tx-ops tx-op-n)
-                op-type-id (case op :put 0, :delete 1)
+                op-type-id (case op :put 0, :delete 1, :evict 2)
                 ^StructVector op-vec (.getStruct tx-ops-duv op-type-id)
-                tx-op-offset (DenseUnionUtil/writeTypeId tx-ops-duv tx-op-n op-type-id)
-                valid-time-start-vec (.getChild op-vec "_valid-time-start" TimeStampVector)
-                valid-time-end-vec (.getChild op-vec "_valid-time-end" TimeStampVector)]
+                tx-op-offset (DenseUnionUtil/writeTypeId tx-ops-duv tx-op-n op-type-id)]
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
                      (.setIndexDefined op-vec tx-op-offset)
@@ -118,29 +127,31 @@
 
                            (util/set-value-count value-duv (inc (.getValueCount value-duv)))))))
 
-              :delete (let [id (:_id tx-op)
-                            ^DenseUnionVector id-duv (.getChild op-vec "_id" DenseUnionVector)]
-                        (.setIndexDefined op-vec tx-op-offset)
+              (:delete :evict) (let [id (:_id tx-op)
+                                     ^DenseUnionVector id-duv (.getChild op-vec "_id" DenseUnionVector)]
+                                 (.setIndexDefined op-vec tx-op-offset)
 
-                        (if (some? id)
-                          (let [type-id (t/arrow-type->type-id (t/class->arrow-type (type id)))
-                                value-offset (DenseUnionUtil/writeTypeId id-duv tx-op-offset type-id)]
-                            (t/set-safe! (.getVectorByType id-duv type-id) value-offset id))
+                                 (if (some? id)
+                                   (let [type-id (t/arrow-type->type-id (t/class->arrow-type (type id)))
+                                         value-offset (DenseUnionUtil/writeTypeId id-duv tx-op-offset type-id)]
+                                     (t/set-safe! (.getVectorByType id-duv type-id) value-offset id))
 
-                          (util/set-value-count id-duv (inc (.getValueCount id-duv))))))
+                                   (util/set-value-count id-duv (inc (.getValueCount id-duv))))))
 
-            (let [{:keys [_valid-time-start _valid-time-end]} vt-opts]
-              (if _valid-time-start
-                (t/set-safe! valid-time-start-vec tx-op-offset _valid-time-start)
-                (doto valid-time-start-vec
-                  (util/set-value-count (inc tx-op-offset))
-                  (t/set-null! tx-op-offset)))
+            (when-let [{:keys [_valid-time-start _valid-time-end]} vt-opts]
+              (let [valid-time-start-vec (.getChild op-vec "_valid-time-start" TimeStampVector)
+                    valid-time-end-vec (.getChild op-vec "_valid-time-end" TimeStampVector)]
+                (if _valid-time-start
+                  (t/set-safe! valid-time-start-vec tx-op-offset _valid-time-start)
+                  (doto valid-time-start-vec
+                    (util/set-value-count (inc tx-op-offset))
+                    (t/set-null! tx-op-offset)))
 
-              (if _valid-time-end
-                (t/set-safe! valid-time-end-vec tx-op-offset _valid-time-end)
-                (doto valid-time-end-vec
-                  (util/set-value-count (inc tx-op-offset))
-                  (t/set-null! tx-op-offset))))))
+                (if _valid-time-end
+                  (t/set-safe! valid-time-end-vec tx-op-offset _valid-time-end)
+                  (doto valid-time-end-vec
+                    (util/set-value-count (inc tx-op-offset))
+                    (t/set-null! tx-op-offset)))))))
 
         (util/set-vector-schema-root-row-count root (count tx-ops))
 
