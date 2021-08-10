@@ -2,10 +2,10 @@
   (:require [clojure.test :as t]
             [core2.temporal :as temporal]
             [core2.temporal.kd-tree :as kd])
-  (:import [java.util Date HashMap List]
+  (:import [core2.temporal IInternalIdManager TemporalCoordinates]
            java.io.Closeable
-           [org.apache.arrow.memory RootAllocator]
-           core2.temporal.IInternalIdManager))
+           [java.util Date HashMap List]
+           org.apache.arrow.memory.RootAllocator))
 
 ;; NOTE: "Developing Time-Oriented Database Applications in SQL",
 ;; chapter 10 "Bitemporal Tables".
@@ -27,6 +27,20 @@
                                            (sort-by (juxt :tx-time-start :row-id)))]
          (merge row (get row-id->row row-id)))))
 
+(defn ->coordinates ^core2.temporal.TemporalCoordinates [{:keys [id
+                                                                 ^long row-id
+                                                                 ^Date tx-time-start
+                                                                 ^Date tx-time-end
+                                                                 ^Date valid-time-start
+                                                                 ^Date valid-time-end
+                                                                 tombstone?]}]
+  (TemporalCoordinates. row-id id
+                        (.getTime tx-time-start)
+                        (.getTime (or tx-time-end temporal/end-of-time))
+                        (.getTime (or valid-time-start tx-time-start))
+                        (.getTime (or valid-time-end temporal/end-of-time))
+                        (boolean tombstone?)))
+
 (t/deftest bitemporal-tx-time-split-test
   (let [kd-tree nil
         id->internal-id-map (doto (HashMap.)
@@ -44,9 +58,9 @@
                 ^Closeable kd-tree (temporal/insert-coordinates kd-tree
                                                                 allocator
                                                                 id-manager
-                                                                (temporal/->coordinates {:id 7797
-                                                                                         :row-id 1
-                                                                                         :tx-time-start #inst "1998-01-10"}))]
+                                                                (->coordinates {:id 7797
+                                                                                :row-id 1
+                                                                                :tx-time-start #inst "1998-01-10"}))]
       (.put row-id->row 1 {:customer-number 145})
       (t/is (= [{:id 7797,
                  :customer-number 145,
@@ -62,9 +76,9 @@
       (let [kd-tree (temporal/insert-coordinates kd-tree
                                                  allocator
                                                  id-manager
-                                                 (temporal/->coordinates {:id 7797
-                                                                          :row-id 2
-                                                                          :tx-time-start #inst "1998-01-15"}))]
+                                                 (->coordinates {:id 7797
+                                                                 :row-id 2
+                                                                 :tx-time-start #inst "1998-01-15"}))]
         (.put row-id->row 2 {:customer-number 827})
         (t/is (= [{:id 7797,
                    :row-id 1,
@@ -94,10 +108,10 @@
         (let [kd-tree (temporal/insert-coordinates kd-tree
                                                    allocator
                                                    id-manager
-                                                   (temporal/->coordinates {:id 7797
-                                                                            :row-id 3
-                                                                            :tx-time-start #inst "1998-01-20"
-                                                                            :tombstone? true}))]
+                                                   (->coordinates {:id 7797
+                                                                   :row-id 3
+                                                                   :tx-time-start #inst "1998-01-20"
+                                                                   :tombstone? true}))]
           (.put row-id->row 3 {:customer-number 827})
           (t/is (= [{:id 7797,
                      :customer-number 145,
@@ -134,11 +148,11 @@
           (let [kd-tree (temporal/insert-coordinates kd-tree
                                                      allocator
                                                      id-manager
-                                                     (temporal/->coordinates {:id 7797
-                                                                              :row-id 4
-                                                                              :tx-time-start #inst "1998-01-23"
-                                                                              :valid-time-start #inst "1998-01-03"
-                                                                              :valid-time-end #inst "1998-01-15"}))]
+                                                     (->coordinates {:id 7797
+                                                                     :row-id 4
+                                                                     :tx-time-start #inst "1998-01-23"
+                                                                     :valid-time-start #inst "1998-01-03"
+                                                                     :valid-time-end #inst "1998-01-15"}))]
             (.put row-id->row 4 {:customer-number 145})
             (t/is (= [{:id 7797,
                        :customer-number 145,
@@ -183,12 +197,12 @@
             (let [kd-tree (temporal/insert-coordinates kd-tree
                                                        allocator
                                                        id-manager
-                                                       (temporal/->coordinates {:id 7797
-                                                                                :row-id 5
-                                                                                :tx-time-start #inst "1998-01-26"
-                                                                                :valid-time-start #inst "1998-01-02"
-                                                                                :valid-time-end #inst "1998-01-05"
-                                                                                :tombstone? true}))]
+                                                       (->coordinates {:id 7797
+                                                                       :row-id 5
+                                                                       :tx-time-start #inst "1998-01-26"
+                                                                       :valid-time-start #inst "1998-01-02"
+                                                                       :valid-time-end #inst "1998-01-05"
+                                                                       :tombstone? true}))]
               (.put row-id->row 5 {:customer-number 145})
               (t/is (= [{:id 7797,
                          :customer-number 145,
@@ -240,11 +254,11 @@
               (let [kd-tree (temporal/insert-coordinates kd-tree
                                                          allocator
                                                          id-manager
-                                                         (temporal/->coordinates {:id 7797
-                                                                                  :row-id 6
-                                                                                  :tx-time-start #inst "1998-01-28"
-                                                                                  :valid-time-start #inst "1998-01-12"
-                                                                                  :valid-time-end #inst "1998-01-15"}))]
+                                                         (->coordinates {:id 7797
+                                                                         :row-id 6
+                                                                         :tx-time-start #inst "1998-01-28"
+                                                                         :valid-time-start #inst "1998-01-12"
+                                                                         :valid-time-end #inst "1998-01-15"}))]
                 (.put row-id->row 6 {:customer-number 827})
                 (t/is (= [{:id 7797,
                            :customer-number 145,

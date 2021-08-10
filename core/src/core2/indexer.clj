@@ -15,7 +15,7 @@
            core2.api.TransactionInstant
            core2.metadata.IMetadataManager
            core2.object_store.ObjectStore
-           [core2.temporal ITemporalManager TemporalCoordinates]
+           core2.temporal.ITemporalManager
            core2.tx.Watermark
            java.io.Closeable
            java.lang.AutoCloseable
@@ -366,9 +366,8 @@
             op-type-ids (object-array (mapv (fn [^Field field]
                                               (keyword (.getName field)))
                                             (.getChildren (.getField tx-ops-vec))))
-            tx-time-ms (.getTime ^Date (.tx-time tx-instant))
-            row-id->temporal-coordinates (TreeMap.)
-            log-op-idxer (.startTx log-indexer tx-instant tx-root)]
+            log-op-idxer (.startTx log-indexer tx-instant tx-root)
+            temporal-idxer (.startTx temporal-mgr tx-instant)]
 
         (dotimes [tx-op-idx op-count]
           (let [op-type-id (.getTypeId tx-ops-vec tx-op-idx)
@@ -378,26 +377,22 @@
                 ^TimeStampVector valid-time-start-vec (.getChild op-vec "_valid-time-start")
                 ^TimeStampVector valid-time-end-vec (.getChild op-vec "_valid-time-end")
                 row-id (+ next-row-id tx-op-idx)
-                op (aget op-type-ids op-type-id)
-                ^TemporalCoordinates temporal-coordinates (temporal/row-id->coordinates row-id)]
-            (set! (.txTimeStart temporal-coordinates) tx-time-ms)
-            (set! (.validTimeStart temporal-coordinates) tx-time-ms)
-            (.put row-id->temporal-coordinates row-id temporal-coordinates)
+                op (aget op-type-ids op-type-id)]
             (case op
               :put (let [^StructVector document-vec (.getChild op-vec "document" StructVector)]
                      (.logPut log-op-idxer row-id tx-op-idx)
+                     (.indexPut temporal-idxer (t/get-object (.getChild document-vec "_id") per-op-offset) row-id
+                                valid-time-start-vec valid-time-end-vec per-op-offset)
+
                      (doseq [^DenseUnionVector value-vec (.getChildrenFromFields document-vec)
                              :when (not (neg? (.getTypeId value-vec per-op-offset)))]
-                       (when (= "_id" (.getName value-vec))
-                         (set! (.id temporal-coordinates) (t/get-object value-vec per-op-offset)))
-
                        (copy-safe! (.getLiveRoot this (.getName value-vec))
                                    value-vec per-op-offset row-id)))
 
               :delete (let [^DenseUnionVector id-vec (.getChild op-vec "_id" DenseUnionVector)]
                         (.logDelete log-op-idxer row-id tx-op-idx)
-                        (set! (.id temporal-coordinates) (t/get-object id-vec per-op-offset))
-                        (set! (.tombstone temporal-coordinates) true)
+                        (.indexDelete temporal-idxer (t/get-object id-vec per-op-offset) row-id
+                                      valid-time-start-vec valid-time-end-vec per-op-offset)
 
                         (copy-safe! (.getLiveRoot this (.getName id-vec))
                                     id-vec per-op-offset row-id)
@@ -409,20 +404,10 @@
                         tx-time-vec 0 row-id)
 
             (copy-safe! (.getLiveRoot this (.getName tx-id-vec))
-                        tx-id-vec 0 row-id)
-
-            (set! (.validTimeStart temporal-coordinates)
-                  (if-not (.isNull valid-time-start-vec per-op-offset)
-                    (.get valid-time-start-vec per-op-offset)
-                    tx-time-ms))
-
-            (set! (.validTimeEnd temporal-coordinates)
-                  (if-not (.isNull valid-time-end-vec per-op-offset)
-                    (.get valid-time-end-vec per-op-offset)
-                    (.getTime temporal/end-of-time)))))
+                        tx-id-vec 0 row-id)))
 
         (.endTx log-op-idxer)
-        (.updateTemporalCoordinates temporal-mgr row-id->temporal-coordinates)
+        (.endTx temporal-idxer)
 
         (.getValueCount tx-ops-vec))))
 
