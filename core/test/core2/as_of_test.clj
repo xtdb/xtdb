@@ -70,3 +70,52 @@
                                         _tx-time-start _tx-time-end]]
                                db)
                   (into {} (map (juxt :_id identity))))))))
+
+(t/deftest test-tx-time
+  (let [snapshot-factory (tu/component ::snap/snapshot-factory)
+
+        {tt1 :tx-time} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 0}]])
+        _ (Thread/sleep 10) ; prevent same-ms transactions
+        {tt2 :tx-time, :as tx2} @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]])
+
+        db (snap/snapshot snapshot-factory tx2)
+
+        original-v0-doc {:_id "doc", :version 0
+                         :_valid-time-start tt1
+                         :_valid-time-end temporal/end-of-time
+                         :_tx-time-start tt1
+                         :_tx-time-end tt2}
+
+        replaced-v0-doc {:_id "doc", :version 0
+                         :_valid-time-start tt1
+                         :_valid-time-end tt2
+                         :_tx-time-start tt2
+                         :_tx-time-end temporal/end-of-time}
+
+        v1-doc {:_id "doc", :version 1
+                :_valid-time-start tt2
+                :_valid-time-end temporal/end-of-time
+                :_tx-time-start tt2
+                :_tx-time-end temporal/end-of-time}]
+
+    (t/is (= [v1-doc]
+             (op/query-ra '[:scan [_id version
+                                   _valid-time-start _valid-time-end
+                                   _tx-time-start _tx-time-end]]
+                          db))
+          "point in time")
+
+    (t/is (= [replaced-v0-doc v1-doc]
+             (op/query-ra '[:scan [_id version
+                                   _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
+                                   _tx-time-start _tx-time-end]]
+                          {'$ db, '?eot temporal/end-of-time}))
+          "all vt")
+
+    #_ ; FIXME
+    (t/is (= [original-v0-doc replaced-v0-doc v1-doc]
+             (op/query-ra '[:scan [_id version
+                                   _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
+                                   _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
+                          {'$ db, '?eot temporal/end-of-time}))
+          "all vt, all tt")))
