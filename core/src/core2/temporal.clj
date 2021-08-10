@@ -168,7 +168,62 @@
 (defn ->temporal-column-idx ^long [col-name]
   (long (get column->idx (name col-name))))
 
-(declare insert-coordinates)
+(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^IInternalIdManager id-manager ^TemporalCoordinates coordinates]
+  (let [new-id? (not (.isKnownId id-manager (.id coordinates)))
+        row-id (.rowId coordinates)
+        id (.getOrCreateInternalId id-manager (.id coordinates) row-id)
+        tx-time-start-ms (.txTimeStart coordinates)
+        valid-time-start-ms (.validTimeStart coordinates)
+        valid-time-end-ms (.validTimeEnd coordinates)
+        end-of-time-ms (.getTime end-of-time)
+        min-range (doto (->min-range)
+                    (aset id-idx id)
+                    (aset valid-time-end-idx valid-time-start-ms)
+                    (aset tx-time-end-idx end-of-time-ms))
+        max-range (doto (->max-range)
+                    (aset id-idx id)
+                    (aset valid-time-start-idx (dec valid-time-end-ms))
+                    (aset tx-time-end-idx end-of-time-ms))
+        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
+        overlap (when-not new-id?
+                  (-> ^LongStream (kd/kd-tree-range-search
+                                   kd-tree
+                                   min-range
+                                   max-range)
+                      (.mapToObj (reify LongFunction
+                                   (apply [_ x]
+                                     (.getArrayPoint point-access x))))
+                      (.toArray)))
+        kd-tree (reduce
+                 (fn [kd-tree ^longs point]
+                   (kd/kd-tree-delete kd-tree allocator (->copy-range point)))
+                 kd-tree
+                 overlap)
+        kd-tree (cond-> kd-tree
+                  (not (.tombstone coordinates))
+                  (kd/kd-tree-insert allocator
+                                     (doto (long-array k)
+                                       (aset id-idx id)
+                                       (aset row-id-idx row-id)
+                                       (aset valid-time-start-idx valid-time-start-ms)
+                                       (aset valid-time-end-idx valid-time-end-ms)
+                                       (aset tx-time-start-idx tx-time-start-ms)
+                                       (aset tx-time-end-idx end-of-time-ms))))]
+    (reduce
+     (fn [kd-tree ^longs coord]
+       (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
+                                                      (aset tx-time-end-idx tx-time-start-ms)))
+         (< (aget coord valid-time-start-idx) valid-time-start-ms)
+         (kd/kd-tree-insert allocator (doto (->copy-range coord)
+                                        (aset tx-time-start-idx tx-time-start-ms)
+                                        (aset valid-time-end-idx valid-time-start-ms)))
+
+         (> (aget coord valid-time-end-idx) valid-time-end-ms)
+         (kd/kd-tree-insert allocator (doto (->copy-range coord)
+                                        (aset tx-time-start-idx tx-time-start-ms)
+                                        (aset valid-time-start-idx valid-time-end-ms)))))
+     kd-tree
+     overlap)))
 
 (defn- ->temporal-obj-key [chunk-idx]
   (format "temporal-%016x.arrow" chunk-idx))
@@ -493,63 +548,6 @@
                             (AtomicLong.) (ConcurrentHashMap.)
                             pool nil nil nil async-snapshot?)
       (.populateKnownChunks))))
-
-(defn insert-coordinates [kd-tree ^BufferAllocator allocator ^IInternalIdManager id-manager ^TemporalCoordinates coordinates]
-  (let [new-id? (not (.isKnownId id-manager (.id coordinates)))
-        row-id (.rowId coordinates)
-        id (.getOrCreateInternalId id-manager (.id coordinates) row-id)
-        tx-time-start-ms (.txTimeStart coordinates)
-        valid-time-start-ms (.validTimeStart coordinates)
-        valid-time-end-ms (.validTimeEnd coordinates)
-        end-of-time-ms (.getTime end-of-time)
-        min-range (doto (->min-range)
-                    (aset id-idx id)
-                    (aset valid-time-end-idx valid-time-start-ms)
-                    (aset tx-time-end-idx end-of-time-ms))
-        max-range (doto (->max-range)
-                    (aset id-idx id)
-                    (aset valid-time-start-idx (dec valid-time-end-ms))
-                    (aset tx-time-end-idx end-of-time-ms))
-        ^IKdTreePointAccess point-access (kd/kd-tree-point-access kd-tree)
-        overlap (when-not new-id?
-                  (-> ^LongStream (kd/kd-tree-range-search
-                                   kd-tree
-                                   min-range
-                                   max-range)
-                      (.mapToObj (reify LongFunction
-                                   (apply [_ x]
-                                     (.getArrayPoint point-access x))))
-                      (.toArray)))
-        kd-tree (reduce
-                 (fn [kd-tree ^longs point]
-                   (kd/kd-tree-delete kd-tree allocator (->copy-range point)))
-                 kd-tree
-                 overlap)
-        kd-tree (cond-> kd-tree
-                  (not (.tombstone coordinates))
-                  (kd/kd-tree-insert allocator
-                                     (doto (long-array k)
-                                       (aset id-idx id)
-                                       (aset row-id-idx row-id)
-                                       (aset valid-time-start-idx valid-time-start-ms)
-                                       (aset valid-time-end-idx valid-time-end-ms)
-                                       (aset tx-time-start-idx tx-time-start-ms)
-                                       (aset tx-time-end-idx end-of-time-ms))))]
-    (reduce
-     (fn [kd-tree ^longs coord]
-       (cond-> (kd/kd-tree-insert kd-tree allocator (doto (->copy-range coord)
-                                                      (aset tx-time-end-idx tx-time-start-ms)))
-         (< (aget coord valid-time-start-idx) valid-time-start-ms)
-         (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset tx-time-start-idx tx-time-start-ms)
-                                        (aset valid-time-end-idx valid-time-start-ms)))
-
-         (> (aget coord valid-time-end-idx) valid-time-end-ms)
-         (kd/kd-tree-insert allocator (doto (->copy-range coord)
-                                        (aset tx-time-start-idx tx-time-start-ms)
-                                        (aset valid-time-start-idx valid-time-end-ms)))))
-     kd-tree
-     overlap)))
 
 (defmethod ig/halt-key! ::temporal-manager [_ ^TemporalManager mgr]
   (.close mgr))
