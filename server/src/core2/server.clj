@@ -2,29 +2,44 @@
   (:require [clojure.instant :as inst]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [cognitect.transit :as transit]
             [core2.api :as c2]
             [core2.datalog :as d]
+            [core2.error :as err]
             [core2.local-node :as node]
             [core2.transit :as c2.transit]
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [muuntaja.core :as m]
+            [muuntaja.format.core :as mf]
             [reitit.coercion :as r.coercion]
             [reitit.coercion.spec :as rc.spec]
+            [reitit.core :as r]
             [reitit.http :as http]
             [reitit.http.coercion :as rh.coercion]
             [reitit.http.interceptors.exception :as ri.exception]
             [reitit.http.interceptors.muuntaja :as ri.muuntaja]
             [reitit.http.interceptors.parameters :as ri.parameters]
             [reitit.interceptor.sieppari :as r.sieppari]
+            [reitit.ring :as r.ring]
             [reitit.swagger :as r.swagger]
             [ring.adapter.jetty9 :as j]
             [spec-tools.core :as st]
-            [reitit.core :as r]
-            [core2.error :as err])
+            [clojure.java.io :as io])
   (:import core2.api.TransactionInstant
+           core2.IResultSet
+           java.io.OutputStream
            java.time.Duration
            org.eclipse.jetty.server.Server))
+
+(def ^:private muuntaja-opts
+  (-> m/default-options
+      (m/select-formats #{"application/transit+json" "application/edn"})
+      (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
+                c2.transit/tj-read-handlers)
+      (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
+                c2.transit/tj-write-handlers)
+      (assoc-in [:http :encode-response-body?] (constantly true))))
 
 (defmulti ^:private route-handler :name, :default ::default)
 
@@ -44,6 +59,33 @@
           ;; so we just check for vector and then conform later.
           :parameters {:body (s/keys :req-un [::tx-ops])}}})
 
+(defn- ->edn-resultset-encoder [_]
+  (reify
+    mf/EncodeToBytes
+    ;; we're required to be a sub-type of ETB but don't need to implement its fn.
+
+    mf/EncodeToOutputStream
+    (encode-to-output-stream [_ res _]
+      (fn [^OutputStream out]
+        (with-open [^IResultSet res res
+                    writer (io/writer out)]
+          (doseq [el (iterator-seq res)]
+            (print-method el writer)))))))
+
+(defn- ->tj-resultset-encoder [opts]
+  (reify
+    mf/EncodeToBytes
+    ;; we're required to be a sub-type of ETB but don't need to implement its fn.
+
+    mf/EncodeToOutputStream
+    (encode-to-output-stream [_ res _]
+      (fn [^OutputStream out]
+        (with-open [^IResultSet res res
+                    out out]
+          (let [writer (transit/writer out :json opts)]
+            (doseq [el (iterator-seq res)]
+              (transit/write writer el))))))))
+
 (s/def ::tx-id int?)
 
 (s/def ::tx-time
@@ -52,7 +94,6 @@
                              (cond
                                (inst? s) s
                                (string? s) (inst/read-instant-date s)))}))
-
 
 (s/def ::default-valid-time inst?)
 (s/def ::tx #(instance? TransactionInstant %))
@@ -69,10 +110,19 @@
   (s/keys :req-un [::query], :opt-un [::params]))
 
 (defmethod route-handler :query [_]
-  {:post {:handler (fn [{:keys [node parameters]}]
+  {:muuntaja (m/create (-> muuntaja-opts
+                           (assoc :return :output-stream)
+
+                           (assoc-in [:formats "application/transit+json" :encoder]
+                                     [->tj-resultset-encoder {:handlers c2.transit/tj-write-handlers}])
+                           (assoc-in [:formats "application/edn" :encoder]
+                                     [->edn-resultset-encoder])))
+
+   :post {:handler (fn [{:keys [node parameters]}]
                      (let [{{:keys [query params]} :body} parameters]
-                       {:status 200
-                        :body (into [] (apply c2/plan-query node query params))}))
+                       (-> (apply c2/open-query-async node query params)
+                           (util/then-apply (fn [res]
+                                              {:status 200, :body res})))))
 
           :parameters {:body ::query-body}}})
 
@@ -90,15 +140,6 @@
    :body (err/illegal-arg :malformed-request
                           {::err/message (str "Malformed " (-> ex ex-data :format pr-str) " request.")})})
 
-(def ^:private muuntaja
-  (m/create (-> m/default-options
-                (m/select-formats #{"application/transit+json" "application/edn"})
-                (assoc-in [:formats "application/transit+json" :decoder-opts :handlers]
-                          c2.transit/tj-read-handlers)
-                (assoc-in [:formats "application/transit+json" :encoder-opts :handlers]
-                          c2.transit/tj-write-handlers)
-                (assoc-in [:http :encode-response-body?] (constantly true)))))
-
 (def router
   (http/router c2/http-routes
                {:expand (fn [{route-name :name, :as route} opts]
@@ -106,7 +147,7 @@
                                       route-name (merge (route-handler route)))
                                     opts))
 
-                :data {:muuntaja muuntaja
+                :data {:muuntaja (m/create muuntaja-opts)
                        :coercion rc.spec/coercion
                        :interceptors [r.swagger/swagger-feature
                                       [ri.parameters/parameters-interceptor]
@@ -138,6 +179,7 @@
 
 (defmethod ig/init-key :core2/server [_ {:keys [port jetty-opts] :as opts}]
   (let [server (j/run-jetty (http/ring-handler router
+                                               (r.ring/create-default-handler)
                                                {:executor r.sieppari/executor
                                                 :interceptors [[with-opts (select-keys opts [:node :read-only?])]]})
 

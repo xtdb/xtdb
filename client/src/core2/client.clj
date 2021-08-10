@@ -1,14 +1,17 @@
 (ns core2.client
-  (:require [core2.api :as c2]
+  (:require [cognitect.transit :as transit]
+            [core2.api :as c2]
             [core2.error :as err]
             [core2.transit :as c2.transit]
             [juxt.clojars-mirrors.hato.v0v8v2.hato.client :as hato]
+            [juxt.clojars-mirrors.hato.v0v8v2.hato.middleware :as hato.middleware]
             [juxt.clojars-mirrors.reitit-core.v0v5v15.reitit.core :as r])
-  (:import clojure.lang.IReduceInit
-           core2.IResultSet
+  (:import core2.IResultSet
+           [java.io EOFException InputStream]
            java.lang.AutoCloseable
            java.util.concurrent.CompletableFuture
-           java.util.function.Function))
+           java.util.function.Function
+           java.util.NoSuchElementException))
 
 (def transit-opts
   {:decode {:handlers c2.transit/tj-read-handlers}
@@ -39,6 +42,38 @@
                         opts)
                  identity handle-err)))
 
+(deftype TransitResultSet [^InputStream in, rdr
+                           ^:unsynchronized-mutable next-el]
+  IResultSet
+  (hasNext [this]
+    (or (some? next-el)
+        (try
+          (set! (.next-el this) (transit/read rdr))
+          true
+          (catch RuntimeException e
+            (if (instance? EOFException (.getCause e))
+              false
+              (throw e))))))
+
+  (next [this]
+    (when-not (.hasNext this)
+      (throw (NoSuchElementException.)))
+    (let [el (.next-el this)]
+      (set! (.next-el this) nil)
+      el))
+
+  (close [_]
+    (.close in)))
+
+(defmethod hato.middleware/coerce-response-body ::transit+json->resultset [_req {:keys [^InputStream body] :as resp}]
+  (try
+    (let [rdr (transit/reader body :json {:handlers c2.transit/tj-read-handlers})]
+      (-> resp
+          (assoc :body (TransitResultSet. body rdr nil))))
+    (catch Exception e
+      (.close body)
+      (throw e))))
+
 (defrecord Core2Client [base-url]
   c2/PClient
   (-open-query-async [client query params]
@@ -53,13 +88,11 @@
                                      {:content-type :transit+json
                                       :form-params {:query (-> query
                                                                (assoc-in [:basis :tx] basis-tx))
-                                                    :params params}}))))
+                                                    :params params}
+                                      :as ::transit+json->resultset}))))
           (.thenApply (reify Function
                         (apply [_ resp]
-                          (let [it (.iterator ^Iterable (:body resp))]
-                            (reify IResultSet
-                              (hasNext [_] (.hasNext it))
-                              (next [_] (.next it))))))))))
+                          (:body resp)))))))
 
   c2/PSubmitNode
   (submit-tx [client tx-ops]
