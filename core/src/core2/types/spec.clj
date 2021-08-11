@@ -96,8 +96,8 @@
 
 (defmethod arrow-type-spec :union [_]
   (s/keys :req-un [:arrow.type/name
-                   :arrow.type.union/mode
-                   :arrow.type.union/typeIds]))
+                   :arrow.type.union/mode]
+          :opt-un [:arrow.type.union/typeIds]))
 
 (s/def :arrow.type.fixedsizebinary/byteWidth nat-int?)
 
