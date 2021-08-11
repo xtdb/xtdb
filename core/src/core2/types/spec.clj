@@ -4,6 +4,8 @@
   (:import [com.fasterxml.jackson.databind ObjectMapper ObjectReader ObjectWriter]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]))
 
+;; See https://github.com/apache/arrow/blob/master/format/Schema.fbs
+
 (def ^:private ^ObjectMapper object-mapper (ObjectMapper.))
 (def ^:private ^ObjectReader arrow-type-reader (.readerFor object-mapper ArrowType))
 (def ^:private ^ObjectReader field-reader (.readerFor object-mapper Field))
@@ -81,11 +83,11 @@
   (s/keys :req-un [:arrow.schema.field.type/name
                    :arrow.schema.field.type.interval/unit]))
 
-(s/def :arrow.schema.field.type.duration/unit :arrow.schema.field.type/time-unit)
+(defmethod arrow-type-spec :list [_]
+  (s/keys :req-un [:arrow.schema.field.type/name]))
 
-(defmethod arrow-type-spec :duration [_]
-  (s/keys :req-un [:arrow.schema.field.type/name]
-          :opt-un [:arrow.schema.field.type.duration/unit]))
+(defmethod arrow-type-spec :struct [_]
+  (s/keys :req-un [:arrow.schema.field.type/name]))
 
 (s/def :arrow.schema.field.type.union/mode (s/and (s/conformer keyword)
                                                   #{:SPARSE :DENSE}))
@@ -114,6 +116,12 @@
   (s/keys :req-un [:arrow.schema.field.type/name]
           :opt-un [:arrow.schema.field.type.map/keysSorted]))
 
+(s/def :arrow.schema.field.type.duration/unit :arrow.schema.field.type/time-unit)
+
+(defmethod arrow-type-spec :duration [_]
+  (s/keys :req-un [:arrow.schema.field.type/name]
+          :opt-un [:arrow.schema.field.type.duration/unit]))
+
 (defmethod arrow-type-spec :largeutf8 [_]
   (s/keys :req-un [:arrow.schema.field.type/name]))
 
@@ -130,7 +138,7 @@
 (s/def :arrow.schema.field/nullable boolean?)
 (s/def :arrow.schema.field/children (s/coll-of :arrow.schema/field))
 (s/def :arrow.schema/field (s/keys :req-un [:arrow.schema.field/name :arrow.schema.field/type]
-                                   :opt-on [:arrow.schema.field/nullable :arrow.schema.field/children]))
+                                   :opt-on [:arrow.schema.field/nullable :arrow.schema.field/children :arrow.schema/metadata]))
 
 (s/def :arrow.schema/fields (s/coll-of :arrow.schema/field :min-count 1))
 (s/def :arrow.schama/metadata (s/map-of string? string?))
