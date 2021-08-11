@@ -70,8 +70,8 @@ EDN::
 == Parameters
 
 * `db-dir` (string/`File`/`Path`): Path to Lucene data directory
-* `fsync-frequency` (string/`Integer`/`Duration`): Approx. time between IO-intensive Lucene `.commit` operations
-* `disable-refresh?` (boolean, default false): Disable synchronous maybeRefreshBlocking calls during ingestion at the cost of full consistency with the main KV index-store. These calls can have a dramatic, negative ingestion performance impact when replaying small transactions
+* `fsync-frequency` (string/`Duration`, default `PT5M`): Approx. time between IO-intensive Lucene `.commit` operations
+* `refresh-frequency` (string/`Duration`, default `PT0S`): How often to perform a refresh operation. Negative (e.g. `"PT-1S"`) will disable refresh, zero will refresh after every transaction, positive will refresh on the given interval - updates will not be visible in Lucene searches until the index is refreshed.
 
 == Indexing
 

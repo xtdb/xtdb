@@ -426,7 +426,7 @@
 (t/deftest test-async-refresh
   (fix/with-tmp-dirs #{lucene-dir}
     (with-open [node (crux.api/start-node {::l/lucene-store {:db-dir lucene-dir
-                                                             :disable-refresh? true}})]
+                                                             :refresh-frequency "PT-1S"}})]
       (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo, :foo "foo"}]])
 
       (t/is (= #{}
@@ -434,7 +434,7 @@
                     {:find '[?e]
                      :where '[[(text-search :foo "foo") [[?e]]]]})))
 
-      (l/fsync (:crux.lucene/lucene-store @(:!system node)))
+      (l/refresh (:crux.lucene/lucene-store @(:!system node)))
 
       (t/is (= #{[:foo]}
                (c/q (c/db node)

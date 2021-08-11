@@ -24,10 +24,11 @@
            [org.apache.lucene.store ByteBuffersDirectory FSDirectory IOContext]))
 
 (defrecord LuceneNode [directory analyzer index-writer searcher-manager indexer
-                       cp-job ^Thread fsync-thread]
+                       cp-job ^Thread fsync-thread, ^Thread refresh-thread]
   Closeable
   (close [_]
     (doto fsync-thread (.interrupt) (.join))
+    (when refresh-thread (doto refresh-thread (.interrupt) (.join)))
     (cio/try-close cp-job)
     (cio/try-close index-writer)
     (cio/try-close directory)))
@@ -294,12 +295,10 @@
             (finally
               (.release snapshotter snapshot))))))))
 
-(defn fsync [{:keys [^IndexWriter index-writer ^SearcherManager searcher-manager]}]
+(defn fsync [{:keys [^IndexWriter index-writer]}]
   (log/debug "Committing Lucene IndexWriter...")
   (.commit index-writer)
-  (log/debug "Committed Lucene IndexWriter.")
-
-  (.maybeRefresh searcher-manager))
+  (log/debug "Committed Lucene IndexWriter."))
 
 (defn- fsync-loop [deps ^Duration fsync-frequency]
   (log/debug "Starting Lucene fsync-loop...")
@@ -318,6 +317,26 @@
     (catch InterruptedException _
       (log/debug "Stopped Lucene fsync-loop."))))
 
+(defn refresh [{:keys [^SearcherManager searcher-manager]}]
+  (.maybeRefresh searcher-manager))
+
+(defn- refresh-loop [deps ^Duration refresh-frequency]
+  (log/debug "Starting Lucene refresh-loop...")
+  (try
+    (while true
+      (try
+        (Thread/sleep (.toMillis refresh-frequency))
+        (refresh deps)
+
+        (catch InterruptedException e
+          (throw e))
+
+        (catch Throwable t
+          (log/warn t "error during Lucene IndexWriter commit"))))
+
+    (catch InterruptedException _
+      (log/debug "Stopped Lucene fsync-loop."))))
+
 (defn ->lucene-store
   {::sys/args {:db-dir {:doc "Lucene DB Dir"
                         :spec ::sys/path}
@@ -325,10 +344,10 @@
                                  :spec ::sys/duration
                                  :default "PT5M"
                                  :doc "Approx. time between IO-intensive Lucene `.commit` operations."}
-               :disable-refresh? {:required? true
-                                  :spec ::sys/boolean
-                                  :default false
-                                  :doc "Disable synchronous maybeRefreshBlocking calls during ingestion at the cost of full consistency with the main KV index-store. These calls can have a dramatic, negative ingestion performance impact when replaying small transactions."}}
+               :refresh-frequency {:required? true
+                                   :spec ::sys/duration
+                                   :default "PT0S"
+                                   :doc "How often to perform a refresh operation. Negative will disable refresh, zero will refresh after every transaction, positive will refresh on the given interval - updates will not be visible in Lucene searches until the index is refreshed."}}
    ::sys/deps {:document-store :crux/document-store
                :query-engine :crux/query-engine
                :indexer `->indexer
@@ -337,7 +356,7 @@
                :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
   [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer
-           fsync-frequency disable-refresh?]
+           fsync-frequency ^Duration refresh-frequency]
     :as opts}]
   (let [directory (if db-dir
                     (FSDirectory/open db-dir)
@@ -352,8 +371,12 @@
                                   indexer
                                   cp-job
                                   (doto (.newThread (cio/thread-factory "crux-lucene-fsync")
-                                                    #(fsync-loop {:index-writer index-writer, :searcher-manager searcher-manager} fsync-frequency))
-                                    (.start)))]
+                                                    #(fsync-loop {:index-writer index-writer} fsync-frequency))
+                                    (.start))
+                                  (when-not (or (.isNegative refresh-frequency) (.isZero refresh-frequency))
+                                    (doto (.newThread (cio/thread-factory "crux-lucene-refresh")
+                                                      #(refresh-loop {:searcher-manager searcher-manager} refresh-frequency))
+                                      (.start))))]
 
     ;; Ensure lucene index exists for immediate queries:
     (.commit index-writer)
@@ -373,7 +396,7 @@
 
                           (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
                                                             "crux.lucene/index-version" (str index-version)})
-                          (when-not disable-refresh?
+                          (when (.isZero refresh-frequency)
                             (.maybeRefreshBlocking searcher-manager))))
 
     lucene-store))
