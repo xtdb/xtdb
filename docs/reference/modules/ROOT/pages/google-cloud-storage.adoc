@@ -1,4 +1,4 @@
-= Crux Google Cloud Storage
+= Google Cloud Storage
 
 You can use Google's Cloud Storage (GCS) as Crux's 'document store' or 'checkpoint store'.
 

@@ -1,4 +1,6 @@
-= Corda (Labs - Alpha)
+= Corda
+
+Development Status: Alpha
 
 A Crux module that allows you to pipe verified https://www.corda.net/[Corda] transactions into a Crux node, to then query using Crux's bitemporal Datalog query engine.
 

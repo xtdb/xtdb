@@ -1,4 +1,4 @@
-= JDBC Nodes
+= JDBC
 
 Crux nodes can use JDBC databases to store their transaction logs and/or document stores.
 

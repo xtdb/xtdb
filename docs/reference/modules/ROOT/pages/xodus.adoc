@@ -1,6 +1,6 @@
-= JetBrains Xodus
+= Xodus
 
-Our friends over at https://www.avisi.nl/en/home[Avisi] have released support for https://github.com/JetBrains/xodus[Xodus] as a KV store for Crux's indices
+Our friends over at https://www.avisi.nl/en/home[Avisi] have released support for https://github.com/JetBrains/xodus[JetBrains Xodus] as a KV store for Crux's indices.
 
 For more details, see the https://github.com/avisi-apps/crux-xodus[crux-xodus] GitHub repo.
 

@@ -21,7 +21,7 @@
 * Persistence Modules
 ** xref:s3.adoc[AWS S3]
 ** xref:azure-blobs.adoc[Azure Blobs]
-** xref:corda.adoc[DLT - Corda]
+** xref:corda.adoc[Corda]
 ** xref:google-cloud-storage.adoc[Google Cloud Storage]
 ** xref:kafka.adoc[Kafka]
 ** xref:jdbc.adoc[JDBC]

@@ -1,4 +1,4 @@
-= Query Engine Configuration
+= Query Engine
 
 There are a number of different defaults that can be overridden within the Crux query engine.
 
