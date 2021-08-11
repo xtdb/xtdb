@@ -1,4 +1,4 @@
-= Crux Azure Blobs
+= Azure Blobs
 
 You can use Azure's Blob Storage as Crux's 'document store'.
 

@@ -1,4 +1,4 @@
-= Crux S3
+= AWS S3
 
 You can use AWS's Simple Storage Service (S3) as Crux's 'document store'.
 

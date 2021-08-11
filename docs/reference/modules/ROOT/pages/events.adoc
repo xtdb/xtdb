@@ -1,4 +1,4 @@
-= Event Subscription
+= Events
 
 [#overview]
 == Overview

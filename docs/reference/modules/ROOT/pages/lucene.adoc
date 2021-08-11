@@ -1,4 +1,4 @@
-= Full-text Lucene search
+= Full-Text Search
 
 Full-text search module for Crux making use of https://lucene.apache.org/[Apache
 Lucene].
