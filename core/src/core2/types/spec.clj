@@ -87,6 +87,14 @@
   (s/keys :req-un [:arrow.schema.field.type/name]
           :opt-un [:arrow.schema.field.type.duration/unit]))
 
+(s/def :arrow.schema.field.type.union/mode (s/and (s/conformer keyword)
+                                                  #{:SPARSE :DENSE}))
+(s/def :arrow.schema.field.type.union/typeIds (s/coll-of nat-int?))
+
+(defmethod arrow-type-spec :union [_]
+  (s/keys :req-un [:arrow.schema.field.type/name
+                   :arrow.schema.field.type.union/mode
+                   :arrow.schema.field.type.union/typeIds]))
 
 (s/def :arrow.schema.field.type.fixedsizebinary/byteWidth nat-int?)
 
