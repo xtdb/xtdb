@@ -441,6 +441,16 @@
                     {:find '[?e]
                      :where '[[(text-search :foo "foo") [[?e]]]]}))))))
 
+(t/deftest test-can-search-docs-from-tx-fn-1594
+  (let [doc {:crux.db/id :ivan :name "Ivan"}]
+    (submit+await-tx [[:crux.tx/put {:crux.db/id :submit-tx, :crux.db/fn '(fn [_ ops] ops)}]])
+    (submit+await-tx [[:crux.tx/fn :submit-tx [[:crux.tx/put doc]]]])
+
+    (t/is (= #{[:ivan]}
+             (c/q (c/db *api*)
+                  {:find '[?e]
+                   :where '[[(text-search :name "Ivan") [[?e]]]]})))))
+
 (comment
   (do
     (import '[ch.qos.logback.classic Level Logger]

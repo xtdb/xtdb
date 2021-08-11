@@ -257,25 +257,16 @@
 (defn ->analyzer [_]
   (StandardAnalyzer.))
 
-(defn- transform-tx-events [document-store tx-events]
-  (let [conformed-tx-events (map txc/<-tx-event tx-events)
-        docs (db/fetch-docs document-store
-                            (txc/conformed-tx-events->doc-hashes conformed-tx-events))]
-    (reduce (fn [acc {:keys [op] :as tx-event}]
-              (case op
-                :crux.tx/evict (-> acc (update :evicted-eids conj (:eid tx-event)))
-                :crux.tx/fn (let [{:keys [args-content-hash]} tx-event
-                                  ;; doc replaced by this point
-                                  nested-events (-> (db/fetch-docs document-store #{args-content-hash})
-                                                    (get args-content-hash)
-                                                    :crux.db.fn/tx-events)
-                                  {:keys [docs evicted-eids]} (transform-tx-events document-store nested-events)]
-                              {:docs (into (:docs acc) docs)
-                               :evicted-eids (into (:evicted-eids acc) evicted-eids)})
-                acc))
-            {:docs docs
-             :evicted-eids #{}}
-            conformed-tx-events)))
+(defn- transform-tx-ops [tx-ops]
+  (->> tx-ops
+       (map txc/conform-tx-op)
+       (mapcat txc/flatten-tx-fn-ops)
+       (reduce (fn xf [acc {:keys [op docs] :as tx-op}]
+                 (if (= op :crux.tx/evict)
+                   (update acc :evicted-eids conj (:eid tx-op))
+                   (update acc :docs into docs)))
+               {:docs #{}
+                :evicted-eids #{}})))
 
 (defn- checkpoint-src [^IndexWriter index-writer]
   (let [^SnapshotDeletionPolicy snapshotter (.getIndexDeletionPolicy (.getConfig index-writer))]
@@ -348,14 +339,13 @@
                                    :spec ::sys/duration
                                    :default "PT0S"
                                    :doc "How often to perform a refresh operation. Negative will disable refresh, zero will refresh after every transaction, positive will refresh on the given interval - updates will not be visible in Lucene searches until the index is refreshed."}}
-   ::sys/deps {:document-store :crux/document-store
-               :query-engine :crux/query-engine
+   ::sys/deps {:query-engine :crux/query-engine
                :indexer `->indexer
                :analyzer `->analyzer
                :secondary-indices :crux/secondary-indices
                :checkpointer (fn [_])}
    ::sys/before #{[:crux/tx-ingester]}}
-  [{:keys [^Path db-dir document-store analyzer indexer query-engine secondary-indices checkpointer
+  [{:keys [^Path db-dir analyzer indexer query-engine secondary-indices checkpointer
            fsync-frequency ^Duration refresh-frequency]
     :as opts}]
   (let [directory (if db-dir
@@ -387,9 +377,10 @@
 
     (tx/register-index! secondary-indices
                         (latest-completed-tx-id index-writer)
-                        (fn [{:keys [::tx/tx-id ::txe/tx-events committing?]}]
+                        {:with-tx-ops? true}
+                        (fn [{:keys [::tx/tx-id :crux.api/tx-ops committing?]}]
                           (when committing?
-                            (let [{:keys [docs evicted-eids]} (transform-tx-events document-store tx-events)]
+                            (let [{:keys [docs evicted-eids]} (transform-tx-ops tx-ops)]
                               (when-let [evicting-eids (not-empty evicted-eids)]
                                 (evict! indexer index-writer evicting-eids))
                               (index! indexer index-writer docs)))

@@ -1345,18 +1345,19 @@
                 (assoc :crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
                                                      :db-dir idx-dir}})))
 
-          (with-secondary-index [node-config after-tx-id process-tx-f]
-            (-> node-config
-                (assoc ::index2 (-> (fn [{:keys [secondary-indices]}]
-                                      (tx/register-index! secondary-indices after-tx-id process-tx-f)
-                                      nil)
-                                    (with-meta {::sys/deps {:secondary-indices :crux/secondary-indices}
-                                                ::sys/before #{[:crux/tx-ingester]}})))))]
+          (with-secondary-index
+            ([node-config after-tx-id opts process-tx-f]
+             (-> node-config
+                 (assoc ::index2 (-> (fn [{:keys [secondary-indices]}]
+                                       (tx/register-index! secondary-indices after-tx-id opts process-tx-f)
+                                       nil)
+                                     (with-meta {::sys/deps {:secondary-indices :crux/secondary-indices}
+                                                 ::sys/before #{[:crux/tx-ingester]}}))))))]
 
     (t/testing "indexes into secondary indices"
       (let [!txs (atom [])]
         (with-open [node (crux/start-node (-> {}
-                                              (with-secondary-index nil
+                                              (with-secondary-index nil {}
                                                 (fn [tx]
                                                   (swap! !txs conj tx)))))]
           (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]])
@@ -1373,7 +1374,7 @@
           (with-open [_node (crux/start-node (-> {}
                                                 (with-persistent-golden-stores db-dir)
                                                 (with-persistent-indices idx-dir)
-                                                (with-secondary-index nil
+                                                (with-secondary-index nil {}
                                                   (fn [tx]
                                                     (swap! !txs conj tx)))))]
             ;; NOTE: don't need `sync` - should happen before node becomes available.
@@ -1384,24 +1385,41 @@
         (let [!txs (atom [])]
           (with-open [node (crux/start-node (-> {}
                                                 (with-persistent-golden-stores db-dir)
-                                                (with-secondary-index nil
+                                                (with-secondary-index nil {}
                                                   (fn [tx]
                                                     (swap! !txs conj tx)))))]
             (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :foo}]]))
 
           (with-open [node (crux/start-node (-> {}
                                                 (with-persistent-golden-stores db-dir)
-                                                (with-secondary-index 0
+                                                (with-secondary-index 0 {}
                                                   (fn [tx]
                                                     (swap! !txs conj tx)))))]
             (crux/sync node)
             (t/is (= 0 (::tx/tx-id (crux/latest-completed-tx node))))
             (t/is (= [0] (map ::tx/tx-id @!txs)))))))
 
+    (t/testing "passes through tx-ops on request"
+      (fix/with-tmp-dirs #{db-dir idx-dir}
+        (let [!txs (atom [])]
+          (with-open [node (crux/start-node (-> {}
+                                                (with-persistent-golden-stores db-dir)
+                                                (with-persistent-indices idx-dir)
+                                                (with-secondary-index nil {:with-tx-ops? true}
+                                                  (fn [tx]
+                                                    (swap! !txs conj tx)))))]
+
+            (fix/submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])
+
+            (t/is (= [{::tx/tx-id 0
+                       ::crux/tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]]}]
+                     (->> @!txs
+                          (map #(select-keys % [::tx/tx-id ::crux/tx-ops])))))))))
+
     (with-redefs [log-impl/enabled? (constantly false)]
       (t/testing "handles secondary indexes blowing up"
         (with-open [node (crux/start-node (-> {}
-                                              (with-secondary-index nil
+                                              (with-secondary-index nil {}
                                                 (fn [_tx]
                                                   (throw (ex-info "boom!" {}))))))]
 
@@ -1424,7 +1442,7 @@
                                     (crux/start-node (-> {}
                                                          (with-persistent-golden-stores db-dir)
                                                          (with-persistent-indices idx-dir)
-                                                         (with-secondary-index nil
+                                                         (with-secondary-index nil {}
                                                            (fn [_tx]
                                                              (throw (ex-info "boom!" {}))))))
                                     (catch Exception e

@@ -24,6 +24,8 @@
       (throw (ex-info "invalid valid-time" {:valid-time valid-time})))
     valid-time))
 
+(declare conform-tx-op)
+
 (defmulti ^:private conform-tx-op-type
   (fn [op decoders]
     (first op))
@@ -83,10 +85,13 @@
   (let [arg-doc {:crux.db/id (UUID/randomUUID)
                  :crux.db.fn/args args}
         arg-doc-id (c/new-id arg-doc)]
-    {:op :crux.tx/fn
-     :fn-eid (check-eid fn-eid)
-     :arg-doc-id arg-doc-id
-     :docs {arg-doc-id arg-doc}}))
+    (into {:op :crux.tx/fn
+           :fn-eid (check-eid fn-eid)
+           :arg-doc-id arg-doc-id
+           :docs {arg-doc-id arg-doc}}
+          (when (= 1 (count args))
+            (when-let [tx-ops (:crux.api/tx-ops (first args))]
+              {:crux.api/tx-ops (mapv conform-tx-op tx-ops)})))))
 
 (defn conform-tx-op
   ([op] (conform-tx-op op {}))
@@ -222,3 +227,9 @@
 
                       (for [arg args]
                         (get docs arg arg))))))))
+
+(defn flatten-tx-fn-ops [{:keys [op] :as tx-op}]
+  (or (when (= :crux.tx/fn op)
+        (when-let [tx-ops (:crux.api/tx-ops tx-op)]
+          (mapcat flatten-tx-fn-ops tx-ops)))
+      [tx-op]))

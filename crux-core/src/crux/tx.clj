@@ -395,13 +395,18 @@
   (map->TxIndexer deps))
 
 (defprotocol ISecondaryIndices
-  (register-index! [_ after-tx-id process-tx-f]))
+  (register-index!
+    [_ after-tx-id process-tx-f]
+    [_ after-tx-id opts process-tx-f]
+    "NOTE: alpha API, may break between releases."))
 
 (defrecord SecondaryIndices [!secondary-indices]
   ISecondaryIndices
-  (register-index! [_ after-tx-id process-tx-f]
-    (swap! !secondary-indices conj {:after-tx-id after-tx-id
-                                    :process-tx-f process-tx-f})))
+  (register-index! [this after-tx-id process-tx-f]
+    (register-index! this after-tx-id {} process-tx-f))
+  (register-index! [_ after-tx-id opts process-tx-f]
+    (swap! !secondary-indices conj (merge opts {:after-tx-id after-tx-id
+                                                :process-tx-f process-tx-f}))))
 
 (defn ->secondary-indices [_]
   (->SecondaryIndices (atom #{})))
@@ -420,19 +425,23 @@
 
 (defn ->tx-ingester {::sys/deps {:tx-indexer :crux/tx-indexer
                                  :index-store :crux/index-store
+                                 :document-store :crux/document-store
                                  :tx-log :crux/tx-log
                                  :bus :crux/bus
                                  :secondary-indices :crux/secondary-indices}}
-  [{:keys [tx-log tx-indexer bus index-store secondary-indices]}]
+  [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices]}]
   (log/info "Started tx-ingester")
 
   (let [!error (atom nil)
         secondary-indices @(:!secondary-indices secondary-indices)
+        with-tx-ops? (some :with-tx-ops? secondary-indices)
         latest-crux-tx-id (::tx-id (db/latest-completed-tx index-store))]
-    (letfn [(process-tx-f [{::keys [^long tx-id] :as tx}]
-              (doseq [{:keys [after-tx-id process-tx-f]} secondary-indices
-                      :when (or (nil? after-tx-id) (< ^long after-tx-id tx-id))]
-                (process-tx-f tx)))
+    (letfn [(process-tx-f [document-store {:keys [::tx-id ::txe/tx-events] :as tx}]
+              (let [tx (cond-> tx
+                         with-tx-ops? (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
+                (doseq [{:keys [after-tx-id process-tx-f]} secondary-indices
+                        :when (or (nil? after-tx-id) (< ^long after-tx-id ^long tx-id))]
+                  (process-tx-f tx))))
 
             (set-ingester-error! [t]
               (reset! !error t)
@@ -449,7 +458,7 @@
               (with-open [log (db/open-tx-log tx-log after-tx-id)]
                 (doseq [{::keys [tx-id] :as tx} (->> (iterator-seq log)
                                                      (take-while (comp #(<= ^long % ^long latest-crux-tx-id) ::tx-id)))]
-                  (process-tx-f (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))
+                  (process-tx-f document-store (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))
             (catch Throwable t
               (set-ingester-error! t)
               (throw t)))))
@@ -463,7 +472,7 @@
                                                                   (select-keys tx [::tx-time ::tx-id])
                                                                   nil)
                                         committing? (db/index-tx-events in-flight-tx (::txe/tx-events tx))]
-                                    (process-tx-f (assoc tx :committing? committing?))
+                                    (process-tx-f in-flight-tx (assoc tx :committing? committing?))
 
                                     (if committing?
                                       (db/commit in-flight-tx)
