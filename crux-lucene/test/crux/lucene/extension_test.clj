@@ -257,23 +257,24 @@
 
       ;; wildcard-text-search + leading wildcard + boosted :product/title
       (t/is (= [["SKU-93921" :product/title "Yellow Raincoat" 10.0]
-                ["SKU-93921"
-                 :product/description
-                 "Light and bright - a yellow raincoat to keep you dry all year round"
-                 1.0]
                 ["SKU-13892"
                  :product/description
                  "Don't let rain get in the way of your day!"
+                 1.0]
+                ["SKU-93921"
+                 :product/description
+                 "Light and bright - a yellow raincoat to keep you dry all year round"
                  1.0]]
-               (custom-wildcard-text-search node
-                                            db
-                                            (FunctionScoreQuery/boostByQuery
-                                             (build-custom-query (->per-field-analyzer nil)
-                                                                 l/field-crux-val
-                                                                 "*rain*")
-                                             (build-custom-query (->per-field-analyzer nil)
-                                                                 l/field-crux-attr
-                                                                 (-> :product/title
-                                                                     l/keyword->k
-                                                                     QueryParser/escape))
-                                             10.0)))))))
+               (->> (custom-wildcard-text-search node
+                                                 db
+                                                 (FunctionScoreQuery/boostByQuery
+                                                  (build-custom-query (->per-field-analyzer nil)
+                                                                      l/field-crux-val
+                                                                      "*rain*")
+                                                  (build-custom-query (->per-field-analyzer nil)
+                                                                      l/field-crux-attr
+                                                                      (-> :product/title
+                                                                          l/keyword->k
+                                                                          QueryParser/escape))
+                                                  10.0))
+                    (sort-by (juxt (comp - last) first))))))))
