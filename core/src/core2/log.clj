@@ -1,8 +1,10 @@
 (ns core2.log
-  (:require [core2.util :as util])
+  (:require [core2.util :as util]
+            [clojure.tools.logging :as log])
   (:import core2.api.TransactionInstant
            java.lang.AutoCloseable
            java.nio.ByteBuffer
+           java.time.Duration
            java.util.concurrent.Semaphore))
 
 (set! *unchecked-math* :warn-on-boxed)
@@ -29,6 +31,30 @@
     (.acceptRecord subscriber record)
 
     (.tx-id ^TransactionInstant (.tx record))))
+
+(defn handle-polling-subscription [^Log log after-tx-id {:keys [^Duration poll-sleep-duration]} ^LogSubscriber subscriber]
+  (doto (.newThread subscription-thread-factory
+                    (fn []
+                      (let [thread (Thread/currentThread)]
+                        (.onSubscribe subscriber (reify AutoCloseable
+                                                   (close [_]
+                                                     (.interrupt thread)
+                                                     (.join thread)))))
+                      (try
+                        (loop [after-tx-id after-tx-id]
+                          (let [last-tx-id (reduce (tx-handler subscriber)
+                                                   after-tx-id
+                                                   (try
+                                                     (.readRecords log after-tx-id 100)
+                                                     (catch Exception e
+                                                       (log/warn e "Error polling for txs, will retry"))))]
+                            (when (Thread/interrupted)
+                              (throw (InterruptedException.)))
+                            (when (= after-tx-id last-tx-id)
+                              (Thread/sleep (.toMillis poll-sleep-duration)))
+                            (recur last-tx-id)))
+                        (catch InterruptedException _))))
+    (.start)))
 
 (definterface INotifyingSubscriberHandler
   (notifyTx [^core2.api.TransactionInstant tx])
