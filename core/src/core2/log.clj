@@ -45,7 +45,9 @@
 (defmethod ig/init-key ::memory-log [_ {:keys [clock]}]
   (InMemoryLog. (atom []) clock))
 
-(def ^:private ^{:tag 'long} header-size (+ Integer/BYTES Integer/BYTES Long/BYTES))
+(def ^:private ^{:tag 'byte} record-separator 0x1E)
+(def ^:private ^{:tag 'long} header-size (+ Byte/BYTES Integer/BYTES Long/BYTES))
+(def ^:private ^{:tag 'long} footer-size Long/BYTES)
 
 (deftype LocalDirectoryLog [^Path root-path, ^ExecutorService pool, ^BlockingQueue queue, ^Future append-loop-future, ^:volatile-mutable ^FileChannel log-channel]
   Log
@@ -56,6 +58,7 @@
           (do (set! log-channel (util/->file-channel log-path))
               (recur after-offset limit))
           []))
+
       (let [log-in (DataInputStream. (BufferedInputStream. (Channels/newInputStream log-channel)))]
         (.position log-channel (long (or after-offset 0)))
         (loop [limit (int (if after-offset
@@ -68,18 +71,20 @@
               (subvec acc 1)
               acc)
             (if-let [record (try
-                              (let [check (.readInt log-in)
-                                    size (.readInt log-in)
-                                    _ (when-not (= check (bit-xor (unchecked-int offset) size))
-                                        (throw (IllegalStateException. "invalid record")))
+                              (when-not (= record-separator (.read log-in))
+                                (throw (IllegalStateException. "invalid record")))
+                              (let [size (.readInt log-in)
                                     time-ms (.readLong log-in)
-                                    record (byte-array size)]
-                                (when (= size (.read log-in record))
+                                    record (byte-array size)
+                                    read-bytes (.read log-in record)
+                                    offset-check (.readLong log-in)]
+                                (when (and (= size read-bytes)
+                                           (= offset-check offset))
                                   (->LogRecord (c2/->TransactionInstant offset (Date. time-ms)) (ByteBuffer/wrap record))))
                               (catch EOFException _))]
               (recur (dec limit)
                      (conj acc record)
-                     (+ offset header-size (.capacity ^ByteBuffer (.record ^LogRecord record))))
+                     (+ offset header-size (.capacity ^ByteBuffer (.record ^LogRecord record)) footer-size))
               (if after-offset
                 (subvec acc 1)
                 acc)))))))
@@ -126,17 +131,17 @@
                     (let [[f ^ByteBuffer record] (.get elements n)
                           time-ms (.millis clock)
                           size (.remaining record)
-                          check (bit-xor (unchecked-int offset) size)
                           written-record (.duplicate record)]
-                      (.writeInt log-out check)
+                      (.write log-out ^byte record-separator)
                       (.writeInt log-out size)
                       (.writeLong log-out time-ms)
                       (while (>= (.remaining written-record) Long/BYTES)
                         (.writeLong log-out (.getLong written-record)))
                       (while (.hasRemaining written-record)
                         (.write log-out (.get written-record)))
+                      (.writeLong log-out offset)
                       (.set elements n (MapEntry/create f (->LogRecord (c2/->TransactionInstant offset (Date. time-ms)) record)))
-                      (recur (inc n) (+ offset header-size size)))))
+                      (recur (inc n) (+ offset header-size size footer-size)))))
                 (catch Throwable t
                   (.truncate log-channel previous-offset)
                   (throw t)))
