@@ -119,3 +119,25 @@
                                    _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
                           {'$ db, '?eot temporal/end-of-time}))
           "all vt, all tt")))
+
+(t/deftest test-evict
+  (let [snapshot-factory (tu/component ::snap/snapshot-factory)]
+    (letfn [(all-time-docs [db]
+              (->> (op/query-ra '[:scan [_id
+                                         _valid-time-start {_valid-time-end (<= _valid-time-end ?eot)}
+                                         _tx-time-start {_tx-time-end (<= _tx-time-end ?eot)}]]
+                                {'$ db, '?eot temporal/end-of-time})
+                   (map :_id)
+                   frequencies))]
+
+      (let [_ @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 0}]
+                                        [:put {:_id "other-doc", :version 0}]])
+            _ (Thread/sleep 10)         ; prevent same-ms transactions
+            tx2 @(c2/submit-tx tu/*node* [[:put {:_id "doc", :version 1}]])]
+
+        (t/is (= {"doc" 3, "other-doc" 1} (all-time-docs (snap/snapshot snapshot-factory tx2)))
+              "documents present before evict"))
+
+      (let [tx3 @(c2/submit-tx tu/*node* [[:evict "doc"]])]
+        (t/is (= {"other-doc" 1} (all-time-docs (snap/snapshot snapshot-factory tx3)))
+              "documents removed after evict")))))

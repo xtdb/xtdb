@@ -6,7 +6,7 @@
       "type" : {
         "name" : "union",
         "mode" : "Dense",
-        "typeIds" : [0,1]
+        "typeIds" : [0,1,2]
       },
       "children" : [{
         "name" : "put",
@@ -363,6 +363,29 @@
           },
           "children" : [ ]
         }]
+      },{
+        "name" : "evict",
+        "nullable" : false,
+        "type" : {
+          "name" : "struct"
+        },
+        "children" : [{
+          "name" : "_id",
+          "nullable" : false,
+          "type" : {
+            "name" : "union",
+            "mode" : "Dense",
+            "typeIds" : [5]
+          },
+          "children" : [{
+            "name" : "type-5",
+            "nullable" : false,
+            "type" : {
+              "name" : "utf8"
+            },
+            "children" : [ ]
+          }]
+        }]
       }]
     }]
   },
@@ -614,6 +637,23 @@
           "count" : 0,
           "VALIDITY" : [ ],
           "DATA" : [ ]
+        }]
+      },{
+        "name" : "evict",
+        "count" : 0,
+        "VALIDITY" : [ ],
+        "children" : [{
+          "name" : "_id",
+          "count" : 0,
+          "TYPE_ID" : [ ],
+          "OFFSET" : [ ],
+          "children" : [{
+            "name" : "type-5",
+            "count" : 0,
+            "VALIDITY" : [ ],
+            "OFFSET" : [0],
+            "DATA" : [ ]
+          }]
         }]
       }]
     }]
