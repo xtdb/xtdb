@@ -3,10 +3,9 @@
             [core2.api :as c2]
             [core2.log :as log]
             [core2.util :as util]
-            [core2.tx :as tx]
             [juxt.clojars-mirrors.integrant.core :as ig]
             [clojure.spec.alpha :as s])
-  (:import [core2.log LogReader LogWriter]
+  (:import core2.log.Log
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration
@@ -33,12 +32,14 @@
                               (merge {"message.timestamp.type" "LogAppendTime"}
                                      config)))))
 
-(deftype KafkaLogWriter [^KafkaProducer producer
-                         topic-name]
-  LogWriter
+(deftype KafkaLog [^KafkaProducer producer
+                   ^KafkaConsumer consumer
+                   ^TopicPartition tp
+                   ^Duration poll-duration]
+  Log
   (appendRecord [_ record]
     (let [fut (CompletableFuture.)]
-      (.send producer (ProducerRecord. topic-name nil record)
+      (.send producer (ProducerRecord. (.topic tp) nil record)
              (reify Callback
                (onCompletion [_ record-metadata e]
                  (if e
@@ -48,15 +49,6 @@
                                                    record))))))
       fut))
 
-  Closeable
-  (close [_]
-    (.close producer)))
-
-(deftype KafkaLog [^LogWriter log-writer
-                   ^KafkaConsumer consumer
-                   ^TopicPartition tp
-                   ^Duration poll-duration]
-  LogReader
   (readRecords [_ after-offset limit]
     (if after-offset
       (.seek consumer tp (inc ^long after-offset))
@@ -70,14 +62,10 @@
       (catch InterruptException e
         (throw (.getCause e)))))
 
-  LogWriter
-  (appendRecord [_ record]
-    (.appendRecord log-writer record))
-
   Closeable
   (close [_]
     (util/try-close consumer)
-    (util/try-close log-writer)))
+    (util/try-close producer)))
 
 (defn ->producer [kafka-config]
   (KafkaProducer. ^Map (merge {"enable.idempotence" "true"
@@ -134,51 +122,30 @@
 (s/def ::create-topic? boolean?)
 (s/def ::topic-config ::util/string-map)
 
-(derive ::log-writer :core2/log-writer)
-
-(defmethod ig/prep-key ::log-writer [_ opts]
-  (-> (merge {:bootstrap-servers "localhost:9092"
-              :replication-factor 1
-              :create-topic? true}
-             opts)
-      (util/maybe-update :properties-file util/->path)))
-
-(defmethod ig/pre-init-spec ::log-writer [_]
-  (s/keys :req-un [::bootstrap-servers ::topic-name ::create-topic? ::replication-factor]
-          :opt-un [::properties-file ::properties-map ::topic-config]))
-
-(defmethod ig/init-key ::log-writer [_ {:keys [topic-name] :as kafka-opts}]
-  (let [kafka-config (->kafka-config kafka-opts)]
-    (ensure-topic-exists kafka-config kafka-opts)
-    (KafkaLogWriter. (->producer kafka-config) topic-name)))
-
-(defmethod ig/halt-key! ::log-writer [_ writer]
-  (util/try-close writer))
-
-(defmethod ig/prep-key ::log [_ opts]
-  (-> (merge (ig/prep-key ::log-writer opts)
-             {:poll-duration "PT1S"})
-      (util/maybe-update :poll-duration util/->duration)))
-
 (s/def ::poll-duration ::util/duration)
 
+(defmethod ig/prep-key ::log [_ opts]
+  (-> (merge {:bootstrap-servers "localhost:9092"
+              :replication-factor 1
+              :create-topic? true
+              :poll-duration "PT1S"}
+             opts)
+      (util/maybe-update :properties-file util/->path)
+      (util/maybe-update :poll-duration util/->duration)))
+
 (defmethod ig/pre-init-spec ::log [_]
-  (s/and (ig/pre-init-spec ::log-writer)
-         (s/keys :req-un [::poll-duration])))
+  (s/keys :req-un [::bootstrap-servers ::topic-name ::create-topic? ::replication-factor ::poll-duration]
+          :opt-un [::properties-file ::properties-map ::topic-config]))
 
 (defmethod ig/init-key ::log [_ {:keys [topic-name poll-duration] :as kafka-opts}]
   (let [kafka-config (->kafka-config kafka-opts)
-        tp (TopicPartition. topic-name 0)
-        writer (ig/init-key ::log-writer kafka-opts)]
-    {:writer (ig/init-key ::log-writer kafka-opts)
-     :log (KafkaLog. writer
-                     (doto (->consumer kafka-config)
-                       (.assign #{tp}))
-                     tp
-                     poll-duration)}))
+        tp (TopicPartition. topic-name 0)]
+    (ensure-topic-exists kafka-config kafka-opts)
+    (KafkaLog. (->producer kafka-config)
+               (doto (->consumer kafka-config)
+                 (.assign #{tp}))
+               tp
+               poll-duration)))
 
-(defmethod ig/resolve-key ::log [_ {:keys [log]}] log)
-
-(defmethod ig/halt-key! ::log [_ {:keys [log writer]}]
-  (util/try-close log)
-  (ig/halt-key! ::log-writer writer))
+(defmethod ig/halt-key! ::log [_ log]
+  (util/try-close log))

@@ -5,12 +5,12 @@
             [core2.util :as util]
             [juxt.clojars-mirrors.integrant.core :as ig])
   (:import core2.indexer.TransactionIndexer
-           [core2.log LogReader LogRecord]
+           [core2.log Log LogRecord]
            java.io.Closeable
            java.time.Duration
            [java.util.concurrent Executors ExecutorService]))
 
-(defn- ingest-loop [^LogReader log, ^TransactionIndexer indexer
+(defn- ingest-loop [^Log log, ^TransactionIndexer indexer
                     {:keys [^Duration poll-sleep-duration ^long batch-size],
                      :or {batch-size 100}}]
   (let [poll-sleep-ms (.toMillis poll-sleep-duration)]
