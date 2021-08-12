@@ -1,12 +1,13 @@
 (ns core2.kafka
   (:require [clojure.java.io :as io]
+            [clojure.spec.alpha :as s]
             [core2.api :as c2]
             [core2.log :as log]
             [core2.util :as util]
-            [juxt.clojars-mirrors.integrant.core :as ig]
-            [clojure.spec.alpha :as s])
-  (:import core2.log.Log
+            [juxt.clojars-mirrors.integrant.core :as ig])
+  (:import [core2.log Log LogSubscriber]
            java.io.Closeable
+           java.lang.AutoCloseable
            java.nio.file.Path
            java.time.Duration
            [java.util Date Map Properties]
@@ -32,41 +33,6 @@
                               (merge {"message.timestamp.type" "LogAppendTime"}
                                      config)))))
 
-(deftype KafkaLog [^KafkaProducer producer
-                   ^KafkaConsumer consumer
-                   ^TopicPartition tp
-                   ^Duration poll-duration]
-  Log
-  (appendRecord [_ record]
-    (let [fut (CompletableFuture.)]
-      (.send producer (ProducerRecord. (.topic tp) nil record)
-             (reify Callback
-               (onCompletion [_ record-metadata e]
-                 (if e
-                   (.completeExceptionally fut e)
-                   (.complete fut (log/->LogRecord (c2/->TransactionInstant (.offset record-metadata)
-                                                                            (Date. (.timestamp record-metadata)))
-                                                   record))))))
-      fut))
-
-  (readRecords [_ after-offset limit]
-    (if after-offset
-      (.seek consumer tp (inc ^long after-offset))
-      (.seekToBeginning consumer [tp]))
-
-    (try
-      (->> (for [^ConsumerRecord record (.poll consumer poll-duration)]
-             (log/->LogRecord (c2/->TransactionInstant (.offset record) (Date. (.timestamp record)))
-                              (.value record)))
-           (into [] (take limit)))
-      (catch InterruptException e
-        (throw (.getCause e)))))
-
-  Closeable
-  (close [_]
-    (util/try-close consumer)
-    (util/try-close producer)))
-
 (defn ->producer [kafka-config]
   (KafkaProducer. ^Map (merge {"enable.idempotence" "true"
                                "acks" "all"
@@ -82,6 +48,79 @@
                                "key.deserializer" "org.apache.kafka.common.serialization.ByteBufferDeserializer"
                                "value.deserializer" "org.apache.kafka.common.serialization.ByteBufferDeserializer"}
                               kafka-config)))
+
+(defn- seek-consumer [^KafkaConsumer consumer, ^TopicPartition tp, after-tx-id]
+  (if after-tx-id
+    (.seek consumer tp (inc ^long after-tx-id))
+    (.seekToBeginning consumer [tp])))
+
+(defn- poll-consumer [^KafkaConsumer consumer, ^Duration poll-duration]
+  (try
+    (.poll consumer poll-duration)
+    (catch InterruptException e
+      (Thread/interrupted)
+      (throw (.getCause e)))))
+
+(defn- ->log-record [^ConsumerRecord record]
+  (log/->LogRecord (c2/->TransactionInstant (.offset record) (Date. (.timestamp record)))
+                   (.value record)))
+
+(defn- handle-subscriber [{:keys [poll-duration tp kafka-config]} after-tx-id ^LogSubscriber subscriber]
+  (doto (.newThread log/subscription-thread-factory
+                    (fn []
+                      (let [thread (Thread/currentThread)]
+                        (.onSubscribe subscriber (reify AutoCloseable
+                                                   (close [_]
+                                                     (.interrupt thread)
+                                                     (.join thread)))))
+
+                      (with-open [consumer (->consumer kafka-config)]
+                        (.assign consumer #{tp})
+                        (seek-consumer consumer tp after-tx-id)
+                        (try
+                          (loop []
+                            (doseq [record (poll-consumer consumer poll-duration)]
+                              (when (Thread/interrupted)
+                                (throw (InterruptedException.)))
+                              (.acceptRecord subscriber (->log-record record)))
+
+                            (when-not (Thread/interrupted)
+                              (recur)))
+
+                          (catch InterruptedException _)))))
+    (.start)))
+
+(defrecord KafkaLog [kafka-config
+                     ^KafkaProducer producer
+                     ^KafkaConsumer consumer
+                     ^TopicPartition tp
+                     ^Duration poll-duration]
+  Log
+  (appendRecord [_ record]
+    (let [fut (CompletableFuture.)]
+      (.send producer (ProducerRecord. (.topic tp) nil record)
+             (reify Callback
+               (onCompletion [_ record-metadata e]
+                 (if e
+                   (.completeExceptionally fut e)
+                   (.complete fut (log/->LogRecord (c2/->TransactionInstant (.offset record-metadata)
+                                                                            (Date. (.timestamp record-metadata)))
+                                                   record))))))
+      fut))
+
+  (readRecords [_ after-tx-id limit]
+    (seek-consumer consumer tp after-tx-id)
+
+    (->> (poll-consumer consumer poll-duration)
+         (into [] (comp (take limit) (map ->log-record)))))
+
+  (subscribe [this after-tx-id subscriber]
+    (handle-subscriber this after-tx-id subscriber))
+
+  Closeable
+  (close [_]
+    (util/try-close consumer)
+    (util/try-close producer)))
 
 (defn ensure-topic-exists [kafka-config {:keys [topic-name replication-factor create-topic? topic-config]}]
   (with-open [admin-client (AdminClient/create ^Map kafka-config)]
@@ -124,6 +163,8 @@
 
 (s/def ::poll-duration ::util/duration)
 
+(derive ::log :core2/log)
+
 (defmethod ig/prep-key ::log [_ opts]
   (-> (merge {:bootstrap-servers "localhost:9092"
               :replication-factor 1
@@ -141,7 +182,8 @@
   (let [kafka-config (->kafka-config kafka-opts)
         tp (TopicPartition. topic-name 0)]
     (ensure-topic-exists kafka-config kafka-opts)
-    (KafkaLog. (->producer kafka-config)
+    (KafkaLog. kafka-config
+               (->producer kafka-config)
                (doto (->consumer kafka-config)
                  (.assign #{tp}))
                tp

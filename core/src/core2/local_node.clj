@@ -3,7 +3,6 @@
             [core2.api :as api]
             [core2.datalog :as d]
             [core2.indexer :as idx]
-            core2.ingest-loop
             [core2.operator :as op]
             [core2.snapshot :as snap]
             [core2.tx-producer :as txp]
@@ -89,13 +88,14 @@
   (let [system (-> (into {::node {}
                           :core2/allocator {}
                           ::idx/indexer {}
-                          :core2.ingest-loop/ingest-loop {}
+                          :core2/ingester {}
                           :core2.metadata/metadata-manager {}
                           :core2.temporal/temporal-manager {}
                           :core2.buffer-pool/buffer-pool {}
                           ::snap/snapshot-factory {}
                           ::txp/tx-producer {}}
                          opts)
+                   (doto ig/load-namespaces)
                    (with-default-impl :core2/log :core2.log/memory-log)
                    (with-default-impl :core2/object-store :core2.object-store/memory-object-store)
                    (doto ig/load-namespaces)
