@@ -7,7 +7,7 @@
             [clojure.spec.alpha :as s]
             [core2.error :as err])
   (:import core2.DenseUnionUtil
-           [core2.log LogWriter LogRecord]
+           [core2.log Log LogRecord]
            [java.util LinkedHashMap LinkedHashSet Set]
            org.apache.arrow.memory.BufferAllocator
            [org.apache.arrow.vector TimeStampVector VectorSchemaRoot]
@@ -157,7 +157,7 @@
 
         (util/root->arrow-ipc-byte-buffer root :stream)))))
 
-(deftype TxProducer [^LogWriter log, ^BufferAllocator allocator]
+(deftype TxProducer [^Log log, ^BufferAllocator allocator]
   ITxProducer
   (submitTx [_ tx-ops]
     (-> (.appendRecord log (serialize-tx-ops tx-ops allocator))
@@ -166,7 +166,7 @@
             (.tx result))))))
 
 (defmethod ig/prep-key ::tx-producer [_ opts]
-  (merge {:log (ig/ref :core2/log-writer)
+  (merge {:log (ig/ref :core2/log)
           :allocator (ig/ref :core2/allocator)}
          opts))
 
