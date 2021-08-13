@@ -131,6 +131,22 @@ papers:
 - [[https://subs.emis.de/LNI/Proceedings/Proceedings241/383.pdf][Unnesting Arbitrary Queries]]
 - [[http://db.in.tum.de/~freitag/papers/p1891-freitag.pdf][Adopting Worst-Case Optimal Joins in Relational Database Systems]]
 
+** Type systems
+
+- Dolan, 'Algebraic Subtyping' (thesis, 2016): https://www.cs.tufts.edu/~nr/cs257/archive/stephen-dolan/thesis.pdf.
+  Inference algorithm is overly complex for what we need, but main contribution for us is the formulation of the algebra of sub-types as multiple distinct lattices (as in, one for numeric types, one for record types, without overlap).
+  Also defines the concept of type 'polarity' (whether a type is used in an input or output position) and its effect on the inference algo which, if it's not useful for us, is at least interesting :)
+
+Record typing
+
+- Gastor, Jones (technical report, 1996), 'A polymorphic type system for extensible records and variants': https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.117.1572&rep=rep1&type=pdf
+  A good state-of-the-union, one of the more approachable papers I'm aware of that talks about variants (the union type side).
+- Leijen (Microsoft Research), 'Extensible records with scoped labels': https://citeseerx.ist.psu.edu/viewdoc/download?doi=10.1.1.74.3362&rep=rep1&type=pdf
+  Another approachable paper that defines useful operations on record and variant types.
+  (Leijen then goes on to use these for algebraic effects in his language, 'Koka')
+
+The 'original' record typing papers (as far as I'm aware) are by Mitchell Wand, Luca Cardelli and Didier Rémy in the late 80s/early 90s but I don't find them as approachable or complete.
+
 ** Misc
 - [[http://nms.csail.mit.edu/~stavros/pubs/hstore.pdf][The End of an Architectural Era (It’s Time for a Complete Rewrite)]]
 - [[https://arxiv.org/pdf/1610.09166.pdf][Push vs. Pull-Based Loop Fusion in Query Engines]]
