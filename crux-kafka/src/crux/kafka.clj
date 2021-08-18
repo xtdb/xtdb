@@ -167,7 +167,7 @@
            (Thread/interrupted) (throw (InterruptedException.))
            :else (recur)))))))
 
-(defrecord KafkaTxLog [^KafkaProducer producer, ^KafkaConsumer latest-submitted-tx-consumer,
+(defrecord KafkaTxLog [^KafkaProducer producer,
                        tx-topic, kafka-config,
                        ^Duration poll-wait-duration
                        ^Closeable consumer]
@@ -190,23 +190,25 @@
     (handle-subscriber this after-tx-id f))
 
   (latest-submitted-tx [_]
-    (let [tx-tp (TopicPartition. tx-topic 0)
-          end-offset (-> (.endOffsets latest-submitted-tx-consumer [tx-tp]) (get tx-tp))]
-      (when (pos? end-offset)
-        {:crux.tx/tx-id (dec end-offset)})))
+    (with-open [consumer (->consumer {:kafka-config kafka-config})]
+      (let [tx-tp (TopicPartition. tx-topic 0)
+            end-offset (-> (.endOffsets consumer [tx-tp]) (get tx-tp))]
+        (when (pos? end-offset)
+          {:crux.tx/tx-id (dec end-offset)}))))
 
   status/Status
   (status-map [_]
     {:crux.zk/zk-active?
      (try
-       (boolean (.listTopics latest-submitted-tx-consumer))
+       (with-open [consumer (->consumer {:kafka-config kafka-config})]
+         (boolean (.listTopics consumer)))
        (catch Exception e
          (log/debug e "Could not list Kafka topics:")
          false))})
 
   Closeable
   (close [_]
-    (cio/try-close consumer)))
+    (cio/try-close producer)))
 
 (defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
                             :tx-topic-opts {:crux/module `->topic-opts, :topic-name "crux-transaction-log"}}
@@ -216,8 +218,7 @@
                                                  :default (Duration/ofSeconds 1)}}}
 
   [{:keys [tx-topic-opts kafka-config poll-wait-duration]}]
-  (let [latest-submitted-tx-consumer (->consumer {:kafka-config kafka-config})
-        producer (->producer {:kafka-config kafka-config})
+  (let [producer (->producer {:kafka-config kafka-config})
         tx-topic-opts (-> tx-topic-opts
                           (assoc :num-partitions 1)
                           (update :topic-config
@@ -229,7 +230,6 @@
       (ensure-topic-exists admin-client tx-topic-opts)
       (ensure-tx-topic-has-single-partition admin-client tx-topic))
     (map->KafkaTxLog {:producer producer
-                      :latest-submitted-tx-consumer latest-submitted-tx-consumer
                       :tx-topic tx-topic
                       :kafka-config kafka-config
                       :poll-wait-duration poll-wait-duration})))
