@@ -261,11 +261,14 @@
   (->> tx-ops
        (map txc/conform-tx-op)
        (mapcat txc/flatten-tx-fn-ops)
-       (reduce (fn xf [acc {:keys [op docs] :as tx-op}]
-                 (if (= op :crux.tx/evict)
-                   (update acc :evicted-eids conj (:eid tx-op))
-                   (update acc :docs into docs)))
-               {:docs #{}
+       (reduce (fn xf [acc {:keys [op docs eid]}]
+                 (case op
+                   :crux.tx/put (update acc :docs into docs)
+                   :crux.tx/evict (-> acc
+                                      (update :evicted-eids conj eid)
+                                      (update :docs dissoc #(into {} (remove (comp #{eid} :crux.db/id val)) %)))
+                   acc))
+               {:docs {}
                 :evicted-eids #{}})))
 
 (defn- checkpoint-src [^IndexWriter index-writer]
