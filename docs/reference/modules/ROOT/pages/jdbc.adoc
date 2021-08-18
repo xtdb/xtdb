@@ -67,7 +67,15 @@ JSON::
         "crux/module": "crux.jdbc.psql/->dialect"
       },
       "pool-opts": { ... },
-      "db-spec": { ... }
+      "db-spec": {
+        "jdbcUrl": "...",
+        // OR
+        "host":"...",
+        "dbname":"...",
+        "user":"...",
+        "password":"...",
+        ...
+        }
     },
 
     "poll-sleep-duration": "PT1S"
@@ -84,7 +92,13 @@ Clojure::
 {:crux/tx-log {:crux/module 'crux.jdbc/->tx-log
                :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
                                  :pool-opts { ... }
-                                 :db-spec { ... }}
+                                 :db-spec {:jdbcUrl "..."
+                                           ;; OR
+                                           :host "..."
+                                           :dbname "..."
+                                           :user "..."
+                                           :password "..."
+                                           ... }}
                :poll-sleep-duration (Duration/ofSeconds 1)}
  ...}
 ----
@@ -96,7 +110,13 @@ EDN::
 {:crux/tx-log {:crux/module crux.jdbc/->tx-log
                :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
                                  :pool-opts { ... }
-                                 :db-spec { ... }}
+                                 :db-spec {:jdbcUrl "..."
+                                           ;; OR
+                                           :host "..."
+                                           :dbname "..."
+                                           :user "..."
+                                           :password "..."
+                                           ... }}
                :poll-sleep-duration "PT1S"}
  ...}
 ----
