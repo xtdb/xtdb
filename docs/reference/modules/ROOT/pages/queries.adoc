@@ -21,8 +21,7 @@ To query Crux using SQL, read the xref:reference::sql.adoc[SQL module documentat
 
 === Datalog
 
-Extensible Data Notation (edn) is used as the data format for the Crux Datalog query APIs.
-EDN is a simple format.
+Extensible Data Notation (edn) is a simple data format that is used to describe Crux Datalog queries.
 To understand how edn works, read the brief description at http://edn-format.org/[http://edn-format.org].
 
 To understand how Datalog works, read the _Learn Crux Datalog Today_ tutorial from the https://www.opencrux.com/tutorials/[Tutorials page].
@@ -268,10 +267,18 @@ The `:where` section of a query limits the combinations of possible results by s
 // TODO
 // get-attr ?
 
+[#clause-inputs]
+=== Clause Inputs
+
+Clauses may refer to combinations of literal values and logic variables as inputs.
+Identical logic variables used across multiple clauses unify automatically (with the exception of `or-join` or `not-join` scoping).
+
+A literal set containing literal values (e.g. `#{"val-1" "val-2"}`) will be interpreted as an input relation of distinct values, and can be used in place of any literal input (e.g. a set of entity IDs in the first position of a triple clause).
+
 [#clause-triple]
 === Triple
 
-A triple clause is a vector of a logic variable, a document key and (optionally) a value to match which can be a literal or another logic variable.
+A triple clause is a vector of (1) a literal entity ID or a logic variable, (2) a hard-coded attribute keyword (top-level key in a document), and (3) optionally, a value which can be a literal or a logic variable.
 
 It restricts results by matching EAV facts
 
