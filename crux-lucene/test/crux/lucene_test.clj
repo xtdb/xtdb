@@ -451,6 +451,27 @@
                   {:find '[?e]
                    :where '[[(text-search :name "Ivan") [[?e]]]]})))))
 
+(t/deftest test-put-then-evict
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :foo :bar "baz"}]
+                    [:crux.tx/evict :foo]])
+  (t/is (= #{} (c/q (c/db *api*) '{:find [e]
+                                   :where [[e :crux.db/id]]})))
+
+  (with-open [search-results (l/search *api* "b*" {:default-field "bar"})]
+    (let [docs (iterator-seq search-results)]
+      (t/is (= 0 (count docs)))))
+
+  (submit+await-tx [[:crux.tx/put {:crux.db/id :foo :bar "baz"}]
+                    [:crux.tx/evict :foo]
+                    [:crux.tx/put {:crux.db/id :qux :bar "qaz"}]])
+
+  (t/is (= #{[:qux]} (c/q (c/db *api*) '{:find [e]
+                                         :where [[e :crux.db/id :qux]]})))
+
+  (with-open [search-results (l/search *api* "b*" {:default-field "bar"})]
+    (let [docs (iterator-seq search-results)]
+      (t/is (= 0 (count docs))))))
+
 (comment
   (do
     (import '[ch.qos.logback.classic Level Logger]
