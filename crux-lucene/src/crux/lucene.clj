@@ -147,12 +147,23 @@
   "Given search results each containing a single A/V pair document,
   perform a temporal resolution against A/V to resolve the eid."
   [index-snapshot {:keys [entity-resolver-fn] :as db} search-results]
-  (mapcat (fn [[^Document doc score]]
-            (let [v (.get ^Document doc field-crux-val)
-                  a (keyword (.get ^Document doc field-crux-attr))]
-              (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
-                [(db/decode-value index-snapshot eid) v a score])))
-          search-results))
+  (->> search-results
+       (reduce (fn [m [^Document doc score]]
+                 (let [v (.get ^Document doc field-crux-val)
+                       a (keyword (.get ^Document doc field-crux-attr))]
+                   (if (get m [a v])
+                     (update m [a v] (fn [exist-score]
+                                       (min score exist-score)))
+                     (assoc m [a v] score))))
+               {})
+       (reduce-kv
+        (fn [res [a v] score]
+          (concat res
+                  (map
+                   (fn [eid]
+                     [(db/decode-value index-snapshot eid) v a score])
+                   (doall (db/ave index-snapshot a v nil entity-resolver-fn)))))
+        [])))
 
 (defn ^Query build-query-wildcard
   "Wildcard query builder"
