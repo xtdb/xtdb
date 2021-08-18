@@ -44,6 +44,49 @@
 (s/def ::ingester-error #(instance? Exception %))
 (defmethod bus/event-spec ::ingester-error [_] (s/keys :req-un [::ingester-error]))
 
+(defn- tx-fn-doc? [doc]
+  (some #{:crux.db.fn/args
+          :crux.db.fn/tx-events
+          :crux.db.fn/failed?}
+        (keys doc)))
+
+(defn- without-tx-fn-docs [docs]
+  (into {} (remove (comp tx-fn-doc? val) docs)))
+
+(defn- strict-fetch-docs [{:keys [document-store-tx]} doc-hashes]
+  (let [doc-hashes (set doc-hashes)
+        docs (db/fetch-docs document-store-tx doc-hashes)
+        fetched-doc-hashes (set (keys docs))]
+    (when-not (= fetched-doc-hashes doc-hashes)
+      (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
+
+    docs))
+
+(defn- arg-docs-to-replace [document-store tx-events]
+  (->> (db/fetch-docs document-store (for [[op :as tx-event] tx-events
+                                           :when (= op :crux.tx/fn)
+                                           :let [[_op _fn-id arg-doc-id] tx-event]]
+                                       arg-doc-id))
+       (into {}
+             (map (fn [[arg-doc-id arg-doc]]
+                    (MapEntry/create arg-doc-id
+                                     {:crux.db/id (:crux.db/id arg-doc)
+                                      :crux.db.fn/failed? true}))))))
+
+(defn- index-docs [{:keys [index-store-tx !tx]} docs]
+  (when (seq docs)
+    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
+      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
+                                            :docs missing-ids})))
+    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store-tx docs)
+          av-count (->> (vals indexed-docs) (apply concat) (count))]
+      (swap! !tx
+             (fn [tx]
+               (-> tx
+                   (update :av-count + av-count)
+                   (update :bytes-indexed + bytes-indexed)
+                   (update :doc-ids into (map c/new-id) (keys indexed-docs))))))))
+
 (defn- etx->vt [^EntityTx etx]
   (.vt etx))
 
@@ -118,7 +161,7 @@
     (if (or (= current-id expected-id)
             ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
             ;; can't rely on the old content-hashing returning the same hash for the same document
-            (let [docs (db/fetch-docs in-flight-tx #{current-id expected-id})]
+            (let [docs (strict-fetch-docs in-flight-tx #{current-id expected-id})]
               (= (get docs current-id)
                  (get docs expected-id))))
       {:etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx in-flight-tx)}
@@ -177,11 +220,11 @@
         {args-doc-id :crux.db/id,
          :crux.db.fn/keys [args tx-events failed?]
          :as args-doc} (when args-content-hash
-                         (-> (db/fetch-docs in-flight-tx #{args-content-hash})
+                         (-> (strict-fetch-docs in-flight-tx #{args-content-hash})
                              (get args-content-hash)))]
     (cond
       tx-events {:tx-events tx-events
-                 :docs (db/fetch-docs in-flight-tx (txc/tx-events->doc-hashes tx-events))}
+                 :docs (strict-fetch-docs in-flight-tx (txc/tx-events->doc-hashes tx-events))}
 
       failed? (do
                 (log/warn "Transaction function failed when originally evaluated:"
@@ -226,40 +269,6 @@
 (defmethod index-tx-event :default [[op & _] _tx _in-flight-tx]
   (throw (err/illegal-arg :unknown-tx-op {:op op})))
 
-(defn- tx-fn-doc? [doc]
-  (some #{:crux.db.fn/args
-          :crux.db.fn/tx-events
-          :crux.db.fn/failed?}
-        (keys doc)))
-
-(defn- without-tx-fn-docs [docs]
-  (into {} (remove (comp tx-fn-doc? val) docs)))
-
-(defn- arg-docs-to-replace [document-store tx-events]
-  (->> (db/fetch-docs document-store (for [[op :as tx-event] tx-events
-                                           :when (= op :crux.tx/fn)
-                                           :let [[_op _fn-id arg-doc-id] tx-event]]
-                                       arg-doc-id))
-       (into {}
-             (map (fn [[arg-doc-id arg-doc]]
-                    (MapEntry/create arg-doc-id
-                                     {:crux.db/id (:crux.db/id arg-doc)
-                                      :crux.db.fn/failed? true}))))))
-
-(defn- index-docs [{:keys [index-store-tx !tx]} docs]
-  (when (seq docs)
-    (when-let [missing-ids (seq (remove :crux.db/id (vals docs)))]
-      (throw (err/illegal-arg :missing-eid {::err/message "Missing required attribute :crux.db/id"
-                                            :docs missing-ids})))
-    (let [{:keys [bytes-indexed indexed-docs]} (db/index-docs index-store-tx docs)
-          av-count (->> (vals indexed-docs) (apply concat) (count))]
-      (swap! !tx
-             (fn [tx]
-               (-> tx
-                   (update :av-count + av-count)
-                   (update :bytes-indexed + bytes-indexed)
-                   (update :doc-ids into (map c/new-id) (keys indexed-docs))))))))
-
 (defrecord InFlightTx [tx fork-at !tx-state !tx
                        index-store-tx document-store-tx
                        db-provider bus]
@@ -287,13 +296,8 @@
 
       (swap! !tx update :tx-events into tx-events)
 
-      (let [doc-hashes (set (txc/tx-events->doc-hashes tx-events))
-            docs (db/fetch-docs document-store-tx doc-hashes)
-            fetched-doc-hashes (set (keys docs))]
-        (when-not (= fetched-doc-hashes doc-hashes)
-          (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
-
-        (index-docs this (-> docs without-tx-fn-docs)))
+      (index-docs this (-> (strict-fetch-docs this (txc/tx-events->doc-hashes tx-events))
+                           without-tx-fn-docs))
 
       (with-open [index-snapshot (db/open-index-snapshot index-store-tx)]
         (let [deps (assoc this :index-snapshot index-snapshot)
