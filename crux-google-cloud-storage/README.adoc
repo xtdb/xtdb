@@ -5,7 +5,7 @@ This Crux module allows you to use Google's Cloud Storage as Crux's 'document st
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-google-cloud-storage {:mvn/version "1.18.0"}
+pro.juxt.crux/crux-google-cloud-storage {:mvn/version "1.18.1"}
 ----
 
 .pom.xml
@@ -14,7 +14,7 @@ pro.juxt.crux/crux-google-cloud-storage {:mvn/version "1.18.0"}
 <dependency>
     <groupId>pro.juxt.crux</groupId>
     <artifactId>crux-google-cloud-storage</artifactId>
-    <version>1.18.0</version>
+    <version>1.18.1</version>
 </dependency>
 ----
 

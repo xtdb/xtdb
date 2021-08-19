@@ -15,10 +15,10 @@ build.gradle.kts::
 [source,kotlin,subs=attributes+]
 ----
 // Main library
-implementation("pro.juxt.crux-labs", "crux-corda", "1.18.0-1")
+implementation("pro.juxt.crux-labs", "crux-corda", "1.18.1")
 
 // Library for inclusion in contract JARs
-implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.0-1")
+implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.1")
 ----
 
 pom.xml::
@@ -28,14 +28,14 @@ pom.xml::
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
     <artifactId>crux-corda</artifactId>
-    <version>1.18.0-1</version>
+    <version>1.18.1</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
     <groupId>pro.juxt.crux-labs</groupId>
     <artifactId>crux-corda-state</artifactId>
-    <version>1.18.0-1</version>
+    <version>1.18.1</version>
 </dependency>
 ----
 ====

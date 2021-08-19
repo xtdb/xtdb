@@ -32,8 +32,8 @@ mkdir crux-cli && cd crux-cli
 [source,clojure]
 ----
 {:deps {org.clojure/clojure   {:mvn/version "1.10.3"}
-        pro.juxt.crux/crux-core        {:mvn/version "1.18.0"}
-        pro.juxt.crux/crux-http-server {:mvn/version "1.18.0"}}}
+        pro.juxt.crux/crux-core        {:mvn/version "1.18.1"}
+        pro.juxt.crux/crux-http-server {:mvn/version "1.18.1"}}}
 ----
 
 .;; crux.edn
