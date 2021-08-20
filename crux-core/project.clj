@@ -29,7 +29,8 @@
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                             :dependencies [[pro.juxt.crux/crux-http-server]]}
-             :test {:dependencies [[pro.juxt.crux/crux-test]]}}
+             :test {:dependencies [[pro.juxt.crux/crux-test]
+                                   [clj-commons/fs "1.6.307"]]}}
 
   :aot [crux.main]
 

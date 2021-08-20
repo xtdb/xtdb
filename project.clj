@@ -71,6 +71,9 @@
    ;; crux-test test dep
    [criterium "0.4.5"]
 
+   ;; crux-core test dep
+   [clj-commons/fs "1.6.307"]
+
    ;; dependency conflict resolution
    [org.apache.commons/commons-lang3 "3.9"]
    [commons-io "2.8.0"]
