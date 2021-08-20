@@ -37,7 +37,7 @@
   [{:keys [tx-log document-store]}]
   (->CruxIngestClient tx-log document-store nil))
 
-(defn open-ingest-client [options]
+(defn open-ingest-client ^crux.ingest_client.CruxIngestClient [options]
   (let [system (-> (sys/prep-system (into [{:crux/ingest-client `->ingest-client
                                             :crux/bus 'crux.bus/->bus
                                             :crux/document-store 'crux.kv.document-store/->document-store
