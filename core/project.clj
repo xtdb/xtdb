@@ -29,7 +29,8 @@
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                             :dependencies [[com.xtdb/xtdb-http-server]]}
-             :test {:dependencies [[com.xtdb/xtdb-test]]}}
+             :test {:dependencies [[com.xtdb/xtdb-test]
+                                   [clj-commons/fs "1.6.307"]]}}
 
   :aot [xtdb.main]
 
