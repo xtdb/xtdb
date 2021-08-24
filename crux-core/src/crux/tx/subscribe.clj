@@ -37,7 +37,7 @@
 
     (f fut tx)
 
-    (::tx/tx-id tx)))
+    (:xt/tx-id tx)))
 
 (defn handle-polling-subscription [tx-log after-tx-id {:keys [^Duration poll-sleep-duration]} f]
   (completable-thread
@@ -71,7 +71,7 @@
 (defrecord NotifyingSubscriberHandler [!state]
   PNotifyingSubscriberHandler
   (notify-tx! [_ tx]
-    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (::tx/tx-id tx))]
+    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (:xt/tx-id tx))]
       (doseq [^Semaphore semaphore semaphores]
         (.release semaphore))))
 
@@ -92,7 +92,7 @@
                                   (reduce (tx-handler f fut)
                                           after-tx-id
                                           (->> (iterator-seq log)
-                                               (take-while #(<= (::tx/tx-id %) latest-submitted-tx-id)))))
+                                               (take-while #(<= (:xt/tx-id %) latest-submitted-tx-id)))))
 
                                 ;; running live
                                 (reduce (tx-handler f fut)
@@ -117,5 +117,5 @@
              (swap! !state update :semaphores disj semaphore))))))))
 
 (defn ->notifying-subscriber-handler [latest-submitted-tx]
-  (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id (::tx/tx-id latest-submitted-tx)
+  (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id (:xt/tx-id latest-submitted-tx)
                                        :semaphores #{}})))

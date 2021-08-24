@@ -446,7 +446,7 @@ include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags
 Clojure::
 +
 --
-In Clojure, you receive a map from `submit-tx` containing `:crux.tx/tx-id` and `:crux.tx/tx-time`
+In Clojure, you receive a map from `submit-tx` containing `:xt/tx-id` and `:xt/tx-time`
 
 [source,clojure]
 ----

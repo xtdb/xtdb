@@ -15,7 +15,7 @@
            java.util.Date
            [org.agrona DirectBuffer MutableDirectBuffer]))
 
-(defn encode-tx-event-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b, {::tx/keys [tx-id tx-time]}]
+(defn encode-tx-event-key-to ^org.agrona.MutableDirectBuffer [^MutableDirectBuffer b, {:xt/keys [tx-id tx-time]}]
   (let [^MutableDirectBuffer b (or b (mem/allocate-buffer (+ c/index-id-size Long/BYTES Long/BYTES)))]
     (doto b
       (.putByte 0 c/tx-events-index-id)
@@ -30,12 +30,12 @@
 (defn decode-tx-event-key-from [^DirectBuffer k]
   (assert (= (+ c/index-id-size Long/BYTES Long/BYTES) (.capacity k)) (mem/buffer->hex k))
   (assert (tx-event-key? k))
-  {::tx/tx-id (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN)
-   ::tx/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
+  {:xt/tx-id (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN)
+   :xt/tx-time (c/reverse-time-ms->date (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
 (defn- latest-submitted-tx [kv-store]
   (when-let [tx-id (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id)]
-    {::tx/tx-id tx-id}))
+    {:xt/tx-id tx-id}))
 
 (defn- submit-tx [tx-events {:keys [^ExecutorService tx-submit-executor kv-store fsync? subscriber-handler]}]
   (if (.isShutdown tx-submit-executor)
@@ -44,7 +44,7 @@
     ;; this needs to remain `:crux.kv-tx-log/latest-submitted-tx-id` because we're a TxLog
     (let [tx-time (Date.)
           tx-id (inc (or (kvi/read-meta kv-store :crux.kv-tx-log/latest-submitted-tx-id) -1))
-          next-tx {::tx/tx-id tx-id, ::tx/tx-time tx-time}]
+          next-tx {:xt/tx-id tx-id, :xt/tx-time tx-time}]
       (kv/store kv-store [[(encode-tx-event-key-to nil next-tx)
                            (mem/->nippy-buffer tx-events)]
                           (kvi/meta-kv :crux.kv-tx-log/latest-submitted-tx-id tx-id)])
@@ -66,7 +66,7 @@
                               :crux.tx.event/tx-events (mem/<-nippy-buffer (kv/value iterator)))
                        (tx-log (kv/next iterator))))))]
       (let [after-tx-id (or (some-> after-tx-id (+ 1)) 0)]
-        (->> (tx-log (kv/seek iterator (encode-tx-event-key-to nil {::tx/tx-id after-tx-id})))
+        (->> (tx-log (kv/seek iterator (encode-tx-event-key-to nil {:xt/tx-id after-tx-id})))
              (take limit)
              vec)))))
 
@@ -95,7 +95,7 @@
                  (let [txs (txs-after this after-tx-id {:limit batch-size})]
                    (concat txs
                            (when (= batch-size (count txs))
-                             (tx-log (::tx/tx-id (last txs))))))))]
+                             (tx-log (:xt/tx-id (last txs))))))))]
         (cio/->cursor (fn []) (tx-log after-tx-id)))))
 
   (subscribe [this after-tx-id f]

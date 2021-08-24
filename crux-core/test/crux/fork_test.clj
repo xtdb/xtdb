@@ -54,19 +54,19 @@
                                       :with-corrections? true})]
 
     (t/is (= (crux/valid-time db)
-             (:crux.db/valid-time (last history))))
+             (:xt/valid-time (last history))))
 
-    (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:xt/id :ivan, :name "Ivna"}}
-              {:crux.tx/tx-id 1, :crux.db/doc {:xt/id :ivan, :name "Ivan"}}]
+    (t/is (= [{:xt/tx-id 0, :xt/doc {:xt/id :ivan, :name "Ivna"}}
+              {:xt/tx-id 1, :xt/doc {:xt/id :ivan, :name "Ivan"}}]
 
              (->> history
-                  (mapv #(select-keys % [::tx/tx-id :crux.db/doc])))))))
+                  (mapv #(select-keys % [:xt/tx-id :xt/doc])))))))
 
 (t/deftest test-speculative-from-point-in-past
   (let [ivan0 {:xt/id :ivan, :name "Ivan0"}
-        tt0 (::tx/tx-time (fix/submit+await-tx [[:crux.tx/put ivan0]]))
+        tt0 (:xt/tx-time (fix/submit+await-tx [[:crux.tx/put ivan0]]))
         _ (Thread/sleep 10)      ; to ensure these two txs are at a different ms
-        _tt1 (::tx/tx-time (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan, :name "Ivan1"}]]))
+        _tt1 (:xt/tx-time (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan, :name "Ivan1"}]]))
 
         db0 (crux/db *api* tt0 tt0)]
 
@@ -79,14 +79,14 @@
         (t/is (= ivan0 (crux/entity db1 :ivan)))))
 
     (t/testing "doesn't include original data after the original db cutoff in history"
-      (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:xt/id :ivan, :name "Ivan0"}}
-                {:crux.tx/tx-id 2, :crux.db/doc {:xt/id :ivan, :name "Ivan2"}}]
+      (t/is (= [{:xt/tx-id 0, :xt/doc {:xt/id :ivan, :name "Ivan0"}}
+                {:xt/tx-id 2, :xt/doc {:xt/id :ivan, :name "Ivan2"}}]
                (->> (crux/entity-history (crux/with-tx db0 [[:crux.tx/put {:xt/id :ivan, :name "Ivan2"}]])
                                          :ivan
                                          :asc
                                          {:with-docs? true
                                           :with-corrections? true})
-                    (mapv #(select-keys % [::tx/tx-id :crux.db/doc]))))))))
+                    (mapv #(select-keys % [:xt/tx-id :xt/doc]))))))))
 
 (t/deftest test-speculative-from-point-in-future
   (let [ivan0 {:xt/id :ivan, :name "Ivan0"}
@@ -105,24 +105,24 @@
 
     (t/is (= now+10m (crux/valid-time db)))
 
-    (t/is (= [{:crux.tx/tx-id 0,
-               :crux.db/valid-time (::tx/tx-time present-tx),
-               :crux.db/doc ivan0}
-              {:crux.tx/tx-id 2,
-               :crux.db/valid-time now+5m,
-               :crux.db/doc {:xt/id :ivan, :name "5m Future Ivan"}}
-              {:crux.tx/tx-id 1,
-               :crux.db/valid-time now+10m,
-               :crux.db/doc {:xt/id :ivan, :name "Future Ivan"}}
-              {:crux.tx/tx-id 2,
-               :crux.db/valid-time now+10m,
-               :crux.db/doc {:xt/id :ivan, :name "Future Ivan 2"}}]
+    (t/is (= [{:xt/tx-id 0,
+               :xt/valid-time (:xt/tx-time present-tx),
+               :xt/doc ivan0}
+              {:xt/tx-id 2,
+               :xt/valid-time now+5m,
+               :xt/doc {:xt/id :ivan, :name "5m Future Ivan"}}
+              {:xt/tx-id 1,
+               :xt/valid-time now+10m,
+               :xt/doc {:xt/id :ivan, :name "Future Ivan"}}
+              {:xt/tx-id 2,
+               :xt/valid-time now+10m,
+               :xt/doc {:xt/id :ivan, :name "Future Ivan 2"}}]
              (->> (crux/entity-history db
                                        :ivan
                                        :asc
                                        {:with-docs? true
                                         :with-corrections? true})
-                  (mapv #(select-keys % [::tx/tx-id :crux.db/valid-time :crux.db/doc])))))))
+                  (mapv #(select-keys % [:xt/tx-id :xt/valid-time :xt/doc])))))))
 
 (t/deftest test-evict
   (let [ivan {:xt/id :ivan, :name "Ivan"}
@@ -135,10 +135,10 @@
 
     (letfn [(entity-history [db eid]
               (->> (crux/entity-history db eid :asc {:with-docs? true})
-                   (map #(select-keys % [::tx/tx-id ::db/doc]))))]
-      (t/is (= [{::tx/tx-id 0, ::db/doc ivan}] (entity-history db :ivan)))
-      (t/is (= [{::tx/tx-id 0, ::db/doc petr}] (entity-history db :petr)))
-      (t/is (= [{::tx/tx-id 0, ::db/doc ivan}] (entity-history db+evict :ivan)))
+                   (map #(select-keys % [:xt/tx-id :xt/doc]))))]
+      (t/is (= [{:xt/tx-id 0, :xt/doc ivan}] (entity-history db :ivan)))
+      (t/is (= [{:xt/tx-id 0, :xt/doc petr}] (entity-history db :petr)))
+      (t/is (= [{:xt/tx-id 0, :xt/doc ivan}] (entity-history db+evict :ivan)))
 
       (t/is (nil? (crux/entity db+evict :petr)))
       (t/is (empty? (entity-history db+evict :petr)))

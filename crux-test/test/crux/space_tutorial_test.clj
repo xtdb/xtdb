@@ -471,29 +471,29 @@
 
     (t/is (= doc4 (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
-    (t/is (= [{:crux.tx/tx-id 0, :crux.db/valid-time #inst "2110-01-01T09", :crux.db/content-hash (fix/hash-doc doc1), :crux.db/doc doc1}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2111-01-01T09", :crux.db/content-hash (fix/hash-doc doc2), :crux.db/doc doc2}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2113-01-01T09", :crux.db/content-hash (fix/hash-doc doc3), :crux.db/doc doc3}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2114-01-01T09", :crux.db/content-hash (fix/hash-doc doc4), :crux.db/doc doc4}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2115-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer), :crux.db/doc nil}]
+    (t/is (= [{:xt/tx-id 0, :xt/valid-time #inst "2110-01-01T09", :xt/content-hash (c/hash-doc doc1), :xt/doc doc1}
+              {:xt/tx-id 0, :xt/valid-time #inst "2111-01-01T09", :xt/content-hash (c/hash-doc doc2), :xt/doc doc2}
+              {:xt/tx-id 0, :xt/valid-time #inst "2113-01-01T09", :xt/content-hash (c/hash-doc doc3), :xt/doc doc3}
+              {:xt/tx-id 0, :xt/valid-time #inst "2114-01-01T09", :xt/content-hash (c/hash-doc doc4), :xt/doc doc4}
+              {:xt/tx-id 0, :xt/valid-time #inst "2115-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer), :xt/doc nil}]
 
              (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
-                  (mapv #(dissoc % :crux.tx/tx-time)))))
+                  (mapv #(dissoc % :xt/tx-time)))))
 
     (fix/submit+await-tx [[:crux.tx/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
 
     (t/is nil? (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients))
 
-    (t/is (= [{:crux.tx/tx-id 1, :crux.db/valid-time #inst "2110-01-01T00", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
-              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2110-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
-              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2111-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
-              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2113-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
-              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2114-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
-              {:crux.tx/tx-id 1, :crux.db/valid-time #inst "2115-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer)}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2116-01-01T00", :crux.db/content-hash (c/new-id c/nil-id-buffer)}]
+    (t/is (= [{:xt/tx-id 1, :xt/valid-time #inst "2110-01-01T00", :xt/content-hash (c/new-id c/nil-id-buffer)}
+              {:xt/tx-id 1, :xt/valid-time #inst "2110-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
+              {:xt/tx-id 1, :xt/valid-time #inst "2111-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
+              {:xt/tx-id 1, :xt/valid-time #inst "2113-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
+              {:xt/tx-id 1, :xt/valid-time #inst "2114-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
+              {:xt/tx-id 1, :xt/valid-time #inst "2115-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
+              {:xt/tx-id 0, :xt/valid-time #inst "2116-01-01T00", :xt/content-hash (c/new-id c/nil-id-buffer)}]
 
              (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? false})
-                  (mapv #(dissoc % :crux.tx/tx-time)))))))
+                  (mapv #(dissoc % :xt/tx-time)))))))
 
 (t/deftest Oumuamua-test
   (fix/submit+await-tx [[:crux.tx/put {:xt/id :person/kaarlang

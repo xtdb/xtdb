@@ -23,13 +23,13 @@
                   (fn []
                     (let [tx (crux/submit-tx *api* [[:crux.tx/put {:xt/id :foo}]])]
                       (crux/sync *api*)
-                      (t/is (= (::tx/tx-time tx)
-                               (::tx/tx-time (crux/latest-completed-tx *api*))))
-                      (::tx/tx-time tx))))]
+                      (t/is (= (:xt/tx-time tx)
+                               (:xt/tx-time (crux/latest-completed-tx *api*))))
+                      (:xt/tx-time tx))))]
     (doseq [tz-str ["Etc/UTC" "Japan/Tokyo" "Europe/London"]]
       (t/testing (str "TZ: " tz-str)
         (with-tz tz-str
           (fix/with-node
             (fn []
               (crux/sync *api*)
-              (t/is (= tx-time (::tx/tx-time (crux/latest-completed-tx *api*)))))))))))
+              (t/is (= tx-time (:xt/tx-time (crux/latest-completed-tx *api*)))))))))))

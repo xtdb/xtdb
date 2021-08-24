@@ -18,16 +18,16 @@ with few lifecycle members added.
     "Returns a DB snapshot at the given time.
 
      db-basis: (optional map, all keys optional)
-       - `:crux.db/valid-time` (Date):
+       - `:xt/valid-time` (Date):
            If provided, DB won't return any data with a valid-time greater than the given time.
            Defaults to now.
-       - `:crux.tx/tx` (Map):
+       - `:xt/tx` (Map):
            If provided, DB will be a snapshot as of the given transaction.
            Defaults to the latest completed transaction.
-       - `:crux.tx/tx-time` (Date):
-           Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+       - `:xt/tx-time` (Date):
+           Shorthand for `{:xt/tx {:xt/tx-time <>}}`
 
-     Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+     Providing both `:xt/tx` and `:xt/tx-time` is undefined.
      Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
      If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
@@ -45,16 +45,16 @@ with few lifecycle members added.
     "Opens a DB snapshot at the given time.
 
      db-basis: (optional map, all keys optional)
-       - `:crux.db/valid-time` (Date):
+       - `:xt/valid-time` (Date):
            If provided, DB won't return any data with a valid-time greater than the given time.
            Defaults to now.
-       - `:crux.tx/tx` (Map):
+       - `:xt/tx` (Map):
            If provided, DB will be a snapshot as of the given transaction.
            Defaults to the latest completed transaction.
-       - `:crux.tx/tx-time` (Date):
-           Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+       - `:xt/tx-time` (Date):
+           Shorthand for `{:xt/tx {:xt/tx-time <>}}`
 
-     Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+     Providing both `:xt/tx` and `:xt/tx-time` is undefined.
      Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
      If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
@@ -315,7 +315,7 @@ Represents the database as of a specific valid and transaction time.
 
     Options:
     * `sort-order`: `#{:asc :desc}`
-    * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:crux.db/doc` key
+    * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:xt/doc` key
     * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
     * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
     * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
@@ -323,11 +323,11 @@ Represents the database as of a specific valid and transaction time.
     No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
     Each entry in the result contains the following keys:
-    * `:crux.db/valid-time`,
-    * `:crux.db/tx-time`,
-    * `:crux.tx/tx-id`,
-    * `:crux.db/content-hash`
-    * `:crux.db/doc` (see `with-docs?`).")
+    * `:xt/valid-time`,
+    * `:xt/tx-time`,
+    * `:xt/tx-id`,
+    * `:xt/content-hash`
+    * `:xt/doc` (see `with-docs?`).")
 ----
 
 === open-entity-history
@@ -354,7 +354,7 @@ Represents the database as of a specific valid and transaction time.
 [source,clojure]
 ----
   (db-basis [db]
-    "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`"))
+    "returns the basis of this db snapshot - a map containing `:xt/valid-time` and `:xt/tx`"))
 ----
 
 === valid-time

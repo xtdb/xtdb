@@ -92,11 +92,11 @@ public interface ICruxDatasource extends Closeable {
      * Eagerly retrieves entity history for the given entity.
      *
      * Each entry in the result contains the following keys:
-     * * `:crux.db/valid-time`,
-     * * `:crux.db/tx-time`,
-     * * `:crux.tx/tx-id`,
-     * * `:crux.db/content-hash`
-     * * `:crux.db/doc` (if {@link HistoryOptions#withDocs(boolean) withDocs} is set on the options).
+     * * `:xt/valid-time`,
+     * * `:xt/tx-time`,
+     * * `:xt/tx-id`,
+     * * `:xt/content-hash`
+     * * `:xt/doc` (if {@link HistoryOptions#withDocs(boolean) withDocs} is set on the options).
      *
      * If {@link HistoryOptions#withCorrections(boolean) withCorrections} is set
      * on the options, bitemporal corrections are also included in the sequence,

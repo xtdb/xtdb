@@ -19,8 +19,8 @@
     (t/is (api/entity (api/db *api*) :origin-man))
     (t/testing "Tx log"
       (with-open [tx-log-iterator (api/open-tx-log *api* 0 false)]
-        (t/is (= [{:crux.tx/tx-id 2,
-                   :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
+        (t/is (= [{:xt/tx-id 2,
+                   :xt/tx-time (:xt/tx-time submitted-tx)
                    :crux.tx.event/tx-events
                    [[:crux.tx/put
                      (c/new-id (:xt/id doc))
@@ -47,8 +47,8 @@
                    (get doc-hash)))))
 
     (t/testing "Eviction"
-      (db/submit-docs doc-store [[doc-hash {:xt/id :some-id, :crux.db/evicted? true}]])
-      (t/is (= {:xt/id :some-id, :crux.db/evicted? true}
+      (db/submit-docs doc-store [[doc-hash {:xt/id :some-id, :xt/evicted? true}]])
+      (t/is (= {:xt/id :some-id, :xt/evicted? true}
                (-> (db/fetch-docs doc-store #{doc-hash})
                    (get doc-hash)))))
 

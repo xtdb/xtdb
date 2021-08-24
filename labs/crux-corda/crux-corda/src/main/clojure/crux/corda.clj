@@ -72,7 +72,7 @@
                               (str corda-tx-id)]
                              {:builder-fn jdbcr/as-unqualified-lower-maps})
           (tx-row->tx dialect)
-          (select-keys [::tx/tx-id ::tx/tx-time])))
+          (select-keys [:xt/tx-id :xt/tx-time])))
 
 (defn- ->corda-tx [corda-tx-id ^AppServiceHub service-hub]
   (.getTransaction (.getValidatedTransactions service-hub)
@@ -118,10 +118,10 @@
                                  ["SELECT * FROM crux_txs ORDER BY crux_tx_id DESC LIMIT 1"]
                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
               (tx-row->tx dialect)
-              (select-keys [::tx/tx-id ::tx/tx-time])))))
+              (select-keys [:xt/tx-id :xt/tx-time])))))
 
 (defn- ^ICursor open-tx-log [{:keys [dialect ^AppServiceHub service-hub] :as tx-log} after-tx-id]
-  (let [last-tx-id (::tx/tx-id (latest-submitted-tx tx-log))]
+  (let [last-tx-id (:xt/tx-id (latest-submitted-tx tx-log))]
     (letfn [(tx-log-query [after-tx-id]
               (if after-tx-id
                 ["SELECT * FROM crux_txs WHERE crux_tx_id <= ? AND crux_tx_id > ? ORDER BY crux_tx_id LIMIT 100"
@@ -137,10 +137,10 @@
                                                                      {:builder-fn jdbcr/as-unqualified-lower-maps})]
                                               (let [{:keys [corda-tx-id] :as tx} (tx-row->tx row dialect)
                                                     corda-tx (->corda-tx corda-tx-id service-hub)]
-                                                (merge (select-keys tx [::tx/tx-id ::tx/tx-time])
+                                                (merge (select-keys tx [:xt/tx-id :xt/tx-time])
                                                        (transform-corda-tx corda-tx tx-log))))
                                             vec))))]
-                 (concat txs (tx-log* (::tx/tx-id (last txs)))))))]
+                 (concat txs (tx-log* (:xt/tx-id (last txs)))))))]
       (cio/->cursor #() (tx-log* after-tx-id)))))
 
 (defrecord CordaTxLog [dialect, ^AppServiceHub service-hub, document-store

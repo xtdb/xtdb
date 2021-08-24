@@ -12,8 +12,8 @@ import java.util.Objects;
  * A POJO representing the identity of a transaction, comprised of a transaction ID and a transaction time.
  */
 public final class TransactionInstant {
-    private static final Keyword TX_ID = Keyword.intern("crux.tx/tx-id");
-    private static final Keyword TX_TIME = Keyword.intern("crux.tx/tx-time");
+    private static final Keyword TX_ID = Keyword.intern("xt/tx-id");
+    private static final Keyword TX_TIME = Keyword.intern("xt/tx-time");
 
     private final Long id;
     private final Date time;

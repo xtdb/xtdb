@@ -10,8 +10,8 @@
                     ["index-store" "tx-id-lag"]
                     #(when-let [completed (api/latest-completed-tx node)]
                        (when-let [submitted (api/latest-submitted-tx node)]
-                         (- (::tx/tx-id submitted)
-                            (::tx/tx-id completed))))))
+                         (- (:xt/tx-id submitted)
+                            (:xt/tx-id completed))))))
 
 (defn assign-tx-latency-gauge [registry {:crux/keys [bus]}]
   (let [!last-tx-lag (atom 0)]
@@ -19,7 +19,7 @@
                 {:crux/event-types #{::tx/indexed-tx}}
                 (fn [{:keys [submitted-tx]}]
                   (reset! !last-tx-lag (- (System/currentTimeMillis)
-                                          (.getTime ^Date (::tx/tx-time submitted-tx))))))
+                                          (.getTime ^Date (:xt/tx-time submitted-tx))))))
     (dropwizard/gauge registry
                       ["index-store" "tx-latency"]
                       (fn []

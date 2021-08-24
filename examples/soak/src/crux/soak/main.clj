@@ -39,7 +39,7 @@
         eid (keyword (str location "-current"))]
     (when-let [etx (api/entity-tx db eid)]
       (merge (api/entity db eid)
-             (select-keys etx [:crux.db/valid-time :crux.tx/tx-time])))))
+             (select-keys etx [:xt/valid-time :xt/tx-time])))))
 
 (defn get-weather-forecast [node location ^Date valid-time]
   (->> (for [tx-time (->> (iterate #(.minus ^ZonedDateTime % (Duration/ofDays 1))
@@ -54,7 +54,7 @@
            (let [eid (keyword (str location "-forecast"))]
              (when-let [etx (api/entity-tx db eid)]
                (merge (api/entity db eid)
-                      (select-keys etx [:crux.db/valid-time :crux.tx/tx-time]))))))
+                      (select-keys etx [:xt/valid-time :xt/tx-time]))))))
        (remove nil?)
        distinct))
 
@@ -76,10 +76,10 @@
   [:div.weather-reports
    [:div.bitemp-inst
     "vt = "
-    (render-time (:crux.db/valid-time weather-report))]
+    (render-time (:xt/valid-time weather-report))]
    [:div.bitemp-inst
     "tt = "
-    (render-time (:crux.tx/tx-time weather-report))]
+    (render-time (:xt/tx-time weather-report))]
    (for [[k v] (filter-weather-map weather-report)]
      [:p.weather-report
       [:b (-> (str (name k) ": ")

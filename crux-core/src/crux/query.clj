@@ -1732,7 +1732,7 @@
 
 (defn- entity [{:keys [document-store] :as db} index-snapshot eid]
   (when-let [content-hash (some-> (entity-tx db index-snapshot eid)
-                                  :crux.db/content-hash)]
+                                  :xt/content-hash)]
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
         (c/keep-non-evicted-doc)
@@ -1749,12 +1749,12 @@
     (-> opts
         (update :start-valid-time with-upper-bound :desc valid-time)
         (assoc :start-tx-id (-> (some->> start-tx (db/resolve-tx index-snapshot))
-                                :crux.tx/tx-id
+                                :xt/tx-id
                                 (with-upper-bound :desc tx-id)))
 
         (update :end-valid-time with-upper-bound :asc (Date. (inc (.getTime valid-time))))
         (assoc :end-tx-id (-> (some->> end-tx (db/resolve-tx index-snapshot))
-                              :crux.tx/tx-id
+                              :xt/tx-id
                               (with-upper-bound :asc (inc tx-id))))
         (dissoc :start-tx :end-tx))))
 
@@ -1881,33 +1881,33 @@
                                                    (cio/map-vals c/crux->xt)))]]
                              (->> history-batch
                                   (map (fn [^EntityTx etx]
-                                         (cond-> {:crux.tx/tx-time (.tt etx)
-                                                  :crux.tx/tx-id (.tx-id etx)
-                                                  :crux.db/valid-time (.vt etx)
-                                                  :crux.db/content-hash (.content-hash etx)}
-                                           with-docs? (assoc :crux.db/doc (get docs (.content-hash etx))))))))
+                                         (cond-> {:xt/tx-time (.tt etx)
+                                                  :xt/tx-id (.tx-id etx)
+                                                  :xt/valid-time (.vt etx)
+                                                  :xt/content-hash (.content-hash etx)}
+                                           with-docs? (assoc :xt/doc (get docs (.content-hash etx))))))))
                            (mapcat seq))))))
 
   (valid-time [_] valid-time)
   (transaction-time [_] tx-time)
   (db-basis [_]
-    {:crux.db/valid-time valid-time
-     :crux.tx/tx {:crux.tx/tx-time tx-time,
-                  :crux.tx/tx-id tx-id}})
+    {:xt/valid-time valid-time
+     :xt/tx {:xt/tx-time tx-time,
+             :xt/tx-id tx-id}})
 
   (with-tx [_ tx-ops]
     (let [valid-time valid-time
-          tx (merge {::db/valid-time valid-time}
+          tx (merge {:xt/valid-time valid-time}
                     (if-let [latest-completed-tx (db/latest-completed-tx index-store)]
-                      {::tx/tx-id (inc (long (::tx/tx-id latest-completed-tx)))
-                       ::tx/tx-time (Date. (max (System/currentTimeMillis)
-                                                (inc (.getTime ^Date (::tx/tx-time latest-completed-tx)))))}
-                      {::tx/tx-time (Date.)
-                       ::tx/tx-id 0}))
+                      {:xt/tx-id (inc (long (:xt/tx-id latest-completed-tx)))
+                       :xt/tx-time (Date. (max (System/currentTimeMillis)
+                                                (inc (.getTime ^Date (:xt/tx-time latest-completed-tx)))))}
+                      {:xt/tx-time (Date.)
+                       :xt/tx-id 0}))
           conformed-tx-ops (map txc/conform-tx-op tx-ops)
-          in-flight-tx (db/begin-tx tx-indexer tx {::db/valid-time valid-time
-                                                    ::tx/tx-time tx-time
-                                                    ::tx/tx-id tx-id})]
+          in-flight-tx (db/begin-tx tx-indexer tx {:xt/valid-time valid-time
+                                                   :xt/tx-time tx-time
+                                                   :xt/tx-id tx-id})]
 
       (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
@@ -1915,17 +1915,17 @@
         (api/db in-flight-tx valid-time)))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
-  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:crux.db/valid-time valid-time, :crux.tx/tx-id tx-id}))))
+  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:xt/valid-time valid-time, :xt/tx-id tx-id}))))
 
 (defmethod pp/simple-dispatch QueryDatasource [it]
   (print-method it *out*))
 
 (defn- ->basis [valid-time-or-basis]
   (if (instance? Date valid-time-or-basis)
-    {:crux.db/valid-time valid-time-or-basis}
-    {:crux.db/valid-time (:crux.db/valid-time valid-time-or-basis)
-     :crux.tx/tx (or (:crux.tx/tx valid-time-or-basis)
-                     (select-keys valid-time-or-basis [:crux.tx/tx-time :crux.tx/tx-id]))}))
+    {:xt/valid-time valid-time-or-basis}
+    {:xt/valid-time (:xt/valid-time valid-time-or-basis)
+     :xt/tx (or (:xt/tx valid-time-or-basis)
+                (select-keys valid-time-or-basis [:xt/tx-time :xt/tx-id]))}))
 
 (defprotocol PredContext
   (assoc-pred-ctx! [_ k v]))
@@ -1935,12 +1935,12 @@
                         query-cache conform-cache pull-cache]
   api/DBProvider
   (db [this] (api/db this nil))
-  (db [this valid-time tx-time] (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+  (db [this valid-time tx-time] (api/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
   (db [this valid-time-or-basis]
-    (let [{:keys [crux.db/valid-time] :as basis} (->basis valid-time-or-basis)
+    (let [{:keys [xt/valid-time] :as basis} (->basis valid-time-or-basis)
           valid-time (or valid-time (Date.))
           resolved-tx (with-open [index-snapshot (db/open-index-snapshot index-store)]
-                        (db/resolve-tx index-snapshot (:crux.tx/tx basis)))]
+                        (db/resolve-tx index-snapshot (:xt/tx basis)))]
 
       ;; we can't have QueryEngine depend on the main tx-indexer, because of a cyclic dependency
       (map->QueryDatasource (assoc this
@@ -1950,11 +1950,11 @@
                                                                  :query-engine this})
                                    :pred-ctx @!pred-ctx
                                    :valid-time valid-time
-                                   :tx-time (:crux.tx/tx-time resolved-tx)
-                                   :tx-id (:crux.tx/tx-id resolved-tx)))))
+                                   :tx-time (:xt/tx-time resolved-tx)
+                                   :tx-id (:xt/tx-id resolved-tx)))))
 
   (open-db [this] (api/open-db this nil nil))
-  (open-db [this valid-time tx-time] (api/open-db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+  (open-db [this valid-time tx-time] (api/open-db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
 
   (open-db [this valid-time-or-basis]
     (let [db (api/db this valid-time-or-basis)

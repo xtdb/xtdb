@@ -14,7 +14,7 @@
 
 (s/def :crux.db/id c/valid-id?)
 (s/def :xt/id c/valid-id?)
-(s/def :crux.db/evicted? boolean?)
+(s/def :xt/evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 
 (s/def :crux.db/fn
@@ -168,7 +168,7 @@
 
   Options:
   * `sort-order`: `#{:asc :desc}`
-  * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:crux.db/doc` key
+  * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:xt/doc` key
   * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
   * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
   * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
@@ -176,11 +176,11 @@
   No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
   Each entry in the result contains the following keys:
-  * `:crux.db/valid-time`,
-  * `:crux.db/tx-time`,
-  * `:crux.tx/tx-id`,
-  * `:crux.db/content-hash`
-  * `:crux.db/doc` (see `with-docs?`).")
+  * `:xt/valid-time`,
+  * `:xt/tx-time`,
+  * `:xt/tx-id`,
+  * `:xt/content-hash`
+  * `:xt/doc` (see `with-docs?`).")
 
   (open-entity-history
     ^crux.api.ICursor [db eid sort-order]
@@ -200,7 +200,7 @@
   the specified time.")
 
   (db-basis [db]
-    "returns the basis of this db snapshot - a map containing `:crux.db/valid-time` and `:crux.tx/tx`")
+    "returns the basis of this db snapshot - a map containing `:xt/valid-time` and `:xt/tx`")
 
   (^java.io.Closeable with-tx [db tx-ops]
    "Returns a new db value with the tx-ops speculatively applied.
@@ -296,16 +296,16 @@
     "Returns a DB snapshot at the given time.
 
   db-basis: (optional map, all keys optional)
-    - `:crux.db/valid-time` (Date):
+    - `:xt/valid-time` (Date):
         If provided, DB won't return any data with a valid-time greater than the given time.
         Defaults to now.
-    - `:crux.tx/tx` (Map):
+    - `:xt/tx` (Map):
         If provided, DB will be a snapshot as of the given transaction.
         Defaults to the latest completed transaction.
-    - `:crux.tx/tx-time` (Date):
-        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+    - `:xt/tx-time` (Date):
+        Shorthand for `{:xt/tx {:xt/tx-time <>}}`
 
-  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Providing both `:xt/tx` and `:xt/tx-time` is undefined.
   Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
   If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
@@ -317,16 +317,16 @@
     "Opens a DB snapshot at the given time.
 
   db-basis: (optional map, all keys optional)
-    - `:crux.db/valid-time` (Date):
+    - `:xt/valid-time` (Date):
         If provided, DB won't return any data with a valid-time greater than the given time.
         Defaults to now.
-    - `:crux.tx/tx` (Map):
+    - `:xt/tx` (Map):
         If provided, DB will be a snapshot as of the given transaction.
         Defaults to the latest completed transaction.
-    - `:crux.tx/tx-time` (Date):
-        Shorthand for `{:crux.tx/tx {:crux.tx/tx-time <>}}`
+    - `:xt/tx-time` (Date):
+        Shorthand for `{:xt/tx {:xt/tx-time <>}}`
 
-  Providing both `:crux.tx/tx` and `:crux.tx/tx-time` is undefined.
+  Providing both `:xt/tx` and `:xt/tx-time` is undefined.
   Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
   If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
@@ -374,11 +374,11 @@
                  [db eid sort-order]
                  ^crux.api.ICursor
                  [db eid sort-order {:keys [with-docs? with-corrections?]
-                                     {start-vt :crux.db/valid-time
-                                      start-tt :crux.tx/tx-time
-                                      start-tx-id :crux.tx/tx-id} :start
-                                     {end-vt :crux.db/valid-time
-                                      end-tt :crux.tx/tx-time
-                                      end-tx-id :crux.tx/tx-id} :end}])]
+                                     {start-vt :xt/valid-time
+                                      start-tt :xt/tx-time
+                                      start-tx-id :xt/tx-id} :start
+                                     {end-vt :xt/valid-time
+                                      end-tt :xt/tx-time
+                                      end-tx-id :xt/tx-id} :end}])]
   (alter-meta! #'entity-history assoc :arglists arglists)
   (alter-meta! #'open-entity-history assoc :arglists arglists))

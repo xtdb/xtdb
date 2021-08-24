@@ -19,7 +19,7 @@
     (t/is (= people
              (db/fetch-docs doc-store (conj (keys people) max-key))))
 
-    (let [evicted-alice {:xt/id :alice, :crux.db/evicted? true}]
+    (let [evicted-alice {:xt/id :alice, :xt/evicted? true}]
       (db/submit-docs doc-store {alice-key evicted-alice})
 
       (t/is (= {alice-key evicted-alice, bob-key bob}

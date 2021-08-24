@@ -368,7 +368,7 @@
   (submit+await-tx [[:crux.tx/match :test-id {:xt/id :test-id}]
                     [:crux.tx/put {:xt/id :test-id :name "2345"}]])
 
-  (t/is (= (:crux.tx/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
+  (t/is (= (:xt/tx-id (db/latest-completed-tx (:crux/index-store @(:!system *api*))))
            (l/latest-completed-tx-id (-> @(:!system *api*)
                                          (get-in [::l/lucene-store :index-writer]))))))
 

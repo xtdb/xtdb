@@ -10,9 +10,9 @@
     (let [src-dir (doto (io/file local-dir "src")
                     (.mkdirs))
           cp-1 {::cp/cp-format ::foo-cp-format
-                :tx {::tx/tx-id 1}}
+                :tx {:xt/tx-id 1}}
           cp-2 {::cp/cp-format ::foo-cp-format
-                :tx {::tx/tx-id 2}}]
+                :tx {:xt/tx-id 2}}]
 
       (t/testing "first checkpoint"
         (spit (io/file src-dir "hello.txt") "Hello world")

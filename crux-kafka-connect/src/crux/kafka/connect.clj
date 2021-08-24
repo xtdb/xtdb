@@ -145,8 +145,8 @@
       tx-op))
 
 (defn- tx-log-entry->tx-source-records [source-partition topic formatter {:keys [crux.api/tx-ops
-                                                                                 crux.tx/tx-id
-                                                                                 crux.tx/tx-time]
+                                                                                 xt/tx-id
+                                                                                 xt/tx-time]
                                                                           :as tx}]
   [(SourceRecord. source-partition
                   {"offset" tx-id}
@@ -179,8 +179,8 @@
          new-doc]))))
 
 (defn- tx-log-entry->doc-source-records [source-partition topic formatter {:keys [crux.api/tx-ops
-                                                                                  crux.tx/tx-id
-                                                                                  crux.tx/tx-time]
+                                                                                  xt/tx-id
+                                                                                  xt/tx-time]
                                                                            :as tx}]
   (log/info "tx-ops:" tx-ops)
   (for [[op :as tx-op] tx-ops

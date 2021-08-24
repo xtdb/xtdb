@@ -14,8 +14,8 @@ import static org.junit.Assert.*;
 import static crux.api.TestUtils.*;
 
 public class TransactionInstantTest {
-    private static final Keyword TX_ID = Keyword.intern("crux.tx/tx-id");
-    private static final Keyword TX_TIME = Keyword.intern("crux.tx/tx-time");
+    private static final Keyword TX_ID = Keyword.intern("xt/tx-id");
+    private static final Keyword TX_TIME = Keyword.intern("xt/tx-time");
 
     @Test
     public void nullFactoryTest() {

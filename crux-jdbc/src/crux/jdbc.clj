@@ -79,8 +79,8 @@
                       (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE ROWID = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
-    {::tx/tx-id (long (:event_offset tx-result))
-     ::tx/tx-time (-> (:tx_time tx-result) (->date dialect))}))
+    {:xt/tx-id (long (:event_offset tx-result))
+     :xt/tx-time (-> (:tx_time tx-result) (->date dialect))}))
 
 (defmulti doc-exists-sql
   (fn [dialect doc-id]
@@ -151,8 +151,8 @@
       (cio/->cursor #(run! cio/try-close [rs stmt conn])
                     (->> (resultset-seq rs)
                          (map (fn [y]
-                                {:crux.tx/tx-id (long (:event_offset y))
-                                 :crux.tx/tx-time (-> (:tx_time y) (->date dialect))
+                                {:xt/tx-id (long (:event_offset y))
+                                 :xt/tx-time (-> (:tx_time y) (->date dialect))
                                  :crux.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
   (subscribe [this after-tx-id f]
@@ -162,7 +162,7 @@
     (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
-      {:crux.tx/tx-id (long max-offset)}))
+      {:xt/tx-id (long max-offset)}))
 
   Closeable
   (close [_]

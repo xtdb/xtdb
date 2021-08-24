@@ -63,7 +63,7 @@
 
 (defn- user-data->tx-id [user-data]
   (some-> user-data
-          (get "crux.tx/tx-id")
+          (get "xt/tx-id")
           (Long/parseLong)))
 
 (defn latest-completed-tx-id [^IndexWriter index-writer]
@@ -284,7 +284,7 @@
                 (with-open [out-dir (FSDirectory/open (.toPath ^File dir))]
                   (doseq [file-name (.getFileNames snapshot)]
                     (.copyFrom out-dir src-dir file-name file-name io-ctx))))
-              {:tx {::tx/tx-id tx-id}})
+              {:tx {:xt/tx-id tx-id}})
             (finally
               (.release snapshotter snapshot))))))))
 
@@ -380,14 +380,14 @@
     (tx/register-index! secondary-indices
                         (latest-completed-tx-id index-writer)
                         {:with-tx-ops? true}
-                        (fn [{:keys [::tx/tx-id :crux.api/tx-ops committing?]}]
+                        (fn [{:keys [:xt/tx-id :crux.api/tx-ops committing?]}]
                           (when committing?
                             (let [{:keys [docs evicted-eids]} (transform-tx-ops tx-ops)]
                               (when-let [evicting-eids (not-empty evicted-eids)]
                                 (evict! indexer index-writer evicting-eids))
                               (index! indexer index-writer docs)))
 
-                          (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
+                          (.setLiveCommitData index-writer {"xt/tx-id" (str tx-id)
                                                             "xt/index-version" (str index-version)})
                           (when (.isZero refresh-frequency)
                             (.maybeRefreshBlocking searcher-manager))))

@@ -51,7 +51,7 @@
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})]
-      (resp/response (merge {:crux.db/valid-time (crux/valid-time db)}
+      (resp/response (merge {:xt/valid-time (crux/valid-time db)}
                             (crux/db-basis db))))))
 
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
@@ -68,7 +68,7 @@
       (if entity-tx
         (-> {:status 200
              :body entity-tx}
-            (add-last-modified (::tx/tx-time entity-tx)))
+            (add-last-modified (:xt/tx-time entity-tx)))
         {:status 404
          :body {:error (str eid " entity-tx not found")}}))))
 
@@ -103,7 +103,7 @@
 (defn- submit-tx [crux-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
-          {::tx/keys [tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
+          {:keys [xt/tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
       (-> {:status 202
            :body submitted-tx}
           (add-last-modified tx-time)))))
@@ -132,7 +132,7 @@
       (-> {:status 200
            :body {:results (crux/open-tx-log crux-node after-tx-id with-ops?)}
            :return :output-stream}
-          (add-last-modified (:crux.tx/tx-time (crux/latest-completed-tx crux-node)))))))
+          (add-last-modified (:xt/tx-time (crux/latest-completed-tx crux-node)))))))
 
 (s/def ::sync-spec (s/keys :opt-un [::util/tx-time ::util/timeout]))
 
@@ -144,7 +144,7 @@
                           (crux/await-tx-time crux-node tx-time timeout)
                           (crux/sync crux-node timeout))]
       (-> {:status 200
-           :body {:crux.tx/tx-time last-modified}}
+           :body {:xt/tx-time last-modified}}
           (add-last-modified last-modified)))))
 
 (s/def ::await-tx-time-spec (s/keys :req-un [::util/tx-time] :opt-un [::util/timeout]))
@@ -156,7 +156,7 @@
       (let [last-modified (crux/await-tx-time crux-node tx-time timeout)]
         (->
          {:status 200
-          :body {:crux.tx/tx-time last-modified}}
+          :body {:xt/tx-time last-modified}}
          (add-last-modified last-modified))))))
 
 (s/def ::await-tx-spec (s/keys :req-un [::util/tx-id] :opt-un [::util/timeout]))
@@ -165,7 +165,7 @@
   (fn [req]
     (let [{:keys [timeout tx-id]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
-          {:keys [crux.tx/tx-time] :as tx} (crux/await-tx crux-node {:crux.tx/tx-id tx-id} timeout)]
+          {:keys [xt/tx-time] :as tx} (crux/await-tx crux-node {:xt/tx-id tx-id} timeout)]
       (-> {:status 200, :body tx}
           (add-last-modified tx-time)))))
 
@@ -181,7 +181,7 @@
     (try
       (let [tx-id (get-in req [:parameters :query :tx-id])]
         {:status 200
-         :body {:tx-committed? (crux/tx-committed? crux-node {:crux.tx/tx-id tx-id})}})
+         :body {:tx-committed? (crux/tx-committed? crux-node {:xt/tx-id tx-id})}})
       (catch NodeOutOfSyncException e
         {:status 400, :body e}))))
 

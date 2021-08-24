@@ -147,9 +147,9 @@
                       db/TxIngester (ingester-error [_] nil)
                       db/LatestCompletedTx (latest-completed-tx [_] *latest-completed-tx*))
         await-tx (fn [tx timeout]
-                   (#'n/await-tx {:bus bus :tx-ingester tx-ingester} ::tx/tx-id tx timeout))
-        tx1 {::tx/tx-id 1
-             ::tx/tx-time (Date.)}
+                   (#'n/await-tx {:bus bus :tx-ingester tx-ingester} :xt/tx-id tx timeout))
+        tx1 {:xt/tx-id 1
+             :xt/tx-time (Date.)}
         tx-evt {:crux/event-type ::tx/indexed-tx
                 :submitted-tx tx1
                 ::txe/tx-events []
@@ -174,7 +174,7 @@
     (t/testing "times out if it's not quite ready"
       (future
         (Thread/sleep 100)
-        (bus/send bus (assoc-in tx-evt [:submitted-tx ::tx/tx-id] 0)))
+        (bus/send bus (assoc-in tx-evt [:submitted-tx :xt/tx-id] 0)))
 
       (with-latest-tx nil
         (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500))))))

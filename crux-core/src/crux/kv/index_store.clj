@@ -411,8 +411,8 @@
 
 (defn- decode-tx-time-mapping-key-from [^DirectBuffer k]
   (assert (= c/tx-time-mapping-id (.getByte k 0)))
-  {:crux.tx/tx-time (c/reverse-time-ms->date (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN))
-   :crux.tx/tx-id (c/descending-long (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
+  {:xt/tx-time (c/reverse-time-ms->date (.getLong k c/index-id-size ByteOrder/BIG_ENDIAN))
+   :xt/tx-id (c/descending-long (.getLong k (+ c/index-id-size Long/BYTES) ByteOrder/BIG_ENDIAN))})
 
 ;;;; stats
 
@@ -818,38 +818,38 @@
         (.put temp-hash-cache (canonical-buffer-lookup canonical-buffer-cache value-buffer) value))
       value-buffer))
 
-  (resolve-tx [_ {:crux.tx/keys [tx-time tx-id] :as tx}]
+  (resolve-tx [_ {:xt/keys [tx-time tx-id] :as tx}]
     (with-open [i (-> (kv/new-iterator snapshot)
                       (new-prefix-kv-iterator tx-time-mapping-prefix))]
       (let [latest-tx (latest-completed-tx-i i)]
         (cond
           (= tx latest-tx) tx
 
-          tx-time (if (or (nil? latest-tx) (pos? (compare tx-time (:crux.tx/tx-time latest-tx))))
+          tx-time (if (or (nil? latest-tx) (pos? (compare tx-time (:xt/tx-time latest-tx))))
                     (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
 
                     (let [found-tx (some-> (kv/seek i (encode-tx-time-mapping-key-to (.get seek-buffer-tl) tx-time tx-id))
                                            decode-tx-time-mapping-key-from)]
-                      (if (and tx-id (not= tx-id (:crux.tx/tx-id found-tx)))
+                      (if (and tx-id (not= tx-id (:xt/tx-id found-tx)))
                         (throw (err/illegal-arg :tx-id-mismatch
                                                 {::err/message "Mismatching tx-id for tx-time"
                                                  :requested tx
                                                  :available found-tx}))
 
                         (do
-                          (when (and found-tx (not= tx-time (:crux.tx/tx-time found-tx)))
+                          (when (and found-tx (not= tx-time (:xt/tx-time found-tx)))
                             (let [next-tx (some-> (kv/prev i)
                                                   decode-tx-time-mapping-key-from)]
-                              (when (= tx-time (:crux.tx/tx-time next-tx))
+                              (when (= tx-time (:xt/tx-time next-tx))
                                 (throw (err/illegal-arg :tx-id-mismatch
                                                         {::err/message "Mismatching tx-id for tx-time"
                                                          :requested tx
                                                          :available next-tx})))))
 
-                          {:crux.tx/tx-time tx-time
-                           :crux.tx/tx-id (:crux.tx/tx-id found-tx)}))))
+                          {:xt/tx-time tx-time
+                           :xt/tx-id (:xt/tx-id found-tx)}))))
 
-          tx-id (if (or (nil? latest-tx) (> ^long tx-id ^long (:crux.tx/tx-id latest-tx)))
+          tx-id (if (or (nil? latest-tx) (> ^long tx-id ^long (:xt/tx-id latest-tx)))
                   (throw (err/node-out-of-sync {:requested tx, :available latest-tx}))
                   ;; TODO find corresponding tx-time?
                   tx)
@@ -1020,7 +1020,7 @@
                                 (into {} (map (fn [[ch eid]]
                                                 (MapEntry/create ch
                                                                  {:xt/id (c/new-id eid)
-                                                                  :crux.db/evicted? true})))))
+                                                                  :xt/evicted? true})))))
                 content-ks (->> (for [[_ eid-buf ecav-key ^Quad quad] ecav-ks
                                       :let [attr-buf (c/->id-buffer (.attr quad))
                                             value-buf ^DirectBuffer (.value quad)
@@ -1057,7 +1057,7 @@
 
   (abort-index-tx [_]
     (with-open [snapshot (kv/new-snapshot transient-kv-store)]
-      (let [{:crux.tx/keys [tx-id tx-time]} tx]
+      (let [{:xt/keys [tx-id tx-time]} tx]
         ;; we still put the ECAV KVs in so that we can keep track of what we need to evict later
         ;; the bitemp indices will ensure these are never returned in queries
         (kv/store persistent-kv-store
@@ -1072,8 +1072,8 @@
   (open-index-snapshot [_]
     (fork/->MergedIndexSnapshot (-> (new-kv-index-snapshot (kv/new-snapshot persistent-kv-store) true thread-mgr
                                                            cav-cache canonical-buffer-cache temp-hash-cache)
-                                    (fork/->CappedIndexSnapshot (:crux.db/valid-time fork-at)
-                                                                (get fork-at :crux.tx/tx-id (:crux.tx/tx-id tx))))
+                                    (fork/->CappedIndexSnapshot (:xt/valid-time fork-at)
+                                                                (get fork-at :xt/tx-id (:xt/tx-id tx))))
                                 (new-kv-index-snapshot (kv/new-snapshot transient-kv-store) true thread-mgr
                                                        cav-cache canonical-buffer-cache temp-hash-cache)
                                 @!evicted-eids)))
@@ -1081,7 +1081,7 @@
 (defrecord KvIndexStore [kv-store thread-mgr cav-cache canonical-buffer-cache]
   db/IndexStore
   (begin-index-tx [_ tx fork-at]
-    (let [{:crux.tx/keys [tx-id tx-time]} tx
+    (let [{:xt/keys [tx-id tx-time]} tx
           transient-kv-store (mut-kv/->mutable-kv-store)]
       (kv/store transient-kv-store
                 [(MapEntry/create (encode-tx-time-mapping-key-to nil tx-time tx-id) mem/empty-buffer)])

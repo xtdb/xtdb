@@ -353,5 +353,5 @@
              (crux/q
               (crux/db node
                        #inst "1715-06-19"
-                       (:crux.tx/tx-time first-ownership-tx-response))
+                       (:xt/tx-time first-ownership-tx-response))
               who-has-what-query)))))

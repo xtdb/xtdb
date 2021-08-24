@@ -16,14 +16,14 @@ public class TestUtils {
     static final Keyword DELETE = Keyword.intern("crux.tx/delete");
 
     static final Keyword DB_ID = Keyword.intern("xt/id");
-    static final Keyword VALID_TIME = Keyword.intern("crux.db/valid-time");
-    static final Keyword CONTENT_HASH = Keyword.intern("crux.db/content-hash");
-    static final Keyword DOC = Keyword.intern("crux.db/doc");
+    static final Keyword VALID_TIME = Keyword.intern("xt/valid-time");
+    static final Keyword CONTENT_HASH = Keyword.intern("xt/content-hash");
+    static final Keyword DOC = Keyword.intern("xt/doc");
 
-    static final Keyword TX_TIME = Keyword.intern("crux.tx/tx-time");
-    static final Keyword TX_ID = Keyword.intern("crux.tx/tx-id");
+    static final Keyword TX_TIME = Keyword.intern("xt/tx-time");
+    static final Keyword TX_ID = Keyword.intern("xt/tx-id");
     static final Keyword TX_EVENTS = Keyword.intern("crux.tx.event/tx-events");
-    static final Keyword TX = Keyword.intern("crux.tx/tx");
+    static final Keyword TX = Keyword.intern("xt/tx");
 
     static final Keyword TX_OPS = Keyword.intern("crux.api/tx-ops");
 

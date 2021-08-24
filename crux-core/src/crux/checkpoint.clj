@@ -155,7 +155,7 @@
   (upload-checkpoint [_ dir {:keys [tx ::cp-format]}]
     (let [from-path (.toPath ^File dir)
           cp-at (java.util.Date.)
-          cp-prefix (format "checkpoint-%s-%s" (::tx/tx-id tx) (cio/format-rfc3339-date cp-at))
+          cp-prefix (format "checkpoint-%s-%s" (:xt/tx-id tx) (cio/format-rfc3339-date cp-at))
           to-path (.resolve root-path cp-prefix)]
       (sync-path from-path to-path)
 

@@ -1,13 +1,12 @@
 (ns crux.bench.ts-devices
   (:require [clojure.instant :as inst]
-            [crux.bench :as bench]
             [clojure.java.io :as io]
             [clojure.string :as str]
             [crux.api :as crux]
-            [crux.io :as cio]
-            [crux.db :as db])
-  (:import java.time.temporal.ChronoUnit
-           java.time.Duration
+            [crux.bench :as bench]
+            [crux.io :as cio])
+  (:import java.time.Duration
+           java.time.temporal.ChronoUnit
            java.util.Date))
 
 ;; https://docs.timescale.com/v1.2/tutorials/other-sample-datasets#in-depth-devices
@@ -223,18 +222,18 @@
                                           (reduce into []))
                          histories (for [r reading-ids]
                                      (crux/open-entity-history db r :asc {:with-docs? true
-                                                                          :start {:crux.db/valid-time  #inst "1970"}}))]
+                                                                          :start {:xt/valid-time  #inst "1970"}}))]
                      (try
                        (->> (for [history histories]
                               (for [entity-tx (iterator-seq history)]
-                                (update entity-tx :crux.db/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                                (update entity-tx :xt/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                             (cio/merge-sort (fn [a b]
-                                              (compare (:crux.db/valid-time a) (:crux.db/valid-time b))))
-                            (partition-by :crux.db/valid-time)
+                                              (compare (:xt/valid-time a) (:xt/valid-time b))))
+                            (partition-by :xt/valid-time)
                             (take 12)
                             (mapv (fn [group]
-                                    (let [battery-levels (sort (mapv (comp :reading/battery-level :crux.db/doc) group))]
-                                      [(:crux.db/valid-time (first group))
+                                    (let [battery-levels (sort (mapv (comp :reading/battery-level :xt/doc) group))]
+                                      [(:xt/valid-time (first group))
                                        (first battery-levels)
                                        (last battery-levels)]))))
                        (finally

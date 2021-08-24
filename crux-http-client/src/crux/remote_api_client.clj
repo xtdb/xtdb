@@ -195,14 +195,14 @@
                      :with-docs (:with-docs? opts)
 
                      :start-valid-time (some-> (:start-valid-time opts) (cio/format-rfc3339-date))
-                     :start-tx-time (some-> (get-in opts [:start-tx ::tx/tx-time])
+                     :start-tx-time (some-> (get-in opts [:start-tx :xt/tx-time])
                                             (cio/format-rfc3339-date))
-                     :start-tx-id (get-in opts [:start-tx ::tx/tx-id])
+                     :start-tx-id (get-in opts [:start-tx :xt/tx-id])
 
                      :end-valid-time (some-> (:end-valid-time opts) (cio/format-rfc3339-date))
-                     :end-tx-time (some-> (get-in opts [:end-tx ::tx/tx-time])
+                     :end-tx-time (some-> (get-in opts [:end-tx :xt/tx-time])
                                           (cio/format-rfc3339-date))
-                     :end-tx-id (get-in opts [:end-tx ::tx/tx-id])})]
+                     :end-tx-id (get-in opts [:end-tx :xt/tx-id])})]
      (if-let [in (api-request-sync (str url "/_crux/entity")
                                    {:http-opts {:as :stream
                                                 :method :get
@@ -216,9 +216,9 @@
   (transaction-time [this] tx-time)
 
   (db-basis [this]
-    {:crux.db/valid-time valid-time
-     :crux.tx/tx {:crux.tx/tx-time tx-time
-                  :crux.tx/tx-id tx-id}}))
+    {:xt/valid-time valid-time
+     :xt/tx {:xt/tx-time tx-time
+             :xt/tx-id tx-id}}))
 
 (defrecord RemoteApiClient [url ->jwt-token]
   Closeable
@@ -228,26 +228,26 @@
   (db [this] (api/db this {}))
 
   (db [this valid-time tx-time]
-   (api/db this {:crux.db/valid-time valid-time
-                 :crux.tx/tx-time tx-time}))
+   (api/db this {:xt/valid-time valid-time
+                 :xt/tx-time tx-time}))
 
   (db [this valid-time-or-basis]
    (if (instance? Date valid-time-or-basis)
-     (api/db this {:crux.db/valid-time valid-time-or-basis})
+     (api/db this {:xt/valid-time valid-time-or-basis})
      (let [db-basis valid-time-or-basis
-           qps (temporal-qps {:valid-time (:crux.db/valid-time db-basis)
-                              :tx-time (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-time])
-                                           (:crux.tx/tx-time db-basis))
-                              :tx-id (or (get-in db-basis [:crux.tx/tx :crux.tx/tx-id])
-                                         (:crux.tx/tx-id db-basis))})
+           qps (temporal-qps {:valid-time (:xt/valid-time db-basis)
+                              :tx-time (or (get-in db-basis [:xt/tx :xt/tx-time])
+                                           (:xt/tx-time db-basis))
+                              :tx-id (or (get-in db-basis [:xt/tx :xt/tx-id])
+                                         (:xt/tx-id db-basis))})
            resolved-tx (api-request-sync (str url "/_crux/db")
                                          {:http-opts {:method :get
                                                       :query-params qps}
                                           :->jwt-token ->jwt-token})]
        (->RemoteDatasource url
-                           (:crux.db/valid-time resolved-tx)
-                           (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-time])
-                           (get-in resolved-tx [:crux.tx/tx :crux.tx/tx-id])
+                           (:xt/valid-time resolved-tx)
+                           (get-in resolved-tx [:xt/tx :xt/tx-time])
+                           (get-in resolved-tx [:xt/tx :xt/tx-id])
                            ->jwt-token))))
 
   (open-db [this] (api/db this))
@@ -265,7 +265,7 @@
   (tx-committed? [this submitted-tx]
     (-> (api-request-sync (str url "/_crux/tx-committed")
                           {:http-opts {:method :get
-                                       :query-params {:tx-id (:crux.tx/tx-id submitted-tx)}}
+                                       :query-params {:tx-id (:xt/tx-id submitted-tx)}}
                            :->jwt-token ->jwt-token})
         (get :tx-committed?)))
 
@@ -276,7 +276,7 @@
                          {:http-opts {:method :get
                                       :query-params {:timeout (some-> timeout (cio/format-duration-millis))}}
                           :->jwt-token ->jwt-token})
-       (get :crux.tx/tx-time)))
+       (get :xt/tx-time)))
 
   (sync [this tx-time timeout]
    (defonce warn-on-deprecated-sync
@@ -287,7 +287,7 @@
   (await-tx [this submitted-tx timeout]
     (api-request-sync (str url "/_crux/await-tx")
                       {:http-opts {:method :get
-                                   :query-params {:tx-id (:crux.tx/tx-id submitted-tx)
+                                   :query-params {:tx-id (:xt/tx-id submitted-tx)
                                                  :timeout (some-> timeout (cio/format-duration-millis))}}
                        :->jwt-token ->jwt-token}))
 
@@ -298,7 +298,7 @@
                                        :query-params {:tx-time (cio/format-rfc3339-date tx-time)
                                                      :timeout (some-> timeout (cio/format-duration-millis))}}
                            :->jwt-token ->jwt-token})
-        (get :crux.tx/tx-time)))
+        (get :xt/tx-time)))
 
   (listen [this event-opts f]
     (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))

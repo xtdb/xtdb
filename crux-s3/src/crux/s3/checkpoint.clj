@@ -57,7 +57,7 @@
   (upload-checkpoint [this dir {:keys [tx ::cp/cp-format]}]
     (let [dir-path (.toPath ^File dir)
           cp-at (java.util.Date.)
-          s3-dir (format "checkpoint-%s-%s" (::tx/tx-id tx) (cio/format-rfc3339-date cp-at))]
+          s3-dir (format "checkpoint-%s-%s" (:xt/tx-id tx) (cio/format-rfc3339-date cp-at))]
       (->> (file-seq dir)
            (into {} (keep (fn [^File file]
                             (when (.isFile file)

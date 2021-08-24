@@ -363,7 +363,7 @@
               entity-error [:div.error-box (str entity-error)]
               (not diffs?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-result-pane-history])]
                              [:div.entity-histories
-                              (for [{:keys [crux.tx/tx-time crux.db/valid-time crux.db/doc]
+                              (for [{:keys [xt/tx-time xt/valid-time xt/doc]
                                      :as history-elem} entity-history]
                                 ^{:key history-elem}
                                 [:div.entity-history__container
@@ -374,12 +374,12 @@
                        [:div.entity-histories
                         [:div.entity-history__container
                          [:div.entity-map
-                          [cm/code-snippet (:crux.db/doc up-to-date-doc) {}]]
+                          [cm/code-snippet (:xt/doc up-to-date-doc) {}]]
                          [vt-tt-entity-box
-                          (:crux.db/valid-time up-to-date-doc)
-                          (:crux.tx/tx-time up-to-date-doc)]]
+                          (:xt/valid-time up-to-date-doc)
+                          (:xt/tx-time up-to-date-doc)]]
                         (for [{:keys [additions deletions
-                                      crux.tx/tx-time crux.db/valid-time]
+                                      xt/tx-time xt/valid-time]
                                :as history-elem} history-diffs]
                           ^{:key history-elem}
                           [:div.entity-history__container

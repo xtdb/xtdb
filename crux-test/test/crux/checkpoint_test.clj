@@ -44,12 +44,12 @@
                                  (spit (doto (io/file dir "hello.edn")
                                          (io/make-parents))
                                        (pr-str {:msg "Hello world!", :tx-id tx-id}))
-                                 {:tx {:crux.tx/tx-id tx-id}}))))})
+                                 {:tx {:xt/tx-id tx-id}}))))})
     @!checkpoints))
 
 (t/deftest test-checkpoint
   (fix/with-tmp-dir "cp" [cp-dir]
-    (let [cp-1 {:tx {:crux.tx/tx-id 1},
+    (let [cp-1 {:tx {:xt/tx-id 1},
                 ::cp/cp-format ::foo-format,
                 :files {"hello.edn" {:msg "Hello world!", :tx-id 1}}}]
       (t/testing "first checkpoint"

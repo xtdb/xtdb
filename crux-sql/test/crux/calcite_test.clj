@@ -52,11 +52,11 @@
     (assert (= "Ivana" (:name (first (query q)))))
     (assert (= "Ivanb" (:name (first (query (str "VALIDTIME ('2016-12-01T10:13:30Z') " q))))))
 
-    (t/is (= "Ivan" (:name (first (query (str (format "VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONTIME ('%s') " (inst->iso-str (:crux.tx/tx-time tx1))) q)))))
+    (t/is (= "Ivan" (:name (first (query (str (format "VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONTIME ('%s') " (inst->iso-str (:xt/tx-time tx1))) q)))))
           "tx-time")
-    (t/is (= "Ivan" (:name (first (query (str (format "VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONID (%s) " (:crux.tx/tx-id tx1)) q)))))
+    (t/is (= "Ivan" (:name (first (query (str (format "VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONID (%s) " (:xt/tx-id tx1)) q)))))
           "tx-id")
-    (t/is (= "Ivan" (:name (first (query (str (format "-- comment \n VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONID (%s) " (:crux.tx/tx-id tx1)) q)))))
+    (t/is (= "Ivan" (:name (first (query (str (format "-- comment \n VALIDTIME ('2016-12-01T10:13:30Z') TRANSACTIONID (%s) " (:xt/tx-id tx1)) q)))))
           "tx-id with comment")))
 
 (t/deftest test-project

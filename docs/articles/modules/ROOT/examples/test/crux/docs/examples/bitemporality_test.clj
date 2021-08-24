@@ -207,10 +207,10 @@
                (crux/q
                  (crux/db node
                           {
-                           :crux.db/valid-time #inst "2019-01-02" ; `as at` valid time
+                           :xt/valid-time #inst "2019-01-02" ; `as at` valid time
                ;; end::bitempq-a[]
                           ;; Fudging this so we can use the real transaction time
-                           :crux.tx/tx transaction
+                           :xt/tx transaction
                           ;; tag::bitempq-c[]
                           })
 
@@ -224,6 +224,6 @@
 ;; Fudging this bit in the actual test
 (comment
   ;; tag::bitempq-b[]
-  :crux.tx/tx #inst "2019-01-03" ; `as of` transaction time
+  :xt/tx #inst "2019-01-03" ; `as of` transaction time
   ;; end::bitempq-b[]
   )

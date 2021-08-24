@@ -101,17 +101,17 @@
   (db [this] (api/db this {}))
   (db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
-      (api/db this {:crux.db/valid-time valid-time-or-basis})
+      (api/db this {:xt/valid-time valid-time-or-basis})
       (api/db query-engine valid-time-or-basis)))
   (db [this valid-time tx-time]
-    (api/db this {:crux.db/valid-time valid-time, :crux.tx/tx-time tx-time}))
+    (api/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
 
   (open-db [this] (api/open-db this {}))
   (open-db [this valid-time tx-time]
-    (api/open-db this {:crux.db/valid-time valid-time :crux.tx/tx-time tx-time}))
+    (api/open-db this {:xt/valid-time valid-time :xt/tx-time tx-time}))
   (open-db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
-      (api/open-db this {:crux.db/valid-time valid-time-or-basis})
+      (api/open-db this {:xt/valid-time valid-time-or-basis})
       (cio/with-read-lock lock
         (ensure-node-open this)
         (api/open-db query-engine valid-time-or-basis))))
@@ -127,10 +127,10 @@
         (merge crux-version
                (status (dissoc @!system :crux/node))))))
 
-  (tx-committed? [this {:keys [::tx/tx-id] :as submitted-tx}]
+  (tx-committed? [this {:keys [:xt/tx-id] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [{latest-tx-id ::tx/tx-id, :as latest-tx} (api/latest-completed-tx this)]
+      (let [{latest-tx-id :xt/tx-id, :as latest-tx} (api/latest-completed-tx this)]
         (cond
           (nil? tx-id) (throw (err/illegal-arg :invalid-tx {:tx submitted-tx}))
 
@@ -144,24 +144,24 @@
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx tx-log)]
       (-> (api/await-tx this tx timeout)
-          :crux.tx/tx-time)))
+          :xt/tx-time)))
 
   (sync [this tx-time timeout]
     (defonce warn-on-deprecated-sync
       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-    (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
+    (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
 
   (await-tx [this submitted-tx]
     (api/await-tx this submitted-tx nil))
 
   (await-tx [this submitted-tx timeout]
-    (await-tx this ::tx/tx-id submitted-tx timeout))
+    (await-tx this :xt/tx-id submitted-tx timeout))
 
   (await-tx-time [this tx-time]
     (api/await-tx-time this tx-time nil))
 
   (await-tx-time [this tx-time timeout]
-    (::tx/tx-time (await-tx this ::tx/tx-time {::tx/tx-time tx-time} timeout)))
+    (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
 
   (listen [_ {:crux/keys [event-type] :as event-opts} f]
     (case event-type
@@ -171,7 +171,7 @@
                   (fn [{:keys [submitted-tx ::txe/tx-events] :as ev}]
                     (f (merge {:crux/event-type :crux/indexed-tx}
                               (select-keys ev [:committed?])
-                              (select-keys submitted-tx [::tx/tx-time ::tx/tx-id])
+                              (select-keys submitted-tx [:xt/tx-time :xt/tx-id])
                               (when (:with-tx-ops? event-opts)
                                 {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
@@ -209,18 +209,18 @@
     (let [with-ops? (boolean with-ops?)]
       (cio/with-read-lock lock
         (ensure-node-open this)
-        (if (let [latest-submitted-tx-id (::tx/tx-id (api/latest-submitted-tx this))]
+        (if (let [latest-submitted-tx-id (:xt/tx-id (api/latest-submitted-tx this))]
               (or (nil? latest-submitted-tx-id)
                   (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
           cio/empty-cursor
 
-          (let [latest-completed-tx-id (::tx/tx-id (api/latest-completed-tx this))
+          (let [latest-completed-tx-id (:xt/tx-id (api/latest-completed-tx this))
                 tx-log-iterator (db/open-tx-log tx-log after-tx-id)
                 tx-log (->> (iterator-seq tx-log-iterator)
-                            (remove #(db/tx-failed? index-store (:crux.tx/tx-id %)))
-                            (take-while (comp #(<= % latest-completed-tx-id) ::tx/tx-id))
+                            (remove #(db/tx-failed? index-store (:xt/tx-id %)))
+                            (take-while (comp #(<= % latest-completed-tx-id) :xt/tx-id))
                             (map (if with-ops?
-                                   (fn [{:keys [crux.tx/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
+                                   (fn [{:keys [xt/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
                                          (dissoc :crux.tx.event/tx-events)
                                          (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))

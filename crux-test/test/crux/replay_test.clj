@@ -37,7 +37,7 @@
       (fix/submit+await-tx [[:crux.tx/put {:xt/id :hello}]]))
 
     (with-cluster-node
-      (t/is (= {:crux.tx/tx-id 0}
+      (t/is (= {:xt/tx-id 0}
                (crux/latest-submitted-tx *api*)))
       (t/is (= {:xt/id :hello}
                (crux/entity (crux/db *api*) :hello))))))
@@ -50,7 +50,7 @@
           (fix/submit+await-tx  [[:crux.tx/put {:xt/id (str "id-" x)}]])))
 
       (with-cluster-node
-        (t/is (= {:crux.tx/tx-id (dec n)}
+        (t/is (= {:xt/tx-id (dec n)}
                  (crux/latest-submitted-tx *api*)))
         (t/is (= n
                  (count (crux/q (crux/db *api*) '{:find [?e]

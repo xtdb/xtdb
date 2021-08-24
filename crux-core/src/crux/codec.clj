@@ -829,10 +829,10 @@
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
     {:xt/id (.eid entity-tx)
-     :crux.db/content-hash (.content-hash entity-tx)
-     :crux.db/valid-time (.vt entity-tx)
-     :crux.tx/tx-time (.tt entity-tx)
-     :crux.tx/tx-id (.tx-id entity-tx)}))
+     :xt/content-hash (.content-hash entity-tx)
+     :xt/valid-time (.vt entity-tx)
+     :xt/tx-time (.tt entity-tx)
+     :xt/tx-id (.tx-id entity-tx)}))
 
 (defn multiple-values? [v]
   (or (vector? v) (set? v)))
@@ -842,9 +842,8 @@
     (not (multiple-values? v))
     (vector)))
 
-(defn evicted-doc?
-  [{:crux.db/keys [id evicted?] :as doc}]
-  (boolean (or (= :crux.db/evicted id) evicted?)))
+(defn evicted-doc? [doc]
+  (boolean (:xt/evicted? doc)))
 
 (defn keep-non-evicted-doc [doc]
   (when-not (evicted-doc? doc)

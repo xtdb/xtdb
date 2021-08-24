@@ -51,8 +51,8 @@ This parameter is a map of the following
 |Key|Value Type|Value
 
 |`:crux/event-type`|Keyword|`:crux/indexed-tx`
-|`:crux.tx/tx-id`|Long|ID of the indexed transaction
-|`:crux.tx/tx-time`|Date|Transaction time of the indexed transaction
+|`:xt/tx-id`|Long|ID of the indexed transaction
+|`:xt/tx-time`|Date|Transaction time of the indexed transaction
 |`:committed?`|Boolean|Whether the transaction was committed or aborted
 |`:crux/tx-ops`|List|List of the transaction operations indexed
 |===
@@ -75,8 +75,8 @@ Will print
 ----
 event received!
 {:crux/event-type :crux/indexed-tx,
- :crux.tx/tx-id ...,
- :crux.tx/tx-time #inst "...",
+ :xt/tx-id ...,
+ :xt/tx-time #inst "...",
  :committed? true,
  :crux/tx-ops [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]]}
 ----
