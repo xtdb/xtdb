@@ -122,7 +122,7 @@
                                  {:handlers
                                   {EDNId
                                    (transit/write-handler
-                                    "crux/id"
+                                    "xt/id"
                                     c/edn-id->original-id)}})]
       (transit/write writer x)
       (.toString out))))

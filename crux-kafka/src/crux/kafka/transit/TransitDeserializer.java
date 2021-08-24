@@ -24,7 +24,7 @@ public class TransitDeserializer implements Deserializer<Object> {
         IFn idEdnReader = Clojure.var("crux.codec/id-edn-reader");
         jsonVerbose = Clojure.read(":json-verbose");
         Map<Object, Object> handlers = new HashMap<>();
-        handlers.put("crux/id", readHandler.invoke(idEdnReader));
+        handlers.put("xt/id", readHandler.invoke(idEdnReader));
         options = new HashMap<>();
         options.put(Clojure.read(":handlers"), handlers);
     }

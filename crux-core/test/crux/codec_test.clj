@@ -127,12 +127,21 @@
 
 (t/deftest test-id-reader
   (t/testing "can read and convert to real id"
-    (t/is (not= (c/new-id "http://google.com") #crux/id "http://google.com"))
+    (t/is (not= (c/new-id "http://google.com") #xt/id "http://google.com"))
     (t/is (= "234988566c9a0a9cf952cec82b143bf9c207ac16"
-             (str #crux/id "http://google.com")))
-    (t/is (instance? Id (c/new-id #crux/id "http://google.com"))))
+             (str #xt/id "http://google.com")))
+    (t/is (instance? Id (c/new-id #xt/id "http://google.com"))))
 
   (t/testing "can create different types of ids"
+    (t/is (= (c/new-id :foo) #xt/id ":foo"))
+    (t/is (= (c/new-id #uuid "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
+             #xt/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28"))
+    (t/is (not= #xt/id "234988566c9a0a9cf952cec82b143bf9c207ac16"
+                (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
+    (t/is (not= (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")
+                #xt/id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
+
+  (t/testing "legacy #crux/* reader tags"
     (t/is (= (c/new-id :foo) #crux/id ":foo"))
     (t/is (= (c/new-id #uuid "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
              #crux/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28"))
@@ -145,19 +154,23 @@
     (t/is (not= {:find ['e]
                  :where [['e (c/new-id "http://xmlns.com/foaf/0.1/firstName") "Pablo"]]}
                 '{:find [e]
-                  :where [[e #crux/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]})))
+                  :where [[e #xt/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]})))
 
   (t/testing "URL and keyword are same id"
     (t/is (= (c/new-id (keyword "http://xmlns.com/foaf/0.1/firstName"))
-             #crux/id "http://xmlns.com/foaf/0.1/firstName"))
+             #xt/id "http://xmlns.com/foaf/0.1/firstName"))
     (t/is (= (c/new-id (URL. "http://xmlns.com/foaf/0.1/firstName"))
-             #crux/id ":http://xmlns.com/foaf/0.1/firstName"))
+             #xt/id ":http://xmlns.com/foaf/0.1/firstName"))
     (t/is (not= (c/new-id "http://xmlns.com/foaf/0.1/firstName")
-                #crux/id ":http://xmlns.com/foaf/0.1/firstName"))))
+                #xt/id ":http://xmlns.com/foaf/0.1/firstName"))))
 
 (t/deftest test-base64-reader
   (t/is (Arrays/equals (byte-array [1 2 3])
-                       ^bytes (c/read-edn-string-with-readers "#crux/base64 \"AQID\""))))
+                       ^bytes (c/read-edn-string-with-readers "#xt/base64 \"AQID\"")))
+
+  (t/is (Arrays/equals (byte-array [1 2 3])
+                       ^bytes (c/read-edn-string-with-readers "#crux/base64 \"AQID\""))
+        "legacy reader tag"))
 
 (t/deftest test-unordered-coll-hashing-1001
   (let [foo-a {{:foo 1} :foo1
@@ -166,7 +179,7 @@
                {:foo 1} :foo1}]
     (t/is (not= (seq foo-a) (seq foo-b))) ; ordering is different
     (t/is (thrown? ClassCastException (sort foo-a))) ; can't just sort it
-    (t/is (= #crux/id "e64adaca39f92830a8e2d167aa3daabd721d40d4"
+    (t/is (= #xt/id "e64adaca39f92830a8e2d167aa3daabd721d40d4"
              (c/new-id {:crux.db/id :foo
                         :foo foo-a})
              (c/new-id {:crux.db/id :foo
@@ -174,18 +187,18 @@
 
   (let [foo #{#{:foo} #{:bar}}]
     (t/is (thrown? ClassCastException (sort foo)))
-    (t/is (= #crux/id "d5fb933a181a2aa89859369c51abcef7f363b31b"
+    (t/is (= #xt/id "d5fb933a181a2aa89859369c51abcef7f363b31b"
              (c/new-id {:crux.db/id :foo
                         :foo foo}))))
 
   (let [foo #{42 "hello"}]
     (t/is (thrown? ClassCastException (sort foo)))
-    (t/is (= #crux/id "33581f4655dc841081f310f50d8bc5e0fa602377"
+    (t/is (= #xt/id "33581f4655dc841081f310f50d8bc5e0fa602377"
              (c/new-id {:crux.db/id :foo
                         :foo foo}))))
 
   (t/testing "original coll hashing unaffected"
-    (t/is (= #crux/id "e4b35746db4bd2cf3b024133eafd95f66c3638ed"
+    (t/is (= #xt/id "e4b35746db4bd2cf3b024133eafd95f66c3638ed"
              (c/new-id {:crux.db/id :foo
                         :foo {:a 1, :b 2}})
              (c/new-id {:crux.db/id :foo

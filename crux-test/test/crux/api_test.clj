@@ -73,8 +73,8 @@
       (t/is (pos? (:crux.kv/estimate-num-keys status-map)))
       (t/is (= submitted-tx (api/latest-completed-tx *api*))))))
 
-(t/deftest test-can-use-crux-ids
-  (let [id #crux/id "https://adam.com"
+(t/deftest test-can-use-id-literals
+  (let [id #xt/id "https://adam.com"
         doc {:crux.db/id id, :name "Adam"}
         submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
     (api/await-tx *api* submitted-tx nil)

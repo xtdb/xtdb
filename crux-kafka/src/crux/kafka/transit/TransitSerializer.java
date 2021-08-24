@@ -31,9 +31,9 @@ public class TransitSerializer implements Serializer<Object> {
         jsonVerbose = Clojure.read(":json-verbose");
         Map<Object, Object> handlers = new HashMap<>();
         handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId")),
-                     writeHandler.invoke("crux/id", ednIdToOriginalId));
+                     writeHandler.invoke("xt/id", ednIdToOriginalId));
         handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.Id")),
-                     writeHandler.invoke("crux/id", clojureStr));
+                     writeHandler.invoke("xt/id", clojureStr));
         options = new HashMap<>();
         options.put(Clojure.read(":handlers"), handlers);
     }
