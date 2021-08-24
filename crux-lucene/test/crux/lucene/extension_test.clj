@@ -44,7 +44,7 @@
     (with-open [s (l/search *api* "Entity*" {:default-field (name :description)})]
       (t/is (= 5 (count (->> (iterator-seq s)
                              (map (fn doc->rel [[^Document doc score]]
-                                    [(.get ^Document doc l/field-crux-val) score]))
+                                    [(.get ^Document doc l/field-xt-val) score]))
                              (distinct) ;; rely on the later resolve step to find all the entities sharing a given AV
                              (mapcat (fn resolve-atemporal-av [[v s]]
                                        (c/q db {:find '[e v s]
@@ -62,7 +62,7 @@
     (with-open [s (l/search *api* "Entity*" {})]
       (t/is (= 5 (count (->> (iterator-seq s)
                              (map (fn doc->rel [[^Document doc score]]
-                                    [(.get ^Document doc l/field-crux-attr) (.get ^Document doc l/field-crux-val) score]))
+                                    [(.get ^Document doc l/field-xt-attr) (.get ^Document doc l/field-xt-val) score]))
                              (distinct) ;; rely on the later resolve step to find all the entities sharing a given AV
                              (mapcat (fn resolve-atemporal-av [[a v s]]
                                        (c/q db {:find '[e a v s]
@@ -73,7 +73,7 @@
 
 ;;; Egeria Connector use-case, derived from https://github.com/odpi/egeria-connector-crux/
 
-(def ^:const field-crux-val-exact "_crux_val_exact")
+(def ^:const field-xt-val-exact "_crux_val_exact")
 
 (defn ^String keyword->kcs [k]
   (subs (str k "-exact") 1))
@@ -91,24 +91,24 @@
             :let [id-str (l/->hash-str (l/->DocumentId e a v))
                   doc (doto (Document.)
                         ;; To search for triples by e-a-v for deduping
-                        (.add (StringField. l/field-crux-id, id-str, Field$Store/NO))
+                        (.add (StringField. l/field-xt-id, id-str, Field$Store/NO))
                         ;; The actual term, which will be tokenized (case-insensitive) (dynamic field)
                         (.add (TextField. (l/keyword->k a), v, Field$Store/YES))
                         ;; Custom - the actual term, to be used for exact matches (case-sensitive) (dynamic field)
                         (.add (StringField. (keyword->kcs a), v, Field$Store/YES))
                         ;; Used for wildcard searches (case-insensitive)
-                        (.add (TextField. l/field-crux-val, v, Field$Store/YES))
+                        (.add (TextField. l/field-xt-val, v, Field$Store/YES))
                         ;; Custom - used for wildcard searches (case-sensitive)
-                        (.add (StringField. field-crux-val-exact, v, Field$Store/YES))
+                        (.add (StringField. field-xt-val-exact, v, Field$Store/YES))
                         ;; Used for eviction
-                        (.add (StringField. l/field-crux-eid, (l/->hash-str e), Field$Store/NO))
+                        (.add (StringField. l/field-xt-eid, (l/->hash-str e), Field$Store/NO))
                         ;; Used for wildcard searches
-                        (.add (StringField. l/field-crux-attr, (l/keyword->k a), Field$Store/YES)))]]
-      (.updateDocument ^IndexWriter index-writer (Term. l/field-crux-id id-str) doc)))
+                        (.add (StringField. l/field-xt-attr, (l/keyword->k a), Field$Store/YES)))]]
+      (.updateDocument ^IndexWriter index-writer (Term. l/field-xt-id id-str) doc)))
 
   (evict! [_ index-writer eids]
     (let [qs (for [eid eids]
-               (TermQuery. (Term. l/field-crux-eid (l/->hash-str eid))))]
+               (TermQuery. (Term. l/field-xt-eid (l/->hash-str eid))))]
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn ->custom-eav-indexer
@@ -126,7 +126,7 @@
 (defn ^Analyzer ->per-field-analyzer
   "global analyzer to cover indexing and _nearly_ all queries (it can't help with overriding dynamic fields)"
   [_]
-  (PerFieldAnalyzerWrapper. (->custom-analyzer nil) {field-crux-val-exact (KeywordAnalyzer.)}))
+  (PerFieldAnalyzerWrapper. (->custom-analyzer nil) {field-xt-val-exact (KeywordAnalyzer.)}))
 
 (defn build-custom-query [analyzer field-string v]
   (let [qp (doto (QueryParser. field-string analyzer) (.setAllowLeadingWildcard true))
@@ -141,7 +141,7 @@
    (with-open [s (l/search node query)]
      (->> (iterator-seq s)
           (map (fn doc->rel [[^Document doc score]]
-                 [(.get ^Document doc l/field-crux-val) score]))
+                 [(.get ^Document doc l/field-xt-val) score]))
           (mapcat (fn resolve-atemporal-av [[v s]]
                     (c/q db {:find '[e v s]
                              :in '[v s]
@@ -158,7 +158,7 @@
                            opts)]
      (->> (iterator-seq s)
           (map (fn doc->rel [[^Document doc score]]
-                 [(.get ^Document doc l/field-crux-attr) (.get ^Document doc l/field-crux-val) score]))
+                 [(.get ^Document doc l/field-xt-attr) (.get ^Document doc l/field-xt-val) score]))
           (mapcat (fn resolve-atemporal-av [[a v s]]
                     (let [a (keyword a)]
                       (c/q db {:find '[e a v s]
@@ -189,11 +189,11 @@
       ;; wildcard-text-search + leading wildcard
       (t/is (= [[0 :description "Some Entity" 2.0]
                 [1 :description "Another entity" 1.0]]
-               (custom-wildcard-text-search node db (build-custom-query (->per-field-analyzer nil) l/field-crux-val "*So* *En*"))))
+               (custom-wildcard-text-search node db (build-custom-query (->per-field-analyzer nil) l/field-xt-val "*So* *En*"))))
 
       ;; case-sensitive wildcard-text-search + leading wildcard
       (t/is (= [[0 :description "Some Entity" 1.0]]
-               (custom-wildcard-text-search node db (build-custom-query (->per-field-analyzer nil) field-crux-val-exact "*En*")))))))
+               (custom-wildcard-text-search node db (build-custom-query (->per-field-analyzer nil) field-xt-val-exact "*En*")))))))
 
 ;;; how-to example
 
@@ -211,20 +211,20 @@
             :let [id-str (l/->hash-str (l/->DocumentId e a v))
                   doc (doto (Document.)
                         ;; To search for triples by e-a-v for deduping
-                        (.add (StringField. l/field-crux-id, id-str, Field$Store/NO))
+                        (.add (StringField. l/field-xt-id, id-str, Field$Store/NO))
                         ;; The actual term, which will be tokenized
                         (.add (TextField. (l/keyword->k a), v, Field$Store/YES))
                         ;; Used for wildcard searches
-                        (.add (TextField. l/field-crux-val, v, Field$Store/YES))
+                        (.add (TextField. l/field-xt-val, v, Field$Store/YES))
                         ;; Used for eviction
-                        (.add (StringField. l/field-crux-eid, (l/->hash-str e), Field$Store/NO))
+                        (.add (StringField. l/field-xt-eid, (l/->hash-str e), Field$Store/NO))
                         ;; Used for wildcard searches
-                        (.add (StringField. l/field-crux-attr, (l/keyword->k a), Field$Store/YES)))]]
-      (.updateDocument ^IndexWriter index-writer (Term. l/field-crux-id id-str) doc)))
+                        (.add (StringField. l/field-xt-attr, (l/keyword->k a), Field$Store/YES)))]]
+      (.updateDocument ^IndexWriter index-writer (Term. l/field-xt-id id-str) doc)))
 
   (evict! [_ index-writer eids]
     (let [qs (for [eid eids]
-               (TermQuery. (Term. l/field-crux-eid (l/->hash-str eid))))]
+               (TermQuery. (Term. l/field-xt-eid (l/->hash-str eid))))]
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn ->example-eav-indexer [_]
@@ -269,10 +269,10 @@
                                                  db
                                                  (FunctionScoreQuery/boostByQuery
                                                   (build-custom-query (->per-field-analyzer nil)
-                                                                      l/field-crux-val
+                                                                      l/field-xt-val
                                                                       "*rain*")
                                                   (build-custom-query (->per-field-analyzer nil)
-                                                                      l/field-crux-attr
+                                                                      l/field-xt-attr
                                                                       (-> :product/title
                                                                           l/keyword->k
                                                                           QueryParser/escape))

@@ -35,7 +35,7 @@
       (with-open [search-results (l/search *api* "Ivan" {:default-field "name"})]
         (let [docs (iterator-seq search-results)]
           (t/is (= 1 (count docs)))
-          (t/is (= "Ivan" (.get ^Document (ffirst docs) "_crux_val"))))))
+          (t/is (= "Ivan" (.get ^Document (ffirst docs) "_xt_val"))))))
 
     (t/testing "using in-built function"
       (with-open [db (c/open-db *api*)]

@@ -41,14 +41,14 @@
   (subs (str k) 1))
 
 (def ^:const index-version 1)
-(def ^:const field-crux-id "_crux_id")
-(def ^:const field-crux-val "_crux_val")
-(def ^:const field-crux-attr "_crux_attr")
-(def ^:const field-crux-eid "_crux_eid")
+(def ^:const field-xt-id "_xt_id")
+(def ^:const field-xt-val "_xt_val")
+(def ^:const field-xt-attr "_xt_attr")
+(def ^:const field-xt-eid "_xt_eid")
 
 (defn- validate-index-version [^IndexWriter writer]
   (let [found-index-version (some-> (into {} (.getLiveCommitData writer))
-                                    (get "crux.lucene/index-version")
+                                    (get "xt/index-version")
                                     (Long/parseLong))]
     (when-not (or (zero? (.numDocs (.getDocStats writer)))
                   (= index-version found-index-version))
@@ -101,7 +101,7 @@
 (defn- parse-query
   ([lucene-store query] (parse-query lucene-store query {}))
 
-  ([{:keys [analyzer]} query {:keys [default-field], :or {default-field field-crux-val}}]
+  ([{:keys [analyzer]} query {:keys [default-field], :or {default-field field-xt-val}}]
    (cond
      (instance? Query query) query
      (string? query) (.parse (QueryParser. default-field analyzer)
@@ -174,7 +174,7 @@
   [attr index-snapshot {:keys [entity-resolver-fn]} search-results]
   (->> search-results
        (map (fn [[^Document doc score]]
-              [attr (.get ^Document doc field-crux-val) score]))
+              [attr (.get ^Document doc field-xt-val) score]))
        distinct ; could distinct by virtue of the `ave` call instead if eid was reversible
        (mapcat (fn [[a v score]]
                  (for [eid (doall (db/ave index-snapshot a v nil entity-resolver-fn))]
@@ -193,8 +193,8 @@
   [index-snapshot {:keys [entity-resolver-fn]} search-results]
   (->> search-results
        (map (fn [[^Document doc score]]
-              [(keyword (.get ^Document doc field-crux-attr))
-               (.get ^Document doc field-crux-val)
+              [(keyword (.get ^Document doc field-xt-attr))
+               (.get ^Document doc field-xt-val)
                score]))
        distinct
        (mapcat (fn [[a v score]]
@@ -206,7 +206,7 @@
   [^Analyzer analyzer, [v]]
   (when-not (string? v)
     (throw (IllegalArgumentException. "Lucene text search values must be String")))
-  (let [qp (QueryParser. field-crux-val analyzer)
+  (let [qp (QueryParser. field-xt-val analyzer)
         b (doto (BooleanQuery$Builder.)
             (.add (.parse qp v) BooleanClause$Occur/MUST))]
     (.build b)))
@@ -234,20 +234,20 @@
             :let [id-str (->hash-str (->DocumentId e a v))
                   doc (doto (Document.)
                         ;; To search for triples by e-a-v for deduping
-                        (.add (StringField. field-crux-id, id-str, Field$Store/NO))
+                        (.add (StringField. field-xt-id, id-str, Field$Store/NO))
                         ;; The actual term, which will be tokenized
                         (.add (TextField. (keyword->k a), v, Field$Store/YES))
                         ;; Used for wildcard searches
-                        (.add (TextField. field-crux-val, v, Field$Store/YES))
+                        (.add (TextField. field-xt-val, v, Field$Store/YES))
                         ;; Used for eviction
-                        (.add (StringField. field-crux-eid, (->hash-str e), Field$Store/NO))
+                        (.add (StringField. field-xt-eid, (->hash-str e), Field$Store/NO))
                         ;; Used for wildcard searches
-                        (.add (StringField. field-crux-attr, (keyword->k a), Field$Store/YES)))]]
-      (.updateDocument ^IndexWriter index-writer (Term. field-crux-id id-str) doc)))
+                        (.add (StringField. field-xt-attr, (keyword->k a), Field$Store/YES)))]]
+      (.updateDocument ^IndexWriter index-writer (Term. field-xt-id id-str) doc)))
 
   (evict! [_ index-writer eids]
     (let [qs (for [eid eids]
-               (TermQuery. (Term. field-crux-eid (->hash-str eid))))]
+               (TermQuery. (Term. field-xt-eid (->hash-str eid))))]
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn ->indexer [_]
@@ -388,7 +388,7 @@
                               (index! indexer index-writer docs)))
 
                           (.setLiveCommitData index-writer {"crux.tx/tx-id" (str tx-id)
-                                                            "crux.lucene/index-version" (str index-version)})
+                                                            "xt/index-version" (str index-version)})
                           (when (.isZero refresh-frequency)
                             (.maybeRefreshBlocking searcher-manager))))
 
