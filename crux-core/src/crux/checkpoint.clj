@@ -98,7 +98,7 @@
           (when-not keep-dir-on-close?
             (cio/delete-dir checkpoint-dir)))))))
 
-(defn ->checkpointer {::sys/deps {:store {:crux/module (fn [_])}}
+(defn ->checkpointer {::sys/deps {:store {:xt/module (fn [_])}}
                       ::sys/args {:checkpoint-dir {:spec ::sys/path
                                                    :required? false}
                                   :keep-dir-between-checkpoints? {:spec ::sys/boolean

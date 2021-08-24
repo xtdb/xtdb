@@ -322,13 +322,13 @@ You can specify arguments using the `:crux.system/args` metadata key - this exam
 ----
 
 You can specify dependencies using `:crux.system/deps` - a map of the dependency key to its options.
-The options takes the same form as the end-user options - you can specify `:crux/module` for the default implementation, as well as any parameters.
+The options takes the same form as the end-user options - you can specify `:xt/module` for the default implementation, as well as any parameters.
 The started dependencies are passed to you as part of the function's parameter, with the `args`.
 Bear in mind that any options you do specify can be overridden by end-users!
 
 [source,clojure]
 ----
-(defn ->server {::sys/deps {:other-module {:crux/module `->other-module
+(defn ->server {::sys/deps {:other-module {:xt/module `->other-module
                                            :param "value"}
                             ...}}
   [{:keys [other-module]}]
@@ -340,7 +340,7 @@ You can also use refs - for example, to depend on the Crux node:
 
 [source,clojure]
 ----
-(defn ->server {::sys/deps {:crux-node :crux/node}
+(defn ->server {::sys/deps {:crux-node :xt/node}
                 ::sys/args {:spec ::sys/int
                             :doc "Port to start the server on"
                             :required? true

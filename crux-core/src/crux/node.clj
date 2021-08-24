@@ -35,7 +35,7 @@
 
 (defn- await-tx [{:keys [bus tx-ingester]} tx-k awaited-tx ^Duration timeout]
   (let [tx-v (get awaited-tx tx-k)
-        fut (bus/await bus {:crux/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
+        fut (bus/await bus {:xt/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
                             :->result (letfn [(tx->result [tx]
                                                 (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
                                                   {:tx tx}))]
@@ -44,7 +44,7 @@
                                                (tx->result (db/latest-completed-tx tx-ingester))
                                                (when-let [ingester-error (db/ingester-error tx-ingester)]
                                                  {:ingester-error ingester-error})))
-                                          ([{:keys [crux/event-type] :as ev}]
+                                          ([{:keys [xt/event-type] :as ev}]
                                            (case event-type
                                              ::tx/indexed-tx (tx->result (:submitted-tx ev))
                                              ::tx/ingester-error {:ingester-error (:ingester-error ev)}
@@ -93,7 +93,7 @@
     (when close-fn
       (cio/with-write-lock lock
         (when (not @closed?)
-          (bus/send bus {:crux/event-type ::node-closing})
+          (bus/send bus {:xt/event-type ::node-closing})
           (close-fn)
           (reset! closed? true)))))
 
@@ -125,7 +125,7 @@
                        (when (map? m)
                          (into {} (mapcat status) (vals m)))))]
         (merge crux-version
-               (status (dissoc @!system :crux/node))))))
+               (status (dissoc @!system :xt/node))))))
 
   (tx-committed? [this {:keys [:xt/tx-id] :as submitted-tx}]
     (cio/with-read-lock lock
@@ -163,17 +163,17 @@
   (await-tx-time [this tx-time timeout]
     (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
 
-  (listen [_ {:crux/keys [event-type] :as event-opts} f]
+  (listen [_ {:xt/keys [event-type] :as event-opts} f]
     (case event-type
-      :crux/indexed-tx
+      :xt/indexed-tx
       (bus/listen bus
-                  (assoc event-opts :crux/event-types #{::tx/indexed-tx})
+                  (assoc event-opts :xt/event-types #{::tx/indexed-tx})
                   (fn [{:keys [submitted-tx ::txe/tx-events] :as ev}]
-                    (f (merge {:crux/event-type :crux/indexed-tx}
+                    (f (merge {:xt/event-type :xt/indexed-tx}
                               (select-keys ev [:committed?])
                               (select-keys submitted-tx [:xt/tx-time :xt/tx-id])
                               (when (:with-tx-ops? event-opts)
-                                {:crux/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
+                                {:xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
   (latest-completed-tx [this]
     (cio/with-read-lock lock
@@ -223,7 +223,7 @@
                                    (fn [{:keys [xt/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
                                          (dissoc :crux.tx.event/tx-events)
-                                         (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
+                                         (assoc :xt/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
                                    (fn [tx-log-entry]
                                      (-> tx-log-entry
                                          (update :crux.tx.event/tx-events
@@ -262,14 +262,14 @@
                                                             (update :slowest clean-slowest-queries node-opts)))))
         (recur)
         (when slow-query?
-          (bus/send bus {:crux/event-type :slow-query
+          (bus/send bus {:xt/event-type :slow-query
                          :query query}))))))
 
 (defn attach-current-query-listeners [!running-queries {:keys [bus] :as node-opts}]
-  (bus/listen bus {:crux/event-types #{:crux.query/submitted-query
+  (bus/listen bus {:xt/event-types #{:crux.query/submitted-query
                                        :crux.query/completed-query
                                        :crux.query/failed-query}}
-              (fn [{::q/keys [query-id query error] :keys [crux/event-type]}]
+              (fn [{::q/keys [query-id query error] :keys [xt/event-type]}]
                 (case event-type
                   :crux.query/submitted-query
                   (swap! !running-queries assoc-in [:in-progress query-id] {:query-id query-id
@@ -292,12 +292,12 @@
                                          :status :completed}
                                         node-opts)))))
 
-(defn- ->node {::sys/deps {:index-store :crux/index-store
-                           :tx-ingester :crux/tx-ingester
-                           :bus :crux/bus
-                           :document-store :crux/document-store
-                           :tx-log :crux/tx-log
-                           :query-engine :crux/query-engine}
+(defn- ->node {::sys/deps {:index-store :xt/index-store
+                           :tx-ingester :xt/tx-ingester
+                           :bus :xt/bus
+                           :document-store :xt/document-store
+                           :tx-log :xt/tx-log
+                           :query-engine :xt/query-engine}
                ::sys/args {:await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
                                               :default nil
                                               :spec ::sys/duration}

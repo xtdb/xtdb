@@ -1,4 +1,4 @@
-{:crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store
-                          :db-dir "/tmp/txs"}}
- :crux/document-store {...}
- :crux/index-store {...}}
+{:xt/tx-log {:kv-store {:xt/module crux.rocksdb/->kv-store
+                        :db-dir "/tmp/txs"}}
+ :xt/document-store {...}
+ :xt/index-store {...}}

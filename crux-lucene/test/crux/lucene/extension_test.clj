@@ -21,10 +21,10 @@
 (t/use-fixtures :each (fix/with-opts {::l/lucene-store {}}) fix/with-node)
 
 (t/deftest test-multiple-lucene-stores
-  (with-open [node (c/start-node {:eav {:crux/module 'crux.lucene/->lucene-store
+  (with-open [node (c/start-node {:eav {:xt/module 'crux.lucene/->lucene-store
                                         :analyzer 'crux.lucene/->analyzer
                                         :indexer 'crux.lucene/->indexer}
-                                  :multi {:crux/module 'crux.lucene/->lucene-store
+                                  :multi {:xt/module 'crux.lucene/->lucene-store
                                           :analyzer 'crux.lucene/->analyzer
                                           :indexer 'crux.lucene.multi-field/->indexer}})]
     (submit+await-tx node [[:crux.tx/put {:xt/id :ivan
@@ -112,7 +112,7 @@
       (.deleteDocuments ^IndexWriter index-writer ^"[Lorg.apache.lucene.search.Query;" (into-array Query qs)))))
 
 (defn ->custom-eav-indexer
-  {::sys/deps {:index-store :crux/index-store}}
+  {::sys/deps {:index-store :xt/index-store}}
   [{:keys [index-store]}]
   (CustomEavIndexer. index-store))
 

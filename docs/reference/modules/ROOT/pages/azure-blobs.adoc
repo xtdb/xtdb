@@ -40,8 +40,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.azure.blobs/->document-store",
+  "xt/document-store": {
+    "xt/module": "crux.azure.blobs/->document-store",
     "sas-token": "your-sas-token",
     "storage-account": "your-storage-account",
     "container": "your-container-name"
@@ -53,20 +53,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.azure.blobs/->document-store
-                       :sas-token "your-sas-token"
-                       :storage-account "your-storage-account"
-                       :container "your-container-name"}}
+{:xt/document-store {:xt/module 'crux.azure.blobs/->document-store
+                     :sas-token "your-sas-token"
+                     :storage-account "your-storage-account"
+                     :container "your-container-name"}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.azure.blobs/->document-store
-                       :sas-token "your-sas-token"
-                       :storage-account "your-storage-account"
-                       :container "your-container-name"}}
+{:xt/document-store {:xt/module crux.azure.blobs/->document-store
+                     :sas-token "your-sas-token"
+                     :storage-account "your-storage-account"
+                     :container "your-container-name"}}
 ----
 ====
 

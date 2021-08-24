@@ -49,19 +49,19 @@ code to connect to your cluster and make a transaction:
   (crux/start-node
    {:crux.kafka/kafka-config {:bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
                               :kafka-properties-file "path/to/my-kafka.properties"}
-    :crux/tx-log {:crux/module 'crux.kafka/->tx-log
-                  :kafka-config :crux.kafka/kafka-config
-                  :tx-topic-opts {:replication-factor 3 ; Confluent Cloud requires this to be `3`
-                                  :topic-name "tx-1"}}
+    :xt/tx-log {:xt/module 'crux.kafka/->tx-log
+                :kafka-config :crux.kafka/kafka-config
+                :tx-topic-opts {:replication-factor 3 ; Confluent Cloud requires this to be `3`
+                                :topic-name "tx-1"}}
 
-    :crux/document-store {:crux/module 'crux.kafka/->document-store
-                          :kafka-config :crux.kafka/kafka-config
-                          :doc-topic-opts {:replication-factor 3
-                                           :topic-name "doc-1" ; choose your doc-topic name
-                                           :doc-partitions 6} ; Confluent Cloud default
-                          :local-document-store {:kv-store :rocksdb}}
-    :crux/index-store {:kv-store :rocksdb}
-    :rocksdb {:crux/module 'crux.rocksdb/->kv-store
+    :xt/document-store {:xt/module 'crux.kafka/->document-store
+                        :kafka-config :crux.kafka/kafka-config
+                        :doc-topic-opts {:replication-factor 3
+                                         :topic-name "doc-1" ; choose your doc-topic name
+                                         :doc-partitions 6} ; Confluent Cloud default
+                        :local-document-store {:kv-store :rocksdb}}
+    :xt/index-store {:kv-store :rocksdb}
+    :rocksdb {:xt/module 'crux.rocksdb/->kv-store
               :db-dir "/tmp/rocksdb"}}))
 
 ; you can also use `:kafka-properties-map` although this increases the risk of

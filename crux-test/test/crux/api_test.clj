@@ -231,7 +231,7 @@
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
-                             :crux.api/tx-ops [[:crux.tx/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+                             :xt/tx-ops [[:crux.tx/put {:xt/id :ivan :name "Ivan"} valid-time]])]
                      result))
             (t/is (realized? result)))))
 
@@ -265,7 +265,7 @@
         (let [tx (fix/submit+await-tx [[:crux.tx/match :foo nil]])]
           (with-open [tx-log (api/open-tx-log *api* (dec (:xt/tx-id tx)) true)]
             (t/is (= [:crux.tx/match (c/new-id :foo) (c/new-id nil)]
-                     (-> (iterator-seq tx-log) first :crux.api/tx-ops first))))))
+                     (-> (iterator-seq tx-log) first :xt/tx-ops first))))))
 
       ;; Intermittent failure on Kafka, see #1256
       (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
@@ -282,12 +282,12 @@
                                           [:crux.tx/fn :increment-age-2 :jack]])]
             (t/is (true? (api/tx-committed? *api* tx4)))
             (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
-              (let [tx-ops (-> tx-log-iterator iterator-seq last :crux.api/tx-ops)]
+              (let [tx-ops (-> tx-log-iterator iterator-seq last :xt/tx-ops)]
                 (t/is (= [:crux.tx/fn
                           (c/new-id :increment-age-2)
-                          {:crux.api/tx-ops [[:crux.tx/fn
-                                              (c/new-id :increment-age)
-                                              {:crux.api/tx-ops [[:crux.tx/put {:xt/id :jack, :age 22}]]}]]}]
+                          {:xt/tx-ops [[:crux.tx/fn
+                                        (c/new-id :increment-age)
+                                        {:xt/tx-ops [[:crux.tx/put {:xt/id :jack, :age 22}]]}]]}]
                          (last tx-ops)))))))))))
 
 (t/deftest test-history-api
@@ -389,7 +389,7 @@
     (let [!events (atom [])]
       (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])
 
-      (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:crux/event-type :crux/indexed-tx
+      (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:xt/event-type :xt/indexed-tx
                                                              :with-tx-ops? true}
                                                       (fn [evt]
                                                         (swap! !events conj evt)))]
@@ -405,13 +405,13 @@
 
         (Thread/sleep 100)
 
-        (t/is (= [(merge {:crux/event-type :crux/indexed-tx,
+        (t/is (= [(merge {:xt/event-type :xt/indexed-tx,
                           :committed? true
-                          :crux/tx-ops [[:crux.tx/put {:xt/id :bar}]]}
+                          :xt/tx-ops [[:crux.tx/put {:xt/id :bar}]]}
                          bar-tx)
-                  (merge {:crux/event-type :crux/indexed-tx,
+                  (merge {:xt/event-type :xt/indexed-tx,
                           :committed? true
-                          :crux/tx-ops [[:crux.tx/put {:xt/id :baz}]]}
+                          :xt/tx-ops [[:crux.tx/put {:xt/id :baz}]]}
                          baz-tx)]
                  @!events))))))
 

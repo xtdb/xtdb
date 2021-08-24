@@ -45,16 +45,16 @@
   (.close node))
 
 (def standalone-config
-  {::crux {:node-opts {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
-                                                     :db-dir (io/file dev-node-dir "indexes"),
-                                                     :block-cache :crux.rocksdb/block-cache}}
-                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
-                                                        :db-dir (io/file dev-node-dir "documents")
-                                                        :block-cache :crux.rocksdb/block-cache}}
-                       :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
-                                                :db-dir (io/file dev-node-dir "tx-log")
-                                                :block-cache :crux.rocksdb/block-cache}}
-                       :crux.rocksdb/block-cache {:crux/module `rocks/->lru-block-cache
+  {::crux {:node-opts {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store,
+                                                   :db-dir (io/file dev-node-dir "indexes"),
+                                                   :block-cache :crux.rocksdb/block-cache}}
+                       :xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
+                                                      :db-dir (io/file dev-node-dir "documents")
+                                                      :block-cache :crux.rocksdb/block-cache}}
+                       :xt/tx-log {:kv-store {:xt/module `rocks/->kv-store,
+                                              :db-dir (io/file dev-node-dir "tx-log")
+                                              :block-cache :crux.rocksdb/block-cache}}
+                       :crux.rocksdb/block-cache {:xt/module `rocks/->lru-block-cache
                                                   :cache-size (* 128 1024 1024)}
                        :crux.metrics.jmx/reporter {}
                        :crux.http-server/server {}
@@ -75,13 +75,13 @@
                        :kafka-dir (io/file dev-node-dir "kafka")}
      ::crux {:ek (i/ref ::embedded-kafka)
              :node-opts {::k/kafka-config {:bootstrap-servers (str "http://localhost:" kafka-port)}
-                         :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                                       :db-dir (io/file dev-node-dir "ek-indexes")}}
-                         :crux/document-store {:crux/module `k/->document-store,
-                                               :kafka-config ::k/kafka-config
-                                               :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
-                                                                                 :db-dir (io/file dev-node-dir "ek-documents")}}}
-                         :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
+                         :xt/index-store {:kv-store {:xt/module `rocks/->kv-store
+                                                     :db-dir (io/file dev-node-dir "ek-indexes")}}
+                         :xt/document-store {:xt/module `k/->document-store,
+                                             :kafka-config ::k/kafka-config
+                                             :local-document-store {:kv-store {:xt/module `rocks/->kv-store,
+                                                                               :db-dir (io/file dev-node-dir "ek-documents")}}}
+                         :xt/tx-log {:xt/module `k/->tx-log, :kafka-config ::k/kafka-config}}}}))
 
 ;; swap for `embedded-kafka-config` to use embedded-kafka
 (ir/set-prep! (fn [] standalone-config))

@@ -35,7 +35,7 @@ class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfiguration
 
     fun withDocumentMapping(f: (Any) -> Iterable<CruxState>?) {
         moduleConfigurator.with("document-mapper") {
-            it.set("crux/module", object : AFunction() {
+            it.set("xt/module", object : AFunction() {
                 override fun invoke(opts: Any) = object : AFunction() {
                     override fun invoke(cordaState: Any) = f(cordaState)
                 }
@@ -45,7 +45,7 @@ class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfiguration
 }
 
 fun NodeConfiguration.Builder.withCordaTxLog(txLogConfigurator: CordaTxLogConfigurator.() -> Unit = {}) {
-    with("crux/tx-log") {
+    with("xt/tx-log") {
         it.module("crux.corda/->tx-log")
         txLogConfigurator(CordaTxLogConfigurator(it))
     }
@@ -56,7 +56,7 @@ fun AppServiceHub.startCruxNode(configurator: NodeConfiguration.Builder.() -> Un
     val hub = this
     val node = Crux.startNode {
         it.with("crux.corda/service-hub") {
-            it.set("crux/module", object : AFunction() {
+            it.set("xt/module", object : AFunction() {
                 override fun invoke(deps: Any) = hub
             })
         }

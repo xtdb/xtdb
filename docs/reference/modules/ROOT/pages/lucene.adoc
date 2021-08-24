@@ -245,9 +245,9 @@ JSON::
   "crux.lucene/index-store": {
     "db-dir": "lucene-dir",
     "checkpointer": {
-      "crux/module": "crux.checkpoint/->checkpointer",
+      "xt/module": "crux.checkpoint/->checkpointer",
       "store": {
-        "crux/module": "crux.checkpoint/->filesystem-checkpoint-store",
+        "xt/module": "crux.checkpoint/->filesystem-checkpoint-store",
         "path": "/path/to/cp-store"
       },
       "approx-frequency": "PT6H"
@@ -262,8 +262,8 @@ Clojure::
 [source,clojure]
 ----
 {:crux.lucene/lucene-store {:db-dir "lucene-dir"
-                            :checkpointer {:crux/module 'crux.checkpoint/->checkpointer
-                                           :store {:crux/module 'crux.checkpoint/->filesystem-checkpoint-store
+                            :checkpointer {:xt/module 'crux.checkpoint/->checkpointer
+                                           :store {:xt/module 'crux.checkpoint/->filesystem-checkpoint-store
                                                    :path "/path/to/cp-store"}
                                            :approx-frequency (Duration/ofHours 6)}}}
  ...}
@@ -274,8 +274,8 @@ EDN::
 [source,clojure]
 ----
 {:crux.lucene/lucene-store {:db-dir "lucene-dir"
-                            :checkpointer {:crux/module crux.checkpoint/->checkpointer
-                                           :store {:crux/module crux.checkpoint/->filesystem-checkpoint-store
+                            :checkpointer {:xt/module crux.checkpoint/->checkpointer
+                                           :store {:xt/module crux.checkpoint/->filesystem-checkpoint-store
                                                    :path "/path/to/cp-store"}
                                            :approx-frequency "PT6H"}}}
  ...}

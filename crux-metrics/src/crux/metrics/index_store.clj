@@ -5,7 +5,7 @@
             [crux.metrics.dropwizard :as dropwizard])
   (:import (java.util Date)))
 
-(defn assign-tx-id-lag [registry {:crux/keys [node]}]
+(defn assign-tx-id-lag [registry {:xt/keys [node]}]
   (dropwizard/gauge registry
                     ["index-store" "tx-id-lag"]
                     #(when-let [completed (api/latest-completed-tx node)]
@@ -13,10 +13,10 @@
                          (- (:xt/tx-id submitted)
                             (:xt/tx-id completed))))))
 
-(defn assign-tx-latency-gauge [registry {:crux/keys [bus]}]
+(defn assign-tx-latency-gauge [registry {:xt/keys [bus]}]
   (let [!last-tx-lag (atom 0)]
     (bus/listen bus
-                {:crux/event-types #{::tx/indexed-tx}}
+                {:xt/event-types #{::tx/indexed-tx}}
                 (fn [{:keys [submitted-tx]}]
                   (reset! !last-tx-lag (- (System/currentTimeMillis)
                                           (.getTime ^Date (:xt/tx-time submitted-tx))))))
@@ -25,12 +25,12 @@
                       (fn []
                         (first (reset-vals! !last-tx-lag 0))))))
 
-(defn assign-doc-meters [registry {:crux/keys [bus]}]
+(defn assign-doc-meters [registry {:xt/keys [bus]}]
   (let [docs-ingested-meter (dropwizard/meter registry ["index-store" "indexed-docs"])
         av-ingested-meter (dropwizard/meter registry ["index-store" "indexed-avs"])
         bytes-ingested-meter (dropwizard/meter registry ["index-store" "indexed-bytes"])]
     (bus/listen bus
-                {:crux/event-types #{::tx/indexed-tx}}
+                {:xt/event-types #{::tx/indexed-tx}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
                   (dropwizard/mark! docs-ingested-meter (count doc-ids))
                   (dropwizard/mark! av-ingested-meter av-count)
@@ -39,12 +39,12 @@
      :av-ingested-meter av-ingested-meter
      :bytes-ingested-meter bytes-ingested-meter}))
 
-(defn assign-tx-timer [registry {:crux/keys [bus]}]
+(defn assign-tx-timer [registry {:xt/keys [bus]}]
   (let [timer (dropwizard/timer registry ["index-store" "indexed-txs"])
         !timer-store (atom {})]
     (bus/listen bus
-                {:crux/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
-                (fn [{:keys [crux/event-type submitted-tx]}]
+                {:xt/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
+                (fn [{:keys [xt/event-type submitted-tx]}]
                   (case event-type
                     ::tx/indexing-tx
                     (swap! !timer-store assoc submitted-tx (dropwizard/start timer))

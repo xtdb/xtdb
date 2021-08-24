@@ -38,11 +38,11 @@
                                                   :kafka-dir (io/file tmp-dir "kafka-data")
                                                   :kafka-log-dir (io/file tmp-dir "kafka-log")})
                 node (crux/start-node {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-                                       :crux/tx-log {:crux/module `k/->tx-log, :kafka-config ::k/kafka-config}
-                                       :crux/document-store {:crux/module `k/->document-store
-                                                             :kafka-config ::k/kafka-config
-                                                             :local-document-store {:kv-store {:crux/module `rocks/->kv-store,
-                                                                                               :db-dir (io/file tmp-dir "doc-store")}}}
-                                       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file tmp-dir "index-store")}}})]
+                                       :xt/tx-log {:xt/module `k/->tx-log, :kafka-config ::k/kafka-config}
+                                       :xt/document-store {:xt/module `k/->document-store
+                                                           :kafka-config ::k/kafka-config
+                                                           :local-document-store {:kv-store {:xt/module `rocks/->kv-store,
+                                                                                             :db-dir (io/file tmp-dir "doc-store")}}}
+                                       :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file tmp-dir "index-store")}}})]
       (bench/with-bench-ns :sorted-maps
         (run-benches node [:initial-submits :initial-await])))))

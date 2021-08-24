@@ -9,11 +9,11 @@
   (fix/with-tmp-dir "db-dir" [db-dir]
     (let [index-version c/index-version
           inc-index-version (inc index-version)
-          topo {:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                                          :db-dir db-dir}}}
+          topo {:xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                                            :db-dir db-dir}}}
           with-flag (fn [topo flag]
                       (-> topo
-                          (assoc-in [:crux/index-store :skip-index-version-bump] flag)))]
+                          (assoc-in [:xt/index-store :skip-index-version-bump] flag)))]
 
       (doto (crux/start-node topo) .close)
 

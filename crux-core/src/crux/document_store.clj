@@ -61,7 +61,7 @@
     (cio/try-close document-store)))
 
 (defn ->cached-document-store
-  {::sys/deps {:document-store :crux/document-store
+  {::sys/deps {:document-store :xt/document-store
                :document-cache 'crux.cache/->cache}}
   [{:keys [document-cache document-store]}]
   (->CachedDocumentStore document-cache document-store))

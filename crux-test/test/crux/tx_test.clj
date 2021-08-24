@@ -207,7 +207,7 @@
     (t/testing "match continues with correct content hash"
       (let [new-picasso (assoc picasso :new? true)
             {new-tx-time :xt/tx-time, new-tx-id :xt/tx-id} (fix/submit+await-tx [[:crux.tx/match picasso-id picasso]
-                                                                                           [:crux.tx/put new-picasso]])]
+                                                                                 [:crux.tx/put new-picasso]])]
 
         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
@@ -225,7 +225,7 @@
   (t/testing "match can check non existing entity"
     (let [ivan {:xt/id :ivan, :value 12}
           {ivan-tx-time :xt/tx-time, ivan-tx-id :xt/tx-id} (fix/submit+await-tx [[:crux.tx/match :ivan nil]
-                                                                                           [:crux.tx/put ivan]])]
+                                                                                 [:crux.tx/put ivan]])]
 
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
@@ -260,7 +260,7 @@
           (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events]
-  (let [{:keys [crux/tx-indexer]} @(:!system *api*)
+  (let [{:keys [xt/tx-indexer]} @(:!system *api*)
         in-flight-tx (db/begin-tx tx-indexer tx nil)]
     (db/index-tx-events in-flight-tx tx-events)
     (db/commit in-flight-tx)))
@@ -402,7 +402,7 @@
                          (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
                            (t/is (= (for [[vt tx-idx value] history]
                                       [vt (get-in res [tx-idx :xt/tx-id]) (c/hash-doc (when value
-                                                                                           (assoc ivan :value value)))])
+                                                                                        (assoc ivan :value value)))])
 
                                     (->> (db/entity-history index-snapshot eid :asc
                                                             {:start {:xt/valid-time first-vt}})
@@ -723,8 +723,8 @@
                                                                  [[:crux.tx/put {:xt/id :prn-out
                                                                                  :e (crux.api/entity db :bar)
                                                                                  :q (first (crux.api/q db {:find '[e v]
-                                                                                                            :where '[[e :xt/id :bar]
-                                                                                                                     [e :ref v]]}))}]
+                                                                                                           :where '[[e :xt/id :bar]
+                                                                                                                    [e :ref v]]}))}]
                                                                   [:crux.tx/put (-> (crux.api/entity db :foo)
                                                                                     (update :foo * 2))]]))}]
                                  [:crux.tx/fn :doubling-fn]])]
@@ -754,7 +754,7 @@
               [[:crux.tx/evict
                 #xt/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]
              (->> (iterator-seq log-iterator)
-                  (map :crux.api/tx-ops))))))
+                  (map :xt/tx-ops))))))
 
 (t/deftest transaction-fn-return-values-457
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
@@ -992,10 +992,10 @@
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
         !latch (promise)]
-    (bus/listen (:bus *api*) {:crux/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
+    (bus/listen (:bus *api*) {:xt/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
                 (fn [evt]
                   (swap! !events conj evt)
-                  (when (= ::tx/indexed-tx (:crux/event-type evt))
+                  (when (= ::tx/indexed-tx (:xt/event-type evt))
                     (deliver !latch @!events))))
 
     (let [doc-1 {:xt/id :foo, :value 1}
@@ -1006,8 +1006,8 @@
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
 
-      (t/is (= [{:crux/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
-                {:crux/event-type ::tx/indexed-tx,
+      (t/is (= [{:xt/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
+                {:xt/event-type ::tx/indexed-tx,
                  :submitted-tx submitted-tx,
                  :committed? true
                  :doc-ids doc-ids
@@ -1183,7 +1183,7 @@
                                                                    (fn [id]
                                                                      (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
                                                                        (merge doc {:xt/id id})))))))))))]
-    (with-open [node (crux/start-node {:crux/document-store ->mocked-doc-store})]
+    (with-open [node (crux/start-node {:xt/document-store ->mocked-doc-store})]
       (crux/submit-tx node [[:crux.tx/put put-fn]])
       (crux/submit-tx node [[:crux.tx/fn :put-fn foo-doc]])
       (crux/sync node)
@@ -1343,15 +1343,15 @@
 (t/deftest handles-secondary-indices
   (letfn [(with-persistent-golden-stores [node-config db-dir]
             (-> node-config
-                (assoc :crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                                                :db-dir (io/file db-dir "txs")}}
-                       :crux/document-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                                                        :db-dir (io/file db-dir "docs")}})))
+                (assoc :xt/tx-log {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                                              :db-dir (io/file db-dir "txs")}}
+                       :xt/document-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                                                      :db-dir (io/file db-dir "docs")}})))
 
           (with-persistent-indices [node-config idx-dir]
             (-> node-config
-                (assoc :crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                                                     :db-dir idx-dir}})))
+                (assoc :xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                                                   :db-dir idx-dir}})))
 
           (with-secondary-index
             ([node-config after-tx-id opts process-tx-f]
@@ -1359,8 +1359,8 @@
                  (assoc ::index2 (-> (fn [{:keys [secondary-indices]}]
                                        (tx/register-index! secondary-indices after-tx-id opts process-tx-f)
                                        nil)
-                                     (with-meta {::sys/deps {:secondary-indices :crux/secondary-indices}
-                                                 ::sys/before #{[:crux/tx-ingester]}}))))))]
+                                     (with-meta {::sys/deps {:secondary-indices :xt/secondary-indices}
+                                                 ::sys/before #{[:xt/tx-ingester]}}))))))]
 
     (t/testing "indexes into secondary indices"
       (let [!txs (atom [])]
@@ -1420,9 +1420,9 @@
             (fix/submit+await-tx node [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]])
 
             (t/is (= [{:xt/tx-id 0
-                       ::crux/tx-ops [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]]}]
+                       :xt/tx-ops [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]]}]
                      (->> @!txs
-                          (map #(select-keys % [:xt/tx-id ::crux/tx-ops])))))))))
+                          (map #(select-keys % [:xt/tx-id :xt/tx-ops])))))))))
 
     (with-redefs [log-impl/enabled? (constantly false)]
       (t/testing "handles secondary indexes blowing up"

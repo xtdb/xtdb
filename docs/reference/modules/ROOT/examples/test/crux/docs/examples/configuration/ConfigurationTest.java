@@ -68,7 +68,7 @@ public class ConfigurationTest {
     public void overrideModuleImplementation() {
         // tag::override-module[]
         ICruxAPI cruxNode = Crux.startNode(n -> {
-            n.with("crux/document-store", docStore -> {
+            n.with("xt/document-store", docStore -> {
                 docStore.module("crux.s3/->document-store");
                 docStore.set("bucket", "my-bucket");
                 docStore.set("prefix", "my-prefix");
@@ -83,7 +83,7 @@ public class ConfigurationTest {
     public void nestedModules() {
         // tag::nested-modules-0[]
         ICruxAPI cruxNode = Crux.startNode(n -> {
-            n.with("crux/tx-log", txLog -> {
+            n.with("xt/tx-log", txLog -> {
                 txLog.with("kv-store", kv -> {
                     kv.module("crux.rocksdb/->kv-store");
                     kv.set("db-dir", new File("/tmp/rocksdb"));
@@ -93,8 +93,8 @@ public class ConfigurationTest {
             /*
             This obviously won't compile so has to be commented out
             // tag::nested-modules-1[]
-            n.with("crux/document-store", docStore -> { ... });
-            n.with("crux/index-store", indexStore -> { ... });
+            n.with("xt/document-store", docStore -> { ... });
+            n.with("xt/index-store", indexStore -> { ... });
             // end::nested-modules-1[]
              */
             // tag::nested-modules-2[]
@@ -112,10 +112,10 @@ public class ConfigurationTest {
                 rocks.module("crux.rocksdb/->kv-store");
                 rocks.set("db-dir", new File("/tmp/rocksdb"));
             });
-            n.with("crux/document-store", docStore -> {
+            n.with("xt/document-store", docStore -> {
                 docStore.with("kv-store", "my-rocksdb");
             });
-            n.with("crux/tx-log", txLog -> {
+            n.with("xt/tx-log", txLog -> {
                 txLog.with("kv-store", "my-rocksdb");
             });
         });

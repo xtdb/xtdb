@@ -48,7 +48,7 @@
 (defn- ->override-foo2 {::sys/args {:arg {:default :foo2-default, :spec ::sys/keyword}}} [opts] [:foo2 opts])
 (defn- ->override-bar {::sys/deps {::override-foo {}}} [opts] [:bar opts])
 (defn- ->override-bar2 {::sys/deps {::override-foo {:arg :bar2-override}}} [opts] [:bar2 opts])
-(defn- ->override-bar3 {::sys/deps {::override-foo {:crux/module `->override-foo2, :arg :bar3-override}}} [opts] [:bar3 opts])
+(defn- ->override-bar3 {::sys/deps {::override-foo {:xt/module `->override-foo2, :arg :bar3-override}}} [opts] [:bar3 opts])
 
 (t/deftest test-overriding
   (t/is (= {:arg :foo-default}
@@ -73,11 +73,11 @@
 
     "user can override implementation"
     {::override-foo [:foo2 {:arg :foo2-default}]}
-    {::override-foo {:crux/module `->override-foo2}}
+    {::override-foo {:xt/module `->override-foo2}}
 
     "user can override implementation and arg"
     {::override-foo [:foo2 {:arg :user-override}]}
-    {::override-foo {:crux/module `->override-foo2, :arg :user-override}}
+    {::override-foo {:xt/module `->override-foo2, :arg :user-override}}
 
     "bar - defaulting nested component"
     {::override-bar [:bar {::override-foo [:foo {:arg :foo-default}]}]}
@@ -89,12 +89,12 @@
 
     "bar2 - user can override nested config"
     {::override-bar [:bar2 {::override-foo [:foo {:arg :user-override}]}]}
-    {::override-bar {:crux/module `->override-bar2, ::override-foo {:arg :user-override}}}
+    {::override-bar {:xt/module `->override-bar2, ::override-foo {:arg :user-override}}}
 
     "bar2 - user can override nested implementation"
     {::override-bar [:bar2 {::override-foo [:foo2 {:arg :user-override}]}]}
-    {::override-bar {:crux/module `->override-bar2,
-                     ::override-foo {:crux/module ->override-foo2, :arg :user-override}}}
+    {::override-bar {:xt/module `->override-bar2,
+                     ::override-foo {:xt/module ->override-foo2, :arg :user-override}}}
 
     "bar3 - module can override nested implementation"
     {::override-bar [:bar3 {::override-foo [:foo2 {:arg :bar3-override}]}]}
@@ -102,17 +102,17 @@
 
     "bar3 - user can override nested config"
     {::override-bar [:bar3 {::override-foo [:foo2 {:arg :user-override}]}]}
-    {::override-bar {:crux/module `->override-bar3, ::override-foo {:arg :user-override}}}
+    {::override-bar {:xt/module `->override-bar3, ::override-foo {:arg :user-override}}}
 
     "bar3 - user can override nested config, but with strings"
     {::override-bar [:bar3 {::override-foo [:foo2 {:arg :user-override}]}]}
-    {"crux.system-test/override-bar" {"crux/module" "crux.system-test/->override-bar3"
+    {"crux.system-test/override-bar" {"xt/module" "crux.system-test/->override-bar3"
                                       "crux.system-test/override-foo" {"arg" "user-override"}}}
 
     "bar3 - user can override nested implementation"
     {::override-bar [:bar3 {::override-foo [:foo {:arg :user-override}]}]}
-    {::override-bar {:crux/module `->override-bar3,
-                     ::override-foo {:crux/module `->override-foo, :arg :user-override}}}))
+    {::override-bar {:xt/module `->override-bar3,
+                     ::override-foo {:xt/module `->override-foo, :arg :user-override}}}))
 
 (t/deftest test-dep-order
   (let [g (-> (sys/prep-system {::after (-> (fn [opts])

@@ -84,14 +84,14 @@ connected to your Confluent Cloud cluster.
   (crux/start-node
     {:crux.kafka/kafka-config {:bootstrap-servers "XXXXX.confluent.cloud:9092" ; replace with value from your properties file
                                :properties-file "/home/myuser/cc-config.properties"} ; replace with the path of your properties file
-     :crux/tx-log {:crux/module 'crux.kafka/->tx-log
-                   :kafka-config :crux.kafka/kafka-config
-                   :tx-topic-opts {:topic-name "tx-1" ; choose your tx-topic name
-                                   :replication-factor 3}} ; Confluent Cloud requires this to be at least `3`
-     :crux/document-store {:crux/module 'crux.kafka/->document-store
-                           :kafka-config :crux.kafka/kafka-config
-                           :doc-topic-opts {:topic-name "doc-1" ; choose your document-topic name
-                                            :replication-factor 3}}})) ; Confluent Cloud requires this to be at least `3`
+     :xt/tx-log {:xt/module 'crux.kafka/->tx-log
+                 :kafka-config :crux.kafka/kafka-config
+                 :tx-topic-opts {:topic-name "tx-1" ; choose your tx-topic name
+                                 :replication-factor 3}} ; Confluent Cloud requires this to be at least `3`
+     :xt/document-store {:xt/module 'crux.kafka/->document-store
+                         :kafka-config :crux.kafka/kafka-config
+                         :doc-topic-opts {:topic-name "doc-1" ; choose your document-topic name
+                                          :replication-factor 3}}})) ; Confluent Cloud requires this to be at least `3`
 ----
 
 Submit a transaction:

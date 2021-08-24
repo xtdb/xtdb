@@ -4,13 +4,13 @@
             [crux.metrics.dropwizard :as dropwizard]))
 
 (defn assign-listeners
-  [registry {:crux/keys [bus]}]
+  [registry {:xt/keys [bus]}]
   (let [!timer-store (atom {})
         query-timer (dropwizard/timer registry ["query" "timer"])]
-    (bus/listen bus {:crux/event-types #{::q/submitted-query
-                                         ::q/completed-query
-                                         ::q/failed-query}}
-                (fn [{:keys [crux.query/query-id crux/event-type]}]
+    (bus/listen bus {:xt/event-types #{::q/submitted-query
+                                       ::q/completed-query
+                                       ::q/failed-query}}
+                (fn [{:keys [crux.query/query-id xt/event-type]}]
                   (case event-type
                     ::q/submitted-query
                     (swap! !timer-store assoc query-id (dropwizard/start query-timer))

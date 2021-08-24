@@ -18,11 +18,11 @@
 
 (defn- with-cluster-node* [f]
   (fix/with-tmp-dir "db-dir" [db-dir]
-    (with-open [node (crux/start-node {:crux/document-store {:kv-store {:crux/module `rocks/->kv-store,
+    (with-open [node (crux/start-node {:xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
                                                                         :db-dir (io/file *event-log-dir* "doc-store")}}
-                                       :crux/tx-log {:kv-store {:crux/module `rocks/->kv-store,
+                                       :xt/tx-log {:kv-store {:xt/module `rocks/->kv-store,
                                                                 :db-dir (io/file *event-log-dir* "tx-log")}}
-                                       :crux/index-store {:kv-store {:crux/module `rocks/->kv-store,
+                                       :xt/index-store {:kv-store {:xt/module `rocks/->kv-store,
                                                                      :db-dir db-dir}}})]
       (binding [*api* node]
         (crux/sync node)

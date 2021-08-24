@@ -198,16 +198,16 @@
   (.stop server))
 
 (defn config []
-  {:soak/crux-node [{:crux/tx-log {:crux/module `k/->tx-log}
-                     :crux/document-store {:crux/module `k/->document-store
-                                           :local-document-store {:kv-store ::rocksdb}}
-                     ::rocksdb {:crux/module `rocksdb/->kv-store
+  {:soak/crux-node [{:xt/tx-log {:xt/module `k/->tx-log}
+                     :xt/document-store {:xt/module `k/->document-store
+                                         :local-document-store {:kv-store ::rocksdb}}
+                     ::rocksdb {:xt/module `rocksdb/->kv-store
                                 :db-dir (io/file "indexes")
-                                :checkpointer {:crux/module `cp/->checkpointer
-                                               :store {:crux/module `s3.cp/->cp-store
+                                :checkpointer {:xt/module `cp/->checkpointer
+                                               :store {:xt/module `s3.cp/->cp-store
                                                        :bucket "crux-soak-checkpoints"}
                                                :approx-frequency (Duration/ofHours 6)}}
-                     :crux/index-store {:kv-store ::rocksdb}}
+                     :xt/index-store {:kv-store ::rocksdb}}
                     (config/crux-node-config)]
    :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
                        :server-opts {:port 8080, :join? false}}})

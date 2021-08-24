@@ -40,8 +40,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.google.cloud-storage/->document-store",
+  "xt/document-store": {
+    "xt/module": "crux.google.cloud-storage/->document-store",
     "root-path": "gs://bucket/prefix"
   },
 }
@@ -51,7 +51,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.google.cloud-storage/->document-store
+{:xt/document-store {:xt/module 'crux.google.cloud-storage/->document-store
                        :root-path "gs://bucket/prefix"}}
 ----
 
@@ -59,7 +59,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.google.cloud-storage/->document-store
+{:xt/document-store {:xt/module crux.google.cloud-storage/->document-store
                        :root-path "gs://bucket/prefix"}}
 ----
 ====
@@ -82,10 +82,10 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on GCS
 
 [source,clojure]
 ----
-;; under :crux/index-store -> :kv-store -> :checkpointer
+;; under :xt/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:crux/module 'crux.google.cloud-storage/->checkpoint-store
+                :store {:xt/module 'crux.google.cloud-storage/->checkpoint-store
                         :path "gs://bucket/prefix"}}
 ----
 

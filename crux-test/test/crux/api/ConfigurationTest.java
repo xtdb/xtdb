@@ -35,7 +35,7 @@ public class ConfigurationTest {
         try {
             File docDir = folder.newFolder("docs");
             return Crux.startNode(n -> {
-                n.with("crux/document-store", createKvConfig(docDir));
+                n.with("xt/document-store", createKvConfig(docDir));
             });
         }
         catch (IOException e) {
@@ -70,9 +70,9 @@ public class ConfigurationTest {
             File indexDir = folder.newFolder("index");
 
             ICruxAPI node = Crux.startNode(n -> {
-                n.with("crux/tx-log", createKvConfig(txDir));
-                n.with("crux/document-store", createKvConfig(docDir));
-                n.with("crux/index-store", createKvConfig(indexDir));
+                n.with("xt/tx-log", createKvConfig(txDir));
+                n.with("xt/document-store", createKvConfig(docDir));
+                n.with("xt/index-store", createKvConfig(indexDir));
             });
 
             assertEquals("crux.rocksdb.RocksKv", kvStore(node, "node", "tx-log", "kv-store"));
@@ -92,7 +92,7 @@ public class ConfigurationTest {
             File docDir = folder.newFolder("docs");
 
             ICruxIngestAPI client = Crux.newIngestClient(n -> {
-                n.with("crux/document-store", createKvConfig(docDir));
+                n.with("xt/document-store", createKvConfig(docDir));
             });
 
             assertEquals("crux.rocksdb.RocksKv", kvStore(client, "client", "document-store", "document-store", "kv-store"));

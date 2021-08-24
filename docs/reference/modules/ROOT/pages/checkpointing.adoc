@@ -26,14 +26,14 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xt/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       ...
       "checkpointer": {
-        "crux/module": "crux.checkpoint/->checkpointer",
+        "xt/module": "crux.checkpoint/->checkpointer",
         "store": {
-          "crux/module": "crux.checkpoint/->filesystem-checkpoint-store",
+          "xt/module": "crux.checkpoint/->filesystem-checkpoint-store",
           "path": "/path/to/cp-store"
         },
         "approx-frequency": "PT6H"
@@ -48,12 +48,12 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+{:xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
                                ...
-                               :checkpointer {:crux/module 'crux.checkpoint/->checkpointer
-                                              :store {:crux/module 'crux.checkpoint/->filesystem-checkpoint-store
-                                                      :path "/path/to/cp-store"}
-                                              :approx-frequency (Duration/ofHours 6)}}}
+                             :checkpointer {:xt/module 'crux.checkpoint/->checkpointer
+                                            :store {:xt/module 'crux.checkpoint/->filesystem-checkpoint-store
+                                                    :path "/path/to/cp-store"}
+                                            :approx-frequency (Duration/ofHours 6)}}}
  ...}
 ----
 
@@ -61,12 +61,12 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               ...
-                               :checkpointer {:crux/module crux.checkpoint/->checkpointer
-                                              :store {:crux/module crux.checkpoint/->filesystem-checkpoint-store
-                                                      :path "/path/to/cp-store"}
-                                              :approx-frequency "PT6H"}}}
+{:xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+                             ...
+                             :checkpointer {:xt/module crux.checkpoint/->checkpointer
+                                            :store {:xt/module crux.checkpoint/->filesystem-checkpoint-store
+                                                    :path "/path/to/cp-store"}
+                                            :approx-frequency "PT6H"}}}
  ...}
 ----
 ====

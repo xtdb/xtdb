@@ -133,13 +133,13 @@ Clojure::
 
 (defn start-crux! []
   (letfn [(kv-store [dir]
-            {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                        :db-dir      (io/file dir)
-                        :sync?       true}})]
+            {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                        :db-dir (io/file dir)
+                        :sync? true}})]
     (crux/start-node
-     {:crux/tx-log              (kv-store "data/dev/tx-log")
-      :crux/document-store      (kv-store "data/dev/doc-store")
-      :crux/index-store         (kv-store "data/dev/index-store")})))
+     {:xt/tx-log (kv-store "data/dev/tx-log")
+      :xt/document-store (kv-store "data/dev/doc-store")
+      :xt/index-store (kv-store "data/dev/index-store")})))
 
 (def crux-node (start-crux!))
 
@@ -186,21 +186,21 @@ config.json::
 [source,json,subs=attributes+]
 ----
 {
-  "crux/index-store": {
+  "xt/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "db-dir": "data/index-store"
     }
   },
-  "crux/document-store": {
+  "xt/document-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "db-dir": "data/doc-store"
     }
   },
-  "crux/tx-log": {
+  "xt/tx-log": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "db-dir": "data/tx-log"
     }
   },

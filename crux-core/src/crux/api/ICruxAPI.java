@@ -199,19 +199,19 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      */
     @SuppressWarnings("unchecked")
     Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
-            .assoc(Keyword.intern("crux/event-type"), Keyword.intern("crux/indexed-tx"))
+            .assoc(Keyword.intern("xt/event-type"), Keyword.intern("xt/indexed-tx"))
             .assoc(Keyword.intern("with-tx-ops?"), true);
 
     /**
      * Attaches a listener to Crux's event bus.
      *
-     * We currently only support one public event-type: `:crux/indexed-tx`.
+     * We currently only support one public event-type: `:xt/indexed-tx`.
      * Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
      * See/use {@link #TX_INDEXED_EVENT_OPTS TX_INDEXED_EVENT_OPTS}
      *
      * This is an experimental API, subject to change.
      *
-     * @param eventOpts should contain `:crux/event-type`, along with any other options the event-type requires.
+     * @param eventOpts should contain `:xt/event-type`, along with any other options the event-type requires.
      * @return an AutoCloseable - closing the return value detaches the listener.
      */
     AutoCloseable listen(Map<Keyword, ?> eventOpts, Consumer<Map<Keyword, ?>> listener);

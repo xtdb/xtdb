@@ -144,7 +144,7 @@
         nil)
       tx-op))
 
-(defn- tx-log-entry->tx-source-records [source-partition topic formatter {:keys [crux.api/tx-ops
+(defn- tx-log-entry->tx-source-records [source-partition topic formatter {:keys [xt/tx-ops
                                                                                  xt/tx-id
                                                                                  xt/tx-time]
                                                                           :as tx}]
@@ -178,7 +178,7 @@
         [(:xt/id new-doc)
          new-doc]))))
 
-(defn- tx-log-entry->doc-source-records [source-partition topic formatter {:keys [crux.api/tx-ops
+(defn- tx-log-entry->doc-source-records [source-partition topic formatter {:keys [xt/tx-ops
                                                                                   xt/tx-id
                                                                                   xt/tx-time]
                                                                            :as tx}]

@@ -33,48 +33,48 @@
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Error parsing opts"
-                          (api/start-node {:crux/document-store {:crux/module `j/->document-store}})))
+                          (api/start-node {:xt/document-store {:xt/module `j/->document-store}})))
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Missing module .+ :dialect"
-                          (api/start-node {:crux/document-store {:crux/module `j/->document-store
-                                                                 :connection-pool {:db-spec {}}}}))))
+                          (api/start-node {:xt/document-store {:xt/module `j/->document-store
+                                                               :connection-pool {:db-spec {}}}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                   :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
+    (with-open [n (api/start-node {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                   :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
                                    ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
                                                         :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n))))
 
 (t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-                                   :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-                                   :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
+    (with-open [n (api/start-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+                                   :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+                                   :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
       (t/is n))))
 
 (t/deftest start-node-from-java
   (f/with-tmp-dir "data" [data-dir]
     (with-open [node (Crux/startNode
                       (doto (HashMap.)
-                        (.put "crux/tx-log"
+                        (.put "xt/tx-log"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "crux/module" "crux.rocksdb/->kv-store")
+                                        (.put "xt/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "txs"))))))
-                        (.put "crux/document-store"
+                        (.put "xt/document-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "crux/module" "crux.rocksdb/->kv-store")
+                                        (.put "xt/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "docs"))))))
-                        (.put "crux/index-store"
+                        (.put "xt/index-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "crux/module" "crux.rocksdb/->kv-store")
+                                        (.put "xt/module" "crux.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "indexes"))))))))]
       (t/is (= "crux.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:node :tx-log :kv-store]))
@@ -85,9 +85,9 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n ^ICruxAPI (Crux/startNode (let [^Map m {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                          :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                          :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+    (with-open [n ^ICruxAPI (Crux/startNode (let [^Map m {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                          :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                          :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
                                                           ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
                                                                                :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
                                               m))]
@@ -104,9 +104,9 @@
                                       :where [[e :name "Ivan"]]}
                                     (object-array 0)))))
 
-      (with-open [^ICruxAPI n2 (Crux/startNode (let [^Map m {:crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                             :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                             :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+      (with-open [^ICruxAPI n2 (Crux/startNode (let [^Map m {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                             :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                             :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
                                                              ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
                                                                                   :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
                                                  m))]
@@ -150,7 +150,7 @@
                    (#'n/await-tx {:bus bus :tx-ingester tx-ingester} :xt/tx-id tx timeout))
         tx1 {:xt/tx-id 1
              :xt/tx-time (Date.)}
-        tx-evt {:crux/event-type ::tx/indexed-tx
+        tx-evt {:xt/event-type ::tx/indexed-tx
                 :submitted-tx tx1
                 ::txe/tx-events []
                 :committed? true}]
@@ -182,7 +182,7 @@
     (t/testing "throws on ingester error"
       (future
         (Thread/sleep 100)
-        (bus/send bus {:crux/event-type ::tx/ingester-error
+        (bus/send bus {:xt/event-type ::tx/ingester-error
                        :ingester-error (ex-info "Ingester error" {})}))
 
       (with-latest-tx nil
@@ -192,7 +192,7 @@
     (t/testing "throws if node closed"
       (future
         (Thread/sleep 100)
-        (bus/send bus {:crux/event-type ::n/node-closing}))
+        (bus/send bus {:xt/event-type ::n/node-closing}))
 
       (with-latest-tx nil
         (t/is (thrown? InterruptedException (await-tx tx1 nil)))))))

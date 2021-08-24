@@ -55,13 +55,13 @@
 
 (def crux-options
   {:crux.kafka/kafka-config {:bootstrap-servers "localhost:9092"}
-   :crux/tx-log {:crux/module 'crux.kafka/->tx-log
-                 :kafka-config :crux.kafka/kafka-config}
-   :crux/document-store {:crux/module 'crux.kafka/->document-store
-                         :kafka-config :crux.kafka/kafka-config
-                         :local-document-store {:kv-store :rocksdb}}
-   :crux/index-store {:kv-store :rocksdb}
-   :rocksdb {:crux/module 'crux.rocksdb/->kv-store
+   :xt/tx-log {:xt/module 'crux.kafka/->tx-log
+               :kafka-config :crux.kafka/kafka-config}
+   :xt/document-store {:xt/module 'crux.kafka/->document-store
+                       :kafka-config :crux.kafka/kafka-config
+                       :local-document-store {:kv-store :rocksdb}}
+   :xt/index-store {:kv-store :rocksdb}
+   :rocksdb {:xt/module 'crux.rocksdb/->kv-store
              :db-dir index-dir}})
 
 (def storage-dir "dev-storage")

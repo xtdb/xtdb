@@ -9,10 +9,10 @@
 
 (t/deftest test-ingest-client
   (fix/with-tmp-dir "db" [db-dir]
-    (let [ingest-opts {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store
-                                                :db-dir (io/file db-dir "tx-log")}}
-                       :crux/document-store {:kv-store {:crux/module `rocks/->kv-store
-                                                        :db-dir (io/file db-dir "doc-store")}}}
+    (let [ingest-opts {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store
+                                              :db-dir (io/file db-dir "tx-log")}}
+                       :xt/document-store {:kv-store {:xt/module `rocks/->kv-store
+                                                      :db-dir (io/file db-dir "doc-store")}}}
 
           submitted-tx
           (with-open [ingest-client (crux/new-ingest-client ingest-opts)]
@@ -27,10 +27,9 @@
               submitted-tx))]
 
       (with-open [node (crux/start-node (merge ingest-opts
-                                               {:crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
+                                               {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
         (crux/await-tx node submitted-tx)
         (t/is (true? (crux/tx-committed? node submitted-tx)))
         (t/is (= #{[:ivan]} (crux/q (crux/db node)
                                     '{:find [e]
-                                      :where [[e :name "Ivan"]]})))
-))))
+                                      :where [[e :name "Ivan"]]})))))))

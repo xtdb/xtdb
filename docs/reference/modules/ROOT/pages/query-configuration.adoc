@@ -9,7 +9,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux/query-engine": {
+  "xt/query-engine": {
     "fn-allow-list": ["foo/bar"]
   }
 }
@@ -19,14 +19,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/query-engine {:fn-allow-list '[foo/bar]}}
+{:xt/query-engine {:fn-allow-list '[foo/bar]}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/query-engine {:fn-allow-list [foo/bar]}
+{:xt/query-engine {:fn-allow-list [foo/bar]}
 ----
 ====
 

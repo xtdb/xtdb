@@ -64,9 +64,9 @@
   (listen ^java.lang.AutoCloseable [node event-opts f]
     "Attaches a listener to Crux's event bus.
 
-  `event-opts` should contain `:crux/event-type`, along with any other options the event-type requires.
+  `event-opts` should contain `:xt/event-type`, along with any other options the event-type requires.
 
-  We currently only support one public event-type: `:crux/indexed-tx`.
+  We currently only support one public event-type: `:xt/indexed-tx`.
   Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
 
   `(.close ...)` the return value to detach the listener.
@@ -101,7 +101,7 @@
 
   (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
-  operations, which allow the contents under the :crux.api/tx-ops
+  operations, which allow the contents under the :xt/tx-ops
   key to be piped into (submit-tx tx-ops) of another
   Crux instance.
 
@@ -228,23 +228,23 @@
 
   Throws IndexVersionOutOfSyncException if the index needs rebuilding."
   ^java.io.Closeable [options]
-  (let [system (-> (sys/prep-system (into [{:crux/node 'crux.node/->node
-                                            :crux/index-store 'crux.kv.index-store/->kv-index-store
-                                            :crux/bus 'crux.bus/->bus
-                                            :crux/tx-ingester 'crux.tx/->tx-ingester
-                                            :crux/tx-indexer 'crux.tx/->tx-indexer
-                                            :crux/document-store 'crux.kv.document-store/->document-store
-                                            :crux/tx-log 'crux.kv.tx-log/->tx-log
-                                            :crux/query-engine 'crux.query/->query-engine
-                                            :crux/secondary-indices 'crux.tx/->secondary-indices}]
+  (let [system (-> (sys/prep-system (into [{:xt/node 'crux.node/->node
+                                            :xt/index-store 'crux.kv.index-store/->kv-index-store
+                                            :xt/bus 'crux.bus/->bus
+                                            :xt/tx-ingester 'crux.tx/->tx-ingester
+                                            :xt/tx-indexer 'crux.tx/->tx-indexer
+                                            :xt/document-store 'crux.kv.document-store/->document-store
+                                            :xt/tx-log 'crux.kv.tx-log/->tx-log
+                                            :xt/query-engine 'crux.query/->query-engine
+                                            :xt/secondary-indices 'crux.tx/->secondary-indices}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
     (when (and (nil? @cio/malloc-arena-max)
                (cio/glibc?))
       (defonce warn-on-malloc-arena-max
         (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for Crux is 2")))
-    (reset! (get-in system [:crux/node :!system]) system)
-    (-> (:crux/node system)
+    (reset! (get-in system [:xt/node :!system]) system)
+    (-> (:xt/node system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))
 
 (defn- ->RemoteClientOptions [{:keys [->jwt-token] :as opts}]

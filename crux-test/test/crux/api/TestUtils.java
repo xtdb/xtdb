@@ -25,7 +25,7 @@ public class TestUtils {
     static final Keyword TX_EVENTS = Keyword.intern("crux.tx.event/tx-events");
     static final Keyword TX = Keyword.intern("xt/tx");
 
-    static final Keyword TX_OPS = Keyword.intern("crux.api/tx-ops");
+    static final Keyword TX_OPS = Keyword.intern("xt/tx-ops");
 
     static final Duration duration = Duration.ofSeconds(10);
 

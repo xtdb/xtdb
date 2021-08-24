@@ -45,9 +45,9 @@
 (t/deftest override-module
   (with-open [node
               ;; tag::override-module[]
-              (crux/start-node {:crux/document-store {:crux/module 'crux.s3/->document-store
-                                                      :bucket "my-bucket"
-                                                      :prefix "my-prefix"}})
+              (crux/start-node {:xt/document-store {:xt/module 'crux.s3/->document-store
+                                                    :bucket "my-bucket"
+                                                    :prefix "my-prefix"}})
               ;; end::override-module[]
               ]
     (t/is true))))
@@ -55,14 +55,14 @@
 (t/deftest nested-modules
   (with-open [node
               ;; tag::nested-modules-0[]
-              (crux/start-node {:crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
+              (crux/start-node {:xt/tx-log {:kv-store {:xt/module 'crux.rocksdb/->kv-store
                                                          :db-dir (io/file "/tmp/txs")}}
                                 ;; end::nested-modules-0[]
                                 })]
                                 (comment [( ("This obviously won't run so putting in a comment"
                                 ;; tag::nested-modules-1[]
-                                :crux/document-store { }
-                                :crux/index-store { }
+                                :xt/document-store { }
+                                :xt/index-store { }
                                 ;; end::nested-modules-1[]
                                          ) {
                                 ;; tag::nested-modules-2[]
@@ -74,10 +74,10 @@
 (t/deftest sharing-modules
   (with-open [node
               ;; tag::sharing-modules[]
-              (crux/start-node {:my-rocksdb {:crux/module 'crux.rocksdb/->kv-store
+              (crux/start-node {:my-rocksdb {:xt/module 'crux.rocksdb/->kv-store
                                              :db-dir (io/file "/tmp/rocksdb")}
-                                :crux/tx-log {:kv-store :my-rocksdb}
-                                :crux/document-store {:kv-store :my-rocksdb}})
+                                :xt/tx-log {:kv-store :my-rocksdb}
+                                :xt/document-store {:kv-store :my-rocksdb}})
               ;; end::sharing-modules[]
               ]
     (t/is true)))

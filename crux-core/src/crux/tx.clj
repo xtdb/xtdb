@@ -346,7 +346,7 @@
     (log/debug "Transaction committed:" (pr-str tx))
 
     (let [{:keys [tx-events]} @!tx]
-      (bus/send bus (into {:crux/event-type ::indexed-tx,
+      (bus/send bus (into {:xt/event-type ::indexed-tx,
                            :submitted-tx tx,
                            :committed? true
                            ::txe/tx-events tx-events}
@@ -366,7 +366,7 @@
 
     (log/debug "Transaction aborted:" (pr-str tx))
 
-    (bus/send bus {:crux/event-type ::indexed-tx,
+    (bus/send bus {:xt/event-type ::indexed-tx,
                    :submitted-tx tx,
                    :committed? false
                    ::txe/tx-events (:tx-events @!tx)})))
@@ -376,7 +376,7 @@
   (begin-tx [_ tx fork-at]
     (when-not fork-at
       (log/debug "Indexing tx-id:" (:xt/tx-id tx))
-      (bus/send bus {:crux/event-type ::indexing-tx, :submitted-tx tx}))
+      (bus/send bus {:xt/event-type ::indexing-tx, :submitted-tx tx}))
 
     (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
           document-store-tx (fork/begin-document-store-tx document-store)]
@@ -393,10 +393,10 @@
                            :document-store document-store-tx)
                     bus))))
 
-(defn ->tx-indexer {::sys/deps {:index-store :crux/index-store
-                                :document-store :crux/document-store
-                                :bus :crux/bus
-                                :query-engine :crux/query-engine}}
+(defn ->tx-indexer {::sys/deps {:index-store :xt/index-store
+                                :document-store :xt/document-store
+                                :bus :xt/bus
+                                :query-engine :xt/query-engine}}
   [deps]
   (map->TxIndexer deps))
 
@@ -429,12 +429,12 @@
     (.cancel job true)
     (log/info "Shut down tx-ingester")))
 
-(defn ->tx-ingester {::sys/deps {:tx-indexer :crux/tx-indexer
-                                 :index-store :crux/index-store
-                                 :document-store :crux/document-store
-                                 :tx-log :crux/tx-log
-                                 :bus :crux/bus
-                                 :secondary-indices :crux/secondary-indices}}
+(defn ->tx-ingester {::sys/deps {:tx-indexer :xt/tx-indexer
+                                 :index-store :xt/index-store
+                                 :document-store :xt/document-store
+                                 :tx-log :xt/tx-log
+                                 :bus :xt/bus
+                                 :secondary-indices :xt/secondary-indices}}
   [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices]}]
   (log/info "Started tx-ingester")
 
@@ -444,14 +444,14 @@
         latest-crux-tx-id (:xt/tx-id (db/latest-completed-tx index-store))]
     (letfn [(process-tx-f [document-store {:keys [:xt/tx-id ::txe/tx-events] :as tx}]
               (let [tx (cond-> tx
-                         with-tx-ops? (assoc :crux.api/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
+                         with-tx-ops? (assoc :xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
                 (doseq [{:keys [after-tx-id process-tx-f]} secondary-indices
                         :when (or (nil? after-tx-id) (< ^long after-tx-id ^long tx-id))]
                   (process-tx-f tx))))
 
             (set-ingester-error! [t]
               (reset! !error t)
-              (bus/send bus {:crux/event-type ::ingester-error, :ingester-error t}))]
+              (bus/send bus {:xt/event-type ::ingester-error, :ingester-error t}))]
 
       ;; catching all the secondary indices up to where Crux is
       (when (and latest-crux-tx-id (seq secondary-indices))

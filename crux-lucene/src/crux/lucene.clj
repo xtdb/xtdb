@@ -341,12 +341,12 @@
                                    :spec ::sys/duration
                                    :default "PT0S"
                                    :doc "How often to perform a refresh operation. Negative will disable refresh, zero will refresh after every transaction, positive will refresh on the given interval - updates will not be visible in Lucene searches until the index is refreshed."}}
-   ::sys/deps {:query-engine :crux/query-engine
+   ::sys/deps {:query-engine :xt/query-engine
                :indexer `->indexer
                :analyzer `->analyzer
-               :secondary-indices :crux/secondary-indices
+               :secondary-indices :xt/secondary-indices
                :checkpointer (fn [_])}
-   ::sys/before #{[:crux/tx-ingester]}}
+   ::sys/before #{[:xt/tx-ingester]}}
   [{:keys [^Path db-dir analyzer indexer query-engine secondary-indices checkpointer
            fsync-frequency ^Duration refresh-frequency]
     :as opts}]
@@ -380,7 +380,7 @@
     (tx/register-index! secondary-indices
                         (latest-completed-tx-id index-writer)
                         {:with-tx-ops? true}
-                        (fn [{:keys [:xt/tx-id :crux.api/tx-ops committing?]}]
+                        (fn [{:keys [:xt/tx-id :xt/tx-ops committing?]}]
                           (when committing?
                             (let [{:keys [docs evicted-eids]} (transform-tx-ops tx-ops)]
                               (when-let [evicting-eids (not-empty evicted-eids)]

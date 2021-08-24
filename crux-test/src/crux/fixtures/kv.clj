@@ -17,19 +17,19 @@
 (defmacro with-kv-store [bindings & body]
   `(with-kv-store* (fn [~@bindings] ~@body)))
 
-(def rocks-dep {:crux/module 'crux.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
-(def lmdb-dep {:crux/module 'crux.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
-(def memkv-dep {:crux/module 'crux.mem-kv/->kv-store})
-(def mutablekv-dep {:crux/module 'crux.kv.mutable-kv/->mutable-kv-store})
+(def rocks-dep {:xt/module 'crux.rocksdb/->kv-store, :db-dir-suffix "rocksdb"})
+(def lmdb-dep {:xt/module 'crux.lmdb/->kv-store, :db-dir-suffix "lmdb", :env-mapsize 4096})
+(def memkv-dep {:xt/module 'crux.mem-kv/->kv-store})
+(def mutablekv-dep {:xt/module 'crux.kv.mutable-kv/->mutable-kv-store})
 
 (defn with-each-kv-store* [f]
   (doseq [kv-opts [memkv-dep
                    mutablekv-dep
                    rocks-dep
-                   {:crux/module `crux.rocksdb.jnr/->kv-store
+                   {:xt/module `crux.rocksdb.jnr/->kv-store
                     :db-dir-suffix "rocksdb-jnr"}
                    lmdb-dep
-                   {:crux/module `crux.lmdb.jnr/->kv-store
+                   {:xt/module `crux.lmdb.jnr/->kv-store
                     :db-dir-suffix "lmdb-jnr"
                     :env-mapsize 4096}]]
     (binding [*kv-opts* (merge *kv-opts* kv-opts)]
@@ -44,9 +44,9 @@
               (merge (when-let [db-dir-suffix (:db-dir-suffix kv-opts)]
                        {:db-dir (io/file db-dir db-dir-suffix module)})
                      kv-opts))]
-      (fix/with-opts {:crux/tx-log {:kv-store (->kv-opts "tx-log")}
-                      :crux/document-store {:kv-store (->kv-opts "doc-store")}
-                      :crux/index-store {:kv-store (->kv-opts "index-store")}}
+      (fix/with-opts {:xt/tx-log {:kv-store (->kv-opts "tx-log")}
+                      :xt/document-store {:kv-store (->kv-opts "doc-store")}
+                      :xt/index-store {:kv-store (->kv-opts "index-store")}}
         f))))
 
 (defmacro with-kv-store-opts [kv-dep & body]

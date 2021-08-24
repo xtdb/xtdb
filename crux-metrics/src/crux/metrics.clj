@@ -10,9 +10,9 @@
   (dropwizard/new-registry))
 
 (defn ->metrics {::sys/deps {:registry ::registry
-                             :crux/node :crux/node
-                             :crux/index-store :crux/index-store
-                             :crux/bus :crux/bus}
+                             :xt/node :xt/node
+                             :xt/index-store :xt/index-store
+                             :xt/bus :xt/bus}
                  ::sys/args {:with-index-store-metrics? {:doc "Include metrics on the index-store"
                                                          :default true
                                                          :spec ::sys/boolean}
@@ -20,7 +20,7 @@
                                                    :default true
                                                    :spec ::sys/boolean}}}
   [{:keys [registry with-index-store-metrics? with-query-metrics?] :as opts}]
-  (let [deps (select-keys opts #{:crux/node :crux/index-store :crux/bus})]
+  (let [deps (select-keys opts #{:xt/node :xt/index-store :xt/bus})]
     {:registry (cond-> registry
                  with-index-store-metrics? (doto (index-store-metrics/assign-listeners deps))
                  with-query-metrics? (doto (query-metrics/assign-listeners deps)))}))

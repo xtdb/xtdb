@@ -32,7 +32,7 @@ public interface ICruxIngestAPI extends Closeable {
 
     /**
      * Reads the transaction log. Optionally includes  operations, which allow the contents
-     * under the :crux.api/tx-ops key to be piped into (submit-tx tx-ops) of another
+     * under the :xt/tx-ops key to be piped into (submit-tx tx-ops) of another
      * Crux instance.
      *
      * @param afterTxId optional transaction id to start after.

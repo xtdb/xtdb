@@ -117,7 +117,7 @@
 
 (defn tx-log-json-encode [tx]
   (-> tx
-      (cio/update-if :crux.api/tx-ops txs->json)
+      (cio/update-if :xt/tx-ops txs->json)
       (cio/update-if :crux.tx.event/tx-events txs->json)
       (http-json/camel-case-keys)))
 
@@ -452,7 +452,7 @@
 
 (alter-meta! #'->crux-handler assoc :arglists '([crux-node {:keys [jwks read-only? server-label]}]))
 
-(defn ->server {::sys/deps {:crux-node :crux/node}
+(defn ->server {::sys/deps {:crux-node :xt/node}
                 ::sys/args {:port {:spec ::sys/nat-int
                                    :doc "Port to start the HTTP server on"
                                    :default default-server-port}

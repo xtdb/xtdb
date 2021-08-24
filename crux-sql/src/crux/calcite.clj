@@ -515,7 +515,7 @@
                             :scan-only? {:doc "Crux Table Scan Only"
                                          :default false
                                          :spec ::sys/boolean}}
-                ::sys/deps {:node :crux/node}}
+                ::sys/deps {:node :xt/node}}
   [{:keys [node port scan-only?]}]
   (let [node-uuid (str (UUID/randomUUID))]
     (.put !crux-nodes node-uuid node)

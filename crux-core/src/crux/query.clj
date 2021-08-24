@@ -1810,7 +1810,7 @@
           safe-query (-> conformed-query .q-normalized (dissoc :args))
           index-snapshot (open-index-snapshot this)]
       (when bus
-        (bus/send bus {:crux/event-type ::submitted-query
+        (bus/send bus {:xt/event-type ::submitted-query
                        ::query safe-query
                        ::query-id query-id}))
       (try
@@ -1822,13 +1822,13 @@
                (cio/->cursor (fn []
                                (cio/try-close index-snapshot)
                                (when bus
-                                 (bus/send bus {:crux/event-type ::completed-query
+                                 (bus/send bus {:xt/event-type ::completed-query
                                                 ::query safe-query
                                                 ::query-id query-id}))))))
         (catch Exception e
           (cio/try-close index-snapshot)
           (when bus
-            (bus/send bus {:crux/event-type ::failed-query
+            (bus/send bus {:xt/event-type ::failed-query
                            ::query safe-query
                            ::query-id query-id
                            ::error {:type (cio/pr-edn-str (type e))
@@ -1992,14 +1992,14 @@
                    {:allowed-ns #{} :allowed-fns default-allow-list}
                    fal)))))
 
-(defn ->query-engine {::sys/deps {:index-store :crux/index-store
-                                  :bus :crux/bus
-                                  :document-store :crux/document-store
-                                  :query-cache {:crux/module 'crux.cache/->cache
+(defn ->query-engine {::sys/deps {:index-store :xt/index-store
+                                  :bus :xt/bus
+                                  :document-store :xt/document-store
+                                  :query-cache {:xt/module 'crux.cache/->cache
                                                 :cache-size 10240}
-                                  :conform-cache {:crux/module 'crux.cache/->cache
+                                  :conform-cache {:xt/module 'crux.cache/->cache
                                                   :cache-size 10240}
-                                  :pull-cache {:crux/module 'crux.cache/->cache
+                                  :pull-cache {:xt/module 'crux.cache/->cache
                                                :cache-size 10240}}
                       ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
                                                       :default (* 32 1024)

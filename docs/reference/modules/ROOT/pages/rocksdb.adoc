@@ -40,15 +40,15 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xt/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "db-dir": "/tmp/rocksdb"
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xt/document-store": { ... },
+  "xt/tx-log": { ... }
 }
 ----
 
@@ -56,20 +56,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               :db-dir (io/file "/tmp/rocksdb")}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                             :db-dir (io/file "/tmp/rocksdb")}}
+ :xt/document-store {...}
+ :xt/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               :db-dir "/tmp/rocksdb"}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+                             :db-dir "/tmp/rocksdb"}}
+ :xt/document-store {...}
+ :xt/tx-log {...}}
 ----
 ====
 
@@ -99,18 +99,18 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xt/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "metrics": {
-        "crux/module": "crux.rocksdb.metrics/->metrics"
+        "xt/module": "crux.rocksdb.metrics/->metrics"
       }
       ...
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xt/document-store": { ... },
+  "xt/tx-log": { ... }
 }
 ----
 
@@ -118,20 +118,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               :metrics {:crux/module 'crux.rocksdb.metrics/->metrics}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                             :metrics {:xt/module 'crux.rocksdb.metrics/->metrics}}
+ :xt/document-store {...}
+ :xt/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               :metrics {:crux/module crux.rocksdb.metrics/->metrics}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+                             :metrics {:xt/module crux.rocksdb.metrics/->metrics}}
+ :xt/document-store {...}
+ :xt/tx-log {...}}
 ----
 ====
 
@@ -154,25 +154,25 @@ JSON::
 ----
 {
   "crux.rocksdb/block-cache": {
-    "crux/module": "crux.rocksdb/>lru-block-cache",
+    "xt/module": "crux.rocksdb/>lru-block-cache",
     "cache-size":536870912
   },
-  "crux/index-store": {
+  "xt/index-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "block-cache": "crux.rocksdb/block-cache"
       ...
     }
   },
-  "crux/document-store": {
+  "xt/document-store": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "block-cache": "crux.rocksdb/block-cache"
     }
   },
-  "crux/tx-log": {
+  "xt/tx-log": {
     "kv-store": {
-      "crux/module": "crux.rocksdb/->kv-store",
+      "xt/module": "crux.rocksdb/->kv-store",
       "block-cache": "crux.rocksdb/block-cache"
     }
   }
@@ -183,28 +183,28 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.rocksdb/block-cache {:crux/module 'crux.rocksdb/->lru-block-cache
-			    :cache-size (* 512 1024 1024)}
- :crux/index-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                               :block-cache :crux.rocksdb/block-cache}}
- :crux/document-store {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                                  :block-cache :crux.rocksdb/block-cache}}
- :crux/tx-log {:kv-store {:crux/module 'crux.rocksdb/->kv-store
-                          :block-cache :crux.rocksdb/block-cache}}}
+{:crux.rocksdb/block-cache {:xt/module 'crux.rocksdb/->lru-block-cache
+			                      :cache-size (* 512 1024 1024)}
+ :xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                             :block-cache :crux.rocksdb/block-cache}}
+ :xt/document-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                                :block-cache :crux.rocksdb/block-cache}}
+ :xt/tx-log {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                        :block-cache :crux.rocksdb/block-cache}}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.rocksdb/block-cache {:crux/module crux.rocksdb/->lru-block-cache
-			    :cache-size 536870912}
- :crux/index-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                               :block-cache :crux.rocksdb/block-cache}}
- :crux/document-store {:kv-store {:crux/module crux.rocksdb/->kv-store
-                                  :block-cache :crux.rocksdb/block-cache}}
- :crux/tx-log {:kv-store {:crux/module crux.rocksdb/->kv-store
-                          :block-cache :crux.rocksdb/block-cache}}}
+{:crux.rocksdb/block-cache {:xt/module crux.rocksdb/->lru-block-cache
+			                      :cache-size 536870912}
+ :xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+                             :block-cache :crux.rocksdb/block-cache}}
+ :xt/document-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+                                :block-cache :crux.rocksdb/block-cache}}
+ :xt/tx-log {:kv-store {:xt/module crux.rocksdb/->kv-store
+                        :block-cache :crux.rocksdb/block-cache}}}
 ----
 ====
 

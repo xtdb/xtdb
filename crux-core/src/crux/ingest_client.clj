@@ -32,17 +32,17 @@
 (defmethod print-method CruxIngestClient [_ ^Writer w] (.write w "#<CruxIngestClient>"))
 (defmethod pp/simple-dispatch CruxIngestClient [it] (print-method it *out*))
 
-(defn ->ingest-client {::sys/deps {:tx-log :crux/tx-log
-                                   :document-store :crux/document-store}}
+(defn ->ingest-client {::sys/deps {:tx-log :xt/tx-log
+                                   :document-store :xt/document-store}}
   [{:keys [tx-log document-store]}]
   (->CruxIngestClient tx-log document-store nil))
 
 (defn open-ingest-client ^crux.ingest_client.CruxIngestClient [options]
-  (let [system (-> (sys/prep-system (into [{:crux/ingest-client `->ingest-client
-                                            :crux/bus 'crux.bus/->bus
-                                            :crux/document-store 'crux.kv.document-store/->document-store
-                                            :crux/tx-log 'crux.kv.tx-log/->tx-log}]
+  (let [system (-> (sys/prep-system (into [{:xt/ingest-client `->ingest-client
+                                            :xt/bus 'crux.bus/->bus
+                                            :xt/document-store 'crux.kv.document-store/->document-store
+                                            :xt/tx-log 'crux.kv.tx-log/->tx-log}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
-    (-> (:crux/ingest-client system)
+    (-> (:xt/ingest-client system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))

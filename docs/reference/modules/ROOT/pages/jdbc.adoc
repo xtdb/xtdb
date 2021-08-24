@@ -60,11 +60,11 @@ JSON::
 [source,json]
 ----
 {
-  "crux/tx-log": {
-    "crux/module": "crux.jdbc/->tx-log",
+  "xt/tx-log": {
+    "xt/module": "crux.jdbc/->tx-log",
     "connection-pool": {
       "dialect": {
-        "crux/module": "crux.jdbc.psql/->dialect"
+        "xt/module": "crux.jdbc.psql/->dialect"
       },
       "pool-opts": { ... },
       "db-spec": {
@@ -89,17 +89,17 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:crux/module 'crux.jdbc/->tx-log
-               :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
-                                 :pool-opts { ... }
-                                 :db-spec {:jdbcUrl "..."
-                                           ;; OR
-                                           :host "..."
-                                           :dbname "..."
-                                           :user "..."
-                                           :password "..."
-                                           ... }}
-               :poll-sleep-duration (Duration/ofSeconds 1)}
+{:xt/tx-log {:xt/module 'crux.jdbc/->tx-log
+             :connection-pool {:dialect {:xt/module 'crux.jdbc.psql/->dialect}
+                               :pool-opts { ... }
+                               :db-spec {:jdbcUrl "..."
+                                         ;; OR
+                                         :host "..."
+                                         :dbname "..."
+                                         :user "..."
+                                         :password "..."
+                                         ... }}
+             :poll-sleep-duration (Duration/ofSeconds 1)}
  ...}
 ----
 
@@ -107,17 +107,17 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/tx-log {:crux/module crux.jdbc/->tx-log
-               :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
-                                 :pool-opts { ... }
-                                 :db-spec {:jdbcUrl "..."
-                                           ;; OR
-                                           :host "..."
-                                           :dbname "..."
-                                           :user "..."
-                                           :password "..."
-                                           ... }}
-               :poll-sleep-duration "PT1S"}
+{:xt/tx-log {:xt/module crux.jdbc/->tx-log
+             :connection-pool {:dialect {:xt/module crux.jdbc.psql/->dialect}
+                               :pool-opts { ... }
+                               :db-spec {:jdbcUrl "..."
+                                         ;; OR
+                                         :host "..."
+                                         :dbname "..."
+                                         :user "..."
+                                         :password "..."
+                                         ... }}
+             :poll-sleep-duration "PT1S"}
  ...}
 ----
 ====
@@ -131,11 +131,11 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.jdbc/->document-store",
+  "xt/document-store": {
+    "xt/module": "crux.jdbc/->document-store",
     "connection-pool": {
       "dialect": {
-        "crux/module": "crux.jdbc.psql/->dialect"
+        "xt/module": "crux.jdbc.psql/->dialect"
       },
       "pool-opts": { ... },
       "db-spec": { ... }
@@ -150,10 +150,10 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module 'crux.jdbc/->document-store
-                       :connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
-                                         :pool-opts { ... }
-                                         :db-spec { ... }}}
+{:xt/document-store {:xt/module 'crux.jdbc/->document-store
+                     :connection-pool {:dialect {:xt/module 'crux.jdbc.psql/->dialect}
+                                       :pool-opts { ... }
+                                       :db-spec { ... }}}
  ...}
 ----
 
@@ -161,10 +161,10 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux/document-store {:crux/module crux.jdbc/->document-store
-                       :connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
-                                         :pool-opts { ... }
-                                         :db-spec { ... }}}
+{:xt/document-store {:xt/module crux.jdbc/->document-store
+                     :connection-pool {:dialect {:xt/module crux.jdbc.psql/->dialect}
+                                       :pool-opts { ... }
+                                       :db-spec { ... }}}
  ...}
 ----
 ====
@@ -182,20 +182,20 @@ JSON::
 {
   "crux.jdbc/connection-pool": {
     "dialect": {
-      "crux/module": "crux.jdbc.psql/->dialect"
+      "xt/module": "crux.jdbc.psql/->dialect"
     },
     "pool-opts": { ... },
     "db-spec": { ... }
   },
 
 
-  "crux/document-store": {
-    "crux/module": "crux.jdbc/->document-store",
+  "xt/document-store": {
+    "xt/module": "crux.jdbc/->document-store",
     "connection-pool": "crux.jdbc/connection-pool"
   },
 
-  "crux/tx-log": {
-    "crux/module": "crux.jdbc/->tx-log",
+  "xt/tx-log": {
+    "xt/module": "crux.jdbc/->tx-log",
     "connection-pool": "crux.jdbc/connection-pool"
   },
 
@@ -207,13 +207,13 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.jdbc/connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect}
+{:crux.jdbc/connection-pool {:dialect {:xt/module 'crux.jdbc.psql/->dialect}
                              :pool-opts { ... }
                              :db-spec { ... }}
- :crux/tx-log {:crux/module 'crux.jdbc/->tx-log
-               :connection-pool :crux.jdbc/connection-pool}
- :crux/document-store {:crux/module 'crux.jdbc/->document-store
-                       :connection-pool :crux.jdbc/connection-pool}
+ :xt/tx-log {:xt/module 'crux.jdbc/->tx-log
+             :connection-pool :crux.jdbc/connection-pool}
+ :xt/document-store {:xt/module 'crux.jdbc/->document-store
+                     :connection-pool :crux.jdbc/connection-pool}
  ...}
 ----
 
@@ -221,13 +221,13 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux.jdbc/connection-pool {:dialect {:crux/module crux.jdbc.psql/->dialect}
+{:crux.jdbc/connection-pool {:dialect {:xt/module crux.jdbc.psql/->dialect}
                              :pool-opts { ... }
                              :db-spec { ... }}
- :crux/tx-log {:crux/module crux.jdbc/->tx-log
-               :connection-pool :crux.jdbc/connection-pool}
- :crux/document-store {:crux/module crux.jdbc/->document-store
-                       :connection-pool :crux.jdbc/connection-pool}
+ :xt/tx-log {:xt/module crux.jdbc/->tx-log
+             :connection-pool :crux.jdbc/connection-pool}
+ :xt/document-store {:xt/module crux.jdbc/->document-store
+                     :connection-pool :crux.jdbc/connection-pool}
  ...}
 ----
 ====

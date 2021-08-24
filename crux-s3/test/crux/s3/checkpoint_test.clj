@@ -9,7 +9,7 @@
 (t/use-fixtures :once s3t/with-s3-client)
 
 (t/deftest test-checkpoint-store
-  (with-open [sys (-> (sys/prep-system {:store {:crux/module `s3c/->cp-store
+  (with-open [sys (-> (sys/prep-system {:store {:xt/module `s3c/->cp-store
                                                 :configurator `s3t/->configurator
                                                 :bucket s3t/test-s3-bucket
                                                 :prefix (str "s3-cp-" (UUID/randomUUID))}})

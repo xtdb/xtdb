@@ -40,15 +40,15 @@ JSON::
 [source,json]
 ----
 {
-  "crux/index-store": {
+  "xt/index-store": {
     "kv-store": {
-      "crux/module": "crux.lmdb/->kv-store",
+      "xt/module": "crux.lmdb/->kv-store",
       "db-dir": "/tmp/lmdb"
     }
   },
 
-  "crux/document-store": { ... },
-  "crux/tx-log": { ... }
+  "xt/document-store": { ... },
+  "xt/tx-log": { ... }
 }
 ----
 
@@ -56,20 +56,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module 'crux.lmdb/->kv-store
-                               :db-dir (io/file "/tmp/lmdb")}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xt/index-store {:kv-store {:xt/module 'crux.lmdb/->kv-store
+                             :db-dir (io/file "/tmp/lmdb")}}
+ :xt/document-store {...}
+ :xt/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux/index-store {:kv-store {:crux/module crux.lmdb/->kv-store
-                               :db-dir "/tmp/lmdb"}}
- :crux/document-store {...}
- :crux/tx-log {...}}
+{:xt/index-store {:kv-store {:xt/module crux.lmdb/->kv-store
+                             :db-dir "/tmp/lmdb"}}
+ :xt/document-store {...}
+ :xt/tx-log {...}}
 ----
 ====
 

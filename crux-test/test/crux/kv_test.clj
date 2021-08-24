@@ -344,13 +344,13 @@
 (t/deftest test-performance-off-heap
   (if (and (Boolean/parseBoolean (System/getenv "CRUX_KV_PERFORMANCE"))
            (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
-             (= backend (str (:crux/module fkv/*kv-opts*)))
+             (= backend (str (:xt/module fkv/*kv-opts*)))
              true))
     (fkv/with-kv-store [kv-store]
       (let [n 1000000
             ks (vec (for [n (range n)]
                       (mem/->off-heap (.getBytes (format "%020x" n)))))]
-        (println (:crux/module fkv/*kv-opts*) "off-heap")
+        (println (:xt/module fkv/*kv-opts*) "off-heap")
         (t/is (= n (count ks)))
         (t/is (mem/off-heap? (first ks)))
 

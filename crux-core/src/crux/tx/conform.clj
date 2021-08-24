@@ -92,8 +92,8 @@
            :arg-doc-id arg-doc-id
            :docs {arg-doc-id arg-doc}}
           (when (= 1 (count args))
-            (when-let [tx-ops (:crux.api/tx-ops (first args))]
-              {:crux.api/tx-ops (mapv conform-tx-op tx-ops)})))))
+            (when-let [tx-ops (:xt/tx-ops (first args))]
+              {:xt/tx-ops (mapv conform-tx-op tx-ops)})))))
 
 (defn conform-tx-op
   ([op] (conform-tx-op op {}))
@@ -220,7 +220,7 @@
                         (if-let [{:keys [:crux.db.fn/tx-events] :as tx-log-entry} (get docs arg)]
                           (-> tx-log-entry
                               (dissoc :xt/id :crux.db.fn/tx-events)
-                              (assoc :crux.api/tx-ops (tx-events->tx-ops document-store tx-events)))
+                              (assoc :xt/tx-ops (tx-events->tx-ops document-store tx-events)))
                           arg))
 
                       :crux.tx/match
@@ -233,6 +233,6 @@
 
 (defn flatten-tx-fn-ops [{:keys [op] :as tx-op}]
   (or (when (= :crux.tx/fn op)
-        (when-let [tx-ops (:crux.api/tx-ops tx-op)]
+        (when-let [tx-ops (:xt/tx-ops tx-op)]
           (mapcat flatten-tx-fn-ops tx-ops)))
       [tx-op]))

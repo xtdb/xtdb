@@ -8,7 +8,7 @@
 
 (t/deftest test-document-store
   (fix/with-tmp-dirs #{doc-store-dir}
-    (with-open [sys (-> (sys/prep-system {:doc-store {:crux/module `ds/->nio-document-store
+    (with-open [sys (-> (sys/prep-system {:doc-store {:xt/module `ds/->nio-document-store
                                                       :root-path (.toPath ^File doc-store-dir)}})
                         (sys/start-system))]
 

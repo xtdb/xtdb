@@ -28,7 +28,7 @@ public class JCruxNodeTest {
         HashMap<Keyword, Object> nodeConfig = new HashMap<>();
         nodeConfig.put(Keyword.intern("slow-queries-min-threshold"), Duration.ofSeconds(-1));
         HashMap<Keyword, Object> _config = new HashMap<>();
-        _config.put(Keyword.intern("crux/node"), nodeConfig);
+        _config.put(Keyword.intern("xt/node"), nodeConfig);
         config = _config;
     }
 
@@ -172,13 +172,13 @@ public class JCruxNodeTest {
         Map<Keyword, ?> event = (Map<Keyword, ?>) events[0];
         assertNotNull(event);
         assertEquals(5, event.size());
-        assertEquals(Keyword.intern("crux/indexed-tx"), event.get(Keyword.intern("crux/event-type")));
+        assertEquals(Keyword.intern("xt/indexed-tx"), event.get(Keyword.intern("xt/event-type")));
         assertTrue((Boolean) event.get(Keyword.intern("committed?")));
         assertEquals(tx.getTime(), event.get(TX_TIME));
         assertEquals(0L, event.get(TX_ID));
 
         //TODO: Reassert
-        //assertTxOps((LazySeq) event.get(Keyword.intern("crux/tx-ops")));
+        //assertTxOps((LazySeq) event.get(Keyword.intern("xt/tx-ops")));
 
         try {
             listener.close();

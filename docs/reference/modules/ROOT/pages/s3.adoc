@@ -38,8 +38,8 @@ JSON::
 [source,json]
 ----
 {
-  "crux/document-store": {
-    "crux/module": "crux.s3/->document-store",
+  "xt/document-store": {
+    "xt/module": "crux.s3/->document-store",
     "bucket": "your-bucket",
     ...
   },
@@ -50,18 +50,18 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.document-store {:crux/module 'crux.s3/->document-store
-                       :bucket "your-bucket"
-                       ...}}
+{:xt/document-store {:xt/module 'crux.s3/->document-store
+                     :bucket "your-bucket"
+                     ...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.document-store {:crux/module crux.s3/->document-store
-                       :bucket "your-bucket"
-                       ...}}
+{:xt/document-store {:xt/module crux.s3/->document-store
+                     :bucket "your-bucket"
+                     ...}}
 ----
 ====
 
@@ -81,10 +81,10 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on you
 
 [source,clojure]
 ----
-;; under :crux/index-store -> :kv-store -> :checkpointer
+;; under :xt/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:crux/module 'crux.s3.checkpoint-store/->checkpoint-store
+                :store {:xt/module 'crux.s3.checkpoint-store/->checkpoint-store
                         :configurator ...
                         :bucket "..."
                         :prefix "..."}}
@@ -113,10 +113,10 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.document-store {:crux/module 'crux.s3/->document-store
-                       :configurator (fn [_]
-                                       (reify S3Configurator
-                                         ...)
-                       ...}}
+{:xt/document-store {:xt/module 'crux.s3/->document-store
+                     :configurator (fn [_]
+                                     (reify S3Configurator
+                                       ...)
+                     ...}}
 ----
 ====

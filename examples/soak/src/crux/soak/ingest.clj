@@ -80,8 +80,8 @@
   (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
 
   (let [mode (first args)]
-    (with-open [node (crux/new-ingest-client [{:crux/tx-log {:crux/module `k/->tx-log}
-                                               :crux/document-store {:crux/module `k/->ingest-only-document-store}}
+    (with-open [node (crux/new-ingest-client [{:xt/tx-log {:xt/module `k/->tx-log}
+                                               :xt/document-store {:xt/module `k/->ingest-only-document-store}}
                                               (config/crux-node-config)])]
       (crux/submit-tx node
                       (case mode

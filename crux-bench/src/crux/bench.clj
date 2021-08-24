@@ -65,7 +65,7 @@
                               :bytes-indexed 0
                               :doc-count 0})]
     (bus/listen (:bus node)
-                {:crux/event-types #{:crux.tx/indexed-tx}}
+                {:xt/event-types #{:crux.tx/indexed-tx}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
                   (swap! !index-metrics (fn [index-metrics-map]
                                           (-> index-metrics-map
@@ -220,111 +220,111 @@
 (def nodes
   {"standalone-rocksdb"
    (fn [data-dir]
-     {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+     {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "rocksdb-lucene"
    (fn [data-dir]
-     {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+     {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.lucene/lucene-store {:db-dir (io/file data-dir "lucene")}
 
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "standalone-rocksdb-with-metrics"
    (fn [data-dir]
-     {:crux/tx-log {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :crux/document-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store
-                                    :db-dir (io/file data-dir "indexes")
-                                    :metrics `crux.rocksdb.metrics/->metrics}}
+     {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store
+                                  :db-dir (io/file data-dir "indexes")
+                                  :metrics `crux.rocksdb.metrics/->metrics}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "h2-rocksdb"
    (fn [data-dir]
      {::j/connection-pool {:dialect 'crux.jdbc.h2/->dialect
                            :db-spec {:dbname (str (io/file data-dir "h2"))}}
-      :crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-      :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+      :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "sqlite-rocksdb"
    (fn [data-dir]
      {::j/connection-pool {:dialect 'crux.jdbc.sqlite/->dialect
                            :db-spec {:dbname (str (io/file data-dir "sqlite"))}}
-      :crux/tx-log {:crux/module `j/->tx-log, :connection-pool ::j/connection-pool}
-      :crux/document-store {:crux/module `j/->document-store, :connection-pool ::j/connection-pool}
-      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+      :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-        :crux/tx-log {:crux/module `k/->tx-log
-                      :kafka-config ::k/kafka-config
-                      :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
-        :crux/document-store {:crux/module `k/->document-store,
-                              :kafka-config ::k/kafka-config
-                              :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
-                              :local-document-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                :db-dir (io/file data-dir "doc-store")}}}
-        :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+        :xt/tx-log {:xt/module `k/->tx-log
+                    :kafka-config ::k/kafka-config
+                    :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
+        :xt/document-store {:xt/module `k/->document-store,
+                            :kafka-config ::k/kafka-config
+                            :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
+                            :local-document-store {:kv-store {:xt/module `rocks/->kv-store
+                                                              :db-dir (io/file data-dir "doc-store")}}}
+        :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :crux.metrics.cloudwatch/reporter cw-reporter-opts}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9091"}
-        :crux/tx-log {:crux/module `k/->tx-log
-                      :kafka-config ::k/kafka-config
-                      :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
-        :crux/document-store {:crux/module `k/->document-store
-                              :kafka-config ::k/kafka-config
-                              :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
-                              :local-document-store {:kv-store {:crux/module `rocks/->kv-store
-                                                                :db-dir (io/file data-dir "doc-store")}}}
-        :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+        :xt/tx-log {:xt/module `k/->tx-log
+                    :kafka-config ::k/kafka-config
+                    :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
+        :xt/document-store {:xt/module `k/->document-store
+                            :kafka-config ::k/kafka-config
+                            :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
+                            :local-document-store {:kv-store {:xt/module `rocks/->kv-store
+                                                              :db-dir (io/file data-dir "doc-store")}}}
+        :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :crux.metrics.cloudwatch/reporter cw-reporter-opts}))
 
    "postgres-rocksdb"
    (fn [^File data-dir]
-     {:crux.jdbc/connection-pool {:dialect {:crux/module 'crux.jdbc.psql/->dialect
+     {:crux.jdbc/connection-pool {:dialect {:xt/module 'crux.jdbc.psql/->dialect
                                             :drop-table? true}
                                   :db-spec {:dbname "postgres",
                                             :user "postgres",
                                             :password "postgres"}}
-      :crux/tx-log {:crux/module 'crux.jdbc/->tx-log
-                    :connection-pool :crux.jdbc/connection-pool}
-      :crux/document-store {:crux/module 'crux.jdbc/->document-store
-                            :connection-pool :crux.jdbc/connection-pool}
-      :crux/index-store {:kv-store {:crux/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+      :xt/tx-log {:xt/module 'crux.jdbc/->tx-log
+                  :connection-pool :crux.jdbc/connection-pool}
+      :xt/document-store {:xt/module 'crux.jdbc/->document-store
+                          :connection-pool :crux.jdbc/connection-pool}
+      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "standalone-lmdb"
    (fn [data-dir]
-     {:crux/tx-log {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :crux/document-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :crux/index-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
+     {:xt/tx-log {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xt/document-store {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xt/index-store {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :crux.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "kafka-lmdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-        :crux/tx-log {:crux/module `k/->tx-log
-                      :kafka-config ::k/kafka-config
-                      :tx-topic-opts {:topic-name (str "kafka-lmdb-tx-" uuid)}}
-        :crux/document-store {:crux/module `k/->document-store
-                              :kafka-config ::k/kafka-config
-                              :doc-topic-opts {:topic-name (str "kafka-lmdb-doc-" uuid)}
-                              :local-document-store {:kv-store {:crux/module `lmdb/->kv-store
-                                                                :db-dir (io/file data-dir "doc-store")}}}
-        :crux/index-store {:kv-store {:crux/module `lmdb/->kv-store, :db-dir (io/file data-dir "index-store")}}
+        :xt/tx-log {:xt/module `k/->tx-log
+                    :kafka-config ::k/kafka-config
+                    :tx-topic-opts {:topic-name (str "kafka-lmdb-tx-" uuid)}}
+        :xt/document-store {:xt/module `k/->document-store
+                            :kafka-config ::k/kafka-config
+                            :doc-topic-opts {:topic-name (str "kafka-lmdb-doc-" uuid)}
+                            :local-document-store {:kv-store {:xt/module `lmdb/->kv-store
+                                                              :db-dir (io/file data-dir "doc-store")}}}
+        :xt/index-store {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :crux.metrics.cloudwatch/reporter cw-reporter-opts}))})
 
 (defn with-embedded-kafka* [f]
