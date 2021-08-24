@@ -1735,7 +1735,8 @@
                                   :crux.db/content-hash)]
     (-> (db/fetch-docs document-store #{content-hash})
         (get content-hash)
-        (c/keep-non-evicted-doc))))
+        (c/keep-non-evicted-doc)
+        (c/crux->xt))))
 
 (defn- with-history-bounds [{:keys [sort-order start-tx end-tx] :as opts}
                             {:keys [^long tx-id ^Date valid-time]}
@@ -1872,11 +1873,12 @@
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))
                                  :let [docs (when with-docs?
-                                              (db/fetch-docs document-store
-                                                             (->> history-batch
-                                                                  (into #{}
-                                                                        (comp (keep #(.content-hash ^EntityTx %))
-                                                                              (remove #{(c/new-id c/nil-id-buffer)}))))))]]
+                                              (->> (db/fetch-docs document-store
+                                                                  (->> history-batch
+                                                                       (into #{}
+                                                                             (comp (keep #(.content-hash ^EntityTx %))
+                                                                                   (remove #{(c/new-id c/nil-id-buffer)})))))
+                                                   (cio/map-vals c/crux->xt)))]]
                              (->> history-batch
                                   (map (fn [^EntityTx etx]
                                          (cond-> {:crux.tx/tx-time (.tt etx)

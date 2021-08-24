@@ -5,8 +5,10 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
-  (:import crux.api.ICursor
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [clojure.set :as set])
+  (:import clojure.lang.MapEntry
+           crux.api.ICursor
            [java.io DataInputStream DataOutputStream File IOException Reader]
            java.lang.AutoCloseable
            [java.lang.management BufferPoolMXBean ManagementFactory]
@@ -329,3 +331,8 @@
         result)
       (catch UnsatisfiedLinkError e
         (log/debug "Could not call glibc mallopt")))))
+
+(defn map-vals [f m]
+  (->> m
+       (into {} (map (fn [v]
+                       (MapEntry/create (key v) (f (val v))))))))

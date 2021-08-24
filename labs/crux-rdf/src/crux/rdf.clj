@@ -143,7 +143,7 @@
               (catch IllegalArgumentException e
                 (log/warn "Could not turn RDF statement into Clojure:" statement)
                 m)))
-          (transient {:crux.db/id (rdf->clj (.getSubject statement))}))
+          (transient {:xt/id (rdf->clj (.getSubject statement))}))
          (persistent!))))
 
 (defn statements->maps [statements]
@@ -285,5 +285,5 @@
 
 (defn ->maps-by-id [rdf-maps]
   (->> (for [m rdf-maps]
-         {(:crux.db/id m) m})
+         {(:xt/id m) m})
        (into {})))

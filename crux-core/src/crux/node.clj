@@ -14,7 +14,8 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
+            [crux.tx.event :as txe]
+            [clojure.set :as set])
   (:import [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
@@ -237,7 +238,10 @@
           conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
       (cio/with-read-lock lock
         (ensure-node-open this)
-        (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+        (db/submit-docs document-store (->> conformed-tx-ops
+                                            (into {} (comp (mapcat :docs)))
+                                            (cio/map-vals c/xt->crux)
+                                            (#(doto % (prn :docs)))))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))

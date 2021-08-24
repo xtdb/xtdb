@@ -1,7 +1,9 @@
 (ns ^:no-doc crux.tx.conform
   (:require [crux.codec :as c]
             [crux.db :as db]
-            [crux.error :as err])
+            [crux.error :as err]
+            [crux.io :as cio]
+            [clojure.set :as set])
   (:import [java.util Date UUID]))
 
 (defn- check-eid [eid]
@@ -16,7 +18,7 @@
       (throw (ex-info "invalid doc" {:doc doc})))
 
     (-> doc
-        (update :crux.db/id check-eid))))
+        (update :xt/id check-eid))))
 
 (defn- check-valid-time [valid-time {::keys [->valid-time], :or {->valid-time identity}}]
   (let [valid-time (->valid-time valid-time)]
@@ -36,9 +38,9 @@
 
 (defmethod conform-tx-op-type :crux.tx/put [[_ doc start-valid-time end-valid-time :as _op] decoders]
   (let [doc (check-doc doc decoders)
-        doc-id (c/new-id doc)]
+        doc-id (c/hash-doc doc)]
     {:op :crux.tx/put
-     :eid (:crux.db/id doc)
+     :eid (:xt/id doc)
      :doc-id doc-id
      :docs {doc-id doc}
      :start-valid-time (some-> start-valid-time (check-valid-time decoders))
@@ -53,15 +55,15 @@
 (defmethod conform-tx-op-type :crux.tx/cas [[_ old-doc new-doc at-valid-time :as op] decoders]
   (let [old-doc (some-> old-doc (check-doc decoders))
         new-doc (some-> new-doc (check-doc decoders))
-        old-doc-id (some-> old-doc c/new-id)
-        new-doc-id (some-> new-doc c/new-id)]
-    (when-not (or (nil? (:crux.db/id old-doc))
-                  (nil? (:crux.db/id new-doc))
-                  (= (:crux.db/id old-doc) (:crux.db/id new-doc)))
+        old-doc-id (some-> old-doc c/hash-doc)
+        new-doc-id (some-> new-doc c/hash-doc)]
+    (when-not (or (nil? (:xt/id old-doc))
+                  (nil? (:xt/id new-doc))
+                  (= (:xt/id old-doc) (:xt/id new-doc)))
       (throw (ex-info "CaS document IDs don't match" {:old-doc old-doc, :new-doc new-doc, :op op})))
 
     {:op :crux.tx/cas
-     :eid (or (:crux.db/id old-doc) (:crux.db/id new-doc))
+     :eid (or (:xt/id old-doc) (:xt/id new-doc))
      :old-doc-id old-doc-id
      :new-doc-id new-doc-id
      :docs (into {} (filter val) {old-doc-id old-doc, new-doc-id new-doc})
@@ -69,7 +71,7 @@
 
 (defmethod conform-tx-op-type :crux.tx/match [[_ eid doc at-valid-time :as op] decoders]
   (let [doc (some-> doc (check-doc decoders))
-        doc-id (c/new-id doc)]
+        doc-id (c/hash-doc doc)]
     {:op :crux.tx/match
      :eid (check-eid eid)
      :at-valid-time (some-> at-valid-time (check-valid-time decoders))
@@ -82,9 +84,9 @@
    :eid (check-eid eid)})
 
 (defmethod conform-tx-op-type :crux.tx/fn [[_ fn-eid & args :as _op] _decoders]
-  (let [arg-doc {:crux.db/id (UUID/randomUUID)
+  (let [arg-doc {:xt/id (UUID/randomUUID)
                  :crux.db.fn/args args}
-        arg-doc-id (c/new-id arg-doc)]
+        arg-doc-id (c/hash-doc arg-doc)]
     (into {:op :crux.tx/fn
            :fn-eid (check-eid fn-eid)
            :arg-doc-id arg-doc-id
@@ -206,7 +208,8 @@
        (conformed-tx-events->doc-hashes)))
 
 (defn tx-events->tx-ops [document-store tx-events]
-  (let [docs (db/fetch-docs document-store (tx-events->doc-hashes tx-events))]
+  (let [docs (->> (db/fetch-docs document-store (tx-events->doc-hashes tx-events))
+                  (cio/map-vals c/crux->xt))]
     (for [[op id & args] tx-events]
       (into [op]
             (concat (when (contains? #{:crux.tx/delete :crux.tx/evict :crux.tx/fn} op)
@@ -216,7 +219,7 @@
                       (for [arg args]
                         (if-let [{:keys [:crux.db.fn/tx-events] :as tx-log-entry} (get docs arg)]
                           (-> tx-log-entry
-                              (dissoc :crux.db/id :crux.db.fn/tx-events)
+                              (dissoc :xt/id :crux.db.fn/tx-events)
                               (assoc :crux.api/tx-ops (tx-events->tx-ops document-store tx-events)))
                           arg))
 

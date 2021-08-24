@@ -457,7 +457,7 @@
                                           (map (juxt identity #(encode-stats-key-to nil (c/->value-buffer %)))))))]
     (->> docs
          (reduce (fn [acc doc]
-                   (let [e (:crux.db/id doc)]
+                   (let [e (:xt/id doc)]
                      (->> (for [[k v] doc
                                 v (c/vectorize-value v)]
                             (MapEntry/create k v))
@@ -942,7 +942,7 @@
           (mapcat seq)
 
           (for [[content-hash doc] docs
-                :let [id (:crux.db/id doc)
+                :let [id (:xt/id doc)
                       eid-value-buffer (c/->value-buffer id)
                       content-hash (c/->id-buffer content-hash)]]
             (into [(MapEntry/create (encode-hash-cache-key-to nil (c/->id-buffer id) eid-value-buffer)
@@ -967,10 +967,10 @@
   (index-docs [_ docs]
     (with-open [persistent-kv-snapshot (kv/new-snapshot persistent-kv-store)
                 transient-kv-snapshot (kv/new-snapshot transient-kv-store)]
-      (let [crux-db-id (c/->id-buffer :crux.db/id)
+      (let [crux-db-id (c/->id-buffer :xt/id)
             docs (->> docs
                       (into {} (remove (fn [[content-hash doc]]
-                                         (let [eid-value (c/->value-buffer (:crux.db/id doc))
+                                         (let [eid-value (c/->value-buffer (:xt/id doc))
                                                k (encode-ecav-key-to (.get seek-buffer-tl)
                                                                      eid-value
                                                                      (c/->id-buffer content-hash)
@@ -1019,7 +1019,7 @@
                                 (into {})
                                 (into {} (map (fn [[ch eid]]
                                                 (MapEntry/create ch
-                                                                 {:crux.db/id (c/new-id eid)
+                                                                 {:xt/id (c/new-id eid)
                                                                   :crux.db/evicted? true})))))
                 content-ks (->> (for [[_ eid-buf ecav-key ^Quad quad] ecav-ks
                                       :let [attr-buf (c/->id-buffer (.attr quad))

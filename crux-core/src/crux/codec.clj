@@ -6,7 +6,8 @@
             [crux.query-state :as cqs]
             [crux.io :as cio]
             [crux.memory :as mem]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
+            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
+            [clojure.set :as set])
   (:import [clojure.lang APersistentMap APersistentSet BigInt IHashEq Keyword]
            crux.codec.MathCodec
            java.io.Writer
@@ -25,7 +26,7 @@
 ;; Indexes
 
 ;; NOTE: Must be updated when existing indexes change structure.
-(def index-version 18)
+(def index-version 19)
 (def ^:const index-version-size Long/BYTES)
 
 (def ^:const index-id-size Byte/BYTES)
@@ -390,6 +391,15 @@
 
 (defn value-buffer-type-id ^org.agrona.DirectBuffer [^DirectBuffer buffer]
   (mem/limit-buffer buffer value-type-id-size))
+
+(defn crux->xt [doc]
+  (set/rename-keys doc {:crux.db/id :xt/id}))
+
+(defn xt->crux [doc]
+  (set/rename-keys doc {:xt/id :crux.db/id}))
+
+(defn hash-doc [doc]
+  (-> doc (xt->crux) (new-id)))
 
 (defn- decode-long ^long [^DirectBuffer buffer]
   (bit-xor (.getLong buffer value-type-id-size  ByteOrder/BIG_ENDIAN) Long/MIN_VALUE))
@@ -818,7 +828,7 @@
 
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
-    {:crux.db/id (.eid entity-tx)
+    {:xt/id (.eid entity-tx)
      :crux.db/content-hash (.content-hash entity-tx)
      :crux.db/valid-time (.vt entity-tx)
      :crux.tx/tx-time (.tt entity-tx)

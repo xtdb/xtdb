@@ -13,6 +13,7 @@
            java.util.function.Supplier))
 
 (s/def :crux.db/id c/valid-id?)
+(s/def :xt/id c/valid-id?)
 (s/def :crux.db/evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 

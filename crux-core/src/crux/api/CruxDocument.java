@@ -12,7 +12,7 @@ import java.util.Objects;
 import java.util.function.Consumer;
 
 public final class CruxDocument {
-    private static final Keyword DB_ID = Keyword.intern("crux.db/id");
+    private static final Keyword DB_ID = Keyword.intern("xt/id");
     private static final Keyword FN_ID = Keyword.intern("crux.db/fn");
 
     private final Object id;
@@ -40,7 +40,7 @@ public final class CruxDocument {
     public static CruxDocument factory(IPersistentMap input) {
         if (input == null) return null;
         Object id = input.valAt(DB_ID);
-        if (id == null) throw new RuntimeException(":crux.db/id missing from data map");
+        if (id == null) throw new RuntimeException(":xt/id missing from data map");
         IPersistentMap data = input.without(DB_ID);
         return new CruxDocument(id, data);
     }
@@ -168,7 +168,7 @@ public final class CruxDocument {
     }
 
     private static void assertNotReserved(Keyword key) {
-        if (DB_ID.equals(key)) throw new IllegalArgumentException(":crux.db/id is a reserved key");
+        if (DB_ID.equals(key)) throw new IllegalArgumentException(":xt/id is a reserved key");
         if (FN_ID.equals(key)) throw new IllegalArgumentException(":crux.db/fn is a reserved key");
     }
 

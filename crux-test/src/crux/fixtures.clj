@@ -2,6 +2,7 @@
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
             [crux.api :as crux]
+            [crux.codec :as c]
             [crux.io :as cio])
   (:import crux.api.ICruxAPI
            java.nio.file.attribute.FileAttribute

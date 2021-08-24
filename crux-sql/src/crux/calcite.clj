@@ -458,7 +458,7 @@
 
 (s/def :crux.sql.table/name string?)
 (s/def :crux.sql.table/columns (s/map-of symbol? java-sql-types->calcite-sql-type))
-(s/def ::table (s/keys :req [:crux.db/id :crux.sql.table/name :crux.sql.table/columns]))
+(s/def ::table (s/keys :req [:xt/id :crux.sql.table/name :crux.sql.table/columns]))
 
 (defn- lookup-schema [node]
   (let [db (crux/db node)]
