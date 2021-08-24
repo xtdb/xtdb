@@ -5,15 +5,15 @@ This Crux module allows you to use Azure's Blob Storage as Crux's 'document stor
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-azure-blobs {:mvn/version "1.18.1"}
+com.xtdb/xtdb-azure-blobs {:mvn/version "1.18.1"}
 ----
 
 .pom.xml
 [source,xml]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-azure-blobs</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-azure-blobs</artifactId>
     <version>1.18.1</version>
 </dependency>
 ----

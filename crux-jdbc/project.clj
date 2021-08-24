@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-jdbc "<inherited>"
-  :description "Crux JDBC"
+(defproject com.xtdb/xtdb-jdbc "<inherited>"
+  :description "XTDB JDBC"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -13,7 +13,7 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [pro.juxt.clojars-mirrors.com.github.seancorfield/next.jdbc "1.2.674"]
                  [org.clojure/java.data "1.0.86"]
                  [com.zaxxer/HikariCP "3.4.5"]

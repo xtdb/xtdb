@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-rocksdb "<inherited>"
-  :description "Crux RocksDB"
+(defproject com.xtdb/xtdb-rocksdb "<inherited>"
+  :description "XTDB RocksDB"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -12,7 +12,7 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
-                 [pro.juxt.crux/crux-metrics :scope "provided"]
+                 [com.xtdb/xtdb-core]
+                 [com.xtdb/xtdb-metrics :scope "provided"]
                  [org.rocksdb/rocksdbjni "6.12.7"]
                  [com.github.jnr/jnr-ffi "2.1.12"]])

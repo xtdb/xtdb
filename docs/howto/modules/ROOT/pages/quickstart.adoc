@@ -45,7 +45,7 @@ All System Requirements
 * Clojure: Clojure 1.10.3 or higher
 * macOS: 10.14.3 (Mojave) or higher
 ** MacOS 10.14.3 is a RocksDB `libc` dependency for macOS users. (See https://github.com/facebook/rocksdb/issues/5064[rocksdb#5064].)
-** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/pro.juxt.crux/crux/issues/894[crux#894].)
+** JDK: You _may_ require AdoptOpenJDK on certain macOS versions. (See https://github.com/com.xtdb/crux/issues/894[crux#894].)
 ** Native Arm64 RocksDB Java is currently unspported on Apple M1 processors, causing an `UnsatisfiedLinkError`. M1 users can still run an x86 JVM on Rosetta, however. (See https://github.com/facebook/rocksdb/issues/7720[rocksdb#7720].)
 * Linux: No known version constraints
 * Windows: No known version constraints
@@ -61,28 +61,28 @@ deps.edn::
 +
 [source,clojure,subs=attributes+]
 ----
-pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 ----
 project.clj::
 +
 [source,clojure,subs=attributes+]
 ----
-[pro.juxt.crux/crux-core "{crux_version}"]
-[pro.juxt.crux/crux-rocksdb "{crux_version}"]
+[com.xtdb/xtdb-core "{crux_version}"]
+[com.xtdb/xtdb-rocksdb "{crux_version}"]
 ----
 pom.xml::
 +
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-core</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-core</artifactId>
     <version>{crux_version}</version>
 </dependency>
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-rocksdb</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-rocksdb</artifactId>
     <version>{crux_version}</version>
 </dependency>
 ----

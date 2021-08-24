@@ -1,4 +1,4 @@
-(defproject pro.juxt.crux/crux-core "<inherited>"
+(defproject com.xtdb/xtdb-core "<inherited>"
   :description "An open source document database with bitemporal graph queries"
 
   :plugins [[lein-javadoc "0.3.0"]
@@ -28,8 +28,8 @@
   :profiles {:dev {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
                    :dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
              :cli-e2e-test {:jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
-                            :dependencies [[pro.juxt.crux/crux-http-server]]}
-             :test {:dependencies [[pro.juxt.crux/crux-test]]}}
+                            :dependencies [[com.xtdb/xtdb-http-server]]}
+             :test {:dependencies [[com.xtdb/xtdb-test]]}}
 
   :aot [crux.main]
 

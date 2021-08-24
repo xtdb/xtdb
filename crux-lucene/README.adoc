@@ -7,15 +7,15 @@ Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-lucene {:mvn/version "1.18.1"}
+com.xtdb/xtdb-lucene {:mvn/version "1.18.1"}
 ----
 
 .pom.xml
 [source,xml]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-lucene</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-lucene</artifactId>
     <version>1.18.1</version>
 </dependency>
 ----

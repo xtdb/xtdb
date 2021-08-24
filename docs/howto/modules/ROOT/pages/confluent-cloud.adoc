@@ -67,7 +67,7 @@ Refer to the https://www.opencrux.com/reference/clojure-api.html[documentation] 
 You can launch a `clj` REPL and provide the latest `crux-kafka` on Maven using:
 [source,sh]
 ----
-clj -Sdeps '{:deps {pro.juxt.crux/crux-core {:mvn/version "RELEASE"} pro.juxt.crux/crux-kafka {:mvn/version "RELEASE"}}}'
+clj -Sdeps '{:deps {com.xtdb/xtdb-core {:mvn/version "RELEASE"} com.xtdb/xtdb-kafka {:mvn/version "RELEASE"}}}'
 ----
 
 Update the various configuration values in the snippet below according to the

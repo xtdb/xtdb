@@ -36,28 +36,28 @@ deps.edn::
 +
 [source,clojure,subs=attributes+]
 ----
-pro.juxt.crux/crux-core {:mvn/version "{crux_version}"}
-pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-core {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 ----
 project.clj::
 +
 [source,clojure,subs=attributes+]
 ----
-[pro.juxt.crux/crux-core "{crux_version}"]
-[pro.juxt.crux/crux-rocksdb "{crux_version}"]
+[com.xtdb/xtdb-core "{crux_version}"]
+[com.xtdb/xtdb-rocksdb "{crux_version}"]
 ----
 pom.xml::
 +
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-core</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-core</artifactId>
     <version>{crux_version}</version>
 </dependency>
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-rocksdb</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-rocksdb</artifactId>
     <version>{crux_version}</version>
 </dependency>
 ----

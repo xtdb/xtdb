@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-kafka-embedded "<inherited>"
-  :description "Crux Kafka Embedded"
+(defproject com.xtdb/xtdb-kafka-embedded "<inherited>"
+  :description "XTDB Kafka Embedded"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -12,7 +12,7 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [org.apache.kafka/kafka_2.12 "2.6.0"]
                  [org.apache.zookeeper/zookeeper "3.6.1"
                   ;; naughty of ZK to depend on a specific SLF4J impl, we don't want to.

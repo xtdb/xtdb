@@ -6,25 +6,25 @@ A https://opencrux.com[Crux] module that allows you to pipe verified https://www
 [source,kotlin]
 ----
 // Main library
-implementation("pro.juxt.crux-labs", "crux-corda", "1.18.1")
+implementation("com.xtdb-labs", "xtdb-corda", "1.18.1")
 
 // Library for inclusion in contract JARs
-implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.1")
+implementation("com.xtdb-labs", "xtdb-corda-state", "1.18.1")
 ----
 
 .pom.xml
 [source,xml]
 ----
 <dependency>
-    <groupId>pro.juxt.crux-labs</groupId>
-    <artifactId>crux-corda</artifactId>
+    <groupId>com.xtdb-labs</groupId>
+    <artifactId>xtdb-corda</artifactId>
     <version>1.18.1</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
-    <groupId>pro.juxt.crux-labs</groupId>
-    <artifactId>crux-corda-state</artifactId>
+    <groupId>com.xtdb-labs</groupId>
+    <artifactId>xtdb-corda-state</artifactId>
     <version>1.18.1</version>
 </dependency>
 ----
@@ -40,9 +40,9 @@ User documentation will live on the https://opencrux.com/reference[Crux document
 * REPL: `./gradlew clojureRepl`
 
 * Entry points:
-** `crux-corda/src/main/kotlin/crux/corda/CruxCorda.kt` - entry point for the Crux driver, adds extension functions to `AppServiceHub`
-** `crux-corda/src/main/clojure/crux/corda.clj` - the implementation of the Crux driver
-** `crux-corda-state/src/main/kotlin/crux/corda/state/CruxState.kt` - interface that Corda states should implement to be included in Crux
+** `xtdb-corda/src/main/kotlin/crux/corda/CruxCorda.kt` - entry point for the Crux driver, adds extension functions to `AppServiceHub`
+** `xtdb-corda/src/main/clojure/crux/corda.clj` - the implementation of the Crux driver
+** `xtdb-corda-state/src/main/kotlin/crux/corda/state/CruxState.kt` - interface that Corda states should implement to be included in Crux
 * Example user app:
 ** `examples/iou-contract/src/main/kotlin/com/example/contract/IOUState.kt` - example of a Corda state with a Crux mapping
 ** `examples/iou-workflow/src/main/kotlin/com/example/service/CruxService.kt` - example of a CordaService that starts a Crux node

@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 allprojects {
-    group = "pro.juxt.crux-labs"
+    group = "com.xtdb.xt-labs"
     version = System.getenv("CRUX_VERSION") ?: "dev-SNAPSHOT"
 
     repositories {

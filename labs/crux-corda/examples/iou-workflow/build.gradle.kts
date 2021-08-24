@@ -23,9 +23,9 @@ dependencies {
     cordaCompile(cordaGroup, "corda-rpc", cordaVersion)
     cordaRuntime(cordaGroup, "corda", cordaVersion)
     cordapp(project(":examples:iou-contract"))
-    cordapp(project(":crux-corda-state"))
-    cordapp(project(":crux-corda"))
-    implementation("pro.juxt.crux", "crux-core", version.toString())
+    cordapp(project(":xtdb-corda-state"))
+    cordapp(project(":xtdb-corda"))
+    implementation("com.xtdb", "xtdb-core", version.toString())
 
     testImplementation("junit", "junit", "4.12")
     testImplementation(cordaGroup, "corda-node-driver", cordaVersion)

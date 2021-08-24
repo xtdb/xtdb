@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-google-cloud-storage "<inherited>"
-  :description "Crux Google Cloud Storage Document Store"
+(defproject com.xtdb/xtdb-google-cloud-storage "<inherited>"
+  :description "XTDB Google Cloud Storage Document Store"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -13,7 +13,7 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [com.google.cloud/google-cloud-nio "0.122.4"]
 
                  ;; dep resolution
@@ -23,6 +23,6 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [com.google.guava/guava "30.1.1-jre"]]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test]]}}
+  :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
 
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"])

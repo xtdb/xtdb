@@ -40,7 +40,7 @@ To use `rocksdb` as the index store, document store and transaction-log store of
 [source,clojure, subs=attributes+]
 ----
 ...
-pro.juxt.crux/crux-rocksdb {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 ...
 ----
 * In `crux.edn`, override the old topology with the following:

@@ -21,7 +21,7 @@ Only a small subset of SPARQL is supported and no other RDF features are availab
 
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-http-server {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-http-server {:mvn/version "{crux_version}"}
 ----
 
 You can start up a Jetty HTTP/HTTP2 server on a node by including `crux.http-server/server` in your node configuration, optionally passing the server port:
@@ -84,7 +84,7 @@ In addition to calling the HTTP endpoints directly you can also use the remote A
 
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-http-client {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-http-client {:mvn/version "{crux_version}"}
 ----
 
 To connect to a pre-existing remote node, you need a URL to the node and the above on your classpath.

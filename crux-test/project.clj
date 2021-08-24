@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-test "<inherited>"
-  :description "Crux Tests Project"
+(defproject com.xtdb/xtdb-test "<inherited>"
+  :description "XTDB Tests Project"
 
   :plugins [[lein-junit "1.1.9"]
             [lein-parent "0.3.8"]]
@@ -13,11 +13,11 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
-                 [pro.juxt.crux/crux-jdbc]
-                 [pro.juxt.crux/crux-http-server]
-                 [pro.juxt.crux/crux-rocksdb]
-                 [pro.juxt.crux/crux-lmdb]
+                 [com.xtdb/xtdb-core]
+                 [com.xtdb/xtdb-jdbc]
+                 [com.xtdb/xtdb-http-server]
+                 [com.xtdb/xtdb-rocksdb]
+                 [com.xtdb/xtdb-lmdb]
 
                  ;; JDBC
                  [com.h2database/h2 "1.4.200"]
@@ -61,13 +61,13 @@
 
   :profiles {:dev {:dependencies []}
 
-             :test {:dependencies [[pro.juxt.crux/crux-kafka]
-                                   [pro.juxt.crux/crux-kafka-connect]
-                                   [pro.juxt.crux/crux-kafka-embedded]
-                                   [pro.juxt.crux/crux-http-client]
-                                   [pro.juxt.crux/crux-metrics]
-                                   [pro.juxt.crux-labs/crux-rdf]
-                                   [pro.juxt.crux/crux-sql]
+             :test {:dependencies [[com.xtdb/xtdb-kafka]
+                                   [com.xtdb/xtdb-kafka-connect]
+                                   [com.xtdb/xtdb-kafka-embedded]
+                                   [com.xtdb/xtdb-http-client]
+                                   [com.xtdb/xtdb-metrics]
+                                   [com.xtdb.xt-labs/xt-rdf]
+                                   [com.xtdb/xtdb-sql]
 
                                    ;; Uncomment to test Oracle, you'll need to locally install the JAR:
                                    ;; [com.oracle/ojdbc "19.3.0.0"]

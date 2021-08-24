@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-lucene "<inherited>"
-  :description "Crux Lucene integration"
+(defproject com.xtdb/xtdb-lucene "<inherited>"
+  :description "XTDB Lucene integration"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -12,15 +12,15 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
 
                  [org.apache.lucene/lucene-core "8.9.0"]
                  [org.apache.lucene/lucene-queryparser "8.9.0"]
                  [org.apache.lucene/lucene-analyzers-common "8.9.0" :scope "test"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]
-                                  [pro.juxt.crux/crux-test]
-                                  [pro.juxt.crux/crux-rocksdb]]}}
+                                  [com.xtdb/xtdb-test]
+                                  [com.xtdb/xtdb-rocksdb]]}}
 
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"
              "-Dclojure.spec.compile-asserts=true"

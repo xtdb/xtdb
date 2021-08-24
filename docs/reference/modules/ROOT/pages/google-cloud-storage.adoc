@@ -14,7 +14,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-google-cloud-storage {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-google-cloud-storage {:mvn/version "{crux_version}"}
 ----
 
 pom.xml::
@@ -22,8 +22,8 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-google-cloud-storage</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-google-cloud-storage</artifactId>
     <version>{crux_version}</version>
 </dependency>
 ----

@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-sql "<inherited>"
-  :description "SQL for Crux using Apache Calcite"
+(defproject com.xtdb/xtdb-sql "<inherited>"
+  :description "SQL for XTDB using Apache Calcite"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]]
@@ -12,7 +12,7 @@
 
   :scm {:dir ".."}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [org.apache.calcite/calcite-core "1.22.0" :exclusions [com.google.code.findbugs/jsr305]]
                  [org.apache.calcite.avatica/avatica-server "1.16.0"]
@@ -31,7 +31,7 @@
                  [com.google.guava/guava "30.1.1-jre"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[pro.juxt.crux/crux-test]]}}
+             :test {:dependencies [[com.xtdb/xtdb-test]]}}
 
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"

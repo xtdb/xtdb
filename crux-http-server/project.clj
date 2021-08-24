@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-http-server "<inherited>"
-  :description "Crux HTTP Server"
+(defproject com.xtdb/xtdb-http-server "<inherited>"
+  :description "XTDB HTTP Server"
 
   :plugins [[lein-parent "0.3.8"]
             [yogthos/lein-sass "0.1.10"]]
@@ -14,7 +14,7 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.csv "1.0.0"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [com.cognitect/transit-clj "1.0.324"]
 
                  [com.nimbusds/nimbus-jose-jwt "9.7"]
@@ -49,7 +49,7 @@
                              [expound "0.8.7"]]}
 
              :test {:dependencies [[pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
-                                   [pro.juxt.crux/crux-test]]}}
+                                   [com.xtdb/xtdb-test]]}}
 
   :aliases {"fig" ["trampoline" "run" "-m" "figwheel.main"]
             "build:cljs" ["do"

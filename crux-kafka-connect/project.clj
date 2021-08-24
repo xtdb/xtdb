@@ -1,7 +1,7 @@
 (def crux-version (or (System/getenv "CRUX_VERSION") "dev-SNAPSHOT"))
 
-(defproject pro.juxt.crux/crux-kafka-connect "<inherited>"
-  :description "Crux Kafka Connect"
+(defproject com.xtdb/xtdb-kafka-connect "<inherited>"
+  :description "XTDB Kafka Connect"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]
@@ -19,8 +19,8 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
-                 [pro.juxt.crux/crux-http-client]
+                 [com.xtdb/xtdb-core]
+                 [com.xtdb/xtdb-http-client]
                  [org.clojure/tools.logging "1.1.0"]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [pro.juxt.clojars-mirrors.com.taoensso/nippy "3.1.1"]
@@ -35,7 +35,7 @@
                        ["archive"]]}
 
   :confluent-hub-manifest {:component_types ["sink" "source"]
-                           :description "A Kafka Connect plugin for transferring data between Crux nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
+                           :description "A Kafka Connect plugin for transferring data between XTDB nodes and Kafka. Acts as a source for publishing transacations on a node to a Kafka topic, as well as a sink to receive transactions from a Kafka topic and submit them to a node."
                            :documentation_url "https://github.com/juxt/crux/tree/master/crux-kafka-connect"
                            :features {:confluent_control_center_integration true,
                                       :delivery_guarantee ["exactly_once"],

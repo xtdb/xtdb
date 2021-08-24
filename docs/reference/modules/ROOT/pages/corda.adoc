@@ -15,10 +15,10 @@ build.gradle.kts::
 [source,kotlin,subs=attributes+]
 ----
 // Main library
-implementation("pro.juxt.crux-labs", "crux-corda", "1.18.1")
+implementation("com.xtdb-labs", "xtdb-corda", "1.18.1")
 
 // Library for inclusion in contract JARs
-implementation("pro.juxt.crux-labs", "crux-corda-state", "1.18.1")
+implementation("com.xtdb-labs", "xtdb-corda-state", "1.18.1")
 ----
 
 pom.xml::
@@ -26,15 +26,15 @@ pom.xml::
 [source,xml,subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux-labs</groupId>
-    <artifactId>crux-corda</artifactId>
+    <groupId>com.xtdb-labs</groupId>
+    <artifactId>xtdb-corda</artifactId>
     <version>1.18.1</version>
 </dependency>
 
 <!-- Library for inclusion in contract JARs -->
 <dependency>
-    <groupId>pro.juxt.crux-labs</groupId>
-    <artifactId>crux-corda-state</artifactId>
+    <groupId>com.xtdb-labs</groupId>
+    <artifactId>xtdb-corda-state</artifactId>
     <version>1.18.1</version>
 </dependency>
 ----

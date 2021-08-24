@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-http-client "<inherited>"
-  :description "Crux HTTP Client"
+(defproject com.xtdb/xtdb-http-client "<inherited>"
+  :description "XTDB HTTP Client"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -12,13 +12,13 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                  [com.nimbusds/nimbus-jose-jwt "9.7"]]
 
   :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
-             :test {:dependencies [[pro.juxt.crux/crux-test]
-                                   [pro.juxt.crux/crux-http-server]
+             :test {:dependencies [[com.xtdb/xtdb-test]
+                                   [com.xtdb/xtdb-http-server]
 
                                    ;; dependency conflicts
                                    [commons-codec "1.15"]]}})

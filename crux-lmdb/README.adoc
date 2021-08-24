@@ -7,15 +7,15 @@ LMDB tends to provide faster queries than xref:rocksdb.adoc[RocksDB] in exchange
 .deps.edn
 [source,clojure]
 ----
-pro.juxt.crux/crux-lmdb {:mvn/version "1.18.1"}
+com.xtdb/xtdb-lmdb {:mvn/version "1.18.1"}
 ----
 
 .pom.xml
 [source,xml]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-lmdb</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-lmdb</artifactId>
     <version>1.18.1</version>
 </dependency>
 ----

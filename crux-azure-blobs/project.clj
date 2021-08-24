@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-azure-blobs "<inherited>"
-  :description "Crux Azure Blobs Document Store"
+(defproject com.xtdb/xtdb-azure-blobs "<inherited>"
+  :description "XTDB Azure Blobs Document Store"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -13,13 +13,13 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
 
                  ;; dependency resolution
                  [commons-codec "1.15"]]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test]]}}
+  :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
 
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
 

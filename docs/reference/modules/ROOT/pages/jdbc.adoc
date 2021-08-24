@@ -12,7 +12,7 @@ deps.edn::
 +
 [source,clojure, subs=attributes+]
 ----
-pro.juxt.crux/crux-jdbc {:mvn/version "{crux_version}"}
+com.xtdb/xtdb-jdbc {:mvn/version "{crux_version}"}
 ----
 
 pom.xml::
@@ -20,8 +20,8 @@ pom.xml::
 [source,xml, subs=attributes+]
 ----
 <dependency>
-    <groupId>pro.juxt.crux</groupId>
-    <artifactId>crux-jdbc</artifactId>
+    <groupId>com.xtdb</groupId>
+    <artifactId>xtdb-jdbc</artifactId>
     <version>{crux_version}</version>
 </dependency>
 ----

@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-s3 "<inherited>"
-  :description "Crux S3 integration"
+(defproject com.xtdb/xtdb-s3 "<inherited>"
+  :description "XTDB S3 integration"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]]
@@ -15,7 +15,7 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
 
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [software.amazon.awssdk/s3 "2.10.91"]
 
                  ;; dependency resolution
@@ -27,7 +27,7 @@
                  [com.fasterxml.jackson.core/jackson-databind "2.12.2"]
                  [org.reactivestreams/reactive-streams "1.0.3"]]
 
-  :profiles {:test {:dependencies [[pro.juxt.crux/crux-test]]}}
+  :profiles {:test {:dependencies [[com.xtdb/xtdb-test]]}}
 
   :jvm-opts ["-Dlogback.configurationFile=../resources/logback-test.xml"]
 

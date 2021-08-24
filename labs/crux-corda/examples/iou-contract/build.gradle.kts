@@ -15,5 +15,5 @@ cordapp {
 
 dependencies {
     cordaCompile(cordaGroup, "corda-core", cordaVersion)
-    implementation(project(":crux-corda-state"))
+    implementation(project(":xtdb-corda-state"))
 }

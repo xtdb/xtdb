@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-metrics "<inherited>"
-  :description "Provides Metrics for Crux nodes"
+(defproject com.xtdb/xtdb-metrics "<inherited>"
+  :description "Provides Metrics for XTDB nodes"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -12,7 +12,7 @@
   :scm {:dir ".."}
 
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [io.dropwizard.metrics/metrics-core "4.1.2"]]
 
   :profiles {:provided {:dependencies

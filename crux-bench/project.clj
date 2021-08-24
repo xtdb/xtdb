@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-bench "<inherited>"
-  :description "Crux Benchmarking tools"
+(defproject com.xtdb/xtdb-bench "<inherited>"
+  :description "XTDB Benchmarking tools"
 
   :plugins [[lein-parent "0.3.8"]]
 
@@ -14,16 +14,16 @@
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/data.json "2.3.1"]
                  [org.clojure/tools.cli "1.0.206"]
-                 [pro.juxt.crux/crux-core]
-                 [pro.juxt.crux/crux-jdbc]
-                 [pro.juxt.crux/crux-kafka]
-                 [pro.juxt.crux/crux-kafka-embedded]
-                 [pro.juxt.crux/crux-rocksdb]
-                 [pro.juxt.crux/crux-lmdb]
-                 [pro.juxt.crux/crux-lucene]
-                 [pro.juxt.crux/crux-metrics]
-                 [pro.juxt.crux-labs/crux-rdf]
-                 [pro.juxt.crux/crux-test]
+                 [com.xtdb/xtdb-core]
+                 [com.xtdb/xtdb-jdbc]
+                 [com.xtdb/xtdb-kafka]
+                 [com.xtdb/xtdb-kafka-embedded]
+                 [com.xtdb/xtdb-rocksdb]
+                 [com.xtdb/xtdb-lmdb]
+                 [com.xtdb/xtdb-lucene]
+                 [com.xtdb/xtdb-metrics]
+                 [com.xtdb.xt-labs/xt-rdf]
+                 [com.xtdb/xtdb-test]
                  [ch.qos.logback/logback-classic "1.2.3"]
 
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]

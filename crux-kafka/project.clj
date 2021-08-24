@@ -1,5 +1,5 @@
-(defproject pro.juxt.crux/crux-kafka "<inherited>"
-  :description "Crux Kafka"
+(defproject com.xtdb/xtdb-kafka "<inherited>"
+  :description "XTDB Kafka"
 
   :plugins [[lein-javadoc "0.3.0"]
             [lein-parent "0.3.8"]]
@@ -14,7 +14,7 @@
 
   :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.clojure/tools.logging "1.1.0"]
-                 [pro.juxt.crux/crux-core]
+                 [com.xtdb/xtdb-core]
                  [org.apache.kafka/kafka-clients "2.6.0" :exclusions [org.lz4/lz4-java]]
                  [pro.juxt.clojars-mirrors.cheshire/cheshire "5.10.0"]
                  [com.cognitect/transit-clj "1.0.324" :exclusions [org.msgpack/msgpack]]]
