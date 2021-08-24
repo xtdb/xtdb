@@ -236,23 +236,23 @@ To ensure nothing crazy will ever happen, our storage metaphor of "documents" mu
 
 [source,clojure]
 --
-{:user/name   "Joe"
- :user/url    "..."
+{:user/name "Joe"
+ :user/url "..."
  :user/stream [9090]}
 
-{:user/name   "Jane"
- :user/url    "..."
+{:user/name "Jane"
+ :user/url "..."
  :user/stream [...]}
 
-{:user/name   "Lu"
- :user/url    "..."
+{:user/name "Lu"
+ :user/url "..."
  :user/stream [...]}
 
-{:crux.db/id  9090
- :post/user   "Jane"
- :post/title  "today"
- :post/body   "go fly a kite"
- :post/likes  ["Lu" "Joe"]}
+{:xt/id 9090
+ :post/user "Jane"
+ :post/title "today"
+ :post/body "go fly a kite"
+ :post/likes ["Lu" "Joe"]}
 --
 
 These are not abstruse or mystical ideas, but they do demand a reappraisal of the database. We can't just tack immutability onto MongoDB or temporality onto Postgres. footnote:sql2011[Yes, SQL:2011 is certainly trying.] We must rebuild the foundation. We must record a _graph_ of _immutable facts_ on a _timeline_ tolerant of _growth_ and query them by _time-aware logic_. That's a mouthful, so let's just call it a _Record_. This is the new metaphor.

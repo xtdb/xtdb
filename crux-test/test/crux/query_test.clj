@@ -17,8 +17,8 @@
                                        :where [[e :name "Ivan"]]}))))
 
 (t/deftest test-basic-query
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov"}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov"}]))
 
   (t/testing "Can query value by single field"
     (t/is (= #{["Ivan"]} (api/q (api/db *api*) '{:find [name]
@@ -51,7 +51,7 @@
              (api/q (api/db *api*) '{:find [name] :where [[e :name name]]}))))
 
 
-  (fix/transact! *api* (fix/people [{:crux.db/id :smith :name "Smith" :last-name "Smith"}]))
+  (fix/transact! *api* (fix/people [{:xt/id :smith :name "Smith" :last-name "Smith"}]))
   (t/testing "Can query across fields for same value"
     (t/is (= #{[:smith]}
              (api/q (api/db *api*) '{:find [p1] :where [[p1 :name name]
@@ -64,8 +64,8 @@
                                                         [p1 :name "Smith"]]})))))
 
 (t/deftest test-returning-maps
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov"}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov"}]))
 
   (let [db (api/db *api*)]
     (t/is (= #{{:user/name "Ivan", :user/last-name "Ivanov"}
@@ -107,10 +107,10 @@
                                                       {:name "Petr" :last-name "Petrov"}]))]
 
     (t/testing "Can query entity by single field"
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+      (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*) '{:find [e]
                                                                :where [[e :name name]]
                                                                :args [{:name "Ivan"}]})))
-      (t/is (= #{[(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+      (t/is (= #{[(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
                                                                :where [[e :name name]]
                                                                :args [{:name "Petr"}]}))))
 
@@ -118,36 +118,36 @@
       (t/is (= #{["Ivan"]
                  ["Petr"]} (api/q (api/db *api*) {:find '[name]
                                                   :where '[[e :name name]]
-                                                  :args [{:e (:crux.db/id ivan)}
-                                                         {:e (:crux.db/id petr)}]})))
+                                                  :args [{:e (:xt/id ivan)}
+                                                         {:e (:xt/id petr)}]})))
 
       (t/is (= #{["Ivan" "Ivanov"]
                  ["Petr" "Petrov"]} (api/q (api/db *api*) {:find '[name last-name]
                                                            :where '[[e :name name]
                                                                     [e :last-name last-name]]
-                                                           :args [{:e (:crux.db/id ivan)}
-                                                                  {:e (:crux.db/id petr)}]}))))
+                                                           :args [{:e (:xt/id ivan)}
+                                                                  {:e (:xt/id petr)}]}))))
 
     (t/testing "Can match on both entity and value position"
       (t/is (= #{["Ivan"]} (api/q (api/db *api*) {:find '[name]
                                                   :where '[[e :name name]]
-                                                  :args [{:e (:crux.db/id ivan)
+                                                  :args [{:e (:xt/id ivan)
                                                           :name "Ivan"}]})))
 
       (t/is (= #{} (api/q (api/db *api*) {:find '[name]
                                           :where '[[e :name name]]
-                                          :args [{:e (:crux.db/id ivan)
+                                          :args [{:e (:xt/id ivan)
                                                   :name "Petr"}]}))))
 
     (t/testing "Can query entity by single field with several arguments"
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+      (t/is (= #{[(:xt/id ivan)]
+                 [(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
                                                                :where [[e :name name]]
                                                                :args [{:name "Ivan"}
                                                                       {:name "Petr"}]}))))
 
     (t/testing "Can query entity by single field with literals"
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [e]
+      (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*) '{:find [e]
                                                                :where [[e :name name]
                                                                        [e :last-name "Ivanov"]]
                                                                :args [{:name "Ivan"}
@@ -156,8 +156,8 @@
       (t/is (= #{["Ivan"]} (api/q (api/db *api*) {:find '[name]
                                                   :where '[[e :name name]
                                                            [e :last-name "Ivanov"]]
-                                                  :args [{:e (:crux.db/id ivan)}
-                                                         {:e (:crux.db/id petr)}]}))))
+                                                  :args [{:e (:xt/id ivan)}
+                                                         {:e (:xt/id petr)}]}))))
 
     (t/testing "Can query entity by non existent argument"
       (t/is (= #{} (api/q (api/db *api*) '{:find [e]
@@ -165,14 +165,14 @@
                                            :args [{:name "Bob"}]}))))
 
     (t/testing "Can query entity with empty arguments"
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+      (t/is (= #{[(:xt/id ivan)]
+                 [(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
                                                                :where [[e :name name]]
                                                                :args []}))))
 
     (t/testing "Can query entity with tuple arguments"
-      (t/is (= #{[(:crux.db/id ivan)]
-                 [(:crux.db/id petr)]} (api/q (api/db *api*) '{:find [e]
+      (t/is (= #{[(:xt/id ivan)]
+                 [(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
                                                                :where [[e :name name]
                                                                        [e :last-name last-name]]
                                                                :args [{:name "Ivan" :last-name "Ivanov"}
@@ -232,40 +232,40 @@
   (let [[ivan petr] (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
                                                       {:name "Petr" :last-name "Petrov"}]))]
 
-    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+    (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
                                             '{:find [e]
                                               :in [$ name]
                                               :where [[e :name name]]}
                                             "Ivan")))
 
     (t/testing "the db var is optional"
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+      (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
                                               '{:find [e]
                                                 :in [name]
                                                 :where [[e :name name]]}
                                               "Ivan"))))
 
-    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+    (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
                                             '{:find [e]
                                               :in [$ name last-name]
                                               :where [[e :name name]
                                                       [e :last-name last-name]]}
                                             "Ivan" "Ivanov")))
 
-    (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*)
+    (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
                                             '{:find [e]
                                               :in [$ [name]]
                                               :where [[e :name name]]}
                                             ["Ivan"])))
 
-    (t/is (= #{[(:crux.db/id ivan)] [(:crux.db/id petr)]}
+    (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
              (api/q (api/db *api*)
                     '{:find [e]
                       :in [$ [[name]]]
                       :where [[e :name name]]}
                     [["Ivan"] ["Petr"]])))
 
-    (t/is (= #{[(:crux.db/id ivan)] [(:crux.db/id petr)]}
+    (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
              (api/q (api/db *api*)
                     '{:find [e]
                       :in [$ [name ...]]
@@ -319,15 +319,15 @@
                                                                    [e :sex :female]]})))))
 
 (t/deftest test-basic-query-at-t
-  (let [[malcolm] (fix/transact! *api* (fix/people [{:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}])
+  (let [[malcolm] (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}])
                                  #inst "1986-10-22")]
-    (fix/transact! *api* (fix/people [{:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}]) #inst "1986-10-24")
+    (fix/transact! *api* (fix/people [{:xt/id :malcolm :name "Malcolma" :last-name "Sparks"}]) #inst "1986-10-24")
     (let [q '{:find [e]
               :where [[e :name "Malcolma"]
                       [e :last-name "Sparks"]]}]
       (t/is (= #{} (api/q (api/db *api* #inst "1986-10-23")
                           q)))
-      (t/is (= #{[(:crux.db/id malcolm)]} (api/q (api/db *api*) q))))))
+      (t/is (= #{[(:xt/id malcolm)]} (api/q (api/db *api*) q))))))
 
 (t/deftest test-query-across-entities-using-join
   ;; Five people, two of which share the same name:
@@ -360,8 +360,8 @@
                                                       [p2 :name name]]}))))))
 
 (t/deftest test-join-over-two-attributes
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :petr :name "Petr" :follows #{"Ivanov"}}]))
 
   (t/is (= #{[:petr]} (api/q (api/db *api*) '{:find [e2]
                                               :where [[e :last-name last-name]
@@ -452,9 +452,9 @@
                                           [e :name "Ivan"]
                                           (not [e :last-name "Ivannotov"])])))
 
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov"}]))
 
   (t/testing "literal v"
     (t/is (= 1 (count (api/q (api/db *api*) '{:find [e]
@@ -598,7 +598,7 @@
                                                  (and [e :sex :male]
                                                       [e :name "Ivan"]))]})))
 
-    (t/is (= #{[(:crux.db/id ivan)]}
+    (t/is (= #{[(:xt/id ivan)]}
              (api/q (api/db *api*) '{:find [e]
                                      :where [(or [e :name "Ivan"])]})))
 
@@ -630,7 +630,7 @@
                                                               {:name "Ivanova" :last-name "Ivanov" :sex :female}]))]
 
     (t/testing "?p2 introduced only inside of an Or"
-      (t/is (= #{[(:crux.db/id ivan)]} (api/q (api/db *api*) '{:find [?p2]
+      (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*) '{:find [?p2]
                                                                :where [(or (and [?p2 :name "Petr"]
                                                                                 [?p2 :sex :female])
                                                                            (and [?p2 :last-name "Ivanov"]
@@ -682,9 +682,9 @@
                                                                   [e :name "Bob"]))]})))))
 
 (t/deftest test-predicate-expression
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
-                                    {:crux.db/id :bob :name "Bob" :last-name "Ivanov" :age 40}
-                                    {:crux.db/id :dominic :name "Dominic" :last-name "Monroe" :age 50}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
+                                    {:xt/id :bob :name "Bob" :last-name "Ivanov" :age 40}
+                                    {:xt/id :dominic :name "Dominic" :last-name "Monroe" :age 50}]))
 
   (t/testing "range expressions"
     (t/is (= #{["Ivan"] ["Bob"]}
@@ -812,9 +812,9 @@
                                                  [(> half-age 20)]]})))))))
 
 (t/deftest test-attributes-with-multiple-values
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}
-                                    {:crux.db/id :bob :name "Bob" :last-name "Ivanov" :age 40 :friends #{:ivan :dominic}}
-                                    {:crux.db/id :dominic :name "Dominic" :last-name "Monroe" :age 50 :friends #{:bob}}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 30 :friends #{:bob :dominic}}
+                                    {:xt/id :bob :name "Bob" :last-name "Ivanov" :age 40 :friends #{:ivan :dominic}}
+                                    {:xt/id :dominic :name "Dominic" :last-name "Monroe" :age 50 :friends #{:bob}}]))
 
   (t/testing "can find multiple values"
     (t/is (= #{[:bob] [:dominic]}
@@ -876,8 +876,8 @@
                                              (not [(= f :bob)])]})))))
 
 (t/deftest test-can-use-idents-as-entities
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}]))
 
   (t/testing "Can query by single field"
     (t/is (= #{[:petr]} (api/q (api/db *api*) '{:find [p]
@@ -934,8 +934,8 @@
                                                    [(identity true) found?]]}))))))
 
 (t/deftest test-join-and-seek-bugs
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}]))
 
   (t/testing "index seek bugs"
     (t/is (= #{} (api/q (api/db *api*) '{:find [i]
@@ -970,9 +970,9 @@
                                                  [p :mentor i]]})))))
 
 (t/deftest test-queries-with-variables-only
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :mentor :petr}
-                                    {:crux.db/id :petr :name "Petr" :mentor :oleg}
-                                    {:crux.db/id :oleg :name "Oleg" :mentor :ivan}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :mentor :petr}
+                                    {:xt/id :petr :name "Petr" :mentor :oleg}
+                                    {:xt/id :oleg :name "Oleg" :mentor :ivan}]))
 
   (t/is (= #{[:oleg "Oleg" :petr "Petr"]
              [:ivan "Ivan" :oleg "Oleg"]
@@ -982,8 +982,8 @@
                                                                           [e2 :name n2]]}))))
 
 (t/deftest test-index-unification
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov" :mentor :ivan}]))
 
   (t/is (= #{[:petr :petr]} (api/q (api/db *api*) '{:find [p1 p2]
                                                     :where [[p1 :name "Petr"]
@@ -1052,7 +1052,7 @@
                                                                 [(!= n #{})]]})))))
 
 (t/deftest test-get-attr
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}]))
   (t/testing "existing attribute"
     (t/is (= #{[:ivan [21]]}
              (api/q (api/db *api*) '{:find [e age]
@@ -1125,9 +1125,9 @@
                                              [(get-attr e :email nil) [email ...]]]})))))
 
 (t/deftest test-byte-array-values
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :photo (byte-array [0 1 2])}
-                                    {:crux.db/id :petr :name "Petr" :photo (byte-array [3 4 5])}
-                                    {:crux.db/id :oleg :name "Oleg" :photo (byte-array [0 1 2])}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :photo (byte-array [0 1 2])}
+                                    {:xt/id :petr :name "Petr" :photo (byte-array [3 4 5])}
+                                    {:xt/id :oleg :name "Oleg" :photo (byte-array [0 1 2])}]))
 
   (t/is (Arrays/equals (byte-array [0 1 2])
                        ^bytes (ffirst
@@ -1151,8 +1151,8 @@
                               [e :photo photo]]})))))
 
 (t/deftest test-multiple-values-literals
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}
-                                    {:crux.db/id :petr :name "Petr" :age 30 :friends #{:ivan}}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :age 21 :friends #{:petr :oleg}}
+                                    {:xt/id :petr :name "Petr" :age 30 :friends #{:ivan}}]))
   (t/testing "set"
     (t/is (empty? (api/q (api/db *api*) '{:find [e]
                                           :where [[e :name #{}]]})))
@@ -1442,8 +1442,8 @@
            (s/conform :crux.query/where '[[i :age age]
                                           [(< age 20)]])))
 
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov" :age 18}]))
 
   (t/testing "Min search case"
     (t/is (= #{[:ivan]} (api/q (api/db *api*) '{:find [i]
@@ -1488,9 +1488,9 @@
                                                    [(> 18 age)]]}))))))
 
 (t/deftest test-mutiple-values
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan"}
-                                    {:crux.db/id :oleg :name "Oleg"}
-                                    {:crux.db/id :petr :name "Petr" :follows #{:ivan :oleg}}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan"}
+                                    {:xt/id :oleg :name "Oleg"}
+                                    {:xt/id :petr :name "Petr" :follows #{:ivan :oleg}}]))
 
   (t/testing "One way"
     (t/is (= #{[:ivan] [:oleg]} (api/q (api/db *api*) '{:find [x]
@@ -1503,7 +1503,7 @@
                                                         [i :follows x]]})))))
 
 (t/deftest test-sanitise-join
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}]))
   (t/testing "Can query by single field"
     (t/is (= #{[:ivan]} (api/q (api/db *api*) '{:find [e2]
                                                 :where [[e :last-name "Ivanov"]
@@ -1525,8 +1525,8 @@
                                           [(over-twenty-one? age)
                                            (not [(< age 21)])]])))
 
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
-                                    {:crux.db/id :petr :name "Petr" :last-name "Petrov" :age 18}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 21}
+                                    {:xt/id :petr :name "Petr" :last-name "Petrov" :age 18}]))
 
   (t/testing "without rule"
     (t/is (= #{[:ivan]} (api/q (api/db *api*) '{:find [i]
@@ -1638,7 +1638,7 @@
 ;; https://github.com/juxt/crux/issues/70
 
 (t/deftest test-lookup-by-value-bug-70
-  (fix/transact! *api* (fix/people (cons {:crux.db/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
+  (fix/transact! *api* (fix/people (cons {:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
                                          (repeat 1000 {:age 20}))))
 
   (let [n 10
@@ -1662,14 +1662,14 @@
 (t/deftest test-range-join-order-bug-348
   (fix/transact! *api* (fix/people
                         (for [n (range 100)]
-                          {:crux.db/id (keyword (str "ivan-" n))
+                          {:xt/id (keyword (str "ivan-" n))
                            :name "Ivan"
                            :name1 "Ivan"
                            :number-1 n})))
 
   (fix/transact! *api* (fix/people
                         (for [n (range 10000)]
-                          {:crux.db/id (keyword (str "oleg-" n))
+                          {:xt/id (keyword (str "oleg-" n))
                            :name "Oleg"
                            :name1 "Oleg"
                            :number-2 n})))
@@ -1701,7 +1701,7 @@
 (t/deftest test-range-args-performance-906
   (fix/transact! *api* (fix/people
                         (for [n (range 10000)]
-                          {:crux.db/id (keyword (str "oleg-" n))
+                          {:xt/id (keyword (str "oleg-" n))
                            :name "Oleg"
                            :number n})))
 
@@ -1725,7 +1725,7 @@
               (pr-str args-ns " " literal-ns))))))
 
 (t/deftest test-or-range-vars-bug-949
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :age 30}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :age 30}]))
   (t/is (= #{[:ivan "Ivan"]}
            (api/q (api/db *api*)
                   '{:find [e name]
@@ -1750,8 +1750,8 @@
 ;; https://github.com/juxt/crux/issues/93
 
 (t/deftest test-self-join-bug-93
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :friend :ivan :boss :petr}
-                                    {:crux.db/id :petr :name "Petr"}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :friend :ivan :boss :petr}
+                                    {:xt/id :petr :name "Petr"}]))
 
   (t/is (= #{[:petr]} (api/q (api/db *api*)
                              '{:find [b]
@@ -1759,9 +1759,9 @@
                                        [e :boss b]]}))))
 
 (t/deftest test-or-bug-146
-  (fix/transact! *api* (fix/people [{:crux.db/id :ivan :name "Ivan" :extra "Petr" :age 20}
-                                    {:crux.db/id :oleg :name "Oleg" :extra #inst "1980" :age 30}
-                                    {:crux.db/id :petr :name "Petr" :age 40}]))
+  (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :extra "Petr" :age 20}
+                                    {:xt/id :oleg :name "Oleg" :extra #inst "1980" :age 30}
+                                    {:xt/id :petr :name "Petr" :age 40}]))
 
   ;; This wasn't the bug, but a useful test, lead to fixes in SPARQL
   ;; translator, and an example on how to use this.
@@ -1772,7 +1772,7 @@
              (api/q (api/db *api*) '{:find [n x a e]
                                      :where [[e :name n]
                                              [e :age a]
-                                             [e :crux.db/id e]
+                                             [e :xt/id e]
                                              (or-join [e x]
                                                       [e :extra x]
                                                       (and [(identity :none) x]
@@ -1788,7 +1788,7 @@
   (t/is (= #{} (api/q (api/db *api*)
                       '{:find [e]
                         :where
-                        [[e :crux.db/id _]]
+                        [[e :xt/id _]]
                         :args [{}]}))))
 
 ;; NOTE: Range constraints only apply when one of the arguments to the
@@ -1798,7 +1798,7 @@
 (t/deftest test-optimise-range-constraints-bug-505
   (let [tx (vec (for [i (range 5000)]
                   [:crux.tx/put
-                   {:crux.db/id (keyword (str "id-" i))
+                   {:xt/id (keyword (str "id-" i))
                     :offer i}]))
         submitted-tx (doto (api/submit-tx *api* tx)
                        (->> (api/await-tx *api*)))])
@@ -1808,7 +1808,7 @@
         range-slowdown-factor 100
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
-                        (t/is (= :id-0 (:crux.db/id (api/entity db :id-0)))))
+                        (t/is (= :id-0 (:xt/id (api/entity db :id-0)))))
                       (- (System/nanoTime) start-time))
         base-query '{:find [i]
                      :where [[_ :offer i]
@@ -1839,23 +1839,23 @@
 ;; NOTE: Micro-benchmark that shows relative bounds, acceptable
 ;; slowdown factors can be tweaked to force it to fail.
 (t/deftest test-non-entity-id-lookup-issue-287
-  (let [ivan {:crux.db/id :ivan :name "Ivan"}
+  (let [ivan {:xt/id :ivan :name "Ivan"}
         number-of-docs 500
         id-slowdown-factor 2
         entity-slowdown-factor 10
         tx (api/submit-tx *api* (vec (for [n (range number-of-docs)]
-                                       [:crux.tx/put (assoc ivan :crux.db/id (keyword (str "ivan-" n)) :id n)])))
+                                       [:crux.tx/put (assoc ivan :xt/id (keyword (str "ivan-" n)) :id n)])))
         _ (api/await-tx *api* tx)
         db (api/db *api*)
         entity-time (let [start-time (System/nanoTime)]
                       (t/testing "entity id lookup"
-                        (t/is (= :ivan-2 (:crux.db/id (api/entity db :ivan-2)))))
+                        (t/is (= :ivan-2 (:xt/id (api/entity db :ivan-2)))))
                       (- (System/nanoTime) start-time))
         id-time (let [start-time (System/nanoTime)]
                   (t/testing "query based on primary key"
                     (t/is (= #{[:ivan-1]} (api/q db
                                                  '{:find [e]
-                                                   :where [[e :crux.db/id :ivan-1]]}))))
+                                                   :where [[e :xt/id :ivan-1]]}))))
                   (- (System/nanoTime) start-time))
         secondary-time (let [start-time (System/nanoTime)]
                          (t/testing "query based on secondary attribute"
@@ -1870,7 +1870,7 @@
   (t/testing "can create new user"
     (let [{:crux.tx/keys [tx-time tx-id] :as submitted-tx}
           (api/submit-tx *api* [[:crux.tx/match :ivan nil]
-                                [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 1st"}]])]
+                                [:crux.tx/put {:xt/id :ivan, :name "Ivan 1st"}]])]
       (api/await-tx *api* submitted-tx)
       (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
@@ -1880,13 +1880,13 @@
 
       (t/is (= tx-id (:crux.tx/tx-id (api/entity-tx (api/db *api* tx-time tx-time) :ivan))))
 
-      (t/is (= {:crux.db/id :ivan
+      (t/is (= {:xt/id :ivan
                 :name "Ivan 1st"} (api/entity (api/db *api* tx-time tx-time) :ivan)))))
 
   (t/testing "cannot create existing user"
     (let [{:crux.tx/keys [tx-time tx-id] :as submitted-tx}
           (api/submit-tx *api* [[:crux.tx/match :ivan nil]
-                                [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 2nd"}]])]
+                                [:crux.tx/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
 
       (api/await-tx *api* submitted-tx)
       (t/is (false? (api/tx-committed? *api* submitted-tx)))
@@ -1899,8 +1899,8 @@
 
   (t/testing "can update existing user"
     (let [{:crux.tx/keys [tx-time] :as submitted-update-tx}
-          (api/submit-tx *api* [[:crux.tx/match :ivan {:crux.db/id :ivan, :name "Ivan 1st"}]
-                                [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 2nd"}]])]
+          (api/submit-tx *api* [[:crux.tx/match :ivan {:xt/id :ivan, :name "Ivan 1st"}]
+                                [:crux.tx/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
       (api/await-tx *api* submitted-update-tx)
       (t/is (true? (api/tx-committed? *api* submitted-update-tx)))
       (t/is (= #{["Ivan 2nd"]} (api/q (api/db *api* tx-time tx-time)
@@ -1909,10 +1909,10 @@
 
       (t/testing "match sees interim state through the transaction"
         (let [{:crux.tx/keys [tx-time] :as submitted-tx}
-              (api/submit-tx *api* [[:crux.tx/match :ivan {:crux.db/id :ivan, :name "Ivan 2nd"}]
-                                    [:crux.tx/put {:crux.db/id :ivan, :name "Ivan 3rd"}]
-                                    [:crux.tx/match :ivan {:crux.db/id :ivan, :name "Ivan 3rd"}]
-                                    [:crux.tx/put {:crux.db/id :ivan :name "Ivan 4th"}]])]
+              (api/submit-tx *api* [[:crux.tx/match :ivan {:xt/id :ivan, :name "Ivan 2nd"}]
+                                    [:crux.tx/put {:xt/id :ivan, :name "Ivan 3rd"}]
+                                    [:crux.tx/match :ivan {:xt/id :ivan, :name "Ivan 3rd"}]
+                                    [:crux.tx/put {:xt/id :ivan :name "Ivan 4th"}]])]
           (api/await-tx *api* submitted-tx)
 
           (t/is (api/tx-committed? *api* submitted-tx))
@@ -1925,7 +1925,7 @@
       (t/testing "normal put works after match"
         (let [{:crux.tx/keys [tx-time] :as submitted-tx}
               (api/submit-tx *api* [[:crux.tx/put
-                                     {:crux.db/id :ivan
+                                     {:xt/id :ivan
                                       :name "Ivan 5th"}]])]
 
           (api/await-tx *api* submitted-tx)
@@ -1963,13 +1963,13 @@
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
   ;; Day 0, represented as #inst "2018-12-31"
   (api/submit-tx *api* [[:crux.tx/put
-                         {:crux.db/id :p2
+                         {:xt/id :p2
                           :entry-pt :SFO
                           :arrival-time #inst "2018-12-31"
                           :departure-time :na}
                          #inst "2018-12-31"]
                         [:crux.tx/put
-                         {:crux.db/id :p3
+                         {:xt/id :p3
                           :entry-pt :LA
                           :arrival-time #inst "2018-12-31"
                           :departure-time :na}
@@ -1978,14 +1978,14 @@
   (api/submit-tx *api* [])
   ;; Day 2
   (api/submit-tx *api* [[:crux.tx/put
-                         {:crux.db/id :p4
+                         {:xt/id :p4
                           :entry-pt :NY
                           :arrival-time #inst "2019-01-02"
                           :departure-time :na}
                          #inst "2019-01-02"]])
   ;; Day 3
   (let [third-day-submitted-tx (api/submit-tx *api* [[:crux.tx/put
-                                                      {:crux.db/id :p4
+                                                      {:xt/id :p4
                                                        :entry-pt :NY
                                                        :arrival-time #inst "2019-01-02"
                                                        :departure-time #inst "2019-01-03"}
@@ -1998,32 +1998,32 @@
 
     ;; Day 4, correction, adding missing trip on new arrival.
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p1
+                           {:xt/id :p1
                             :entry-pt :NY
                             :arrival-time #inst "2018-12-31"
                             :departure-time :na}
                            #inst "2018-12-31"]
                           [:crux.tx/put
-                           {:crux.db/id :p1
+                           {:xt/id :p1
                             :entry-pt :NY
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-03"}
                            #inst "2019-01-03"]
                           [:crux.tx/put
-                           {:crux.db/id :p1
+                           {:xt/id :p1
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-04"
                             :departure-time :na}
                            #inst "2019-01-04"]
                           [:crux.tx/put
-                           {:crux.db/id :p3
+                           {:xt/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-04"}
                            #inst "2019-01-04"]])
     ;; Day 5
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p2
+                           {:xt/id :p2
                             :entry-pt :SFO
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2018-12-31"}
@@ -2033,50 +2033,50 @@
     ;; Day 7-12, correction of deletion/departure on day 4. Shows
     ;; how valid time cannot be the same as arrival time.
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p3
+                           {:xt/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time :na}
                            #inst "2019-01-04"]
                           [:crux.tx/put
-                           {:crux.db/id :p3
+                           {:xt/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-07"}
                            #inst "2019-01-07"]])
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p3
+                           {:xt/id :p3
                             :entry-pt :SFO
                             :arrival-time #inst "2019-01-08"
                             :departure-time :na}
                            #inst "2019-01-08"]
                           [:crux.tx/put
-                           {:crux.db/id :p4
+                           {:xt/id :p4
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-08"
                             :departure-time :na}
                            #inst "2019-01-08"]])
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p3
+                           {:xt/id :p3
                             :entry-pt :SFO
                             :arrival-time #inst "2019-01-08"
                             :departure-time #inst "2019-01-08"}
                            #inst "2019-01-09"]])
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p5
+                           {:xt/id :p5
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-10"
                             :departure-time :na}
                            #inst "2019-01-10"]])
     (api/submit-tx *api* [[:crux.tx/put
-                           {:crux.db/id :p7
+                           {:xt/id :p7
                             :entry-pt :NY
                             :arrival-time #inst "2019-01-11"
                             :departure-time :na}
                            #inst "2019-01-11"]])
 
     (doto (api/submit-tx *api* [[:crux.tx/put
-                                 {:crux.db/id :p6
+                                 {:xt/id :p6
                                   :entry-pt :NY
                                   :arrival-time #inst "2019-01-12"
                                   :departure-time :na}
@@ -2096,12 +2096,12 @@
 ;; https://github.com/tonsky/datascript/tree/master/test/datascript/test
 
 (defn- populate-datascript-test-db []
-  (fix/transact! *api* [{:crux.db/id 1 :name "Ivan" :age 10}
-                        {:crux.db/id 2 :name "Ivan" :age 20}
-                        {:crux.db/id 3 :name "Oleg" :age 10}
-                        {:crux.db/id 4 :name "Oleg" :age 20}
-                        {:crux.db/id 5 :name "Ivan" :age 10}
-                        {:crux.db/id 6 :name "Ivan" :age 20}]))
+  (fix/transact! *api* [{:xt/id 1 :name "Ivan" :age 10}
+                        {:xt/id 2 :name "Ivan" :age 20}
+                        {:xt/id 3 :name "Oleg" :age 10}
+                        {:xt/id 4 :name "Oleg" :age 20}
+                        {:xt/id 5 :name "Ivan" :age 10}
+                        {:xt/id 6 :name "Ivan" :age 20}]))
 
 (t/deftest datascript-test-not
   (populate-datascript-test-db)
@@ -2284,11 +2284,11 @@
       #{1 2 3 4 5 6})))
 
 (t/deftest test-rules
-  (fix/transact! *api* [{:crux.db/id 5 :follow 3}
-                        {:crux.db/id 1 :follow 2}
-                        {:crux.db/id 2 :follow #{3 4}}
-                        {:crux.db/id 3 :follow 4}
-                        {:crux.db/id 4 :follow 6}])
+  (fix/transact! *api* [{:xt/id 5 :follow 3}
+                        {:xt/id 1 :follow 2}
+                        {:xt/id 2 :follow #{3 4}}
+                        {:xt/id 3 :follow 4}
+                        {:xt/id 4 :follow 6}])
   (let [db (api/db *api*)]
     (t/is (= (api/q db
                     '{:find  [?e1 ?e2]
@@ -2366,9 +2366,9 @@
                #{[4 6] [2 4]})))))
 
 (t/deftest test-rules-with-recursion-1
-  (fix/transact! *api* [{:crux.db/id 1 :follow 2}
-                        {:crux.db/id 2 :follow 3}
-                        {:crux.db/id 3 :follow 1}])
+  (fix/transact! *api* [{:xt/id 1 :follow 2}
+                        {:xt/id 2 :follow 3}
+                        {:xt/id 3 :follow 1}])
   (t/is (= (api/q (api/db *api*)
                   '{:find [?e1 ?e2]
                     :where [(follow ?e1 ?e2)]
@@ -2379,8 +2379,8 @@
            #{[1 2] [2 3] [3 1] [2 1] [3 2] [1 3]})))
 
 (t/deftest test-rules-with-recursion-2
-  (fix/transact! *api* [{:crux.db/id 1 :follow 2}
-                        {:crux.db/id 2 :follow 3}])
+  (fix/transact! *api* [{:xt/id 1 :follow 2}
+                        {:xt/id 2 :follow 3}])
   (t/is (= (api/q (api/db *api*)
                   '{:find [?e1 ?e2]
                     :where [(follow ?e1 ?e2)]
@@ -2391,7 +2391,7 @@
            #{[1 2] [2 3] [2 1] [3 2]})))
 
 (t/deftest test-calling-rule-twice-44
-  (fix/transact! *api* [{:crux.db/id 1 :attr "a"}])
+  (fix/transact! *api* [{:xt/id 1 :attr "a"}])
   (let [db (api/db *api*)]
     (t/is (api/q db
                  {:find '[?p]
@@ -2403,12 +2403,12 @@
                   :args [{:?fn (constantly true)}]}))))
 
 (t/deftest test-mutually-recursive-rules
-  (fix/transact! *api* [{:crux.db/id 0 :f1 1}
-                        {:crux.db/id 1 :f2 2}
-                        {:crux.db/id 2 :f1 3}
-                        {:crux.db/id 3 :f2 4}
-                        {:crux.db/id 4 :f1 5}
-                        {:crux.db/id 5 :f2 6}])
+  (fix/transact! *api* [{:xt/id 0 :f1 1}
+                        {:xt/id 1 :f2 2}
+                        {:xt/id 2 :f1 3}
+                        {:xt/id 3 :f2 4}
+                        {:xt/id 4 :f1 5}
+                        {:xt/id 5 :f2 6}])
   (let [db (api/db *api*)]
     (t/is (= (api/q db
                     '{:find [?e1 ?e2]
@@ -2431,8 +2431,8 @@
 
 ;; https://github.com/tonsky/datascript/issues/218
 (t/deftest datascript-test-rules-false-arguments
-  (fix/transact! *api* [{:crux.db/id 1 :attr true}
-                        {:crux.db/id 2 :attr false}])
+  (fix/transact! *api* [{:xt/id 1 :attr true}
+                        {:xt/id 2 :attr false}])
   (let [db (api/db *api*)
         rules '[[(is ?id ?val)
                  [?id :attr ?val]]]]
@@ -2452,9 +2452,9 @@
     x))
 
 (t/deftest data-script-test-query-fns
-  (fix/transact! *api* [{:crux.db/id 1 :name "Ivan" :age 15}
-                        {:crux.db/id 2 :name "Petr" :age 22 :height 240 :parent 1}
-                        {:crux.db/id 3 :name "Slava" :age 37 :parent 2}])
+  (fix/transact! *api* [{:xt/id 1 :name "Ivan" :age 15}
+                        {:xt/id 2 :name "Petr" :age 22 :height 240 :parent 1}
+                        {:xt/id 3 :name "Slava" :age 37 :parent 2}])
   (let [db (api/db *api*)]
     (t/testing "predicate without free variables"
       (t/is (= (api/q db
@@ -2649,10 +2649,10 @@
 
 
 (t/deftest datascript-test-predicates
-  (fix/transact! *api* [{:crux.db/id 1 :name "Ivan" :age 10}
-                        {:crux.db/id 2 :name "Ivan" :age 20}
-                        {:crux.db/id 3 :name "Oleg" :age 10}
-                        {:crux.db/id 4 :name "Oleg" :age 20}])
+  (fix/transact! *api* [{:xt/id 1 :name "Ivan" :age 10}
+                        {:xt/id 2 :name "Ivan" :age 20}
+                        {:xt/id 3 :name "Oleg" :age 10}
+                        {:xt/id 4 :name "Oleg" :age 20}])
   (let [db (api/db *api*)]
     (t/are [q res] (= (api/q db (quote q)) res)
       ;; plain predicate
@@ -2708,7 +2708,7 @@
 
 
 (t/deftest datascript-test-issue-180
-  (fix/transact! *api* [{:crux.db/id 1 :age 20}])
+  (fix/transact! *api* [{:xt/id 1 :age 20}])
   (let [db (api/db *api*)]
     (t/is (= #{}
              (api/q db
@@ -2860,10 +2860,10 @@
                     :where [[(identity true) b]]}))))
 
 (t/deftest test-can-use-any-value-as-entity-id
-  (fix/transact! *api* [{:crux.db/id "ivan@example.com" :name "Ivan"}
-                        {:crux.db/id 42 :name "Petr"}
-                        {:crux.db/id true :name "Oleg" :friends ["ivan@example.com" 42 3.14]}
-                        {:crux.db/id 3.14 :name "Pi" :boss "ivan@example.com"}])
+  (fix/transact! *api* [{:xt/id "ivan@example.com" :name "Ivan"}
+                        {:xt/id 42 :name "Petr"}
+                        {:xt/id true :name "Oleg" :friends ["ivan@example.com" 42 3.14]}
+                        {:xt/id 3.14 :name "Pi" :boss "ivan@example.com"}])
   (t/is (= #{["Ivan"]}
            (api/q (api/db *api*)
                   '{:find [name]
@@ -2902,7 +2902,7 @@
 
 (t/deftest test-racket-datalog-tutorial
   ;; parent(john,douglas).
-  (fix/transact! *api* [{:crux.db/id :john :parent :douglas}])
+  (fix/transact! *api* [{:xt/id :john :parent :douglas}])
   ;; parent(john,douglas)?
   (t/is (= #{[true]}
            (api/q (api/db *api*)
@@ -2919,8 +2919,8 @@
 
   ;; parent(bob,john).
   ;; parent(ebbon,bob).
-  (fix/transact! *api* [{:crux.db/id :bob :parent :john}
-                        {:crux.db/id :ebbon :parent :bob}])
+  (fix/transact! *api* [{:xt/id :bob :parent :john}
+                        {:xt/id :ebbon :parent :bob}])
 
   ;; parent(A,B)?
   (t/is (= #{[:john :douglas]
@@ -3012,10 +3012,10 @@
 
 (t/deftest test-racket-datalog-path
   ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
-  (fix/transact! *api* [{:crux.db/id :a :edge :b}
-                        {:crux.db/id :b :edge :c}
-                        {:crux.db/id :c :edge :d}
-                        {:crux.db/id :d :edge :a}])
+  (fix/transact! *api* [{:xt/id :a :edge :b}
+                        {:xt/id :b :edge :c}
+                        {:xt/id :c :edge :d}
+                        {:xt/id :d :edge :a}])
 
   ;; path(X, Y) :- edge(X, Y).
   ;; path(X, Y) :- edge(X, Z), path(Z, Y).
@@ -3047,10 +3047,10 @@
 
 (t/deftest test-racket-datalog-revpath
   ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
-  (fix/transact! *api* [{:crux.db/id :a :edge :b}
-                        {:crux.db/id :b :edge :c}
-                        {:crux.db/id :c :edge :d}
-                        {:crux.db/id :d :edge :a}])
+  (fix/transact! *api* [{:xt/id :a :edge :b}
+                        {:xt/id :b :edge :c}
+                        {:xt/id :c :edge :d}
+                        {:xt/id :d :edge :a}])
   ;; path(X, Y) :- edge(X, Y).
   ;; path(X, Y) :- path(X, Z), edge(Z, Y).
   ;; path(X, Y)?
@@ -3081,10 +3081,10 @@
 
 (t/deftest test-racket-datalog-bidipath
   ;; edge(a, b). edge(b, c). edge(c, d). edge(d, a).
-  (fix/transact! *api* [{:crux.db/id :a :edge :b}
-                        {:crux.db/id :b :edge :c}
-                        {:crux.db/id :c :edge :d}
-                        {:crux.db/id :d :edge :a}])
+  (fix/transact! *api* [{:xt/id :a :edge :b}
+                        {:xt/id :b :edge :c}
+                        {:xt/id :c :edge :d}
+                        {:xt/id :d :edge :a}])
 
   ;; path(X, Y) :- edge(X, Y).
   ;; path(X, Y) :- edge(X, Z), path(Z, Y).
@@ -3122,9 +3122,9 @@
   ;; sym(a).
   ;; sym(b).
   ;; sym(c).
-  (fix/transact! *api* [{:crux.db/id :a}
-                        {:crux.db/id :b}
-                        {:crux.db/id :c}])
+  (fix/transact! *api* [{:xt/id :a}
+                        {:xt/id :b}
+                        {:xt/id :c}])
 
   ;; perm(X,Y) :- sym(X), sym(Y), X != Y.
   ;; perm(X, Y)?
@@ -3138,8 +3138,8 @@
                   '{:find [x y]
                     :where [(perm x y)]
                     :rules [[(perm x y)
-                             [x :crux.db/id]
-                             [y :crux.db/id]
+                             [x :xt/id]
+                             [y :xt/id]
                              [(!= x y)]]]}))))
 
 (t/deftest test-failing-predicates-at-top-level-bug
@@ -3218,14 +3218,14 @@
 ;; https://pdfs.semanticscholar.org/9374/f0da312f3ba77fa840071d68935a28cba364.pdf
 
 (t/deftest test-datalog-paper-sgc
-  (fix/transact! *api* [{:crux.db/id :ann :parent #{:dorothy :hilary}}
-                        {:crux.db/id :bertrand :parent :dorothy}
-                        {:crux.db/id :charles :parent :evelyn}
-                        {:crux.db/id :dorothy :parent :george}
-                        {:crux.db/id :evelyn :parent :george}
-                        {:crux.db/id :fred}
-                        {:crux.db/id :george}
-                        {:crux.db/id :hilary}])
+  (fix/transact! *api* [{:xt/id :ann :parent #{:dorothy :hilary}}
+                        {:xt/id :bertrand :parent :dorothy}
+                        {:xt/id :charles :parent :evelyn}
+                        {:xt/id :dorothy :parent :george}
+                        {:xt/id :evelyn :parent :george}
+                        {:xt/id :fred}
+                        {:xt/id :george}
+                        {:xt/id :hilary}])
 
   ;; rl: sgc(X, X) :- person(X).
   ;; r2: sgc(X, Y) :- par(X, X1), sgc(X1, Y1), par(Y, Y1).
@@ -3249,7 +3249,7 @@
                   '{:find [x y]
                     :where [(sgc x y)]
                     :rules [[(sgc x y)
-                             [x :crux.db/id y]]
+                             [x :xt/id y]]
                             [(sgc x y)
                              [x :parent x1]
                              (sgc x1 y1)
@@ -3257,9 +3257,9 @@
 
 (t/deftest test-datalog-paper-stratified-datalog
   ;; d(a, b), d(b, c) d(e, e)
-  (fix/transact! *api* [{:crux.db/id :a :d :b}
-                        {:crux.db/id :b :d :c}
-                        {:crux.db/id :e :d :e}])
+  (fix/transact! *api* [{:xt/id :a :d :b}
+                        {:xt/id :b :d :c}
+                        {:xt/id :e :d :e}])
 
   ;; rl: p(X, Y) :- not q(X, Y), s(X, Y).
   ;; r2: q(K, Y) :- q(X, Z), q(Z, Y).
@@ -3312,7 +3312,7 @@
 (t/deftest test-query-against-empty-database-376
   (let [db (api/db *api*)
         _ (t/is (not (api/entity db :a)))
-        _ (fix/transact! *api* [{:crux.db/id :a
+        _ (fix/transact! *api* [{:xt/id :a
                                  :arbitrary-key ["an untyped value" 123]
                                  :nested-map {"and values" :can-be-arbitrarily-nested}}])]
     (t/is (not (api/entity db :a)))
@@ -3322,11 +3322,11 @@
       (t/is (empty? (iterator-seq res))))
 
     (let [db (api/db *api*)]
-      (with-open [res (api/open-q db '{:find [x] :where [[x :crux.db/id _]]})]
+      (with-open [res (api/open-q db '{:find [x] :where [[x :xt/id _]]})]
         (t/is (first (iterator-seq res)))))))
 
 (t/deftest test-can-use-cons-in-query-377
-  (fix/transact! *api* [{:crux.db/id :issue-377-test :name "TestName"}])
+  (fix/transact! *api* [{:xt/id :issue-377-test :name "TestName"}])
   (t/is (= #{[:issue-377-test]}
            (api/q (api/db *api*)
                   {:find ['e]
@@ -3334,60 +3334,60 @@
                            [(cons '= '(n "TestName"))]]}))))
 
 (t/deftest test-query-keyword-to-entity-tx-351
-  (fix/transact! *api* [{:crux.db/id :se.id/ASE,
+  (fix/transact! *api* [{:xt/id :se.id/ASE,
                          :se/currency :currency/usd}
-                        {:crux.db/id :ids/ticker-1000 ;;ids/ticker
+                        {:xt/id :ids/ticker-1000 ;;ids/ticker
                          :ticker/price 67
                          :ticker/market :se.id/ASE
                          :ticker/foo :bar}])
 
   (t/is (seq (api/q (api/db *api*) '{:find [p]
                                      :where
-                                     [[e :crux.db/id someid]
+                                     [[e :xt/id someid]
                                       [e :ticker/price p]
                                       [(= p 67)]
                                       [e :ticker/market m2]
                                       [m2 :se/currency :currency/usd]]}))))
 
 (t/deftest test-order-by-when-not-specified-in-return-418
-  (fix/transact! *api* [{:crux.db/id :one
+  (fix/transact! *api* [{:xt/id :one
                          :val 1}
-                        {:crux.db/id :two
+                        {:xt/id :two
                          :val 2}
-                        {:crux.db/id :three
+                        {:xt/id :three
                          :val 3}])
 
   (t/is (= [:three :two :one]
            (mapv first (api/q (api/db *api*) '{:find [e v]
-                                               :where [[x :crux.db/id e]
+                                               :where [[x :xt/id e]
                                                        [x :val v]]
                                                :order-by [[v :desc]]}))))
 
   (t/is (= [:one :two :three]
            (mapv first (api/q (api/db *api*) '{:find [e v]
-                                               :where [[x :crux.db/id e]
+                                               :where [[x :xt/id e]
                                                        [x :val v]]
                                                :order-by [[v :asc]]}))))
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Order by requires an element from :find\. unreturned element:"
                           (api/q (api/db *api*) '{:find [e]
-                                                  :where [[x :crux.db/id e]
+                                                  :where [[x :xt/id e]
                                                           [x :val v]]
                                                   :order-by [[v :asc]]})))
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Order by requires an element from :find\. unreturned element:"
                           (api/q (api/db *api*) '{:find [e]
-                                                  :where [[x :crux.db/id e]
+                                                  :where [[x :xt/id e]
                                                           [x :val v]]
                                                   :order-by [[v :desc]]}))))
 
 (t/deftest test-query-with-timeout-419
-  (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-                        {:crux.db/id :petr :name "Petr" :last-name "Petrov"}])
+  (fix/transact! *api* [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+                        {:xt/id :petr :name "Petr" :last-name "Petrov"}])
 
   (t/is (= #{[:ivan] [:petr]}
            (api/q (api/db *api*) '{:find [e]
-                                   :where [[e :crux.db/id _]]
+                                   :where [[e :xt/id _]]
                                    :timeout 100})))
 
   (with-redefs [idx/layered-idx->seq (let [f idx/layered-idx->seq]
@@ -3397,11 +3397,11 @@
                                           (apply f args))))]
     (t/is (thrown? TimeoutException
                    (api/q (api/db *api*) '{:find [e]
-                                           :where [[e :crux.db/id _]]
+                                           :where [[e :xt/id _]]
                                            :timeout 100})))))
 
 (t/deftest test-nil-query-attribute-453
-  (fix/transact! *api* [{:crux.db/id :id :this :that :these :those}])
+  (fix/transact! *api* [{:xt/id :id :this :that :these :those}])
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Query didn't match expected structure"
                           (api/q (api/db *api*) {:find ['e] :where [['_ nil 'e]]}))))
@@ -3409,7 +3409,7 @@
 ;; TODO: Unsure why this test has started failing, or how much it
 ;; matters?
 #_(t/deftest test-entity-snapshot-520
-    (let [ivan {:crux.db/id :ivan}
+    (let [ivan {:xt/id :ivan}
           _ (fix/transact! *api* [ivan])
           db (api/db *api*)]
       (with-open [shared-db (api/open-db *api*)]
@@ -3447,10 +3447,10 @@
                     :limit 1})))))
 
 (t/deftest test-query-result-cardinality-972
-  (fix/transact! *api* [{:crux.db/id :ii :name "Ivan" :last-name "Ivanov", :age 20}
-                        {:crux.db/id :pp :name "Petr" :last-name "Petrov", :age 20}
-                        {:crux.db/id :ip :name "Ivan" :last-name "Petrov", :age 25}
-                        {:crux.db/id :pi :name "Petr" :last-name "Ivanov", :age 30}])
+  (fix/transact! *api* [{:xt/id :ii :name "Ivan" :last-name "Ivanov", :age 20}
+                        {:xt/id :pp :name "Petr" :last-name "Petrov", :age 20}
+                        {:xt/id :ip :name "Ivan" :last-name "Petrov", :age 25}
+                        {:xt/id :pi :name "Petr" :last-name "Ivanov", :age 30}])
 
   (let [db (api/db *api*)]
     (t/testing "eager query without order-by returns set of results"
@@ -3467,9 +3467,9 @@
                  (sort (iterator-seq res))))))))
 
 (t/deftest test-unsorted-args-697
-  (fix/transact! *api* [{:crux.db/id :foo-some-bar-nil, :bar nil, :foo true}
-                        {:crux.db/id :foo-nil-bar-some, :bar true, :foo nil}
-                        {:crux.db/id :foo-some-bar-some, :foo true, :bar true}])
+  (fix/transact! *api* [{:xt/id :foo-some-bar-nil, :bar nil, :foo true}
+                        {:xt/id :foo-nil-bar-some, :bar true, :foo nil}
+                        {:xt/id :foo-some-bar-some, :foo true, :bar true}])
 
   (t/is (= #{[:foo-some-bar-nil] [:foo-nil-bar-some] [:foo-some-bar-some]}
            (api/q (api/db *api*)
@@ -3482,7 +3482,7 @@
                            {f nil, g true}]}))))
 
 (t/deftest test-binds-args-before-entities
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :foo/type "type", :foo/id 1}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :foo/type "type", :foo/id 1}]])
 
   (let [db (api/db *api*)]
     (t/is (= ['m 'e]
@@ -3495,9 +3495,9 @@
                   (filter #{'m 'e}))))))
 
 (t/deftest test-binds-against-false-arg-885
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :name "foo", :flag? false}]
-                        [:crux.tx/put {:crux.db/id :bar, :name "bar", :flag? true}]
-                        [:crux.tx/put {:crux.db/id :baz, :name "baz", :flag? nil}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :name "foo", :flag? false}]
+                        [:crux.tx/put {:xt/id :bar, :name "bar", :flag? true}]
+                        [:crux.tx/put {:xt/id :baz, :name "baz", :flag? nil}]])
 
   (t/is (= #{["foo" false]}
            (api/q (api/db *api*)
@@ -3515,7 +3515,7 @@
                     :args [{flag? nil}]}))))
 
 (t/deftest test-unused-args-still-binding-882
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :name "foo"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :name "foo"}]])
 
   (t/is (= #{["foo" false]}
            (api/q (api/db *api*)
@@ -3533,7 +3533,7 @@
                     :args [{foo nil}]}))))
 
 (t/deftest test-leaf-vars-and-ors
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :field1 1 :field2 2}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :field1 1 :field2 2}]])
   (t/is (= #{[:foo]}
            (api/q (api/db *api*)'{:find [?id], :where [[?id :field1 ?field1]
                                                        [?id :field2 ?field2]
@@ -3542,7 +3542,7 @@
 
 (t/deftest test-bound-rule-vars-946
   (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
-                         [:crux.tx/put {:crux.db/id id, :child child-id :name (str id "-" child-id)}]))
+                         [:crux.tx/put {:xt/id id, :child child-id :name (str id "-" child-id)}]))
 
   (let [parent-id 50
         expected (set (for [[id child-id] (partition 2 1 (range (inc parent-id) 101))]
@@ -3551,7 +3551,7 @@
     (let [free-vars-ns-start (System/nanoTime)
           result (api/q (api/db *api*)
                         {:find '[child-name]
-                         :where '[[parent :crux.db/id]
+                         :where '[[parent :xt/id]
                                   (child-of parent child)
                                   [child :name child-name]]
                          :rules '[[(child-of p c)
@@ -3565,7 +3565,7 @@
       (let [bound-vars-ns-start (System/nanoTime)
             result (api/q (api/db *api*)
                           {:find '[child-name]
-                           :where '[[parent :crux.db/id]
+                           :where '[[parent :xt/id]
                                     (child-of parent child)
                                     [child :name child-name]]
                            :rules '[[(child-of [p] c)
@@ -3583,12 +3583,12 @@
   (fix/transact! *api* (fix/people
                         (apply concat
                                (for [n (range 100)]
-                                 [{:crux.db/id (keyword (str "dummy-" n))
+                                 [{:xt/id (keyword (str "dummy-" n))
                                    :my-name (str n)}
-                                  {:crux.db/id (keyword (str "ivan-" n))
+                                  {:xt/id (keyword (str "ivan-" n))
                                    :my-name "Ivan"
                                    :my-number n}
-                                  {:crux.db/id (keyword (str "oleg-" n))
+                                  {:xt/id (keyword (str "oleg-" n))
                                    :my-name "Oleg"
                                    :my-number n}]))))
 
@@ -3609,9 +3609,9 @@
   (t/deftest multiple-joins-bug-443
     (doseq [x (range 5)]
       (api/submit-tx *api* (for [y (range 10)]
-                             [:crux.tx/put {:crux.db/id (keyword (str "id" (+ (* x 1000) y))), :x x, :y y}])))
+                             [:crux.tx/put {:xt/id (keyword (str "id" (+ (* x 1000) y))), :x x, :y y}])))
 
-    (let [last-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :match, :x 4, :y 8}]])]
+    (let [last-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id :match, :x 4, :y 8}]])]
       (api/await-tx *api* last-tx))
 
     (t/is (= #{[:id4008 :match 4 8] [:match :id4008 4 8]}
@@ -3627,7 +3627,7 @@
                :where '[[n :name "hello"]
                         [n :age 17]]}]
 
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :my-id, :name "hello", :age 17}]])
+    (fix/submit+await-tx [[:crux.tx/put {:xt/id :my-id, :name "hello", :age 17}]])
 
     (t/is (= #{[:my-id]} (api/q (api/db *api*) query)))
 
@@ -3636,7 +3636,7 @@
     (t/is (= #{} (api/q (api/db *api*) query)))))
 
 (t/deftest hashing-quoted-lists-1197
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo, :a-list '(1 2 3)}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :a-list '(1 2 3)}]])
 
   (t/is (= #{[:foo]}
            (api/q (api/db *api*)
@@ -3645,10 +3645,10 @@
 
 (t/deftest falsey-values-bind-with-rules
   ;; resolved in 20.05-1.8.4-alpha
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :a :att nil}]
-                        [:crux.tx/put {:crux.db/id :b :att :foo}]
-                        [:crux.tx/put {:crux.db/id :c :att false}]
-                        [:crux.tx/put {:crux.db/id :d}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :a :att nil}]
+                        [:crux.tx/put {:xt/id :b :att :foo}]
+                        [:crux.tx/put {:xt/id :c :att false}]
+                        [:crux.tx/put {:xt/id :d}]])
   (t/is (= #{[:a] [:b] [:c]}
            (api/q (api/db *api*)
                   '{:find [?e]
@@ -3690,15 +3690,15 @@
                                                             (apply f args)))]
                        (t/is (thrown? InterruptedException
                                       (api/q (api/db node)
-                                             '{:find [?e] :where [[?e :crux.db/id]]})))))]
+                                             '{:find [?e] :where [[?e :xt/id]]})))))]
            (Thread/sleep 100)
            fut)
          (finally
            (.close node))))))
 
 (t/deftest nil-in-entity-position-shouldnt-yield-results-1486
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id 1 :foo nil}]
-                        [:crux.tx/put {:crux.db/id 2 :foo nil}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id 1 :foo nil}]
+                        [:crux.tx/put {:xt/id 2 :foo nil}]])
 
   (t/is (= #{}
            (api/q (api/db *api*)
@@ -3711,8 +3711,8 @@
                     :where [[#{nil} :foo ?v]]}))))
 
 (t/deftest literal-nil-value-in-triple-clause-should-only-match-nil-1487
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id 1 :foo nil}]
-                        [:crux.tx/put {:crux.db/id 2 :foo 2}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id 1 :foo nil}]
+                        [:crux.tx/put {:xt/id 2 :foo 2}]])
   (t/is (= #{[1] [2]}
            (api/q (api/db *api*)
                   '{:find [?e]
@@ -3744,19 +3744,19 @@
                 :where [[?e :name ?name]
                         [?e :type ?type]]}]
     (fix/submit+await-tx (conj (for [idx (range 1000)]
-                                 [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                                 [:crux.tx/put {:xt/id (UUID/randomUUID)
                                                 :type :person
                                                 :name (str "person-" idx)}])
-                               [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                               [:crux.tx/put {:xt/id (UUID/randomUUID)
                                               :type "extra type"}]))
 
     (t/is (= '[?name ?e ?type]
              (-> (q/query-plan-for (api/db *api*) query)
                  :vars-in-join-order)))
 
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id (UUID/randomUUID)
+    (fix/submit+await-tx [[:crux.tx/put {:xt/id (UUID/randomUUID)
                                          :name "extra name"}]
-                          [:crux.tx/put {:crux.db/id (UUID/randomUUID)
+                          [:crux.tx/put {:xt/id (UUID/randomUUID)
                                          :name "another extra name"}]])
 
     (t/is (= '[?name ?e ?type]
@@ -3772,11 +3772,11 @@
 (t/deftest range-constraint-ordering-behaviours
   (fix/transact!
    *api*
-   [{:crux.db/id :a :i -7 :j 30 :t #inst "2021-05-17" :t2 (date->inverted-long #inst "2021-05-17")}
-    {:crux.db/id :b :i 14 :j 25 :t #inst "2021-05-19" :t2 (date->inverted-long #inst "2021-05-19")}
-    {:crux.db/id :c :i 14 :j 14 :t #inst "2021-05-19" :t2 (date->inverted-long #inst "2021-05-19")}
-    {:crux.db/id :d :i 25 :j 14 :t #inst "2021-05-21" :t2 (date->inverted-long #inst "2021-05-21")}
-    {:crux.db/id :e :i 30 :j -7 :t #inst "2021-05-22" :t2 (date->inverted-long #inst "2021-05-22")}])
+   [{:xt/id :a :i -7 :j 30 :t #inst "2021-05-17" :t2 (date->inverted-long #inst "2021-05-17")}
+    {:xt/id :b :i 14 :j 25 :t #inst "2021-05-19" :t2 (date->inverted-long #inst "2021-05-19")}
+    {:xt/id :c :i 14 :j 14 :t #inst "2021-05-19" :t2 (date->inverted-long #inst "2021-05-19")}
+    {:xt/id :d :i 25 :j 14 :t #inst "2021-05-21" :t2 (date->inverted-long #inst "2021-05-21")}
+    {:xt/id :e :i 30 :j -7 :t #inst "2021-05-22" :t2 (date->inverted-long #inst "2021-05-22")}])
 
   (let [db (api/db *api*)]
     (t/testing "eager query returns an unsorted set"
@@ -3861,8 +3861,8 @@
                  (map (comp inverted-long->date first) (iterator-seq res))))))))
 
 (t/deftest circular-deps-test-1523
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan", :foo :foo}]
-                        [:crux.tx/put {:crux.db/id :foo, :bar :bar}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan", :foo :foo}]
+                        [:crux.tx/put {:xt/id :foo, :bar :bar}]])
 
   ;; failed with 'circular dependency between ?foo and ?a'
   (with-open [db (api/open-db *api*)]
@@ -3874,22 +3874,22 @@
                                  [?foo :bar ?bar]]})))))
 
 (t/deftest test-rules-binding-1569
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :a-1, :next :a-2}]
-                        [:crux.tx/put {:crux.db/id :a-2, :next :a-3}]
-                        [:crux.tx/put {:crux.db/id :a-3, :next :a-4}]
-                        [:crux.tx/put {:crux.db/id :a-4, :next :a-1}]
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :a-1, :next :a-2}]
+                        [:crux.tx/put {:xt/id :a-2, :next :a-3}]
+                        [:crux.tx/put {:xt/id :a-3, :next :a-4}]
+                        [:crux.tx/put {:xt/id :a-4, :next :a-1}]
 
-                        [:crux.tx/put {:crux.db/id :b-1, :next :b-2}]
-                        [:crux.tx/put {:crux.db/id :b-2, :next :b-3}]
-                        [:crux.tx/put {:crux.db/id :b-3, :next :b-4}]
-                        [:crux.tx/put {:crux.db/id :b-4, :next :b-5}]
-                        [:crux.tx/put {:crux.db/id :b-5, :next :b-1}]])
+                        [:crux.tx/put {:xt/id :b-1, :next :b-2}]
+                        [:crux.tx/put {:xt/id :b-2, :next :b-3}]
+                        [:crux.tx/put {:xt/id :b-3, :next :b-4}]
+                        [:crux.tx/put {:xt/id :b-4, :next :b-5}]
+                        [:crux.tx/put {:xt/id :b-5, :next :b-1}]])
 
   #_ ; FIXME this returns all the B's too
   (t/is (= #{[:a-3] [:a-2] [:a-1] [:a-4]}
            (api/q (api/db *api*)
                   '{:find [node]
-                    :where [[end :crux.db/id :a-1]
+                    :where [[end :xt/id :a-1]
                             (pointsTo node end)]
                     :rules [[(pointsTo start end)
                              [start :next end]]

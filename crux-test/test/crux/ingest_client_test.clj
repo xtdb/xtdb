@@ -16,12 +16,12 @@
 
           submitted-tx
           (with-open [ingest-client (crux/new-ingest-client ingest-opts)]
-            (let [submitted-tx (crux/submit-tx ingest-client [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]])]
+            (let [submitted-tx (crux/submit-tx ingest-client [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]])]
               (with-open [tx-log-iterator (db/open-tx-log (:tx-log ingest-client) nil)]
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))
                   (t/is (= [(assoc submitted-tx
-                                   :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/new-id {:crux.db/id :ivan :name "Ivan"})]])]
+                                   :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (fix/hash-doc {:xt/id :ivan :name "Ivan"})]])]
                            result))
                   (t/is (realized? result))))
               submitted-tx))]

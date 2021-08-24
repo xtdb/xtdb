@@ -231,9 +231,9 @@
                                           :values (Math/round (db/value-cardinality index-snapshot attr))
                                           :eids (Math/round (db/eid-cardinality index-snapshot attr))})))))))]
     (with-fresh-index-store
-      (let [ivan {:crux.db/id :ivan :name "Ivan"}
-            ivan2 {:crux.db/id :ivan :name "Ivan2"}
-            petr {:crux.db/id :petr :name "Petr"}]
+      (let [ivan {:xt/id :ivan :name "Ivan"}
+            ivan2 {:xt/id :ivan :name "Ivan2"}
+            petr {:xt/id :petr :name "Petr"}]
         (let [index-store-tx (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)]
 
           (db/index-docs index-store-tx {(c/new-id ivan) ivan})
@@ -258,7 +258,7 @@
         (letfn [(mk-docs [n]
                   (for [idx (range n)
                         sub-idx (range idx)]
-                    (let [doc {:crux.db/id (.next id-iterator)
+                    (let [doc {:xt/id (.next id-iterator)
                                :sub-idx sub-idx}]
                       (MapEntry/create (c/new-id doc) doc))))]
           (doto (db/begin-index-tx *index-store* #::tx{:tx-time #inst "2021", :tx-id 0} nil)
@@ -272,13 +272,13 @@
             (db/index-docs (mk-docs 50))
             (db/commit-index-tx))))
 
-      (t/is (= {:crux.db/id {:doc-count 3675, :values 3554, :eids 3554}
+      (t/is (= {:xt/id {:doc-count 3675, :values 3554, :eids 3554}
                 :sub-idx {:doc-count 3675, :values 50, :eids 3554}}
                (->stats *index-store*))))))
 
 (t/deftest test-entity
   (with-fresh-index-store
-    (let [doc {:crux.db/id :foo
+    (let [doc {:xt/id :foo
                :normal-val "value"
                :set-val #{1 3 2 5}
                :vec-val [1 4 6 2 6 1]}
@@ -293,10 +293,10 @@
 #_
 (t/deftest test-entity-slowdown
   (with-fresh-index-store
-    (let [simple-doc {:crux.db/id :foo
+    (let [simple-doc {:xt/id :foo
                       :foo :bar}
           simple-doc-id (c/new-id simple-doc)
-          large-vec-doc {:crux.db/id :bar
+          large-vec-doc {:xt/id :bar
                          :foo (vec (range 1024))}
           large-vec-doc-id (c/new-id large-vec-doc)
           docs {simple-doc-id simple-doc, large-vec-doc-id large-vec-doc}

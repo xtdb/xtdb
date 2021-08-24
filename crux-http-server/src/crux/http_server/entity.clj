@@ -52,7 +52,7 @@
 (defn entity-links
   [db result]
   (letfn [(recur-on-result [result & key]
-            (if (and (c/valid-id? result) (crux/entity db result) (not= (first key) :crux.db/id))
+            (if (and (c/valid-id? result) (crux/entity db result) (not= (first key) :xt/id))
               (entity-ref/->EntityRef result)
               (cond
                 (map? result) (map (fn [[k v]] [k (recur-on-result v k)]) result)

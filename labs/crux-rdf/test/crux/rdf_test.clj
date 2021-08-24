@@ -25,7 +25,7 @@
                (-> artist
                    (get (keyword "http://example.org/homeAddress"))
                    iri->entity
-                   (dissoc :crux.db/id)))))))
+                   (dissoc :xt/id)))))))
 
 (t/deftest test-can-parse-dbpedia-entity
   (let [picasso (-> (->> (rdf/ntriples "crux/Pablo_Picasso.ntriples")

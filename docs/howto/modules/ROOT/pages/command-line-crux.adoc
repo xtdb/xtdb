@@ -67,7 +67,7 @@ curl -X POST \
      -H "Accept: application/json" \
      -d '{"tx-ops": [
            ["put", { ;; <1>
-                "crux.db/id": "president", ;; <2>
+                "xt/id": "president", ;; <2>
                 "name": "Joe", ;; <3>
                 "last-name": "Biden" ;; <4>
             }]
@@ -102,7 +102,7 @@ curl -X POST \
      -H "Accept: application/json" \
      -d '{"tx-ops": [
            ["put", {
-                "crux.db/id": "president", ;; <1>
+                "xt/id": "president", ;; <1>
                 "name": "Donald",
                 "last-name": "Trump"
             }, "2017-01-20"] ;; <2>
@@ -162,7 +162,7 @@ curl -X POST \
      -H "Accept: application/json" \
      -d '{"tx-ops": [
            ["put", {
-                "crux.db/id": "president",
+                "xt/id": "president",
                 "name": "Joe",
                 "last-name": "Biden"
             }, "2021-01-20"] ;; <1>

@@ -9,7 +9,7 @@
 (t/use-fixtures :each (lf/with-lucene-opts {:indexer 'crux.lucene.multi-field/->indexer}) fix/with-node)
 
 (t/deftest test-multi-field-lucene-queries
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
                                    :firstname "Fred"
                                    :surname "Smith"}]])
 
@@ -22,7 +22,7 @@
                              :where '[[(lucene-text-search "firstname:James OR surname:preston") [[?e]]]]}))))))
 
 (t/deftest test-bindings
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
                                    :firstname "Fred"
                                    :surname "Smith"}]])
 
@@ -37,25 +37,25 @@
                     "Smith" "Fred")))))
 
 (t/deftest test-namespaced-keywords
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :person/surname "Smith"}]])
+  (submit+await-tx [[:crux.tx/put {:xt/id :ivan :person/surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     ;; QueryParser/escape also works
     (t/is (seq (c/q db {:find '[?e]
                         :where '[[(lucene-text-search "person\\/surname: Smith") [[?e]]]
-                                 [?e :crux.db/id]]})))))
+                                 [?e :xt/id]]})))))
 
 (t/deftest test-evict
   (let [in-crux? (fn []
                    (with-open [db (c/open-db *api*)]
                      (boolean (seq (c/q db {:find '[?e]
                                             :where '[[(lucene-text-search "name: Smith") [[?e]]]
-                                                     [?e :crux.db/id]]})))))
+                                                     [?e :xt/id]]})))))
         in-lucene-store? (fn []
                            (with-open [search-results (l/search *api* "name: Smith")]
                              (boolean (seq (iterator-seq search-results)))))]
 
-    (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Smith"}]])
+    (submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Smith"}]])
 
     (assert (in-crux?))
     (assert (in-lucene-store?))
@@ -69,10 +69,10 @@
   (t/is (thrown-with-msg? ParseException #"Cannot parse"
                           (c/q (c/db *api*) {:find '[?e]
                                              :where '[[(lucene-text-search "+12!") [[?e]]]
-                                                      [?e :crux.db/id]]}))))
+                                                      [?e :xt/id]]}))))
 
 (t/deftest test-use-in-argument
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
                                    :firstname "Fred"
                                    :surname "Smith"}]])
 
@@ -101,7 +101,7 @@
                              (str (subs (str field) 1) ":" term-string)))))
 
 (t/deftest test-construct-or-fields-dynamically
-  (submit+await-tx [[:crux.tx/put {:crux.db/id :ivan
+  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
                                    :firstname "Fred"
                                    :surname "Smith"}]])
 

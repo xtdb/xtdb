@@ -22,13 +22,13 @@
 (s/def ::query
   (st/spec
    {:spec any? ; checked by crux.query
-    :swagger/example '{:find [e] :where [[e :crux.db/id _]] :limit 100}
+    :swagger/example '{:find [e] :where [[e :xt/id _]] :limit 100}
     :description "Datalog query"}))
 
 (s/def ::query-edn
   (st/spec
    {:spec ::query
-    :swagger/example (pr-str '{:find [e] :where [[e :crux.db/id _]] :limit 100})
+    :swagger/example (pr-str '{:find [e] :where [[e :xt/id _]] :limit 100})
     :description "EDN formatted Datalog query"
     :decode/string (fn [_ q] (util/try-decode-edn q))}))
 

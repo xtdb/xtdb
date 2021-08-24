@@ -37,14 +37,14 @@
   (let [sink-task (doto (CruxSinkTask.) (.start {"url" *api-url*}))]
     (t/testing "`put` on documents"
       (t/testing "put with key contained in document"
-        (.put sink-task [(new-sink-record {:value {:crux.db/id :foo}})])
+        (.put sink-task [(new-sink-record {:value {:xt/id :foo}})])
         (t/is (api/await-tx *api* {:crux.tx/tx-id 0}))
-        (t/is (= {:crux.db/id (c/new-id :foo)} (api/entity (api/db *api*) :foo))))
+        (t/is (= {:xt/id (c/new-id :foo)} (api/entity (api/db *api*) :foo))))
       (t/testing "put with key contained in sink record"
         (.put sink-task [(new-sink-record {:key :bar
                                            :value {:hello "world"}})])
         (t/is (api/await-tx *api* {:crux.tx/tx-id 1}))
-        (t/is (= {:crux.db/id (c/new-id :bar) :hello "world"} (api/entity (api/db *api*) :bar)))))
+        (t/is (= {:xt/id (c/new-id :bar) :hello "world"} (api/entity (api/db *api*) :bar)))))
     (t/testing "`delete` on documents - (key with an empty document)"
       (.put sink-task [(new-sink-record {:key :foo})])
       (t/is (api/await-tx *api* {:crux.tx/tx-id 2}))
@@ -56,7 +56,7 @@
       (.put sink-task [(new-sink-record {:value {:kafka/id :kafka-id}})])
       (t/is (api/await-tx *api* {:crux.tx/tx-id 3}))
       (t/is (= {:kafka/id :kafka-id
-                :crux.db/id (c/new-id :kafka-id)} (api/entity (api/db *api*) :kafka-id)))
+                :xt/id (c/new-id :kafka-id)} (api/entity (api/db *api*) :kafka-id)))
       (.stop sink-task))))
 
 (t/deftest test-source-task-tx-mode-edn
@@ -76,14 +76,14 @@
                                                  (offsets [this ps] (map #(.offset this %) ps))))))))]
     (t/testing "CruxSourceTask outputs single operation transactions"
       (t/testing ":crux.tx/put"
-        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :hello}]])]
+        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id :hello}]])]
           (t/is
-           (= [[:crux.tx/put {:crux.db/id :hello} tx-time]]
+           (= [[:crux.tx/put {:xt/id :hello} tx-time]]
               (get-tx-from-source-task source-task)))))
       (t/testing ":crux.tx/match"
-        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/match :hello {:crux.db/id :hello}]])]
+        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/match :hello {:xt/id :hello}]])]
           (t/is
-           (= [[:crux.tx/match (c/new-id :hello) {:crux.db/id :hello}]]
+           (= [[:crux.tx/match (c/new-id :hello) {:xt/id :hello}]]
               (get-tx-from-source-task source-task)))))
       (t/testing ":crux.tx/delete"
         (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/delete :hello]])]
@@ -97,27 +97,27 @@
               (get-tx-from-source-task source-task))))))
 
     (t/testing "CruxSourceTask outputs a set of mixed transactions"
-      (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :bar :age 20}]
-                                                                         [:crux.tx/put {:crux.db/id :foo}]
-                                                                         [:crux.tx/match :foo {:crux.db/id :foo}]])]
+      (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id :bar :age 20}]
+                                                                         [:crux.tx/put {:xt/id :foo}]
+                                                                         [:crux.tx/match :foo {:xt/id :foo}]])]
         (t/is
-         (= [[:crux.tx/put {:crux.db/id :bar :age 20} tx-time]
-             [:crux.tx/put {:crux.db/id :foo} tx-time]
-             [:crux.tx/match (c/new-id :foo) {:crux.db/id :foo}]]
+         (= [[:crux.tx/put {:xt/id :bar :age 20} tx-time]
+             [:crux.tx/put {:xt/id :foo} tx-time]
+             [:crux.tx/match (c/new-id :foo) {:xt/id :foo}]]
             (get-tx-from-source-task source-task)))))
 
     (t/testing "CruxSourceTask doesn't break on failed transactions"
       (t/testing "Failed transactions are skipped, outputted as nil"
-        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :bar2}]
-                                                                           [:crux.tx/match :bar2 {:crux.db/id :bar2 :key "not-found"}]
-                                                                           [:crux.tx/put {:crux.db/id :foo2}]])]
+        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id :bar2}]
+                                                                           [:crux.tx/match :bar2 {:xt/id :bar2 :key "not-found"}]
+                                                                           [:crux.tx/put {:xt/id :foo2}]])]
           (t/is
            (= nil
               (get-tx-from-source-task source-task)))))
       (t/testing "Continues to read post a failed transaction"
-        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :test}]])]
+        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id :test}]])]
           (t/is
-           (= [[:crux.tx/put {:crux.db/id :test} tx-time]]
+           (= [[:crux.tx/put {:xt/id :test} tx-time]]
               (get-tx-from-source-task source-task))))))
     (.stop source-task)))
 
@@ -139,13 +139,13 @@
                                                    (offsets [this ps] (map #(.offset this %) ps))))))))
           hello-doc-id (str (c/new-id :hello-doc))]
       (t/testing ":crux.tx/put"
-        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:crux.db/id :hello-doc}]])]
+        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id :hello-doc}]])]
           (t/is
-           (= {:doc {:crux.db/id :hello-doc}
+           (= {:doc {:xt/id :hello-doc}
                :id hello-doc-id}
               (first (get-docs-from-source-task source-task))))))
       (t/testing ":crux.tx/match"
-        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/match :hello {:crux.db/id :hello-doc}]])]
+        (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/match :hello {:xt/id :hello-doc}]])]
           (t/is (empty? (get-docs-from-source-task source-task)))))
       (t/testing ":crux.tx/delete"
         (let [{:crux.tx/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:crux.tx/delete :hello-doc]])]

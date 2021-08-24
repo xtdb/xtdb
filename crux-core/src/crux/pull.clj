@@ -52,7 +52,7 @@
 (defn- ->pull-child [{:keys [query] :as join}]
   (letfn [(pull-child [v db ^RecurseState recurse-state]
             (if (contains? (.seen-vs recurse-state) v)
-              {:crux.db/id v}
+              {:xt/id v}
               (let [recurse-state ^RecurseState (update recurse-state :seen-vs conj v)]
                 (->> (mapv (fn [f]
                              (f v db recurse-state))

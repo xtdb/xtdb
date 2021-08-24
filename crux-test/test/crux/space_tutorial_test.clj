@@ -1,16 +1,13 @@
 (ns crux.space-tutorial-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
-            [crux.io :as cio]
-            [crux.fixtures :as fix :refer [*api*]]
-            [clojure.java.io :as io]
-            [crux.codec :as c])
-  (:import java.io.Closeable))
+            [crux.codec :as c]
+            [crux.fixtures :as fix :refer [*api*]]))
 
 (t/use-fixtures :each fix/with-node)
 
 (def manifest
-  {:crux.db/id :manifest
+  {:xt/id :manifest
    :pilot-name "Johanna"
    :id/rocket "SB002-sol"
    :id/employee "22910x2"
@@ -47,13 +44,13 @@
 (defn full-query [node]
   (crux/q (crux/db node)
           '{:find [(pull id [*])]
-            :where [[e :crux.db/id id]]}))
+            :where [[e :xt/id id]]}))
 
 (t/deftest space-tutorial-test
   (t/testing "earth-test"
     (fix/submit+await-tx [[:crux.tx/put manifest]])
 
-    (t/is (= {:crux.db/id :manifest,
+    (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
               :id/rocket "SB002-sol",
               :id/employee "22910x2",
@@ -69,72 +66,72 @@
 
   (t/testing "pluto-tests"
     (fix/submit+await-tx [[:crux.tx/put
-                           {:crux.db/id :commodity/Pu
+                           {:xt/id :commodity/Pu
                             :common-name "Plutonium"
                             :type :element/metal
                             :density 19.816
                             :radioactive true}]
 
                           [:crux.tx/put
-                           {:crux.db/id :commodity/N
+                           {:xt/id :commodity/N
                             :common-name "Nitrogen"
                             :type :element/gas
                             :density 1.2506
                             :radioactive false}]
 
                           [:crux.tx/put
-                           {:crux.db/id :commodity/CH4
+                           {:xt/id :commodity/CH4
                             :common-name "Methane"
                             :type :molecule/gas
                             :density 0.717
                             :radioactive false}]])
 
 
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :stock/Pu
+    (fix/submit+await-tx [[:crux.tx/put {:xt/id :stock/Pu
                                          :commod :commodity/Pu
                                          :weight-ton 21}
                            #inst "2115-02-13T18"] ;; valid-time
 
-                          [:crux.tx/put {:crux.db/id :stock/Pu
+                          [:crux.tx/put {:xt/id :stock/Pu
                                          :commod :commodity/Pu
                                          :weight-ton 23}
                            #inst "2115-02-14T18"]
 
-                          [:crux.tx/put {:crux.db/id :stock/Pu
+                          [:crux.tx/put {:xt/id :stock/Pu
                                          :commod :commodity/Pu
                                          :weight-ton 22.2}
                            #inst "2115-02-15T18"]
 
-                          [:crux.tx/put {:crux.db/id :stock/Pu
+                          [:crux.tx/put {:xt/id :stock/Pu
                                          :commod :commodity/Pu
                                          :weight-ton 24}
                            #inst "2115-02-18T18"]
 
-                          [:crux.tx/put {:crux.db/id :stock/Pu
+                          [:crux.tx/put {:xt/id :stock/Pu
                                          :commod :commodity/Pu
                                          :weight-ton 24.9}
                            #inst "2115-02-19T18"]])
 
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :stock/N
+    (fix/submit+await-tx [[:crux.tx/put {:xt/id :stock/N
                                          :commod :commodity/N
                                          :weight-ton 3}
                            #inst "2115-02-13T18" ;; start valid-time
                            #inst "2115-02-19T18"] ;; end valid-time
 
-                          [:crux.tx/put {:crux.db/id :stock/CH4
+                          [:crux.tx/put {:xt/id :stock/CH4
                                          :commod :commodity/CH4
                                          :weight-ton 92}
                            #inst "2115-02-15T18"
                            #inst "2115-02-19T18"]])
 
-    (t/is (= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 21}
+    (t/is (= {:xt/id :stock/Pu, :commod :commodity/Pu, :weight-ton 21}
              (crux/entity (crux/db *api* #inst "2115-02-14") :stock/Pu)))
-    (t/is (= {:crux.db/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
+    (t/is (= {:xt/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
              (crux/entity (crux/db *api* #inst "2115-02-18") :stock/Pu)))
 
     (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT"])]])
 
-    (t/is (= {:crux.db/id :manifest,
+    (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
               :id/rocket "SB002-sol",
               :id/employee "22910x2",
@@ -143,37 +140,37 @@
              (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "mercury-tests"
-    (put-all! [{:crux.db/id :commodity/Pu
+    (put-all! [{:xt/id :commodity/Pu
                 :common-name "Plutonium"
                 :type :element/metal
                 :density 19.816
                 :radioactive true}
 
-               {:crux.db/id :commodity/N
+               {:xt/id :commodity/N
                 :common-name "Nitrogen"
                 :type :element/gas
                 :density 1.2506
                 :radioactive false}
 
-               {:crux.db/id :commodity/CH4
+               {:xt/id :commodity/CH4
                 :common-name "Methane"
                 :type :molecule/gas
                 :density 0.717
                 :radioactive false}
 
-               {:crux.db/id :commodity/Au
+               {:xt/id :commodity/Au
                 :common-name "Gold"
                 :type :element/metal
                 :density 19.300
                 :radioactive false}
 
-               {:crux.db/id :commodity/C
+               {:xt/id :commodity/C
                 :common-name "Carbon"
                 :type :element/non-metal
                 :density 2.267
                 :radioactive false}
 
-               {:crux.db/id :commodity/borax
+               {:xt/id :commodity/borax
                 :common-name "Borax"
                 :IUPAC-name "Sodium tetraborate decahydrate"
                 :other-names ["Borax decahydrate" "sodium borate" "sodium tetraborate" "disodium tetraborate"]
@@ -182,7 +179,7 @@
                 :density 1.73
                 :radioactive false}])
 
-    (t/is (={:crux.db/id :commodity/borax
+    (t/is (={:xt/id :commodity/borax
              :common-name "Borax"
              :IUPAC-name "Sodium tetraborate decahydrate"
              :other-names ["Borax decahydrate" "sodium borate" "sodium tetraborate" "disodium tetraborate"]
@@ -247,7 +244,7 @@
 
     (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"])]])
 
-    (t/is (= {:crux.db/id :manifest,
+    (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
               :id/rocket "SB002-sol",
               :id/employee "22910x2",
@@ -257,7 +254,7 @@
 
   (t/testing "neptune-test"
     (fix/submit+await-tx [[:crux.tx/put
-                           {:crux.db/id :consumer/RJ29sUU
+                           {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
                             :last-name "Rose"
@@ -265,7 +262,7 @@
                             :cover-type :Full}
                            #inst "2114-12-03"]])
     (fix/submit+await-tx [[:crux.tx/put ;; <1>
-                           {:crux.db/id :consumer/RJ29sUU
+                           {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
                             :last-name "Rose"
@@ -275,7 +272,7 @@
                            #inst "2114-12-03"] ;; Valid time end
 
                           [:crux.tx/put ;; <2>
-                           {:crux.db/id :consumer/RJ29sUU
+                           {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
                             :last-name "Rose"
@@ -285,7 +282,7 @@
                            #inst "2113-12-03"]
 
                           [:crux.tx/put ;; <3>
-                           {:crux.db/id :consumer/RJ29sUU
+                           {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
                             :last-name "Rose"
@@ -294,7 +291,7 @@
                            #inst "2112-12-02"]
 
                           [:crux.tx/put ;; <4>
-                           {:crux.db/id :consumer/RJ29sUU
+                           {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
                             :last-name "Rose"
@@ -327,7 +324,7 @@
                            (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"
                                                     "BITEMP"])]])
 
-    (t/is (= {:crux.db/id :manifest,
+    (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
               :id/rocket "SB002-sol",
               :id/employee "22910x2",
@@ -336,14 +333,14 @@
              (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "saturn-tests"
-    (put-all! [{:crux.db/id :gold-harmony
+    (put-all! [{:xt/id :gold-harmony
                 :company-name "Gold Harmony"
                 :seller? true
                 :buyer? false
                 :units/Au 10211
                 :credits 51}
 
-               {:crux.db/id :tombaugh-resources
+               {:xt/id :tombaugh-resources
                 :company-name "Tombaugh Resources Ltd."
                 :seller? true
                 :buyer? false
@@ -352,7 +349,7 @@
                 :units/CH4 92
                 :credits 51}
 
-               {:crux.db/id :encompass-trade
+               {:xt/id :encompass-trade
                 :company-name "Encompass Trade"
                 :seller? true
                 :buyer? true
@@ -361,7 +358,7 @@
                 :units/CH4 211
                 :credits 1002}
 
-               {:crux.db/id :blue-energy
+               {:xt/id :blue-energy
                 :seller? false
                 :buyer? true
                 :company-name "Blue Energy"
@@ -369,13 +366,13 @@
 
     (fix/submit+await-tx [[:crux.tx/match
                            :blue-energy
-                           {:crux.db/id :blue-energy
+                           {:xt/id :blue-energy
                             :seller? false
                             :buyer? true
                             :company-name "Blue Energy"
                             :credits 1000}]
                           [:crux.tx/put
-                           {:crux.db/id :blue-energy
+                           {:xt/id :blue-energy
                             :seller? false
                             :buyer? true
                             :company-name "Blue Energy"
@@ -384,7 +381,7 @@
 
                           [:crux.tx/match
                            :tombaugh-resources
-                           {:crux.db/id :tombaugh-resources
+                           {:xt/id :tombaugh-resources
                             :company-name "Tombaugh Resources Ltd."
                             :seller? true
                             :buyer? false
@@ -393,7 +390,7 @@
                             :units/CH4 92
                             :credits 51}]
                           [:crux.tx/put
-                           {:crux.db/id :tombaugh-resources
+                           {:xt/id :tombaugh-resources
                             :company-name "Tombaugh Resources Ltd."
                             :seller? true
                             :buyer? false
@@ -409,7 +406,7 @@
     (fix/submit+await-tx [[:crux.tx/match
                            :gold-harmony
                            ;; Old doc
-                           {:crux.db/id :gold-harmony
+                           {:xt/id :gold-harmony
                             :company-name "Gold Harmony"
                             :seller? true
                             :buyer? false
@@ -417,7 +414,7 @@
                             :credits 51}]
                           [:crux.tx/put
                            ;; New doc
-                           {:crux.db/id :gold-harmony
+                           {:xt/id :gold-harmony
                             :company-name "Gold Harmony"
                             :seller? true
                             :buyer? false
@@ -427,7 +424,7 @@
                           [:crux.tx/match
                            :encompass-trade
                            ;; Old doc
-                           {:crux.db/id :encompass-trade
+                           {:xt/id :encompass-trade
                             :company-name "Encompass Trade"
                             :seller? true
                             :buyer? true
@@ -437,7 +434,7 @@
                             :credits 100002}]
                           [:crux.tx/put
                            ;; New doc
-                           {:crux.db/id :encompass-trade
+                           {:xt/id :encompass-trade
                             :company-name "Encompass Trade"
                             :seller? true
                             :buyer? true
@@ -454,7 +451,7 @@
 
     (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"])]])
 
-    (t/is (= {:crux.db/id :manifest,
+    (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
               :id/rocket "SB002-sol",
               :id/employee "22910x2",
@@ -463,10 +460,10 @@
              (crux/entity (crux/db *api*) :manifest)))))
 
 (t/deftest jupiter-tests
-  (let [doc1 {:crux.db/id :kaarlang/clients, :clients [:encompass-trade]}
-        doc2 {:crux.db/id :kaarlang/clients, :clients [:encompass-trade :blue-energy]}
-        doc3 {:crux.db/id :kaarlang/clients, :clients [:blue-energy]}
-        doc4 {:crux.db/id :kaarlang/clients, :clients [:blue-energy :gold-harmony :tombaugh-resources]}]
+  (let [doc1 {:xt/id :kaarlang/clients, :clients [:encompass-trade]}
+        doc2 {:xt/id :kaarlang/clients, :clients [:encompass-trade :blue-energy]}
+        doc3 {:xt/id :kaarlang/clients, :clients [:blue-energy]}
+        doc4 {:xt/id :kaarlang/clients, :clients [:blue-energy :gold-harmony :tombaugh-resources]}]
     (fix/submit+await-tx [[:crux.tx/put doc1 #inst "2110-01-01T09" #inst "2111-01-01T09"]
                           [:crux.tx/put doc2 #inst "2111-01-01T09" #inst "2113-01-01T09"]
                           [:crux.tx/put doc3 #inst "2113-01-01T09" #inst "2114-01-01T09"]
@@ -474,10 +471,10 @@
 
     (t/is (= doc4 (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
-    (t/is (= [{:crux.tx/tx-id 0, :crux.db/valid-time #inst "2110-01-01T09", :crux.db/content-hash (c/new-id doc1), :crux.db/doc doc1}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2111-01-01T09", :crux.db/content-hash (c/new-id doc2), :crux.db/doc doc2}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2113-01-01T09", :crux.db/content-hash (c/new-id doc3), :crux.db/doc doc3}
-              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2114-01-01T09", :crux.db/content-hash (c/new-id doc4), :crux.db/doc doc4}
+    (t/is (= [{:crux.tx/tx-id 0, :crux.db/valid-time #inst "2110-01-01T09", :crux.db/content-hash (fix/hash-doc doc1), :crux.db/doc doc1}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2111-01-01T09", :crux.db/content-hash (fix/hash-doc doc2), :crux.db/doc doc2}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2113-01-01T09", :crux.db/content-hash (fix/hash-doc doc3), :crux.db/doc doc3}
+              {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2114-01-01T09", :crux.db/content-hash (fix/hash-doc doc4), :crux.db/doc doc4}
               {:crux.tx/tx-id 0, :crux.db/valid-time #inst "2115-01-01T09", :crux.db/content-hash (c/new-id c/nil-id-buffer), :crux.db/doc nil}]
 
              (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
@@ -499,46 +496,46 @@
                   (mapv #(dissoc % :crux.tx/tx-time)))))))
 
 (t/deftest Oumuamua-test
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :person/kaarlang
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :person/kaarlang
                                        :full-name "Kaarlang"
                                        :origin-planet "Mars"
                                        :identity-tag :KA01299242093
                                        :DOB #inst "2040-11-23"}]
 
-                        [:crux.tx/put {:crux.db/id :person/ilex
+                        [:crux.tx/put {:xt/id :person/ilex
                                        :full-name "Ilex Jefferson"
                                        :origin-planet "Venus"
                                        :identity-tag :IJ01222212454
                                        :DOB #inst "2061-02-17"}]
 
-                        [:crux.tx/put {:crux.db/id :person/thadd
+                        [:crux.tx/put {:xt/id :person/thadd
                                        :full-name "Thad Christover"
                                        :origin-moon "Titan"
                                        :identity-tag :IJ01222212454
                                        :DOB #inst "2101-01-01"}]
 
-                        [:crux.tx/put {:crux.db/id :person/johanna
+                        [:crux.tx/put {:xt/id :person/johanna
                                        :full-name "Johanna"
                                        :origin-planet "Earth"
                                        :identity-tag :JA012992129120
                                        :DOB #inst "2090-12-07"}]])
 
-  (t/is (= #{[{:crux.db/id :person/ilex,
+  (t/is (= #{[{:xt/id :person/ilex,
                :full-name "Ilex Jefferson",
                :origin-planet "Venus",
                :identity-tag :IJ01222212454,
                :DOB #inst "2061-02-17T00:00:00.000-00:00"}]
-             [{:crux.db/id :person/thadd,
+             [{:xt/id :person/thadd,
                :full-name "Thad Christover",
                :origin-moon "Titan",
                :identity-tag :IJ01222212454,
                :DOB #inst "2101-01-01T00:00:00.000-00:00"}]
-             [{:crux.db/id :person/kaarlang,
+             [{:xt/id :person/kaarlang,
                :full-name "Kaarlang",
                :origin-planet "Mars",
                :identity-tag :KA01299242093,
                :DOB #inst "2040-11-23T00:00:00.000-00:00"}]
-             [{:crux.db/id :person/johanna,
+             [{:xt/id :person/johanna,
                :full-name "Johanna",
                :origin-planet "Earth",
                :identity-tag :JA012992129120,

@@ -14,13 +14,13 @@
 (crux/submit-tx
   node
   [[:crux.tx/put
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
+    {:xt/id :dbpedia.resource/Pablo-Picasso ; id
      :name "Pablo"
      :last-name "Picasso"
      :location "Spain"}
     #inst "1881-10-25T09:20:27.966-00:00"]
    [:crux.tx/put
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso ; id
+    {:xt/id :dbpedia.resource/Pablo-Picasso ; id
      :name "Pablo"
      :last-name "Picasso"
      :location "Sain2"}
@@ -32,13 +32,13 @@
   node
   [[:crux.tx/match ; check old version
     :dbpedia.resource/Pablo-Picasso
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso
+    {:xt/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
      :last-name "Picasso"
      :location "Spain"}
     #inst "1973-04-08T09:20:27.966-00:00"]
    [:crux.tx/put ; put new version if it matches
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso
+    {:xt/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
      :last-name "Picasso"
      :height 1.63
@@ -69,7 +69,7 @@
 (crux/submit-tx
   node
   [[:crux.tx/put
-    {:crux.db/id :dbpedia.resource/Pablo-Picasso
+    {:xt/id :dbpedia.resource/Pablo-Picasso
      :name "Pablo"
      :last-name "Picasso"
      :height 1.63

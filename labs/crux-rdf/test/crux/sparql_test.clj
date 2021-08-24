@@ -345,7 +345,7 @@ WHERE {
                         [?s #=(keyword "http://www.w3.org/2000/01/rdf-schema#subClassOf") ?t]
                         (#=(symbol "http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR") ?t ?o)]
                        [(#=(symbol "http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR") ?s ?o)
-                        [?s :crux.db/id]
+                        [?s :xt/id]
                         [(identity :crux.sparql/zero-matches) ?o]]]}
              (sparql/sparql->datalog "
 PREFIX  rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
@@ -375,7 +375,7 @@ SELECT ?person
     (t/is (= '{:find [?person],
                :where
                [(or-join [?person]
-                         (and [#=(keyword "http://example/x") :crux.db/id]
+                         (and [#=(keyword "http://example/x") :xt/id]
                               [(identity :crux.sparql/zero-matches) ?person])
                          [#=(keyword "http://example/x") #=(keyword "http://xmlns.com/foaf/0.1/knows") ?person])]}
              (sparql/sparql->datalog "

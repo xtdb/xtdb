@@ -9,7 +9,7 @@
 
 (defn submit-batches [node]
   (for [doc-batch (->> (for [n (range 25000)]
-                         [:crux.tx/put {:crux.db/id (keyword (str "doc-" n))
+                         [:crux.tx/put {:xt/id (keyword (str "doc-" n))
                                         :nested-map {:foo :bar
                                                      :baz :quux
                                                      :doc-idx n}}])

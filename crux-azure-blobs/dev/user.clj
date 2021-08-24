@@ -3,25 +3,25 @@
             [crux.azure.blobs :as azb]))
 
 (def init-data
-  [{:crux.db/id :country/denmark
+  [{:xt/id :country/denmark
     :country/name "Denmark"}
 
-   {:crux.db/id :region/hovedstaden
+   {:xt/id :region/hovedstaden
     :country :country/denmark}
 
-   {:crux.db/id :municipality/copenhagen
+   {:xt/id :municipality/copenhagen
     :region :region/hovedstaden}
 
-   {:crux.db/id :org/some-org
+   {:xt/id :org/some-org
     :org/name "Some org name"
     :municipality :municipality/copenhagen}
 
-   {:crux.db/id :course/math101
+   {:xt/id :course/math101
     :course/name "Math 101"
     :level :a
     :org :org/some-org}
 
-   {:crux.db/id :team/some-team
+   {:xt/id :team/some-team
     :team/name "Some Team"
     :experience-level 10
     :org :org/some-org

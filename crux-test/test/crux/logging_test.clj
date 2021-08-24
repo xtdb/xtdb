@@ -24,20 +24,20 @@
 (t/use-fixtures :each asserting-no-logged-secrets)
 
 (t/deftest test-submit-putting-doc
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :secure-document
                                        :secret secret}]]))
 
 (t/deftest test-submitting-putting-existing-doc
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :secure-document
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :secure-document
                                        :secret-2 secret}]]))
 
 (t/deftest test-submitting-match
   (fix/submit+await-tx [[:crux.tx/match
                          :secure-document
-                         {:crux.db/id :secure-document
+                         {:xt/id :secure-document
                           :secret secret
                           :secret-2 secret}]
-                        [:crux.tx/put {:crux.db/id :secure-document, :secret secret}]]))
+                        [:crux.tx/put {:xt/id :secure-document, :secret secret}]]))
 
 (t/deftest test-submitting-delete
   (fix/submit+await-tx [[:crux.tx/delete :secure-document]]))

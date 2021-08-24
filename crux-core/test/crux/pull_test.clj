@@ -102,7 +102,7 @@
                             :where [[?dc :person/name "Daniel Craig"]]}))))
 
     (t/testing "pull *"
-      (t/is (= #{[{:crux.db/id :daniel-craig
+      (t/is (= #{[{:xt/id :daniel-craig
                    :person/name "Daniel Craig",
                    :type :person}]}
                (crux/q db '{:find [(pull ?dc [*])]
@@ -168,76 +168,76 @@
           (t/is (= [3] @!lookup-counts) "batching lookups"))))))
 
 (t/deftest test-union
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo
                                        :type :a
                                        :x 2
                                        :y "this"
                                        :z :not-this}]
-                        [:crux.tx/put {:crux.db/id :bar
+                        [:crux.tx/put {:xt/id :bar
                                        :type :b
                                        :y "not this"
                                        :z 5}]])
 
-  (t/is (= #{[{:crux.db/id :foo, :x 2, :y "this"}]
-             [{:crux.db/id :bar, :z 5}]}
+  (t/is (= #{[{:xt/id :foo, :x 2, :y "this"}]
+             [{:xt/id :bar, :z 5}]}
            (crux/q (crux/db *api*)
                    '{:find [(pull ?it [{:type {:a [:x :y], :b [:z]}}
-                                              :crux.db/id])]
-                     :where [[?it :crux.db/id]]}))))
+                                              :xt/id])]
+                     :where [[?it :xt/id]]}))))
 
 (t/deftest test-recursive
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :root}]
-                        [:crux.tx/put {:crux.db/id :a
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :root}]
+                        [:crux.tx/put {:xt/id :a
                                        :parent :root}]
-                        [:crux.tx/put {:crux.db/id :b
+                        [:crux.tx/put {:xt/id :b
                                        :parent :root}]
-                        [:crux.tx/put {:crux.db/id :aa
+                        [:crux.tx/put {:xt/id :aa
                                        :parent :a}]
-                        [:crux.tx/put {:crux.db/id :ab
+                        [:crux.tx/put {:xt/id :ab
                                        :parent :a}]
-                        [:crux.tx/put {:crux.db/id :aba
+                        [:crux.tx/put {:xt/id :aba
                                        :parent :ab}]
-                        [:crux.tx/put {:crux.db/id :abb
+                        [:crux.tx/put {:xt/id :abb
                                        :parent :ab}]])
 
   (t/testing "forward unbounded recursion"
-    (t/is (= {:crux.db/id :aba
-              :parent {:crux.db/id :ab
-                       :parent {:crux.db/id :a
-                                :parent {:crux.db/id :root}}}}
+    (t/is (= {:xt/id :aba
+              :parent {:xt/id :ab
+                       :parent {:xt/id :a
+                                :parent {:xt/id :root}}}}
              (ffirst (crux/q (crux/db *api*)
-                             '{:find [(pull ?aba [:crux.db/id {:parent ...}])]
-                               :where [[?aba :crux.db/id :aba]]})))))
+                             '{:find [(pull ?aba [:xt/id {:parent ...}])]
+                               :where [[?aba :xt/id :aba]]})))))
 
   (t/testing "forward bounded recursion"
-    (t/is (= {:crux.db/id :aba
-              :parent {:crux.db/id :ab
-                       :parent {:crux.db/id :a}}}
+    (t/is (= {:xt/id :aba
+              :parent {:xt/id :ab
+                       :parent {:xt/id :a}}}
              (ffirst (crux/q (crux/db *api*)
-                             '{:find [(pull ?aba [:crux.db/id {:parent 2}])]
-                               :where [[?aba :crux.db/id :aba]]})))))
+                             '{:find [(pull ?aba [:xt/id {:parent 2}])]
+                               :where [[?aba :xt/id :aba]]})))))
 
   (t/testing "reverse unbounded recursion"
-    (t/is (= {:crux.db/id :root
-              :_parent [{:crux.db/id :a
-                         :_parent [{:crux.db/id :aa}
-                                   {:crux.db/id :ab
-                                    :_parent [{:crux.db/id :aba}
-                                              {:crux.db/id :abb}]}]}
-                        {:crux.db/id :b}]}
+    (t/is (= {:xt/id :root
+              :_parent [{:xt/id :a
+                         :_parent [{:xt/id :aa}
+                                   {:xt/id :ab
+                                    :_parent [{:xt/id :aba}
+                                              {:xt/id :abb}]}]}
+                        {:xt/id :b}]}
              (ffirst (crux/q (crux/db *api*)
-                             '{:find [(pull ?root [:crux.db/id {:_parent ...}])]
-                               :where [[?root :crux.db/id :root]]})))))
+                             '{:find [(pull ?root [:xt/id {:_parent ...}])]
+                               :where [[?root :xt/id :root]]})))))
 
   (t/testing "reverse bounded recursion"
-    (t/is (= {:crux.db/id :root
-              :_parent [{:crux.db/id :a
-                         :_parent [{:crux.db/id :aa}
-                                   {:crux.db/id :ab}]}
-                        {:crux.db/id :b}]}
+    (t/is (= {:xt/id :root
+              :_parent [{:xt/id :a
+                         :_parent [{:xt/id :aa}
+                                   {:xt/id :ab}]}
+                        {:xt/id :b}]}
              (ffirst (crux/q (crux/db *api*)
-                             '{:find [(pull ?root [:crux.db/id {:_parent 2}])]
-                               :where [[?root :crux.db/id :root]]}))))))
+                             '{:find [(pull ?root [:xt/id {:_parent 2}])]
+                               :where [[?root :xt/id :root]]}))))))
 
 (t/deftest test-doesnt-hang-on-unknown-eid
   (t/is (= #{[{}]}
@@ -248,17 +248,17 @@
                    "doesntexist"))))
 
 (t/deftest test-with-speculative-doc-store
-  (let [db (crux/with-tx (crux/db *api*) [[:crux.tx/put {:crux.db/id :foo}]])]
-    (t/is (= #{[{:crux.db/id :foo}]}
+  (let [db (crux/with-tx (crux/db *api*) [[:crux.tx/put {:xt/id :foo}]])]
+    (t/is (= #{[{:xt/id :foo}]}
              (crux/q db
                      '{:find [(pull ?e [*])]
-                       :where [[?e :crux.db/id :foo]]})))))
+                       :where [[?e :xt/id :foo]]})))))
 
 (t/deftest test-missing-forward-join
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo :ref [:bar :baz]}]
-                        [:crux.tx/put {:crux.db/id :bar}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo :ref [:bar :baz]}]
+                        [:crux.tx/put {:xt/id :bar}]])
 
-  (t/is (= #{[{:ref [#:crux.db{:id :bar} {}]}]}
+  (t/is (= #{[{:ref [{:xt/id :bar} {}]}]}
            (crux/q (crux/db *api*)
-                   '{:find [(pull ?it [{:ref [:crux.db/id]}])]
-                     :where [[?it :crux.db/id :foo]]}))))
+                   '{:find [(pull ?it [{:ref [:xt/id]}])]
+                     :where [[?it :xt/id :foo]]}))))

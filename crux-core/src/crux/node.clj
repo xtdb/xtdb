@@ -240,8 +240,7 @@
         (ensure-node-open this)
         (db/submit-docs document-store (->> conformed-tx-ops
                                             (into {} (comp (mapcat :docs)))
-                                            (cio/map-vals c/xt->crux)
-                                            (#(doto % (prn :docs)))))
+                                            (cio/map-vals c/xt->crux)))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
 
 (defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))

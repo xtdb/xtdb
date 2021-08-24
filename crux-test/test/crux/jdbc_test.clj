@@ -13,7 +13,7 @@
 (t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node)
 
 (t/deftest test-happy-path-jdbc-event-log
-  (let [doc {:crux.db/id :origin-man :name "Adam"}
+  (let [doc {:xt/id :origin-man :name "Adam"}
         submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
     (api/await-tx *api* submitted-tx (java.time.Duration/ofSeconds 2))
     (t/is (api/entity (api/db *api*) :origin-man))
@@ -23,22 +23,22 @@
                    :crux.tx/tx-time (:crux.tx/tx-time submitted-tx)
                    :crux.tx.event/tx-events
                    [[:crux.tx/put
-                     (c/new-id (:crux.db/id doc))
-                     (c/new-id doc)]]}]
+                     (c/new-id (:xt/id doc))
+                     (c/hash-doc doc)]]}]
                  (iterator-seq tx-log-iterator)))))))
 
 (t/deftest test-docs-retention
   (let [doc-store (:document-store *api*)
 
-        doc {:crux.db/id :some-id, :a :b}
-        doc-hash (c/new-id doc)
+        doc {:xt/id :some-id, :a :b}
+        doc-hash (c/hash-doc doc)
 
         _ (fix/submit+await-tx [[:crux.tx/put doc]])
 
         docs (db/fetch-docs doc-store #{doc-hash})]
 
     (t/is (= 1 (count docs)))
-    (t/is (= doc (get docs doc-hash)))
+    (t/is (= doc (-> (get docs doc-hash) (c/crux->xt))))
 
     (t/testing "Compaction"
       (db/submit-docs doc-store [[doc-hash :some-val]])
@@ -47,8 +47,8 @@
                    (get doc-hash)))))
 
     (t/testing "Eviction"
-      (db/submit-docs doc-store [[doc-hash {:crux.db/id :some-id, :crux.db/evicted? true}]])
-      (t/is (= {:crux.db/id :some-id, :crux.db/evicted? true}
+      (db/submit-docs doc-store [[doc-hash {:xt/id :some-id, :crux.db/evicted? true}]])
+      (t/is (= {:xt/id :some-id, :crux.db/evicted? true}
                (-> (db/fetch-docs doc-store #{doc-hash})
                    (get doc-hash)))))
 
@@ -57,7 +57,8 @@
 
       (t/is (= doc
                (-> (db/fetch-docs doc-store #{doc-hash})
-                   (get doc-hash)))))))
+                   (get doc-hash)
+                   (c/crux->xt)))))))
 
 (t/deftest test-micro-bench
   (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))
@@ -65,7 +66,7 @@
           last-tx (atom nil)]
       (time
        (dotimes [n n]
-         (reset! last-tx (api/submit-tx *api* [[:crux.tx/put {:crux.db/id (keyword (str n))}]]))))
+         (reset! last-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id (keyword (str n))}]]))))
 
       (time
        (api/await-tx *api* last-tx nil))))
@@ -81,25 +82,25 @@
   (t/is true))
 
 (t/deftest test-project-star-bug-1016
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :put
                                        :crux.db/fn '(fn [ctx doc]
                                                       [[:crux.tx/put doc]])}]])
-  (fix/submit+await-tx [[:crux.tx/fn :put {:crux.db/id :foo, :foo :bar}]])
+  (fix/submit+await-tx [[:crux.tx/fn :put {:xt/id :foo, :foo :bar}]])
 
   (let [db (api/db *api*)]
 
-    (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
+    (t/is (= #{[{:xt/id :foo, :foo :bar}]}
              (api/q db
                     '{:find [(pull ?e [*])]
-                      :where [[?e :crux.db/id :foo]]})))
+                      :where [[?e :xt/id :foo]]})))
 
-    (t/is (= {:crux.db/id :foo, :foo :bar}
+    (t/is (= {:xt/id :foo, :foo :bar}
              (api/entity db :foo)))
 
-    (t/is (= #{[{:crux.db/id :foo, :foo :bar}]}
+    (t/is (= #{[{:xt/id :foo, :foo :bar}]}
              (api/q db
                     '{:find [(pull ?e [*])]
-                      :where [[?e :crux.db/id :foo]]})))))
+                      :where [[?e :xt/id :foo]]})))))
 
 (t/deftest test-deadlock
   ;; SQLite doesn't support writing from multiple threads
@@ -113,7 +114,7 @@
       (->> (for [_ (range 100)]
              (future
                (api/submit-tx *api* (for [eid (shuffle eids)]
-                                      [:crux.tx/put {:crux.db/id eid}]))))
+                                      [:crux.tx/put {:xt/id eid}]))))
            doall
            (run! deref))
       (t/is true))))

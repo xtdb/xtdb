@@ -10,18 +10,18 @@
 
 (t/deftest test-empty-fork
   (let [db (-> (crux/db *api*)
-               (crux/with-tx [[:crux.tx/put {:crux.db/id :foo}]]))]
-    (t/is (= {:crux.db/id :foo} (crux/entity db :foo)))))
+               (crux/with-tx [[:crux.tx/put {:xt/id :foo}]]))]
+    (t/is (= {:xt/id :foo} (crux/entity db :foo)))))
 
 (t/deftest test-simple-fork
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivna"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan, :name "Ivna"}]])
 
   (let [all-names-query '{:find [?name]
                           :where [[?e :name ?name]]}
         db (crux/db *api*)
         _ (Thread/sleep 10)    ; to ensure these two txs are at a different ms
         db2 (crux/with-tx db
-              [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])]
+              [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]])]
 
     (t/is (= (crux/valid-time db) (crux/valid-time db2)))
 
@@ -35,19 +35,19 @@
                (crux/q (crux/with-tx db [[:crux.tx/delete :ivan]])
                        all-names-query)))
       (t/is (= #{["Petr"]}
-               (crux/q (crux/with-tx db [[:crux.tx/put {:crux.db/id :petr, :name "Petr"}]
+               (crux/q (crux/with-tx db [[:crux.tx/put {:xt/id :petr, :name "Petr"}]
                                          [:crux.tx/delete :ivan]])
                        all-names-query))))
 
     (t/testing "returns nil on failed match"
-      (t/is (nil? (crux/with-tx db [[:crux.tx/match :nope {:crux.db/id :nope}]]))))))
+      (t/is (nil? (crux/with-tx db [[:crux.tx/match :nope {:xt/id :nope}]]))))))
 
 (t/deftest test-history
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivna"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan, :name "Ivna"}]])
 
   (let [db (crux/db *api*)
         history (crux/entity-history (crux/with-tx db
-                                       [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
+                                       [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]])
                                      :ivan
                                      :asc
                                      {:with-docs? true
@@ -56,32 +56,32 @@
     (t/is (= (crux/valid-time db)
              (:crux.db/valid-time (last history))))
 
-    (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:crux.db/id :ivan, :name "Ivna"}}
-              {:crux.tx/tx-id 1, :crux.db/doc {:crux.db/id :ivan, :name "Ivan"}}]
+    (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:xt/id :ivan, :name "Ivna"}}
+              {:crux.tx/tx-id 1, :crux.db/doc {:xt/id :ivan, :name "Ivan"}}]
 
              (->> history
                   (mapv #(select-keys % [::tx/tx-id :crux.db/doc])))))))
 
 (t/deftest test-speculative-from-point-in-past
-  (let [ivan0 {:crux.db/id :ivan, :name "Ivan0"}
+  (let [ivan0 {:xt/id :ivan, :name "Ivan0"}
         tt0 (::tx/tx-time (fix/submit+await-tx [[:crux.tx/put ivan0]]))
         _ (Thread/sleep 10)      ; to ensure these two txs are at a different ms
-        tt1 (::tx/tx-time (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan1"}]]))
+        _tt1 (::tx/tx-time (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan, :name "Ivan1"}]]))
 
         db0 (crux/db *api* tt0 tt0)]
 
 
     (t/testing "doesn't include original data after the original db cutoff"
       (let [db1 (crux/with-tx db0
-                  [[:crux.tx/put {:crux.db/id :petr, :name "Petr"}]])]
+                  [[:crux.tx/put {:xt/id :petr, :name "Petr"}]])]
 
         (t/is (= (crux/valid-time db0) (crux/valid-time db1)))
         (t/is (= ivan0 (crux/entity db1 :ivan)))))
 
     (t/testing "doesn't include original data after the original db cutoff in history"
-      (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:crux.db/id :ivan, :name "Ivan0"}}
-                {:crux.tx/tx-id 2, :crux.db/doc {:crux.db/id :ivan, :name "Ivan2"}}]
-               (->> (crux/entity-history (crux/with-tx db0 [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan2"}]])
+      (t/is (= [{:crux.tx/tx-id 0, :crux.db/doc {:xt/id :ivan, :name "Ivan0"}}
+                {:crux.tx/tx-id 2, :crux.db/doc {:xt/id :ivan, :name "Ivan2"}}]
+               (->> (crux/entity-history (crux/with-tx db0 [[:crux.tx/put {:xt/id :ivan, :name "Ivan2"}]])
                                          :ivan
                                          :asc
                                          {:with-docs? true
@@ -89,19 +89,19 @@
                     (mapv #(select-keys % [::tx/tx-id :crux.db/doc]))))))))
 
 (t/deftest test-speculative-from-point-in-future
-  (let [ivan0 {:crux.db/id :ivan, :name "Ivan0"}
+  (let [ivan0 {:xt/id :ivan, :name "Ivan0"}
         present-tx (fix/submit+await-tx [[:crux.tx/put ivan0]])
         _ (Thread/sleep 10) ; to ensure these two txs are at a different ms
 
         now+10m (Date. (+ (.getTime (Date.)) (* 10 60 1000)))
-        future-ivan {:crux.db/id :ivan, :name "Future Ivan"}
-        now+10m-tx (fix/submit+await-tx [[:crux.tx/put future-ivan now+10m]])
+        future-ivan {:xt/id :ivan, :name "Future Ivan"}
+        _now+10m-tx (fix/submit+await-tx [[:crux.tx/put future-ivan now+10m]])
         future-db (crux/db *api* now+10m)
 
         now+5m (Date. (+ (.getTime (Date.)) (* 5 60 1000)))
         db (crux/with-tx future-db
-             [[:crux.tx/put {:crux.db/id :ivan, :name "Future Ivan 2"}]
-              [:crux.tx/put {:crux.db/id :ivan, :name "5m Future Ivan"} now+5m]])]
+             [[:crux.tx/put {:xt/id :ivan, :name "Future Ivan 2"}]
+              [:crux.tx/put {:xt/id :ivan, :name "5m Future Ivan"} now+5m]])]
 
     (t/is (= now+10m (crux/valid-time db)))
 
@@ -110,13 +110,13 @@
                :crux.db/doc ivan0}
               {:crux.tx/tx-id 2,
                :crux.db/valid-time now+5m,
-               :crux.db/doc {:crux.db/id :ivan, :name "5m Future Ivan"}}
+               :crux.db/doc {:xt/id :ivan, :name "5m Future Ivan"}}
               {:crux.tx/tx-id 1,
                :crux.db/valid-time now+10m,
-               :crux.db/doc {:crux.db/id :ivan, :name "Future Ivan"}}
+               :crux.db/doc {:xt/id :ivan, :name "Future Ivan"}}
               {:crux.tx/tx-id 2,
                :crux.db/valid-time now+10m,
-               :crux.db/doc {:crux.db/id :ivan, :name "Future Ivan 2"}}]
+               :crux.db/doc {:xt/id :ivan, :name "Future Ivan 2"}}]
              (->> (crux/entity-history db
                                        :ivan
                                        :asc
@@ -125,10 +125,10 @@
                   (mapv #(select-keys % [::tx/tx-id :crux.db/valid-time :crux.db/doc])))))))
 
 (t/deftest test-evict
-  (let [ivan {:crux.db/id :ivan, :name "Ivan"}
-        petr {:crux.db/id :petr, :name "Petr"}
-        tx (fix/submit+await-tx [[:crux.tx/put ivan]
-                                 [:crux.tx/put petr]])
+  (let [ivan {:xt/id :ivan, :name "Ivan"}
+        petr {:xt/id :petr, :name "Petr"}
+        _tx (fix/submit+await-tx [[:crux.tx/put ivan]
+                                  [:crux.tx/put petr]])
         db (crux/db *api*)
         db+evict (crux/with-tx db
                    [[:crux.tx/evict :petr]])]

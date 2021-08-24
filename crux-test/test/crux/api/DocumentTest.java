@@ -29,7 +29,7 @@ public class DocumentTest {
     @Test(expected = IllegalArgumentException.class)
     public void reassigningId() {
         CruxDocument document = CruxDocument.create("foo");
-        document.plus("crux.db/id", "bar");
+        document.plus("xt/id", "bar");
     }
 
     @Test(expected = IllegalArgumentException.class)

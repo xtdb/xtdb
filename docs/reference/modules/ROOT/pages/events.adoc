@@ -66,7 +66,7 @@ This parameter is a map of the following
     (println "event received!")
     (clojure.pprint/pprint ev)))
 
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
+(crux/submit-tx node [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]])
 ----
 
 Will print
@@ -78,5 +78,5 @@ event received!
  :crux.tx/tx-id ...,
  :crux.tx/tx-time #inst "...",
  :committed? true,
- :crux/tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]]}
+ :crux/tx-ops [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]]}
 ----

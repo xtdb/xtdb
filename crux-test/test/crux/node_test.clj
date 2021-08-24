@@ -96,7 +96,7 @@
       (let [valid-time (Date.)
             submitted-tx (.submitTx n
                                     (-> (Transaction/builder)
-                                        (.put (CruxDocument/factory {:crux.db/id :ivan :name "Ivan"}) valid-time)
+                                        (.put (CruxDocument/factory {:xt/id :ivan :name "Ivan"}) valid-time)
                                         (.build)))]
         (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
         (t/is (= #{[:ivan]} (.query (.db n)
@@ -120,7 +120,7 @@
               submitted-tx (.submitTx
                              n2
                              (-> (Transaction/builder)
-                                 (.put (CruxDocument/factory {:crux.db/id :ivan :name "Iva"}) valid-time)
+                                 (.put (CruxDocument/factory {:xt/id :ivan :name "Iva"}) valid-time)
                                  (.build)))]
           (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
           (t/is (= #{[:ivan]} (.query (.db n2)

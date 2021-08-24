@@ -27,7 +27,7 @@
 
 (def ^{:private true :const true} crux-builtin-keywords
  [:find :where :args :rules :offset :limit :order-by
-  :timeout :crux.db/id])
+  :timeout :xt/id])
 
 (defn- autocomplete [index cm options]
   (let [cur (.getCursor cm)

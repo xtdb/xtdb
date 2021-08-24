@@ -119,7 +119,7 @@ public class JCruxDatasourceTest {
     @Test
     public void pullTest() {
         ICruxDatasource db = node.db();
-        String projection = "[:crux.db/id :foo :bar]";
+        String projection = "[:xt/id :foo :bar]";
 
         Map<Keyword, ?> result = db.pull(projection, pullId1);
 
@@ -131,7 +131,7 @@ public class JCruxDatasourceTest {
     @Test
     public void pullManyIterableTest() {
         ICruxDatasource db = node.db();
-        String projection = "[:crux.db/id :foo :bar]";
+        String projection = "[:xt/id :foo :bar]";
 
         List<Map<Keyword, ?>> results = db.pullMany(projection, pullId1, pullId2);
 
@@ -145,7 +145,7 @@ public class JCruxDatasourceTest {
     @Test
     public void pullManyCollectionTest() {
         ICruxDatasource db = node.db();
-        String projection = "[:crux.db/id :foo :bar]";
+        String projection = "[:xt/id :foo :bar]";
         ArrayList<Keyword> ids = new ArrayList<>();
         ids.add(pullId1);
         ids.add(pullId2);

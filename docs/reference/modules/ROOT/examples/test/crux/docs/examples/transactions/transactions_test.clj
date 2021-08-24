@@ -10,7 +10,7 @@
 (defn- put-pablo []
   (fix/submit+await-tx
    (fix/maps->tx-ops
-    [{:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo}]
+    [{:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo}]
     #inst "2017")))
 
 (defn- pablo-db [db]
@@ -24,7 +24,7 @@
   (let [node *api*]
     ;; tag::put[]
     (crux/submit-tx node [[:crux.tx/put
-                           {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <1>
+                           {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <1>
                            #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
                            #inst "2018-05-19T08:31:15.966-00:00"]] ) ;; <3>
     ;; end::put[]
@@ -55,7 +55,7 @@
     ;; tag::match[]
     (crux/submit-tx node [[:crux.tx/match
                            :dbpedia.resource/Pablo-Picasso ;; <1>
-                           {:crux.db/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <2>
+                           {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <2>
                            #inst "2018-05-18T09:21:31.846-00:00"] ;; <3>
                           [:crux.tx/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
     ;; end::match[]
@@ -79,7 +79,7 @@
 
 (t/deftest test-function-anatomy
   (fix/submit+await-tx
-   [[:crux.tx/put {:crux.db/id :increment-age
+   [[:crux.tx/put {:xt/id :increment-age
                    :crux.db/fn '
                    ;; tag::fn-anatomy[]
                    (fn [ctx eid]  ;;<1>
@@ -88,7 +88,7 @@
                        [[:crux.tx/put (update entity :age inc)]])) ;;<3>
                    ;; end::fn-anatomy[]
                    }]
-    [:crux.tx/put {:crux.db/id :ivan
+    [:crux.tx/put {:xt/id :ivan
                    :age 0}]])
 
   (fix/submit+await-tx
@@ -96,16 +96,16 @@
      :increment-age
      :ivan]])
 
-  (t/is (= {:crux.db/id :ivan :age 1} (crux/entity (crux/db *api*) :ivan))))
+  (t/is (= {:xt/id :ivan :age 1} (crux/entity (crux/db *api*) :ivan))))
 
 (t/deftest test-function
   (let [node *api*]
     (fix/submit+await-tx
      (fix/maps->tx-ops
-      [{:crux.db/id :ivan :age 0}]))
+      [{:xt/id :ivan :age 0}]))
 
     ;; tag::fn-put[]
-    (crux/submit-tx node [[:crux.tx/put {:crux.db/id :increment-age
+    (crux/submit-tx node [[:crux.tx/put {:xt/id :increment-age
                                          :crux.db/fn '(fn [ctx eid] ;;<1>
                                                         (let [db (crux.api/db ctx)
                                                               entity (crux.api/entity db eid)]
@@ -122,12 +122,12 @@
 
     (crux/sync node)
 
-    (t/is (= {:crux.db/id :ivan :age 1} (crux/entity (crux/db *api*) :ivan)))))
+    (t/is (= {:xt/id :ivan :age 1} (crux/entity (crux/db *api*) :ivan)))))
 
 (t/deftest speculative-transactions
   (let [node *api*]
     ;; tag::speculative-0[]
-    (let [real-tx (crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan"}]])
+    (let [real-tx (crux/submit-tx node [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]])
           _ (crux/await-tx node real-tx)
           all-names '{:find [?name], :where [[?e :name ?name]]}
           db (crux/db node)]
@@ -138,7 +138,7 @@
 
       ;; tag::speculative-1[]
       (let [speculative-db (crux/with-tx db
-                             [[:crux.tx/put {:crux.db/id :petr, :name "Petr"}]])]
+                             [[:crux.tx/put {:xt/id :petr, :name "Petr"}]])]
         (crux/q speculative-db all-names) ; => #{["Petr"] ["Ivan"]}
         ;; end::speculative-1[]
         (t/is #{["Petr"] ["Ivan"]} (crux/q speculative-db all-names))
@@ -159,7 +159,7 @@
 (t/deftest awaiting
   (let [node *api*]
     ;; tag::ti[]
-    (let [tx (crux/submit-tx node [[:crux.tx/put {:crux.db/id :ivan}]])]
+    (let [tx (crux/submit-tx node [[:crux.tx/put {:xt/id :ivan}]])]
       ;; The transaction won't have indexed yet so :ivan won't exist in a snapshot
       (crux/entity (crux/db node) :ivan) ;; => nil
 
@@ -167,6 +167,6 @@
       (crux/await-tx node tx)
 
       ;; Now :ivan will exist in a snapshot
-      (crux/entity (crux/db node) :ivan)) ;; => {:crux.db/id :ivan}
+      (crux/entity (crux/db node) :ivan)) ;; => {:xt/id :ivan}
     ;; end::ti[]
     ))

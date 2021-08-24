@@ -19,9 +19,9 @@
                [])
        (reverse)))
 
-(def evicted-doc {:crux.db/id :to-be-evicted :personal "private"})
-(def non-evicted-doc {:crux.db/id :not-evicted :personal "private"})
-(def after-evict-doc {:crux.db/id :after-evict :personal "private"})
+(def evicted-doc {:xt/id :to-be-evicted :personal "private"})
+(def non-evicted-doc {:xt/id :not-evicted :personal "private"})
+(def after-evict-doc {:xt/id :after-evict :personal "private"})
 
 (defn submit-txs-to-compact []
   (fix/with-node
@@ -30,13 +30,13 @@
         (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put evicted-doc]
                                                  [:crux.tx/put non-evicted-doc]])
               _ (api/await-tx *api* submitted-tx)
-              _ (api/submit-tx *api* [[:crux.tx/evict (:crux.db/id evicted-doc)]])
+              _ (api/submit-tx *api* [[:crux.tx/evict (:xt/id evicted-doc)]])
               submitted-tx (api/submit-tx *api* [[:crux.tx/put after-evict-doc]])
               _ (api/await-tx *api* submitted-tx nil)]
 
           (t/testing "querying transacted data"
             (t/is (= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
-            (t/is (nil? (api/entity (api/db *api*) (:crux.db/id :to-be-evicted))))
+            (t/is (nil? (api/entity (api/db *api*) (:xt/id :to-be-evicted))))
             (t/is (= after-evict-doc (api/entity (api/db *api*) :after-evict))))
 
           (with-open [doc-consumer (doto (fk/open-consumer)
@@ -87,10 +87,10 @@
         (fn []
           (fix/with-node
             (fn []
-              (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])))
+              (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])))
           (fix/with-node
             (fn []
-              (doto (api/submit-tx *api* [[:crux.tx/put {:crux.db/id :bar}]])
+              (doto (api/submit-tx *api* [[:crux.tx/put {:xt/id :bar}]])
                 (as-> tx (api/await-tx *api* tx (Duration/ofSeconds 5))))
               (t/is (api/entity (api/db *api*) :foo))
               (t/is (api/entity (api/db *api*) :bar)))))))))
@@ -113,7 +113,7 @@
             (api/submit-tx
              *api*
              [[:crux.tx/put
-               (into {:crux.db/id :test}
+               (into {:xt/id :test}
                      (for [n (range 1000)]
                        [(keyword (str "key-" n))
                         (str "value-" n)]))]]))))))))

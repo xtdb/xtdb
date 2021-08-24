@@ -21,7 +21,7 @@
 (t/deftest test-tx-time-tz-1071
   (let [tx-time (fix/with-node
                   (fn []
-                    (let [tx (crux/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]])]
+                    (let [tx (crux/submit-tx *api* [[:crux.tx/put {:xt/id :foo}]])]
                       (crux/sync *api*)
                       (t/is (= (::tx/tx-time tx)
                                (::tx/tx-time (crux/latest-completed-tx *api*))))

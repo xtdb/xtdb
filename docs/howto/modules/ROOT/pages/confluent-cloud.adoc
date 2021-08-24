@@ -98,7 +98,7 @@ Submit a transaction:
 
 [source,clj]
 ----
-(def my-doc {:crux.db/id :some-id
+(def my-doc {:xt/id :some-id
              :color "red"})
 
 (crux/submit-tx node [[:crux.tx/put my-doc]]) ; returns a transaction receipt

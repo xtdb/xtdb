@@ -81,7 +81,7 @@
 (defn- ->crux-docs [^TransactionState tx-state {:keys [document-mapper]}]
   (for [^CruxState crux-state (document-mapper (.getData tx-state))
         :when (instance? CruxState crux-state)]
-    (merge {:crux.db/id (.getCruxId crux-state)}
+    (merge {:xt/id (.getCruxId crux-state)}
            (->> (.getCruxDoc crux-state)
                 (into {} (map (juxt (comp keyword key) val)))))))
 
@@ -90,7 +90,7 @@
         consumed-ids (->> (.getInputs ledger-tx)
                           (map #(.getState ^StateAndRef %))
                           (mapcat #(->crux-docs % opts))
-                          (into #{} (map :crux.db/id)))
+                          (into #{} (map :xt/id)))
         new-docs (->> (.getOutputs ledger-tx)
                       (mapcat #(->crux-docs % opts))
                       (into {} (map (juxt c/new-id identity))))]
@@ -98,7 +98,7 @@
                                [::tx/delete deleted-id])
 
                              (for [[new-doc-id new-doc] new-docs]
-                               [::tx/put (:crux.db/id new-doc) new-doc-id]))
+                               [::tx/put (:xt/id new-doc) new-doc-id]))
      :docs new-docs}))
 
 (defn- with-database-connection [^AppServiceHub service-hub, f]

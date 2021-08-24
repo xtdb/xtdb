@@ -28,7 +28,7 @@
     (crux/submit-tx
      node
      [[:crux.tx/put
-       {:crux.db/id :malcolm :name "Malcolm" :last-name "Sparks"}
+       {:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}
        #inst "1986-10-22"]])
     ;; end::query-at-t-d1[]
 
@@ -36,7 +36,7 @@
     (crux/submit-tx
      node
      [[:crux.tx/put
-       {:crux.db/id :malcolm :name "Malcolma" :last-name "Sparks"}
+       {:xt/id :malcolm :name "Malcolma" :last-name "Sparks"}
        #inst "1986-10-24"]])
     ;; end::query-at-t-d2[]
 
@@ -61,15 +61,15 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::query-input[]
-    [{:crux.db/id :ivan
+    [{:xt/id :ivan
       :name "Ivan"
       :last-name "Ivanov"}
 
-     {:crux.db/id :petr
+     {:xt/id :petr
       :name "Petr"
       :last-name "Petrov"}
 
-     {:crux.db/id :smith
+     {:xt/id :smith
       :name "Smith"
       :last-name "Smith"}])
    ;; end::query-input[]
@@ -97,15 +97,15 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::query-input[]
-    [{:crux.db/id :ivan
+    [{:xt/id :ivan
       :name "Ivan"
       :last-name "Ivanov"}
 
-     {:crux.db/id :petr
+     {:xt/id :petr
       :name "Petr"
       :last-name "Petrov"}
 
-     {:crux.db/id :smith
+     {:xt/id :smith
       :name "Smith"
       :last-name "Smith"}]
     ;; end::query-input[]
@@ -281,11 +281,11 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::join-d[]
-    [{:crux.db/id :ivan :name "Ivan"}
-     {:crux.db/id :petr :name "Petr"}
-     {:crux.db/id :sergei :name "Sergei"}
-     {:crux.db/id :denis-a :name "Denis"}
-     {:crux.db/id :denis-b :name "Denis"}]
+    [{:xt/id :ivan :name "Ivan"}
+     {:xt/id :petr :name "Petr"}
+     {:xt/id :sergei :name "Sergei"}
+     {:xt/id :denis-a :name "Denis"}
+     {:xt/id :denis-b :name "Denis"}]
     ;; end::join-d[]
     ))
 
@@ -315,8 +315,8 @@
     (fix/submit+await-tx
      (fix/maps->tx-ops
       ;; tag::join2-d[]
-      [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"}
-       {:crux.db/id :petr :name "Petr" :follows #{"Ivanov"}}]
+      [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"}
+       {:xt/id :petr :name "Petr" :follows #{"Ivanov"}}]
       ;; end::join2-d[]
       ))
 
@@ -338,11 +338,11 @@
 (t/deftest test-eql
   (fix/submit+await-tx
    (fix/maps->tx-ops
-    [{:crux.db/id :ivan :user/name "Ivan" :user/id 1 :user/profession :doctor}
-     {:crux.db/id :sergei :user/name "Sergei" :user/id 2 :user/profession :lawyer}
-     {:crux.db/id :petr :user/name "Petr" :user/id 3 :user/profession :doctor}
-     {:crux.db/id :doctor :profession/name "Doctor"}
-     {:crux.db/id :lawyer :profession/name "Lawyer"}]))
+    [{:xt/id :ivan :user/name "Ivan" :user/id 1 :user/profession :doctor}
+     {:xt/id :sergei :user/name "Sergei" :user/id 2 :user/profession :lawyer}
+     {:xt/id :petr :user/name "Petr" :user/id 3 :user/profession :doctor}
+     {:xt/id :doctor :profession/name "Doctor"}
+     {:xt/id :lawyer :profession/name "Lawyer"}]))
 
   (let [node *api*]
     (t/is (=
@@ -429,7 +429,7 @@
 
     (t/is (=
            ;; tag::pull-query-6-r[]
-           #{[{:crux.db/id :ivan :user/id 1, :user/name "Ivan", :user/profession :doctor}]}
+           #{[{:xt/id :ivan :user/id 1, :user/name "Ivan", :user/profession :doctor}]}
            ;; end::pull-query-6-r[]
 
            ;; tag::pull-query-6[]
@@ -472,11 +472,11 @@
 (t/deftest test-return-maps
   (fix/submit+await-tx
    (fix/maps->tx-ops
-    [{:crux.db/id :ivan :user/name "Ivan" :user/id 1 :user/profession :doctor}
-     {:crux.db/id :sergei :user/name "Sergei" :user/id 2 :user/profession :lawyer}
-     {:crux.db/id :petr :user/name "Petr" :user/id 3 :user/profession :doctor}
-     {:crux.db/id :doctor :profession/name "Doctor"}
-     {:crux.db/id :lawyer :profession/name "Lawyer"}]))
+    [{:xt/id :ivan :user/name "Ivan" :user/id 1 :user/profession :doctor}
+     {:xt/id :sergei :user/name "Sergei" :user/id 2 :user/profession :lawyer}
+     {:xt/id :petr :user/name "Petr" :user/id 3 :user/profession :doctor}
+     {:xt/id :doctor :profession/name "Doctor"}
+     {:xt/id :lawyer :profession/name "Lawyer"}]))
 
   (let [node *api*]
     (t/is (=
@@ -499,7 +499,7 @@
 (t/deftest test-order-and-pagination
   (let [node *api*
         data (for [i (range 200)]
-               {:crux.db/id i
+               {:xt/id i
                 :condition/time (if (even? i) (quot i 4) (- (quot i 4)))
                 :condition/device-id i
                 :condition/temperature :temp
@@ -550,9 +550,9 @@
 (t/deftest test-rules
   (fix/submit+await-tx
    (fix/maps->tx-ops
-    [{:crux.db/id :ivan :follow :petr :age 19}
-     {:crux.db/id :petr :follow :sergei :age 25}
-     {:crux.db/id :sergei :age 3}]))
+    [{:xt/id :ivan :follow :petr :age 19}
+     {:xt/id :petr :follow :sergei :age 25}
+     {:xt/id :sergei :age 3}]))
 
   (let [node *api*]
     (t/is (= #{[:ivan] [:petr]}
@@ -585,7 +585,7 @@
 
 (t/deftest test-bound-rule-vars-946
   (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
-                         [:crux.tx/put {:crux.db/id id, :child child-id :name (str id "-" child-id)}]))
+                         [:crux.tx/put {:xt/id id, :child child-id :name (str id "-" child-id)}]))
 
   (let [node *api*
         parent-id 50
@@ -597,7 +597,7 @@
               (crux/db node)
               '{:find [child-name]
                 :in [parent]
-                :where [[parent :crux.db/id]
+                :where [[parent :xt/id]
                         (child-of parent child)
                         [child :name child-name]]
                 :rules [[(child-of p c)
@@ -614,7 +614,7 @@
               (crux/db node)
               '{:find [child-name]
                 :in [parent]
-                :where [[parent :crux.db/id]
+                :where [[parent :xt/id]
                         (child-of parent child)
                         [child :name child-name]]
                 :rules [[(child-of [p] c)
@@ -630,10 +630,10 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::not-data[]
-    [{:crux.db/id :petr-ivanov :name "Petr" :last-name "Ivanov"} ;; <1>
-     {:crux.db/id :ivan-ivanov :name "Ivan" :last-name "Ivanov"}
-     {:crux.db/id :ivan-petrov :name "Ivan" :last-name "Petrov"}
-     {:crux.db/id :petr-petrov :name "Petr" :last-name "Petrov"}]
+    [{:xt/id :petr-ivanov :name "Petr" :last-name "Ivanov"} ;; <1>
+     {:xt/id :ivan-ivanov :name "Ivan" :last-name "Ivanov"}
+     {:xt/id :ivan-petrov :name "Ivan" :last-name "Petrov"}
+     {:xt/id :petr-petrov :name "Petr" :last-name "Petrov"}]
     ;; end::not-data[]
     ))
 
@@ -656,7 +656,7 @@
            (crux/q
             (crux/db node)
             '{:find [e]
-              :where [[e :crux.db/id]
+              :where [[e :xt/id]
                       (not [e :last-name "Ivanov"] ;;<2>
                            [e :name "Ivan"])]})
            ;; end::not-2[]
@@ -677,11 +677,11 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::or-data[]
-    [{:crux.db/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov" :sex :male} ;;<1>
-     {:crux.db/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov" :sex :male}
-     {:crux.db/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov" :sex :male}
-     {:crux.db/id :ivanova :name "Ivanova" :last-name "Ivanov" :sex :female}
-     {:crux.db/id :bob :name "Bob" :last-name "Controlguy"}]
+    [{:xt/id :ivan-ivanov-1 :name "Ivan" :last-name "Ivanov" :sex :male} ;;<1>
+     {:xt/id :ivan-ivanov-2 :name "Ivan" :last-name "Ivanov" :sex :male}
+     {:xt/id :ivan-ivanovtov-1 :name "Ivan" :last-name "Ivannotov" :sex :male}
+     {:xt/id :ivanova :name "Ivanova" :last-name "Ivanov" :sex :female}
+     {:xt/id :bob :name "Bob" :last-name "Controlguy"}]
     ;; end::or-data[]
     ))
 
@@ -742,9 +742,9 @@
 
 (t/deftest test-blanks
   (fix/submit+await-tx
-   (fix/maps->tx-ops [{:crux.db/id :ivan :name "Ivan"}
-                      {:crux.db/id :petr :name "Petr"}
-                      {:crux.db/id :sergei :name "Sergei"}]))
+   (fix/maps->tx-ops [{:xt/id :ivan :name "Ivan"}
+                      {:xt/id :petr :name "Petr"}
+                      {:xt/id :sergei :name "Sergei"}]))
 
   (let [node *api*]
     (t/is (= #{["Ivan"] ["Petr"] ["Sergei"]}
@@ -757,9 +757,9 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::not-join-data[]
-    [{:crux.db/id :ivan :name "Ivan" :last-name "Ivanov"} ;;<1>
-     {:crux.db/id :petr :name "Petr" :last-name "Petrov"}
-     {:crux.db/id :sergei :name "Sergei" :last-name "Sergei"}]
+    [{:xt/id :ivan :name "Ivan" :last-name "Ivanov"} ;;<1>
+     {:xt/id :petr :name "Petr" :last-name "Petrov"}
+     {:xt/id :sergei :name "Sergei" :last-name "Sergei"}]
     ;; end::not-join-data[]
     ))
 
@@ -772,7 +772,7 @@
            (crux/q
             (crux/db node)
             '{:find [e]
-              :where [[e :crux.db/id]
+              :where [[e :xt/id]
                       (not-join [e] ;;<2>
                                 [e :last-name n] ;;<3>
                                 [e :name n])]})
@@ -782,7 +782,7 @@
 (t/deftest test-generic
   (fix/submit+await-tx
    (fix/maps->tx-ops
-    [{:crux.db/id :ivan :name "Ivan" :last-name "Ivan"}]))
+    [{:xt/id :ivan :name "Ivan" :last-name "Ivan"}]))
 
   (let [node *api*]
     (t/is (= #{[:ivan]}
@@ -842,9 +842,9 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::or-join-data[]
-    [{:crux.db/id :ivan :name "Ivan" :age 12} ;;<1>
-     {:crux.db/id :petr :name "Petr" :age 15}
-     {:crux.db/id :sergei :name "Sergei" :age 19}]
+    [{:xt/id :ivan :name "Ivan" :age 12} ;;<1>
+     {:xt/id :petr :name "Petr" :age 15}
+     {:xt/id :sergei :name "Sergei" :age 19}]
     ;; end::or-join-data[]
     ))
 
@@ -858,7 +858,7 @@
            (crux/q
             (crux/db node)
             '{:find [p]
-              :where [[p :crux.db/id]
+              :where [[p :xt/id]
                       (or-join [p] ;;<2>
                                (and [p :age a] ;;<3>
                                     [(>= a 18)])
@@ -870,9 +870,9 @@
   (fix/submit+await-tx
    (fix/maps->tx-ops
     ;; tag::range-data[]
-    [{:crux.db/id :ivan :name "Ivan" :age 12} ;;<1>
-     {:crux.db/id :petr :name "Petr" :age 15}
-     {:crux.db/id :sergei :name "Sergei" :age 19}]
+    [{:xt/id :ivan :name "Ivan" :age 12} ;;<1>
+     {:xt/id :petr :name "Petr" :age 15}
+     {:xt/id :sergei :name "Sergei" :age 19}]
     ;; end::range-data[]
     ))
 

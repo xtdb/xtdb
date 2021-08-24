@@ -92,8 +92,8 @@
                     (map ::query-id)))))))
 
 (t/deftest test-recent-queries
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
-                        [:crux.tx/put {:crux.db/id :petr :name "Petr"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]
+                        [:crux.tx/put {:xt/id :petr :name "Petr"}]])
 
   (let [db (api/db *api*)]
     (api/q db
@@ -106,17 +106,17 @@
 
     (t/is (thrown-with-msg? Exception
                             #"Find refers to unknown variable: f"
-                            (api/q db '{:find [f], :where [[e :crux.db/id _]]})))
+                            (api/q db '{:find [f], :where [[e :xt/id _]]})))
 
     (t/testing "test recent-query - post failed query"
       (let [malformed-query (first (api/recent-queries *api*))]
-        (t/is (= '{:find [f], :where [[e :crux.db/id _]]} (:query malformed-query)))
+        (t/is (= '{:find [f], :where [[e :xt/id _]]} (:query malformed-query)))
         (t/is (= :failed (:status malformed-query)))))))
 
 (t/deftest test-slowest-queries
   (fix/submit+await-tx (mapv
                         (fn [n] [:crux.tx/put
-                                 {:crux.db/id (keyword (str "ivan" n))
+                                 {:xt/id (keyword (str "ivan" n))
                                   :name (str "ivan" n)}])
                         (range 100)))
   (let [db (api/db *api*)]
@@ -134,8 +134,8 @@
       (t/is (not (n/slow-query? query-info {:slow-queries-min-threshold (Duration/ofSeconds 10)}))))))
 
 (t/deftest test-active-queries
-  (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :ivan :name "Ivan"}]
-                        [:crux.tx/put {:crux.db/id :petr :name "Petr"}]])
+  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]
+                        [:crux.tx/put {:xt/id :petr :name "Petr"}]])
 
   (let [db (api/db *api*)]
     (t/testing "test active-queries - streaming query"

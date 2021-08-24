@@ -421,7 +421,7 @@
     (blank-var? e)
     (assoc :e (gensym "_"))
     (nil? a)
-    (assoc :a :crux.db/id)))
+    (assoc :a :xt/id)))
 
 (def ^:private pred->built-in-range-pred {< (comp neg? compare)
                                           <= (comp not pos? compare)
@@ -1419,7 +1419,7 @@
                                             (= e (get v-var->e v)))]
                              [v a])
                            (into {}))
-          e-var->attr (zipmap e-vars (repeat :crux.db/id))
+          e-var->attr (zipmap e-vars (repeat :xt/id))
           var->attr (merge e-var->attr v-var->attr)
           var->bindings (merge (build-or-free-var-bindings var->values-result-index or-clause+idx-id+or-branches)
                                (build-pred-return-var-bindings var->values-result-index pred-clauses)

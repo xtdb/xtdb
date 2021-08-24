@@ -117,7 +117,7 @@ coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.
 To define a table, transact a document into Crux:
 
 ``` clojure
-{:crux.db/id :crux.sql.schema/person
+{:xt/id :crux.sql.schema/person
  :crux.sql.table/name "person"
  :crux.sql.table/query '{:find [id name homeworld]
                          :where [[id :name name]
@@ -136,7 +136,7 @@ For example with the following Crux transaction operation:
 
 [source,clojure]
 ----
-[:crux.tx/put {:crux.db/id :ivan :name "Ivan" :homeworld "Earth"}]
+[:crux.tx/put {:xt/id :ivan :name "Ivan" :homeworld "Earth"}]
 ----
 
 Get a connection and query as such:

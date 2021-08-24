@@ -332,12 +332,12 @@ A document is a map from keywords to values.
 
 [source,clj]
 ----
-{:crux.db/id :dbpedia.resource/Pablo-Picasso
+{:xt/id :dbpedia.resource/Pablo-Picasso
  :name "Pablo"
  :last-name "Picasso"}
 ----
 
-All documents must contain the `:crux.db/id` key.
+All documents must contain the `:xt/id` key.
 
 Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to Crux, to avoid potential equality checking issues (see https://github.com/juxt/crux/issues/1510[here] for more details).
 --
@@ -377,7 +377,7 @@ The following types of document IDs are allowed:
 Clojure::
 +
 --
-The following types of `:crux.db/id` are allowed:
+The following types of `:xt/id` are allowed:
 
 .Valid ID types (Clojure)
 [cols="d,d"]

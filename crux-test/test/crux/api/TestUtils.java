@@ -15,7 +15,7 @@ public class TestUtils {
     static final Keyword PUT = Keyword.intern("crux.tx/put");
     static final Keyword DELETE = Keyword.intern("crux.tx/delete");
 
-    static final Keyword DB_ID = Keyword.intern("crux.db/id");
+    static final Keyword DB_ID = Keyword.intern("xt/id");
     static final Keyword VALID_TIME = Keyword.intern("crux.db/valid-time");
     static final Keyword CONTENT_HASH = Keyword.intern("crux.db/content-hash");
     static final Keyword DOC = Keyword.intern("crux.db/doc");

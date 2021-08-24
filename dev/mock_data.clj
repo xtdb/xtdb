@@ -1,5 +1,5 @@
 (ns mock-data
-  (:require [user :as user]
+  (:require dev
             [clojure.edn :as edn]
             [clojure.string :as string]
             [crux.api :as crux]))
@@ -28,7 +28,7 @@
   [data addresses]
   (map (fn [x address]
          (assoc x :address
-                (:crux.db/id address))) data addresses))
+                (:xt/id address))) data addresses))
 
 (def final-employees
   (let [top-management (get-n 1 ["CEO" "CTO" "COO" "CMO"] employees)
@@ -53,18 +53,18 @@
                                  #(not (string/includes? (:position %) "Engineer"))
                                  #(string/includes? (:position %) "Sales"))
                                 final-employees)]
-    (map (fn [{:keys [crux.db/id]}]
-           {:crux.db/id (java.util.UUID/randomUUID)
-            :car (:crux.db/id (rand-nth final-cars))
+    (map (fn [{:keys [xt/id]}]
+           {:xt/id (java.util.UUID/randomUUID)
+            :car (:xt/id (rand-nth final-cars))
             :type :sale
-            :employee (:crux.db/id (rand-nth sales-employees))
+            :employee (:xt/id (rand-nth sales-employees))
             :customer id
             :status (rand-nth ["Shipped" "Processed" "Delivered"])}) final-customers)))
 
 (defn ingest-data
   [data]
   (crux/submit-tx
-   (user/crux-node)
+   (dev/crux-node)
    (mapv #(do [:crux.tx/put %]) data)))
 
 (comment

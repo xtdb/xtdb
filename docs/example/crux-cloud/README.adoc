@@ -77,9 +77,9 @@ code to connect to your cluster and make a transaction:
    ; note the escaped string characters surrounding your username and password SASL values
    "security.protocol" "SASL_SSL"})
 
-(crux/submit-tx node [[:crux.tx/put {:crux.db/id :my-first-doc :very "cool"}]])
+(crux/submit-tx node [[:crux.tx/put {:xt/id :my-first-doc :very "cool"}]])
 
-(crux/q (crux/db node) {:find '[(pull e [*])] :where '[[e :crux.db/id _]]})
+(crux/q (crux/db node) {:find '[(pull e [*])] :where '[[e :xt/id _]]})
 ----
 
 Note that Crux will automatically generate topics with the required

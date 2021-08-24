@@ -256,7 +256,7 @@
 
   ZeroLengthPath
   (rdf->clj [this]
-    [[(rdf/rdf->clj (.getSubjectVar this)) :crux.db/id]
+    [[(rdf/rdf->clj (.getSubjectVar this)) :xt/id]
      ['(identity ::zero-matches) (rdf/rdf->clj (.getObjectVar this))]]))
 
 (defn- collect-args [^TupleExpr tuple-expr]
@@ -296,7 +296,7 @@
                                   [s p '?t]
                                   (arbitrary-length-path-rule-head '?t p o min-length)]]
                           (zero? min-length) (conj [(arbitrary-length-path-rule-head s p o min-length)
-                                                    [s :crux.db/id]
+                                                    [s :xt/id]
                                                     ['(identity ::zero-matches) o]])))))
              (.visitChildren ^QueryModelNode node this)))
          (.visit tuple-expr))

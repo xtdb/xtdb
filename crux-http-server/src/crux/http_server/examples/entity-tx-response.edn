@@ -1,4 +1,4 @@
-{:crux.db/id #xt/id "5aeebab117b892fa42002146e4c62be676bc4621",
+{:xt/id #xt/id "5aeebab117b892fa42002146e4c62be676bc4621",
  :crux.db/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9",
  :crux.db/valid-time #inst "2020-10-16T14:29:35.664-00:00",
  :crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00",

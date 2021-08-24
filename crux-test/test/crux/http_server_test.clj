@@ -10,4 +10,4 @@
 
 (t/deftest test-read-only-node
   (t/is (thrown-with-msg? UnsupportedOperationException #"read-only"
-                          (crux/submit-tx *api* [[:crux.tx/put {:crux.db/id :foo}]]))))
+                          (crux/submit-tx *api* [[:crux.tx/put {:xt/id :foo}]]))))

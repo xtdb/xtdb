@@ -27,7 +27,7 @@
                                   :multi {:crux/module 'crux.lucene/->lucene-store
                                           :analyzer 'crux.lucene/->analyzer
                                           :indexer 'crux.lucene.multi-field/->indexer}})]
-    (submit+await-tx node [[:crux.tx/put {:crux.db/id :ivan
+    (submit+await-tx node [[:crux.tx/put {:xt/id :ivan
                                           :firstname "Fred"
                                           :surname "Smith"}]])
     (with-open [db (c/open-db node)]
@@ -36,9 +36,9 @@
                                    [(lucene-text-search "firstname:%s AND surname:%s" "Fred" "Smith" {:lucene-store-k :multi}) [[?e]]]]}))))))
 
 (t/deftest test-userspace-text-search-limit
-  (submit+await-tx (for [n (range 10)] [:crux.tx/put {:crux.db/id n, :description (str "Entity " n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:crux.db/id n, :description (str "Entity v2 " n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:crux.db/id (+ n 4), :description (str "Entity v2 " n)}]))
+  (submit+await-tx (for [n (range 10)] [:crux.tx/put {:xt/id n, :description (str "Entity " n)}]))
+  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id n, :description (str "Entity v2 " n)}]))
+  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id (+ n 4), :description (str "Entity v2 " n)}]))
 
   (with-open [db (c/open-db *api*)]
     (with-open [s (l/search *api* "Entity*" {:default-field (name :description)})]
@@ -54,9 +54,9 @@
                              (take 5))))))))
 
 (t/deftest test-userspace-wildcard-text-search-limit
-  (submit+await-tx (for [n (range 10)] [:crux.tx/put {:crux.db/id n, :description (str "Entity " n) :foo (str "Entitybar" n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:crux.db/id n, :description (str "Entity v2 " n) :foo (str "Entitybaz" n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:crux.db/id (+ n 4), :description (str "Entity v2 " n) :foo (str "Entityqaz" n)}]))
+  (submit+await-tx (for [n (range 10)] [:crux.tx/put {:xt/id n, :description (str "Entity " n) :foo (str "Entitybar" n)}]))
+  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id n, :description (str "Entity v2 " n) :foo (str "Entitybaz" n)}]))
+  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id (+ n 4), :description (str "Entity v2 " n) :foo (str "Entityqaz" n)}]))
 
   (with-open [db (c/open-db *api*)]
     (with-open [s (l/search *api* "Entity*" {})]
@@ -82,8 +82,8 @@
   l/LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
-            [a ^String v] (->> (dissoc crux-doc :crux.db/id)
+    (doseq [{e :xt/id, :as crux-doc} (vals docs)
+            [a ^String v] (->> (dissoc crux-doc :xt/id)
                                (mapcat (fn [[a v]]
                                          (for [v (cc/vectorize-value v)
                                                :when (string? v)]
@@ -170,8 +170,8 @@
 (t/deftest test-custom-index-and-analyzer
   (with-open [node (c/start-node {:crux.lucene/lucene-store {:analyzer 'crux.lucene.extension-test/->per-field-analyzer
                                                              :indexer 'crux.lucene.extension-test/->custom-eav-indexer}})]
-    (submit+await-tx node [[:crux.tx/put {:crux.db/id 0, :description "Some Entity"}]
-                           [:crux.tx/put {:crux.db/id 1, :description "Another entity"}]])
+    (submit+await-tx node [[:crux.tx/put {:xt/id 0, :description "Some Entity"}]
+                           [:crux.tx/put {:xt/id 1, :description "Another entity"}]])
 
     (let [db (c/db node)]
       ;; text-search + leading-wildcard
@@ -201,8 +201,8 @@
   l/LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
-            [a v] (->> (dissoc crux-doc :crux.db/id)
+    (doseq [{e :xt/id, :as crux-doc} (vals docs)
+            [a v] (->> (dissoc crux-doc :xt/id)
                        (mapcat (fn [[a v]]
                                  (for [v (cc/vectorize-value v)
                                        :when (string? v)]
@@ -240,13 +240,13 @@
 (t/deftest test-example-use-case
   (with-open [node (c/start-node {:crux.lucene/lucene-store {:analyzer 'crux.lucene.extension-test/->example-analyzer
                                                              :indexer 'crux.lucene.extension-test/->example-eav-indexer}})]
-    (submit+await-tx node [[:crux.tx/put {:crux.db/id "SKU-32934"
+    (submit+await-tx node [[:crux.tx/put {:xt/id "SKU-32934"
                                           :product/title "Brown Summer Hat"
                                           :product/description "This large and comfortable woven hat will keep you cool in the summer"}]
-                           [:crux.tx/put {:crux.db/id "SKU-93921"
+                           [:crux.tx/put {:xt/id "SKU-93921"
                                           :product/title "Yellow Raincoat"
                                           :product/description "Light and bright - a yellow raincoat to keep you dry all year round"}]
-                           [:crux.tx/put {:crux.db/id "SKU-13892"
+                           [:crux.tx/put {:xt/id "SKU-13892"
                                           :product/title "Large Umbrella"
                                           :product/description "Don't let rain get in the way of your day!"}]])
     (let [db (c/db node)]

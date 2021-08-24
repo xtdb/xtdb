@@ -34,12 +34,12 @@
 (t/deftest drop-db
   (with-cluster
     (with-cluster-node
-      (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :hello}]]))
+      (fix/submit+await-tx [[:crux.tx/put {:xt/id :hello}]]))
 
     (with-cluster-node
       (t/is (= {:crux.tx/tx-id 0}
                (crux/latest-submitted-tx *api*)))
-      (t/is (= {:crux.db/id :hello}
+      (t/is (= {:xt/id :hello}
                (crux/entity (crux/db *api*) :hello))))))
 
 (t/deftest test-more-txs
@@ -47,71 +47,71 @@
     (with-cluster
       (with-cluster-node
         (dotimes [x n]
-          (fix/submit+await-tx  [[:crux.tx/put {:crux.db/id (str "id-" x)}]])))
+          (fix/submit+await-tx  [[:crux.tx/put {:xt/id (str "id-" x)}]])))
 
       (with-cluster-node
         (t/is (= {:crux.tx/tx-id (dec n)}
                  (crux/latest-submitted-tx *api*)))
         (t/is (= n
                  (count (crux/q (crux/db *api*) '{:find [?e]
-                                                  :where [[?e :crux.db/id]]}))))))))
+                                                  :where [[?e :xt/id]]}))))))))
 
 (t/deftest replaces-tx-fn-arg-docs
   (with-cluster
     (with-cluster-node
-      (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
+      (fix/submit+await-tx [[:crux.tx/put {:xt/id :put-ivan
                                            :crux.db/fn '(fn [ctx doc]
-                                                          [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
+                                                          [[:crux.tx/put (assoc doc :xt/id :ivan)]])}]])
 
       (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
 
-      (t/is (= {:crux.db/id :ivan, :name "Ivan"}
+      (t/is (= {:xt/id :ivan, :name "Ivan"}
                (crux/entity (crux/db *api*) :ivan))))
 
     (with-cluster-node
-      (t/is (= {:crux.db/id :ivan, :name "Ivan"}
+      (t/is (= {:xt/id :ivan, :name "Ivan"}
                (crux/entity (crux/db *api*) :ivan)))))
 
   (t/testing "replaces fn with no args"
     (with-cluster
       (with-cluster-node
-        (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :no-args
+        (fix/submit+await-tx [[:crux.tx/put {:xt/id :no-args
                                              :crux.db/fn '(fn [ctx]
-                                                            [[:crux.tx/put {:crux.db/id :no-fn-args-doc}]])}]])
+                                                            [[:crux.tx/put {:xt/id :no-fn-args-doc}]])}]])
         (fix/submit+await-tx [[:crux.tx/fn :no-args]])
 
-        (t/is (= {:crux.db/id :no-fn-args-doc}
+        (t/is (= {:xt/id :no-fn-args-doc}
                  (crux/entity (crux/db *api*) :no-fn-args-doc))))
 
       (with-cluster-node
-        (t/is (= {:crux.db/id :no-fn-args-doc}
+        (t/is (= {:xt/id :no-fn-args-doc}
                  (crux/entity (crux/db *api*) :no-fn-args-doc))))))
 
   (t/testing "nested tx-fn"
     (with-cluster
       (with-cluster-node
-        (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-ivan
+        (fix/submit+await-tx [[:crux.tx/put {:xt/id :put-ivan
                                              :crux.db/fn '(fn [ctx doc]
-                                                            [[:crux.tx/put (assoc doc :crux.db/id :ivan)]])}]])
+                                                            [[:crux.tx/put (assoc doc :xt/id :ivan)]])}]])
 
-        (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :put-bob-and-ivan
+        (fix/submit+await-tx [[:crux.tx/put {:xt/id :put-bob-and-ivan
                                              :crux.db/fn '(fn [ctx bob ivan]
-                                                            [[:crux.tx/put (assoc bob :crux.db/id :bob)]
+                                                            [[:crux.tx/put (assoc bob :xt/id :bob)]
                                                              [:crux.tx/fn :put-ivan ivan]])}]])
 
         (fix/submit+await-tx [[:crux.tx/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
 
-        (t/is (= {:crux.db/id :ivan, :name "Ivan2"}
+        (t/is (= {:xt/id :ivan, :name "Ivan2"}
                  (crux/entity (crux/db *api*) :ivan)))
 
-        (t/is (= {:crux.db/id :bob, :name "Bob"}
+        (t/is (= {:xt/id :bob, :name "Bob"}
                  (crux/entity (crux/db *api*) :bob))))
 
       (with-cluster-node
-        (t/is (= {:crux.db/id :ivan, :name "Ivan2"}
+        (t/is (= {:xt/id :ivan, :name "Ivan2"}
                  (crux/entity (crux/db *api*) :ivan)))
 
-        (t/is (= {:crux.db/id :bob, :name "Bob"}
+        (t/is (= {:xt/id :bob, :name "Bob"}
                  (crux/entity (crux/db *api*) :bob))))))
 
   (t/testing "failed tx-fn"
@@ -121,12 +121,12 @@
 
         (t/is (nil? (crux/entity (crux/db *api*) :petr)))
 
-        (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :foo}]])
+        (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])
 
-        (t/is (= {:crux.db/id :foo}
+        (t/is (= {:xt/id :foo}
                  (crux/entity (crux/db *api*) :foo))))
 
       (with-cluster-node
         (t/is (nil? (crux/entity (crux/db *api*) :petr)))
-        (t/is (= {:crux.db/id :foo}
+        (t/is (= {:xt/id :foo}
                  (crux/entity (crux/db *api*) :foo)))))))

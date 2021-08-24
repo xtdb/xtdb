@@ -7,7 +7,7 @@
   (cf/with-calcite-connection-scan-only f))
 
 (defn- with-sql-schema [f]
-  (fix/transact! *api* [{:crux.db/id :crux.sql.schema/person
+  (fix/transact! *api* [{:xt/id :crux.sql.schema/person
                          :crux.sql.table/name "person"
                          :crux.sql.table/query '{:find [?id ?name ?homeworld ?age ?alive]
                                                  :where [[?id :name ?name]
@@ -20,8 +20,8 @@
 (t/use-fixtures :each cf/with-calcite-module cf/with-scan-only fix/with-node with-each-connection-type with-sql-schema)
 
 (t/deftest test-sql-query
-  (fix/transact! *api* [{:crux.db/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
-                        {:crux.db/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
+  (fix/transact! *api* [{:xt/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
+                        {:xt/id :malcolm :name "Malcolm" :homeworld "Mars" :age 25 :alive false}])
 
   (let [q "SELECT CEIL(21) FROM PERSON"]
     (t/is (= 21

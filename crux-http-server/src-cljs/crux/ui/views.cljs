@@ -285,7 +285,7 @@
               [:div.entity-form__input-line
                [:span {:style {:padding-right "1rem"}}
                 "Entity "
-                [:b ":crux.db/id"]]
+                [:b ":xt/id"]]
                [:input.monospace.entity-form__input
                 {:type "text"
                  :name "eid"

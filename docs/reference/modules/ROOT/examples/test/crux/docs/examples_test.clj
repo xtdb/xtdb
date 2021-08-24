@@ -45,12 +45,12 @@
 (api/submit-tx
   node
   [[:crux.tx/put
-    {:crux.db/id :ids.persons/Jeff
+    {:xt/id :ids.persons/Jeff
      :person/name "Jeff"
      :person/wealth 100}
     #inst "2018-05-18T09:20:27.966"]
    [:crux.tx/put
-    {:crux.db/id :ids.persons/Jeff
+    {:xt/id :ids.persons/Jeff
      :person/name "Jeff"
      :person/wealth 1000}
     #inst "2015-05-18T09:20:27.966"]])
@@ -85,7 +85,7 @@
   :crux.db/content-hash
   "6ca48d3bf05a16cd8d30e6b466f76d5cc281b561"
   :crux.db/doc
-  {:crux.db/id :ids.persons/Jeff
+  {:xt/id :ids.persons/Jeff
    :person/name "Jeff"
    :person/wealth 100}}
  {:crux.tx/tx-time #inst "2019-04-15T07:53:56.178-00:00",
@@ -93,7 +93,7 @@
   :crux.db/valid-time #inst "2015-05-18T09:20:27.966-00:00",
   :crux.db/content-hash "a95f149636e0a10a78452298e2135791c0203529"
   :crux.db/doc
-  {:crux.db/id :ids.persons/Jeff
+  {:xt/id :ids.persons/Jeff
    :person/name "Jeff"
    :person/wealth 1000}}]
 ;; end::history-with-docs[]

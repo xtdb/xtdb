@@ -72,7 +72,7 @@ include::Kafka-QuickStart.adoc[leveloffset=+1]
 * Default: _"http://localhost:3000"_
 
 .*id.key*
-* Record key to use as :crux.db/id
+* Record key to use as :xt/id
 * Type: *String*
 * Importance: *Low*
-* Default: _"crux.db/id"_
+* Default: _"xt/id"_

@@ -17,7 +17,7 @@
    TpchColumnType$Base/DATE :timestamp})
 
 (defn tpch-table->crux-sql-schema [^TpchTable t]
-  {:crux.db/id (keyword "crux.sql.schema" (.getTableName t))
+  {:xt/id (keyword "crux.sql.schema" (.getTableName t))
    :crux.sql.table/name (.getTableName t)
    :crux.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
                                        (symbol (.getColumnName c))))
@@ -40,7 +40,7 @@
    "region" [:r_regionkey]})
 
 (defn tpch-entity->doc [^TpchTable t ^TpchEntity b]
-  (into {:crux.db/id (UUID/randomUUID)}
+  (into {:xt/id (UUID/randomUUID)}
         (for [^TpchColumn c (.getColumns t)]
           [(keyword (.getColumnName c))
            (condp = (.getBase (.getType c))
@@ -72,7 +72,7 @@
                  (into {}))
         pkey-columns (get table->pkey (.getTableName t))
         pkey (mapv doc pkey-columns)]
-    (assoc doc :crux.db/id (str/join "___" pkey))))
+    (assoc doc :xt/id (str/join "___" pkey))))
 
 (def default-scale-factor 0.05)
 

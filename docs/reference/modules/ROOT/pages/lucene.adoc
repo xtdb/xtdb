@@ -85,7 +85,7 @@ You can use the built-in `text-search` function within in your Datalog queries:
 ----
 {:find '[?e]
  :where '[[(text-search :name "Ivan") [[?e]]]
- [?e :crux.db/id]]}
+ [?e :xt/id]]}
 ----
 
 The destructuring available is `entity-id`, `matched-value` and `score`.
@@ -95,7 +95,7 @@ For example, to return the complete search results tuples:
 ----
 {:find '[?e ?v ?s]
  :where '[[(text-search :name "Ivan") [[?e ?v ?s]]]
- [?e :crux.db/id]]}
+ [?e :xt/id]]}
 ----
 
 In the above example, `?e` is the entity ID of the matched search result.
@@ -107,7 +107,7 @@ You can use standard Lucene fuzzy textual search capabilities:
 ----
 {:find '[?e]
  :where '[[(text-search :name "Iva*") [[?e]]]
- [?e :crux.db/id]]}
+ [?e :xt/id]]}
 ----
 
 This will return all entities with a `:name` attribute that starts with "Iva". Note that large result sets will be fully realized and there is currently no means to specify a limit.
@@ -135,7 +135,7 @@ There is a wildcard search function, where you can search across all attributes:
 ----
 {:find '[?e ?v ?a ?s]
  :where '[[(wildcard-text-search "Iva*") [[?e ?v ?a ?s]]]
- [?e :crux.db/id]]}
+ [?e :xt/id]]}
 ----
 
 This will return all entities that have an attribute with a value that matches "Iva".

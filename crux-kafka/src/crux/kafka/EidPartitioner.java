@@ -19,7 +19,7 @@ import clojure.lang.IFn;
  * partitioner.class=crux.kafka.EidPartitioner
  */
 public class EidPartitioner implements Partitioner {
-    private static final Keyword cruxDbId = (Keyword) Clojure.read(":crux.db/id");
+    private static final Keyword xtId = (Keyword) Clojure.read(":xt/id");
     private static final IFn newId;
     private static final IFn toIdBuffer;
     private static final IFn toOnHeap;
@@ -46,7 +46,7 @@ public class EidPartitioner implements Partitioner {
     }
 
     public int partitionForDoc(Map<Keyword,Object> doc, int numPartitions) {
-        Object eid = doc.get(cruxDbId);
+        Object eid = doc.get(xtId);
         byte[] eidBytes = (byte[]) toOnHeap.invoke(toIdBuffer.invoke(newId.invoke(eid)));
         return Utils.toPositive(Utils.murmur2(eidBytes)) % numPartitions;
     }

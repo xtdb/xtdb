@@ -282,19 +282,19 @@
 
 (defn entity->idents [e]
   (cons
-   {:db/ident (:crux.db/id e)}
+   {:db/ident (:xt/id e)}
    (for [[_ v] e
          v (c/vectorize-value v)
          :when (keyword? v)]
      {:db/ident v})))
 
 (defn entity->datomic [e]
-  (let [id (:crux.db/id e)
+  (let [id (:xt/id e)
         tx-op-fn (fn tx-op-fn [k v]
                    (if (set? v)
                      (vec (mapcat #(tx-op-fn k %) v))
                      [[:db/add id k v]]))]
-    (->> (for [[k v] (dissoc e :crux.db/id)]
+    (->> (for [[k v] (dissoc e :xt/id)]
            (tx-op-fn k v))
          (apply concat)
          (vec))))

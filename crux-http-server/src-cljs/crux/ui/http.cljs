@@ -13,8 +13,8 @@
 (def edn-response-with-readers
   (map->ResponseFormat {:read (fn [xhrio]
                                 (reader/read-string
-                                 {:readers {'crux.http/entity-ref entity-ref/->EntityRef
-                                            'crux/id str}}
+                                 {:readers {'xt.http/entity-ref entity-ref/->EntityRef
+                                            'xt/id str}}
                                  (-body xhrio)))
                         :description "EDN"
                         :content-type ["application/edn"]}))

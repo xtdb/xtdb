@@ -179,34 +179,34 @@
                {:foo 1} :foo1}]
     (t/is (not= (seq foo-a) (seq foo-b))) ; ordering is different
     (t/is (thrown? ClassCastException (sort foo-a))) ; can't just sort it
-    (t/is (= #xt/id "e64adaca39f92830a8e2d167aa3daabd721d40d4"
-             (c/new-id {:crux.db/id :foo
+    (t/is (= #xt/id "952fe1092dacf06dc4d9270ce1d27010a6c46508"
+             (c/new-id {:xt/id :foo
                         :foo foo-a})
-             (c/new-id {:crux.db/id :foo
+             (c/new-id {:xt/id :foo
                         :foo foo-b}))))
 
   (let [foo #{#{:foo} #{:bar}}]
     (t/is (thrown? ClassCastException (sort foo)))
-    (t/is (= #xt/id "d5fb933a181a2aa89859369c51abcef7f363b31b"
-             (c/new-id {:crux.db/id :foo
+    (t/is (= #xt/id "3d9559394baad1e185c228dfc5a9f1eb655279fd"
+             (c/new-id {:xt/id :foo
                         :foo foo}))))
 
   (let [foo #{42 "hello"}]
     (t/is (thrown? ClassCastException (sort foo)))
-    (t/is (= #xt/id "33581f4655dc841081f310f50d8bc5e0fa602377"
-             (c/new-id {:crux.db/id :foo
+    (t/is (= #xt/id "e744f8a121d024c68e20f160b0965b1bacf1bf29"
+             (c/new-id {:xt/id :foo
                         :foo foo}))))
 
   (t/testing "original coll hashing unaffected"
-    (t/is (= #xt/id "e4b35746db4bd2cf3b024133eafd95f66c3638ed"
-             (c/new-id {:crux.db/id :foo
+    (t/is (= #xt/id "f5282928a8acc2ac6bfc796fea2a676a9bdadfd5"
+             (c/new-id {:xt/id :foo
                         :foo {:a 1, :b 2}})
-             (c/new-id {:crux.db/id :foo
+             (c/new-id {:xt/id :foo
                         :foo {:b 2, :a 1}})))))
 
 (t/deftest test-java-type-serialisation-1044
   (with-open [node (crux/start-node {})]
-    (let [doc {:crux.db/id :foo
+    (let [doc {:xt/id :foo
                :date (java.util.Date.)
                :uri (java.net.URI. "https://google.com")
                :url (java.net.URL. "https://google.com")

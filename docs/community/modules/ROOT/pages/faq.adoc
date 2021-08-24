@@ -67,11 +67,11 @@ Crux imposes very few constraints on the user. How different systems model entit
 therefore very flexible -- including the option of "no modelling at all," in the case
 of ingesting unstructured data. Crux stores schemaless documents and queries them with
 EAV triples. The only strict constraint is that every document must contain a
-`:crux.db/id` key.
+`:xt/id` key.
 
 === Modeling Identifiers
 
-The only constraint Crux places on entity ids (`:crux.db/id`) is that they must be
+The only constraint Crux places on entity ids (`:xt/id`) is that they must be
 unique. They can be of any type.
 Care should be taken when deciding on the type and structure of an entity id.
 If you are building on top of a legacy system and/or legacy data, you may already
@@ -81,7 +81,7 @@ new identifiers), many users choose UUIDs, like so:
 [source,clojure]
 ----
 [[:crux.tx/put
-  {:crux.db/id  (java.util.UUID/randomUUID)
+  {:xt/id  (java.util.UUID/randomUUID)
    :product/sku "KS93528TUT"}]]
 ----
 
@@ -96,7 +96,7 @@ like this:
 [source,clojure]
 ----
 [[:crux.tx/put
-  {:crux.db/id     (java.util.UUID/randomUUID)
+  {:xt/id     (java.util.UUID/randomUUID)
    :user/username  "satoshi"
    :user/full-name "Satoshi Nakamoto"
    :user/dob       (java.time.Instant/parse "1975-04-05T00:00:00.00Z")}]]
@@ -117,7 +117,7 @@ convenience:
 [source,clojure]
 ----
 [[:crux.tx/put
-  {:crux.db/id        (java.util.UUID/randomUUID)
+  {:xt/id        (java.util.UUID/randomUUID)
    :my.custom.ns/type :user
    :user/name         "satoshi"}]]
 ----
@@ -136,14 +136,14 @@ not match, due to the `put` operation immediately preceding it:
 (with-open [node (crux/start-node {})]
   (crux/submit-tx
     node
-    [[:crux.tx/put      {:crux.db/id :a, :a "a"}]])
+    [[:crux.tx/put      {:xt/id :a, :a "a"}]])
   (crux/submit-tx
     node
     ; This won't match. Either the match should come first or it should match :a "b"
-    [[:crux.tx/put      {:crux.db/id :a, :a "b"}]
-     [:crux.tx/match :a {:crux.db/id :a, :a "a"}]])
+    [[:crux.tx/put      {:xt/id :a, :a "b"}]
+     [:crux.tx/match :a {:xt/id :a, :a "a"}]])
   (crux/sync node)
-  (crux/entity (crux/db node) :a)) ; {:crux.db/id :a, :a "a"}
+  (crux/entity (crux/db node) :a)) ; {:xt/id :a, :a "a"}
 ----
 
 Thank you to https://github.com/jacobobryant/[Jacob O'Bryant] for this example.

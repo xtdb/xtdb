@@ -1,1 +1,1 @@
-{:crux.db/id :hello :age 20}
+{:xt/id :hello :age 20}

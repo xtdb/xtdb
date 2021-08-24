@@ -81,7 +81,7 @@
   (bench/run-bench :ingest
     (bench/with-additional-index-metrics node
       (let [last-tx
-            (->> (haystack create-docs :crux.db/id *needle-count* *haystack-size*)
+            (->> (haystack create-docs :xt/id *needle-count* *haystack-size*)
                  (partition-all crux-tx-size)
                  (reduce (fn [last-tx batch]
                            (crux/submit-tx node (vec (for [doc batch] [:crux.tx/put doc]))))

@@ -19,7 +19,7 @@
         put (partial put-at-vt node)]
        (put
          ;; tag::bitemp0[]
-         {:crux.db/id :p2
+         {:xt/id :p2
           :entry-pt :SFO
           :arrival-time #inst "2018-12-31"
           :departure-time :na}
@@ -29,7 +29,7 @@
 
        (put
          ;; tag::bitemp1[]
-         {:crux.db/id :p3
+         {:xt/id :p3
           :entry-pt :LA
           :arrival-time #inst "2018-12-31"
           :departure-time :na}
@@ -39,7 +39,7 @@
 
        (put
          ;; tag::bitemp2[]
-         {:crux.db/id :p4
+         {:xt/id :p4
           :entry-pt :NY
           :arrival-time #inst "2019-01-02"
           :departure-time :na}
@@ -53,7 +53,7 @@
        (let [transaction
              (put
                ;; tag::bitemp3[]
-               {:crux.db/id :p4
+               {:xt/id :p4
                 :entry-pt :NY
                 :arrival-time #inst "2019-01-02"
                 :departure-time #inst "2019-01-03"}
@@ -66,7 +66,7 @@
 
        (put
          ;; tag::bitemp4[]
-         {:crux.db/id :p1
+         {:xt/id :p1
           :entry-pt :NY
           :arrival-time #inst "2018-12-31"
           :departure-time :na}
@@ -76,7 +76,7 @@
 
        (put
          ;; tag::bitemp4b[]
-         {:crux.db/id :p1
+         {:xt/id :p1
           :entry-pt :NY
           :arrival-time #inst "2018-12-31"
           :departure-time #inst "2019-01-03"}
@@ -86,7 +86,7 @@
 
        (put
          ;; tag::bitemp4c[]
-         {:crux.db/id :p1
+         {:xt/id :p1
           :entry-pt :LA
           :arrival-time #inst "2019-01-04"
           :departure-time :na}
@@ -96,7 +96,7 @@
 
        (put
          ;; tag::bitemp4d[]
-         {:crux.db/id :p3
+         {:xt/id :p3
           :entry-pt :LA
           :arrival-time #inst "2018-12-31"
           :departure-time #inst "2019-01-04"}
@@ -106,7 +106,7 @@
 
        (put
          ;; tag::bitemp5[]
-         {:crux.db/id :p2
+         {:xt/id :p2
           :entry-pt :SFO
           :arrival-time #inst "2018-12-31"
           :departure-time #inst "2019-01-05"}
@@ -116,7 +116,7 @@
 
        (put
          ;; tag::bitemp7a[]
-         {:crux.db/id :p3
+         {:xt/id :p3
           :entry-pt :LA
           :arrival-time #inst "2018-12-31"
           :departure-time :na}
@@ -126,7 +126,7 @@
 
        (put
          ;; tag::bitemp7b[]
-         {:crux.db/id :p3
+         {:xt/id :p3
           :entry-pt :LA
           :arrival-time #inst "2018-12-31"
           :departure-time #inst "2019-01-07"}
@@ -136,7 +136,7 @@
 
        (put
          ;; tag::bitemp8a[]
-         {:crux.db/id :p3
+         {:xt/id :p3
           :entry-pt :SFO
           :arrival-time #inst "2019-01-08"
           :departure-time :na}
@@ -146,7 +146,7 @@
 
        (put
          ;; tag::bitemp8b[]
-         {:crux.db/id :p4
+         {:xt/id :p4
           :entry-pt :LA
           :arrival-time #inst "2019-01-08"
           :departure-time :na}
@@ -156,7 +156,7 @@
 
        (put
          ;; tag::bitemp9[]
-         {:crux.db/id :p3
+         {:xt/id :p3
           :entry-pt :SFO
           :arrival-time #inst "2019-01-08"
           :departure-time #inst "2019-01-08"}
@@ -166,7 +166,7 @@
 
         (put
           ;; tag::bitemp10[]
-          {:crux.db/id :p5
+          {:xt/id :p5
            :entry-pt :LA
            :arrival-time #inst "2019-01-10"
            :departure-time :na}
@@ -176,7 +176,7 @@
 
        (put
          ;; tag::bitemp11[]
-         {:crux.db/id :p7
+         {:xt/id :p7
           :entry-pt :NY
           :arrival-time #inst "2019-01-11"
           :departure-time :na}
@@ -186,7 +186,7 @@
 
        (put
          ;; tag::bitemp12[]
-         {:crux.db/id :p6
+         {:xt/id :p6
           :entry-pt :NY
           :arrival-time #inst "2019-01-12"
           :departure-time :na}

@@ -39,7 +39,7 @@
                        (keyword? (ffirst where)))
                 (let [[e a v] (first where)
                       tmp (gensym "?tmp")]
-                  [[tmp :crux.db/id e]
+                  [[tmp :xt/id e]
                    [tmp a v]])
                 where)]
     (str "MATCH " (->> (for [[e a v] where]
@@ -47,11 +47,11 @@
                            (format "(%s)-[:`%s`]->(%s)"
                                    (if (symbol? e)
                                      (str (maybe-fix-variable e) ":Entity")
-                                     (format ":Entity {`:crux.db/id`: '%s'}" e))
+                                     (format ":Entity {`:xt/id`: '%s'}" e))
                                    a
                                    (if (symbol? v)
                                      (str (maybe-fix-variable v) ":Entity")
-                                     (format ":Entity {`:crux.db/id`: '%s'}" v)))
+                                     (format ":Entity {`:xt/id`: '%s'}" v)))
                            (if (symbol? v)
                              (do
                                (swap! property-returns assoc v [e a])
@@ -84,16 +84,16 @@
 
 (defn upsert-node [tx id]
   (let [id-str (str id)]
-    (or (.findNode tx entity-label (str :crux.db/id) id-str)
+    (or (.findNode tx entity-label (str :xt/id) id-str)
         (doto (.createNode tx (into-array [entity-label]))
-          (.setProperty (str :crux.db/id) id-str)))))
+          (.setProperty (str :xt/id) id-str)))))
 
 (defn load-rdf-into-neo4j [^GraphDatabaseService graph-db]
   (bench/run-bench :ingest-neo4j
     (with-open [tx (.beginTx graph-db)]
       (-> (.schema tx)
           (.indexFor entity-label)
-          (.on (str :crux.db/id))
+          (.on (str :xt/id))
           (.create))
       (.commit tx))
 
@@ -110,7 +110,7 @@
                              (let [o-node (upsert-node tx o)
                                    p-rel (doto (.createRelationshipTo s-node o-node
                                                                       (RelationshipType/withName (str p)))
-                                           (.setProperty (str :crux.db/id) (str p)))])
+                                           (.setProperty (str :xt/id) (str p)))])
                              (.setProperty s-node (str p) o))))
                        (.commit tx)
                        (+ n (count statements))))

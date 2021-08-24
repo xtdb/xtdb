@@ -15,44 +15,43 @@
 
 ;; nodes with edges
 (def nodes
-  (for
-    [n [{:user/name :User1
-         :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
-        {:user/name :User2
-      :hasRoleInGroups #{:U2G2R34 :U2G3R56 :U2G1R25}}
-     {:role/name :Role1}
-     {:role/name :Role2}
-     {:role/name :Role3}
-     {:role/name :Role4}
-     {:role/name :Role5}
-     {:role/name :Role6}
-     {:group/name :Group1}
-     {:group/name :Group2}
-     {:group/name :Group3}
-     {:roleInGroup/name :U2G2R34
-      :hasGroups #{:Group2}
-      :hasRoles #{:Role3 :Role4}}
-     {:roleInGroup/name :U1G2R23
-      :hasGroups #{:Group2}
-      :hasRoles #{:Role2 :Role3}}
-     {:roleInGroup/name :U1G3R34
-      :hasGroups #{:Group3}
-      :hasRoles #{:Role3 :Role4}}
-     {:roleInGroup/name :U2G3R56
-      :hasGroups #{:Group3}
-      :hasRoles #{:Role5 :Role6}}
-     {:roleInGroup/name :U2G1R25
-      :hasGroups #{:Group1}
-      :hasRoles #{:Role2 :Role5}}
-     {:roleInGroup/name :U1G1R12
-      :hasGroups #{:Group1}
-      :hasRoles #{:Role1 :Role2}}]]
-      (assoc n :crux.db/id (get n (some
-                                   #{:user/name
-                                     :group/name
-                                     :role/name
-                                     :roleInGroup/name}
-                                   (keys n))))))
+  (for [n [{:user/name :User1
+            :hasRoleInGroups #{:U1G3R34 :U1G2R23}}
+           {:user/name :User2
+            :hasRoleInGroups #{:U2G2R34 :U2G3R56 :U2G1R25}}
+           {:role/name :Role1}
+           {:role/name :Role2}
+           {:role/name :Role3}
+           {:role/name :Role4}
+           {:role/name :Role5}
+           {:role/name :Role6}
+           {:group/name :Group1}
+           {:group/name :Group2}
+           {:group/name :Group3}
+           {:roleInGroup/name :U2G2R34
+            :hasGroups #{:Group2}
+            :hasRoles #{:Role3 :Role4}}
+           {:roleInGroup/name :U1G2R23
+            :hasGroups #{:Group2}
+            :hasRoles #{:Role2 :Role3}}
+           {:roleInGroup/name :U1G3R34
+            :hasGroups #{:Group3}
+            :hasRoles #{:Role3 :Role4}}
+           {:roleInGroup/name :U2G3R56
+            :hasGroups #{:Group3}
+            :hasRoles #{:Role5 :Role6}}
+           {:roleInGroup/name :U2G1R25
+            :hasGroups #{:Group1}
+            :hasRoles #{:Role2 :Role5}}
+           {:roleInGroup/name :U1G1R12
+            :hasGroups #{:Group1}
+            :hasRoles #{:Role1 :Role2}}]]
+    (assoc n :xt/id (get n (some
+                            #{:user/name
+                              :group/name
+                              :role/name
+                              :roleInGroup/name}
+                            (keys n))))))
 
 
 (def node

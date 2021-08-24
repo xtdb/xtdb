@@ -27,7 +27,7 @@
       (with-open [rdr (io/reader locations-csv-resource)]
         (vec (for [location (line-seq rdr)
                    :let [[device-id location environment] (str/split location #",")]]
-               {:crux.db/id (keyword "location" device-id)
+               {:xt/id (keyword "location" device-id)
                 :location/location (keyword location)
                 :location/environment (keyword environment)}))))))
 
@@ -37,7 +37,7 @@
       (f (->> (line-seq rdr)
               (map (fn [condition]
                      (let [[time device-id temperature humidity] (str/split condition #",")]
-                       {:crux.db/id (keyword "condition" device-id)
+                       {:xt/id (keyword "condition" device-id)
                         :condition/time (inst/read-instant-date
                                           (-> time
                                               (str/replace " " "T")

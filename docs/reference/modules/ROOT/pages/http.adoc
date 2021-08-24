@@ -218,7 +218,7 @@ JSON::
 [source,json]
 ----
 {
-    "crux.db/id": "tommy",
+    "xt/id": "tommy",
     "first-name": "Tommy",
     "last-name": "Tutorial"
 }
@@ -228,7 +228,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux.db/id :tommy,
+{:xt/id :tommy,
  :first-name "Tommy",
  :last-name "Tutorial"}
 ----
@@ -388,7 +388,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux.db/id #xt/id "5aeebab117b892fa42002146e4c62be676bc4621",
+{:xt/id #xt/id "5aeebab117b892fa42002146e4c62be676bc4621",
  :crux.db/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9",
  :crux.db/valid-time #inst "2020-10-16T14:29:35.664-00:00",
  :crux.tx/tx-time #inst "2020-10-16T14:29:35.664-00:00",
@@ -412,7 +412,7 @@ JSON::
 curl -g \
      -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Acrux.db/id+_]]}
+     $CRUX_URL/_crux/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
 ----
 
 EDN::
@@ -422,7 +422,7 @@ EDN::
 curl -g \
      -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Acrux.db/id+_]]}
+     $CRUX_URL/_crux/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
 ----
 ====
 
@@ -558,7 +558,7 @@ JSON::
     "age": 1,
     "firstName": 1,
     "lastName": 1,
-    "crux.db/id": 3,
+    "xt/id": 3,
     "first-name": 2,
     "last-name": 2
 }
@@ -571,7 +571,7 @@ EDN::
 {:age 1,
  :firstName 1,
  :lastName 1,
- :crux.db/id 3,
+ :xt/id 3,
  :first-name 2,
  :last-name 2}
 ----
@@ -845,8 +845,8 @@ JSON::
 curl -X POST \
      -H "Content-Type: application/json" \
      -H "Accept: application/json" \
-     -d '{"tx-ops": [["put", {"crux.db/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
-          	    ["put", {"crux.db/id": "boris", "name": "Boris", "last-name": "Petrov"}],
+     -d '{"tx-ops": [["put", {"xt/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
+          	    ["put", {"xt/id": "boris", "name": "Boris", "last-name": "Petrov"}],
           	    ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
      $CRUX_URL/_crux/submit-tx
 ----
@@ -861,9 +861,9 @@ EDN::
 curl -X POST \
      -H "Content-Type: application/edn" \
      -H "Accept: application/edn" \
-     -d '{:tx-ops [[:crux.tx/put {:crux.db/id :ivan, :name "Ivan" :last-name "Petrov"}],
-          	  [:crux.tx/put {:crux.db/id :boris, :name "Boris" :last-name "Petrov"}],
-          	  [:crux.tx/delete :maria  #inst "2012-05-07T14:57:08.462-00:00"]]}' \
+     -d '{:tx-ops [[:crux.tx/put {:xt/id :ivan, :name "Ivan" :last-name "Petrov"}],
+          	  [:crux.tx/put {:xt/id :boris, :name "Boris" :last-name "Petrov"}],
+          	  [:crux.tx/delete :maria #inst "2012-05-07T14:57:08.462-00:00"]]}' \
      $CRUX_URL/_crux/submit-tx
 ----
 ====

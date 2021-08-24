@@ -19,8 +19,8 @@
                               (str "meta[title=" title "]"))
                              (.getAttribute "content"))
          edn-content (reader/read-string {:readers {'object pr-str
-                                                    'crux/id str
-                                                    'crux.http/entity-ref entity-ref/->EntityRef}} result-meta)]
+                                                    'xt/id str
+                                                    'xt.http/entity-ref entity-ref/->EntityRef}} result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
        (js/console.warn "Metadata not found")))))

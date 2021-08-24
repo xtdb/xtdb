@@ -92,7 +92,7 @@
     (keyword id)))
 
 (defn- find-eid [props ^SinkRecord record doc]
-  (let [id (or (get doc :crux.db/id)
+  (let [id (or (get doc :xt/id)
                (some->> (get props CruxSinkConnector/ID_KEY_CONFIG)
                         (keyword)
                         (get doc))
@@ -107,7 +107,7 @@
                 [:crux.tx/delete (coerce-eid (.key record))]
                 (let [doc (record->edn record)
                       id (find-eid props record doc)]
-                  [:crux.tx/put (assoc doc :crux.db/id id)]))]
+                  [:crux.tx/put (assoc doc :xt/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 
@@ -166,7 +166,7 @@
     :crux.tx/put
     (when (= 2 (count tx-op))
       (let [[_ new-doc] tx-op]
-        [(:crux.db/id new-doc)
+        [(:xt/id new-doc)
          new-doc]))
     (:crux.tx/delete :crux.tx/evict)
     (when (= 2 (count tx-op))
@@ -175,7 +175,7 @@
     :crux.tx/cas
     (when (= 3 (count tx-op))
       (let [[_ old-doc new-doc] tx-op]
-        [(:crux.db/id new-doc)
+        [(:xt/id new-doc)
          new-doc]))))
 
 (defn- tx-log-entry->doc-source-records [source-partition topic formatter {:keys [crux.api/tx-ops

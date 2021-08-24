@@ -10,7 +10,7 @@
     (crux/await-tx node (crux/submit-tx
                          node
                          [[:crux.tx/put
-                           {:crux.db/id :ids.people/Charles
+                           {:xt/id :ids.people/Charles
                             :person/name "Charles"
                             :person/born #inst "1700-05-18"
                             :person/location :ids.places/rarities-shop
@@ -24,7 +24,7 @@
     (crux/await-tx node (crux/submit-tx
                          node
                          [[:crux.tx/put
-                           {:crux.db/id :ids.people/Mary
+                           {:xt/id :ids.people/Mary
                             :person/name "Mary"
                             :person/born #inst "1710-05-18"
                             :person/location :ids.places/carribean
@@ -34,7 +34,7 @@
                             :person/hp   50}
                            #inst "1710-05-18"]
                           [:crux.tx/put
-                           {:crux.db/id :ids.people/Joe
+                           {:xt/id :ids.people/Joe
                             :person/name "Joe"
                             :person/born #inst "1715-05-18"
                             :person/location :ids.places/city
@@ -47,56 +47,56 @@
     (crux/await-tx node (crux/submit-tx
                          node
                          [[:crux.tx/put
-                           {:crux.db/id :ids.artefacts/cozy-mug
+                           {:xt/id :ids.artefacts/cozy-mug
                             :artefact/title "A Rather Cozy Mug"
                             :artefact.perks/int 3}
                            #inst "1625-05-18"]
 
                           [:crux.tx/put
-                           {:crux.db/id :ids.artefacts/forbidden-beans
+                           {:xt/id :ids.artefacts/forbidden-beans
                             :artefact/title "Magic beans"
                             :artefact.perks/int 30
                             :artefact.perks/hp -20}
                            #inst "1500-05-18"]
 
                           [:crux.tx/put
-                           {:crux.db/id :ids.artefacts/pirate-sword
+                           {:xt/id :ids.artefacts/pirate-sword
                             :artefact/title "A used sword"}
                            #inst "1710-05-18"]
 
                           [:crux.tx/put
-                           {:crux.db/id :ids.artefacts/flintlock-pistol
+                           {:xt/id :ids.artefacts/flintlock-pistol
                             :artefact/title "Flintlock pistol"}
                            #inst "1710-05-18"]
 
                           [:crux.tx/put
-                           {:crux.db/id :ids.artefacts/unknown-key
+                           {:xt/id :ids.artefacts/unknown-key
                             :artefact/title "Key from an unknown door"}
                            #inst "1700-05-18"]
 
                           [:crux.tx/put
-                           {:crux.db/id :ids.artefacts/laptop
+                           {:xt/id :ids.artefacts/laptop
                             :artefact/title "A Tell DPS Laptop (what?)"}
                            #inst "2016-05-18"]]))
 
     (crux/await-tx node (crux/submit-tx
                          node
                          [[:crux.tx/put
-                           {:crux.db/id :ids.places/continent
+                           {:xt/id :ids.places/continent
                             :place/title "Ah The Continent"}
                            #inst "1000-01-01"]
                           [:crux.tx/put
-                           {:crux.db/id :ids.places/carribean
+                           {:xt/id :ids.places/carribean
                             :place/title "Ah The Good Ol Carribean Sea"
                             :place/location :ids.places/carribean}
                            #inst "1000-01-01"]
                           [:crux.tx/put
-                           {:crux.db/id :ids.places/coconut-island
+                           {:xt/id :ids.places/coconut-island
                             :place/title "Coconut Island"
                             :place/location :ids.places/carribean}
                            #inst "1000-01-01"]]))
     (def db (crux/db node))
-    (t/is (= {:crux.db/id :ids.people/Charles,
+    (t/is (= {:xt/id :ids.people/Charles,
               :person/str 40,
               :person/dex 40,
               :person/location :ids.places/rarities-shop,
@@ -258,18 +258,18 @@
               :person/hp 40,
               :person/int 50,
               :person/name "Charles",
-              :crux.db/id :ids.people/Charles,
+              :xt/id :ids.people/Charles,
               :person/gold 10000,
               :person/born #inst "1700-05-18T00:00:00.000-00:00"}))
 
     (t/is (= (entity-with-adjacent :ids.people/Charles [:person/has])
-             {:crux.db/id :ids.people/Charles,
+             {:xt/id :ids.people/Charles,
               :person/str 40,
               :person/dex 40,
               :person/has
-              #{{:crux.db/id :ids.artefacts/unknown-key,
+              #{{:xt/id :ids.artefacts/unknown-key,
                  :artefact/title "Key from an unknown door"}
-                {:crux.db/id :ids.artefacts/cozy-mug,
+                {:xt/id :ids.artefacts/cozy-mug,
                  :artefact/title "A Rather Cozy Mug",
                  :artefact.perks/int 3}},
               :person/location :ids.places/rarities-shop,

@@ -31,7 +31,7 @@
                 ""
                 "{"
                 " :find [?e]"
-                " :where [[?e :crux.db/id]]"
+                " :where [[?e :xt/id]]"
                 "}"]))
 
 (rf/reg-sub

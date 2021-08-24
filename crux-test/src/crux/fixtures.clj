@@ -76,7 +76,7 @@
    entities))
 
 (defn random-person []
-  {:crux.db/id (UUID/randomUUID)
+  {:xt/id (UUID/randomUUID)
    :name (rand-nth ["Ivan" "Petr" "Sergei" "Oleg" "Yuri" "Dmitry" "Fedor" "Denis"])
    :last-name (rand-nth ["Ivanov" "Petrov" "Sidorov" "Kovalev" "Kuznetsov" "Voronoi"])
    :sex (rand-nth [:male :female])

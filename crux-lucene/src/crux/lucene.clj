@@ -8,8 +8,7 @@
             [crux.query :as q]
             [crux.system :as sys]
             [crux.tx :as tx]
-            [crux.tx.conform :as txc]
-            [crux.tx.event :as txe])
+            [crux.tx.conform :as txc])
   (:import crux.query.VarBinding
            [java.io Closeable File]
            java.nio.file.Path
@@ -226,8 +225,8 @@
   LuceneIndexer
 
   (index! [_ index-writer docs]
-    (doseq [{e :crux.db/id, :as crux-doc} (vals docs)
-            [a v] (->> (dissoc crux-doc :crux.db/id)
+    (doseq [{e :xt/id, :as crux-doc} (vals docs)
+            [a v] (->> (dissoc crux-doc :xt/id)
                        (mapcat (fn [[a v]]
                                  (for [v (cc/vectorize-value v)
                                        :when (string? v)]
@@ -266,7 +265,7 @@
                    :crux.tx/put (update acc :docs into docs)
                    :crux.tx/evict (-> acc
                                       (update :evicted-eids conj eid)
-                                      (update :docs dissoc #(into {} (remove (comp #{eid} :crux.db/id val)) %)))
+                                      (update :docs dissoc #(into {} (remove (comp #{eid} :xt/id val)) %)))
                    acc))
                {:docs {}
                 :evicted-eids #{}})))

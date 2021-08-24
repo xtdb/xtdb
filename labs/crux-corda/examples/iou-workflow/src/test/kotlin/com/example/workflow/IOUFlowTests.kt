@@ -86,7 +86,7 @@ class IOUFlowTests {
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
                 cruxNode.db(cruxTx).query("""
-                    {:find [?l ?b ?v] 
+                    {:find [?l ?b ?v]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/borrower ?b]
                              [?iou :iou-state/value ?v]]}""".trimIndent())
@@ -96,7 +96,7 @@ class IOUFlowTests {
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
                 cruxNode.db(DBBasis(inThreeDays, cruxTx)).query("""
-                    {:find [?l ?b ?v] 
+                    {:find [?l ?b ?v]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/borrower ?b]
                              [?iou :iou-state/value ?v]]}""".trimIndent()).first()
@@ -105,7 +105,7 @@ class IOUFlowTests {
             assertEquals(
                 emptySet(),
                 cruxNode.db(DBBasis(threeDaysAgo, cruxTx)).query("""
-                    {:find [?l ?b ?v] 
+                    {:find [?l ?b ?v]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/borrower ?b]
                              [?iou :iou-state/value ?v]]}"""
@@ -196,7 +196,7 @@ class IOUFlowTests {
         assertEquals(
                 listOf(10L, aId.toString(), bId.toString()),
                 firstDB.query("""
-                    {:find [?v ?l ?b] 
+                    {:find [?v ?l ?b]
                      :where [[?iou :iou-state/borrower ?b]
                              [?iou :iou-state/lender ?l]
                              [?iou :iou-state/value ?v]]}
@@ -206,7 +206,7 @@ class IOUFlowTests {
         assertEquals(
                 listOf(10L, bId.toString(), aId.toString()),
                 secondDB.query("""
-                    {:find [?v ?l ?b] 
+                    {:find [?v ?l ?b]
                      :where [[?iou :iou-state/borrower ?b]
                              [?iou :iou-state/lender ?l]
                              [?iou :iou-state/value ?v]]}
@@ -215,15 +215,15 @@ class IOUFlowTests {
         // It is the same CRUX fact too
         assertEquals(
                 firstDB.query("""
-                    {:find [?id] 
+                    {:find [?id]
                      :in [?l]
-                     :where [[?iou :crux.db/id ?id]
+                     :where [[?iou :xt/id ?id]
                              [?iou :iou-state/lender ?l]]}
                 """.trimIndent(), aId.toString()),
                 secondDB.query("""
-                    {:find [?id] 
+                    {:find [?id]
                      :in [?b]
-                     :where [[?iou :crux.db/id ?id]
+                     :where [[?iou :xt/id ?id]
                              [?iou :iou-state/borrower ?b]]}
                 """.trimIndent(), aId.toString())
 
@@ -258,7 +258,7 @@ class IOUFlowTests {
         assertEquals(
                 listOf(10L, aId.toString(), bId.toString()),
                 firstDB.query("""
-                    {:find [?v ?l ?b] 
+                    {:find [?v ?l ?b]
                      :where [[?iou :iou-state/borrower ?b]
                              [?iou :iou-state/lender ?l]
                              [?iou :iou-state/value ?v]]}
@@ -268,7 +268,7 @@ class IOUFlowTests {
         assertEquals(
                 emptySet(),
                 secondDB.query("""
-                    {:find [?v ?l ?b] 
+                    {:find [?v ?l ?b]
                      :where [[?iou :iou-state/borrower ?b]
                              [?iou :iou-state/lender ?l]
                              [?iou :iou-state/value ?v]]}

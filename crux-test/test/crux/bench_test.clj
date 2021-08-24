@@ -119,7 +119,7 @@
 
   (bench {:verbose true
           :preload [(assoc (fix/random-person)
-                           :crux.db/id :hardcoded-id
+                           :xt/id :hardcoded-id
                            :name "davros")]
           :n 10000
           :samples 10000
@@ -127,7 +127,7 @@
 
   (bench {:verbose true
           :preload [(assoc (fix/random-person)
-                           :crux.db/id :hardcoded-id
+                           :xt/id :hardcoded-id
                            :name "davros")]
           :n 10000
           :samples 10000

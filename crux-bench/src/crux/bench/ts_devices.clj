@@ -24,7 +24,7 @@
       (with-open [rdr (io/reader device-info-csv-resource)]
         (vec (for [device-info (line-seq rdr)
                    :let [[device-id api-version manufacturer model os-name] (str/split device-info #",")]]
-               {:crux.db/id (keyword "device-info" device-id)
+               {:xt/id (keyword "device-info" device-id)
                 :device-info/api-version api-version
                 :device-info/manufacturer manufacturer
                 :device-info/model model
@@ -40,7 +40,7 @@
                                battery-temperature bssid
                                cpu-avg-1min cpu-avg-5min cpu-avg-15min
                                mem-free mem-used rssi ssid] (str/split reading #",")]]
-                    {:crux.db/id (keyword "reading" device-id)
+                    {:xt/id (keyword "reading" device-id)
                      :reading/time (inst/read-instant-date
                                     (-> time
                                         (str/replace " " "T")

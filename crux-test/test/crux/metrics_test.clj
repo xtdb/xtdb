@@ -18,7 +18,7 @@
       (t/is (zero? (dropwizard/meter-count (:docs-ingested-meter mets))))
       (t/is (zero? (dropwizard/meter-count (:tx-ingest-timer mets)))))
 
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
+    (fix/submit+await-tx [[:crux.tx/put {:xt/id :test}]])
     (.close ^Closeable bus)
 
     (t/testing "post ingest values"
@@ -35,13 +35,13 @@
     (t/testing "initial query timer values"
       (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))
 
-    (fix/submit+await-tx [[:crux.tx/put {:crux.db/id :test}]])
+    (fix/submit+await-tx [[:crux.tx/put {:xt/id :test}]])
     (t/is (= #{[:test]}
-             (api/q (api/db *api*) '{:find [e] :where [[e :crux.db/id _]]})))
+             (api/q (api/db *api*) '{:find [e] :where [[e :xt/id _]]})))
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"Find refers to unknown variable:"
-           (api/q (api/db *api*) '{:find [e] :where [[f :crux.db/id _]]})))
+           (api/q (api/db *api*) '{:find [e] :where [[f :xt/id _]]})))
     (.close ^Closeable bus)
     (t/testing "post query timer values"
       (t/is (not (zero? (dropwizard/meter-count (:query-timer mets)))))
