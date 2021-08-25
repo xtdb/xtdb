@@ -7,18 +7,18 @@
 
 (t/deftest can-convert-arrow-type-to-clojure-data-and-back
   (t/is (= (.getType Types$MinorType/INT)
-           (ts/->arrow-type {:name "int" :bitWidth 32  :isSigned true})))
-  (t/is (= {:name "int" :bitWidth 32 :isSigned true}
+           (ts/->arrow-type {:name :int :bitWidth 32 :isSigned true})))
+  (t/is (= {:name :int :bitWidth 32 :isSigned true}
            (cd/datafy (.getType Types$MinorType/INT)))))
 
 (t/deftest can-convert-arrow-field-to-clojure-data-and-back
   (t/is (= (Field/nullable "foo" (.getType Types$MinorType/INT))
-           (ts/->field {:name "foo" :type {:name "int" :bitWidth 32  :isSigned true} :nullable true :children []})))
-  (t/is (= {:name "foo" :type {:name "int" :bitWidth 32  :isSigned true} :nullable true :children []}
+           (ts/->field {:name "foo" :type {:name :int :bitWidth 32 :isSigned true}})))
+  (t/is (= {:name "foo" :type {:name :int :bitWidth 32  :isSigned true} :nullable true}
            (cd/datafy (Field/nullable "foo" (.getType Types$MinorType/INT))))))
 
 (t/deftest can-convert-arrow-schema-to-clojure-data-and-back
   (t/is (= (Schema. [(Field/nullable "foo" (.getType Types$MinorType/INT))])
-           (ts/->schema {:fields [{:name "foo" :type {:name "int" :bitWidth 32  :isSigned true} :nullable true :children []}]})))
-  (t/is (= {:fields [{:name "foo" :type {:name "int" :bitWidth 32  :isSigned true} :nullable true :children []}]}
+           (ts/->schema {:fields [{:name "foo" :type {:name :int :bitWidth 32 :isSigned true}}]})))
+  (t/is (= {:fields [{:name "foo" :type {:name :int :bitWidth 32  :isSigned true} :nullable true}]}
            (cd/datafy (Schema. [(Field/nullable "foo" (.getType Types$MinorType/INT))])))))

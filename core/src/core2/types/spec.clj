@@ -3,18 +3,17 @@
             [clojure.spec.alpha :as s]
             [clojure.core.protocols :as p])
   (:import [com.fasterxml.jackson.databind ObjectMapper ObjectReader ObjectWriter]
-           [org.apache.arrow.vector.types.pojo ArrowType Field Schema]))
+           [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]))
 
 ;; See https://github.com/apache/arrow/blob/master/format/Schema.fbs
 
 (def ^:private ^ObjectMapper object-mapper (ObjectMapper.))
 (def ^:private ^ObjectReader arrow-type-reader (.readerFor object-mapper ArrowType))
-(def ^:private ^ObjectReader field-reader (.readerFor object-mapper Field))
-(def ^:private ^ObjectWriter writer (.writer object-mapper))
+(def ^:private ^ObjectWriter object-writer (.writer object-mapper))
 
-(defmulti arrow-type-spec (comp keyword :name))
+(defmulti arrow-type-spec :name)
 
-(s/def :arrow.type/name (some-fn keyword? string?))
+(s/def :arrow.type/name keyword?)
 (s/def :arrow/type (s/keys :req-un [:arrow.type/name]))
 
 (defmethod arrow-type-spec :null [_]
@@ -151,26 +150,33 @@
   (s/assert :arrow/type arrow-type)
   (.readValue arrow-type-reader (json/write-str arrow-type)))
 
-(defn ->field ^org.apache.arrow.vector.types.pojo.Field [field]
+(defn ->field ^org.apache.arrow.vector.types.pojo.Field [{:keys [name nullable type children metadata] :as field
+                                                          :or {nullable true children []}}]
   (s/assert :arrow/field field)
-  (.readValue field-reader (json/write-str field)))
+  (Field. name (FieldType. nullable (->arrow-type type) nil metadata) (mapv ->field children)))
 
-(defn ->schema ^org.apache.arrow.vector.types.pojo.Schema [schema]
+(defn ->schema ^org.apache.arrow.vector.types.pojo.Schema [{:keys [fields metadata] :as schema}]
   (s/assert :arrow/schema schema)
-  (Schema/fromJSON (json/write-str schema)))
-
-(defn- <-clojure [x]
-  (json/read-str (.writeValueAsString writer x) :key-fn keyword))
+  (Schema. (mapv ->field fields) metadata))
 
 (extend-protocol p/Datafiable
   ArrowType
   (datafy [x]
-    (<-clojure x))
+    (-> (json/read-str (.writeValueAsString object-writer x) :key-fn keyword)
+        (update :name keyword)))
 
   Field
   (datafy [x]
-    (<-clojure x))
+    (let [children (.getChildren x)
+          metadata (.getMetadata x)]
+      (cond-> {:name (.getName x)
+               :type (p/datafy (.getType x))
+               :nullable (.isNullable x)}
+        (seq children) (assoc :children (mapv p/datafy children))
+        (seq metadata) (assoc :metadata metadata))))
 
   Schema
   (datafy [x]
-    (<-clojure x)))
+    (let [metadata (.getCustomMetadata x)]
+      (cond-> {:fields (mapv p/datafy (.getFields x))}
+        (seq metadata) (assoc :metadata metadata)))))
