@@ -177,6 +177,29 @@
 (s/def :arrow.schema/metadata :arrow/key-value)
 (s/def :arrow/schema (s/keys :req-un [:arrow.schema/fields] :opt-un [:arrow.schema/metadata]))
 
+(defmulti type-kind :name)
+
+(defmethod type-kind :map [_]
+  :arrow.kind/struct)
+
+(defmethod type-kind :struct [_]
+  :arrow.kind/struct)
+
+(defmethod type-kind :fixedsizelist [_]
+  :arrow.kind/list)
+
+(defmethod type-kind :list [_]
+  :arrow.kind/list)
+
+(defmethod type-kind :largelist [_]
+  :arrow.kind/list)
+
+(defmethod type-kind :union [_]
+  :arrow.kind/union)
+
+(defmethod type-kind :default [_]
+  :arrow.kind/primitive)
+
 (defn ->arrow-type ^org.apache.arrow.vector.types.pojo.ArrowType [arrow-type]
   (s/assert :arrow/type arrow-type)
   (.readValue arrow-type-reader (json/write-str arrow-type)))

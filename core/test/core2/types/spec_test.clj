@@ -28,3 +28,13 @@
            (ts/->schema {:fields [{:name "foo" :type {:name :int :bitWidth 32 :isSigned true}}]})))
   (t/is (= {:fields [{:name "foo" :type {:name :int :bitWidth 32  :isSigned true} :nullable true}]}
            (cd/datafy (Schema. [(Field/nullable "foo" (.getType Types$MinorType/INT))])))))
+
+(t/deftest can-infer-kind-of-type
+  (t/is (= :arrow.kind/primitive (ts/type-kind {:name :int :bitWidth 32 :isSigned true})))
+  (t/is (= :arrow.kind/primitive (ts/type-kind {:name :floatingpoint :precision :DOUBLE})))
+  (t/is (= :arrow.kind/struct (ts/type-kind {:name :struct})))
+  (t/is (= :arrow.kind/struct (ts/type-kind {:name :map})))
+  (t/is (= :arrow.kind/list (ts/type-kind {:name :list})))
+  (t/is (= :arrow.kind/list (ts/type-kind {:name :largelist})))
+  (t/is (= :arrow.kind/list (ts/type-kind {:name :fixedsizelist})))
+  (t/is (= :arrow.kind/union (ts/type-kind {:name :union}))))
