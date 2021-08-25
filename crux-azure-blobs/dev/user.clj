@@ -39,7 +39,7 @@
   (crux/await-tx node
                  (crux/submit-tx node
                                  (vec (for [doc docs]
-                                        [:crux.tx/put doc])))))
+                                        [:xt/put doc])))))
 
 (defn ingest-query-entity []
   (with-open [node (start-node)]

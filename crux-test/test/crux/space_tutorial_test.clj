@@ -24,7 +24,7 @@
 
 (defn put-all! [docs]
   (fix/submit+await-tx (for [doc docs]
-                         [:crux.tx/put doc])))
+                         [:xt/put doc])))
 
 (defn stock-check
   [company-id item]
@@ -48,7 +48,7 @@
 
 (t/deftest space-tutorial-test
   (t/testing "earth-test"
-    (fix/submit+await-tx [[:crux.tx/put manifest]])
+    (fix/submit+await-tx [[:xt/put manifest]])
 
     (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
@@ -65,21 +65,21 @@
                       :args [{'belongings "secret note"}]}))))
 
   (t/testing "pluto-tests"
-    (fix/submit+await-tx [[:crux.tx/put
+    (fix/submit+await-tx [[:xt/put
                            {:xt/id :commodity/Pu
                             :common-name "Plutonium"
                             :type :element/metal
                             :density 19.816
                             :radioactive true}]
 
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :commodity/N
                             :common-name "Nitrogen"
                             :type :element/gas
                             :density 1.2506
                             :radioactive false}]
 
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :commodity/CH4
                             :common-name "Methane"
                             :type :molecule/gas
@@ -87,40 +87,40 @@
                             :radioactive false}]])
 
 
-    (fix/submit+await-tx [[:crux.tx/put {:xt/id :stock/Pu
-                                         :commod :commodity/Pu
-                                         :weight-ton 21}
+    (fix/submit+await-tx [[:xt/put {:xt/id :stock/Pu
+                                    :commod :commodity/Pu
+                                    :weight-ton 21}
                            #inst "2115-02-13T18"] ;; valid-time
 
-                          [:crux.tx/put {:xt/id :stock/Pu
-                                         :commod :commodity/Pu
-                                         :weight-ton 23}
+                          [:xt/put {:xt/id :stock/Pu
+                                    :commod :commodity/Pu
+                                    :weight-ton 23}
                            #inst "2115-02-14T18"]
 
-                          [:crux.tx/put {:xt/id :stock/Pu
-                                         :commod :commodity/Pu
-                                         :weight-ton 22.2}
+                          [:xt/put {:xt/id :stock/Pu
+                                    :commod :commodity/Pu
+                                    :weight-ton 22.2}
                            #inst "2115-02-15T18"]
 
-                          [:crux.tx/put {:xt/id :stock/Pu
-                                         :commod :commodity/Pu
-                                         :weight-ton 24}
+                          [:xt/put {:xt/id :stock/Pu
+                                    :commod :commodity/Pu
+                                    :weight-ton 24}
                            #inst "2115-02-18T18"]
 
-                          [:crux.tx/put {:xt/id :stock/Pu
-                                         :commod :commodity/Pu
-                                         :weight-ton 24.9}
+                          [:xt/put {:xt/id :stock/Pu
+                                    :commod :commodity/Pu
+                                    :weight-ton 24.9}
                            #inst "2115-02-19T18"]])
 
-    (fix/submit+await-tx [[:crux.tx/put {:xt/id :stock/N
-                                         :commod :commodity/N
-                                         :weight-ton 3}
+    (fix/submit+await-tx [[:xt/put {:xt/id :stock/N
+                                    :commod :commodity/N
+                                    :weight-ton 3}
                            #inst "2115-02-13T18" ;; start valid-time
                            #inst "2115-02-19T18"] ;; end valid-time
 
-                          [:crux.tx/put {:xt/id :stock/CH4
-                                         :commod :commodity/CH4
-                                         :weight-ton 92}
+                          [:xt/put {:xt/id :stock/CH4
+                                    :commod :commodity/CH4
+                                    :weight-ton 92}
                            #inst "2115-02-15T18"
                            #inst "2115-02-19T18"]])
 
@@ -129,7 +129,7 @@
     (t/is (= {:xt/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
              (crux/entity (crux/db *api* #inst "2115-02-18") :stock/Pu)))
 
-    (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT"])]])
+    (fix/submit+await-tx [[:xt/put (assoc manifest :badges ["SETUP" "PUT"])]])
 
     (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
@@ -242,7 +242,7 @@
              #{["Borax" "Sodium tetraborate decahydrate"]}
              ))
 
-    (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"])]])
+    (fix/submit+await-tx [[:xt/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"])]])
 
     (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
@@ -253,7 +253,7 @@
              (crux/entity (crux/db *api*) :manifest))))
 
   (t/testing "neptune-test"
-    (fix/submit+await-tx [[:crux.tx/put
+    (fix/submit+await-tx [[:xt/put
                            {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
@@ -261,7 +261,7 @@
                             :cover? true
                             :cover-type :Full}
                            #inst "2114-12-03"]])
-    (fix/submit+await-tx [[:crux.tx/put ;; <1>
+    (fix/submit+await-tx [[:xt/put ;; <1>
                            {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
@@ -271,7 +271,7 @@
                            #inst "2113-12-03" ;; Valid time start
                            #inst "2114-12-03"] ;; Valid time end
 
-                          [:crux.tx/put ;; <2>
+                          [:xt/put ;; <2>
                            {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
@@ -281,7 +281,7 @@
                            #inst "2112-12-03"
                            #inst "2113-12-03"]
 
-                          [:crux.tx/put ;; <3>
+                          [:xt/put ;; <3>
                            {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
@@ -290,7 +290,7 @@
                            #inst "2112-06-03"
                            #inst "2112-12-02"]
 
-                          [:crux.tx/put ;; <4>
+                          [:xt/put ;; <4>
                            {:xt/id :consumer/RJ29sUU
                             :consumer-id :RJ29sUU
                             :first-name "Jay"
@@ -320,7 +320,7 @@
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
                                [e :cover-type type]]})))
-    (fix/submit+await-tx [[:crux.tx/put
+    (fix/submit+await-tx [[:xt/put
                            (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"
                                                     "BITEMP"])]])
 
@@ -364,14 +364,14 @@
                 :company-name "Blue Energy"
                 :credits 1000}])
 
-    (fix/submit+await-tx [[:crux.tx/match
+    (fix/submit+await-tx [[:xt/match
                            :blue-energy
                            {:xt/id :blue-energy
                             :seller? false
                             :buyer? true
                             :company-name "Blue Energy"
                             :credits 1000}]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :blue-energy
                             :seller? false
                             :buyer? true
@@ -379,7 +379,7 @@
                             :credits 900
                             :units/CH4 10}]
 
-                          [:crux.tx/match
+                          [:xt/match
                            :tombaugh-resources
                            {:xt/id :tombaugh-resources
                             :company-name "Tombaugh Resources Ltd."
@@ -389,7 +389,7 @@
                             :units/N 3
                             :units/CH4 92
                             :credits 51}]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :tombaugh-resources
                             :company-name "Tombaugh Resources Ltd."
                             :seller? true
@@ -403,7 +403,7 @@
 
     (t/is (= ["Name: Blue Energy, Funds: 900, :units/CH4 10"]
              (format-stock-check (stock-check :blue-energy :units/CH4))))
-    (fix/submit+await-tx [[:crux.tx/match
+    (fix/submit+await-tx [[:xt/match
                            :gold-harmony
                            ;; Old doc
                            {:xt/id :gold-harmony
@@ -412,7 +412,7 @@
                             :buyer? false
                             :units/Au 10211
                             :credits 51}]
-                          [:crux.tx/put
+                          [:xt/put
                            ;; New doc
                            {:xt/id :gold-harmony
                             :company-name "Gold Harmony"
@@ -421,7 +421,7 @@
                             :units/Au 211
                             :credits 51}]
 
-                          [:crux.tx/match
+                          [:xt/match
                            :encompass-trade
                            ;; Old doc
                            {:xt/id :encompass-trade
@@ -432,7 +432,7 @@
                             :units/Pu 5
                             :units/CH4 211
                             :credits 100002}]
-                          [:crux.tx/put
+                          [:xt/put
                            ;; New doc
                            {:xt/id :encompass-trade
                             :company-name "Encompass Trade"
@@ -449,7 +449,7 @@
     (t/is (= '("Name: Encompass Trade, Funds: 1002, :units/Au 10")
              (format-stock-check (stock-check :encompass-trade :units/Au))))
 
-    (fix/submit+await-tx [[:crux.tx/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"])]])
+    (fix/submit+await-tx [[:xt/put (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"])]])
 
     (t/is (= {:xt/id :manifest,
               :pilot-name "Johanna",
@@ -464,10 +464,10 @@
         doc2 {:xt/id :kaarlang/clients, :clients [:encompass-trade :blue-energy]}
         doc3 {:xt/id :kaarlang/clients, :clients [:blue-energy]}
         doc4 {:xt/id :kaarlang/clients, :clients [:blue-energy :gold-harmony :tombaugh-resources]}]
-    (fix/submit+await-tx [[:crux.tx/put doc1 #inst "2110-01-01T09" #inst "2111-01-01T09"]
-                          [:crux.tx/put doc2 #inst "2111-01-01T09" #inst "2113-01-01T09"]
-                          [:crux.tx/put doc3 #inst "2113-01-01T09" #inst "2114-01-01T09"]
-                          [:crux.tx/put doc4 #inst "2114-01-01T09" #inst "2115-01-01T09"]])
+    (fix/submit+await-tx [[:xt/put doc1 #inst "2110-01-01T09" #inst "2111-01-01T09"]
+                          [:xt/put doc2 #inst "2111-01-01T09" #inst "2113-01-01T09"]
+                          [:xt/put doc3 #inst "2113-01-01T09" #inst "2114-01-01T09"]
+                          [:xt/put doc4 #inst "2114-01-01T09" #inst "2115-01-01T09"]])
 
     (t/is (= doc4 (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
@@ -480,7 +480,7 @@
              (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
                   (mapv #(dissoc % :xt/tx-time)))))
 
-    (fix/submit+await-tx [[:crux.tx/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
+    (fix/submit+await-tx [[:xt/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
 
     (t/is nil? (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients))
 
@@ -496,29 +496,29 @@
                   (mapv #(dissoc % :xt/tx-time)))))))
 
 (t/deftest Oumuamua-test
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :person/kaarlang
-                                       :full-name "Kaarlang"
-                                       :origin-planet "Mars"
-                                       :identity-tag :KA01299242093
-                                       :DOB #inst "2040-11-23"}]
+  (fix/submit+await-tx [[:xt/put {:xt/id :person/kaarlang
+                                  :full-name "Kaarlang"
+                                  :origin-planet "Mars"
+                                  :identity-tag :KA01299242093
+                                  :DOB #inst "2040-11-23"}]
 
-                        [:crux.tx/put {:xt/id :person/ilex
-                                       :full-name "Ilex Jefferson"
-                                       :origin-planet "Venus"
-                                       :identity-tag :IJ01222212454
-                                       :DOB #inst "2061-02-17"}]
+                        [:xt/put {:xt/id :person/ilex
+                                  :full-name "Ilex Jefferson"
+                                  :origin-planet "Venus"
+                                  :identity-tag :IJ01222212454
+                                  :DOB #inst "2061-02-17"}]
 
-                        [:crux.tx/put {:xt/id :person/thadd
-                                       :full-name "Thad Christover"
-                                       :origin-moon "Titan"
-                                       :identity-tag :IJ01222212454
-                                       :DOB #inst "2101-01-01"}]
+                        [:xt/put {:xt/id :person/thadd
+                                  :full-name "Thad Christover"
+                                  :origin-moon "Titan"
+                                  :identity-tag :IJ01222212454
+                                  :DOB #inst "2101-01-01"}]
 
-                        [:crux.tx/put {:xt/id :person/johanna
-                                       :full-name "Johanna"
-                                       :origin-planet "Earth"
-                                       :identity-tag :JA012992129120
-                                       :DOB #inst "2090-12-07"}]])
+                        [:xt/put {:xt/id :person/johanna
+                                  :full-name "Johanna"
+                                  :origin-planet "Earth"
+                                  :identity-tag :JA012992129120
+                                  :DOB #inst "2090-12-07"}]])
 
   (t/is (= #{[{:xt/id :person/ilex,
                :full-name "Ilex Jefferson",
@@ -542,7 +542,7 @@
                :DOB #inst "2090-12-07T00:00:00.000-00:00"}]}
            (full-query *api*)))
 
-  (fix/submit+await-tx [[:crux.tx/evict :person/kaarlang]]) ;; <1>
+  (fix/submit+await-tx [[:xt/evict :person/kaarlang]]) ;; <1>
   (t/is empty? (full-query *api*))
 
   ;; Check not nil, history constantly changing so it is hard to check otherwise

@@ -211,5 +211,5 @@
                :uri (java.net.URI. "https://google.com")
                :url (java.net.URL. "https://google.com")
                :uuid (java.util.UUID/randomUUID)}]
-      (fix/submit+await-tx node [[:crux.tx/put doc]])
+      (fix/submit+await-tx node [[:xt/put doc]])
       (t/is (= doc (crux/entity (crux/db node) :foo))))))

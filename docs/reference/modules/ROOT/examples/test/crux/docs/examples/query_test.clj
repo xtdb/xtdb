@@ -1,8 +1,7 @@
 (ns crux.docs.examples.query-test
   (:require [clojure.test :as t]
             [crux.api :as crux]
-            [crux.fixtures :as fix :refer [*api*]]
-            [user :as user]))
+            [crux.fixtures :as fix :refer [*api*]]))
 
 (def ^:dynamic *storage-dir*)
 
@@ -27,7 +26,7 @@
     ;; tag::query-at-t-d1[]
     (crux/submit-tx
      node
-     [[:crux.tx/put
+     [[:xt/put
        {:xt/id :malcolm :name "Malcolm" :last-name "Sparks"}
        #inst "1986-10-22"]])
     ;; end::query-at-t-d1[]
@@ -35,7 +34,7 @@
     ;; tag::query-at-t-d2[]
     (crux/submit-tx
      node
-     [[:crux.tx/put
+     [[:xt/put
        {:xt/id :malcolm :name "Malcolma" :last-name "Sparks"}
        #inst "1986-10-24"]])
     ;; end::query-at-t-d2[]
@@ -585,7 +584,7 @@
 
 (t/deftest test-bound-rule-vars-946
   (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
-                         [:crux.tx/put {:xt/id id, :child child-id :name (str id "-" child-id)}]))
+                         [:xt/put {:xt/id id, :child child-id :name (str id "-" child-id)}]))
 
   (let [node *api*
         parent-id 50

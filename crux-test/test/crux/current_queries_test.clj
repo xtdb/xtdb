@@ -92,8 +92,8 @@
                     (map ::query-id)))))))
 
 (t/deftest test-recent-queries
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]
-                        [:crux.tx/put {:xt/id :petr :name "Petr"}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan"}]
+                        [:xt/put {:xt/id :petr :name "Petr"}]])
 
   (let [db (api/db *api*)]
     (api/q db
@@ -115,7 +115,7 @@
 
 (t/deftest test-slowest-queries
   (fix/submit+await-tx (mapv
-                        (fn [n] [:crux.tx/put
+                        (fn [n] [:xt/put
                                  {:xt/id (keyword (str "ivan" n))
                                   :name (str "ivan" n)}])
                         (range 100)))
@@ -134,8 +134,8 @@
       (t/is (not (n/slow-query? query-info {:slow-queries-min-threshold (Duration/ofSeconds 10)}))))))
 
 (t/deftest test-active-queries
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]
-                        [:crux.tx/put {:xt/id :petr :name "Petr"}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan"}]
+                        [:xt/put {:xt/id :petr :name "Petr"}]])
 
   (let [db (api/db *api*)]
     (t/testing "test active-queries - streaming query"

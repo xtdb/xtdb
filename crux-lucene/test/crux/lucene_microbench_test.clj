@@ -52,7 +52,7 @@
                          (partition-all 1000)
                          (reduce (fn [last-tx chunk]
                                    (c/submit-tx *api* (vec (for [doc chunk]
-                                                             [:crux.tx/put doc]))))
+                                                             [:xt/put doc]))))
                                  nil))]
         (c/await-tx *api* last-tx)))
 
@@ -73,6 +73,6 @@
                          (partition-all 1)
                          (reduce (fn [last-tx chunk]
                                    (c/submit-tx *api* (vec (for [doc chunk]
-                                                             [:crux.tx/put doc]))))
+                                                             [:xt/put doc]))))
                                  nil))]
         (c/await-tx *api* last-tx))))))

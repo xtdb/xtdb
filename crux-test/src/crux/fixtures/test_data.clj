@@ -7,5 +7,5 @@
     (read-string (slurp bond-file))))
 
 (defn with-james-bond-data [f]
-  (fix/submit+await-tx (mapv (fn [e] [:crux.tx/put e]) james-bond-data))
+  (fix/submit+await-tx (mapv (fn [e] [:xt/put e]) james-bond-data))
   (f))

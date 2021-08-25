@@ -401,7 +401,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionNoArgs() {
-        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx] (let [db (crux.api/db ctx) entity (crux.api/entity db \"PabloPicasso\")] [[:crux.tx/put (update entity :person/version inc)]]))");
+        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx] (let [db (crux.api/db ctx) entity (crux.api/entity db \"PabloPicasso\")] [[:xt/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));
@@ -419,7 +419,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionArgs() {
-        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:crux.tx/put (update entity :person/version inc)]]))");
+        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));

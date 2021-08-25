@@ -14,7 +14,7 @@
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:xt/id :origin-man :name "Adam"}
-        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+        submitted-tx (api/submit-tx *api* [[:xt/put doc]])]
     (api/await-tx *api* submitted-tx (java.time.Duration/ofSeconds 2))
     (t/is (api/entity (api/db *api*) :origin-man))
     (t/testing "Tx log"
@@ -22,7 +22,7 @@
         (t/is (= [{:xt/tx-id 2,
                    :xt/tx-time (:xt/tx-time submitted-tx)
                    :crux.tx.event/tx-events
-                   [[:crux.tx/put
+                   [[:xt/put
                      (c/new-id (:xt/id doc))
                      (c/hash-doc doc)]]}]
                  (iterator-seq tx-log-iterator)))))))
@@ -33,7 +33,7 @@
         doc {:xt/id :some-id, :a :b}
         doc-hash (c/hash-doc doc)
 
-        _ (fix/submit+await-tx [[:crux.tx/put doc]])
+        _ (fix/submit+await-tx [[:xt/put doc]])
 
         docs (db/fetch-docs doc-store #{doc-hash})]
 
@@ -53,7 +53,7 @@
                    (get doc-hash)))))
 
     (t/testing "Resurrect Document"
-      (fix/submit+await-tx [[:crux.tx/put doc]])
+      (fix/submit+await-tx [[:xt/put doc]])
 
       (t/is (= doc
                (-> (db/fetch-docs doc-store #{doc-hash})
@@ -66,7 +66,7 @@
           last-tx (atom nil)]
       (time
        (dotimes [n n]
-         (reset! last-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id (keyword (str n))}]]))))
+         (reset! last-tx (api/submit-tx *api* [[:xt/put {:xt/id (keyword (str n))}]]))))
 
       (time
        (api/await-tx *api* last-tx nil))))
@@ -82,10 +82,10 @@
   (t/is true))
 
 (t/deftest test-project-star-bug-1016
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :put
-                                       :crux.db/fn '(fn [ctx doc]
-                                                      [[:crux.tx/put doc]])}]])
-  (fix/submit+await-tx [[:crux.tx/fn :put {:xt/id :foo, :foo :bar}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :put
+                                  :crux.db/fn '(fn [ctx doc]
+                                                 [[:xt/put doc]])}]])
+  (fix/submit+await-tx [[:xt/fn :put {:xt/id :foo, :foo :bar}]])
 
   (let [db (api/db *api*)]
 
@@ -114,7 +114,7 @@
       (->> (for [_ (range 100)]
              (future
                (api/submit-tx *api* (for [eid (shuffle eids)]
-                                      [:crux.tx/put {:xt/id eid}]))))
+                                      [:xt/put {:xt/id eid}]))))
            doall
            (run! deref))
       (t/is true))))

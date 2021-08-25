@@ -23,7 +23,7 @@
 (t/deftest test-put
   (let [node *api*]
     ;; tag::put[]
-    (crux/submit-tx node [[:crux.tx/put
+    (crux/submit-tx node [[:xt/put
                            {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <1>
                            #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
                            #inst "2018-05-19T08:31:15.966-00:00"]] ) ;; <3>
@@ -38,7 +38,7 @@
     (put-pablo)
 
     ;; tag::delete[]
-    (crux/submit-tx node [[:crux.tx/delete
+    (crux/submit-tx node [[:xt/delete
                            :dbpedia.resource/Pablo-Picasso  ;; <1>
                            #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
                            #inst "2018-05-19T08:31:15.966-00:00"]]) ;; <3>
@@ -53,11 +53,11 @@
     (put-pablo)
 
     ;; tag::match[]
-    (crux/submit-tx node [[:crux.tx/match
+    (crux/submit-tx node [[:xt/match
                            :dbpedia.resource/Pablo-Picasso ;; <1>
                            {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <2>
                            #inst "2018-05-18T09:21:31.846-00:00"] ;; <3>
-                          [:crux.tx/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
+                          [:xt/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
     ;; end::match[]
     (crux/sync node)
     (t/is (nil? (pablo)))
@@ -69,7 +69,7 @@
     (put-pablo)
 
     ;; tag::evict[]
-    (crux/submit-tx node [[:crux.tx/evict :dbpedia.resource/Pablo-Picasso]])
+    (crux/submit-tx node [[:xt/evict :dbpedia.resource/Pablo-Picasso]])
     ;; end::evict[]
 
     (crux/sync node)
@@ -79,20 +79,20 @@
 
 (t/deftest test-function-anatomy
   (fix/submit+await-tx
-   [[:crux.tx/put {:xt/id :increment-age
-                   :crux.db/fn '
-                   ;; tag::fn-anatomy[]
-                   (fn [ctx eid]  ;;<1>
-                     (let [db (crux.api/db ctx) ;;<2>
-                           entity (crux.api/entity db eid)]
-                       [[:crux.tx/put (update entity :age inc)]])) ;;<3>
-                   ;; end::fn-anatomy[]
-                   }]
-    [:crux.tx/put {:xt/id :ivan
-                   :age 0}]])
+   [[:xt/put {:xt/id :increment-age
+              :crux.db/fn '
+              ;; tag::fn-anatomy[]
+              (fn [ctx eid]  ;;<1>
+                (let [db (crux.api/db ctx) ;;<2>
+                      entity (crux.api/entity db eid)]
+                  [[:xt/put (update entity :age inc)]])) ;;<3>
+              ;; end::fn-anatomy[]
+              }]
+    [:xt/put {:xt/id :ivan
+              :age 0}]])
 
   (fix/submit+await-tx
-   [[:crux.tx/fn
+   [[:xt/fn
      :increment-age
      :ivan]])
 
@@ -105,17 +105,17 @@
       [{:xt/id :ivan :age 0}]))
 
     ;; tag::fn-put[]
-    (crux/submit-tx node [[:crux.tx/put {:xt/id :increment-age
-                                         :crux.db/fn '(fn [ctx eid] ;;<1>
-                                                        (let [db (crux.api/db ctx)
-                                                              entity (crux.api/entity db eid)]
-                                                          [[:crux.tx/put (update entity :age inc)]]))}]])
+    (crux/submit-tx node [[:xt/put {:xt/id :increment-age
+                                    :crux.db/fn '(fn [ctx eid] ;;<1>
+                                                   (let [db (crux.api/db ctx)
+                                                         entity (crux.api/entity db eid)]
+                                                     [[:xt/put (update entity :age inc)]]))}]])
     ;; end::fn-put[]
 
     (crux/sync node)
 
     ;; tag::fn-use[]
-    (crux/submit-tx node [[:crux.tx/fn
+    (crux/submit-tx node [[:xt/fn
                            :increment-age ;; <1>
                            :ivan]]) ;; <2>
     ;; end::fn-use[]
@@ -127,7 +127,7 @@
 (t/deftest speculative-transactions
   (let [node *api*]
     ;; tag::speculative-0[]
-    (let [real-tx (crux/submit-tx node [[:crux.tx/put {:xt/id :ivan, :name "Ivan"}]])
+    (let [real-tx (crux/submit-tx node [[:xt/put {:xt/id :ivan, :name "Ivan"}]])
           _ (crux/await-tx node real-tx)
           all-names '{:find [?name], :where [[?e :name ?name]]}
           db (crux/db node)]
@@ -138,7 +138,7 @@
 
       ;; tag::speculative-1[]
       (let [speculative-db (crux/with-tx db
-                             [[:crux.tx/put {:xt/id :petr, :name "Petr"}]])]
+                             [[:xt/put {:xt/id :petr, :name "Petr"}]])]
         (crux/q speculative-db all-names) ; => #{["Petr"] ["Ivan"]}
         ;; end::speculative-1[]
         (t/is #{["Petr"] ["Ivan"]} (crux/q speculative-db all-names))
@@ -159,7 +159,7 @@
 (t/deftest awaiting
   (let [node *api*]
     ;; tag::ti[]
-    (let [tx (crux/submit-tx node [[:crux.tx/put {:xt/id :ivan}]])]
+    (let [tx (crux/submit-tx node [[:xt/put {:xt/id :ivan}]])]
       ;; The transaction won't have indexed yet so :ivan won't exist in a snapshot
       (crux/entity (crux/db node) :ivan) ;; => nil
 

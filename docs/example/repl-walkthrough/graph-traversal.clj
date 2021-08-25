@@ -59,7 +59,7 @@
 
 (crux/submit-tx
   node
-  (mapv (fn [n] [:crux.tx/put n]) nodes))
+  (mapv (fn [n] [:xt/put n]) nodes))
 
 (def db (crux/db node))
 

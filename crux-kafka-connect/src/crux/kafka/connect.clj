@@ -35,9 +35,9 @@
     (instance? Struct val)
     (let [struct-schema (.schema ^Struct val)
           struct-fields (.fields ^Schema struct-schema)]
-     (reduce conj
-        (map (fn [^Field field] {(keyword (.name field)) (get-struct-contents (.get ^Struct val field))})
-             struct-fields)))
+      (reduce conj
+              (map (fn [^Field field] {(keyword (.name field)) (get-struct-contents (.get ^Struct val field))})
+                   struct-fields)))
     (instance? java.util.ArrayList val) (into [] (map get-struct-contents val))
     (instance? java.util.HashMap val) (zipmap (map keyword (.keySet ^java.util.HashMap val)) (map get-struct-contents (.values ^java.util.HashMap val)))
     :else val))
@@ -104,17 +104,17 @@
   (log/info "sink record:" record)
   (let [tx-op (if (and (nil? (.value record))
                        (.key record))
-                [:crux.tx/delete (coerce-eid (.key record))]
+                [:xt/delete (coerce-eid (.key record))]
                 (let [doc (record->edn record)
                       id (find-eid props record doc)]
-                  [:crux.tx/put (assoc doc :xt/id id)]))]
+                  [:xt/put (assoc doc :xt/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 
 (defn submit-sink-records [api props records]
   (when (seq records)
     (api/submit-tx api (vec (for [record records]
-                               (transform-sink-record props record))))))
+                              (transform-sink-record props record))))))
 
 (defn- write-transit [x]
   (with-open [out (ByteArrayOutputStream.)]
@@ -129,16 +129,16 @@
 
 (defn- tx-op-with-explicit-valid-time [[op :as tx-op] tx-time]
   (or (case op
-        :crux.tx/put
+        :xt/put
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
-        :crux.tx/delete
+        :xt/delete
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
-        :crux.tx/match
+        :xt/match
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
-        :crux.tx/cas
+        :xt/cas
         (when (= 3 (count tx-op))
           (conj tx-op tx-time))
         nil)
@@ -163,16 +163,16 @@
 
 (defn- tx-op->id+doc [[op :as tx-op]]
   (case op
-    :crux.tx/put
+    :xt/put
     (when (= 2 (count tx-op))
       (let [[_ new-doc] tx-op]
         [(:xt/id new-doc)
          new-doc]))
-    (:crux.tx/delete :crux.tx/evict)
+    (:xt/delete :xt/evict)
     (when (= 2 (count tx-op))
       (let [[_ deleted-id] tx-op]
         [deleted-id]))
-    :crux.tx/cas
+    :xt/cas
     (when (= 3 (count tx-op))
       (let [[_ old-doc new-doc] tx-op]
         [(:xt/id new-doc)
@@ -184,7 +184,7 @@
                                                                            :as tx}]
   (log/info "tx-ops:" tx-ops)
   (for [[op :as tx-op] tx-ops
-        :when (not (contains? #{:crux.tx/fn :crux.tx/match} op))
+        :when (not (contains? #{:xt/fn :xt/match} op))
         :let [[id doc] (tx-op->id+doc tx-op)
               hashed-id (str (c/new-id id))
               _ (log/info "tx-op:" tx-op "id:" id "hashed id:" hashed-id "doc:" doc)]

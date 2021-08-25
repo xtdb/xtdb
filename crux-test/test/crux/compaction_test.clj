@@ -8,9 +8,9 @@
 
 (t/deftest test-compaction-leaves-replayable-log
   (let [tx (with-open [api (crux/start-node fix/*opts*)]
-             (crux/submit-tx api [[:crux.tx/put {:xt/id :foo}]])
+             (crux/submit-tx api [[:xt/put {:xt/id :foo}]])
              (Thread/sleep 10) ; to avoid two txs at the same ms
-             (crux/submit-tx api [[:crux.tx/put {:xt/id :foo}]]))]
+             (crux/submit-tx api [[:xt/put {:xt/id :foo}]]))]
 
     (with-open [api2 (crux/start-node fix/*opts*)]
       (crux/await-tx api2 tx nil)

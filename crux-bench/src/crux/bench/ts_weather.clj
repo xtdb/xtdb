@@ -50,7 +50,7 @@
   (bench/run-bench :ingest
     (bench/with-additional-index-metrics node
       (let [location-tx-ops (vec (for [location-doc @location-docs]
-                                   [:crux.tx/put location-doc]))
+                                   [:xt/put location-doc]))
             _ (api/submit-tx node location-tx-ops)
             last-tx (with-condition-docs
                       (fn [condition-docs]
@@ -59,7 +59,7 @@
                              (reduce (fn [last-tx chunk]
                                        (api/submit-tx node
                                                       (vec (for [{:keys [condition/time] :as condition-doc} chunk]
-                                                             [:crux.tx/put condition-doc time]))))
+                                                             [:xt/put condition-doc time]))))
                                      nil))))]
         (api/await-tx node last-tx (Duration/ofMinutes 20))
         {:success? true}))))

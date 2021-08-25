@@ -815,14 +815,14 @@ EDN::
 ----
 ({:xt/tx-id 0,
   :xt/tx-time #inst "2020-10-16T09:02:43.429-00:00",
-  :crux.tx.event/tx-events [[:crux.tx/put
-  			     #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+  :crux.tx.event/tx-events [[:xt/put
+  			   #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
 			     #xt/id "f441402b3c5d37365203947aabe85cf471498bf0"
 			     #inst "2020-06-20T20:05:50.000-00:00"]]}
  {:xt/tx-id 1,
   :xt/tx-time #inst "2020-10-16T09:28:27.785-00:00",
-  :crux.tx.event/tx-events [[:crux.tx/put
-  			     #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
+  :crux.tx.event/tx-events [[:xt/put
+  			   #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
 			     #xt/id "f441402b3c5d37365203947aabe85cf471498bf0"
 			     #inst "2020-06-20T20:05:50.000-00:00"]]})
 ----
@@ -846,8 +846,8 @@ curl -X POST \
      -H "Content-Type: application/json" \
      -H "Accept: application/json" \
      -d '{"tx-ops": [["put", {"xt/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
-          	    ["put", {"xt/id": "boris", "name": "Boris", "last-name": "Petrov"}],
-          	    ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
+          	         ["put", {"xt/id": "boris", "name": "Boris", "last-name": "Petrov"}],
+          	         ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
      $CRUX_URL/_crux/submit-tx
 ----
 
@@ -861,9 +861,9 @@ EDN::
 curl -X POST \
      -H "Content-Type: application/edn" \
      -H "Accept: application/edn" \
-     -d '{:tx-ops [[:crux.tx/put {:xt/id :ivan, :name "Ivan" :last-name "Petrov"}],
-          	  [:crux.tx/put {:xt/id :boris, :name "Boris" :last-name "Petrov"}],
-          	  [:crux.tx/delete :maria #inst "2012-05-07T14:57:08.462-00:00"]]}' \
+     -d '{:tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan" :last-name "Petrov"}],
+          	       [:xt/put {:xt/id :boris, :name "Boris" :last-name "Petrov"}],
+          	       [:xt/delete :maria #inst "2012-05-07T14:57:08.462-00:00"]]}' \
      $CRUX_URL/_crux/submit-tx
 ----
 ====

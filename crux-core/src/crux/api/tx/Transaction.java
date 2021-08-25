@@ -159,11 +159,11 @@ public final class Transaction {
     }
 
     private static class EdnVisitor implements TransactionOperation.Visitor<IPersistentVector> {
-        private static final Keyword PUT = Keyword.intern("crux.tx/put");
-        private static final Keyword DELETE = Keyword.intern("crux.tx/delete");
-        private static final Keyword EVICT = Keyword.intern("crux.tx/evict");
-        private static final Keyword MATCH = Keyword.intern("crux.tx/match");
-        private static final Keyword FN = Keyword.intern("crux.tx/fn");
+        private static final Keyword PUT = Keyword.intern("xt/put");
+        private static final Keyword DELETE = Keyword.intern("xt/delete");
+        private static final Keyword EVICT = Keyword.intern("xt/evict");
+        private static final Keyword MATCH = Keyword.intern("xt/match");
+        private static final Keyword FN = Keyword.intern("xt/fn");
 
         @Override
         public IPersistentVector visit(PutOperation operation) {

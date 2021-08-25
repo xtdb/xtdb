@@ -116,14 +116,15 @@ coursier launch sqlline:sqlline:1.9.0 org.apache.calcite.avatica:avatica-core:1.
 
 To define a table, transact a document into Crux:
 
-``` clojure
+[source,clojure]
+----
 {:xt/id :crux.sql.schema/person
  :crux.sql.table/name "person"
  :crux.sql.table/query '{:find [id name homeworld]
                          :where [[id :name name]
                                  [id :homeworld homeworld]]}
  :crux.sql.table/columns '{id :keyword name :varchar homeworld :varchar}}
-```
+----
 
 A SQL table is a schema that maps Crux attributes to SQL table columns.
 Any document in Crux that matches the `crux.sql.table/query` in the schema document is eligible to be returned via the SQL query.
@@ -136,7 +137,7 @@ For example with the following Crux transaction operation:
 
 [source,clojure]
 ----
-[:crux.tx/put {:xt/id :ivan :name "Ivan" :homeworld "Earth"}]
+[:xt/put {:xt/id :ivan :name "Ivan" :homeworld "Earth"}]
 ----
 
 Get a connection and query as such:

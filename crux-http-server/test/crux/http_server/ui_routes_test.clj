@@ -46,8 +46,8 @@
   ;; Insert data
   (let [{:keys [xt/tx-id]} (-> (http/post (str *api-url* "/_crux/submit-tx")
                                           {:content-type :edn
-                                           :body (pr-str {:tx-ops [[:crux.tx/put {:xt/id :ivan, :linking :peter}]
-                                                                   [:crux.tx/put {:xt/id :peter, :name "Peter"}]]})
+                                           :body (pr-str {:tx-ops [[:xt/put {:xt/id :ivan, :linking :peter}]
+                                                                   [:xt/put {:xt/id :peter, :name "Peter"}]]})
                                            :as :stream})
                                (parse-body "application/edn"))]
     (http/get (str *api-url* "/_crux/await-tx?tx-id=" tx-id))
@@ -135,7 +135,7 @@
                       (parse-body "text/tsv")))))))
 
 (t/deftest test-string-eid-routes
-  (let [{:keys [xt/tx-id] :as tx} (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id "string-id"}]])]
+  (let [{:keys [xt/tx-id] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id "string-id"}]])]
     (t/is (= {:xt/id "string-id"}
              (-> (get-result-from-path "/_crux/entity?eid=string-id" "application/edn")
                  (parse-body "application/edn"))))
@@ -145,7 +145,7 @@
                  :xt/tx-id)))))
 
 (t/deftest test-b64
-  (fix/submit+await-tx *api* [[:crux.tx/put {:xt/id :foo, :bytes (byte-array [1 2 3])}]])
+  (fix/submit+await-tx *api* [[:xt/put {:xt/id :foo, :bytes (byte-array [1 2 3])}]])
   (t/is (= {:xt/id :foo
             :bytes [1 2 3]}
            (-> (get-result-from-path "/_crux/entity?eid-edn=:foo" "application/transit+json")

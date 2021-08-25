@@ -76,7 +76,7 @@ facility.save
 
 [source,clojure]
 ----
-[:crux.tx/put facility]
+[:xt/put facility]
 ----
 
 Today, ActiveRecord is void. Mapping objects into databases is outmoded. The idea has a certain appeal, no doubt. I _record_ (verb) my _records_ (noun) to disk. When they are read back into memory via `has_one :superfluous_abstraction` the virtual machine makes them _active_ -- singing, dancing, and procreating through the object lifecycle -- until they are _recorded_ back into Postgres. But this act of recording doesn't necessitate mapping. Object mapping is a broken metaphor.
@@ -193,7 +193,7 @@ Back in 2014 our triple-store of choice had a hard schema, not unlike the schema
 
 [source,clojure]
 --
-[:crux.tx/put record]
+[:xt/put record]
 --
 
 We found that bootstrapping wasn't our only challenge. Schema or no schema, triples are not really _natural._ Beautiful, yes. Pure, yes. Natural, no. Try as we might, the team never had the epiphany with triples we had each experienced with Clojure.

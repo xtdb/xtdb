@@ -28,5 +28,5 @@ This module uses the default BM25Similarity similarity to calculate
 scores.
 
 Please note that although data is evicted from the Lucene index during
-the `crux.tx/evict` transaction operation, data is not removed during
-a normal `crux.tx/delete`.
+the `xt/evict` transaction operation, data is not removed during
+a normal `xt/delete`.

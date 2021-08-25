@@ -9,9 +9,9 @@
 (t/use-fixtures :each (lf/with-lucene-opts {:indexer 'crux.lucene.multi-field/->indexer}) fix/with-node)
 
 (t/deftest test-multi-field-lucene-queries
-  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
-                                   :firstname "Fred"
-                                   :surname "Smith"}]])
+  (submit+await-tx [[:xt/put {:xt/id :ivan
+                              :firstname "Fred"
+                              :surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db {:find '[?e]
@@ -22,9 +22,9 @@
                              :where '[[(lucene-text-search "firstname:James OR surname:preston") [[?e]]]]}))))))
 
 (t/deftest test-bindings
-  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
-                                   :firstname "Fred"
-                                   :surname "Smith"}]])
+  (submit+await-tx [[:xt/put {:xt/id :ivan
+                              :firstname "Fred"
+                              :surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db '{:find [?e]
@@ -37,7 +37,7 @@
                     "Smith" "Fred")))))
 
 (t/deftest test-namespaced-keywords
-  (submit+await-tx [[:crux.tx/put {:xt/id :ivan :person/surname "Smith"}]])
+  (submit+await-tx [[:xt/put {:xt/id :ivan :person/surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     ;; QueryParser/escape also works
@@ -55,12 +55,12 @@
                            (with-open [search-results (l/search *api* "name: Smith")]
                              (boolean (seq (iterator-seq search-results)))))]
 
-    (submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Smith"}]])
+    (submit+await-tx [[:xt/put {:xt/id :ivan :name "Smith"}]])
 
     (assert (in-crux?))
     (assert (in-lucene-store?))
 
-    (submit+await-tx [[:crux.tx/evict :ivan]])
+    (submit+await-tx [[:xt/evict :ivan]])
 
     (t/is (not (in-crux?)))
     (t/is (not (in-lucene-store?)))))
@@ -72,9 +72,9 @@
                                                       [?e :xt/id]]}))))
 
 (t/deftest test-use-in-argument
-  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
-                                   :firstname "Fred"
-                                   :surname "Smith"}]])
+  (submit+await-tx [[:xt/put {:xt/id :ivan
+                              :firstname "Fred"
+                              :surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db '{:find [?e]
@@ -101,9 +101,9 @@
                              (str (subs (str field) 1) ":" term-string)))))
 
 (t/deftest test-construct-or-fields-dynamically
-  (submit+await-tx [[:crux.tx/put {:xt/id :ivan
-                                   :firstname "Fred"
-                                   :surname "Smith"}]])
+  (submit+await-tx [[:xt/put {:xt/id :ivan
+                              :firstname "Fred"
+                              :surname "Smith"}]])
 
   (with-open [db (c/open-db *api*)]
     (t/is (seq (c/q db '{:find [?e]

@@ -9,10 +9,10 @@
 
 (defn submit-batches [node]
   (for [doc-batch (->> (for [n (range 25000)]
-                         [:crux.tx/put {:xt/id (keyword (str "doc-" n))
-                                        :nested-map {:foo :bar
-                                                     :baz :quux
-                                                     :doc-idx n}}])
+                         [:xt/put {:xt/id (keyword (str "doc-" n))
+                                   :nested-map {:foo :bar
+                                                :baz :quux
+                                                :doc-idx n}}])
                        (partition-all 1000))]
     (crux/submit-tx node (vec doc-batch))))
 

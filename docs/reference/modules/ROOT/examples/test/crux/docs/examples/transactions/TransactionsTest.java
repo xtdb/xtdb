@@ -234,7 +234,7 @@ public class TransactionsTest {
         // tag::fn-put[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
             tx.put(CruxDocument.createFunction("incAge",
-            "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:crux.tx/put (update entity :age inc)]]))"));
+            "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:xt/put (update entity :age inc)]]))"));
         }));
         // end::fn-put[]
 

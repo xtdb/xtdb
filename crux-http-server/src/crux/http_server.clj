@@ -87,7 +87,7 @@
                               (->> tx-ops
                                    (mapv (fn [tx-op]
                                            (-> tx-op
-                                               (update 0 (fn [op] (keyword "crux.tx" op)))
+                                               (update 0 (fn [op] (keyword "xt" op)))
                                                (txc/conform-tx-op decoders)
                                                (txc/->tx-op))))))))))))
 

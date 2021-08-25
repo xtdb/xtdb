@@ -147,7 +147,7 @@
                                                tx-id)
         match? (= (c/new-id content-hash) (c/new-id v))]
     (when-not match?
-      (log/debug "crux.tx/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash)))
+      (log/debug "xt/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash)))
 
     {:abort? (not match?)}))
 

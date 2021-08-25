@@ -44,12 +44,12 @@
 ;; tag::history-full[]
 (api/submit-tx
   node
-  [[:crux.tx/put
+  [[:xt/put
     {:xt/id :ids.persons/Jeff
      :person/name "Jeff"
      :person/wealth 100}
     #inst "2018-05-18T09:20:27.966"]
-   [:crux.tx/put
+   [:xt/put
     {:xt/id :ids.persons/Jeff
      :person/name "Jeff"
      :person/wealth 1000}

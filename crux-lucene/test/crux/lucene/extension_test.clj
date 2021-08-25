@@ -27,18 +27,18 @@
                                   :multi {:xt/module 'crux.lucene/->lucene-store
                                           :analyzer 'crux.lucene/->analyzer
                                           :indexer 'crux.lucene.multi-field/->indexer}})]
-    (submit+await-tx node [[:crux.tx/put {:xt/id :ivan
-                                          :firstname "Fred"
-                                          :surname "Smith"}]])
+    (submit+await-tx node [[:xt/put {:xt/id :ivan
+                                     :firstname "Fred"
+                                     :surname "Smith"}]])
     (with-open [db (c/open-db node)]
       (t/is (seq (c/q db '{:find [?e]
                            :where [[(text-search :firstname "Fre*" {:lucene-store-k :eav}) [[?e]]]
                                    [(lucene-text-search "firstname:%s AND surname:%s" "Fred" "Smith" {:lucene-store-k :multi}) [[?e]]]]}))))))
 
 (t/deftest test-userspace-text-search-limit
-  (submit+await-tx (for [n (range 10)] [:crux.tx/put {:xt/id n, :description (str "Entity " n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id n, :description (str "Entity v2 " n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id (+ n 4), :description (str "Entity v2 " n)}]))
+  (submit+await-tx (for [n (range 10)] [:xt/put {:xt/id n, :description (str "Entity " n)}]))
+  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id n, :description (str "Entity v2 " n)}]))
+  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id (+ n 4), :description (str "Entity v2 " n)}]))
 
   (with-open [db (c/open-db *api*)]
     (with-open [s (l/search *api* "Entity*" {:default-field (name :description)})]
@@ -54,9 +54,9 @@
                              (take 5))))))))
 
 (t/deftest test-userspace-wildcard-text-search-limit
-  (submit+await-tx (for [n (range 10)] [:crux.tx/put {:xt/id n, :description (str "Entity " n) :foo (str "Entitybar" n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id n, :description (str "Entity v2 " n) :foo (str "Entitybaz" n)}]))
-  (submit+await-tx (for [n (range 4)] [:crux.tx/put {:xt/id (+ n 4), :description (str "Entity v2 " n) :foo (str "Entityqaz" n)}]))
+  (submit+await-tx (for [n (range 10)] [:xt/put {:xt/id n, :description (str "Entity " n) :foo (str "Entitybar" n)}]))
+  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id n, :description (str "Entity v2 " n) :foo (str "Entitybaz" n)}]))
+  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id (+ n 4), :description (str "Entity v2 " n) :foo (str "Entityqaz" n)}]))
 
   (with-open [db (c/open-db *api*)]
     (with-open [s (l/search *api* "Entity*" {})]
@@ -170,8 +170,8 @@
 (t/deftest test-custom-index-and-analyzer
   (with-open [node (c/start-node {:crux.lucene/lucene-store {:analyzer 'crux.lucene.extension-test/->per-field-analyzer
                                                              :indexer 'crux.lucene.extension-test/->custom-eav-indexer}})]
-    (submit+await-tx node [[:crux.tx/put {:xt/id 0, :description "Some Entity"}]
-                           [:crux.tx/put {:xt/id 1, :description "Another entity"}]])
+    (submit+await-tx node [[:xt/put {:xt/id 0, :description "Some Entity"}]
+                           [:xt/put {:xt/id 1, :description "Another entity"}]])
 
     (let [db (c/db node)]
       ;; text-search + leading-wildcard
@@ -240,15 +240,15 @@
 (t/deftest test-example-use-case
   (with-open [node (c/start-node {:crux.lucene/lucene-store {:analyzer 'crux.lucene.extension-test/->example-analyzer
                                                              :indexer 'crux.lucene.extension-test/->example-eav-indexer}})]
-    (submit+await-tx node [[:crux.tx/put {:xt/id "SKU-32934"
-                                          :product/title "Brown Summer Hat"
-                                          :product/description "This large and comfortable woven hat will keep you cool in the summer"}]
-                           [:crux.tx/put {:xt/id "SKU-93921"
-                                          :product/title "Yellow Raincoat"
-                                          :product/description "Light and bright - a yellow raincoat to keep you dry all year round"}]
-                           [:crux.tx/put {:xt/id "SKU-13892"
-                                          :product/title "Large Umbrella"
-                                          :product/description "Don't let rain get in the way of your day!"}]])
+    (submit+await-tx node [[:xt/put {:xt/id "SKU-32934"
+                                     :product/title "Brown Summer Hat"
+                                     :product/description "This large and comfortable woven hat will keep you cool in the summer"}]
+                           [:xt/put {:xt/id "SKU-93921"
+                                     :product/title "Yellow Raincoat"
+                                     :product/description "Light and bright - a yellow raincoat to keep you dry all year round"}]
+                           [:xt/put {:xt/id "SKU-13892"
+                                     :product/title "Large Umbrella"
+                                     :product/description "Don't let rain get in the way of your day!"}]])
     (let [db (c/db node)]
       ;; text-search + leading-wildcard
       (t/is (= [["SKU-32934" "Brown Summer Hat" 1.0]]

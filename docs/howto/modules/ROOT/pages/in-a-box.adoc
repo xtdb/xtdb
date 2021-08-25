@@ -184,10 +184,10 @@ Clojure REPL::
 +
 [source,clojure,subs=attributes+]
 ----
-crux-in-a-box.db> (crux/submit-tx crux-node [[:crux.tx/put
+crux-in-a-box.db> (crux/submit-tx crux-node [[:xt/put
                                               {:xt/id "hi2u"
                                                :user/name "zig"}]])
-;; => #:crux.tx{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
+;; => #:xt{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
 crux-in-a-box.db> (crux/q (crux/db crux-node) '{:find [e]
                                                 :where [[e :user/name "zig"]]} )
 ;; => #{["hi2u"]}

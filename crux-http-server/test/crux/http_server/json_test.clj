@@ -203,7 +203,7 @@
   (let [tx-fn (pr-str '(fn [ctx eid]
                          (let [db (crux.api/db ctx)
                                entity (crux.api/entity db eid)]
-                           [[:crux.tx/put (update entity :age inc)]])))
+                           [[:xt/put (update entity :age inc)]])))
         {:strs [txId] :as tx} (submit-tx [["put" {"xt/id" "increment-age", "crux.db/fn" tx-fn}]])]
     (t/is (= tx
              (json-get {:url "/_crux/await-tx"
@@ -232,8 +232,8 @@
                         :qps {"eidJson" (pr-str "ivan")}})))))
 
 (t/deftest test-object-mapping
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id "foo"
-                                       :bytes (byte-array [1 2 3])}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id "foo"
+                                  :bytes (byte-array [1 2 3])}]])
   (t/is (= {"xt/id" "foo"
             "bytes" "AQID"}
            (json-get {:url "/_crux/entity"

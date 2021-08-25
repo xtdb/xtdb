@@ -161,7 +161,7 @@ public class DocumentTest {
     @Test
     public void functions() {
         CruxDocument document = CruxDocument.createFunction(documentId,
-                "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:crux.tx/put (update entity :person/version inc)]]))");
+                "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
         assertSameAfterPut(document);
     }
 

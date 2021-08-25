@@ -16,7 +16,7 @@
 
           submitted-tx
           (with-open [ingest-client (crux/new-ingest-client ingest-opts)]
-            (let [submitted-tx (crux/submit-tx ingest-client [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]])]
+            (let [submitted-tx (crux/submit-tx ingest-client [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
               (with-open [tx-log-iterator (db/open-tx-log (:tx-log ingest-client) nil)]
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))

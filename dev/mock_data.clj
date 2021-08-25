@@ -65,7 +65,7 @@
   [data]
   (crux/submit-tx
    (dev/crux-node)
-   (mapv #(do [:crux.tx/put %]) data)))
+   (mapv #(do [:xt/put %]) data)))
 
 (comment
   (ingest-data

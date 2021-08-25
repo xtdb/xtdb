@@ -29,8 +29,8 @@
 
 (t/deftest test-valid-time
   (let [id (java.util.UUID/randomUUID)
-        tx1 (submit+await-tx [[:crux.tx/put {:xt/id id :name "Ivan" :homeworld (str id) :age 21 :alive true} #inst "2015"]
-                              [:crux.tx/put {:xt/id id :name "Ivana" :homeworld (str id) :age 21 :alive true} #inst "2018"]])
+        tx1 (submit+await-tx [[:xt/put {:xt/id id :name "Ivan" :homeworld (str id) :age 21 :alive true} #inst "2015"]
+                              [:xt/put {:xt/id id :name "Ivana" :homeworld (str id) :age 21 :alive true} #inst "2018"]])
         q (str "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD = '" (str id) "'")]
 
     (t/is (= "Ivana" (:name (first (query q)))))
@@ -48,7 +48,7 @@
       (t/is (thrown-with-msg? java.lang.Exception #"Unrecognized date/time syntax: 2016-12-01TWOT"
                               (query (str "VALIDTIME('2016-12-01TWOT') \n " q)))))
 
-    (submit+await-tx [[:crux.tx/put {:xt/id id :name "Ivanb" :homeworld (str id) :age 21 :alive true} #inst "2016"]])
+    (submit+await-tx [[:xt/put {:xt/id id :name "Ivanb" :homeworld (str id) :age 21 :alive true} #inst "2016"]])
     (assert (= "Ivana" (:name (first (query q)))))
     (assert (= "Ivanb" (:name (first (query (str "VALIDTIME ('2016-12-01T10:13:30Z') " q))))))
 

@@ -103,7 +103,7 @@
                                      (partition-all 1000)
                                      (reduce (fn [[last-tx last-doc-count] chunk]
                                                [(crux/submit-tx node (vec (for [doc chunk]
-                                                                            [:crux.tx/put doc])))
+                                                                            [:xt/put doc])))
                                                 (+ last-doc-count (count chunk))])
                                              [nil 0]))]
         (println "Transacted" doc-count (.getTableName t))
