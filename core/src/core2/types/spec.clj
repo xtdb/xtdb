@@ -179,11 +179,11 @@
 
 (defmulti type-kind :name)
 
-(defmethod type-kind :map [_]
-  :arrow.kind/struct)
-
 (defmethod type-kind :struct [_]
   :arrow.kind/struct)
+
+(defmethod type-kind :map [_]
+  :arrow.kind/list)
 
 (defmethod type-kind :fixedsizelist [_]
   :arrow.kind/list)
