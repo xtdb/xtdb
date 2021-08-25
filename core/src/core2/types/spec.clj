@@ -1,6 +1,7 @@
 (ns core2.types.spec
   (:require [clojure.data.json :as json]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [clojure.core.protocols :as p])
   (:import [com.fasterxml.jackson.databind ObjectMapper ObjectReader ObjectWriter]
            [org.apache.arrow.vector.types.pojo ArrowType Field Schema]))
 
@@ -158,5 +159,18 @@
   (s/assert :arrow/schema schema)
   (Schema/fromJSON (json/write-str schema)))
 
-(defn <-clojure [x]
+(defn- <-clojure [x]
   (json/read-str (.writeValueAsString writer x) :key-fn keyword))
+
+(extend-protocol p/Datafiable
+  ArrowType
+  (datafy [x]
+    (<-clojure x))
+
+  Field
+  (datafy [x]
+    (<-clojure x))
+
+  Schema
+  (datafy [x]
+    (<-clojure x)))
