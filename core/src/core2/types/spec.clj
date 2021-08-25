@@ -87,7 +87,7 @@
 
 (s/def :arrow.type.timestamp/name (kw :timestamp))
 (s/def :arrow.type.timestamp/unit :arrow.type.time/unit)
-(s/def :arrow.type.timestamp/timezone (s/spec string? :gen #(s/gen (set (ZoneId/getAvailableZoneIds)))))
+(s/def :arrow.type.timestamp/timezone (s/spec (s/nilable string?) :gen #(s/gen (set (ZoneId/getAvailableZoneIds)))))
 
 (defmethod arrow-type-spec :timestamp [_]
   (s/keys :req-un [:arrow.type.timestamp/name
