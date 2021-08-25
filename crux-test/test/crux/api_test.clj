@@ -6,7 +6,6 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.every-api :as every-api :refer [*http-server-api* *node-type*]]
             [crux.fixtures.http-server :as fh]
-            [crux.io :as cio]
             [crux.rdf :as rdf]
             [crux.tx :as tx]
             [crux.tx.event :as txe])
@@ -39,19 +38,19 @@
   (let [valid-time (Date.)
         content-ivan {:xt/id :ivan :name "Ivan"}]
     (t/testing "put"
-      (let [tx (fix/submit+await-tx [[:crux.tx/put content-ivan valid-time]])]
+      (let [tx (fix/submit+await-tx [[:xt/put content-ivan valid-time]])]
         (t/is (= {:xt/id :ivan, :name "Ivan"}
                  (api/entity (api/db *api* {:xt/valid-time valid-time, :xt/tx tx}) :ivan)))))
 
     (t/testing "delete"
-      (let [delete-tx (api/submit-tx *api* [[:crux.tx/delete :ivan valid-time]])]
+      (let [delete-tx (api/submit-tx *api* [[:xt/delete :ivan valid-time]])]
         (api/await-tx *api* delete-tx)
         (t/is (nil? (api/entity (api/db *api* {:xt/valid-time valid-time, :xt/tx delete-tx}) :ivan)))))))
 
 (t/deftest test-empty-db
   (let [empty-db (api/db *api*)]
     (t/is (nil? (api/sync *api* (Duration/ofSeconds 10))))
-    (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo} #inst "2020"]])
+    (fix/submit+await-tx [[:xt/put {:xt/id :foo} #inst "2020"]])
     (t/is (= {:xt/id :foo} (api/entity (api/db *api*) :foo)))
 
     ;; TODO we don't currently distinguish between 'give me empty DB'
@@ -66,7 +65,7 @@
                     {:crux.zk/zk-active? true}))
            (select-keys (api/status *api*) [:crux.index/index-version :crux.zk/zk-active?])))
 
-  (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]])]
+  (let [submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
     (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
     (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
@@ -77,17 +76,17 @@
 (t/deftest test-can-use-id-literals
   (let [id #xt/id "https://adam.com"
         doc {:xt/id id, :name "Adam"}
-        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+        submitted-tx (api/submit-tx *api* [[:xt/put doc]])]
     (api/await-tx *api* submitted-tx nil)
 
     (t/is (= doc (api/entity (api/db *api*) id)))))
 
 (t/deftest test-query
   (let [valid-time (Date.)
-        submitted-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id :ivan :name "Ivan"} valid-time]
-                                           [:crux.tx/put {:xt/id :a :foo 1}]
-                                           [:crux.tx/put {:xt/id :b :foo 1}]
-                                           [:crux.tx/put {:xt/id :c :bar 2}]])]
+        submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]
+                                           [:xt/put {:xt/id :a :foo 1}]
+                                           [:xt/put {:xt/id :b :foo 1}]
+                                           [:xt/put {:xt/id :c :bar 2}]])]
     (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
     (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
@@ -148,7 +147,7 @@
 (t/deftest test-history
   (t/testing "transaction"
     (let [valid-time (Date.)
-          submitted-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+          submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
       (api/await-tx *api* submitted-tx)
       (with-dbs [db (*api*)]
         (let [entity-tx (api/entity-tx db :ivan)
@@ -165,21 +164,21 @@
 
 (t/deftest test-can-write-entity-using-map-as-id
   (let [doc {:xt/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
-        submitted-tx (api/submit-tx *api* [[:crux.tx/put doc]])]
+        submitted-tx (api/submit-tx *api* [[:xt/put doc]])]
     (api/await-tx *api* submitted-tx)
     (t/is (api/entity (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))
     (t/is (not-empty (api/entity-history (api/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"} :asc)))))
 
 (t/deftest test-invalid-doc
   (t/is (thrown? IllegalArgumentException
-                 (api/submit-tx *api* [[:crux.tx/put {}]]))))
+                 (api/submit-tx *api* [[:xt/put {}]]))))
 
 (t/deftest test-content-hash-invalid
   (let [valid-time (Date.)
         content-ivan {:xt/id :ivan :name "Ivan"}
         content-hash (str (c/new-id content-ivan))]
     (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
-                            (api/submit-tx *api* [[:crux.tx/put content-hash valid-time]])))))
+                            (api/submit-tx *api* [[:xt/put content-hash valid-time]])))))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
@@ -190,7 +189,7 @@
                     (lazy-seq (step)))))))))
 
 (t/deftest test-sparql
-  (let [submitted-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id :ivan :name "Ivan"}]])]
+  (let [submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
     (api/await-tx *api* submitted-tx))
 
   (t/testing "SPARQL query"
@@ -204,25 +203,25 @@
             (.shutDown repo)))))))
 
 (t/deftest test-adding-back-evicted-document
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo))
 
-  (fix/submit+await-tx [[:crux.tx/evict :foo]])
+  (fix/submit+await-tx [[:xt/evict :foo]])
   (t/is (nil? (api/entity (api/db *api*) :foo)))
 
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
   (t/is (api/entity (api/db *api*) :foo)))
 
 (t/deftest test-tx-log
   (let [valid-time (Date.)
-        tx1 (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+        tx1 (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
 
     (t/testing "tx-log"
       (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (not (realized? result)))
           (t/is (= [(assoc tx1
-                           :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
+                           :crux.tx.event/tx-events [[:xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
                    result))
           (t/is (realized? result))))
 
@@ -231,7 +230,7 @@
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
-                             :xt/tx-ops [[:crux.tx/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+                             :xt/tx-ops [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
                      result))
             (t/is (realized? result)))))
 
@@ -240,18 +239,18 @@
           (t/is (empty? (iterator-seq tx-log-iterator)))))
 
       (t/testing "tx log skips failed transactions"
-        (let [tx2 (fix/submit+await-tx [[:crux.tx/match :ivan {:xt/id :ivan :name "Ivan2"}]
-                                        [:crux.tx/put {:xt/id :ivan :name "Ivan3"}]])]
+        (let [tx2 (fix/submit+await-tx [[:xt/match :ivan {:xt/id :ivan :name "Ivan2"}]
+                                        [:xt/put {:xt/id :ivan :name "Ivan3"}]])]
           (t/is (false? (api/tx-committed? *api* tx2)))
 
           (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (= [(assoc tx1
-                               :crux.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
+                               :crux.tx.event/tx-events [[:xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
                        result))))
 
-          (let [tx3 (fix/submit+await-tx [[:crux.tx/match :ivan {:xt/id :ivan :name "Ivan"}]
-                                          [:crux.tx/put {:xt/id :ivan :name "Ivan3"}]])]
+          (let [tx3 (fix/submit+await-tx [[:xt/match :ivan {:xt/id :ivan :name "Ivan"}]
+                                          [:xt/put {:xt/id :ivan :name "Ivan3"}]])]
             (t/is (true? (api/tx-committed? *api* tx3)))
             (with-open [tx-log-iterator (api/open-tx-log *api* nil false)]
               (let [result (iterator-seq tx-log-iterator)]
@@ -262,38 +261,38 @@
           (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
 
       (t/testing "match includes eid"
-        (let [tx (fix/submit+await-tx [[:crux.tx/match :foo nil]])]
+        (let [tx (fix/submit+await-tx [[:xt/match :foo nil]])]
           (with-open [tx-log (api/open-tx-log *api* (dec (:xt/tx-id tx)) true)]
-            (t/is (= [:crux.tx/match (c/new-id :foo) (c/new-id nil)]
+            (t/is (= [:xt/match (c/new-id :foo) (c/new-id nil)]
                      (-> (iterator-seq tx-log) first :xt/tx-ops first))))))
 
       ;; Intermittent failure on Kafka, see #1256
       (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
         (t/testing "tx fns return with-ops? correctly"
-          (let [tx4 (fix/submit+await-tx [[:crux.tx/put {:xt/id :jack :age 21}]
-                                          [:crux.tx/put {:xt/id :increment-age
-                                                         :crux.db/fn '(fn [ctx eid]
-                                                                        (let [db (crux.api/db ctx)
-                                                                              entity (crux.api/entity db eid)]
-                                                                          [[:crux.tx/put (update entity :age inc)]]))}]
-                                          [:crux.tx/put {:xt/id :increment-age-2
-                                                         :crux.db/fn '(fn [ctx eid]
-                                                                        [[:crux.tx/fn :increment-age eid]])}]
-                                          [:crux.tx/fn :increment-age-2 :jack]])]
+          (let [tx4 (fix/submit+await-tx [[:xt/put {:xt/id :jack :age 21}]
+                                          [:xt/put {:xt/id :increment-age
+                                                    :crux.db/fn '(fn [ctx eid]
+                                                                   (let [db (crux.api/db ctx)
+                                                                         entity (crux.api/entity db eid)]
+                                                                     [[:xt/put (update entity :age inc)]]))}]
+                                          [:xt/put {:xt/id :increment-age-2
+                                                    :crux.db/fn '(fn [ctx eid]
+                                                                   [[:xt/fn :increment-age eid]])}]
+                                          [:xt/fn :increment-age-2 :jack]])]
             (t/is (true? (api/tx-committed? *api* tx4)))
             (with-open [tx-log-iterator (api/open-tx-log *api* nil true)]
               (let [tx-ops (-> tx-log-iterator iterator-seq last :xt/tx-ops)]
-                (t/is (= [:crux.tx/fn
+                (t/is (= [:xt/fn
                           (c/new-id :increment-age-2)
-                          {:xt/tx-ops [[:crux.tx/fn
+                          {:xt/tx-ops [[:xt/fn
                                         (c/new-id :increment-age)
-                                        {:xt/tx-ops [[:crux.tx/put {:xt/id :jack, :age 22}]]}]]}]
+                                        {:xt/tx-ops [[:xt/put {:xt/id :jack, :age 22}]]}]]}]
                          (last tx-ops)))))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
             (let [doc (merge {:xt/id :ivan, :name "Ivan"} m)]
-              (merge (fix/submit+await-tx [[:crux.tx/put doc valid-time]])
+              (merge (fix/submit+await-tx [[:xt/put doc valid-time]])
                      {:xt/doc doc
                       :xt/valid-time valid-time
                       :xt/content-hash (c/hash-doc doc)})))]
@@ -358,71 +357,71 @@
                  (api/entity-history db :ivan :desc {:with-docs? true})))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided-546
-  (let [{:keys [^Date xt/tx-time]} (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])
+  (let [{:keys [^Date xt/tx-time]} (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (api/db *api* the-future the-future)))))
 
 (t/deftest test-db-is-a-snapshot
-  (let [tx (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :count 0}]])
+  (let [tx (fix/submit+await-tx [[:xt/put {:xt/id :foo, :count 0}]])
         db (api/db *api*)]
     (t/is (= tx (:xt/tx (api/db-basis db))))
     (t/is (= {:xt/id :foo, :count 0}
              (api/entity db :foo)))
 
-    (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :count 1}]])
+    (fix/submit+await-tx [[:xt/put {:xt/id :foo, :count 1}]])
 
     (t/is (= {:xt/id :foo, :count 0}
              (api/entity db :foo)))))
 
 (t/deftest test-latest-submitted-tx
-    (t/is (nil? (api/latest-submitted-tx *api*)))
-    (let [{:keys [xt/tx-id] :as tx} (api/submit-tx *api* [[:crux.tx/put {:xt/id :foo}]])]
-      (t/is (= {:xt/tx-id tx-id}
-               (api/latest-submitted-tx *api*))))
+  (t/is (nil? (api/latest-submitted-tx *api*)))
+  (let [{:keys [xt/tx-id] :as tx} (api/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
+    (t/is (= {:xt/tx-id tx-id}
+             (api/latest-submitted-tx *api*))))
 
-    (api/sync *api*)
+  (api/sync *api*)
 
-    (t/is (= {:xt/id :foo} (api/entity (api/db *api*) :foo))))
+  (t/is (= {:xt/id :foo} (api/entity (api/db *api*) :foo))))
 
 (t/deftest test-listen-for-indexed-txs
   (when-not (contains? (set t/*testing-contexts*) (str :remote))
     (let [!events (atom [])]
-      (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo}]])
+      (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
 
       (let [[bar-tx baz-tx] (with-open [_ (api/listen *api* {:xt/event-type :xt/indexed-tx
                                                              :with-tx-ops? true}
                                                       (fn [evt]
                                                         (swap! !events conj evt)))]
 
-                              (let [bar-tx (fix/submit+await-tx [[:crux.tx/put {:xt/id :bar}]])
-                                    baz-tx (fix/submit+await-tx [[:crux.tx/put {:xt/id :baz}]])]
+                              (let [bar-tx (fix/submit+await-tx [[:xt/put {:xt/id :bar}]])
+                                    baz-tx (fix/submit+await-tx [[:xt/put {:xt/id :baz}]])]
 
                                 (Thread/sleep 100)
 
                                 [bar-tx baz-tx]))]
 
-        (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan}]])
+        (fix/submit+await-tx [[:xt/put {:xt/id :ivan}]])
 
         (Thread/sleep 100)
 
         (t/is (= [(merge {:xt/event-type :xt/indexed-tx,
                           :committed? true
-                          :xt/tx-ops [[:crux.tx/put {:xt/id :bar}]]}
+                          :xt/tx-ops [[:xt/put {:xt/id :bar}]]}
                          bar-tx)
                   (merge {:xt/event-type :xt/indexed-tx,
                           :committed? true
-                          :xt/tx-ops [[:crux.tx/put {:xt/id :baz}]]}
+                          :xt/tx-ops [[:xt/put {:xt/id :baz}]]}
                          baz-tx)]
                  @!events))))))
 
 (t/deftest test-tx-fn-replacing-arg-docs-866
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :put-ivan
-                                       :crux.db/fn '(fn [ctx doc]
-                                                      [[:crux.tx/put (assoc doc :xt/id :ivan)]])}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :put-ivan
+                                  :crux.db/fn '(fn [ctx doc]
+                                                 [[:xt/put (assoc doc :xt/id :ivan)]])}]])
 
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (t/testing "replaces args doc with resulting ops"
-      (fix/submit+await-tx [[:crux.tx/fn :put-ivan {:name "Ivan"}]])
+      (fix/submit+await-tx [[:xt/fn :put-ivan {:name "Ivan"}]])
 
       (t/is (= {:xt/id :ivan, :name "Ivan"}
                (api/entity (api/db *api*) :ivan)))
@@ -440,7 +439,7 @@
 (t/deftest test-await-tx
   (when-not (= *node-type* :remote)
     (t/testing "timeout outputs properly"
-      (let [tx (api/submit-tx *api* (for [n (range 100)] [:crux.tx/put {:xt/id (str "test-" n)}]))]
+      (let [tx (api/submit-tx *api* (for [n (range 100)] [:xt/put {:xt/id (str "test-" n)}]))]
         (t/is
          (thrown-with-msg?
           java.util.concurrent.TimeoutException
@@ -464,7 +463,7 @@
 
   (let [clob (pr-str (range 1000))
         clob-doc {:xt/id :clob, :clob clob}]
-    (fix/submit+await-tx [[:crux.tx/put clob-doc]])
+    (fix/submit+await-tx [[:xt/put clob-doc]])
 
     (let [db (api/db *api*)]
       (t/is (= #{[clob]}

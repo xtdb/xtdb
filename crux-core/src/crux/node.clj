@@ -220,7 +220,7 @@
                             (remove #(db/tx-failed? index-store (:xt/tx-id %)))
                             (take-while (comp #(<= % latest-completed-tx-id) :xt/tx-id))
                             (map (if with-ops?
-                                   (fn [{:keys [xt/tx-id crux.tx.event/tx-events] :as tx-log-entry}]
+                                   (fn [{:keys [crux.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
                                          (dissoc :crux.tx.event/tx-events)
                                          (assoc :xt/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
@@ -228,7 +228,11 @@
                                      (-> tx-log-entry
                                          (update :crux.tx.event/tx-events
                                                  (fn [evts]
-                                                   (->> evts (mapv #(update % 1 c/new-id))))))))))]
+                                                   (->> evts
+                                                        (mapv (fn [evt]
+                                                                (-> evt
+                                                                    (update 0 txc/crux-op->xt-op)
+                                                                    (update 1 c/new-id))))))))))))]
             (cio/->cursor (fn []
                             (.close tx-log-iterator))
                           tx-log))))))

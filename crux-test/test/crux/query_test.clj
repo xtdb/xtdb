@@ -108,11 +108,11 @@
 
     (t/testing "Can query entity by single field"
       (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                               :where [[e :name name]]
-                                                               :args [{:name "Ivan"}]})))
+                                                          :where [[e :name name]]
+                                                          :args [{:name "Ivan"}]})))
       (t/is (= #{[(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                               :where [[e :name name]]
-                                                               :args [{:name "Petr"}]}))))
+                                                          :where [[e :name name]]
+                                                          :args [{:name "Petr"}]}))))
 
     (t/testing "Can query entity by entity position"
       (t/is (= #{["Ivan"]
@@ -142,16 +142,16 @@
     (t/testing "Can query entity by single field with several arguments"
       (t/is (= #{[(:xt/id ivan)]
                  [(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                               :where [[e :name name]]
-                                                               :args [{:name "Ivan"}
-                                                                      {:name "Petr"}]}))))
+                                                          :where [[e :name name]]
+                                                          :args [{:name "Ivan"}
+                                                                 {:name "Petr"}]}))))
 
     (t/testing "Can query entity by single field with literals"
       (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*) '{:find [e]
-                                                               :where [[e :name name]
-                                                                       [e :last-name "Ivanov"]]
-                                                               :args [{:name "Ivan"}
-                                                                      {:name "Petr"}]})))
+                                                          :where [[e :name name]
+                                                                  [e :last-name "Ivanov"]]
+                                                          :args [{:name "Ivan"}
+                                                                 {:name "Petr"}]})))
 
       (t/is (= #{["Ivan"]} (api/q (api/db *api*) {:find '[name]
                                                   :where '[[e :name name]
@@ -167,16 +167,16 @@
     (t/testing "Can query entity with empty arguments"
       (t/is (= #{[(:xt/id ivan)]
                  [(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                               :where [[e :name name]]
-                                                               :args []}))))
+                                                          :where [[e :name name]]
+                                                          :args []}))))
 
     (t/testing "Can query entity with tuple arguments"
       (t/is (= #{[(:xt/id ivan)]
                  [(:xt/id petr)]} (api/q (api/db *api*) '{:find [e]
-                                                               :where [[e :name name]
-                                                                       [e :last-name last-name]]
-                                                               :args [{:name "Ivan" :last-name "Ivanov"}
-                                                                      {:name "Petr" :last-name "Petrov"}]}))))
+                                                          :where [[e :name name]
+                                                                  [e :last-name last-name]]
+                                                          :args [{:name "Ivan" :last-name "Ivanov"}
+                                                                 {:name "Petr" :last-name "Petrov"}]}))))
 
     (t/testing "Can query predicates based on arguments alone"
       (t/is (= #{["Ivan"]} (api/q (api/db *api*) '{:find [name]
@@ -233,30 +233,30 @@
                                                       {:name "Petr" :last-name "Petrov"}]))]
 
     (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
-                                            '{:find [e]
-                                              :in [$ name]
-                                              :where [[e :name name]]}
-                                            "Ivan")))
+                                       '{:find [e]
+                                         :in [$ name]
+                                         :where [[e :name name]]}
+                                       "Ivan")))
 
     (t/testing "the db var is optional"
       (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
-                                              '{:find [e]
-                                                :in [name]
-                                                :where [[e :name name]]}
-                                              "Ivan"))))
+                                         '{:find [e]
+                                           :in [name]
+                                           :where [[e :name name]]}
+                                         "Ivan"))))
 
     (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
-                                            '{:find [e]
-                                              :in [$ name last-name]
-                                              :where [[e :name name]
-                                                      [e :last-name last-name]]}
-                                            "Ivan" "Ivanov")))
+                                       '{:find [e]
+                                         :in [$ name last-name]
+                                         :where [[e :name name]
+                                                 [e :last-name last-name]]}
+                                       "Ivan" "Ivanov")))
 
     (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*)
-                                            '{:find [e]
-                                              :in [$ [name]]
-                                              :where [[e :name name]]}
-                                            ["Ivan"])))
+                                       '{:find [e]
+                                         :in [$ [name]]
+                                         :where [[e :name name]]}
+                                       ["Ivan"])))
 
     (t/is (= #{[(:xt/id ivan)] [(:xt/id petr)]}
              (api/q (api/db *api*)
@@ -631,10 +631,10 @@
 
     (t/testing "?p2 introduced only inside of an Or"
       (t/is (= #{[(:xt/id ivan)]} (api/q (api/db *api*) '{:find [?p2]
-                                                               :where [(or (and [?p2 :name "Petr"]
-                                                                                [?p2 :sex :female])
-                                                                           (and [?p2 :last-name "Ivanov"]
-                                                                                [?p2 :sex :male]))]}))))))
+                                                          :where [(or (and [?p2 :name "Petr"]
+                                                                           [?p2 :sex :female])
+                                                                      (and [?p2 :last-name "Ivanov"]
+                                                                           [?p2 :sex :male]))]}))))))
 
 (t/deftest test-not-join
   (fix/transact! *api* (fix/people [{:name "Ivan" :last-name "Ivanov"}
@@ -1206,9 +1206,9 @@
                       :where [[(vector 1 2) [x ...]]]})))
 
     (t/is (= #{}
-           (api/q (api/db *api*)
-                  '{:find [x]
-                    :where [[(vector) [x ...]]]}))))
+             (api/q (api/db *api*)
+                    '{:find [x]
+                      :where [[(vector) [x ...]]]}))))
 
   (t/testing "sets"
     (t/is (= #{[1]
@@ -1258,8 +1258,8 @@
            (api/q (api/db *api*) '{:find [x y]
                                    :where [[(identity #{[1 2] [3 4]}) [[x y]]]]})))
 
-   (t/is (empty? (api/q (api/db *api*) '{:find [x y]
-                                         :where [[(identity #{}) [[x y]]]]})))
+  (t/is (empty? (api/q (api/db *api*) '{:find [x y]
+                                        :where [[(identity #{}) [[x y]]]]})))
 
   (t/testing "distinct tuples"
     (t/is (= #{[1 2]}
@@ -1797,7 +1797,7 @@
 ;; expected place in the index.
 (t/deftest test-optimise-range-constraints-bug-505
   (let [tx (vec (for [i (range 5000)]
-                  [:crux.tx/put
+                  [:xt/put
                    {:xt/id (keyword (str "id-" i))
                     :offer i}]))
         submitted-tx (doto (api/submit-tx *api* tx)
@@ -1844,7 +1844,7 @@
         id-slowdown-factor 2
         entity-slowdown-factor 10
         tx (api/submit-tx *api* (vec (for [n (range number-of-docs)]
-                                       [:crux.tx/put (assoc ivan :xt/id (keyword (str "ivan-" n)) :id n)])))
+                                       [:xt/put (assoc ivan :xt/id (keyword (str "ivan-" n)) :id n)])))
         _ (api/await-tx *api* tx)
         db (api/db *api*)
         entity-time (let [start-time (System/nanoTime)]
@@ -1869,8 +1869,8 @@
 (t/deftest test-query-and-match
   (t/testing "can create new user"
     (let [{:xt/keys [tx-time tx-id] :as submitted-tx}
-          (api/submit-tx *api* [[:crux.tx/match :ivan nil]
-                                [:crux.tx/put {:xt/id :ivan, :name "Ivan 1st"}]])]
+          (api/submit-tx *api* [[:xt/match :ivan nil]
+                                [:xt/put {:xt/id :ivan, :name "Ivan 1st"}]])]
       (api/await-tx *api* submitted-tx)
       (t/is (true? (api/tx-committed? *api* submitted-tx)))
 
@@ -1885,8 +1885,8 @@
 
   (t/testing "cannot create existing user"
     (let [{:xt/keys [tx-time tx-id] :as submitted-tx}
-          (api/submit-tx *api* [[:crux.tx/match :ivan nil]
-                                [:crux.tx/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
+          (api/submit-tx *api* [[:xt/match :ivan nil]
+                                [:xt/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
 
       (api/await-tx *api* submitted-tx)
       (t/is (false? (api/tx-committed? *api* submitted-tx)))
@@ -1899,8 +1899,8 @@
 
   (t/testing "can update existing user"
     (let [{:xt/keys [tx-time] :as submitted-update-tx}
-          (api/submit-tx *api* [[:crux.tx/match :ivan {:xt/id :ivan, :name "Ivan 1st"}]
-                                [:crux.tx/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
+          (api/submit-tx *api* [[:xt/match :ivan {:xt/id :ivan, :name "Ivan 1st"}]
+                                [:xt/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
       (api/await-tx *api* submitted-update-tx)
       (t/is (true? (api/tx-committed? *api* submitted-update-tx)))
       (t/is (= #{["Ivan 2nd"]} (api/q (api/db *api* tx-time tx-time)
@@ -1909,10 +1909,10 @@
 
       (t/testing "match sees interim state through the transaction"
         (let [{:xt/keys [tx-time] :as submitted-tx}
-              (api/submit-tx *api* [[:crux.tx/match :ivan {:xt/id :ivan, :name "Ivan 2nd"}]
-                                    [:crux.tx/put {:xt/id :ivan, :name "Ivan 3rd"}]
-                                    [:crux.tx/match :ivan {:xt/id :ivan, :name "Ivan 3rd"}]
-                                    [:crux.tx/put {:xt/id :ivan :name "Ivan 4th"}]])]
+              (api/submit-tx *api* [[:xt/match :ivan {:xt/id :ivan, :name "Ivan 2nd"}]
+                                    [:xt/put {:xt/id :ivan, :name "Ivan 3rd"}]
+                                    [:xt/match :ivan {:xt/id :ivan, :name "Ivan 3rd"}]
+                                    [:xt/put {:xt/id :ivan :name "Ivan 4th"}]])]
           (api/await-tx *api* submitted-tx)
 
           (t/is (api/tx-committed? *api* submitted-tx))
@@ -1924,7 +1924,7 @@
 
       (t/testing "normal put works after match"
         (let [{:xt/keys [tx-time] :as submitted-tx}
-              (api/submit-tx *api* [[:crux.tx/put
+              (api/submit-tx *api* [[:xt/put
                                      {:xt/id :ivan
                                       :name "Ivan 5th"}]])]
 
@@ -1962,13 +1962,13 @@
 
 (t/deftest test-bitemp-query-from-indexing-temporal-data-using-existing-b+-trees-paper
   ;; Day 0, represented as #inst "2018-12-31"
-  (api/submit-tx *api* [[:crux.tx/put
+  (api/submit-tx *api* [[:xt/put
                          {:xt/id :p2
                           :entry-pt :SFO
                           :arrival-time #inst "2018-12-31"
                           :departure-time :na}
                          #inst "2018-12-31"]
-                        [:crux.tx/put
+                        [:xt/put
                          {:xt/id :p3
                           :entry-pt :LA
                           :arrival-time #inst "2018-12-31"
@@ -1977,14 +1977,14 @@
   ;; Day 1, nothing happens.
   (api/submit-tx *api* [])
   ;; Day 2
-  (api/submit-tx *api* [[:crux.tx/put
+  (api/submit-tx *api* [[:xt/put
                          {:xt/id :p4
                           :entry-pt :NY
                           :arrival-time #inst "2019-01-02"
                           :departure-time :na}
                          #inst "2019-01-02"]])
   ;; Day 3
-  (let [third-day-submitted-tx (api/submit-tx *api* [[:crux.tx/put
+  (let [third-day-submitted-tx (api/submit-tx *api* [[:xt/put
                                                       {:xt/id :p4
                                                        :entry-pt :NY
                                                        :arrival-time #inst "2019-01-02"
@@ -1997,32 +1997,32 @@
     (Thread/sleep 10)
 
     ;; Day 4, correction, adding missing trip on new arrival.
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p1
                             :entry-pt :NY
                             :arrival-time #inst "2018-12-31"
                             :departure-time :na}
                            #inst "2018-12-31"]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :p1
                             :entry-pt :NY
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-03"}
                            #inst "2019-01-03"]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :p1
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-04"
                             :departure-time :na}
                            #inst "2019-01-04"]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-04"}
                            #inst "2019-01-04"]])
     ;; Day 5
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p2
                             :entry-pt :SFO
                             :arrival-time #inst "2018-12-31"
@@ -2032,50 +2032,50 @@
     (api/submit-tx *api* [])
     ;; Day 7-12, correction of deletion/departure on day 4. Shows
     ;; how valid time cannot be the same as arrival time.
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time :na}
                            #inst "2019-01-04"]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :p3
                             :entry-pt :LA
                             :arrival-time #inst "2018-12-31"
                             :departure-time #inst "2019-01-07"}
                            #inst "2019-01-07"]])
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p3
                             :entry-pt :SFO
                             :arrival-time #inst "2019-01-08"
                             :departure-time :na}
                            #inst "2019-01-08"]
-                          [:crux.tx/put
+                          [:xt/put
                            {:xt/id :p4
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-08"
                             :departure-time :na}
                            #inst "2019-01-08"]])
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p3
                             :entry-pt :SFO
                             :arrival-time #inst "2019-01-08"
                             :departure-time #inst "2019-01-08"}
                            #inst "2019-01-09"]])
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p5
                             :entry-pt :LA
                             :arrival-time #inst "2019-01-10"
                             :departure-time :na}
                            #inst "2019-01-10"]])
-    (api/submit-tx *api* [[:crux.tx/put
+    (api/submit-tx *api* [[:xt/put
                            {:xt/id :p7
                             :entry-pt :NY
                             :arrival-time #inst "2019-01-11"
                             :departure-time :na}
                            #inst "2019-01-11"]])
 
-    (doto (api/submit-tx *api* [[:crux.tx/put
+    (doto (api/submit-tx *api* [[:xt/put
                                  {:xt/id :p6
                                   :entry-pt :NY
                                   :arrival-time #inst "2019-01-12"
@@ -2812,8 +2812,8 @@
 
     (t/testing "variance aggregate"
       (t/is (= (ffirst (api/q db '[:find (variance ?x)
-                                    :where [(identity [10 15 20 35 75]) [?x ...]]]))
-                554.0))) ;; double
+                                   :where [(identity [10 15 20 35 75]) [?x ...]]]))
+               554.0))) ;; double
 
     (t/testing "stddev aggregate"
       (t/is (= (ffirst (api/q db '[:find (stddev ?x)
@@ -2827,7 +2827,7 @@
 
     (t/testing "sample aggregate"
       (t/is (= (count (ffirst (api/q db '[:find (sample 7 ?x)
-                                   :where [(identity [:a :b :c :a :d]) [?x ...]]])))
+                                          :where [(identity [:a :b :c :a :d]) [?x ...]]])))
                4)))
 
     (t/testing "rand aggregate"
@@ -2974,7 +2974,7 @@
 
   (let [db-before (api/db *api*)]
     ;; parent(bob, john)-
-    (fix/submit+await-tx [[:crux.tx/delete :bob]])
+    (fix/submit+await-tx [[:xt/delete :bob]])
     ;; parent(A,B)?
     (t/is (= #{[:john :douglas]
                [:ebbon :bob]}
@@ -3482,7 +3482,7 @@
                            {f nil, g true}]}))))
 
 (t/deftest test-binds-args-before-entities
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :foo/type "type", :foo/id 1}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo, :foo/type "type", :foo/id 1}]])
 
   (let [db (api/db *api*)]
     (t/is (= ['m 'e]
@@ -3495,9 +3495,9 @@
                   (filter #{'m 'e}))))))
 
 (t/deftest test-binds-against-false-arg-885
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :name "foo", :flag? false}]
-                        [:crux.tx/put {:xt/id :bar, :name "bar", :flag? true}]
-                        [:crux.tx/put {:xt/id :baz, :name "baz", :flag? nil}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo, :name "foo", :flag? false}]
+                        [:xt/put {:xt/id :bar, :name "bar", :flag? true}]
+                        [:xt/put {:xt/id :baz, :name "baz", :flag? nil}]])
 
   (t/is (= #{["foo" false]}
            (api/q (api/db *api*)
@@ -3515,7 +3515,7 @@
                     :args [{flag? nil}]}))))
 
 (t/deftest test-unused-args-still-binding-882
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :name "foo"}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo, :name "foo"}]])
 
   (t/is (= #{["foo" false]}
            (api/q (api/db *api*)
@@ -3533,7 +3533,7 @@
                     :args [{foo nil}]}))))
 
 (t/deftest test-leaf-vars-and-ors
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :field1 1 :field2 2}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo, :field1 1 :field2 2}]])
   (t/is (= #{[:foo]}
            (api/q (api/db *api*)'{:find [?id], :where [[?id :field1 ?field1]
                                                        [?id :field2 ?field2]
@@ -3542,7 +3542,7 @@
 
 (t/deftest test-bound-rule-vars-946
   (fix/submit+await-tx (for [[id child-id] (partition 2 1 (range 101))]
-                         [:crux.tx/put {:xt/id id, :child child-id :name (str id "-" child-id)}]))
+                         [:xt/put {:xt/id id, :child child-id :name (str id "-" child-id)}]))
 
   (let [parent-id 50
         expected (set (for [[id child-id] (partition 2 1 (range (inc parent-id) 101))]
@@ -3609,9 +3609,9 @@
   (t/deftest multiple-joins-bug-443
     (doseq [x (range 5)]
       (api/submit-tx *api* (for [y (range 10)]
-                             [:crux.tx/put {:xt/id (keyword (str "id" (+ (* x 1000) y))), :x x, :y y}])))
+                             [:xt/put {:xt/id (keyword (str "id" (+ (* x 1000) y))), :x x, :y y}])))
 
-    (let [last-tx (api/submit-tx *api* [[:crux.tx/put {:xt/id :match, :x 4, :y 8}]])]
+    (let [last-tx (api/submit-tx *api* [[:xt/put {:xt/id :match, :x 4, :y 8}]])]
       (api/await-tx *api* last-tx))
 
     (t/is (= #{[:id4008 :match 4 8] [:match :id4008 4 8]}
@@ -3627,16 +3627,16 @@
                :where '[[n :name "hello"]
                         [n :age 17]]}]
 
-    (fix/submit+await-tx [[:crux.tx/put {:xt/id :my-id, :name "hello", :age 17}]])
+    (fix/submit+await-tx [[:xt/put {:xt/id :my-id, :name "hello", :age 17}]])
 
     (t/is (= #{[:my-id]} (api/q (api/db *api*) query)))
 
-    (fix/submit+await-tx [[:crux.tx/delete :my-id]])
+    (fix/submit+await-tx [[:xt/delete :my-id]])
 
     (t/is (= #{} (api/q (api/db *api*) query)))))
 
 (t/deftest hashing-quoted-lists-1197
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :foo, :a-list '(1 2 3)}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :foo, :a-list '(1 2 3)}]])
 
   (t/is (= #{[:foo]}
            (api/q (api/db *api*)
@@ -3645,10 +3645,10 @@
 
 (t/deftest falsey-values-bind-with-rules
   ;; resolved in 20.05-1.8.4-alpha
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :a :att nil}]
-                        [:crux.tx/put {:xt/id :b :att :foo}]
-                        [:crux.tx/put {:xt/id :c :att false}]
-                        [:crux.tx/put {:xt/id :d}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :a :att nil}]
+                        [:xt/put {:xt/id :b :att :foo}]
+                        [:xt/put {:xt/id :c :att false}]
+                        [:xt/put {:xt/id :d}]])
   (t/is (= #{[:a] [:b] [:c]}
            (api/q (api/db *api*)
                   '{:find [?e]
@@ -3697,8 +3697,8 @@
            (.close node))))))
 
 (t/deftest nil-in-entity-position-shouldnt-yield-results-1486
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id 1 :foo nil}]
-                        [:crux.tx/put {:xt/id 2 :foo nil}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id 1 :foo nil}]
+                        [:xt/put {:xt/id 2 :foo nil}]])
 
   (t/is (= #{}
            (api/q (api/db *api*)
@@ -3711,8 +3711,8 @@
                     :where [[#{nil} :foo ?v]]}))))
 
 (t/deftest literal-nil-value-in-triple-clause-should-only-match-nil-1487
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id 1 :foo nil}]
-                        [:crux.tx/put {:xt/id 2 :foo 2}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id 1 :foo nil}]
+                        [:xt/put {:xt/id 2 :foo 2}]])
   (t/is (= #{[1] [2]}
            (api/q (api/db *api*)
                   '{:find [?e]
@@ -3744,20 +3744,20 @@
                 :where [[?e :name ?name]
                         [?e :type ?type]]}]
     (fix/submit+await-tx (conj (for [idx (range 1000)]
-                                 [:crux.tx/put {:xt/id (UUID/randomUUID)
-                                                :type :person
-                                                :name (str "person-" idx)}])
-                               [:crux.tx/put {:xt/id (UUID/randomUUID)
-                                              :type "extra type"}]))
+                                 [:xt/put {:xt/id (UUID/randomUUID)
+                                           :type :person
+                                           :name (str "person-" idx)}])
+                               [:xt/put {:xt/id (UUID/randomUUID)
+                                         :type "extra type"}]))
 
     (t/is (= '[?name ?e ?type]
              (-> (q/query-plan-for (api/db *api*) query)
                  :vars-in-join-order)))
 
-    (fix/submit+await-tx [[:crux.tx/put {:xt/id (UUID/randomUUID)
-                                         :name "extra name"}]
-                          [:crux.tx/put {:xt/id (UUID/randomUUID)
-                                         :name "another extra name"}]])
+    (fix/submit+await-tx [[:xt/put {:xt/id (UUID/randomUUID)
+                                    :name "extra name"}]
+                          [:xt/put {:xt/id (UUID/randomUUID)
+                                    :name "another extra name"}]])
 
     (t/is (= '[?name ?e ?type]
              (-> (q/query-plan-for (api/db *api*) query)
@@ -3861,8 +3861,8 @@
                  (map (comp inverted-long->date first) (iterator-seq res))))))))
 
 (t/deftest circular-deps-test-1523
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :ivan :name "Ivan", :foo :foo}]
-                        [:crux.tx/put {:xt/id :foo, :bar :bar}]])
+  (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan", :foo :foo}]
+                        [:xt/put {:xt/id :foo, :bar :bar}]])
 
   ;; failed with 'circular dependency between ?foo and ?a'
   (with-open [db (api/open-db *api*)]
@@ -3874,16 +3874,16 @@
                                  [?foo :bar ?bar]]})))))
 
 (t/deftest test-rules-binding-1569
-  (fix/submit+await-tx [[:crux.tx/put {:xt/id :a-1, :next :a-2}]
-                        [:crux.tx/put {:xt/id :a-2, :next :a-3}]
-                        [:crux.tx/put {:xt/id :a-3, :next :a-4}]
-                        [:crux.tx/put {:xt/id :a-4, :next :a-1}]
+  (fix/submit+await-tx [[:xt/put {:xt/id :a-1, :next :a-2}]
+                        [:xt/put {:xt/id :a-2, :next :a-3}]
+                        [:xt/put {:xt/id :a-3, :next :a-4}]
+                        [:xt/put {:xt/id :a-4, :next :a-1}]
 
-                        [:crux.tx/put {:xt/id :b-1, :next :b-2}]
-                        [:crux.tx/put {:xt/id :b-2, :next :b-3}]
-                        [:crux.tx/put {:xt/id :b-3, :next :b-4}]
-                        [:crux.tx/put {:xt/id :b-4, :next :b-5}]
-                        [:crux.tx/put {:xt/id :b-5, :next :b-1}]])
+                        [:xt/put {:xt/id :b-1, :next :b-2}]
+                        [:xt/put {:xt/id :b-2, :next :b-3}]
+                        [:xt/put {:xt/id :b-3, :next :b-4}]
+                        [:xt/put {:xt/id :b-4, :next :b-5}]
+                        [:xt/put {:xt/id :b-5, :next :b-1}]])
 
   #_ ; FIXME this returns all the B's too
   (t/is (= #{[:a-3] [:a-2] [:a-1] [:a-4]}

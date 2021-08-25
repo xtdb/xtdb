@@ -61,10 +61,10 @@
 (defn maps->tx-ops
   ([maps]
    (vec (for [m maps]
-          [:crux.tx/put m])))
+          [:xt/put m])))
   ([maps ts]
    (vec (for [m maps]
-          [:crux.tx/put m ts]))))
+          [:xt/put m ts]))))
 
 (defn transact!
   "Helper fn for transacting entities "

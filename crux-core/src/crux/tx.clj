@@ -71,7 +71,7 @@
        (into {}
              (map (fn [[arg-doc-id arg-doc]]
                     (MapEntry/create arg-doc-id
-                                     {:xt/id (:xt/id arg-doc)
+                                     {:crux.db/id (:crux.db/id arg-doc)
                                       :crux.db.fn/failed? true}))))))
 
 (defn- index-docs [{:keys [index-store-tx !tx]} docs]
@@ -139,8 +139,8 @@
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx in-flight-tx)})
 
 (defmethod index-tx-event :crux.tx/match [[_op k v at-valid-time :as match-op]
-                                          {:xt/keys [tx-time tx-id valid-time]}
-                                          {:keys [index-snapshot]}]
+                                     {:xt/keys [tx-time tx-id valid-time]}
+                                     {:keys [index-snapshot]}]
   (let [content-hash (db/entity-as-of-resolver index-snapshot
                                                (c/new-id k)
                                                (or at-valid-time valid-time tx-time)
@@ -152,8 +152,8 @@
     {:abort? (not match?)}))
 
 (defmethod index-tx-event :crux.tx/cas [[_op k old-v new-v at-valid-time :as cas-op]
-                                        {:xt/keys [tx-time tx-id valid-time] :as tx}
-                                        {:keys [index-snapshot] :as in-flight-tx}]
+                                   {:xt/keys [tx-time tx-id valid-time] :as tx}
+                                   {:keys [index-snapshot] :as in-flight-tx}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time valid-time tx-time)
         content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)

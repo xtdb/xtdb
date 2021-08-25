@@ -10,10 +10,10 @@
 
 (defrecord CruxIngestClient [tx-log document-store close-fn]
   api/PCruxAsyncIngestClient
-  (submit-tx-async [this tx-ops]
+  (submit-tx-async [_ tx-ops]
     (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (db/submit-docs (:document-store this) (into {} (mapcat :docs) conformed-tx-ops))
-      (db/submit-tx (:tx-log this) (mapv txc/->tx-event conformed-tx-ops))))
+      (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
+      (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))
 
   api/PCruxIngestClient
   (submit-tx [this tx-ops]
