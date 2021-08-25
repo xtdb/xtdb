@@ -341,7 +341,7 @@ by providing the transaction details from the transaction log (returned from
 `crux.api/submit-tx`), in a call to `crux.api/await-tx`. This will block until
 this transaction time has been seen by the cluster node.
 +
-Write consistency across nodes is provided via the `:crux.db/match` operation.
+Write consistency across nodes is provided via the `:crux.tx/match` operation.
 The user needs to include a match operation in their transaction, wait for the transaction time (as above), and check that the transaction committed.
 More advanced algorithms can be built on top of this.
 As mentioned above, all match operations in a transaction must pass for the transaction to proceed and get indexed, which enables one to enforce consistency across documents.
