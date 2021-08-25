@@ -23,19 +23,19 @@ orbs:
         steps:
           - run:
               command: |
-                cd crux-build
+                cd build
                 DEPS_EDN=<<parameters.deps-edn>> CRUX_EDN=<<parameters.crux-edn>> ./build-tar.sh
                 cd crux-builder/clj-uberjar/
                 UBERJAR_NAME=<<parameters.artifact-name>>.jar ./build-uberjar.sh
 
           - store_artifacts:
-              path: "~/crux/crux-build/crux-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
+              path: "~/crux/build/crux-builder/clj-uberjar/<<parameters.artifact-name>>.jar"
               destination: "<<parameters.artifact-name>>.jar"
 
           - run:
               command: |
                 export IMAGE_NAME=juxt/<<parameters.artifact-name>>
-                cd crux-build/crux-builder/docker/
+                cd build/crux-builder/docker/
                 IMAGE_NAME="${IMAGE_NAME}" IMAGE_VERSION="${CIRCLE_TAG}" ./build-docker.sh
                 echo "${DOCKER_PASS}" | docker login -u "${DOCKER_USER}" --password-stdin
                 docker push "${IMAGE_NAME}:${CIRCLE_TAG}"
@@ -133,15 +133,15 @@ jobs:
         - docker/install-docker
         - setup_remote_docker
 
-        - run: md5sum ~/crux/crux-bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
+        - run: md5sum ~/crux/bench/bin/download-dataset.sh > .circleci-bench-dataset-cache-key
         - restore_cache:
             keys:
               - v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
               # fallback to using the latest cache if no exact match is found
               - v1-dataset-
 
-        - run: sh ./crux-bench/bin/download-dataset.sh
-        - run: ./lein-sub -s crux-bench uberjar
+        - run: sh ./bench/bin/download-dataset.sh
+        - run: ./lein-sub -s bench uberjar
         - run:
             command: |
               echo 'export BUILD_ARG="--build-arg crux_commit=$CIRCLE_SHA1"' >> $BASH_ENV
@@ -153,12 +153,12 @@ jobs:
         - aws-ecr/build-and-push-image:
               dockerfile: 'Dockerfile'
               extra-build-args: '${BUILD_ARG}'
-              path: "crux-bench/"
+              path: "bench/"
               repo: 'crux-bench'
               tag: '${BUILD_TAGS}'
         - save_cache:
             paths:
-              - ~/crux/crux-bench/data/
+              - ~/crux/bench/data/
             key: v1-dataset-{{ checksum ".circleci-bench-dataset-cache-key" }}
 
   crux-build-artifacts:

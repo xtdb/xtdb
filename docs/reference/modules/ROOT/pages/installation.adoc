@@ -76,7 +76,7 @@ Crux pre-built JARs can be found on the relevant https://github.com/juxt/crux/re
 Start it in the usual way, with `java -jar crux-in-memory.jar`.
 This will open an HTTP port with a console UI on port 3000 - open http://localhost:3000[window=_blank] in your favourite browser.
 
-// TODO crux-build needs its own pages in the main docs, not just a blog
+// TODO build needs its own pages in the main docs, not just a blog
 You can also build custom Crux JARs with your choice of modules - see the https://juxt.pro/blog/crux-build[Crux build,window=_blank] blog for more details.
 
 [#docker]

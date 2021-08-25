@@ -79,25 +79,7 @@
 
   :source-paths ["dev"]
 
-  :test-paths ["crux-core/test"
-               "crux-rdf/test"
-               "crux-rocksdb/test"
-               "crux-lmdb/test"
-               "crux-kafka-connect/test"
-               "crux-kafka-embedded/test"
-               "crux-kafka/test"
-               "crux-jdbc/test"
-               "crux-http-client/test"
-               "crux-http-server/test"
-               "crux-metrics/test"
-               "crux-s3/test"
-               "crux-azure-blobs/test"
-               "crux-google-cloud-storage/test"
-               "crux-sql/test"
-               "crux-lucene/test"
-               "crux-bench/test"
-               "crux-test/test"
-               "docs/reference/modules/ROOT/examples/test"
+  :test-paths ["docs/reference/modules/ROOT/examples/test"
                "docs/about/modules/ROOT/examples/test"]
 
   :jvm-opts ["-Dlogback.configurationFile=resources/logback-test.xml"

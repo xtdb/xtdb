@@ -1,6 +1,6 @@
 = Building
 
-`crux-build` is a module within the crux repo with two key objectives:
+`build` is a module within the crux repo with two key objectives:
 
 * Providing pre-configured JARs and Docker containers to start a basic implementation of Crux with no prior knowledge required.
 * Providing a mechanism to spin up custom Crux artifacts - with two necessary inputs:
