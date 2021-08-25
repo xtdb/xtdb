@@ -6,7 +6,7 @@
             [clojure.test :as t]
             [crux.api :as crux]
             [crux.fixtures :as fix :refer [*api*]])
-  (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType TpchColumnType$Base TpchEntity TpchTable]
+  (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            java.util.UUID))
 
 (def tpch-column-types->crux-calcite-type
@@ -17,13 +17,13 @@
    TpchColumnType$Base/DATE :timestamp})
 
 (defn tpch-table->crux-sql-schema [^TpchTable t]
-  {:xt/id (keyword "crux.sql.schema" (.getTableName t))
-   :crux.sql.table/name (.getTableName t)
-   :crux.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
+  {:xt/id (keyword "xt.sql.schema" (.getTableName t))
+   :xt.sql.table/name (.getTableName t)
+   :xt.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
                                        (symbol (.getColumnName c))))
                           :where (vec (for [^TpchColumn c (.getColumns t)]
                                         ['e (keyword (.getColumnName c)) (symbol (.getColumnName c))]))}
-   :crux.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
+   :xt.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
                                       [(symbol (.getColumnName c)) (tpch-column-types->crux-calcite-type (.getBase (.getType c)))]))})
 
 (defn tpch-tables->crux-sql-schemas []
