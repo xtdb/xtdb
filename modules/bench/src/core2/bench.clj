@@ -49,10 +49,10 @@
   (doto (Files/createTempFile prefix suffix (make-array FileAttribute 0))
     (Files/delete)))
 
-(def ^S3Client !s3-client (delay (S3Client/create)))
+(def !s3-client (delay (S3Client/create)))
 
 (defn download-s3-dataset-file [s3-key ^Path tmp-path]
-  (.getObject @!s3-client
+  (.getObject ^S3Client @!s3-client
               (-> (GetObjectRequest/builder)
                   (.bucket "crux-datasets")
                   (.key s3-key)
