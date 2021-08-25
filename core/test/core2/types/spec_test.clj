@@ -9,7 +9,13 @@
   (t/is (= (.getType Types$MinorType/INT)
            (ts/->arrow-type {:name :int :bitWidth 32 :isSigned true})))
   (t/is (= {:name :int :bitWidth 32 :isSigned true}
-           (cd/datafy (.getType Types$MinorType/INT)))))
+           (cd/datafy (.getType Types$MinorType/INT))))
+
+  (t/testing "enums"
+    (t/is (= (.getType Types$MinorType/FLOAT4)
+             (ts/->arrow-type {:name :floatingpoint :precision :SINGLE})))
+    (t/is (= {:name :floatingpoint :precision :SINGLE}
+             (cd/datafy (.getType Types$MinorType/FLOAT4))))))
 
 (t/deftest can-convert-arrow-field-to-clojure-data-and-back
   (t/is (= (Field/nullable "foo" (.getType Types$MinorType/INT))

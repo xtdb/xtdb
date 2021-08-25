@@ -5,19 +5,21 @@
   (:import [com.fasterxml.jackson.databind ObjectMapper ObjectReader ObjectWriter]
            [org.apache.arrow.vector.types.pojo ArrowType Field FieldType Schema]))
 
+(require '[clojure.spec.gen.alpha :as gen])
+
 ;; See https://github.com/apache/arrow/blob/master/format/Schema.fbs
 
 (def ^:private ^ObjectMapper object-mapper (ObjectMapper.))
 (def ^:private ^ObjectReader arrow-type-reader (.readerFor object-mapper ArrowType))
 (def ^:private ^ObjectWriter object-writer (.writer object-mapper))
 
-(defmulti arrow-type-spec :name)
+(defmulti arrow-type-spec (comp keyword :name))
 
-(s/def :arrow.type/name keyword?)
-(s/def :arrow/type (s/keys :req-un [:arrow.type/name]))
+(s/def :arrow.type/name (s/conformer keyword))
+(s/def :arrow/type (s/multi-spec arrow-type-spec (comp keyword :name)))
 
 (defmethod arrow-type-spec :null [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (s/def :arrow.type.int/bitWidth #{Byte/SIZE Short/SIZE Integer/SIZE Long/SIZE})
 (s/def :arrow.type.int/isSigned boolean?)
@@ -35,13 +37,13 @@
                    :arrow.type.floatingpoint/precision]))
 
 (defmethod arrow-type-spec :binary [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (defmethod arrow-type-spec :utf8 [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (defmethod arrow-type-spec :bool [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (s/def :arrow.type.decimal/precision nat-int?)
 (s/def :arrow.type.decimal/scale nat-int?)
@@ -85,10 +87,10 @@
                    :arrow.type.interval/unit]))
 
 (defmethod arrow-type-spec :list [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (defmethod arrow-type-spec :struct [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (s/def :arrow.type.union/mode (s/and (s/conformer keyword)
                                      #{:SPARSE :DENSE}))
@@ -124,17 +126,17 @@
           :opt-un [:arrow.type.duration/unit]))
 
 (defmethod arrow-type-spec :largeutf8 [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (defmethod arrow-type-spec :largebinary [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (defmethod arrow-type-spec :largelist [_]
-  :arrow/type)
+  (s/keys :req-un [:arrow.type/name]))
 
 (s/def :arrow/key-value (s/map-of string? string?))
 
-(s/def :arrow.field/type (s/multi-spec arrow-type-spec :name))
+(s/def :arrow.field/type :arrow/type)
 (s/def :arrow.field/name string?)
 (s/def :arrow.field/nullable boolean?)
 (s/def :arrow.field/children (s/coll-of :arrow.schema/field))
@@ -162,8 +164,8 @@
 (extend-protocol p/Datafiable
   ArrowType
   (datafy [x]
-    (-> (json/read-str (.writeValueAsString object-writer x) :key-fn keyword)
-        (update :name keyword)))
+    (->> (json/read-str (.writeValueAsString object-writer x) :key-fn keyword)
+         (s/conform :arrow/type)))
 
   Field
   (datafy [x]
