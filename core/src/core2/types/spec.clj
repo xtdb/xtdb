@@ -183,16 +183,16 @@
   :arrow.kind/struct)
 
 (defmethod type-kind :map [_]
-  :arrow.kind/list)
-
-(defmethod type-kind :fixedsizelist [_]
-  :arrow.kind/list)
+  :arrow.kind/map)
 
 (defmethod type-kind :list [_]
   :arrow.kind/list)
 
+(defmethod type-kind :fixedsizelist [_]
+  :arrow.kind/fixedsizelist)
+
 (defmethod type-kind :largelist [_]
-  :arrow.kind/list)
+  :arrow.kind/largelist)
 
 (defmethod type-kind :union [_]
   :arrow.kind/union)
