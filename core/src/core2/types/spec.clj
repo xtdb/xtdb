@@ -117,7 +117,7 @@
   (s/keys :req-un [:arrow.type/name]
           :opt-un [:arrow.type.map/keysSorted]))
 
-(s/def :arrow.type.duration/unit :arrow.type/time-unit)
+(s/def :arrow.type.duration/unit :arrow.type.time/unit)
 
 (defmethod arrow-type-spec :duration [_]
   (s/keys :req-un [:arrow.type/name]
