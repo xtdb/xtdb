@@ -1,7 +1,7 @@
 (ns crux.fixtures.lubm
   (:require [crux.fixtures :refer [*api*]]
             [crux.api :as xt]
-            [crux.rdf :as rdf]))
+            [xtdb.rdf :as rdf]))
 
 (def ^:const lubm-triples-resource-8k "lubm/University0_0.ntriples")
 (def ^:const lubm-triples-resource-100k "lubm/lubm10.ntriples")

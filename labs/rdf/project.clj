@@ -1,4 +1,4 @@
-(defproject com.xtdb.xt-labs/xt-rdf "<inherited>"
+(defproject com.xtdb.labs/xtdb-rdf "<inherited>"
   :description "XTDB RDF"
 
   :plugins [[lein-parent "0.3.8"]]

@@ -4,7 +4,7 @@
             [crux.bench :as bench]
             [crux.bench.watdiv :as watdiv]
             [crux.io :as cio]
-            [crux.rdf :as rdf])
+            [xtdb.rdf :as rdf])
   (:import java.io.StringReader
            org.eclipse.rdf4j.query.Binding
            org.eclipse.rdf4j.repository.RepositoryConnection

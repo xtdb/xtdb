@@ -3,9 +3,9 @@
             [crux.fixtures.kafka :as fk]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.api :as xt]
-            [crux.rdf :as rdf]
+            [xtdb.rdf :as rdf]
             [clojure.java.io :as io]
-            [crux.sparql :as sparql]))
+            [xtdb.sparql :as sparql]))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
 (t/use-fixtures :each fk/with-cluster-tx-log-opts fk/with-cluster-doc-store-opts fix/with-node)

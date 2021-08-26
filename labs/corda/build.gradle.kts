@@ -1,7 +1,7 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 allprojects {
-    group = "com.xtdb.xt-labs"
+    group = "com.xtdb.labs"
     version = System.getenv("XTDB_VERSION") ?: "dev-SNAPSHOT"
 
     repositories {

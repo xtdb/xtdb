@@ -1,9 +1,9 @@
-(ns ^:no-doc crux.sparql.protocol
+(ns ^:no-doc xtdb.sparql.protocol
   "See https://www.w3.org/TR/2013/REC-sparql11-protocol-20130321/"
   (:require [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
+            [xtdb.rdf :as rdf]
+            [xtdb.sparql :as sparql]
             [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.request :as req]
             [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.time :as rt]
             [crux.io :as cio]
@@ -25,7 +25,7 @@
 
 (defn- unbound-sparql-value? [x]
   (and (keyword? x)
-       (= "crux.sparql" (namespace x))))
+       (= "xtdb.sparql" (namespace x))))
 
 (defn- strip-qmark [x]
   (str/replace x #"^\?" ""))

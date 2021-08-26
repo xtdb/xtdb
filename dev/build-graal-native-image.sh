@@ -8,7 +8,7 @@ JAVA_HOME=$GRAAL_HOME
 PATH=$JAVA_HOME/bin:$PATH
 
 LEIN_TARGET_DIR=./target
-GRAAL_TARGET_DIR=/dev/shm/crux-graal-build-target
+GRAAL_TARGET_DIR=/dev/shm/xtdb-graal-build-target
 
 echo "Deleting $LEIN_TARGET_DIR and linking to $GRAAL_TARGET_DIR to avoid 'File name too long' exceptions."
 

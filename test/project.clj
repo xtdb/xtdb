@@ -66,7 +66,7 @@
                                    [com.xtdb/xtdb-kafka-embedded]
                                    [com.xtdb/xtdb-http-client]
                                    [com.xtdb/xtdb-metrics]
-                                   [com.xtdb.xt-labs/xt-rdf]
+                                   [com.xtdb.labs/xtdb-rdf]
                                    [com.xtdb/xtdb-sql]
 
                                    ;; Uncomment to test Oracle, you'll need to locally install the JAR:

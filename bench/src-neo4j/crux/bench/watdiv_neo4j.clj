@@ -4,8 +4,8 @@
             [crux.bench :as bench]
             [crux.bench.watdiv :as watdiv]
             [crux.io :as cio]
-            [crux.rdf :as rdf]
-            [crux.sparql :as sparql])
+            [xtdb.rdf :as rdf]
+            [xtdb.sparql :as sparql])
   (:import java.util.concurrent.TimeUnit
            org.neo4j.dbms.api.DatabaseManagementServiceBuilder
            [org.neo4j.graphdb GraphDatabaseService Label RelationshipType]))

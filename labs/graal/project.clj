@@ -1,4 +1,4 @@
-(defproject com.xtdb.xt-labs/xt-graal "<inherited>"
+(defproject com.xtdb.labs/xtdb-graal "<inherited>"
   :description "XTDB Graal"
 
   :plugins [[lein-parent "0.3.8"]]
@@ -19,5 +19,5 @@
   :jvm-opts ["-Dclojure.compiler.direct-linking=true"
              "-Dclojure.spec.compile-asserts=false"]
 
-  :aot [crux.mem-kv xtdb.rocksdb crux.main.graal]
-  :main crux.main.graal)
+  :aot [crux.mem-kv xtdb.rocksdb xtdb.main.graal]
+  :main xtdb.main.graal)

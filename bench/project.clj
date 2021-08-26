@@ -22,7 +22,7 @@
                  [com.xtdb/xtdb-lmdb]
                  [com.xtdb/xtdb-lucene]
                  [com.xtdb/xtdb-metrics]
-                 [com.xtdb.xt-labs/xt-rdf]
+                 [com.xtdb.labs/xtdb-rdf]
                  [com.xtdb/xtdb-test]
                  [ch.qos.logback/logback-classic "1.2.3"]
 

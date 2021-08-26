@@ -17,7 +17,7 @@
     <logger name="xtdb.kafka" level="WARN" />
     <logger name="xtdb.jdbc" level="WARN" />
     <logger name="crux.mem-kv" level="ERROR" />
-    <logger name="crux.rdf" level="ERROR" />
+    <logger name="xtdb.rdf" level="ERROR" />
     <logger name="crux.tx" level="ERROR" />
 
     <logger name="org.apache.kafka" level="ERROR" />

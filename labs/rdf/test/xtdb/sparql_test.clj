@@ -1,9 +1,9 @@
-(ns crux.sparql-test
+(ns xtdb.sparql-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
             [crux.io :as cio]
-            [crux.rdf :as rdf]
-            [crux.sparql :as sparql]))
+            [xtdb.rdf :as rdf]
+            [xtdb.sparql :as sparql]))
 
 (t/deftest test-can-parse-sparql-to-datalog
   (t/testing "Apacha Jena Tutorial"
@@ -216,7 +216,7 @@ WHERE   { ?x ns:price ?price .
                 (or-join
                  [?mbox ?x]
                  [?x #=(keyword "http://xmlns.com/foaf/0.1/mbox") ?mbox]
-                 (and [(identity :crux.sparql/optional) ?mbox]
+                 (and [(identity :xtdb.sparql/optional) ?mbox]
                       (not [?x #=(keyword "http://xmlns.com/foaf/0.1/mbox")])))]}
              (sparql/sparql->datalog
               "
@@ -233,7 +233,7 @@ WHERE  { ?x foaf:name  ?name .
                  [?x ?price]
                  (and [?x #=(keyword "http://example.org/ns#price") ?price] [(< ?price 30)])
                  (and (not [?x #=(keyword "http://example.org/ns#price")])
-                      [(identity :crux.sparql/optional) ?price]))]}
+                      [(identity :xtdb.sparql/optional) ?price]))]}
              (sparql/sparql->datalog "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 PREFIX  ns:  <http://example.org/ns#>
@@ -346,7 +346,7 @@ WHERE {
                         (#=(symbol "http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR") ?t ?o)]
                        [(#=(symbol "http://www.w3.org/2000/01/rdf-schema#subClassOf-STAR") ?s ?o)
                         [?s :xt/id]
-                        [(identity :crux.sparql/zero-matches) ?o]]]}
+                        [(identity :xtdb.sparql/zero-matches) ?o]]]}
              (sparql/sparql->datalog "
 PREFIX  rdfs:   <http://www.w3.org/2000/01/rdf-schema#>
 PREFIX  rdf:    <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
@@ -376,7 +376,7 @@ SELECT ?person
                :where
                [(or-join [?person]
                          (and [#=(keyword "http://example/x") :xt/id]
-                              [(identity :crux.sparql/zero-matches) ?person])
+                              [(identity :xtdb.sparql/zero-matches) ?person])
                          [#=(keyword "http://example/x") #=(keyword "http://xmlns.com/foaf/0.1/knows") ?person])]}
              (sparql/sparql->datalog "
 PREFIX foaf: <http://xmlns.com/foaf/0.1/>
@@ -425,8 +425,8 @@ SELECT ?book ?title ?price
                [[?book #=(keyword "http://purl.org/dc/elements/1.1/title") ?title]
                 [?book #=(keyword "http://example.org/ns#price") ?price]],
                :args
-               [{?book :crux.sparql/undefined, ?title "SPARQL Tutorial"}
-                {?book #=(keyword "http://example.org/book/book2"), ?title :crux.sparql/undefined}]}
+               [{?book :xtdb.sparql/undefined, ?title "SPARQL Tutorial"}
+                {?book #=(keyword "http://example.org/book/book2"), ?title :xtdb.sparql/undefined}]}
              (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>
@@ -445,8 +445,8 @@ SELECT ?book ?title ?price
                [[?book #=(keyword "http://purl.org/dc/elements/1.1/title") ?title]
                 [?book #=(keyword "http://example.org/ns#price") ?price]],
                :args
-               [{?book :crux.sparql/undefined, ?title "SPARQL Tutorial"}
-                {?book #=(keyword "http://example.org/book/book2") ?title :crux.sparql/undefined}]}
+               [{?book :xtdb.sparql/undefined, ?title "SPARQL Tutorial"}
+                {?book #=(keyword "http://example.org/book/book2") ?title :xtdb.sparql/undefined}]}
              (sparql/sparql->datalog "
 PREFIX dc:   <http://purl.org/dc/elements/1.1/>
 PREFIX :     <http://example.org/book/>

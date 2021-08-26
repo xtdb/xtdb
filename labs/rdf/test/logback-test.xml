@@ -9,5 +9,5 @@
   </root>
   <logger name="crux" level="INFO" />
   <logger name="crux.hash" level="WARN" />
-  <logger name="crux.rdf" level="ERROR" />
+  <logger name="xtdb.rdf" level="ERROR" />
 </configuration>

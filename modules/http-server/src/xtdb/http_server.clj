@@ -218,7 +218,7 @@
 
 (def ^:private sparql-available?
   (try ; you can change it back to require when clojure.core fixes it to be thread-safe
-    (requiring-resolve 'crux.sparql.protocol/sparql-query)
+    (requiring-resolve 'xtdb.sparql.protocol/sparql-query)
     true
     (catch IOException _
       false)))
@@ -226,7 +226,7 @@
 (defn sparqql [crux-node]
   (fn [req]
     (when sparql-available?
-      ((resolve 'crux.sparql.protocol/sparql-query) crux-node req))))
+      ((resolve 'xtdb.sparql.protocol/sparql-query) crux-node req))))
 
 (defn- add-response-format [handler format]
   (fn [req]

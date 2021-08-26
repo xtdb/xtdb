@@ -9,7 +9,7 @@
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.io :as cio]
-            [crux.rdf :as rdf]
+            [xtdb.rdf :as rdf]
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.event :as txe])

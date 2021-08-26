@@ -3,8 +3,8 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.api :as xt]
             [clojure.java.io :as io]
-            [crux.sparql :as sparql]
-            [crux.rdf :as rdf]))
+            [xtdb.sparql :as sparql]
+            [xtdb.rdf :as rdf]))
 
 (t/use-fixtures :each fix/with-node)
 
@@ -68,9 +68,9 @@ WHERE
 
     ;; NOTE: Without post processing the extra optional is correct.
     (t/is (= #{["Becky Smith" 23]
-               ["Sarah Jones" :crux.sparql/optional]
+               ["Sarah Jones" :xtdb.sparql/optional]
                ["John Smith" 25]
-               ["Matt Jones" :crux.sparql/optional]}
+               ["Matt Jones" :xtdb.sparql/optional]}
              (xt/q (xt/db *api*)
                      (sparql/sparql->datalog
                       "
@@ -99,9 +99,9 @@ WHERE
     ?person info:age ?age .
 }"))))
 
-    (t/is (= #{["Sarah Jones" :crux.sparql/optional]
+    (t/is (= #{["Sarah Jones" :xtdb.sparql/optional]
                ["John Smith" 25]
-               ["Matt Jones" :crux.sparql/optional]}
+               ["Matt Jones" :xtdb.sparql/optional]}
              (xt/q (xt/db *api*)
                      (sparql/sparql->datalog
                       "

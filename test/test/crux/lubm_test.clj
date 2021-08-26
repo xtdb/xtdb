@@ -1,7 +1,7 @@
 (ns crux.lubm-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [crux.rdf :as rdf]
+            [xtdb.rdf :as rdf]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.lubm :as fl]

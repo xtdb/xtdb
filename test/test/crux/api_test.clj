@@ -6,7 +6,7 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.every-api :as every-api :refer [*http-server-api* *node-type*]]
             [crux.fixtures.http-server :as fh]
-            [crux.rdf :as rdf]
+            [xtdb.rdf :as rdf]
             [crux.tx :as tx]
             [crux.tx.event :as txe])
   (:import crux.api.NodeOutOfSyncException

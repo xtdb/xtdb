@@ -3,8 +3,8 @@
             [crux.bench :as bench]
             [crux.bench.watdiv :as watdiv]
             [crux.codec :as c]
-            [crux.rdf :as rdf]
-            [crux.sparql :as sparql]
+            [xtdb.rdf :as rdf]
+            [xtdb.sparql :as sparql]
             [datomic.api :as d])
   (:import (java.io Closeable)))
 

@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.rdf
+(ns ^:no-doc xtdb.rdf
   "Helpers for loading RDF triples into Crux.
 
   https://www.w3.org/TR/rdf11-primer/

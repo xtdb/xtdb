@@ -393,7 +393,7 @@ ordering between nodes.
 
 Does Crux support RDF/SPARQL?::
 
-  No. We have a simple ingestion mechanism for RDF data in `crux.rdf`
+  No. We have a simple ingestion mechanism for RDF data in `xtdb.rdf`
 but this is not a core feature. There is a also a query translator for a
 subset of SPARQL. RDF and SPARQL support could eventually be written as
 a layer on top of Crux as a module, but there are no plans for this by
@@ -425,7 +425,7 @@ Any plans for Datalog, Cypher, Gremlin or SPARQL support?::
 
   The goal is to support different languages, and decouple the query
 engine from its syntax, but this is not currently the case.
-There is a query translator for a subset of SPARQL in `crux.sparql`.
+There is a query translator for a subset of SPARQL in `xtdb.sparql`.
 
 Does Crux support sharding?::
 

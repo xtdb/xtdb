@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.sparql
+(ns ^:no-doc xtdb.sparql
   "SPARQL to Datalog compiler. Only handles a subset of SPARQL.
 
   https://www.w3.org/TR/2013/REC-sparql11-query-20130321/
@@ -6,7 +6,7 @@
   See http://docs.rdf4j.org/"
   (:require [clojure.walk :as w]
             [clojure.set :as set]
-            [crux.rdf :as rdf])
+            [xtdb.rdf :as rdf])
   (:import [org.eclipse.rdf4j.query BindingSet QueryLanguage]
            org.eclipse.rdf4j.query.parser.QueryParserUtil
            org.eclipse.rdf4j.query.algebra.helpers.AbstractQueryModelVisitor

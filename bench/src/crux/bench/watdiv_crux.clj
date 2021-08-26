@@ -2,9 +2,9 @@
   (:require [crux.bench.watdiv :as watdiv]
             [crux.bench :as bench]
             [clojure.java.io :as io]
-            [crux.rdf :as rdf]
+            [xtdb.rdf :as rdf]
             [crux.api :as xt]
-            [crux.sparql :as sparql]
+            [xtdb.sparql :as sparql]
             [clojure.data.json :as json])
   (:import (java.time Duration)))
 
