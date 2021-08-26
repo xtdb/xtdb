@@ -1,6 +1,6 @@
-(ns crux.bench.watdiv-crux
-  (:require [crux.bench.watdiv :as watdiv]
-            [crux.bench :as bench]
+(ns xtdb.bench.watdiv-crux
+  (:require [xtdb.bench.watdiv :as watdiv]
+            [xtdb.bench :as bench]
             [clojure.java.io :as io]
             [xtdb.rdf :as rdf]
             [crux.api :as xt]
@@ -131,7 +131,7 @@
 
 (comment
   (def foo-raw-watdiv-results
-    (with-redefs [watdiv/watdiv-input-file (io/file "crux-bench/data/watdiv.10.nt")]
+    (with-redefs [watdiv/watdiv-input-file (io/file "bench/data/watdiv.10.nt")]
      (bench/with-nodes [node (select-keys bench/nodes ["standalone-rocksdb"])]
        (run-watdiv-bench node {:test-count 10}))))
 

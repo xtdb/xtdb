@@ -1,7 +1,7 @@
-(ns crux.bench.watdiv-datomic
+(ns xtdb.bench.watdiv-datomic
   (:require [clojure.java.io :as io]
-            [crux.bench :as bench]
-            [crux.bench.watdiv :as watdiv]
+            [xtdb.bench :as bench]
+            [xtdb.bench.watdiv :as watdiv]
             [crux.codec :as c]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql]

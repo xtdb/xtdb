@@ -1,5 +1,5 @@
-(ns crux.bench.ts-weather
-  (:require [crux.bench :as bench]
+(ns xtdb.bench.ts-weather
+  (:require [xtdb.bench :as bench]
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
@@ -295,7 +295,7 @@
                                                    '{:find [c]
                                                      :where [[c :condition/device-id device-id]
                                                              [device-id :location/location location]
-                                                             [(crux.bench.ts-weather/kw-starts-with? location "field-")]]
+                                                             [(xtdb.bench.ts-weather/kw-starts-with? location "field-")]]
                                                      :timeout 120000})
                                             (reduce into []))
                          histories (for [c condition-ids]

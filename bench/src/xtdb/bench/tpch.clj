@@ -1,6 +1,6 @@
-(ns crux.bench.tpch
+(ns xtdb.bench.tpch
   (:require [crux.api :as xt]
-            [crux.bench :as bench]
+            [xtdb.bench :as bench]
             [crux.fixtures.tpch :as tpch]))
 
 (defn run-tpch-query [node n]

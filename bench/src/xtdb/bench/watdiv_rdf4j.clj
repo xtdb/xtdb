@@ -1,8 +1,8 @@
-(ns crux.bench.watdiv-rdf4j
+(ns xtdb.bench.watdiv-rdf4j
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
-            [crux.bench :as bench]
-            [crux.bench.watdiv :as watdiv]
+            [xtdb.bench :as bench]
+            [xtdb.bench.watdiv :as watdiv]
             [crux.io :as cio]
             [xtdb.rdf :as rdf])
   (:import java.io.StringReader

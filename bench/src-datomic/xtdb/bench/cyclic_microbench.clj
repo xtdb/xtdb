@@ -1,6 +1,6 @@
-(ns crux.bench.cyclic-microbench
+(ns xtdb.bench.cyclic-microbench
   (:require [crux.api :as xt]
-            [crux.bench :as bench]
+            [xtdb.bench :as bench]
             [datomic.api :as d])
   (:import java.time.Duration))
 

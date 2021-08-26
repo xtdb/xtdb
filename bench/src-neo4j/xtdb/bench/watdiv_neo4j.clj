@@ -1,8 +1,8 @@
-(ns crux.bench.watdiv-neo4j
+(ns xtdb.bench.watdiv-neo4j
   (:require [clojure.java.io :as io]
             [clojure.string :as string]
-            [crux.bench :as bench]
-            [crux.bench.watdiv :as watdiv]
+            [xtdb.bench :as bench]
+            [xtdb.bench.watdiv :as watdiv]
             [crux.io :as cio]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql])

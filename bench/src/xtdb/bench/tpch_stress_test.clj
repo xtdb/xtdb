@@ -1,5 +1,5 @@
-(ns crux.bench.tpch-stress-test
-  (:require [crux.bench :as bench]
+(ns xtdb.bench.tpch-stress-test
+  (:require [xtdb.bench :as bench]
             [crux.api :as xt]
             [clojure.tools.logging :as log]
             [crux.fixtures.tpch :as tpch]))

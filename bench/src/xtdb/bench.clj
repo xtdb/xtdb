@@ -1,11 +1,11 @@
-(ns crux.bench
+(ns xtdb.bench
   (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as client]
             [clojure.data.json :as json]
             [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [crux.api :as xt]
-            [crux.bench.cloudwatch :as cw]
+            [xtdb.bench.cloudwatch :as cw]
             [crux.bus :as bus]
             [crux.fixtures :as f]
             [crux.io :as cio]

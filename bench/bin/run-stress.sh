@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -e
 
-# COMMAND = '["crux.bench.main", "foo", "bar"]'
-COMMAND='["crux.bench.main", "--tests", "tpch-stress"'
+# COMMAND = '["xtdb.bench.main", "foo", "bar"]'
+COMMAND='["xtdb.bench.main", "--tests", "tpch-stress"'
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in

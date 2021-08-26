@@ -1,4 +1,4 @@
-(ns crux.bench.cloudwatch
+(ns xtdb.bench.cloudwatch
   (:import java.util.List
            software.amazon.awssdk.regions.Region
            software.amazon.awssdk.services.cloudwatch.CloudWatchClient
@@ -18,9 +18,9 @@
 
 (def ^:private cw-namespace
   ;; uncomment this to test CW metrics locally, but don't commit it!
-  (or #_"crux.bench.dev"
+  (or #_"xtdb.bench.dev"
       (when (Boolean/parseBoolean (System/getenv "XTDB_BENCH_CW_METRICS"))
-        "crux.bench")))
+        "xtdb.bench")))
 
 (defn put-cw-metrics! [results]
   (when cw-namespace

@@ -84,7 +84,7 @@
 
 (defn ->metric [m]
   (.. (Metric$Builder/create)
-      (namespace "crux.bench")
+      (namespace "xtdb.bench")
       (dimensions {"bench-type" (:bench-type m)
                    "bench-ns" (:bench-ns m)
                    "crux-node-type" (:crux-node-type m)})

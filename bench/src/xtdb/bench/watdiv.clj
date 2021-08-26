@@ -1,4 +1,4 @@
-(ns crux.bench.watdiv
+(ns xtdb.bench.watdiv
   (:require [clojure.java.io :as io]))
 
 (def watdiv-tests

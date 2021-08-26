@@ -1,13 +1,13 @@
-(ns crux.bench.main
+(ns xtdb.bench.main
   (:require [clojure.string :as string]
             [clojure.tools.cli :as cli]
-            [crux.bench :as bench]
-            [crux.bench.sorted-maps-microbench :as sorted-maps]
-            [crux.bench.tpch-stress-test :as tpch-stress]
-            [crux.bench.tpch :as tpch]
-            [crux.bench.ts-devices :as devices]
-            [crux.bench.ts-weather :as weather]
-            [crux.bench.watdiv-crux :as watdiv-crux]))
+            [xtdb.bench :as bench]
+            [xtdb.bench.sorted-maps-microbench :as sorted-maps]
+            [xtdb.bench.tpch-stress-test :as tpch-stress]
+            [xtdb.bench.tpch :as tpch]
+            [xtdb.bench.ts-devices :as devices]
+            [xtdb.bench.ts-weather :as weather]
+            [xtdb.bench.watdiv-crux :as watdiv-crux]))
 
 (defn post-to-slack [results]
   (doto results

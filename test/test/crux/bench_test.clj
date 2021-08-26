@@ -1,14 +1,9 @@
 (ns crux.bench-test
   (:require [criterium.core :as crit]
             [crux.api :as xt]
-            [crux.db :as db]
             [crux.fixtures :refer [*api*] :as fix]
             [crux.fixtures.kv :as fkv]
-            [clojure.spec.alpha :as s]
-            [clojure.test :as t]
-            [clojure.tools.logging :as log]
-            [crux.kv :as kv])
-  (:import java.util.Date))
+            [clojure.test :as t]))
 
 (def queries
   {:name '{:find [e]
