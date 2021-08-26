@@ -12,7 +12,7 @@ The central characteristic of a graph database is that it can support arbitrary-
 Graph queries are possible through the Crux dialect of the Datalog query language.
 
 //This page walks through many of the more interesting queries that run as part of Crux's default test suite.
-//See the https://github.com/juxt/crux/blob/master/test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
+//See the https://github.com/xtdb/xtdb/blob/master/test/test/crux/query_test.clj[`Crux query test file`] for the full suite of query tests and how each test listed below runs in the wider context.
 
 === SQL
 
@@ -629,7 +629,7 @@ bag of results that can contain duplicates.
 
 More powerful ordering and pagination features may be provided in the future.
 Feel free to open an issue or get in touch to discuss your ordering
-requirements, e.g. see https://github.com/juxt/crux/discussions/1514[#1514]
+requirements, e.g. see https://github.com/xtdb/xtdb/discussions/1514[#1514]
 
 [#rules]
 == Rules
@@ -917,7 +917,7 @@ Crux does not support:
 Crux does _not yet_ support:
 
 - `ground` (you can use alternatively use `identity`)
-- `get-else` (see https://github.com/juxt/crux/blob/7f7b50fcc7c766c8e5913ea7195138c9d1e5314a/crux-test/test/crux/query_test.clj#L1056[`get-attr`] which returns a relation instead)
+- `get-else` (see https://github.com/xtdb/xtdb/blob/7f7b50fcc7c766c8e5913ea7195138c9d1e5314a/crux-test/test/crux/query_test.clj#L1056[`get-attr`] which returns a relation instead)
 - `get-some`
 - `missing?` (however, instead of `[(missing? $ ?e :height)]` you can use `(not-join [?e] [?e :height])`)
 - backref attribute syntax (i.e. `[?child :example/_child ?parent]`)
@@ -929,4 +929,4 @@ Many advanced query requirements can be addressed using custom predicate functio
 
 Be aware during development that query compilation internalizes function definitions and this means that subsequent re-definitions of your custom functions may not be reflected until the query is modified and therefore re-compiled.
 
-Many examples of advanced queries are showcased across the https://github.com/juxt/crux/blob/master/test/test/crux/query_test.clj[query tests] and the suite of benchmarks maintained in the `crux-bench` sub-project.
+Many examples of advanced queries are showcased across the https://github.com/xtdb/xtdb/blob/master/test/test/crux/query_test.clj[query tests] and the suite of benchmarks maintained in the `crux-bench` sub-project.

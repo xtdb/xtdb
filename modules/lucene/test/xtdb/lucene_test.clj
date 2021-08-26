@@ -144,7 +144,7 @@
                         :where '[[(text-search :name "Ivan") [[?e ?v]]]
                                  [?e :xt/id]]})))))
 
-;; https://github.com/juxt/crux/issues/1428
+;; https://github.com/xtdb/xtdb/issues/1428
 
 (t/deftest test-can-search-multiple-entities-with-same-av-pair-bug-1428
   (submit+await-tx [[:xt/put {:xt/id :ivan1 :name "Ivan"}]

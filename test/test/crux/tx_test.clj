@@ -863,7 +863,7 @@
         (test-id) (test-value)))
 
     (t/testing "URL"
-      (doto (URL. "https://github.com/juxt/crux")
+      (doto (URL. "https://github.com/xtdb/xtdb")
         (test-id) (test-value)))
 
     (t/testing "IPersistentMap"

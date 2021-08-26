@@ -33,7 +33,7 @@ publishing {
             pom {
                 name.set("Crux Corda")
                 description.set("A Crux module that allows you to pipe verified Corda transactions into a Crux node, to then query using Crux’s bitemporal Datalog query engine. ")
-                url.set("https://github.com/juxt/crux")
+                url.set("https://github.com/xtdb/xtdb")
                 licenses {
                     license {
                         name.set("The MIT License")
@@ -47,9 +47,9 @@ publishing {
                     }
                 }
                 scm {
-                    connection.set("scm:git:git://github.com/juxt/crux.git")
-                    developerConnection.set("scm:git:ssh://github.com:juxt/crux.git")
-                    url.set("https://github.com/juxt/crux")
+                    connection.set("scm:git:git://github.com/xtdb/xtdb.git")
+                    developerConnection.set("scm:git:ssh://github.com:xtdb/xtdb.git")
+                    url.set("https://github.com/xtdb/xtdb")
                 }
             }
         }

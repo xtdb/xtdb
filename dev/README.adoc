@@ -24,8 +24,8 @@ All of the below commands should be run in the *root* of the Crux repo.
 
 == Links
 
-* https://github.com/juxt/crux/projects/1[Kanban board]
-* https://circleci.com/gh/juxt/crux[CircleCI build] image:https://circleci.com/gh/juxt/crux.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b[]
+* https://github.com/xtdb/xtdb/projects/1[Kanban board]
+* https://circleci.com/gh/xtdb/xtdb[CircleCI build] image:https://circleci.com/gh/xtdb/xtdb.svg?style=svg&circle-token=867b84b6d1b4dfff332773f771457349529aee8b[]
 * link:./GIT.adoc[Git practices in Crux]
 
 == Testing

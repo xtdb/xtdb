@@ -14,7 +14,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
 3. `git push origin master <next-version>`
 
 ## CircleCI
-1. Await https://app.circleci.com/pipelines/github/juxt/crux[CircleCI build]
+1. Await https://app.circleci.com/pipelines/github/xtdb/xtdb[CircleCI build]
 2. Manually approve hold - this kicks off the Maven deploy, building the API docs, deploying Docker images etc.
 
 ## JARs:
@@ -41,7 +41,7 @@ We use https://github.com/ptaoussanis/encore/blob/master/BREAK-VERSIONING.md[Bre
    * Deploy using `./bin/deploy-site.sh`
 
 ## Github release:
-1. Locate tag on https://github.com/juxt/crux/releases[releases page], click 'Edit tag'
+1. Locate tag on https://github.com/xtdb/xtdb/releases[releases page], click 'Edit tag'
 2. Copy release notes into release description
 3. Await artifacts, upload artifacts to release
 4. Await JARs deploying, and ensure 'docs' section is complete - people get notified at this point.

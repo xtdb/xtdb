@@ -339,7 +339,7 @@ A document is a map from keywords to values.
 
 All documents must contain the `:xt/id` key.
 
-Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to Crux, to avoid potential equality checking issues (see https://github.com/juxt/crux/issues/1510[here] for more details).
+Persistence of Clojure metadata is not supported (although is not currently rejected either) - we strongly recommended that all metadata should be removed from each document prior to submission to Crux, to avoid potential equality checking issues (see https://github.com/xtdb/xtdb/issues/1510[here] for more details).
 --
 ====
 
@@ -369,7 +369,7 @@ The following types of document IDs are allowed:
 |Long|`42L`
 |UUID|`UUID.randomUUID()`
 |URI|`URI.create("mailto:crux@juxt.pro")`
-|URL|`new URL("https://github.com/juxt/crux")`
+|URL|`new URL("https://github.com/xtdb/xtdb")`
 |IPersistentMap|`PersistentArrayMap.EMPTY.assoc("foo", "bar")`
 |===
 --
@@ -389,7 +389,7 @@ The following types of `:xt/id` are allowed:
 |Integers/Longs|`42`
 |UUID|`#uuid "6f0232d0-f3f9-4020-a75f-17b067f41203"`
 |URI|`#xt/id "mailto:crux@juxt.pro"`
-|URL|`#xt/id "https://github.com/juxt/crux"`
+|URL|`#xt/id "https://github.com/xtdb/xtdb"`
 |Maps|`{:this :id-field}`
 |===
 

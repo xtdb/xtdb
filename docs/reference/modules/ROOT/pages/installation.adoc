@@ -71,7 +71,7 @@ include::example$test/crux/docs/Install.kt[tag=main,indent=0]
 == Using a pre-built Crux JAR
 
 You can start a standalone Crux node, accessible through HTTP, using a pre-built Crux JAR.
-Crux pre-built JARs can be found on the relevant https://github.com/juxt/crux/releases[GitHub releases,window=_blank] page - we'll use `crux-in-memory.jar`.
+Crux pre-built JARs can be found on the relevant https://github.com/xtdb/xtdb/releases[GitHub releases,window=_blank] page - we'll use `crux-in-memory.jar`.
 
 Start it in the usual way, with `java -jar crux-in-memory.jar`.
 This will open an HTTP port with a console UI on port 3000 - open http://localhost:3000[window=_blank] in your favourite browser.

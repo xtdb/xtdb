@@ -9,7 +9,7 @@ Crux would not exist without the community of vibrant open source projects on wh
 == GitHub
 
 We currently use GitHub Issues to work on near-term changes to the Crux codebase and documentation.
-Please see the issues labelled with https://github.com/juxt/crux/labels/good%20first%20issue["good first issue"] if you are looking for ideas to help push Crux forward.
+Please see the issues labelled with https://github.com/xtdb/xtdb/labels/good%20first%20issue["good first issue"] if you are looking for ideas to help push Crux forward.
 
 PRs with fixes and improvements to these docs are very welcome.
 
@@ -24,4 +24,4 @@ Please strive to follow the best-practices for commit messages which are outline
 A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future.
 Please complete the very short `.rtf` template linked below and email it to us, crux@juxt.pro, along with a reference to your current PR on GitHub.
 
-https://raw.githubusercontent.com/juxt/crux/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[Open Crux CLA]
+https://raw.githubusercontent.com/xtdb/xtdb/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[Open Crux CLA]

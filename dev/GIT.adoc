@@ -54,6 +54,6 @@ With PRs, the assignee is considered to have the 'lock' on the branch.
 +
 Secondly, though (and probably more commonly) - if it's you and it shouldn't be, or it's not you and it should be, update it (even if that means no assignee) :smile:
 
-* **Use a fork of https://github.com/juxt/crux**
+* **Use a fork of https://github.com/xtdb/xtdb**
 +
 This means you're responsible for cleaning up your branches rather than have them cluttering up the main repo and annoying me :wink:

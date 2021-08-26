@@ -1,7 +1,7 @@
 (def xt-version (or (System/getenv "XTDB_VERSION") "dev-SNAPSHOT"))
 
 (defproject com.xtdb/xtdb-dev xt-version
-  :url "https://github.com/juxt/crux"
+  :url "https://github.com/xtdb/xtdb"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 

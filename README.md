@@ -34,9 +34,9 @@ used to express complex joins and recursive graph traversals.
   ```clojure
   com.xtdb/xtdb-core {:mvn/version "1.18.1"}
   ```
-* [Release notes](https://github.com/juxt/crux/releases)
-* Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/juxt/crux/discussions) | crux@juxt.pro
-* [Developing Crux](https://github.com/juxt/crux/tree/master/dev)
+* [Release notes](https://github.com/xtdb/xtdb/releases)
+* Support: [Zulip community chat](https://juxt-oss.zulipchat.com/#narrow/stream/194466-crux) | [GitHub Discussions](https://github.com/xtdb/xtdb/discussions) | crux@juxt.pro
+* [Developing Crux](https://github.com/xtdb/xtdb/tree/master/dev)
 
 ## Unbundled Architecture
 

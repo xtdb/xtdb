@@ -32,7 +32,7 @@ transactions.
 
 You need to add a `logback-classic` dependency to your `project.clj` / `deps.edn` and then create a `logback.xml` file. Set your log level to "INFO".
 
-Look for https://github.com/juxt/crux/search?p=2&q=logback&unscoped_q=logback[code examples] and https://github.com/juxt/crux/blob/0ac595a6df9efcde57e85356e0edfccf00e85248/crux-bench/logback.xml[config examples] in the Crux repo.
+Look for https://github.com/xtdb/xtdb/search?p=2&q=logback&unscoped_q=logback[code examples] and https://github.com/xtdb/xtdb/blob/0ac595a6df9efcde57e85356e0edfccf00e85248/crux-bench/logback.xml[config examples] in the Crux repo.
 
 If you want to see the gritty details, turn your log level up to "DEBUG" for the `crux.query` namespace in a similar way. Try using the following snippet at the REPL:
 
@@ -47,7 +47,7 @@ If you want to see the gritty details, turn your log level up to "DEBUG" for the
 [#testing]
 == What is the easiest way to write tests with Crux?
 
-If you are writing acceptance, integration, or end-to-end tests which require an active Crux node in the mix, you can rely on an in-memory node that you spin up in the tests themselves. There are examples of such tests in the https://github.com/juxt/crux/blob/224a3dc04b0b9d9d5336c54f0ea9ee0d0aeb003b/crux-test/test/crux/bitemporal_tale_test.clj#L6[tutorial source] and in the https://github.com/juxt/crux/blob/d8f251c2f9b3930453239681de1ed87e636ff2a3/crux-core/test/crux/codec_test.clj#L194-L202[crux-core tests themselves].
+If you are writing acceptance, integration, or end-to-end tests which require an active Crux node in the mix, you can rely on an in-memory node that you spin up in the tests themselves. There are examples of such tests in the https://github.com/xtdb/xtdb/blob/224a3dc04b0b9d9d5336c54f0ea9ee0d0aeb003b/crux-test/test/crux/bitemporal_tale_test.clj#L6[tutorial source] and in the https://github.com/xtdb/xtdb/blob/d8f251c2f9b3930453239681de1ed87e636ff2a3/crux-core/test/crux/codec_test.clj#L194-L202[crux-core tests themselves].
 
 
 [#uniqueconstraint]

@@ -6,19 +6,19 @@ Crux would not exist without the community of vibrant open source projects on wh
 
 == How to contribute
 
-We use https://github.com/juxt/crux/issues[GitHub Issues] to work on near-term changes to the Crux codebase and documentation.
-Our work-in-progress is shown on our https://github.com/juxt/crux/projects/1[GitHub Project Board].
+We use https://github.com/xtdb/xtdb/issues[GitHub Issues] to work on near-term changes to the Crux codebase and documentation.
+Our work-in-progress is shown on our https://github.com/xtdb/xtdb/projects/1[GitHub Project Board].
 
 PRs with fixes and improvements to our documentation are also very welcome.
 
 A Contributor License Agreement (CLA) is necessary for us to ensure that we can support a healthy Crux ecosystem over the indefinite future.
-Please complete the very short https://raw.githubusercontent.com/juxt/crux/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[.rtf template] and email it to us, crux@juxt.pro, along with a reference to your current PR on GitHub.
+Please complete the very short https://raw.githubusercontent.com/xtdb/xtdb/master/docs/open-crux-individual-contributor-license-agreement-cla.rtf[.rtf template] and email it to us, crux@juxt.pro, along with a reference to your current PR on GitHub.
 
 Particularly, *please do not open an issue to ask a question* - you'll get quicker support using our support channels below. Thanks!
 
 == Releases
 
-Our releases are published using https://github.com/juxt/crux/releases[GitHub releases] - feel free to 'watch' the Crux repo to receive notifications.
+Our releases are published using https://github.com/xtdb/xtdb/releases[GitHub releases] - feel free to 'watch' the Crux repo to receive notifications.
 
 == Get in touch!
 

@@ -16,7 +16,7 @@ The `crux-in-memory` artifact starts up a basic, in-memory Crux node, with both 
 It can be downloaded:
 
 * as a Docker image from https://hub.docker.com/repository/docker/juxt/crux-in-memory[JUXT's Docker Hub]
-* as an uberjar, `crux-in-memory.jar`, from the relevant https://github.com/juxt/crux/releases[GitHub release]
+* as an uberjar, `crux-in-memory.jar`, from the relevant https://github.com/xtdb/xtdb/releases[GitHub release]
 
 Communication with the node is done via the Crux REST API - see the xref:http.adoc[HTTP docs] for more information.
 

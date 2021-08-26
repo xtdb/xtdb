@@ -1635,7 +1635,7 @@
                                        [(is-ivan-or-petr? i)
                                         [i :name "Petr"]]]}))))
 
-;; https://github.com/juxt/crux/issues/70
+;; https://github.com/xtdb/xtdb/issues/70
 
 (t/deftest test-lookup-by-value-bug-70
   (fix/transact! *api* (fix/people (cons {:xt/id :ivan :name "Ivan" :last-name "Ivanov" :age 30}
@@ -1657,7 +1657,7 @@
                      (repeatedly n))]
     (t/is (>= (/ (reduce + factors) n) acceptable-limit-slowdown))))
 
-;; https://github.com/juxt/crux/issues/348
+;; https://github.com/xtdb/xtdb/issues/348
 
 (t/deftest test-range-join-order-bug-348
   (fix/transact! *api* (fix/people
@@ -1735,7 +1735,7 @@
                            [(str age) x]
                            [(str age) y]]}))))
 
-;; https://github.com/juxt/crux/issues/71
+;; https://github.com/xtdb/xtdb/issues/71
 
 (t/deftest test-query-limits-bug-71
   (dotimes [i 10]
@@ -1747,7 +1747,7 @@
                                             :where [[_ :last-name l]]
                                             :limit 2}))))))
 
-;; https://github.com/juxt/crux/issues/93
+;; https://github.com/xtdb/xtdb/issues/93
 
 (t/deftest test-self-join-bug-93
   (fix/transact! *api* (fix/people [{:xt/id :ivan :name "Ivan" :friend :ivan :boss :petr}
@@ -3603,7 +3603,7 @@
                                           [e2 :my-number n]]}))))))
 
 (comment
-  ;; repro for https://github.com/juxt/crux/issues/443, don't have a solution yet though
+  ;; repro for https://github.com/xtdb/xtdb/issues/443, don't have a solution yet though
   ;; replacing x with 0..50 and y with 0..100 takes a long time.
 
   (t/deftest multiple-joins-bug-443

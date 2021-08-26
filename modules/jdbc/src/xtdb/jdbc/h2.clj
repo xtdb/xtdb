@@ -14,7 +14,7 @@
                  first :type
                  (re-find #"WITH TIME ZONE"))
     (log/warn (str "`tx_time` column not in UTC format. "
-                   "See https://github.com/juxt/crux/releases/tag/20.09-1.12.1 for more details."))))
+                   "See https://github.com/xtdb/xtdb/releases/tag/20.09-1.12.1 for more details."))))
 
 (defn ->dialect [_]
   (reify j/Dialect

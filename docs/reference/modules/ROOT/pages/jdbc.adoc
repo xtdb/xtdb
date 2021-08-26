@@ -41,7 +41,7 @@ Connection pools require a JDBC 'dialect' - out of the box, Crux supports the fo
 * PostgreSQL: `+xtdb.jdbc.psql/->dialect+`
 * SQLite: `+xtdb.jdbc.sqlite/->dialect+`
 
-Each of these also require an additional dependency to pull in the relevant JDBC driver - see the XTDB JDBC https://github.com/juxt/crux/blob/master/modules/jdbc/project.clj[project.clj] for our latest dependencies.
+Each of these also require an additional dependency to pull in the relevant JDBC driver - see the XTDB JDBC https://github.com/xtdb/xtdb/blob/master/modules/jdbc/project.clj[project.clj] for our latest dependencies.
 
 [#db-spec]
 The connection pool also requires a `db-spec` - a map containing either a full `jdbcUrl` or its component parts, including `dbtype` (provided by the dialect by default), `host`, `port`, `dbname`.

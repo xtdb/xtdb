@@ -160,7 +160,7 @@
         current-id (c/new-id content-hash)
         expected-id (c/new-id old-v)]
     (if (or (= current-id expected-id)
-            ;; see juxt/crux#362 - we'd like to just compare content hashes here, but
+            ;; see xtdb/xtdb#362 - we'd like to just compare content hashes here, but
             ;; can't rely on the old content-hashing returning the same hash for the same document
             (let [docs (strict-fetch-docs in-flight-tx #{current-id expected-id})]
               (= (get docs current-id)
@@ -180,7 +180,7 @@
     (not *evict-all-on-legacy-time-ranges?*)
     (throw (err/illegal-arg :evict-with-time-range
                             {::err/message (str "Evict no longer supports time-range parameters. "
-                                                "See https://github.com/juxt/crux/pull/438 for more details, and what to do about this message.")}))
+                                                "See https://github.com/xtdb/xtdb/pull/438 for more details, and what to do about this message.")}))
 
     :else (do
             (log/warnf "Evicting '%s' for all valid-times, '%s' set"
