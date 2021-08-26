@@ -207,7 +207,7 @@ config.json::
   "xtdb.lucene/lucene-store": {
     "db-dir": "data/dev/lucene-dir"
   },
-  "crux.http-server/server": {
+  "xtdb.http-server/server": {
     "port": 9999
   }
 }

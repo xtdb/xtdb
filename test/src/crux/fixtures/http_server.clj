@@ -1,6 +1,6 @@
 (ns crux.fixtures.http-server
   (:require [crux.fixtures :as fix :refer [*api*]]
-            [crux.http-server :as srv]
+            [xtdb.http-server :as srv]
             [crux.io :as cio]
             [crux.api :as api]))
 
@@ -10,7 +10,7 @@
 
 (defn with-http-server [f]
   (let [server-port (cio/free-port)]
-    (fix/with-opts {:crux.http-server/server {:port server-port}}
+    (fix/with-opts {:xtdb.http-server/server {:port server-port}}
       (fn []
         (binding [*api-url* (str "http://" *host* ":" server-port)]
           (f))))))

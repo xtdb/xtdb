@@ -55,7 +55,7 @@ public class ConfigurationTest {
     public void httpServer() {
         // tag::http-server[]
         ICruxAPI cruxNode = Crux.startNode(n -> {
-            n.with("crux.http-server/server", http -> {
+            n.with("xtdb.http-server/server", http -> {
                 http.set("port", 3000);
             });
         });

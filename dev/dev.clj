@@ -57,7 +57,7 @@
                        :xtdb.rocksdb/block-cache {:xt/module `rocks/->lru-block-cache
                                                   :cache-size (* 128 1024 1024)}
                        :xtdb.metrics.jmx/reporter {}
-                       :crux.http-server/server {}
+                       :xtdb.http-server/server {}
                        :xtdb.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]

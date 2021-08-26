@@ -194,7 +194,7 @@
 
   (t/testing "SPARQL query"
     (when (bound? #'fh/*api-url*)
-      (let [repo (SPARQLRepository. (str fh/*api-url* "/_crux/sparql"))]
+      (let [repo (SPARQLRepository. (str fh/*api-url* "/_xtdb/sparql"))]
         (try
           (.initialize repo)
           (with-open [conn (.getConnection repo)]

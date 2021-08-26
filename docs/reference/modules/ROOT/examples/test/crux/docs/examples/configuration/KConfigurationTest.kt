@@ -39,7 +39,7 @@ class KConfigurationTest {
     public fun `Starting a Crux node with http server`() {
         // tag::http-server[]
         val cruxNode = Crux.startNode { n ->
-            n.with("crux.http-server/server") { http ->
+            n.with("xtdb.http-server/server") { http ->
                 http["port"] = 3000
             }
         }

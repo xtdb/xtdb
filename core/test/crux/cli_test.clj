@@ -66,7 +66,7 @@
   (into-array String strs))
 
 (t/deftest test-cli-can-start
-  (let [opts {:crux.http-server/server {:port (cio/free-port)}}
+  (let [opts {:xtdb.http-server/server {:port (cio/free-port)}}
 
         process (.. (ProcessBuilder. (string-array
                                       "timeout" "30s"

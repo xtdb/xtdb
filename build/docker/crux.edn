@@ -1,1 +1,1 @@
-{:crux.http-server/server {}}
+{:xtdb.http-server/server {}}

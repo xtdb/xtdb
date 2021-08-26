@@ -5,7 +5,7 @@
             [crux.fixtures.http-server :as fh]))
 
 (t/use-fixtures :each
-  (fix/with-opts {:crux.http-server/server {:read-only? true}})
+  (fix/with-opts {:xtdb.http-server/server {:read-only? true}})
   fh/with-http-server fix/with-node fh/with-http-client)
 
 (t/deftest test-read-only-node

@@ -1,6 +1,6 @@
-= crux-http-client
+= xtdb-http-client
 
-This module offers an HTTP client that allows you to send transactions and run queries to a Crux link:../crux-http-server/[HTTP server].
+This module offers an HTTP client that allows you to send transactions and run queries to a Crux link:../xtdb-http-server/[HTTP server].
 
 .deps.edn
 [source,clojure]

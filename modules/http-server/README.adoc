@@ -1,4 +1,4 @@
-= crux-http-server
+= xtdb-http-server
 
 This module offers an HTTP server that allows you to send transactions and run queries via a REST API.
 

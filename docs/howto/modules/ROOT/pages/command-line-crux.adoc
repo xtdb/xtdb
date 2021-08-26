@@ -39,7 +39,7 @@ mkdir crux-cli && cd crux-cli
 .;; crux.edn
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000}} ;; <1>
+{:xtdb.http-server/server {:port 3000}} ;; <1>
 ----
 <1> This configuration tells Crux to start an HTTP server on port 3000.
 
@@ -72,7 +72,7 @@ curl -X POST \
                 "last-name": "Biden" ;; <4>
             }]
          ]}' \
-     http://localhost:3000/_crux/submit-tx
+     http://localhost:3000/_xtdb/submit-tx
 ----
 <1> `put` - The type of operation we are performing
 <2> The ID for the document we are adding
@@ -85,7 +85,7 @@ We see that a transaction has been received by our locally running Crux node. No
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president ;; <1>
+     http://localhost:3000/_xtdb/entity\?eid=president ;; <1>
 ----
 <1> GET the entity by the same ID we used above
 
@@ -107,7 +107,7 @@ curl -X POST \
                 "last-name": "Trump"
             }, "2017-01-20"] ;; <2>
          ]}' \
-     http://localhost:3000/_crux/submit-tx
+     http://localhost:3000/_xtdb/submit-tx
 ----
 <1> The same ID as our first `put` operation
 <2> The valid time for the document being added
@@ -120,7 +120,7 @@ Now lets retrieve the `president` entity again:
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president
+     http://localhost:3000/_xtdb/entity\?eid=president
 ----
 
 We get the same result - Joe Biden!
@@ -135,7 +135,7 @@ To retrieve the Donald Trump document we just added, we can pass a valid time wi
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president\&valid-time=2020-10-10 ;; <1>
+     http://localhost:3000/_xtdb/entity\?eid=president\&valid-time=2020-10-10 ;; <1>
 ----
 <1> We pass a valid time of `2020-10-10`
 
@@ -147,7 +147,7 @@ We can see all of our transactions by passing some more arguments to the same `/
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     http://localhost:3000/_crux/entity\?eid=president\&history=true\&sortOrder=desc\&withDocs=true ;; <1>
+     http://localhost:3000/_xtdb/entity\?eid=president\&history=true\&sortOrder=desc\&withDocs=true ;; <1>
 ----
 <1> `history=true` returns all historical documents for this entity
 
@@ -167,7 +167,7 @@ curl -X POST \
                 "last-name": "Biden"
             }, "2021-01-20"] ;; <1>
          ]}' \
-     http://localhost:3000/_crux/submit-tx
+     http://localhost:3000/_xtdb/submit-tx
 ----
 <1> Again, `"2021-01-20"` is our explicit 'valid time' parameter.
 

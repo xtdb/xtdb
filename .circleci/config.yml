@@ -207,7 +207,7 @@ jobs:
       - node/install
       - run:
           command: |
-            lein run -m crux.http-server.get-swagger
+            lein run -m xtdb.http-server.get-swagger
             npm install redoc-cli
             mkdir swagger-doc
             ./node_modules/redoc-cli/index.js bundle swagger.json -o redoc/crux-redoc.html

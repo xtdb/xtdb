@@ -5,5 +5,5 @@
  :xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                              :db-dir "data/indices"}}
 
- :crux.http-server/server {}
+ :xtdb.http-server/server {}
  :crux.calcite/server {}}

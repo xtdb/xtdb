@@ -1,2 +1,2 @@
-{:crux.http-server/server {}
+{:xtdb.http-server/server {}
  :crux.calcite/server {}}

@@ -36,7 +36,7 @@
 (t/deftest http-server
   (with-open [node
               ;; tag::http-server[]
-              (crux/start-node {:crux.http-server/server {:port 3000}})
+              (crux/start-node {:xtdb.http-server/server {:port 3000}})
               ;; end::http-server[]
               ]
     (t/is true)))

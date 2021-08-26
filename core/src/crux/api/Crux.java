@@ -108,7 +108,7 @@ public final class Crux {
     /**
      * Creates a new remote API client.
      * <p>
-     * NOTE: requires crux-http-client on the classpath.
+     * NOTE: requires xtdb-http-client on the classpath.
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
@@ -116,14 +116,14 @@ public final class Crux {
      * @return    a remote API client.
      */
     public static ICruxAPI newApiClient(String url) {
-        Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url);
+        Object apiClient = resolve("xtdb.remote-api-client/new-api-client").invoke(url);
         return (ICruxAPI) resolve("crux.api.java/->JCruxNode").invoke(apiClient);
     }
 
     /**
      * Creates a new remote API client.
      * <p>
-     * NOTE: requires crux-http-client on the classpath.
+     * NOTE: requires xtdb-http-client on the classpath.
      * <p>
      * When you're done, close the node with {@link java.io.Closeable#close}
      *
@@ -132,7 +132,7 @@ public final class Crux {
      * @return    a remote API client.
      */
     public static ICruxAPI newApiClient(String url, RemoteClientOptions options) {
-        Object apiClient = resolve("crux.remote-api-client/new-api-client").invoke(url, options);
+        Object apiClient = resolve("xtdb.remote-api-client/new-api-client").invoke(url, options);
         return (ICruxAPI) resolve("crux.api.java/->JCruxNode").invoke(apiClient);
     }
 

@@ -1,6 +1,6 @@
 = HTTP
 
-Crux offers a REST API layer in the `crux-http-server` module that allows you to send transactions and run queries over HTTP.
+Crux offers a REST API layer in the `xtdb-http-server` module that allows you to send transactions and run queries over HTTP.
 
 image::remote-cluster-mode.svg?sanitize=true[Remote Cluster Mode,450,145,align="centre"]
 
@@ -11,7 +11,7 @@ Multiple Crux nodes can placed be behind a HTTP load balancer to spread the writ
 Each Crux node in such a cluster will be independently catching up with the head of the transaction log, and since different queries might go to different nodes, you have to be slightly conscious of read consistency when designing your application to use Crux in this way.
 Fortunately, you can readily achieve read-your-writes consistency with the ability to query consistent point-in-time snapshots using specific temporal coordinates.
 
-The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol queries under `/_crux/sparql/`, rewriting the query into the Crux Datalog dialect.
+The REST API also provides an experimental endpoint for SPARQL 1.1 Protocol queries under `/_xtdb/sparql/`, rewriting the query into the Crux Datalog dialect.
 Only a small subset of SPARQL is supported and no other RDF features are available.
 
 [#start-http-server]
@@ -24,7 +24,7 @@ Only a small subset of SPARQL is supported and no other RDF features are availab
 com.xtdb/xtdb-http-server {:mvn/version "{crux_version}"}
 ----
 
-You can start up a Jetty HTTP/HTTP2 server on a node by including `crux.http-server/server` in your node configuration, optionally passing the server port:
+You can start up a Jetty HTTP/HTTP2 server on a node by including `xtdb.http-server/server` in your node configuration, optionally passing the server port:
 
 [tabs]
 ====
@@ -33,7 +33,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.http-server/server": {
+  "xtdb.http-server/server": {
     "port": 3000,
     ...
   }
@@ -44,7 +44,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000
+{:xtdb.http-server/server {:port 3000
                            ...}
 ----
 
@@ -52,7 +52,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000
+{:xtdb.http-server/server {:port 3000
                            ...}
 ----
 ====
@@ -72,7 +72,7 @@ Crux also exposes a https://github.com/ring-clojure/ring[Ring] handler that you 
 
 [source,clojure]
 ----
-(crux.http-server/->crux-handler crux-node {...})
+(xtdb.http-server/->crux-handler crux-node {...})
 ----
 
 [#start-remote-client]
@@ -107,7 +107,7 @@ Swagger documentation link:https://crux-doc.s3.eu-west-2.amazonaws.com/redoc/{pa
 All endpoints with query-parameters accept them in both a kebab-case and camel cased format, (ie: if `valid-time` is taken, `validTime` will also be taken)
 
 [#status]
-=== GET `/_crux/status`
+=== GET `/_xtdb/status`
 
 Returns the current status information of the node.
 
@@ -121,7 +121,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/status
+     $CRUX_URL/_xtdb/status
 ----
 
 EDN::
@@ -130,7 +130,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/status
+     $CRUX_URL/_xtdb/status
 ----
 ====
 
@@ -168,7 +168,7 @@ EDN::
 ====
 
 [#entity]
-=== GET `/_crux/entity`
+=== GET `/_xtdb/entity`
 
 Returns the document map for a particular entity.
 
@@ -182,7 +182,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/entity?eid=tommy
+     $CRUX_URL/_xtdb/entity?eid=tommy
 ----
 
 EDN::
@@ -192,7 +192,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/entity?eid-edn=:tommy
+     $CRUX_URL/_xtdb/entity?eid-edn=:tommy
 ----
 ====
 
@@ -235,7 +235,7 @@ EDN::
 ====
 
 [#entity-history]
-=== GET `/_crux/entity?history=true`
+=== GET `/_xtdb/entity?history=true`
 
 Returns the history of a particular entity.
 
@@ -249,7 +249,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/entity?eid=tommy&history=true&sortOrder=asc
+     $CRUX_URL/_xtdb/entity?eid=tommy&history=true&sortOrder=asc
 ----
 
 EDN::
@@ -258,7 +258,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/entity?eid-edn=:tommy&history=true&sort-order=asc
+     $CRUX_URL/_xtdb/entity?eid-edn=:tommy&history=true&sort-order=asc
 ----
 ====
 
@@ -327,7 +327,7 @@ EDN::
 ====
 
 [#entity-tx]
-=== GET `/_crux/entity-tx`
+=== GET `/_xtdb/entity-tx`
 
 Returns the transaction details for an entity - returns a map containing the tx-id and tx-time.
 
@@ -341,7 +341,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/entity-tx?eid=tommy
+     $CRUX_URL/_xtdb/entity-tx?eid=tommy
 ----
 
 EDN::
@@ -350,7 +350,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/entity-tx?eid-edn=:tommy
+     $CRUX_URL/_xtdb/entity-tx?eid-edn=:tommy
 ----
 ====
 
@@ -397,9 +397,9 @@ EDN::
 ====
 
 [#get-query]
-=== GET `/_crux/query`
+=== GET `/_xtdb/query`
 
-Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_crux/query.csv` and `/_crux/query.tsv` endpoints respectively).
+Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_xtdb/query.csv` and `/_xtdb/query.tsv` endpoints respectively).
 
 ==== Request
 
@@ -412,7 +412,7 @@ JSON::
 curl -g \
      -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
+     $CRUX_URL/_xtdb/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
 ----
 
 EDN::
@@ -422,7 +422,7 @@ EDN::
 curl -g \
      -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
+     $CRUX_URL/_xtdb/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
 ----
 ====
 
@@ -458,9 +458,9 @@ EDN::
 ====
 
 [#post-query]
-=== POST `/_crux/query`
+=== POST `/_xtdb/query`
 
-Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_crux/query.csv` and `/_crux/query.tsv` endpoints respectively).
+Takes a datalog query and returns its results. Results are also available in `text/csv` and `text/tsv` formats (can force negotiation of these by using the `/_xtdb/query.csv` and `/_xtdb/query.tsv` endpoints respectively).
 
 ==== Request
 
@@ -475,7 +475,7 @@ curl -g \
      -H "Accept: application/edn" \
      -H "Content-Type: application/edn" \
      -d '{:query {:find [e first-name] :where [[e :first-name first-name] [e :last-name "Tutorial"]]}}' \
-     $CRUX_URL/_crux/query
+     $CRUX_URL/_xtdb/query
 ----
 ====
 
@@ -519,7 +519,7 @@ EDN::
 ====
 
 [#attribute-stats]
-=== GET `/_crux/attribute-stats`
+=== GET `/_xtdb/attribute-stats`
 
 Returns frequencies of indexed attributes
 
@@ -533,7 +533,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/attribute-stats
+     $CRUX_URL/_xtdb/attribute-stats
 ----
 
 EDN::
@@ -542,7 +542,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/attribute-stats
+     $CRUX_URL/_xtdb/attribute-stats
 ----
 ====
 
@@ -578,7 +578,7 @@ EDN::
 ====
 
 [#sync]
-=== GET `/_crux/sync`
+=== GET `/_xtdb/sync`
 
 Wait until the Kafka consumer's lag is back to 0 (i.e. when it no longer has pending transactions to write).  Returns the transaction time of the most recent transaction.
 
@@ -592,7 +592,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/sync?timeout=500
+     $CRUX_URL/_xtdb/sync?timeout=500
 ----
 
 EDN::
@@ -601,7 +601,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/sync?timeout=500
+     $CRUX_URL/_xtdb/sync?timeout=500
 ----
 ====
 
@@ -630,7 +630,7 @@ EDN::
 ====
 
 [#await-tx]
-=== GET `/_crux/await-tx`
+=== GET `/_xtdb/await-tx`
 
 Waits until the node has indexed a transaction that is at or past the supplied tx-id. Returns the most recent tx indexed by the node.
 
@@ -644,7 +644,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/await-tx?txId=1
+     $CRUX_URL/_xtdb/await-tx?txId=1
 ----
 
 EDN::
@@ -653,7 +653,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/await-tx?tx-id=1
+     $CRUX_URL/_xtdb/await-tx?tx-id=1
 ----
 ====
 
@@ -685,7 +685,7 @@ EDN::
 ====
 
 [#await-tx-time]
-=== GET `/_crux/await-tx-time`
+=== GET `/_xtdb/await-tx-time`
 
 Blocks until the node has indexed a transaction that is past the supplied tx-time. The returned date is the latest index time when this node has caught up as of this call.
 
@@ -699,7 +699,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/await-tx-time?tx-time=2020-10-16T14:29:35Z
+     $CRUX_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
 ----
 
 EDN::
@@ -708,7 +708,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/await-tx-time?tx-time=2020-10-16T14:29:35Z
+     $CRUX_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
 ----
 ====
 
@@ -740,7 +740,7 @@ EDN::
 ====
 
 [#tx-log]
-=== GET `/_crux/tx-log`
+=== GET `/_xtdb/tx-log`
 
 Returns a list of all transactions, from oldest to newest transaction time - optionally including documents.
 
@@ -754,7 +754,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-      $CRUX_URL/_crux/tx-log
+      $CRUX_URL/_xtdb/tx-log
 ----
 
 EDN::
@@ -763,7 +763,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-      $CRUX_URL/_crux/tx-log
+      $CRUX_URL/_xtdb/tx-log
 ----
 ====
 
@@ -829,7 +829,7 @@ EDN::
 ====
 
 [#submit-tx]
-=== POST `/_crux/submit-tx`
+=== POST `/_xtdb/submit-tx`
 
 Takes a vector of transactions (any combination of `put`, `delete`, `match`, `evict` and `fn`) and executes them in order. This is the only "write" endpoint.
 
@@ -848,7 +848,7 @@ curl -X POST \
      -d '{"tx-ops": [["put", {"xt/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
           	         ["put", {"xt/id": "boris", "name": "Boris", "last-name": "Petrov"}],
           	         ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
-     $CRUX_URL/_crux/submit-tx
+     $CRUX_URL/_xtdb/submit-tx
 ----
 
 Note: xref:transactions#transaction-functions[Transaction functions] should be submitted as strings containing clojure code, and read in as EDN.
@@ -864,7 +864,7 @@ curl -X POST \
      -d '{:tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan" :last-name "Petrov"}],
           	       [:xt/put {:xt/id :boris, :name "Boris" :last-name "Petrov"}],
           	       [:xt/delete :maria #inst "2012-05-07T14:57:08.462-00:00"]]}' \
-     $CRUX_URL/_crux/submit-tx
+     $CRUX_URL/_xtdb/submit-tx
 ----
 ====
 
@@ -894,7 +894,7 @@ EDN::
 ----
 ====
 
-=== GET `/_crux/tx-committed`
+=== GET `/_xtdb/tx-committed`
 
 Checks if a submitted tx was successfully committed, returning a map with tx-committed and either `true` or `false` (or a `NodeOutOfSyncException` exception response if the node has not yet indexed the transaction).
 
@@ -908,7 +908,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/tx-committed?txId=1
+     $CRUX_URL/_xtdb/tx-committed?txId=1
 ----
 
 EDN::
@@ -917,7 +917,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/tx-committed?tx-id=1
+     $CRUX_URL/_xtdb/tx-committed?tx-id=1
 ----
 ====
 
@@ -946,7 +946,7 @@ EDN::
 ====
 
 
-=== GET `/_crux/latest-completed-tx`
+=== GET `/_xtdb/latest-completed-tx`
 
 Returns the latest transaction to have been indexed by this node.
 
@@ -960,7 +960,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/latest-completed-tx
+     $CRUX_URL/_xtdb/latest-completed-tx
 ----
 
 EDN::
@@ -969,7 +969,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/latest-completed-tx
+     $CRUX_URL/_xtdb/latest-completed-tx
 ----
 
 ====
@@ -993,7 +993,7 @@ EDN::
 ----
 ====
 
-=== GET `/_crux/latest-submitted-tx`
+=== GET `/_xtdb/latest-submitted-tx`
 
 Returns the latest transaction to have been submitted to this cluster.
 
@@ -1007,7 +1007,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/latest-submitted-tx
+     $CRUX_URL/_xtdb/latest-submitted-tx
 ----
 
 EDN::
@@ -1016,7 +1016,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/latest-submitted-tx
+     $CRUX_URL/_xtdb/latest-submitted-tx
 ----
 ====
 
@@ -1039,7 +1039,7 @@ EDN::
 ----
 ====
 
-=== GET `/_crux/active-queries`
+=== GET `/_xtdb/active-queries`
 
 Returns a list of currently running queries.
 
@@ -1053,7 +1053,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/active-queries
+     $CRUX_URL/_xtdb/active-queries
 ----
 
 EDN::
@@ -1062,7 +1062,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/active-queries
+     $CRUX_URL/_xtdb/active-queries
 ----
 ====
 
@@ -1099,7 +1099,7 @@ EDN::
 ----
 ====
 
-=== GET `/_crux/recent-queries`
+=== GET `/_xtdb/recent-queries`
 
 Returns a list of recently completed/failed queries.
 
@@ -1113,7 +1113,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/recent-queries
+     $CRUX_URL/_xtdb/recent-queries
 ----
 
 EDN::
@@ -1122,7 +1122,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/recent-queries
+     $CRUX_URL/_xtdb/recent-queries
 ----
 ====
 
@@ -1159,7 +1159,7 @@ EDN::
 ----
 ====
 
-=== GET `/_crux/slowest-queries`
+=== GET `/_xtdb/slowest-queries`
 
 Returns a list of slowest completed/failed queries ran on the node.
 
@@ -1173,7 +1173,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_crux/slowest-queries
+     $CRUX_URL/_xtdb/slowest-queries
 ----
 
 EDN::
@@ -1182,7 +1182,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_crux/slowest-queries
+     $CRUX_URL/_xtdb/slowest-queries
 ----
 ====
 

@@ -13,7 +13,7 @@
     <logger name="crux.node" level="WARN" />
     <logger name="crux.mem-kv" level="ERROR" />
     <logger name="crux.hash" level="WARN" />
-    <logger name="crux.http-server" level="WARN" />
+    <logger name="xtdb.http-server" level="WARN" />
     <logger name="xtdb.kafka" level="WARN" />
     <logger name="xtdb.jdbc" level="WARN" />
     <logger name="crux.mem-kv" level="ERROR" />

@@ -50,7 +50,7 @@ com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 {:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
  :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
  :xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xt/tx-log"}}
- :crux.http-server/server {}}
+ :xtdb.http-server/server {}}
 ----
 
 To build the JAR, run the `build-uberjar.sh` script.
@@ -75,7 +75,7 @@ Override the topology within `crux.edn` with the following:
 {:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
  :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
  :xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xt/tx-log"}}
- :crux.http-server/server {}}
+ :xtdb.http-server/server {}}
 ----
 
 To build your Docker container, run the `build-docker.sh` script.

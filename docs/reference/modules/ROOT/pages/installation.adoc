@@ -114,7 +114,7 @@ crux.edn::
 +
 [source,clojure]
 ----
-{:crux.http-server/server {:port 3000}}
+{:xtdb.http-server/server {:port 3000}}
 ----
 ====
 
