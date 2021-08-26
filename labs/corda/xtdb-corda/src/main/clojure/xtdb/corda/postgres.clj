@@ -1,12 +1,11 @@
-(ns crux.corda.postgres
-  (:require [crux.corda :as xt-corda]
-            [crux.tx :as tx]
+(ns xtdb.corda.postgres
+  (:require [xtdb.corda :as xt.corda]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (java.util Date)
            (java.sql Timestamp)))
 
 (defn ->dialect [_]
-  (reify crux-corda/SQLDialect
+  (reify xt.corda/SQLDialect
     (db-type [_] :postgres)
 
     (setup-tx-schema! [_ jdbc-session]
@@ -37,7 +36,7 @@ CREATE TRIGGER crux_tx_mapping
 "]]
         (jdbc/execute-one! jdbc-session [q])))))
 
-(defmethod crux-corda/tx-row->tx :postgres [tx-row _]
+(defmethod xt.corda/tx-row->tx :postgres [tx-row _]
   {:xt/tx-id (:crux_tx_id tx-row)
    :xt/tx-time (Date. (.getTime ^Timestamp (:crux_tx_time tx-row)))
    :corda-tx-id (:corda_tx_id tx-row)})

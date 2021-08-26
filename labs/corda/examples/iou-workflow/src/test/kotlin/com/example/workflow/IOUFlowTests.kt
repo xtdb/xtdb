@@ -1,7 +1,7 @@
 package com.example.workflow
 
 import com.example.contract.IOUState
-import com.example.service.CruxService
+import com.example.service.XtdbService
 import crux.api.DBBasis
 import net.corda.core.node.services.queryBy
 import net.corda.core.utilities.getOrThrow
@@ -73,19 +73,19 @@ class IOUFlowTests {
 
         // We check Crux gets a transaction
         for (node in nodes) {
-            val cruxService = node.services.cordaService(CruxService::class.java)
-            val cruxNode = cruxService.node
-            val cruxTx = cruxService.cruxTx(signedTx.id)!!
+            val xtdbService = node.services.cordaService(XtdbService::class.java)
+            val xtdb = xtdbService.node
+            val xtTx = xtdbService.xtdbTx(signedTx.id)!!
             val inThreeDays = Date(LocalDateTime.now().plusDays(3).toEpochSecond(ZoneOffset.UTC)*1000)
             val threeDaysAgo = Date(LocalDateTime.now().minusDays(3).toEpochSecond(ZoneOffset.UTC)*1000)
 
-            assertEquals(1L, cruxTx.id)
-            assertEquals(1L, cruxNode.latestCompletedTx().id)
+            assertEquals(1L, xtTx.id)
+            assertEquals(1L, xtdb.latestCompletedTx().id)
 
             // Crux knows about the transaction now
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
-                cruxNode.db(cruxTx).query("""
+                xtdb.db(xtTx).query("""
                     {:find [?l ?b ?v]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/borrower ?b]
@@ -95,7 +95,7 @@ class IOUFlowTests {
             // Crux knows about the transaction three days from now
             assertEquals(
                 listOf(a.info.singleIdentity().name.toString(), b.info.singleIdentity().name.toString(), 1L),
-                cruxNode.db(DBBasis(inThreeDays, cruxTx)).query("""
+                xtdb.db(DBBasis(inThreeDays, xtTx)).query("""
                     {:find [?l ?b ?v]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/borrower ?b]
@@ -104,7 +104,7 @@ class IOUFlowTests {
             // Crux does not know about the transaction three days ago
             assertEquals(
                 emptySet(),
-                cruxNode.db(DBBasis(threeDaysAgo, cruxTx)).query("""
+                xtdb.db(DBBasis(threeDaysAgo, xtTx)).query("""
                     {:find [?l ?b ?v]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/borrower ?b]
@@ -116,15 +116,15 @@ class IOUFlowTests {
 
     @Test
     fun `A lends money to B, B buys a "house"`() {
-        val bCruxService = b.services.cordaService(CruxService::class.java)
-        val bCruxNode = bCruxService.node
+        val bXtdbService = b.services.cordaService(XtdbService::class.java)
+        val bCruxNode = bXtdbService.node
 
         // A lends 23 to B
         val iouValue = 23
         val iouFlow = IOUFlow.Initiator(iouValue, b.info.singleIdentity())
         val future = a.startFlow(iouFlow)
         network.runNetwork()
-        val iouTx = bCruxService.cruxTx(future.getOrThrow().id)
+        val iouTx = bXtdbService.xtdbTx(future.getOrThrow().id)
 
         // We verify B has received the funds
         bCruxNode.awaitTx(iouTx, Duration.ofSeconds(2))
@@ -146,7 +146,7 @@ class IOUFlowTests {
         val itemFlow = ItemFlow.Initiator(itemValue, itemName)
         val itemFuture = b.startFlow(itemFlow)
         network.runNetwork()
-        val itemTx = bCruxService.cruxTx(itemFuture.getOrThrow().id)
+        val itemTx = bXtdbService.xtdbTx(itemFuture.getOrThrow().id)
 
         bCruxNode.awaitTx(itemTx, Duration.ofSeconds(1))
 
@@ -169,7 +169,7 @@ class IOUFlowTests {
 
     @Test
     fun `A lends 10 to B, but then B lends 20 to A, resulting in A owing 10`() {
-        val aService = a.services.cordaService(CruxService::class.java)
+        val aService = a.services.cordaService(XtdbService::class.java)
         val aNode = aService.node
 
         // A lends 10 to B
@@ -178,7 +178,7 @@ class IOUFlowTests {
         val firstIouFlow = IOUFlow.Initiator(10, bId)
         val firstFuture = a.startFlow(firstIouFlow)
         network.runNetwork()
-        val firstIouTx = aService.cruxTx(firstFuture.getOrThrow().id)
+        val firstIouTx = aService.xtdbTx(firstFuture.getOrThrow().id)
 
         aNode.awaitTx(firstIouTx, Duration.ofSeconds(1))
         val firstDB = aNode.db(firstIouTx)
@@ -187,7 +187,7 @@ class IOUFlowTests {
         val secondIouFlow = IOUFlow.Initiator(20, aId)
         val secondFuture = b.startFlow(secondIouFlow)
         network.runNetwork()
-        val secondIouTx = aService.cruxTx(secondFuture.getOrThrow().id)
+        val secondIouTx = aService.xtdbTx(secondFuture.getOrThrow().id)
 
         aNode.awaitTx(secondIouTx, Duration.ofSeconds(1))
         val secondDB = aNode.db(secondIouTx)
@@ -250,7 +250,7 @@ class IOUFlowTests {
         secondFuture.getOrThrow()
 
         // We get 2 separate Crux instances, one after each transaction
-        val node = a.services.cordaService(CruxService::class.java).node
+        val node = a.services.cordaService(XtdbService::class.java).node
         val firstDB = node.db(firstCheckpoint)
         val secondDB = node.db()
 

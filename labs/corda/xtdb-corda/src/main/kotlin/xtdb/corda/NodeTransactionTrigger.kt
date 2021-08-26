@@ -1,4 +1,4 @@
-package crux.corda
+package xtdb.corda
 
 import org.h2.api.Trigger
 import java.sql.Connection

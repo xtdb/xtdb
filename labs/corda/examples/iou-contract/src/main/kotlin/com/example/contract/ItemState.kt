@@ -1,6 +1,6 @@
 package com.example.contract
 
-import crux.corda.state.CruxState
+import xtdb.corda.state.XtdbState
 import net.corda.core.contracts.BelongsToContract
 import net.corda.core.contracts.UniqueIdentifier
 import net.corda.core.identity.Party
@@ -12,10 +12,10 @@ data class ItemState(val name: String,
                      val value: Int,
                      val owner: Party,
                      override val linearId: UniqueIdentifier = UniqueIdentifier()) :
-    LinearState, CruxState {
+    LinearState, XtdbState {
 
-    override val cruxId = linearId.id
-    override val cruxDoc: Map<String,Any> = mapOf(
+    override val xtdbId = linearId.id
+    override val xtdbDoc: Map<String,Any> = mapOf(
             "item/value" to value,
             "item/name" to name,
             "item/owner" to owner.name.toString())

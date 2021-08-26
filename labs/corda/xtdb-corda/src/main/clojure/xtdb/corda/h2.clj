@@ -1,13 +1,12 @@
-(ns crux.corda.h2
-  (:require [crux.corda :as xt-corda]
-            [crux.tx :as tx]
+(ns xtdb.corda.h2
+  (:require [xtdb.corda :as xt.corda]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (java.time OffsetDateTime LocalDate LocalTime ZoneOffset)
            (java.util Date)
            org.h2.api.TimestampWithTimeZone))
 
 (defn ->dialect [_]
-  (reify crux-corda/SQLDialect
+  (reify xt.corda/SQLDialect
     (db-type [_] :h2)
 
     (setup-tx-schema! [_ jdbc-session]
@@ -22,9 +21,9 @@ CREATE TABLE IF NOT EXISTS crux_txs (
 CREATE TRIGGER IF NOT EXISTS crux_tx_trigger
   AFTER INSERT, UPDATE ON node_transactions
   FOR EACH ROW
-  CALL \"crux.corda.NodeTransactionTrigger\""]))))
+  CALL \"xtdb.corda.NodeTransactionTrigger\""]))))
 
-(defmethod crux-corda/tx-row->tx :h2 [tx-row _]
+(defmethod xt.corda/tx-row->tx :h2 [tx-row _]
   (let [^TimestampWithTimeZone h2-tx-time (:crux_tx_time tx-row)]
     {:xt/tx-id (:crux_tx_id tx-row)
      :xt/tx-time (-> (OffsetDateTime/of (LocalDate/of (.getYear h2-tx-time)

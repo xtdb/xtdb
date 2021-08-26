@@ -1,4 +1,4 @@
-(ns crux.corda
+(ns xtdb.corda
   (:require [crux.api :as xt]
             [crux.tx :as tx]
             [crux.tx.event :as txe]
@@ -10,7 +10,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
             [crux.io :as cio])
-  (:import (crux.corda.state CruxState)
+  (:import (xtdb.corda.state XtdbState)
            (crux.api ICursor)
            kotlin.jvm.functions.Function1
            (net.corda.core.crypto SecureHash)
@@ -33,7 +33,7 @@
 
   (do
     (defonce ^MockNetwork network
-      (MockNetwork. (MockNetworkParameters. [(TestCordapp/findCordapp "crux.corda.service")
+      (MockNetwork. (MockNetworkParameters. [(TestCordapp/findCordapp "xtdb.corda.service")
                                              (TestCordapp/findCordapp "com.example.contract")
                                              (TestCordapp/findCordapp "com.example.workflow")])))
     (defonce node-a
@@ -66,7 +66,7 @@
     (db-type dialect))
   :default ::default)
 
-(defn ->crux-tx [^SecureHash corda-tx-id {{{:keys [dialect ^AppServiceHub service-hub]} :tx-log} :node}]
+(defn ->xtdb-tx [^SecureHash corda-tx-id {{{:keys [dialect ^AppServiceHub service-hub]} :tx-log} :node}]
   (some-> (jdbc/execute-one! (.jdbcSession service-hub)
                              ["SELECT * FROM crux_txs WHERE corda_tx_id = ?"
                               (str corda-tx-id)]
@@ -78,21 +78,21 @@
   (.getTransaction (.getValidatedTransactions service-hub)
                    (SecureHash/parse corda-tx-id)))
 
-(defn- ->crux-docs [^TransactionState tx-state {:keys [document-mapper]}]
-  (for [^CruxState crux-state (document-mapper (.getData tx-state))
-        :when (instance? CruxState crux-state)]
-    (merge {:xt/id (.getCruxId crux-state)}
-           (->> (.getCruxDoc crux-state)
+(defn- ->xtdb-docs [^TransactionState tx-state {:keys [document-mapper]}]
+  (for [^XtdbState xtdb-state (document-mapper (.getData tx-state))
+        :when (instance? XtdbState xtdb-state)]
+    (merge {:xt/id (.getXtdbId xtdb-state)}
+           (->> (.getXtdbDoc xtdb-state)
                 (into {} (map (juxt (comp keyword key) val)))))))
 
 (defn- transform-corda-tx [^SignedTransaction corda-tx {:keys [service-hub] :as opts}]
   (let [ledger-tx (.toLedgerTransaction corda-tx service-hub)
         consumed-ids (->> (.getInputs ledger-tx)
                           (map #(.getState ^StateAndRef %))
-                          (mapcat #(->crux-docs % opts))
+                          (mapcat #(->xtdb-docs % opts))
                           (into #{} (map :xt/id)))
         new-docs (->> (.getOutputs ledger-tx)
-                      (mapcat #(->crux-docs % opts))
+                      (mapcat #(->xtdb-docs % opts))
                       (into {} (map (juxt c/new-id identity))))]
     {::txe/tx-events (concat (for [deleted-id (set/difference consumed-ids (set (keys new-docs)))]
                                [::tx/delete deleted-id])
@@ -164,14 +164,14 @@
                                           (f fut tx)))))
 
 (defn notify-tx [^SecureHash corda-tx-id {{{:keys [subscriber-handler]} :tx-log} :node, :as node}]
-  (tx-sub/notify-tx! subscriber-handler (->crux-tx corda-tx-id node)))
+  (tx-sub/notify-tx! subscriber-handler (->xtdb-tx corda-tx-id node)))
 
 (defn ->document-mapper [_]
   (fn [doc]
-    (when (instance? CruxState doc)
+    (when (instance? XtdbState doc)
       [doc])))
 
-(defn ->tx-log {::sys/deps {:dialect 'crux.corda.h2/->dialect
+(defn ->tx-log {::sys/deps {:dialect 'xtdb.corda.h2/->dialect
                             :document-store :xt/document-store
                             :service-hub ::service-hub
                             :document-mapper `->document-mapper}}

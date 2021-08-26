@@ -1,10 +1,9 @@
 package com.example.workflow
 
 import co.paralleluniverse.fibers.Suspendable
-import com.example.contract.IOUState
 import com.example.contract.ItemContract
 import com.example.contract.ItemState
-import com.example.service.CruxService
+import com.example.service.XtdbService
 import net.corda.core.contracts.Command
 import net.corda.core.flows.*
 import net.corda.core.transactions.SignedTransaction
@@ -41,26 +40,26 @@ object ItemFlow {
 
             progressTracker.currentStep = VERIFYING_FUNDS
             val notary = serviceHub.networkMapCache.notaryIdentities.single()
-            val crux = serviceHub.cordaService(CruxService::class.java)
+            val xtdb = serviceHub.cordaService(XtdbService::class.java)
             val me = serviceHub.myInfo.legalIdentities.first()
-            val currentDb = crux.node.db()
+            val currentDb = xtdb.node.db()
 
             val borrowed = currentDb.query("""
-                    {:find [(sum ?v)] 
+                    {:find [(sum ?v)]
                      :in [?b]
                      :where [[?iou :iou-state/borrower ?b]
                              [?iou :iou-state/value ?v]]}
             """.trimIndent(), me.name.toString()).singleOrNull()?.singleOrNull() as Long? ?: 0
 
             val lent = currentDb.query("""
-                    {:find [(sum ?v)] 
+                    {:find [(sum ?v)]
                      :in [?l]
                      :where [[?iou :iou-state/lender ?l]
                              [?iou :iou-state/value ?v]]}
             """.trimIndent(), me.name.toString()).singleOrNull()?.singleOrNull() as Long? ?: 0
 
             val owned = currentDb.query("""
-                    {:find [(sum ?v)] 
+                    {:find [(sum ?v)]
                      :in [?o]
                      :where [[?item :item/owner ?o]
                              [?item :item/value ?v]]}
