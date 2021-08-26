@@ -89,6 +89,6 @@ transaction topic to `1`.
 You can also create and manage topics independently of Crux using a CLI tool or
 the Confluent Cloud web interface, but they will need to be configured
 appropriately (see:
-https://github.com/juxt/crux/blob/master/crux-kafka/src/crux/kafka.clj).
+https://github.com/juxt/crux/blob/master/modules/kafka/src/xtdb/kafka.clj).
 
 image::new-tx-topic.png[]

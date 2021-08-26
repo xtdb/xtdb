@@ -206,17 +206,17 @@ The value of this entry will be supplied to the Lucene `QueryParser` in the case
 
 Each item returned will be a vector of `org.apache.lucene.document.Document` and a Double representing the matched score.
 
-See the https://github.com/juxt/crux/blob/master/crux-lucene/test/crux/lucene/extension_test.clj[extension tests] for examples of decoding the contents of the result document and performing userspace temporal filtering.
+See the https://github.com/juxt/crux/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for examples of decoding the contents of the result document and performing userspace temporal filtering.
 
 === Custom Indexer
 
 It is possible to implementing a custom indexer based on the `xtdb.lucene/LuceneIndexer` protocol, which will be necessary to address complex requirements.
-See the https://github.com/juxt/crux/blob/master/crux-lucene/test/crux/lucene/extension_test.clj[extension tests] for examples.
+See the https://github.com/juxt/crux/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for examples.
 
 === Custom Analyzer
 
 Lucene provides a huge amount of capability beyond the default `StandardAnalyzer`.
-See the https://github.com/juxt/crux/blob/master/crux-lucene/test/crux/lucene/extension_test.clj[extension tests] for examples.
+See the https://github.com/juxt/crux/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for examples.
 
 == Multiple Lucene modules
 
@@ -224,7 +224,7 @@ The built-in search functions all accept an additional opts map parameter as the
 This can be included in your Datalog query as a literal or passed in using a logic variable.
 The value under `:lucene-store-k` in this map can be set to specify that a search function should be run against a particular module (i.e. a specific Lucene secondary index, if many are configured), otherwise the search function will attempt to execute against the default `:xtdb.lucene/lucene-store` module.
 
-See the https://github.com/juxt/crux/blob/master/crux-lucene/test/crux/lucene/extension_test.clj[extension tests] for an example of configuring multiple Lucene modules to run on the same node.
+See the https://github.com/juxt/crux/blob/master/modules/lucene/test/crux/lucene/extension_test.clj[extension tests] for an example of configuring multiple Lucene modules to run on the same node.
 
 == Checkpointing Lucene
 
