@@ -1,4 +1,4 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import org.apache.calcite.adapter.enumerable.EnumerableConvention;
 import org.apache.calcite.plan.RelTraitSet;
@@ -9,18 +9,18 @@ import org.apache.calcite.tools.RelBuilderFactory;
 
 import java.util.function.Predicate;
 
-public class CruxToEnumerableConverterRule extends ConverterRule {
+public class XtdbToEnumerableConverterRule extends ConverterRule {
     static final ConverterRule INSTANCE =
-        new CruxToEnumerableConverterRule(RelFactories.LOGICAL_BUILDER);
+        new XtdbToEnumerableConverterRule(RelFactories.LOGICAL_BUILDER);
 
-    private CruxToEnumerableConverterRule(RelBuilderFactory relBuilderFactory) {
+    private XtdbToEnumerableConverterRule(RelBuilderFactory relBuilderFactory) {
         super(RelNode.class, (Predicate<RelNode>) r -> true,
-              CruxRel.CONVENTION, EnumerableConvention.INSTANCE,
-              relBuilderFactory, "CruxToEnumerableConverterRule");
+              XtdbRel.CONVENTION, EnumerableConvention.INSTANCE,
+              relBuilderFactory, "XtdbToEnumerableConverterRule");
     }
 
     @Override public RelNode convert(RelNode relNode) {
         RelTraitSet newTraitSet = relNode.getTraitSet().replace(getOutConvention());
-        return new CruxToEnumerableConverter(relNode.getCluster(), newTraitSet, relNode);
+        return new XtdbToEnumerableConverter(relNode.getCluster(), newTraitSet, relNode);
     }
 }

@@ -1,7 +1,7 @@
-(ns crux.scan-only-test
+(ns xtdb.scan-only-test
   (:require [clojure.test :as t]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.fixtures.calcite :as cf :refer [explain query]]))
+            [xtdb.fixtures.calcite :as cf :refer [explain query]]))
 
 (defn- with-each-connection-type [f]
   (cf/with-calcite-connection-scan-only f))
@@ -27,8 +27,8 @@
     (t/is (= 21
              (val (ffirst (query q)))))
     (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], expr#5=[21], expr#6=[CEIL($t5)], EXPR$0=[$t6])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+                  "  XtdbToEnumerableConverter\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (t/testing "retrieve data"
@@ -37,8 +37,8 @@
                  {:name "Malcolm"}}
                (set (query q))))
       (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
-                    "  CruxToEnumerableConverter\n"
-                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+                    "  XtdbToEnumerableConverter\n"
+                    "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (explain q))))
 
     (t/testing "retrieve data case insensitivity of table schema"
@@ -69,9 +69,9 @@
       (t/is (= #{{:name "Ivan"}}
                (set (query q))))
       (t/is (= (str "EnumerableCalc(expr#0..4=[{inputs}], NAME=[$t1])\n"
-                    "  CruxToEnumerableConverter\n"
-                    "    CruxFilter(condition=[=($1, 'Ivan')])\n"
-                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+                    "  XtdbToEnumerableConverter\n"
+                    "    XtdbFilter(condition=[=($1, 'Ivan')])\n"
+                    "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (:plan (first (query (str "explain plan for " q))))))))
 
   (t/testing "in operand"

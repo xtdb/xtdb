@@ -1,8 +1,9 @@
-(ns crux.calcite-test
+(ns xtdb.calcite-test
   (:require [clojure.test :as t]
             [crux.api :as c]
             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
-            [crux.fixtures.calcite :as cf :refer [explain prepared-query query]])
+            [xtdb.fixtures.calcite :as cf :refer [explain prepared-query query]]
+            [clojure.string :as str])
   (:import [java.time ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter))
 
@@ -67,27 +68,27 @@
     (t/is (= #{{:name "Ivan"}
                {:name "Malcolm"}}
              (set (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxProject(NAME=[$1])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbProject(NAME=[$1])\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT PERSON.NAME, PERSON.HOMEWORLD FROM PERSON"]
     (t/is (= #{{:name "Ivan" :homeworld "Earth"}
                {:name "Malcolm" :homeworld "Mars"}}
              (set (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxProject(NAME=[$1], HOMEWORLD=[$2])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbProject(NAME=[$1], HOMEWORLD=[$2])\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT PERSON.HOMEWORLD, PERSON.NAME FROM PERSON"]
     (t/is (= #{{:name "Ivan" :homeworld "Earth"}
                {:name "Malcolm" :homeworld "Mars"}}
              (set (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxProject(HOMEWORLD=[$2], NAME=[$1])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbProject(HOMEWORLD=[$2], NAME=[$1])\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT PERSON.NAME, PERSON.AGE FROM PERSON"]
@@ -99,24 +100,24 @@
     (t/is (= [{:total_age 46}]
              (query q)))
     (t/is (= (str "EnumerableAggregate(group=[{}], TOTAL_AGE=[SUM($3)])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+                  "  XtdbToEnumerableConverter\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT MAX(PERSON.AGE) AS MAX_AGE FROM PERSON"]
     (t/is (= [{:max_age 25}]
              (query q)))
     (t/is (= (str "EnumerableAggregate(group=[{}], MAX_AGE=[MAX($3)])\n"
-                  "  CruxToEnumerableConverter\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+                  "  XtdbToEnumerableConverter\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT PERSON.NAME, (2 * PERSON.AGE) AS DOUBLE_AGE FROM PERSON"]
     (t/is (= #{{:name "Ivan", :double_age 42} {:name "Malcolm", :double_age 50}}
              (set (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxProject(NAME=[$1], DOUBLE_AGE=[*(2, $3)])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbProject(NAME=[$1], DOUBLE_AGE=[*(2, $3)])\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q)))))
 
 (t/deftest test-project-literals-tpch-016
@@ -145,8 +146,8 @@
       (t/is (= [{:n 2}]
                (query q)))
       (t/is (= (str "EnumerableAggregate(group=[{}], N=[COUNT()])\n"
-                    "  CruxToEnumerableConverter\n"
-                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+                    "  XtdbToEnumerableConverter\n"
+                    "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (explain q))))
 
     (t/testing "retrieve data case insensitivity of table schema"
@@ -159,9 +160,9 @@
       (t/is (= #{{:name "Ivan"}
                  {:name "Malcolm"}}
                (set (query q))))
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(NAME=[$1])\n"
-                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+      (t/is (= (str "XtdbToEnumerableConverter\n"
+                    "  XtdbProject(NAME=[$1])\n"
+                    "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (explain q))))
 
     (t/testing "retrieve data case insensitivity of table schema"
@@ -191,10 +192,10 @@
     (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Ivan'"]
       (t/is (= #{{:name "Ivan"}}
                (set (query q))))
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(NAME=[$1])\n"
-                    "    CruxFilter(condition=[=($1, 'Ivan')])\n"
-                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+      (t/is (= (str "XtdbToEnumerableConverter\n"
+                    "  XtdbProject(NAME=[$1])\n"
+                    "    XtdbFilter(condition=[=($1, 'Ivan')])\n"
+                    "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (:plan (first (query (str "explain plan for " q)))))))
     (t/is (= #{{:name "Malcolm"}}
              (set (query "SELECT NAME FROM PERSON WHERE NAME <> 'Ivan'"))))
@@ -281,29 +282,29 @@
     (let [q "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = (YEARS_WORKED * 2)"]
       (t/is (= ["Ivan"]
                (map :name (query q))))
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(NAME=[$1], AGE=[$2])\n"
-                    "    CruxFilter(condition=[=($2, *($3, 2))])\n"
-                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+      (t/is (= (str "XtdbToEnumerableConverter\n"
+                    "  XtdbProject(NAME=[$1], AGE=[$2])\n"
+                    "    XtdbFilter(condition=[=($2, *($3, 2))])\n"
+                    "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (explain q))))
 
     (t/testing "nested"
       (let [q "SELECT PERSON.NAME,PERSON.AGE FROM PERSON WHERE AGE = (2 + (YEARS_WORKED * 2))"]
         (t/is (= ["Malcolm"]
                  (map :name (query q))))
-        (t/is (= (str "CruxToEnumerableConverter\n"
-                      "  CruxProject(NAME=[$1], AGE=[$2])\n"
-                      "    CruxFilter(condition=[=($2, +(2, *($3, 2)))])\n"
-                      "      CruxTableScan(table=[[crux, PERSON]])\n")
+        (t/is (= (str "XtdbToEnumerableConverter\n"
+                      "  XtdbProject(NAME=[$1], AGE=[$2])\n"
+                      "    XtdbFilter(condition=[=($2, +(2, *($3, 2)))])\n"
+                      "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
                  (explain q))))))
 
   (t/testing "project"
     (let [q "SELECT NAME, (PERSON.AGE * 2) AS AGE FROM PERSON"]
       (t/is (= [{:name "Ivan", :age 84} {:name "Malcolm", :age 44}]
                (sort-by :name (query q))))
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(NAME=[$1], AGE=[*($2, 2)])\n"
-                    "    CruxTableScan(table=[[crux, PERSON]])\n")
+      (t/is (= (str "XtdbToEnumerableConverter\n"
+                    "  XtdbProject(NAME=[$1], AGE=[*($2, 2)])\n"
+                    "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (explain q))))
 
     (t/testing "nested"
@@ -313,10 +314,10 @@
 
   (t/testing "in OR conditional with args"
     (let [q "SELECT NAME FROM PERSON WHERE NAME = 'Malcolm' OR AGE = (2 * YEARS_WORKED)"]
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(NAME=[$1])\n"
-                    "    CruxFilter(condition=[OR(=($1, 'Malcolm'), =($2, *(2, $3)))])\n"
-                    "      CruxTableScan(table=[[crux, PERSON]])\n")
+      (t/is (= (str "XtdbToEnumerableConverter\n"
+                    "  XtdbProject(NAME=[$1])\n"
+                    "    XtdbFilter(condition=[OR(=($1, 'Malcolm'), =($2, *(2, $3)))])\n"
+                    "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
                (explain q)))
       (t/is (= [{:name "Ivan"} {:name "Malcolm"}]
                (sort-by :name (query q))))))
@@ -398,25 +399,25 @@
 
   (let [q "SELECT * FROM PERSON WHERE NAME='Ivan'"]
     (t/is (= 20 (count (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxFilter(condition=[=($1, 'Ivan')])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbFilter(condition=[=($1, 'Ivan')])\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10"]
     (t/is (= 10 (count (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxSort(fetch=[10])\n"
-                  "    CruxFilter(condition=[=($1, 'Ivan')])\n"
-                  "      CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbSort(fetch=[10])\n"
+                  "    XtdbFilter(condition=[=($1, 'Ivan')])\n"
+                  "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT * FROM PERSON WHERE NAME='Ivan' LIMIT 10 OFFSET 15"]
     (t/is (= 5 (count (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxSort(offset=[15], fetch=[10])\n"
-                  "    CruxFilter(condition=[=($1, 'Ivan')])\n"
-                  "      CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbSort(offset=[15], fetch=[10])\n"
+                  "    XtdbFilter(condition=[=($1, 'Ivan')])\n"
+                  "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q)))))
 
 (t/deftest test-prepare-statement
@@ -433,10 +434,10 @@
 
   (let [q "SELECT NAME FROM PERSON ORDER BY NAME"]
     (t/is (= ["Fred" "Ivan" "Malcolm"] (map :name (query q))))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxSort(sort0=[$0], dir0=[ASC])\n"
-                  "    CruxProject(NAME=[$1])\n"
-                  "      CruxTableScan(table=[[crux, PERSON]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbSort(sort0=[$0], dir0=[ASC])\n"
+                  "    XtdbProject(NAME=[$1])\n"
+                  "      XtdbTableScan(table=[[xtdb, PERSON]])\n")
              (explain q))))
 
   (let [q "SELECT NAME FROM PERSON ORDER BY NAME DESC"]
@@ -521,10 +522,10 @@
                :climate "Hot"
                :age0 42}]
              (query q)))
-    (t/is (= (str "CruxToEnumerableConverter\n"
-                  "  CruxJoin(condition=[=($2, $5)], joinType=[inner])\n"
-                  "    CruxTableScan(table=[[crux, PERSON]])\n"
-                  "    CruxTableScan(table=[[crux, PLANET]])\n")
+    (t/is (= (str "XtdbToEnumerableConverter\n"
+                  "  XtdbJoin(condition=[=($2, $5)], joinType=[inner])\n"
+                  "    XtdbTableScan(table=[[xtdb, PERSON]])\n"
+                  "    XtdbTableScan(table=[[xtdb, PLANET]])\n")
              (explain q))))
 
   (t/testing "joins with projects"
@@ -532,14 +533,15 @@
       (t/is (= [{:id ":person/ivan", :person "Ivan", :planet "earth"}]
                (query q)))
 
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(ID=[$1], PERSON=[$2], PLANET=[$0])\n"
-                    "    CruxJoin(condition=[=($3, $0)], joinType=[inner])\n"
-                    "      CruxProject(NAME=[$1])\n"
-                    "        CruxTableScan(table=[[crux, PLANET]])\n"
-                    "      CruxProject(ID=[$0], NAME=[$1], PLANET=[$2])\n"
-                    "        CruxTableScan(table=[[crux, PERSON]])\n")
-               (explain q))))
+      (t/is (= (str/trim "
+XtdbToEnumerableConverter
+  XtdbProject(ID=[$0], PERSON=[$1], PLANET=[$3])
+    XtdbJoin(condition=[=($2, $3)], joinType=[inner])
+      XtdbProject(ID=[$0], NAME=[$1], PLANET=[$2])
+        XtdbTableScan(table=[[xtdb, PERSON]])
+      XtdbProject(NAME=[$1])
+        XtdbTableScan(table=[[xtdb, PLANET]])")
+               (str/trim (explain q)))))
 
     (t/testing "triple join"
       (let [q (str "SELECT * FROM PERSON\n"
@@ -558,12 +560,12 @@
                    :captain "Ivan",
                    :decks 13}]
                  (query q)))
-        (t/is (= (str "CruxToEnumerableConverter\n"
-                      "  CruxJoin(condition=[=($10, $1)], joinType=[inner])\n"
-                      "    CruxJoin(condition=[=($2, $5)], joinType=[inner])\n"
-                      "      CruxTableScan(table=[[crux, PERSON]])\n"
-                      "      CruxTableScan(table=[[crux, PLANET]])\n"
-                      "    CruxTableScan(table=[[crux, SHIP]])\n")
+        (t/is (= (str "XtdbToEnumerableConverter\n"
+                      "  XtdbJoin(condition=[=($10, $1)], joinType=[inner])\n"
+                      "    XtdbJoin(condition=[=($2, $5)], joinType=[inner])\n"
+                      "      XtdbTableScan(table=[[xtdb, PERSON]])\n"
+                      "      XtdbTableScan(table=[[xtdb, PLANET]])\n"
+                      "    XtdbTableScan(table=[[xtdb, SHIP]])\n")
                  (explain q))))))
 
   (t/testing "join using calc"
@@ -577,13 +579,14 @@
                  :climate "Hot",
                  :age0 42}]
                (query q)))
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(ID=[$4], NAME=[$5], PLANET=[$6], AGE=[$7], ID0=[$0], NAME0=[$1], CLIMATE=[$2], AGE0=[$3])\n"
-                    "    CruxJoin(condition=[=($3, $8)], joinType=[inner])\n"
-                    "      CruxTableScan(table=[[crux, PLANET]])\n"
-                    "      CruxProject(ID=[$0], NAME=[$1], PLANET=[$2], AGE=[$3], $f4=[*(2, $3)])\n"
-                    "        CruxTableScan(table=[[crux, PERSON]])\n")
-               (explain q)))))
+      (t/is (= (str/trim "
+XtdbToEnumerableConverter
+  XtdbProject(ID=[$0], NAME=[$1], PLANET=[$2], AGE=[$3], ID0=[$5], NAME0=[$6], CLIMATE=[$7], AGE0=[$8])
+    XtdbJoin(condition=[=($8, $4)], joinType=[inner])
+      XtdbProject(ID=[$0], NAME=[$1], PLANET=[$2], AGE=[$3], $f4=[*(2, $3)])
+        XtdbTableScan(table=[[xtdb, PERSON]])
+      XtdbTableScan(table=[[xtdb, PLANET]])")
+               (str/trim (explain q))))))
 
   (let [q "SELECT PERSON.NAME FROM PERSON LEFT OUTER JOIN PLANET ON PERSON.PLANET = PLANET.NAME"]
     ;; Calcite handles OUTER_JOINS for now:
@@ -591,12 +594,12 @@
              (sort-by :name (query q))))
     (t/is (= (str "EnumerableCalc(expr#0..2=[{inputs}], NAME=[$t0])\n"
                   "  EnumerableHashJoin(condition=[=($1, $2)], joinType=[left])\n"
-                  "    CruxToEnumerableConverter\n"
-                  "      CruxProject(NAME=[$1], PLANET=[$2])\n"
-                  "        CruxTableScan(table=[[crux, PERSON]])\n"
-                  "    CruxToEnumerableConverter\n"
-                  "      CruxProject(NAME=[$1])\n"
-                  "        CruxTableScan(table=[[crux, PLANET]])\n")
+                  "    XtdbToEnumerableConverter\n"
+                  "      XtdbProject(NAME=[$1], PLANET=[$2])\n"
+                  "        XtdbTableScan(table=[[xtdb, PERSON]])\n"
+                  "    XtdbToEnumerableConverter\n"
+                  "      XtdbProject(NAME=[$1])\n"
+                  "        XtdbTableScan(table=[[xtdb, PLANET]])\n")
              (explain q)))))
 
 (t/deftest test-table-backed-by-query
@@ -647,9 +650,9 @@
 
     (let [q "SELECT CEIL(1.1) FROM PERSON"]
       (t/is (= 2M (val (ffirst (query q)))))
-      (t/is (= (str "CruxToEnumerableConverter\n"
-                    "  CruxProject(EXPR$0=[CEIL(1.1:DECIMAL(2, 1))])\n"
-                    "    CruxTableScan(table=[[crux, PERSON]])\n") (explain q))))
+      (t/is (= (str "XtdbToEnumerableConverter\n"
+                    "  XtdbProject(EXPR$0=[CEIL(1.1:DECIMAL(2, 1))])\n"
+                    "    XtdbTableScan(table=[[xtdb, PERSON]])\n") (explain q))))
     (t/is (= 1M (val (ffirst (query "SELECT FLOOR(1.1) FROM PERSON"))))))
 
   (let [q  "SELECT TRUNCATE(1.12, 1) FROM PERSON"]
@@ -673,4 +676,4 @@
 (comment
   (import '[ch.qos.logback.classic Level Logger]
           'org.slf4j.LoggerFactory)
-  (.setLevel ^Logger (LoggerFactory/getLogger "crux.calcite") (Level/valueOf "DEBUG")))
+  (.setLevel ^Logger (LoggerFactory/getLogger "xtdb.calcite") (Level/valueOf "DEBUG")))

@@ -1,6 +1,5 @@
-package crux.calcite;
+package xtdb.calcite;
 
-import org.apache.calcite.adapter.enumerable.EnumerableRules;
 import org.apache.calcite.rel.type.RelDataType;
 import org.apache.calcite.plan.RelOptTable;
 import org.apache.calcite.plan.RelTraitSet;
@@ -10,32 +9,31 @@ import org.apache.calcite.plan.RelOptRule;
 import java.util.Objects;
 import com.google.common.collect.ImmutableList;
 import org.apache.calcite.rel.core.TableScan;
-import clojure.lang.Keyword;
 
-public class CruxTableScan extends TableScan implements CruxRel {
-    private final CruxTable cruxTable;
+public class XtdbTableScan extends TableScan implements XtdbRel {
+    private final XtdbTable xtdbTable;
     private final RelDataType projectRowType;
     private final boolean scanOnly;
 
-    protected CruxTableScan(RelOptCluster cluster, RelTraitSet traitSet,
-                            RelOptTable table, CruxTable cruxTable,
+    protected XtdbTableScan(RelOptCluster cluster, RelTraitSet traitSet,
+                            RelOptTable table, XtdbTable xtdbTable,
                             RelDataType projectRowType,
                             boolean scanOnly) {
         super(cluster, traitSet, ImmutableList.of(), table);
-        this.cruxTable  = Objects.requireNonNull(cruxTable, "cruxTable");
+        this.xtdbTable = Objects.requireNonNull(xtdbTable, "xtdbTable");
         this.projectRowType = projectRowType;
         this.scanOnly = scanOnly;
 
-        assert getConvention() == CruxRel.CONVENTION;
+        assert getConvention() == XtdbRel.CONVENTION;
     }
 
     @Override public void register(RelOptPlanner planner) {
         if (scanOnly) {
-            for (RelOptRule rule: CruxRules.SCAN_ONLY_RULES) {
+            for (RelOptRule rule: XtdbRules.SCAN_ONLY_RULES) {
                 planner.addRule(rule);
             }
         } else {
-            for (RelOptRule rule: CruxRules.RULES) {
+            for (RelOptRule rule: XtdbRules.RULES) {
                 planner.addRule(rule);
             }
         }
@@ -43,10 +41,10 @@ public class CruxTableScan extends TableScan implements CruxRel {
 
     @Override public void implement(Implementor implementor) {
         implementor.table = table;
-        implementor.schema = cruxTable.schema;
+        implementor.schema = xtdbTable.schema;
     }
 
-    public CruxTable getCruxTable() {
-        return cruxTable;
+    public XtdbTable getXtdbTable() {
+        return xtdbTable;
     }
 }

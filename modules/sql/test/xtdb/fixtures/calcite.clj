@@ -1,5 +1,5 @@
-(ns crux.fixtures.calcite
-  (:require [crux.calcite :as cal]
+(ns xtdb.fixtures.calcite
+  (:require [xtdb.calcite :as cal]
             [crux.fixtures :as fix]
             [crux.node :as n])
   (:import java.sql.DriverManager

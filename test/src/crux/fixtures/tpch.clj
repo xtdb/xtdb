@@ -16,7 +16,7 @@
    TpchColumnType$Base/DOUBLE :double
    TpchColumnType$Base/DATE :timestamp})
 
-(defn tpch-table->crux-sql-schema [^TpchTable t]
+(defn tpch-table->xtdb-sql-schema [^TpchTable t]
   {:xt/id (keyword "xt.sql.schema" (.getTableName t))
    :xt.sql.table/name (.getTableName t)
    :xt.sql.table/query {:find (vec (for [^TpchColumn c (.getColumns t)]
@@ -26,8 +26,8 @@
    :xt.sql.table/columns (into {} (for [^TpchColumn c (.getColumns t)]
                                       [(symbol (.getColumnName c)) (tpch-column-types->crux-calcite-type (.getBase (.getType c)))]))})
 
-(defn tpch-tables->crux-sql-schemas []
-  (map tpch-table->crux-sql-schema (TpchTable/getTables)))
+(defn tpch-tables->xtdb-sql-schemas []
+  (map tpch-table->xtdb-sql-schema (TpchTable/getTables)))
 
 (def table->pkey
   {"part" [:p_partkey]
@@ -87,7 +87,7 @@
    (map (partial doc-fn t) (seq (.createGenerator ^TpchTable t sf 1 1)))))
 
 (defn with-tpch-schema [f]
-  (fix/transact! *api* (tpch-tables->crux-sql-schemas))
+  (fix/transact! *api* (tpch-tables->xtdb-sql-schemas))
   (f))
 
 (defn submit-docs!

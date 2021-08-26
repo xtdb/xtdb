@@ -1,13 +1,10 @@
-(ns crux.calcite-microbench-test
-  (:require [clojure.test :as t]
-            [crux.calcite :as cal]
+(ns xtdb.calcite-microbench-test
+  (:require [xtdb.calcite :as cal]
             [crux.api :as c]
-            [crux.fixtures :as fix :refer [*api*]]
-            [crux.fixtures.calcite :as cf]
+            [crux.fixtures :as fix]
+            [xtdb.fixtures.calcite :as cf]
             [crux.fixtures.tpch :as tf])
-  (:import io.airlift.tpch.TpchTable
-           java.sql.DriverManager
-           java.sql.PreparedStatement))
+  (:import io.airlift.tpch.TpchTable))
 
 (defn- load-docs! [node]
   (doseq [^TpchTable t (TpchTable/getTables)]
@@ -35,7 +32,7 @@
 (comment
   (require 'user)
   (load-docs! (user/crux-node))
-  (fix/transact! (user/crux-node) (tf/tpch-tables->crux-sql-schemas))
+  (fix/transact! (user/crux-node) (tf/tpch-tables->xtdb-sql-schemas))
   (def db (c/db (user/crux-node)))
   (def conn (cal/jdbc-connection (user/crux-node)))
   (def p (prepared-query conn "SELECT c_name FROM CUSTOMER"))

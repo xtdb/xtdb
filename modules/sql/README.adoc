@@ -2,7 +2,7 @@
 
 SQL adapter for Crux making use of https://calcite.apache.org/[Apache Calcite].
 
-`crux-sql` runs in-process as part of the Crux node as a Crux module.
+`xtdb-sql` runs in-process as part of the Crux node as a Crux module.
 
 .deps.edn
 [source,clojure]

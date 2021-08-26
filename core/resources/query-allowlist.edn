@@ -226,8 +226,8 @@
   clojure.core/vector?
   clojure.core/zero?
   clojure.core/zipmap
-  crux.calcite/-divide
-  crux.calcite/-lambda
-  crux.calcite/-like
-  crux.calcite/-mod
+  xtdb.calcite/-divide
+  xtdb.calcite/-lambda
+  xtdb.calcite/-like
+  xtdb.calcite/-mod
   clojure.core/-'}

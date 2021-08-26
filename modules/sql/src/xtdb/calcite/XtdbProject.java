@@ -1,4 +1,4 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
@@ -10,25 +10,25 @@ import org.apache.calcite.rex.RexNode;
 import com.google.common.collect.ImmutableList;
 import clojure.lang.Keyword;
 import clojure.lang.IFn;
-import java.util.ArrayList;
+
 import java.util.List;
 import java.util.Map;
 
-public class CruxProject extends Project implements CruxRel {
+public class XtdbProject extends Project implements XtdbRel {
     private final IFn projectFn;
     private final List<? extends RexNode> projects;
 
-    public CruxProject(RelOptCluster cluster, RelTraitSet traitSet, RelNode input,
+    public XtdbProject(RelOptCluster cluster, RelTraitSet traitSet, RelNode input,
                        List<? extends RexNode> projects, RelDataType rowType) {
         super(cluster, traitSet, ImmutableList.of(), input, projects, rowType);
-        assert getConvention() == CruxRel.CONVENTION;
+        assert getConvention() == XtdbRel.CONVENTION;
         this.projects = projects;
-        this.projectFn = CruxUtils.resolveWithErrorLogging("crux.calcite/enrich-project");
+        this.projectFn = XtdbUtils.resolveWithErrorLogging("xtdb.calcite/enrich-project");
     }
 
     @Override public Project copy(RelTraitSet traitSet, RelNode input, List<RexNode> projects,
                                   RelDataType rowType) {
-        return new CruxProject(input.getCluster(), traitSet, input, projects, rowType);
+        return new XtdbProject(input.getCluster(), traitSet, input, projects, rowType);
     }
 
     @SuppressWarnings("unchecked")

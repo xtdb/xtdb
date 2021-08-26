@@ -1,13 +1,10 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexInputRef;
-import org.apache.calcite.adapter.enumerable.EnumerableLimit;
 import org.apache.calcite.plan.Convention;
-import org.apache.calcite.adapter.java.JavaTypeFactory;
 import org.apache.calcite.rel.RelCollations;
 import org.apache.calcite.plan.RelOptRule;
-import org.apache.calcite.plan.RelOptRuleCall;
 import org.apache.calcite.plan.RelTrait;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.RelNode;
@@ -20,88 +17,87 @@ import org.apache.calcite.rel.core.Sort;
 import org.apache.calcite.rel.core.Join;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.calcite.rel.InvalidRelException;
 
-class CruxRules {
+class XtdbRules {
     static final RelOptRule[] RULES = {
-        CruxToEnumerableConverterRule.INSTANCE,
-        CruxJoinRule.INSTANCE,
-        CruxProjectRule.INSTANCE,
-        CruxFilterRule.INSTANCE,
-        CruxSortRule.INSTANCE,
+        XtdbToEnumerableConverterRule.INSTANCE,
+        XtdbJoinRule.INSTANCE,
+        XtdbProjectRule.INSTANCE,
+        XtdbFilterRule.INSTANCE,
+        XtdbSortRule.INSTANCE,
     };
 
     static final RelOptRule[] SCAN_ONLY_RULES = {
-        CruxToEnumerableConverterRule.INSTANCE,
-        CruxFilterRule.INSTANCE,
-        CruxSortRule.INSTANCE,
+        XtdbToEnumerableConverterRule.INSTANCE,
+        XtdbFilterRule.INSTANCE,
+        XtdbSortRule.INSTANCE,
     };
 
 
-    abstract static class CruxConverterRule extends ConverterRule {
+    abstract static class XtdbConverterRule extends ConverterRule {
         final Convention out;
 
-        CruxConverterRule(Class<? extends RelNode> clazz, RelTrait in, Convention out,
+        XtdbConverterRule(Class<? extends RelNode> clazz, RelTrait in, Convention out,
                           String description) {
             super(clazz, in, out, description);
             this.out = out;
         }
     }
 
-    private static class CruxFilterRule extends CruxConverterRule {
-        private static final CruxFilterRule INSTANCE = new CruxFilterRule();
+    private static class XtdbFilterRule extends XtdbConverterRule {
+        private static final XtdbFilterRule INSTANCE = new XtdbFilterRule();
 
-        private CruxFilterRule() {
-            super(LogicalFilter.class, Convention.NONE, CruxRel.CONVENTION, "CruxFilterRule");
+        private XtdbFilterRule() {
+            super(LogicalFilter.class, Convention.NONE, XtdbRel.CONVENTION, "XtdbFilterRule");
         }
 
         @Override public RelNode convert(RelNode relNode) {
             final LogicalFilter filter = (LogicalFilter) relNode;
             final RelTraitSet traitSet = filter.getTraitSet().replace(out);
-            return new CruxFilter(relNode.getCluster(), traitSet,
+            return new XtdbFilter(relNode.getCluster(), traitSet,
                                   convert(filter.getInput(), out),
                                   filter.getCondition());
         }
     }
 
-    private static class CruxSortRule extends CruxConverterRule {
-        public static final CruxSortRule INSTANCE = new CruxSortRule();
+    private static class XtdbSortRule extends XtdbConverterRule {
+        public static final XtdbSortRule INSTANCE = new XtdbSortRule();
 
-        private CruxSortRule() {
-            super(Sort.class, Convention.NONE, CruxRel.CONVENTION, "CruxSortRule");
+        private XtdbSortRule() {
+            super(Sort.class, Convention.NONE, XtdbRel.CONVENTION, "XtdbSortRule");
         }
 
         public RelNode convert(RelNode rel) {
             final Sort sort = (Sort) rel;
             final RelTraitSet traitSet = sort.getTraitSet().replace(out).replace(sort.getCollation());
-            return new CruxSort(rel.getCluster(), traitSet,
+            return new XtdbSort(rel.getCluster(), traitSet,
                                 convert(sort.getInput(), traitSet.replace(RelCollations.EMPTY)),
                                 sort.getCollation(), sort.offset, sort.fetch);
         }
     }
 
-    private static class CruxProjectRule extends CruxConverterRule {
-        private static final CruxProjectRule INSTANCE = new CruxProjectRule();
+    private static class XtdbProjectRule extends XtdbConverterRule {
+        private static final XtdbProjectRule INSTANCE = new XtdbProjectRule();
 
-        private CruxProjectRule() {
-            super(LogicalProject.class, Convention.NONE, CruxRel.CONVENTION, "CruxProjectRule");
+        private XtdbProjectRule() {
+            super(LogicalProject.class, Convention.NONE, XtdbRel.CONVENTION, "XtdbProjectRule");
         }
 
         public RelNode convert(RelNode rel) {
             final LogicalProject project = (LogicalProject) rel;
-            final RelTraitSet traitSet = project.getTraitSet().replace(CruxRel.CONVENTION);
-            return new CruxProject(project.getCluster(), traitSet,
+            final RelTraitSet traitSet = project.getTraitSet().replace(XtdbRel.CONVENTION);
+            return new XtdbProject(project.getCluster(), traitSet,
                                    //                                   project.getInput(),
                                    convert(project.getInput(), out),
                                    project.getProjects(), project.getRowType());
         }
     }
 
-    private static class CruxJoinRule extends CruxConverterRule {
-        private static final CruxJoinRule INSTANCE = new CruxJoinRule();
+    private static class XtdbJoinRule extends XtdbConverterRule {
+        private static final XtdbJoinRule INSTANCE = new XtdbJoinRule();
 
-        private CruxJoinRule() {
-            super(LogicalJoin.class, Convention.NONE, CruxRel.CONVENTION, "CruxJoinRule");
+        private XtdbJoinRule() {
+            super(LogicalJoin.class, Convention.NONE, XtdbRel.CONVENTION, "XtdbJoinRule");
         }
 
         // Note: this is modeled on org.apache.calcite.adapter.jdbc
@@ -129,7 +125,7 @@ class CruxRules {
                 return null;
             }
 
-            return new CruxJoin(join.getCluster(),
+            return new XtdbJoin(join.getCluster(),
                                 join.getTraitSet().replace(out),
                                 newInputs.get(0),
                                 newInputs.get(1),

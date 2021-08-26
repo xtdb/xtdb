@@ -1,41 +1,36 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import org.apache.calcite.plan.RelOptCost;
 import org.apache.calcite.plan.RelOptPlanner;
 import org.apache.calcite.plan.RelOptCluster;
 import org.apache.calcite.plan.RelOptTable;
-import org.apache.calcite.plan.RelOptUtil;
 import org.apache.calcite.plan.RelTraitSet;
 import org.apache.calcite.rel.metadata.RelMetadataQuery;
 import org.apache.calcite.rel.RelNode;
 import org.apache.calcite.rel.core.Join;
 import org.apache.calcite.rel.core.JoinRelType;
-import org.apache.calcite.rex.RexCall;
 import org.apache.calcite.rex.RexNode;
-import org.apache.calcite.sql.SqlKind;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import clojure.lang.Keyword;
 import clojure.lang.IFn;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import org.apache.calcite.rel.InvalidRelException;
 
-public class CruxJoin extends Join implements CruxRel {
+import java.util.Map;
+
+public class XtdbJoin extends Join implements XtdbRel {
     private RelOptTable table;
     private final IFn joinFn;
 
-    public CruxJoin(RelOptCluster cluster, RelTraitSet traitSet, RelNode left, RelNode right,
+    public XtdbJoin(RelOptCluster cluster, RelTraitSet traitSet, RelNode left, RelNode right,
                     RexNode condition, JoinRelType joinType) {
         super(cluster, traitSet, ImmutableList.of(), left, right, condition, ImmutableSet.of(), joinType);
-        this.joinFn = CruxUtils.resolveWithErrorLogging("crux.calcite/enrich-join");
-        assert getConvention() == CruxRel.CONVENTION;
+        this.joinFn = XtdbUtils.resolveWithErrorLogging("xtdb.calcite/enrich-join");
+        assert getConvention() == XtdbRel.CONVENTION;
     }
 
     @Override public Join copy(RelTraitSet traitSet, RexNode conditionExpr, RelNode left,
                                RelNode right, JoinRelType joinType, boolean semiJoinDone) {
-        return new CruxJoin(getCluster(), traitSet, left, right, conditionExpr, joinType);
+        return new XtdbJoin(getCluster(), traitSet, left, right, conditionExpr, joinType);
     }
 
     @SuppressWarnings("unchecked")

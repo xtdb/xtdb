@@ -44,9 +44,9 @@
              "-Dclojure.spec.compile-asserts=true"
              "-Dclojure.spec.check-asserts=true"]
 
-  :javadoc-opts {:package-names ["crux"]
+  :javadoc-opts {:package-names ["xtdb"]
                  :output-dir "target/javadoc/out"
-                 :additional-args ["-windowtitle" "Crux SQL Javadoc"
+                 :additional-args ["-windowtitle" "XTDB SQL Javadoc"
                                    "-quiet"
                                    "-Xdoclint:none"
                                    "-link" "https://docs.oracle.com/javase/8/docs/api/"

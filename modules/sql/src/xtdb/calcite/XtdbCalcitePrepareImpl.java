@@ -1,21 +1,15 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import org.apache.calcite.jdbc.CalcitePrepare;
 import org.apache.calcite.prepare.CalcitePrepareImpl;
-import org.apache.calcite.plan.RelOptCostFactory;
-import org.apache.calcite.plan.RelOptPlanner;
 
 import clojure.lang.IFn;
 
 import java.lang.reflect.Type;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import java.util.Date;
 import java.util.Map;
-import java.util.HashMap;
 
-public class CruxCalcitePrepareImpl extends CalcitePrepareImpl {
-    private static final IFn PREPARE_SQL = CruxUtils.resolve("crux.calcite/prepare-sql");
+public class XtdbCalcitePrepareImpl extends CalcitePrepareImpl {
+    private static final IFn PREPARE_SQL = XtdbUtils.resolve("xtdb.calcite/prepare-sql");
 
     public interface PreparedSQL {
         String query();

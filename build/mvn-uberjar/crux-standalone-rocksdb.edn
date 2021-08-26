@@ -6,4 +6,4 @@
                              :db-dir "data/indices"}}
 
  :xtdb.http-server/server {}
- :crux.calcite/server {}}
+ :xtdb.calcite/server {}}

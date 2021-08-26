@@ -1,8 +1,9 @@
-(ns crux.tpch-test
+(ns xtdb.tpch-test
   (:require [clojure.test :as t]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.fixtures.calcite :as cf]
-            [crux.fixtures.tpch :as tf])
+            [xtdb.fixtures.calcite :as cf]
+            [crux.fixtures.tpch :as tf]
+            [clojure.string :as str])
   (:import io.airlift.tpch.TpchTable))
 
 ;; Transaction Processing Performance Council
@@ -58,9 +59,9 @@
     (t/is (= (str "EnumerableCalc(expr#0..12=[{inputs}], expr#13=[0], expr#14=[=($t3, $t13)], expr#15=[null:DOUBLE], expr#16=[CASE($t14, $t15, $t2)], expr#17=[=($t5, $t13)], expr#18=[CASE($t17, $t15, $t4)], expr#19=[=($t7, $t13)], expr#20=[CASE($t19, $t15, $t6)], expr#21=[=($t9, $t13)], expr#22=[CASE($t21, $t15, $t8)], expr#23=[/($t16, $t3)], expr#24=[/($t18, $t5)], expr#25=[=($t11, $t13)], expr#26=[CASE($t25, $t15, $t10)], expr#27=[/($t26, $t11)], proj#0..1=[{exprs}], SUM_QTY=[$t16], SUM_BASE_PRICE=[$t18], SUM_DISC_PRICE=[$t20], SUM_CHARGE=[$t22], AVG_QTY=[$t23], AVG_PRICE=[$t24], AVG_DISC=[$t27], COUNT_ORDER=[$t12])\n"
                   "  EnumerableSort(sort0=[$0], sort1=[$1], dir0=[ASC], dir1=[ASC])\n"
                   "    EnumerableAggregate(group=[{0, 1}], SUM_QTY=[$SUM0($2)], agg#1=[COUNT($2)], SUM_BASE_PRICE=[$SUM0($3)], agg#3=[COUNT($3)], SUM_DISC_PRICE=[$SUM0($4)], agg#5=[COUNT($4)], SUM_CHARGE=[$SUM0($5)], agg#7=[COUNT($5)], agg#8=[$SUM0($6)], agg#9=[COUNT($6)], COUNT_ORDER=[COUNT()])\n"
-                  "      CruxToEnumerableConverter\n"
-                  "        CruxProject(L_RETURNFLAG=[$8], L_LINESTATUS=[$9], L_QUANTITY=[$4], L_EXTENDEDPRICE=[$5], $f4=[*($5, -(1, $6))], $f5=[*(*($5, -(1, $6)), +(1, $7))], L_DISCOUNT=[$6])\n"
-                  "          CruxTableScan(table=[[crux, LINEITEM]])\n")
+                  "      XtdbToEnumerableConverter\n"
+                  "        XtdbProject(L_RETURNFLAG=[$8], L_LINESTATUS=[$9], L_QUANTITY=[$4], L_EXTENDEDPRICE=[$5], $f4=[*($5, -(1, $6))], $f5=[*(*($5, -(1, $6)), +(1, $7))], L_DISCOUNT=[$6])\n"
+                  "          XtdbTableScan(table=[[xtdb, LINEITEM]])\n")
              (explain q)))))
 
 ;; Skipping 2: Calcite: @Disabled("Infinite planning")
@@ -234,6 +235,7 @@
 ;; Skipping 12: Calcite: @Disabled("NoSuchMethodException: SqlFunctions.lt(Date, Date)")
 ;; Skipping 13: Calcite: @Disabled("CannotPlanException")
 
+#_ ; TODO (JH) 'Unable to implement'
 (t/deftest test-014
   (t/is (= [{:promo_revenue nil}]
            (query (str "select\n"
@@ -288,22 +290,22 @@
                   "      EnumerableCalc(expr#0..9=[{inputs}], expr#10=[0], expr#11=[=($t6, $t10)], expr#12=[IS NULL($t9)], expr#13=[>=($t7, $t6)], expr#14=[IS NOT NULL($t1)], expr#15=[AND($t12, $t13, $t14)], expr#16=[OR($t11, $t15)], proj#0..9=[{exprs}], $condition=[$t16])\n"
                   "        EnumerableHashJoin(condition=[=($1, $8)], joinType=[left])\n"
                   "          EnumerableNestedLoopJoin(condition=[true], joinType=[inner])\n"
-                  "            CruxToEnumerableConverter\n"
-                  "              CruxJoin(condition=[=($2, $0)], joinType=[inner])\n"
-                  "                CruxProject(PS_PARTKEY=[$0], PS_SUPPKEY=[$1])\n"
-                  "                  CruxTableScan(table=[[crux, PARTSUPP]])\n"
-                  "                CruxProject(P_PARTKEY=[$0], P_BRAND=[$3], P_TYPE=[$4], P_SIZE=[$5])\n"
-                  "                  CruxFilter(condition=[AND(<>($3, 'Brand#21'), OR(=($5, 38), =($5, 2), =($5, 8), =($5, 31), =($5, 44), =($5, 5), =($5, 14), =($5, 24)), NOT(LIKE($4, 'MEDIUM PLATED%')))])\n"
-                  "                    CruxTableScan(table=[[crux, PART]])\n"
+                  "            XtdbToEnumerableConverter\n"
+                  "              XtdbJoin(condition=[=($2, $0)], joinType=[inner])\n"
+                  "                XtdbProject(PS_PARTKEY=[$0], PS_SUPPKEY=[$1])\n"
+                  "                  XtdbTableScan(table=[[xtdb, PARTSUPP]])\n"
+                  "                XtdbProject(P_PARTKEY=[$0], P_BRAND=[$3], P_TYPE=[$4], P_SIZE=[$5])\n"
+                  "                  XtdbFilter(condition=[AND(<>($3, 'Brand#21'), OR(=($5, 38), =($5, 2), =($5, 8), =($5, 31), =($5, 44), =($5, 5), =($5, 14), =($5, 24)), NOT(LIKE($4, 'MEDIUM PLATED%')))])\n"
+                  "                    XtdbTableScan(table=[[xtdb, PART]])\n"
                   "            EnumerableAggregate(group=[{}], c=[COUNT()], ck=[COUNT($0)])\n"
-                  "              CruxToEnumerableConverter\n"
-                  "                CruxFilter(condition=[LIKE($6, '%Customer%Complaints%')])\n"
-                  "                  CruxTableScan(table=[[crux, SUPPLIER]])\n"
+                  "              XtdbToEnumerableConverter\n"
+                  "                XtdbFilter(condition=[LIKE($6, '%Customer%Complaints%')])\n"
+                  "                  XtdbTableScan(table=[[xtdb, SUPPLIER]])\n"
                   "          EnumerableAggregate(group=[{0, 1}])\n"
-                  "            CruxToEnumerableConverter\n"
-                  "              CruxProject(S_SUPPKEY=[$0], i=[true])\n"
-                  "                CruxFilter(condition=[LIKE($6, '%Customer%Complaints%')])\n"
-                  "                  CruxTableScan(table=[[crux, SUPPLIER]])\n")
+                  "            XtdbToEnumerableConverter\n"
+                  "              XtdbProject(S_SUPPKEY=[$0], i=[true])\n"
+                  "                XtdbFilter(condition=[LIKE($6, '%Customer%Complaints%')])\n"
+                  "                  XtdbTableScan(table=[[xtdb, SUPPLIER]])\n")
              (explain q))))
   (t/is true))
 
@@ -326,22 +328,23 @@
               "      l2.l_partkey = p.p_partkey\n"
               ")")]
     (query q)
-    (t/is (= (str "EnumerableCalc(expr#0=[{inputs}], expr#1=[7.0:DECIMAL(2, 1)], expr#2=[/($t0, $t1)], AVG_YEARLY=[$t2])\n"
-                  "  EnumerableAggregate(group=[{}], agg#0=[SUM($7)])\n"
-                  "    EnumerableHashJoin(condition=[AND(=($0, $2), <($6, *(0.2:DECIMAL(2, 1), $1)))], joinType=[inner])\n"
-                  "      EnumerableCalc(expr#0..2=[{inputs}], expr#3=[0], expr#4=[=($t2, $t3)], expr#5=[null:DOUBLE], expr#6=[CASE($t4, $t5, $t1)], expr#7=[/($t6, $t2)], L_PARTKEY=[$t0], $f1=[$t7])\n"
-                  "        EnumerableAggregate(group=[{1}], agg#0=[$SUM0($4)], agg#1=[COUNT($4)])\n"
-                  "          CruxToEnumerableConverter\n"
-                  "            CruxFilter(condition=[IS NOT NULL($1)])\n"
-                  "              CruxTableScan(table=[[crux, LINEITEM]])\n"
-                  "      CruxToEnumerableConverter\n"
-                  "        CruxJoin(condition=[=($0, $3)], joinType=[inner])\n"
-                  "          CruxProject(P_PARTKEY=[$0], P_BRAND=[$3], P_CONTAINER=[$6])\n"
-                  "            CruxFilter(condition=[AND(=($3, 'Brand#13'), =($6, 'JUMBO CAN'))])\n"
-                  "              CruxTableScan(table=[[crux, PART]])\n"
-                  "          CruxProject(L_PARTKEY=[$1], L_QUANTITY=[$4], L_EXTENDEDPRICE=[$5])\n"
-                  "            CruxTableScan(table=[[crux, LINEITEM]])\n")
-             (explain q))))
+    (t/is (= (str/trim "
+EnumerableCalc(expr#0=[{inputs}], expr#1=[7.0:DECIMAL(2, 1)], expr#2=[/($t0, $t1)], AVG_YEARLY=[$t2])
+  EnumerableAggregate(group=[{}], agg#0=[SUM($4)])
+    EnumerableHashJoin(condition=[AND(=($0, $5), <($3, *(0.2:DECIMAL(2, 1), $1)))], joinType=[inner])
+      EnumerableCalc(expr#0..2=[{inputs}], expr#3=[0], expr#4=[=($t2, $t3)], expr#5=[null:DOUBLE], expr#6=[CASE($t4, $t5, $t1)], expr#7=[/($t6, $t2)], L_PARTKEY=[$t0], $f1=[$t7])
+        EnumerableAggregate(group=[{1}], agg#0=[$SUM0($4)], agg#1=[COUNT($4)])
+          XtdbToEnumerableConverter
+            XtdbFilter(condition=[IS NOT NULL($1)])
+              XtdbTableScan(table=[[xtdb, LINEITEM]])
+      XtdbToEnumerableConverter
+        XtdbJoin(condition=[=($3, $0)], joinType=[inner])
+          XtdbProject(L_PARTKEY=[$1], L_QUANTITY=[$4], L_EXTENDEDPRICE=[$5])
+            XtdbTableScan(table=[[xtdb, LINEITEM]])
+          XtdbProject(P_PARTKEY=[$0], P_BRAND=[$3], P_CONTAINER=[$6])
+            XtdbFilter(condition=[AND(=($3, 'Brand#13'), =($6, 'JUMBO CAN'))])
+              XtdbTableScan(table=[[xtdb, PART]])")
+             (str/trim (explain q)))))
   (t/is true))
 
 (t/deftest test-018

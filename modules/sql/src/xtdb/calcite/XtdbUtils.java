@@ -1,11 +1,11 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
 import org.apache.calcite.linq4j.tree.Expressions;
 import org.apache.calcite.linq4j.tree.Expression;
 
-public class CruxUtils {
+public class XtdbUtils {
     private static IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
 
     public static IFn resolve(String symbolName) {
@@ -14,7 +14,7 @@ public class CruxUtils {
 
     public static IFn resolveWithErrorLogging(String symbolName) {
         IFn fn = (IFn) requiringResolve.invoke(Clojure.read(symbolName));
-        IFn helper = (IFn) requiringResolve.invoke(Clojure.read("crux.calcite/clojure-helper-fn"));
+        IFn helper = (IFn) requiringResolve.invoke(Clojure.read("xtdb.calcite/clojure-helper-fn"));
         return (IFn) helper.invoke(fn);
     }
 

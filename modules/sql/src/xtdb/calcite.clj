@@ -1,4 +1,4 @@
-(ns crux.calcite
+(ns xtdb.calcite
   (:require [clojure.edn :as edn]
             [clojure.instant :as inst]
             [clojure.spec.alpha :as s]
@@ -6,13 +6,13 @@
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
             [crux.api :as xt]
-            [crux.calcite.types]
+            [xtdb.calcite.types]
             [crux.error :as err]
             [crux.system :as sys]
             [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json])
   (:import clojure.lang.Symbol
-           [crux.calcite CruxCalcitePrepareImpl$PreparedSQL CruxTable]
-           [crux.calcite.types ArbitraryFn SQLCondition SQLPredicate]
+           [xtdb.calcite XtdbCalcitePrepareImpl$PreparedSQL XtdbJdbcDriver XtdbTable]
+           [xtdb.calcite.types ArbitraryFn SQLCondition SQLPredicate]
            [java.lang.reflect Field Method]
            [java.sql DriverManager Types]
            [java.util List Properties UUID WeakHashMap]
@@ -35,10 +35,10 @@
            org.apache.calcite.sql.type.SqlTypeName
            [org.apache.calcite.util BuiltInMethod Pair]))
 
-(defonce ^WeakHashMap !crux-nodes (WeakHashMap.))
+(defonce ^WeakHashMap !xtdb-nodes (WeakHashMap.))
 
 (defrecord PreparedSQL [query params]
-  CruxCalcitePrepareImpl$PreparedSQL
+  XtdbCalcitePrepareImpl$PreparedSQL
   (query [_] query)
   (internalParameters [_] params))
 
@@ -99,7 +99,7 @@
    SqlKind/GREATER_THAN_OR_EQUAL '>=
    SqlKind/LESS_THAN '<
    SqlKind/LESS_THAN_OR_EQUAL '<=
-   SqlKind/LIKE 'crux.calcite/-like
+   SqlKind/LIKE 'xtdb.calcite/-like
    SqlKind/IS_NULL 'nil?
    SqlKind/IS_NOT_NULL 'boolean})
 
@@ -107,8 +107,8 @@
   {SqlKind/TIMES '*
    SqlKind/PLUS '+
    SqlKind/MINUS '-
-   SqlKind/DIVIDE 'crux.calcite/-divide
-   SqlKind/MOD 'crux.calcite/-mod})
+   SqlKind/DIVIDE 'xtdb.calcite/-divide
+   SqlKind/MOD 'xtdb.calcite/-mod})
 
 (declare ->ast)
 
@@ -119,11 +119,11 @@
 
 (defn- ->lambda-expression [^MethodCallExpression m parameter-expressions operands]
   (let [l (Expressions/lambda m ^Iterable parameter-expressions)]
-    (ArbitraryFn. 'crux.calcite/-lambda (cons l operands))))
+    (ArbitraryFn. 'xtdb.calcite/-lambda (cons l operands))))
 
 (defn- ^MethodCallExpression ->method-call-expression [m parameter-expressions]
   (if (instance? Method m)
-    (crux.calcite.CruxUtils/callExpression m (into-array Expression parameter-expressions))
+    (xtdb.calcite.XtdbUtils/callExpression m (into-array Expression parameter-expressions))
     (EnumUtils/call SqlFunctions m parameter-expressions)))
 
 (defn- method->lambda [^RexCall n schema m]
@@ -204,7 +204,7 @@
         (throw (err/illegal-arg :cant-understand-call
                                 {::err/message (str "Can't understand call " n)})))))
 
-(def ^:private crux-custom-fns
+(def ^:private xtdb-custom-fns
   {"KEYWORD" keyword
    "UUID" #(UUID/fromString %)})
 
@@ -214,7 +214,7 @@
   (or (when-let [op (pred-fns (.getKind n))]
         (SQLPredicate. op (map #(->ast % schema) (.-operands ^RexCall n))))
 
-      (when-let [custom-fn (and (= SqlKind/OTHER_FUNCTION (.getKind n)) (crux-custom-fns (str (.-op ^RexCall n))))]
+      (when-let [custom-fn (and (= SqlKind/OTHER_FUNCTION (.getKind n)) (xtdb-custom-fns (str (.-op ^RexCall n))))]
         (custom-fn (.getValue2 ^RexLiteral (first (.-operands ^RexCall n)))))
 
       (when-let [op (get arithmetic-fns (.getKind n))]
@@ -466,7 +466,7 @@
                             :where [[e :xt.sql.table/name]]}))))
 
 (defn create-schema [parent-schema name operands]
-  (let [node (get !crux-nodes (get operands "XTDB_NODE"))
+  (let [node (get !xtdb-nodes (get operands "XTDB_NODE"))
         scan-only? (get operands "SCAN_ONLY")]
     (assert node)
     (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
@@ -476,16 +476,16 @@
                 (do (when-not (s/valid? ::table table-schema)
                       (throw (IllegalStateException. (str "Invalid table schema: " (prn-str table-schema)))))
                     [(string/upper-case (:xt.sql.table/name table-schema))
-                     (CruxTable. node table-schema scan-only?)])))))))
+                     (XtdbTable. node table-schema scan-only?)])))))))
 
 (def ^:private model
   {:version "1.0",
-   :defaultSchema "crux",
-   :schemas [{:name "crux",
+   :defaultSchema "xtdb",
+   :schemas [{:name "xtdb",
               :type "custom",
-              :factory "crux.calcite.CruxSchemaFactory",
-              :functions [{:name "KEYWORD", :className "crux.calcite.KeywordFn"}
-                          {:name "UUID", :className "crux.calcite.UuidFn"}]}]})
+              :factory "xtdb.calcite.XtdbSchemaFactory",
+              :functions [{:name "KEYWORD", :className "xtdb.calcite.KeywordFn"}
+                          {:name "UUID", :className "xtdb.calcite.UuidFn"}]}]})
 
 (defn- model-properties [node-uuid scan-only?]
   (doto (Properties.)
@@ -498,29 +498,29 @@
 (defrecord CalciteAvaticaServer [^HttpServer server node-uuid]
   java.io.Closeable
   (close [this]
-    (.remove !crux-nodes node-uuid)
+    (.remove !xtdb-nodes node-uuid)
     (.stop server)))
 
-(defonce registration (java.sql.DriverManager/registerDriver (crux.calcite.CruxJdbcDriver.)))
+(defonce registration (java.sql.DriverManager/registerDriver (XtdbJdbcDriver.)))
 
 (defn ^java.sql.Connection jdbc-connection
   ([node] (jdbc-connection node false))
   ([node scan-only?]
    (assert node)
-   (DriverManager/getConnection "jdbc:crux:" (-> node :!system deref ::server :node-uuid (model-properties scan-only?)))))
+   (DriverManager/getConnection "jdbc:xtdb:" (-> node :!system deref ::server :node-uuid (model-properties scan-only?)))))
 
 (defn ->server {::sys/args {:port {:doc "JDBC Server Port"
                                    :default 1501
                                    :spec ::sys/nat-int}
-                            :scan-only? {:doc "Crux Table Scan Only"
+                            :scan-only? {:doc "XTDB Table Scan Only"
                                          :default false
                                          :spec ::sys/boolean}}
                 ::sys/deps {:node :xt/node}}
   [{:keys [node port scan-only?]}]
   (let [node-uuid (str (UUID/randomUUID))]
-    (.put !crux-nodes node-uuid node)
+    (.put !xtdb-nodes node-uuid node)
     (let [server (.build (doto (HttpServer$Builder.)
-                           (.withHandler (LocalService. (JdbcMeta. "jdbc:crux:" (model-properties node-uuid scan-only?)))
+                           (.withHandler (LocalService. (JdbcMeta. "jdbc:xtdb:" (model-properties node-uuid scan-only?)))
                                          org.apache.calcite.avatica.remote.Driver$Serialization/PROTOBUF)
                            (.withPort port)))]
       (.start server)

@@ -1,4 +1,4 @@
-package crux.calcite;
+package xtdb.calcite;
 
 import clojure.lang.Keyword;
 
