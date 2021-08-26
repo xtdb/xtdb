@@ -45,7 +45,7 @@
 (t/deftest override-module
   (with-open [node
               ;; tag::override-module[]
-              (crux/start-node {:xt/document-store {:xt/module 'crux.s3/->document-store
+              (crux/start-node {:xt/document-store {:xt/module 'xtdb.s3/->document-store
                                                     :bucket "my-bucket"
                                                     :prefix "my-prefix"}})
               ;; end::override-module[]

@@ -1,8 +1,8 @@
-(ns crux.s3.checkpoint-test
+(ns xtdb.s3.checkpoint-test
   (:require [clojure.test :as t]
             [crux.fixtures.checkpoint-store :as fix.cp-store]
-            [crux.s3-test :as s3t]
-            [crux.s3.checkpoint :as s3c]
+            [xtdb.s3-test :as s3t]
+            [xtdb.s3.checkpoint :as s3c]
             [crux.system :as sys])
   (:import java.util.UUID))
 

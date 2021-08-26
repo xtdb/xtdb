@@ -29,7 +29,7 @@ pom.xml::
 
 == Using S3
 
-Replace the implementation of the document store with `+crux.s3/->document-store+`
+Replace the implementation of the document store with `+xtdb.s3/->document-store+`
 
 [tabs]
 ====
@@ -39,7 +39,7 @@ JSON::
 ----
 {
   "xt/document-store": {
-    "xt/module": "crux.s3/->document-store",
+    "xt/module": "xtdb.s3/->document-store",
     "bucket": "your-bucket",
     ...
   },
@@ -50,7 +50,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'crux.s3/->document-store
+{:xt/document-store {:xt/module 'xtdb.s3/->document-store
                      :bucket "your-bucket"
                      ...}}
 ----
@@ -59,7 +59,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module crux.s3/->document-store
+{:xt/document-store {:xt/module xtdb.s3/->document-store
                      :bucket "your-bucket"
                      ...}}
 ----
@@ -84,7 +84,7 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on you
 ;; under :xt/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:xt/module 'crux.s3.checkpoint-store/->checkpoint-store
+                :store {:xt/module 'xtdb.s3.checkpoint-store/->checkpoint-store
                         :configurator ...
                         :bucket "..."
                         :prefix "..."}}
@@ -102,7 +102,7 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on you
 WARNING: This is unfortunately currently only accessible from Clojure - we plan to expose it outside of Clojure soon.
 
 While the above is sufficient to get `crux-s3` working out of the box, there are a plethora of configuration options in S3 - how to get credentials, object properties, serialisation of the documents, etc.
-We expose these via the https://github.com/juxt/crux/blob/master/crux-s3/src/crux/s3/S3Configurator.java[`crux.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
+We expose these via the https://github.com/juxt/crux/blob/master/crux-s3/src/crux/s3/S3Configurator.java[`xtdb.s3.S3Configurator`] interface - you can supply an instance using the following in your node configuration.
 
 Through this interface, you can supply an `S3AsyncClient` for crux-s3 to use, adapt the `PutObjectRequest`/`GetObjectRequest` as required, and choose the serialisation format.
 By default, we get credentials through the usual AWS credentials provider, and store documents using https://github.com/ptaoussanis/nippy[Nippy].
@@ -113,7 +113,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'crux.s3/->document-store
+{:xt/document-store {:xt/module 'xtdb.s3/->document-store
                      :configurator (fn [_]
                                      (reify S3Configurator
                                        ...)

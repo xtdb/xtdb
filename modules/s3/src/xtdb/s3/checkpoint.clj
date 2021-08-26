@@ -1,5 +1,5 @@
-(ns crux.s3.checkpoint
-  (:require [crux.s3 :as s3]
+(ns xtdb.s3.checkpoint
+  (:require [xtdb.s3 :as s3]
             [crux.checkpoint :as cp]
             [clojure.string :as string]
             [clojure.java.io :as io]
@@ -8,7 +8,7 @@
             [clojure.edn :as edn]
             [clojure.set :as set]
             [crux.system :as sys])
-  (:import (crux.s3 S3Configurator)
+  (:import (xtdb.s3 S3Configurator)
            (clojure.lang MapEntry)
            (java.io Closeable File)
            (java.nio.file Path Paths)

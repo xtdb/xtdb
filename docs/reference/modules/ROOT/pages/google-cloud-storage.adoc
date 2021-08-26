@@ -31,7 +31,7 @@ pom.xml::
 
 == Using GCS
 
-Replace the implementation of the document store with `+crux.google.cloud-storage/->document-store+`
+Replace the implementation of the document store with `+xtdb.google.cloud-storage/->document-store+`
 
 [tabs]
 ====
@@ -41,7 +41,7 @@ JSON::
 ----
 {
   "xt/document-store": {
-    "xt/module": "crux.google.cloud-storage/->document-store",
+    "xt/module": "xtdb.google.cloud-storage/->document-store",
     "root-path": "gs://bucket/prefix"
   },
 }
@@ -51,7 +51,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'crux.google.cloud-storage/->document-store
+{:xt/document-store {:xt/module 'xtdb.google.cloud-storage/->document-store
                        :root-path "gs://bucket/prefix"}}
 ----
 
@@ -59,7 +59,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module crux.google.cloud-storage/->document-store
+{:xt/document-store {:xt/module xtdb.google.cloud-storage/->document-store
                        :root-path "gs://bucket/prefix"}}
 ----
 ====
@@ -85,7 +85,7 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on GCS
 ;; under :xt/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:xt/module 'crux.google.cloud-storage/->checkpoint-store
+                :store {:xt/module 'xtdb.google.cloud-storage/->checkpoint-store
                         :path "gs://bucket/prefix"}}
 ----
 

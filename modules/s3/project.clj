@@ -38,7 +38,7 @@
                   "-Werror"
                   "-proc:none"]
 
-  :javadoc-opts {:package-names ["crux"]
+  :javadoc-opts {:package-names ["xtdb"]
                  :output-dir "target/javadoc/out"
                  :additional-args ["-windowtitle" "Crux S3 Javadoc"
                                    "-quiet"

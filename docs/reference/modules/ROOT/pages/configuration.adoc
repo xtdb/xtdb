@@ -132,7 +132,7 @@ include::example$test/crux/docs/examples/configuration/config.edn[indent=0]
 === Overriding the module implementation
 
 To override the underlying implementation, specify the factory function of the new implementation.
-For example, using S3's `+crux.s3/->document-store+` factory:
+For example, using S3's `+xtdb.s3/->document-store+` factory:
 
 [tabs]
 ====

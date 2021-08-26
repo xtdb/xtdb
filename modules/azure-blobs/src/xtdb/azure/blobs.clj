@@ -1,4 +1,4 @@
-(ns crux.azure.blobs
+(ns xtdb.azure.blobs
   (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [crux.db :as db]

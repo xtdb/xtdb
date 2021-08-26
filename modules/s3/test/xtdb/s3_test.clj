@@ -1,19 +1,19 @@
-(ns crux.s3-test
+(ns xtdb.s3-test
   (:require [clojure.test :as t]
             [crux.fixtures.document-store :as fix.ds]
-            [crux.s3 :as s3]
+            [xtdb.s3 :as s3]
             [crux.system :as sys])
-  (:import crux.s3.S3Configurator
+  (:import xtdb.s3.S3Configurator
            java.util.UUID
            software.amazon.awssdk.regions.Region
            software.amazon.awssdk.services.s3.S3AsyncClient))
 
 (def test-s3-bucket
-  (or (System/getProperty "crux.s3.test-bucket")
+  (or (System/getProperty "xtdb.s3.test-bucket")
       (System/getenv "CRUX_S3_TEST_BUCKET")))
 
 (def test-s3-region
-  (or (System/getProperty "crux.s3.test-region")
+  (or (System/getProperty "xtdb.s3.test-region")
       (System/getenv "CRUX_S3_TEST_REGION")))
 
 (def ^:dynamic ^S3AsyncClient *client*)

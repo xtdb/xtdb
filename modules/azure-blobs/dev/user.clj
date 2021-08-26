@@ -1,6 +1,6 @@
 (ns user
   (:require [crux.api :as crux]
-            [crux.azure.blobs :as azb]))
+            [xtdb.azure.blobs :as azb]))
 
 (def init-data
   [{:xt/id :country/denmark

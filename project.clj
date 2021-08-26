@@ -1,28 +1,28 @@
-(def crux-version (or (System/getenv "CRUX_VERSION") "dev-SNAPSHOT"))
+(def xt-version (or (System/getenv "XTDB_VERSION") "dev-SNAPSHOT"))
 
-(defproject com.xtdb/xtdb-dev crux-version
+(defproject com.xtdb/xtdb-dev xt-version
   :url "https://github.com/juxt/crux"
   :license {:name "The MIT License"
             :url "http://opensource.org/licenses/MIT"}
 
   :managed-dependencies
-  [[com.xtdb/xtdb-core ~crux-version]
-   [com.xtdb/xtdb-rocksdb ~crux-version]
-   [com.xtdb/xtdb-lmdb ~crux-version]
-   [com.xtdb/xtdb-kafka ~crux-version]
-   [com.xtdb/xtdb-kafka-connect ~crux-version]
-   [com.xtdb/xtdb-kafka-embedded ~crux-version]
-   [com.xtdb/xtdb-jdbc ~crux-version]
-   [com.xtdb/xtdb-metrics ~crux-version]
-   [com.xtdb/xtdb-http-server ~crux-version]
-   [com.xtdb/xtdb-http-client ~crux-version]
-   [com.xtdb.xt-labs/xt-rdf ~crux-version]
-   [com.xtdb/xtdb-sql ~crux-version]
-   [com.xtdb/xtdb-azure-blobs ~crux-version]
-   [com.xtdb/xtdb-google-cloud-storage ~crux-version]
-   [com.xtdb/xtdb-lucene ~crux-version]
-   [com.xtdb/xtdb-test ~crux-version]
-   [com.xtdb/xtdb-bench ~crux-version]]
+  [[com.xtdb/xtdb-core ~xt-version]
+   [com.xtdb/xtdb-rocksdb ~xt-version]
+   [com.xtdb/xtdb-lmdb ~xt-version]
+   [com.xtdb/xtdb-kafka ~xt-version]
+   [com.xtdb/xtdb-kafka-connect ~xt-version]
+   [com.xtdb/xtdb-kafka-embedded ~xt-version]
+   [com.xtdb/xtdb-jdbc ~xt-version]
+   [com.xtdb/xtdb-metrics ~xt-version]
+   [com.xtdb/xtdb-http-server ~xt-version]
+   [com.xtdb/xtdb-http-client ~xt-version]
+   [com.xtdb.xt-labs/xt-rdf ~xt-version]
+   [com.xtdb/xtdb-sql ~xt-version]
+   [com.xtdb/xtdb-azure-blobs ~xt-version]
+   [com.xtdb/xtdb-google-cloud-storage ~xt-version]
+   [com.xtdb/xtdb-lucene ~xt-version]
+   [com.xtdb/xtdb-test ~xt-version]
+   [com.xtdb/xtdb-bench ~xt-version]]
 
   :dependencies
   [[org.clojure/clojure "1.10.3"]
@@ -50,7 +50,7 @@
    [integrant "0.8.0"]
    [integrant/repl "0.3.1"]
 
-   ;; crux metrics dependencies
+   ;; metrics dependencies
    ;; JMX Deps
    [io.dropwizard.metrics/metrics-jmx "4.1.2"]
 
@@ -65,10 +65,10 @@
    [io.prometheus/simpleclient_hotspot "0.8.1"]
    [clj-commons/iapetos "0.1.9"]
 
-   ;; crux-lucene test dep
+   ;; lucene test dep
    [org.apache.lucene/lucene-analyzers-common "8.9.0"]
 
-   ;; crux-test test dep
+   ;; test test dep
    [criterium "0.4.5"]
 
    ;; dependency conflict resolution
@@ -87,10 +87,10 @@
              "-Dclojure.spec.check-asserts=true"]
 
   :profiles {:attach-yourkit {:jvm-opts ["-agentpath:/opt/yourkit/bin/linux-x86-64/libyjpagent.so"]}
-             :with-s3-tests {:jvm-opts ["-Dcrux.s3.test-bucket=crux-s3-test"]}
-             :with-azure-blobs-tests {:jvm-opts ["-Dcrux.azure.blobs.test-storage-account=crux-azure-blobs-test-storage-account"
-                                                 "-Dcrux.azure.blobs.test-container=crux-azure-blobs-test-container"]}
-             :with-google-cloud-storage-test {:jvm-opts ["-Dcrux.google.cloud-storage-test.bucket=crux-gcs-test"]}
+             :with-s3-tests {:jvm-opts ["-Dxtdb.s3.test-bucket=xtdb-s3-test"]}
+             :with-azure-blobs-tests {:jvm-opts ["-Dxtdb.azure.blobs.test-storage-account=xtdb-azure-blobs-test-storage-account"
+                                                 "-Dxtdb.azure.blobs.test-container=xtdb-azure-blobs-test-container"]}
+             :with-google-cloud-storage-test {:jvm-opts ["-Dxtdb.google.cloud-storage-test.bucket=xtdb-gcs-test"]}
              :with-chm-add-opens {:jvm-opts ["--add-opens" "java.base/java.util.concurrent=ALL-UNNAMED"]}}
 
   :pedantic? :warn

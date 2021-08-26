@@ -10,7 +10,7 @@
             [crux.soak.config :as config]
             [crux.checkpoint :as cp]
             [crux.kafka :as k]
-            [crux.s3.checkpoint :as s3.cp]
+            [xtdb.s3.checkpoint :as s3.cp]
             [hiccup2.core :refer [html]]
             [integrant.core :as ig]
             [integrant.repl :as ir]

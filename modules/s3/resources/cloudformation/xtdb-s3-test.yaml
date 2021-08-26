@@ -21,8 +21,8 @@ Resources:
   ReadWriteIAMPolicy:
     Type: AWS::IAM::ManagedPolicy
     Properties:
-      ManagedPolicyName: read-write-crux-test-s3-bucket
-      Path: '/crux/'
+      ManagedPolicyName: read-write-xtdb-test-s3-bucket
+      Path: '/xtdb/'
       PolicyDocument:
         Version: 2012-10-17
         Statement:

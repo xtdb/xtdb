@@ -31,7 +31,7 @@ pom.xml::
 
 == Using Azure Blobs
 
-Replace the implementation of the document store with `+crux.azure.blobs/->document-store+`
+Replace the implementation of the document store with `+xtdb.azure.blobs/->document-store+`
 
 [tabs]
 ====
@@ -41,7 +41,7 @@ JSON::
 ----
 {
   "xt/document-store": {
-    "xt/module": "crux.azure.blobs/->document-store",
+    "xt/module": "xtdb.azure.blobs/->document-store",
     "sas-token": "your-sas-token",
     "storage-account": "your-storage-account",
     "container": "your-container-name"
@@ -53,7 +53,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'crux.azure.blobs/->document-store
+{:xt/document-store {:xt/module 'xtdb.azure.blobs/->document-store
                      :sas-token "your-sas-token"
                      :storage-account "your-storage-account"
                      :container "your-container-name"}}
@@ -63,7 +63,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module crux.azure.blobs/->document-store
+{:xt/document-store {:xt/module xtdb.azure.blobs/->document-store
                      :sas-token "your-sas-token"
                      :storage-account "your-storage-account"
                      :container "your-container-name"}}

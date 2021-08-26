@@ -1,4 +1,4 @@
-(ns crux.google.cloud-storage
+(ns xtdb.google.cloud-storage
   (:require [crux.system :as sys]
             [crux.document-store :as ds]
             [crux.checkpoint :as cp]))

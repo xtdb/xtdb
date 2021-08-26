@@ -52,7 +52,7 @@ class KConfigurationTest {
         // tag::override-module[]
         val cruxNode = Crux.startNode { n ->
             n.with("xt/document-store") { docStore ->
-                docStore.module("crux.s3/->document-store")
+                docStore.module("xtdb.s3/->document-store")
                 docStore["bucket"] = "my-bucket"
                 docStore["prefix"] = "my-prefix"
             }

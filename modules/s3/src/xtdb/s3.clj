@@ -1,4 +1,4 @@
-(ns crux.s3
+(ns xtdb.s3
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
@@ -7,7 +7,7 @@
             [crux.io :as cio]
             [crux.system :as sys])
   (:import clojure.lang.MapEntry
-           crux.s3.S3Configurator
+           xtdb.s3.S3Configurator
            java.io.Closeable
            java.util.concurrent.CompletableFuture
            java.util.function.BiFunction

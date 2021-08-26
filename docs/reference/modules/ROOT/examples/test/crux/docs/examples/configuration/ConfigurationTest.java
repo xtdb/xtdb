@@ -69,7 +69,7 @@ public class ConfigurationTest {
         // tag::override-module[]
         ICruxAPI cruxNode = Crux.startNode(n -> {
             n.with("xt/document-store", docStore -> {
-                docStore.module("crux.s3/->document-store");
+                docStore.module("xtdb.s3/->document-store");
                 docStore.set("bucket", "my-bucket");
                 docStore.set("prefix", "my-prefix");
             });

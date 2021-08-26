@@ -1,5 +1,5 @@
-(ns crux.google.cloud-storage-test
-  (:require [crux.google.cloud-storage :as gcs]
+(ns xtdb.google.cloud-storage-test
+  (:require [xtdb.google.cloud-storage :as gcs]
             [clojure.test :as t]
             [crux.fixtures.document-store :as fix.ds]
             [crux.fixtures.checkpoint-store :as fix.cp]
@@ -7,7 +7,7 @@
   (:import java.util.UUID))
 
 (def test-bucket
-  (System/getProperty "crux.google.cloud-storage-test.bucket"))
+  (System/getProperty "xtdb.google.cloud-storage-test.bucket"))
 
 (t/use-fixtures :once
   (fn [f]

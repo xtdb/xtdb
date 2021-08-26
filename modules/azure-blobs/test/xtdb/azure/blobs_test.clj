@@ -1,5 +1,5 @@
-(ns crux.azure.blobs-test
-  (:require [crux.azure.blobs :as azb]
+(ns xtdb.azure.blobs-test
+  (:require [xtdb.azure.blobs :as azb]
             [clojure.test :as t]
             [crux.fixtures.document-store :as fix.ds]
             [crux.system :as sys]))
@@ -8,11 +8,11 @@
   (System/getenv "CRUX_AZURE_BLOBS_TEST_SAS_TOKEN"))
 
 (def test-azure-blobs-storage-account
-  (or (System/getProperty "crux.azure.blobs.test-storage-account")
+  (or (System/getProperty "xtdb.azure.blobs.test-storage-account")
       (System/getenv "CRUX_AZURE_BLOBS_TEST_STORAGE_ACCOUNT")))
 
 (def test-azure-blobs-container
-  (or (System/getProperty "crux.azure.blobs.test-container")
+  (or (System/getProperty "xtdb.azure.blobs.test-container")
       (System/getenv "CRUX_AZURE_BLOBS_TEST_CONTAINER")))
 
 (t/deftest test-blobs-doc-store
