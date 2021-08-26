@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.soak.config
+(ns ^:no-doc xtdb.soak.config
   (:require [xtdb.kafka :as k]
             [clojure.string :as string]
             [nomad.config :as n])
@@ -24,7 +24,7 @@
                            ";")
    "security.protocol" "SASL_SSL"})
 
-(defn crux-node-config []
+(defn xt-node-config []
   {::k/kafka-config {:bootstrap-servers (:broker confluent-creds)
                      :properties-map (kafka-properties)}
    :xt/tx-log {:kafka-config ::k/kafka-config

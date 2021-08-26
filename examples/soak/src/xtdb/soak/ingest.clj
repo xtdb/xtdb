@@ -1,9 +1,9 @@
-(ns ^:no-doc crux.soak.ingest
+(ns ^:no-doc xtdb.soak.ingest
   (:require [clj-http.client :as http]
             [clojure.string :as string]
             [crux.api :as xt]
             [xtdb.kafka :as k]
-            [crux.soak.config :as config]
+            [xtdb.soak.config :as config]
             [nomad.config :as n])
   (:import java.time.Duration
            java.util.Date))
@@ -81,16 +81,16 @@
 
   (let [mode (first args)]
     (with-open [node (xt/new-ingest-client [{:xt/tx-log {:xt/module `k/->tx-log}
-                                               :xt/document-store {:xt/module `k/->ingest-only-document-store}}
-                                              (config/crux-node-config)])]
+                                             :xt/document-store {:xt/module `k/->ingest-only-document-store}}
+                                            (config/xt-node-config)])]
       (xt/submit-tx node
-                      (case mode
-                        "current" (->> (vals locations)
-                                       (map fetch-current-weather)
-                                       (map current-resp->put))
+                    (case mode
+                      "current" (->> (vals locations)
+                                     (map fetch-current-weather)
+                                     (map current-resp->put))
 
-                        "forecast" (->> (vals locations)
-                                        (map fetch-weather-forecast)
-                                        (mapcat forecast-resp->puts))))))
+                      "forecast" (->> (vals locations)
+                                      (map fetch-weather-forecast)
+                                      (mapcat forecast-resp->puts))))))
 
   (shutdown-agents))

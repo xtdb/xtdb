@@ -1,4 +1,4 @@
-(defproject juxt/console-demo "<inherited>"
+(defproject com.xtdb.examples/console-demo "<inherited>"
   :plugins [[lein-parent "0.3.8"]]
 
   :parent-project {:path "../../project.clj"
@@ -15,7 +15,7 @@
                  [integrant "0.8.0"]
                  [integrant/repl "0.3.1"]]
 
-  :uberjar-name "crux-console-demo.jar"
-  :aot [crux.console-demo.main]
-  :main crux.console-demo.main
+  :uberjar-name "xtdb-console-demo.jar"
+  :aot [xtdb.console-demo.main]
+  :main xtdb.console-demo.main
   :pedantic? :warn)

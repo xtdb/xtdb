@@ -1,4 +1,4 @@
-(ns crux.console-demo.main
+(ns xtdb.console-demo.main
   (:require [crux.api :as xt]
             [integrant.core :as ig]
             [integrant.repl :as ir]
@@ -8,7 +8,7 @@
   (:import java.io.Closeable)
   (:gen-class))
 
-(defmethod ig/init-key :console-demo/crux-node [_ node-opts]
+(defmethod ig/init-key :console-demo/xtdb-node [_ node-opts]
   (let [node (doto (xt/start-node node-opts) (xt/sync))
         submit-data? (nil? (xt/entity (xt/db node) :tmdb/cast-65731))]
     (when submit-data?
@@ -30,11 +30,11 @@
           (prn "Sample Data Loaded!"))))
     node))
 
-(defmethod ig/halt-key! :console-demo/crux-node [_ ^Closeable node]
+(defmethod ig/halt-key! :console-demo/xtdb-node [_ ^Closeable node]
   (.close node))
 
 (defn config []
-  {:console-demo/crux-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/tx-log"}}
+  {:console-demo/xtdb-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/tx-log"}}
                             :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/doc-store"}}
                             :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/indices"}}
                             :xtdb.http-server/server {:read-only? true

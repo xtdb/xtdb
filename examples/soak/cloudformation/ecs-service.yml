@@ -106,7 +106,7 @@ Resources:
             - ContainerPort: 8080
           Command:
             - "-m"
-            - "crux.soak.main"
+            - "xtdb.soak.main"
           LogConfiguration:
             LogDriver: awslogs
             Options:

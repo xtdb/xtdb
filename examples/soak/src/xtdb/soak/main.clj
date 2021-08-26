@@ -1,4 +1,4 @@
-(ns ^:no-doc crux.soak.main
+(ns ^:no-doc xtdb.soak.main
   (:require [bidi.bidi :as bidi]
             [bidi.ring :as br]
             [clojure.java.io :as io]
@@ -7,7 +7,7 @@
             [clojure.tools.logging :as log]
             [crux.api :as xt]
             [xtdb.rocksdb :as rocksdb]
-            [crux.soak.config :as config]
+            [xtdb.soak.config :as config]
             [crux.checkpoint :as cp]
             [xtdb.kafka :as k]
             [xtdb.s3.checkpoint :as s3.cp]
@@ -116,7 +116,7 @@
       [:div#forecasts
        (->> weather-forecast (map render-weather-report))]]])))
 
-(defn weather-handler [req {:keys [crux-node]}]
+(defn weather-handler [req {:keys [xt-node]}]
   (let [location-id (get-in req [:query-params "location"])
         valid-time (-> (ZonedDateTime/of (or (some-> (get-in req [:query-params "date"])
                                                      (LocalDate/parse))
@@ -129,12 +129,12 @@
                        (Date/from))]
     (resp/response
      (render-weather-page {:location-id location-id
-                           :location-name (-> (xt/entity (xt/db crux-node)
-                                                          (keyword (str location-id "-current")))
+                           :location-name (-> (xt/entity (xt/db xt-node)
+                                                         (keyword (str location-id "-current")))
                                               (:location-name))
                            :valid-time valid-time
-                           :current-weather (get-current-weather crux-node location-id valid-time)
-                           :weather-forecast (get-weather-forecast crux-node location-id valid-time)}))))
+                           :current-weather (get-current-weather xt-node location-id valid-time)
+                           :weather-forecast (get-weather-forecast xt-node location-id valid-time)}))))
 
 (defn render-homepage [location-names]
   (str
@@ -144,7 +144,7 @@
      [:link {:rel "stylesheet" :type "text/css" :href "/resources/style.css"}]]
     [:body
      [:div#homepage
-      [:h1 "Crux Weather Service"]
+      [:h1 "XTDB Weather Service"]
       [:h2 "Locations"]
       [:form {:target "_blank" :action "/weather.html"}
        [:p
@@ -155,14 +155,14 @@
                  location-name]))]
        [:p [:input {:type "submit" :value "View Location"}]]]]])))
 
-(defn homepage-handler [req {:keys [crux-node]}]
-  (let [location-names (->> (xt/q (xt/db crux-node) '{:find [l]
-                                                        :where [[e :location-name l]]})
+(defn homepage-handler [req {:keys [xt-node]}]
+  (let [location-names (->> (xt/q (xt/db xt-node) '{:find [l]
+                                                    :where [[e :location-name l]]})
                             (map first))]
     (resp/response (render-homepage location-names))))
 
-(defn status-handler [req {:keys [crux-node]}]
-  (let [status (xt/status crux-node)]
+(defn status-handler [req {:keys [xt-node]}]
+  (let [status (xt/status xt-node)]
     {:status (if (or (not (contains? status :crux.zk/zk-active?))
                      (:crux.zk/zk-active? status))
                200
@@ -170,27 +170,27 @@
      :headers {"Content-Type" "application/edn"}
      :body (pr-str status)}))
 
-(defn bidi-handler [{:keys [crux-node]}]
+(defn bidi-handler [{:keys [xt-node]}]
   (br/make-handler routes
-                   (some-fn {:homepage #(homepage-handler % {:crux-node crux-node})
-                             :weather #(weather-handler % {:crux-node crux-node})
-                             :status #(status-handler % {:crux-node crux-node})}
+                   (some-fn {:homepage #(homepage-handler % {:xt-node xt-node})
+                             :weather #(weather-handler % {:xt-node xt-node})
+                             :status #(status-handler % {:xt-node xt-node})}
                             identity
                             (constantly (constantly (resp/not-found "Not found"))))))
 
-(defmethod ig/init-key :soak/crux-node [_ node-opts]
+(defmethod ig/init-key :soak/xt-node [_ node-opts]
   (let [node (xt/start-node node-opts)]
     (log/info "Loading Weather Data...")
     (xt/sync node)
     (log/info "Weather Data Loaded!")
     node))
 
-(defmethod ig/halt-key! :soak/crux-node [_ ^Closeable node]
+(defmethod ig/halt-key! :soak/xt-node [_ ^Closeable node]
   (.close node))
 
-(defmethod ig/init-key :soak/jetty-server [_ {:keys [crux-node server-opts]}]
+(defmethod ig/init-key :soak/jetty-server [_ {:keys [xt-node server-opts]}]
   (log/info "Starting jetty server...")
-  (jetty/run-jetty (-> (bidi-handler {:crux-node crux-node})
+  (jetty/run-jetty (-> (bidi-handler {:xt-node xt-node})
                        (params/wrap-params))
                    server-opts))
 
@@ -198,18 +198,18 @@
   (.stop server))
 
 (defn config []
-  {:soak/crux-node [{:xt/tx-log {:xt/module `k/->tx-log}
-                     :xt/document-store {:xt/module `k/->document-store
-                                         :local-document-store {:kv-store ::rocksdb}}
-                     ::rocksdb {:xt/module `rocksdb/->kv-store
-                                :db-dir (io/file "indexes")
-                                :checkpointer {:xt/module `cp/->checkpointer
-                                               :store {:xt/module `s3.cp/->cp-store
-                                                       :bucket "crux-soak-checkpoints"}
-                                               :approx-frequency (Duration/ofHours 6)}}
-                     :xt/index-store {:kv-store ::rocksdb}}
-                    (config/crux-node-config)]
-   :soak/jetty-server {:crux-node (ig/ref :soak/crux-node)
+  {:soak/xt-node [{:xt/tx-log {:xt/module `k/->tx-log}
+                   :xt/document-store {:xt/module `k/->document-store
+                                       :local-document-store {:kv-store ::rocksdb}}
+                   ::rocksdb {:xt/module `rocksdb/->kv-store
+                              :db-dir (io/file "indexes")
+                              :checkpointer {:xt/module `cp/->checkpointer
+                                             :store {:xt/module `s3.cp/->cp-store
+                                                     :bucket "crux-soak-checkpoints"}
+                                             :approx-frequency (Duration/ofHours 6)}}
+                   :xt/index-store {:kv-store ::rocksdb}}
+                  (config/xt-node-config)]
+   :soak/jetty-server {:xt-node (ig/ref :soak/xt-node)
                        :server-opts {:port 8080, :join? false}}})
 
 (defn -main [& args]

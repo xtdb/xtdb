@@ -79,7 +79,7 @@ Resources:
             - ContainerPort: 8080
           Command:
             - "-m"
-            - "crux.soak.ingest"
+            - "xtdb.soak.ingest"
             - "current"
           LogConfiguration:
             LogDriver: awslogs
@@ -110,7 +110,7 @@ Resources:
             - ContainerPort: 8080
           Command:
             - "-m"
-            - "crux.soak.ingest"
+            - "xtdb.soak.ingest"
             - "forecast"
           LogConfiguration:
             LogDriver: awslogs
