@@ -8,7 +8,7 @@ toc::[levels=1]
 
 == Project Dependency
 
-In order to use any of the `crux-metrics` reporters, you will need to include the following dependency on `crux-metrics`:
+In order to use any of the `xtdb-metrics` reporters, you will need to include the following dependency on `xtdb-metrics`:
 
 [tabs]
 ====
@@ -44,7 +44,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics/metrics": { ... },
+  "xtdb.metrics/metrics": { ... },
 }
 ----
 
@@ -52,14 +52,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics/metrics { ... }}
+{:xtdb.metrics/metrics { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics/metrics { ... }}
+{:xtdb.metrics/metrics { ... }}
 ----
 
 ====
@@ -76,7 +76,7 @@ You can omit this if you're happy with its default parameters.
 
 This reporter pushes metrics to a Prometheus 'Pushgateway' at regular intervals.
 
-You will need to add the following dependencies, alongside `crux-metrics`, in your project:
+You will need to add the following dependencies, alongside `xtdb-metrics`, in your project:
 
 === Additional dependencies
 
@@ -103,7 +103,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.prometheus/reporter": { ... }
+  "xtdb.metrics.prometheus/reporter": { ... }
 }
 ----
 
@@ -111,14 +111,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/reporter { ... }}
+{:xtdb.metrics.prometheus/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/reporter { ... }}
+{:xtdb.metrics.prometheus/reporter { ... }}
 ----
 ====
 
@@ -159,7 +159,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.prometheus/http-exporter": { ... }
+  "xtdb.metrics.prometheus/http-exporter": { ... }
 }
 ----
 
@@ -168,14 +168,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/http-exporter { ... }}
+{:xtdb.metrics.prometheus/http-exporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.prometheus/http-exporter { ... }}
+{:xtdb.metrics.prometheus/http-exporter { ... }}
 ----
 ====
 
@@ -212,7 +212,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.cloudwatch/reporter": { ... }
+  "xtdb.metrics.cloudwatch/reporter": { ... }
 }
 ----
 
@@ -220,14 +220,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.cloudwatch/reporter { ... }}
+{:xtdb.metrics.cloudwatch/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.cloudwatch/reporter { ... }}
+{:xtdb.metrics.cloudwatch/reporter { ... }}
 ----
 ====
 
@@ -266,7 +266,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.jmx/reporter": { ... }
+  "xtdb.metrics.jmx/reporter": { ... }
 }
 ----
 
@@ -274,14 +274,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.jmx/reporter { ... }}
+{:xtdb.metrics.jmx/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.jmx/reporter { ... }}
+{:xtdb.metrics.jmx/reporter { ... }}
 ----
 ====
 
@@ -308,7 +308,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.console/reporter": { ... }
+  "xtdb.metrics.console/reporter": { ... }
 }
 ----
 
@@ -316,14 +316,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.console/reporter { ... }}
+{:xtdb.metrics.console/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.console/reporter { ... }}
+{:xtdb.metrics.console/reporter { ... }}
 ----
 ====
 
@@ -350,7 +350,7 @@ JSON::
 [source,json]
 ----
 {
-  "crux.metrics.csv/reporter": { ... }
+  "xtdb.metrics.csv/reporter": { ... }
 }
 ----
 
@@ -358,14 +358,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:crux.metrics.csv/reporter { ... }}
+{:xtdb.metrics.csv/reporter { ... }}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:crux.metrics.csv/reporter { ... }}
+{:xtdb.metrics.csv/reporter { ... }}
 ----
 ====
 

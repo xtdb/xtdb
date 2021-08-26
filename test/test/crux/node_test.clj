@@ -6,10 +6,10 @@
             [crux.bus :as bus]
             [crux.fixtures :as f]
             [crux.io :as cio]
-            [crux.jdbc :as j]
+            [xtdb.jdbc :as j]
             [crux.kv :as kv]
             [crux.node :as n]
-            [crux.rocksdb :as rocks]
+            [xtdb.rocksdb :as rocks]
             [crux.tx :as tx]
             [crux.tx.event :as txe]
             [crux.db :as db])
@@ -43,7 +43,7 @@
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (api/start-node {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                    :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                   ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect,
+                                   ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect,
                                                         :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n))))
 
@@ -62,21 +62,21 @@
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "xt/module" "crux.rocksdb/->kv-store")
+                                        (.put "xt/module" "xtdb.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "txs"))))))
                         (.put "xt/document-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "xt/module" "crux.rocksdb/->kv-store")
+                                        (.put "xt/module" "xtdb.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "docs"))))))
                         (.put "xt/index-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "xt/module" "crux.rocksdb/->kv-store")
+                                        (.put "xt/module" "xtdb.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "indexes"))))))))]
-      (t/is (= "crux.rocksdb.RocksKv"
+      (t/is (= "xtdb.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:node :tx-log :kv-store]))
                (kv/kv-name (get-in node [:node :document-store :document-store :kv-store]))
                (kv/kv-name (get-in node [:node :index-store :kv-store]))))
@@ -88,7 +88,7 @@
     (with-open [n ^ICruxAPI (Crux/startNode (let [^Map m {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                                           :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
                                                           :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
-                                                          ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                          ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
                                                                                :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
                                               m))]
       (t/is n)
@@ -107,7 +107,7 @@
       (with-open [^ICruxAPI n2 (Crux/startNode (let [^Map m {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                                              :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
                                                              :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
-                                                             ::j/connection-pool {:dialect `crux.jdbc.h2/->dialect
+                                                             ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
                                                                                   :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
                                                  m))]
 

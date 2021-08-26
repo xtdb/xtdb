@@ -31,7 +31,7 @@ pom.xml::
 
 == Using LMDB
 
-Replace the implementation of the desired component with `+crux.lmdb/->kv-store+`
+Replace the implementation of the desired component with `+xtdb.lmdb/->kv-store+`
 
 [tabs]
 ====
@@ -42,7 +42,7 @@ JSON::
 {
   "xt/index-store": {
     "kv-store": {
-      "xt/module": "crux.lmdb/->kv-store",
+      "xt/module": "xtdb.lmdb/->kv-store",
       "db-dir": "/tmp/lmdb"
     }
   },
@@ -56,7 +56,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module 'crux.lmdb/->kv-store
+{:xt/index-store {:kv-store {:xt/module 'xtdb.lmdb/->kv-store
                              :db-dir (io/file "/tmp/lmdb")}}
  :xt/document-store {...}
  :xt/tx-log {...}}
@@ -66,7 +66,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module crux.lmdb/->kv-store
+{:xt/index-store {:kv-store {:xt/module xtdb.lmdb/->kv-store
                              :db-dir "/tmp/lmdb"}}
  :xt/document-store {...}
  :xt/tx-log {...}}

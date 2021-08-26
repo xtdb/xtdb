@@ -61,7 +61,7 @@
                        :kafka-config :xtdb.kafka/kafka-config
                        :local-document-store {:kv-store :rocksdb}}
    :xt/index-store {:kv-store :rocksdb}
-   :rocksdb {:xt/module 'crux.rocksdb/->kv-store
+   :rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
              :db-dir index-dir}})
 
 (def storage-dir "dev-storage")

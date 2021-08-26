@@ -127,7 +127,7 @@ https://github.com/juxt/crux/blob/master/crux-kafka/src/crux/kafka.clj[kafka.clj
 Congratulations! You now have a Crux infrastructure fit for production
 applications. However, if you would still prefer to use a regular JDBC database
 (such as SQLite, Postgres or Oracle) instead of Kafka then you may want to take
-a look at the `crux-jdbc` module.
+a look at the `xtdb-jdbc` module.
 
 In addition to Confluent Cloud's unique pricing and multi-cloud model you also
 get access to many interesting non-Apache features. The standard service is

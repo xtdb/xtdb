@@ -2,9 +2,9 @@
   (:require [clojure.test :as t]
             [crux.api :as api]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.metrics.index-store :as index-store-metrics]
-            [crux.metrics.query :as query-metrics]
-            [crux.metrics.dropwizard :as dropwizard])
+            [xtdb.metrics.index-store :as index-store-metrics]
+            [xtdb.metrics.query :as query-metrics]
+            [xtdb.metrics.dropwizard :as dropwizard])
   (:import (java.io Closeable)))
 
 (t/use-fixtures :each fix/with-node)

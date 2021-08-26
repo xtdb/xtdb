@@ -5,7 +5,7 @@
             [xtdb.kafka.embedded :as ek]
             [crux.fixtures :as fix]
             [xtdb.kafka :as k]
-            [crux.rocksdb :as rocks]))
+            [xtdb.rocksdb :as rocks]))
 
 (defn submit-batches [node]
   (for [doc-batch (->> (for [n (range 25000)]

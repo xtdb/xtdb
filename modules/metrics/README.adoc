@@ -1,4 +1,4 @@
-= crux-metrics
+= xtdb-metrics
 
 This module provides components that expose metrics about a node via https://metrics.dropwizard.io/4.1.2/[Dropwizard] to https://prometheus.io/[Prometheus], AWS's CloudWatch, and Java's JMX.
 

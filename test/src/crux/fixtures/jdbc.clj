@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
             [crux.fixtures :as fix]
-            [crux.jdbc :as j]
+            [xtdb.jdbc :as j]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import com.opentable.db.postgres.embedded.EmbeddedPostgres))
 
@@ -14,36 +14,36 @@
 
 (defn with-h2-opts [f]
   (fix/with-tmp-dirs #{db-dir}
-    (with-opts {:dialect 'crux.jdbc.h2/->dialect
+    (with-opts {:dialect 'xtdb.jdbc.h2/->dialect
                 :db-spec {:dbname (str (io/file db-dir "cruxtest"))}}
       f)))
 
 (defn with-sqlite-opts [f]
   (fix/with-tmp-dirs #{db-dir}
-    (with-opts {:dialect 'crux.jdbc.sqlite/->dialect
+    (with-opts {:dialect 'xtdb.jdbc.sqlite/->dialect
                 :db-spec {:dbname (str (io/file db-dir "cruxtest"))}}
       f)))
 
 (defn with-mssql-opts [db-spec f]
-  (with-opts {:dialect 'crux.jdbc.mssql/->dialect
+  (with-opts {:dialect 'xtdb.jdbc.mssql/->dialect
               :db-spec db-spec}
     f))
 
 (defn with-mysql-opts [db-spec f]
-  (with-opts {:dialect 'crux.jdbc.mysql/->dialect
+  (with-opts {:dialect 'xtdb.jdbc.mysql/->dialect
               :db-spec db-spec}
     f))
 
 (defn with-embedded-postgres [f]
   (with-open [pg (.start (EmbeddedPostgres/builder))]
-    (with-opts {:dialect 'crux.jdbc.psql/->dialect
+    (with-opts {:dialect 'xtdb.jdbc.psql/->dialect
                 :db-spec {:port (.getPort pg)
                           :dbname "postgres"
                           :user "postgres"}}
       f)))
 
 (defn with-postgres-opts [db-spec f]
-  (with-opts {:dialect 'crux.jdbc.psql/->dialect
+  (with-opts {:dialect 'xtdb.jdbc.psql/->dialect
               :db-spec db-spec}
     f))
 
@@ -52,7 +52,7 @@
     #_:postgres #_:mysql #_:mssql})
 
 ;; Optional:
-;; in `crux-jdbc`: `docker-compose up` (`docker-compose up -d` for background)
+;; in `xtdb-jdbc`: `docker-compose up` (`docker-compose up -d` for background)
 
 (defn with-each-jdbc-dialect [f]
   (when (:h2 jdbc-dialects)
@@ -108,7 +108,7 @@
     ;; The below still fails with an auth error, I can't see why. Sorry :(
 
     (t/testing "Oracle Database"
-      (with-opts {:dialect 'crux.jdbc.oracle/->dialect
+      (with-opts {:dialect 'xtdb.jdbc.oracle/->dialect
                   :db-spec {:jdbcUrl "jdbc:oracle:thin:@127.0.0.1:51521:XE"
                             :username "sys as sysdba"
                             :password "mysecurepassword"}}

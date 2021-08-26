@@ -6,7 +6,7 @@
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [crux.api :as api]
-            [crux.rocksdb :as rocksdb]
+            [xtdb.rocksdb :as rocksdb]
             [crux.soak.config :as config]
             [crux.checkpoint :as cp]
             [xtdb.kafka :as k]

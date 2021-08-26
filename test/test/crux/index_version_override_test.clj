@@ -9,7 +9,7 @@
   (fix/with-tmp-dir "db-dir" [db-dir]
     (let [index-version c/index-version
           inc-index-version (inc index-version)
-          topo {:xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+          topo {:xt/index-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                             :db-dir db-dir}}}
           with-flag (fn [topo flag]
                       (-> topo

@@ -8,7 +8,7 @@
             [crux.fixtures.lubm :as fl]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
-            [crux.jdbc :as j]))
+            [xtdb.jdbc :as j]))
 
 (t/use-fixtures :each fj/with-each-jdbc-dialect fj/with-jdbc-node fix/with-node)
 

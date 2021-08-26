@@ -61,7 +61,7 @@ code to connect to your cluster and make a transaction:
                                          :doc-partitions 6} ; Confluent Cloud default
                         :local-document-store {:kv-store :rocksdb}}
     :xt/index-store {:kv-store :rocksdb}
-    :rocksdb {:xt/module 'crux.rocksdb/->kv-store
+    :rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
               :db-dir "/tmp/rocksdb"}}))
 
 ; you can also use `:kafka-properties-map` although this increases the risk of

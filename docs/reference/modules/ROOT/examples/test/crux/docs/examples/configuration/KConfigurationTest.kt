@@ -67,7 +67,7 @@ class KConfigurationTest {
         val cruxNode = Crux.startNode{ n ->
             n.with("xt/tx-log") { txLog ->
                 txLog.with("kv-store") { kv ->
-                    kv.module("crux.rocksdb/->kv-store")
+                    kv.module("xtdb.rocksdb/->kv-store")
                     kv["db-dir"] = File("/tmp/rocksdb")
                 }
             }
@@ -90,7 +90,7 @@ class KConfigurationTest {
         // tag::sharing-modules[]
         val cruxNode = Crux.startNode { n ->
             n.with("my-rocksdb") { rocks ->
-                rocks.module("crux.rocksdb/->kv-store")
+                rocks.module("xtdb.rocksdb/->kv-store")
                 rocks["db-dir"] = File("/tmp/rocksdb")
             }
             n.with("xt/document-store") { docStore ->

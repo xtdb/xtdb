@@ -6,10 +6,10 @@
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [go halt reset reset-all]]
             [crux.io :as cio]
-            [crux.lucene]
+            [xtdb.lucene]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
-            [crux.rocksdb :as rocks]
+            [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)
            java.io.Closeable
@@ -47,18 +47,18 @@
 (def standalone-config
   {::crux {:node-opts {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store,
                                                    :db-dir (io/file dev-node-dir "indexes"),
-                                                   :block-cache :crux.rocksdb/block-cache}}
+                                                   :block-cache :xtdb.rocksdb/block-cache}}
                        :xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
                                                       :db-dir (io/file dev-node-dir "documents")
-                                                      :block-cache :crux.rocksdb/block-cache}}
+                                                      :block-cache :xtdb.rocksdb/block-cache}}
                        :xt/tx-log {:kv-store {:xt/module `rocks/->kv-store,
                                               :db-dir (io/file dev-node-dir "tx-log")
-                                              :block-cache :crux.rocksdb/block-cache}}
-                       :crux.rocksdb/block-cache {:xt/module `rocks/->lru-block-cache
+                                              :block-cache :xtdb.rocksdb/block-cache}}
+                       :xtdb.rocksdb/block-cache {:xt/module `rocks/->lru-block-cache
                                                   :cache-size (* 128 1024 1024)}
-                       :crux.metrics.jmx/reporter {}
+                       :xtdb.metrics.jmx/reporter {}
                        :crux.http-server/server {}
-                       :crux.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
+                       :xtdb.lucene/lucene-store {:db-dir (io/file dev-node-dir "lucene")}}}})
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")

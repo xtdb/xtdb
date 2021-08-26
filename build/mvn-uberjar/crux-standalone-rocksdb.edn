@@ -1,8 +1,8 @@
-{:xt/tx-log {:kv-store {:xt/module crux.rocksdb/->kv-store
+{:xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                         :db-dir "data/tx-log"}}
- :xt/document-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+ :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                                 :db-dir "data/docs"}}
- :xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+ :xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                              :db-dir "data/indices"}}
 
  :crux.http-server/server {}

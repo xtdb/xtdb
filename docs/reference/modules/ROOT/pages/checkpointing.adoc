@@ -28,7 +28,7 @@ JSON::
 {
   "xt/index-store": {
     "kv-store": {
-      "xt/module": "crux.rocksdb/->kv-store",
+      "xt/module": "xtdb.rocksdb/->kv-store",
       ...
       "checkpointer": {
         "xt/module": "crux.checkpoint/->checkpointer",
@@ -48,7 +48,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+{:xt/index-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                ...
                              :checkpointer {:xt/module 'crux.checkpoint/->checkpointer
                                             :store {:xt/module 'crux.checkpoint/->filesystem-checkpoint-store
@@ -61,7 +61,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+{:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                              ...
                              :checkpointer {:xt/module crux.checkpoint/->checkpointer
                                             :store {:xt/module crux.checkpoint/->filesystem-checkpoint-store

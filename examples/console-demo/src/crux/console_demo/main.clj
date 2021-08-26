@@ -4,7 +4,7 @@
             [integrant.repl :as ir]
             [clojure.string :as string]
             [clojure.java.io :as io]
-            [crux.rocksdb :as rocks])
+            [xtdb.rocksdb :as rocks])
   (:import java.io.Closeable)
   (:gen-class))
 
@@ -39,7 +39,7 @@
                             :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/indices"}}
                             :crux.http-server/server {:read-only? true
                                                       :server-label "Console Demo"}
-                            :crux.metrics/registry {}}})
+                            :xtdb.metrics/registry {}}})
 
 (defn -main [& args]
   (ir/set-prep! config)

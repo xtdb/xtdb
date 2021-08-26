@@ -4,7 +4,7 @@
             [crux.api :as crux]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.rocksdb :as rocks]))
+            [xtdb.rocksdb :as rocks]))
 
 (def ^:private ^:dynamic *event-log-dir*)
 

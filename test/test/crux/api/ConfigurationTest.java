@@ -26,7 +26,7 @@ public class ConfigurationTest {
 
     private ModuleConfiguration createKvConfig(File folder) {
         return buildModule(m -> m.with("kv-store", buildModule(kv -> {
-            kv.module("crux.rocksdb/->kv-store");
+            kv.module("xtdb.rocksdb/->kv-store");
             kv.set("db-dir", folder);
         })));
     }
@@ -75,9 +75,9 @@ public class ConfigurationTest {
                 n.with("xt/index-store", createKvConfig(indexDir));
             });
 
-            assertEquals("crux.rocksdb.RocksKv", kvStore(node, "node", "tx-log", "kv-store"));
-            assertEquals("crux.rocksdb.RocksKv", kvStore(node, "node", "document-store", "document-store", "kv-store"));
-            assertEquals("crux.rocksdb.RocksKv", kvStore(node, "node", "tx-log", "kv-store"));
+            assertEquals("xtdb.rocksdb.RocksKv", kvStore(node, "node", "tx-log", "kv-store"));
+            assertEquals("xtdb.rocksdb.RocksKv", kvStore(node, "node", "document-store", "document-store", "kv-store"));
+            assertEquals("xtdb.rocksdb.RocksKv", kvStore(node, "node", "tx-log", "kv-store"));
 
             assertEquals(txDir.toPath(), unwrap(node, "node", "tx-log", "kv-store", "db-dir"));
         }
@@ -95,7 +95,7 @@ public class ConfigurationTest {
                 n.with("xt/document-store", createKvConfig(docDir));
             });
 
-            assertEquals("crux.rocksdb.RocksKv", kvStore(client, "client", "document-store", "document-store", "kv-store"));
+            assertEquals("xtdb.rocksdb.RocksKv", kvStore(client, "client", "document-store", "document-store", "kv-store"));
         }
         catch (IOException e) {
             fail();

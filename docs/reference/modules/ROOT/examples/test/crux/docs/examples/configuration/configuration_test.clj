@@ -55,7 +55,7 @@
 (t/deftest nested-modules
   (with-open [node
               ;; tag::nested-modules-0[]
-              (crux/start-node {:xt/tx-log {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+              (crux/start-node {:xt/tx-log {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                                          :db-dir (io/file "/tmp/txs")}}
                                 ;; end::nested-modules-0[]
                                 })]
@@ -74,7 +74,7 @@
 (t/deftest sharing-modules
   (with-open [node
               ;; tag::sharing-modules[]
-              (crux/start-node {:my-rocksdb {:xt/module 'crux.rocksdb/->kv-store
+              (crux/start-node {:my-rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
                                              :db-dir (io/file "/tmp/rocksdb")}
                                 :xt/tx-log {:kv-store :my-rocksdb}
                                 :xt/document-store {:kv-store :my-rocksdb}})

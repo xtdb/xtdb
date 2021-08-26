@@ -111,7 +111,7 @@ JSON::
     },
     "local-document-store": {
       "kv-store": {
-        "xt/module": "crux.rocksdb/->kv-store",
+        "xt/module": "xtdb.rocksdb/->kv-store",
         "db-dir": "/tmp/rocksdb"
       }
     },
@@ -131,7 +131,7 @@ Clojure::
                                     ...}
                      :doc-topic-opts {:topic-name "crux-docs"
                                       ...}
-                     :local-document-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                     :local-document-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                                        :db-dir (io/file "/tmp/rocksdb")}}
                      :poll-wait-duration (Duration/ofSeconds 1)}
  ...}
@@ -146,7 +146,7 @@ EDN::
                                     ...}
                      :doc-topic-opts {:topic-name "crux-docs"
                                       ...}
-                     :local-document-store {:kv-store {:xt/module crux.rocksdb/->kv-store
+                     :local-document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                                                        :db-dir "/tmp/rocksdb"}}
                      :poll-wait-duration "PT1S"}
  ...}
@@ -167,7 +167,7 @@ JSON::
 ----
 {
   "local-rocksdb": {
-    "xt/module": "crux.rocksdb/->kv-store",
+    "xt/module": "xtdb.rocksdb/->kv-store",
     "db-dir": "/tmp/rocksdb"
   },
 
@@ -191,7 +191,7 @@ Clojure::
 [source,clojure]
 ----
 {...
- :local-rocksdb {:xt/module 'crux.rocksdb/->kv-store
+ :local-rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
                  :db-dir (io/file "/tmp/rocksdb")}
  :xt/document-store {...
                      :local-document-store {:kv-store :local-rocksdb}}
@@ -203,7 +203,7 @@ EDN::
 [source,clojure]
 ----
 {...
- :local-rocksdb {:xt/module crux.rocksdb/->kv-store
+ :local-rocksdb {:xt/module xtdb.rocksdb/->kv-store
                  :db-dir "/tmp/rocksdb"}
  :xt/document-store {...
                      :local-document-store {:kv-store :local-rocksdb}}

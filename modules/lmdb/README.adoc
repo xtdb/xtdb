@@ -1,4 +1,4 @@
-= crux-lmdb
+= xtdb-lmdb
 
 https://symas.com/lmdb/[LMDB] can be used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 

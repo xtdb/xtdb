@@ -103,7 +103,7 @@ Clojure::
 
 (defn start-crux! []
   (letfn [(kv-store [dir]
-            {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+            {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                         :db-dir (io/file dir)
                         :sync? true}})]
     (crux/start-node
@@ -147,23 +147,23 @@ config.json::
 {
   "xt/index-store": {
     "kv-store": {
-      "xt/module": "crux.rocksdb/->kv-store",
+      "xt/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "data/index-store"
     }
   },
   "xt/document-store": {
     "kv-store": {
-      "xt/module": "crux.rocksdb/->kv-store",
+      "xt/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "data/doc-store"
     }
   },
   "xt/tx-log": {
     "kv-store": {
-      "xt/module": "crux.rocksdb/->kv-store",
+      "xt/module": "xtdb.rocksdb/->kv-store",
       "db-dir": "data/tx-log"
     }
   },
-  "crux.lucene/lucene-store": {
+  "xtdb.lucene/lucene-store": {
     "db-dir": "data/dev/lucene-dir"
   },
   "crux.http-server/server": {

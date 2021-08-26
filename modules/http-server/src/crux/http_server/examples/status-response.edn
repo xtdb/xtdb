@@ -2,6 +2,6 @@
  :crux.version/revision nil, :crux.index/index-version 13,
  :crux.doc-log/consumer-state nil,
  :crux.tx-log/consumer-state nil,
- :crux.kv/kv-store "crux.rocksdb.RocksKv",
+ :crux.kv/kv-store "xtdb.rocksdb.RocksKv",
  :crux.kv/estimate-num-keys 3,
  :crux.kv/size 132665}

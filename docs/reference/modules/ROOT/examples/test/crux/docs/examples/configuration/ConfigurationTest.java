@@ -85,7 +85,7 @@ public class ConfigurationTest {
         ICruxAPI cruxNode = Crux.startNode(n -> {
             n.with("xt/tx-log", txLog -> {
                 txLog.with("kv-store", kv -> {
-                    kv.module("crux.rocksdb/->kv-store");
+                    kv.module("xtdb.rocksdb/->kv-store");
                     kv.set("db-dir", new File("/tmp/rocksdb"));
                 });
             });
@@ -109,7 +109,7 @@ public class ConfigurationTest {
         // tag::sharing-modules[]
         ICruxAPI cruxNode = Crux.startNode(n -> {
             n.with("my-rocksdb", rocks -> {
-                rocks.module("crux.rocksdb/->kv-store");
+                rocks.module("xtdb.rocksdb/->kv-store");
                 rocks.set("db-dir", new File("/tmp/rocksdb"));
             });
             n.with("xt/document-store", docStore -> {

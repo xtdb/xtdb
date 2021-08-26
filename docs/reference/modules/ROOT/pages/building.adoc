@@ -35,7 +35,7 @@ The `clj-uberjar` folder contains a number of files:
 
 To use `rocksdb` as the index store, document store and transaction-log store of the node:
 
-* Add `crux-rocksdb` as a dependency in `deps.edn`:
+* Add `xtdb-rocksdb` as a dependency in `deps.edn`:
 +
 [source,clojure, subs=attributes+]
 ----
@@ -47,9 +47,9 @@ com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
- :xt/document-store {:kv-store {:xt/module crux.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
- :xt/tx-log {:kv-store {:xt/module crux.rocksdb/->kv-store, :db-dir "/tmp/xt/tx-log"}}
+{:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
+ :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
+ :xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xt/tx-log"}}
  :crux.http-server/server {}}
 ----
 
@@ -66,15 +66,15 @@ In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update t
 
 In the `docker` directory, there are a similar set of files to the uberjar examples above, as well as a `Dockerfile` and a `build-docker.sh` script.
 
-As with building a JAR, to add `rocksdb` as the KV store - start by adding a dependency on `crux-rocksdb` within `deps.edn`.
+As with building a JAR, to add `rocksdb` as the KV store - start by adding a dependency on `xtdb-rocksdb` within `deps.edn`.
 
 Override the topology within `crux.edn` with the following:
 
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module crux.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
- :xt/document-store {:kv-store {:xt/module crux.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
- :xt/tx-log {:kv-store {:xt/module crux.rocksdb/->kv-store, :db-dir "/var/lib/xt/tx-log"}}
+{:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
+ :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
+ :xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xt/tx-log"}}
  :crux.http-server/server {}}
 ----
 

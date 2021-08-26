@@ -467,10 +467,10 @@
                    :on-tab-selected [::events/status-tab-selected]}]
 
      (case @(rf/subscribe [::sub/status-tab])
-       :overview [render-status-map (dissoc status-map :crux.metrics)]
+       :overview [render-status-map (dissoc status-map :xtdb.metrics)]
        :configuration [render-status-map options-map]
        :attributes [render-attribute-stats attributes-map]
-       :metrics (render-metrics-map (:crux.metrics status-map)))]))
+       :metrics (render-metrics-map (:xtdb.metrics status-map)))]))
 
 (defn console-pane []
   [:<>

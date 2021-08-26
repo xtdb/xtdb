@@ -1,4 +1,4 @@
-= crux-rocksdb
+= xtdb-rocksdb
 
 https://rocksdb.org/[RocksDB] is often used as the data store for Crux's query indices, but can also be used as a transaction log and/or document store in single node clusters.
 

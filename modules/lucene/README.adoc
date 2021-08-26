@@ -2,7 +2,7 @@
 
 Lucene module for Crux making use of https://lucene.apache.org/[Apache Lucene].
 
-`crux-lucene` runs in-process as part of the Crux node as a Crux module.
+`xtdb-lucene` runs in-process as part of the Crux node as a Crux module.
 
 .deps.edn
 [source,clojure]

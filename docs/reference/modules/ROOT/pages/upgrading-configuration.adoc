@@ -22,7 +22,7 @@ It is intented to be comfortable to follow strictly and be reliable in practice.
 Upgrading a node from Crux version `1.X.n` to `1.Y.n` (a minor bump) often requires rebuilding the node's local KV index-store from the golden stores, i.e. the transaction log and the document store.
 However, it isn't always the case that minor bumps require an index rebuild and this distinction is made clear in the release notes for a given version.
 
-You can perform the rebuild process by simply shutting down the node and removing the index-store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `crux-lucene` is enabled).
+You can perform the rebuild process by simply shutting down the node and removing the index-store's `db-dir` (and similarly for Lucene's `db-dir` indexes where `xtdb-lucene` is enabled).
 Crux will then rebuild the indices when the node is restarted.
 
 During development and other manual interactions, it is strongly suggested to rename or move the index directories rather than delete them, in case you need to rollback.

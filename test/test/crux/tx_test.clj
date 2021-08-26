@@ -1345,14 +1345,14 @@
 (t/deftest handles-secondary-indices
   (letfn [(with-persistent-golden-stores [node-config db-dir]
             (-> node-config
-                (assoc :xt/tx-log {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                (assoc :xt/tx-log {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                               :db-dir (io/file db-dir "txs")}}
-                       :xt/document-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                       :xt/document-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                                       :db-dir (io/file db-dir "docs")}})))
 
           (with-persistent-indices [node-config idx-dir]
             (-> node-config
-                (assoc :xt/index-store {:kv-store {:xt/module 'crux.rocksdb/->kv-store
+                (assoc :xt/index-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                                    :db-dir idx-dir}})))
 
           (with-secondary-index

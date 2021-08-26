@@ -1,7 +1,7 @@
 (ns crux.ingest-client-test
   (:require [crux.fixtures :as fix]
             [crux.api :as crux]
-            [crux.rocksdb :as rocks]
+            [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io]
             [clojure.test :as t]
             [crux.db :as db]
