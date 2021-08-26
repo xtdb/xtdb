@@ -5,7 +5,7 @@
 * Providing pre-configured JARs and Docker containers to start a basic implementation of Crux with no prior knowledge required.
 * Providing a mechanism to spin up custom Crux artifacts - with two necessary inputs:
 ** A `deps.edn` file containing the dependencies that the node requires.
-** A `crux.edn` file, containing the configuration options to start the node with.
+** A `xtdb.edn` file, containing the configuration options to start the node with.
 
 == Preconfigured Artifacts
 
@@ -29,7 +29,7 @@ Alongside the JARs deployed on the GitHub releases is `crux-builder.tar.gz` - th
 The `clj-uberjar` folder contains a number of files:
 
 * a `deps.edn` file to configure the Maven dependencies required
-* a `crux.edn` file to configure the node itself
+* a `xtdb.edn` file to configure the node itself
 * a `resources/logback.xml` to configure logging output
 * a `build-uberjar.sh` script to build the JAR.
 
@@ -43,7 +43,7 @@ To use `rocksdb` as the index store, document store and transaction-log store of
 com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 ...
 ----
-* In `crux.edn`, override the old topology with the following:
+* In `xtdb.edn`, override the old topology with the following:
 +
 [source,clojure]
 ----
@@ -60,7 +60,7 @@ To run the clojure uberjar, use the following command `java -jar crux.jar`. This
 === Building a JAR (Maven tooling)
 
 Similarly to building a JAR using the Clojure CLI tooling, we can also build an uberjar using Maven.
-In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `crux.edn` file as before, and then run `build-uberjar.sh` to create the uberjar. To run the maven generated uberjar, use the following command: `java -jar crux.jar`
+In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `xtdb.edn` file as before, and then run `build-uberjar.sh` to create the uberjar. To run the maven generated uberjar, use the following command: `java -jar crux.jar`
 
 === Building a Docker Container
 
@@ -68,7 +68,7 @@ In the `docker` directory, there are a similar set of files to the uberjar examp
 
 As with building a JAR, to add `rocksdb` as the KV store - start by adding a dependency on `xtdb-rocksdb` within `deps.edn`.
 
-Override the topology within `crux.edn` with the following:
+Override the topology within `xtdb.edn` with the following:
 
 [source,clojure]
 ----

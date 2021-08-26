@@ -26,7 +26,7 @@ If you do not have the Clojure CLI tools installed, installers are available fro
 mkdir crux-cli && cd crux-cli
 ----
 
-(2) Next, create two new files within this directory named `deps.edn` and `crux.edn` with the following configuration code:
+(2) Next, create two new files within this directory named `deps.edn` and `xtdb.edn` with the following configuration code:
 
 .;; deps.edn
 [source,clojure]
@@ -36,7 +36,7 @@ mkdir crux-cli && cd crux-cli
         com.xtdb/xtdb-http-server {:mvn/version "1.18.1"}}}
 ----
 
-.;; crux.edn
+.;; xtdb.edn
 [source,clojure]
 ----
 {:xtdb.http-server/server {:port 3000}} ;; <1>

@@ -11,4 +11,4 @@ ADD resources/logback.xml resources/logback.xml
 RUN clojure -Sforce -Spath >/dev/null
 
 ENV MALLOC_ARENA_MAX=2
-ADD crux.edn crux.edn
+ADD xtdb.edn xtdb.edn

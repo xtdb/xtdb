@@ -110,7 +110,7 @@ deps.edn::
 
 [tabs]
 ====
-crux.edn::
+xtdb.edn::
 +
 [source,clojure]
 ----

@@ -41,10 +41,10 @@
 
       :else (let [{:keys [file edn json]} options]
               {::node-opts [(or file
-                                (some-> (io/file "crux.edn") if-it-exists)
-                                (some-> (io/file "crux.json") if-it-exists)
-                                (io/resource "crux.edn")
-                                (io/resource "crux.json"))
+                                (some-> (io/file "xtdb.edn") if-it-exists)
+                                (some-> (io/file "xtdb.json") if-it-exists)
+                                (io/resource "xtdb.edn")
+                                (io/resource "xtdb.json"))
 
                             json
                             edn]}))))

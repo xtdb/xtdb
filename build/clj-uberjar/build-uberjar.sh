@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 mkdir -p config
-cp crux.edn config/
+cp xtdb.edn config/
 
 clojure -Sdeps '{:aliases {:depstar {:replace-deps {seancorfield/depstar {:mvn/version "2.0.171"}}}}}' \
         -X:depstar \
