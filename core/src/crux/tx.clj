@@ -170,7 +170,7 @@
         (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
         {:abort? true}))))
 
-(def evict-time-ranges-env-var "CRUX_EVICT_TIME_RANGES")
+(def evict-time-ranges-env-var "XTDB_EVICT_TIME_RANGES")
 (def ^:dynamic *evict-all-on-legacy-time-ranges?* (= (System/getenv evict-time-ranges-env-var) "EVICT_ALL"))
 
 (defmethod index-tx-event :crux.tx/evict [[_op k & legacy-args] _ _]

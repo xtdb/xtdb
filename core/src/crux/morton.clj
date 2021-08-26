@@ -24,7 +24,7 @@
 ;; Internally its first and second dimension, x and y are just names
 ;; for these which may change depending on context.
 
-(def ^:dynamic *use-space-filling-curve-index?* (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_SPACE_FILLING_CURVE_INDEX"))))
+(def ^:dynamic *use-space-filling-curve-index?* (not (Boolean/parseBoolean (System/getenv "XTDB_DISABLE_SPACE_FILLING_CURVE_INDEX"))))
 
 (set! *unchecked-math* :warn-on-boxed)
 

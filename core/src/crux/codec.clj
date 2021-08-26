@@ -751,7 +751,7 @@
                    s))
 
 (def ^:const ^:private base64-print-method-enabled?
-  (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_BASE64_PRINT_METHOD")))
+  (Boolean/parseBoolean (System/getenv "XTDB_ENABLE_BASE64_PRINT_METHOD")))
 
 (when base64-print-method-enabled?
   (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]

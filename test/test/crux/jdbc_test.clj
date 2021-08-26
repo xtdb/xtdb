@@ -61,7 +61,7 @@
                    (c/crux->xt)))))))
 
 (t/deftest test-micro-bench
-  (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))
+  (when (Boolean/parseBoolean (System/getenv "XTDB_JDBC_PERFORMANCE"))
     (let [n 1000
           last-tx (atom nil)]
       (time
@@ -73,7 +73,7 @@
   (t/is true))
 
 (t/deftest test-ingest-bench
-  (when (Boolean/parseBoolean (System/getenv "CRUX_JDBC_PERFORMANCE"))
+  (when (Boolean/parseBoolean (System/getenv "XTDB_JDBC_PERFORMANCE"))
     (fl/with-lubm-data
       #(t/is (= 1650
                 (:num_docs (jdbc/execute-one! (:pool (:tx-log *api*))

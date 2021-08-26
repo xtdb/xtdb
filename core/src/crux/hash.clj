@@ -7,9 +7,9 @@
            java.security.MessageDigest
            crux.ByteUtils))
 
-(def ^:const ^:private gcrypt-enabled? (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_LIBGCRYPT"))))
-(def ^:const ^:private openssl-enabled? (not (Boolean/parseBoolean (System/getenv "CRUX_DISABLE_LIBCRYPTO"))))
-(def ^:const ^:private byte-utils-sha1-enabled? (Boolean/parseBoolean (System/getenv "CRUX_ENABLE_BYTEUTILS_SHA1")))
+(def ^:const ^:private gcrypt-enabled? (not (Boolean/parseBoolean (System/getenv "XTDB_DISABLE_LIBGCRYPT"))))
+(def ^:const ^:private openssl-enabled? (not (Boolean/parseBoolean (System/getenv "XTDB_DISABLE_LIBCRYPTO"))))
+(def ^:const ^:private byte-utils-sha1-enabled? (Boolean/parseBoolean (System/getenv "XTDB_ENABLE_BYTEUTILS_SHA1")))
 
 ;; NOTE: Using name without dash as it's supported both by
 ;; MessageDigest and libgcrypt.

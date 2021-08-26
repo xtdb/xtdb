@@ -5,15 +5,15 @@
             [crux.system :as sys]))
 
 (def test-azure-blobs-sas-token
-  (System/getenv "CRUX_AZURE_BLOBS_TEST_SAS_TOKEN"))
+  (System/getenv "XTDB_AZURE_BLOBS_TEST_SAS_TOKEN"))
 
 (def test-azure-blobs-storage-account
   (or (System/getProperty "xtdb.azure.blobs.test-storage-account")
-      (System/getenv "CRUX_AZURE_BLOBS_TEST_STORAGE_ACCOUNT")))
+      (System/getenv "XTDB_AZURE_BLOBS_TEST_STORAGE_ACCOUNT")))
 
 (def test-azure-blobs-container
   (or (System/getProperty "xtdb.azure.blobs.test-container")
-      (System/getenv "CRUX_AZURE_BLOBS_TEST_CONTAINER")))
+      (System/getenv "XTDB_AZURE_BLOBS_TEST_CONTAINER")))
 
 (t/deftest test-blobs-doc-store
   (when (and test-azure-blobs-sas-token

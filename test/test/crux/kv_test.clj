@@ -342,8 +342,8 @@
                          (every? true?))))))
 
 (t/deftest test-performance-off-heap
-  (if (and (Boolean/parseBoolean (System/getenv "CRUX_KV_PERFORMANCE"))
-           (if-let [backend (System/getenv "CRUX_KV_PERFORMANCE_BACKEND")]
+  (if (and (Boolean/parseBoolean (System/getenv "XTDB_KV_PERFORMANCE"))
+           (if-let [backend (System/getenv "XTDB_KV_PERFORMANCE_BACKEND")]
              (= backend (str (:xt/module fkv/*kv-opts*)))
              true))
     (fkv/with-kv-store [kv-store]

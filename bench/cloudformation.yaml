@@ -204,7 +204,7 @@ Resources:
               ValueFrom:
                 "arn:aws:secretsmanager:eu-west-2:955308952094:secret:bench/slack-url-uumMHQ"
           Environment:
-            - Name: 'CRUX_BENCH_CW_METRICS'
+            - Name: 'XTDB_BENCH_CW_METRICS'
               Value: 'true'
           LogConfiguration:
             LogDriver: awslogs

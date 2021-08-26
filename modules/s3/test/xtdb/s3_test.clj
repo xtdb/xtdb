@@ -10,11 +10,11 @@
 
 (def test-s3-bucket
   (or (System/getProperty "xtdb.s3.test-bucket")
-      (System/getenv "CRUX_S3_TEST_BUCKET")))
+      (System/getenv "XTDB_S3_TEST_BUCKET")))
 
 (def test-s3-region
   (or (System/getProperty "xtdb.s3.test-region")
-      (System/getenv "CRUX_S3_TEST_REGION")))
+      (System/getenv "XTDB_S3_TEST_REGION")))
 
 (def ^:dynamic ^S3AsyncClient *client*)
 

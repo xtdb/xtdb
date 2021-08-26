@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 allprojects {
     group = "com.xtdb.xt-labs"
-    version = System.getenv("CRUX_VERSION") ?: "dev-SNAPSHOT"
+    version = System.getenv("XTDB_VERSION") ?: "dev-SNAPSHOT"
 
     repositories {
         mavenCentral()

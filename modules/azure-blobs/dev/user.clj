@@ -30,9 +30,9 @@
 (defn start-node []
   (crux/start-node
    {:xt/document-store {:xt/module `azb/->document-store
-                        :sas-token (System/getenv "CRUX_AZURE_BLOBS_SAS_TOKEN")
-                        :storage-account (System/getenv "CRUX_AZURE_BLOBS_STORAGE_ACCOUNT")
-                        :container (System/getenv "CRUX_AZURE_BLOBS_CONTAINER")}}))
+                        :sas-token (System/getenv "XTDB_AZURE_BLOBS_SAS_TOKEN")
+                        :storage-account (System/getenv "XTDB_AZURE_BLOBS_STORAGE_ACCOUNT")
+                        :container (System/getenv "XTDB_AZURE_BLOBS_CONTAINER")}}))
 
 (defn await-ingest
   [node docs]

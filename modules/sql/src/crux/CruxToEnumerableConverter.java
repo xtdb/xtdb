@@ -59,7 +59,7 @@ public class CruxToEnumerableConverter extends ConverterImpl implements Enumerab
 
         Expression enumerable = block.append("enumerable",
                                              Expressions.call(table,
-                                                              CruxMethod.CRUX_QUERYABLE_FIND.method, schema, types, DataContext.ROOT));
+                                                              CruxMethod.XTDB_QUERYABLE_FIND.method, schema, types, DataContext.ROOT));
 
         // if (CalciteSystemProperty.DEBUG.value()) {
         //     System.out.println("Mongo: " + opList);

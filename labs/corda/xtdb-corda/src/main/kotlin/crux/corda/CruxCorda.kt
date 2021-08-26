@@ -13,10 +13,10 @@ import net.corda.core.node.AppServiceHub
 import net.corda.core.node.ServiceHub
 
 @Suppress("unused")
-private val CRUX_CORDA_SERVICE = Clojure.`var`("clojure.core", "require")(Clojure.read("crux.corda"))
+private val XTDB_CORDA_SERVICE = Clojure.`var`("clojure.core", "require")(Clojure.read("crux.corda"))
 
 private val NOTIFY_TX = Clojure.`var`("crux.corda/notify-tx")
-private val TO_CRUX_TX = Clojure.`var`("crux.corda/->crux-tx")
+private val TO_XTDB_TX = Clojure.`var`("crux.corda/->crux-tx")
 
 @Suppress("unused")
 data class CruxDoc(
@@ -76,5 +76,5 @@ fun AppServiceHub.startCruxNode(configurator: NodeConfiguration.Builder.() -> Un
 @Suppress("UNCHECKED_CAST", "UNUSED")
 fun AppServiceHub.cruxTx(cruxNode: ICruxAPI, id: SecureHash): TransactionInstant? =
     database.transaction {
-        TransactionInstant.factory(TO_CRUX_TX(id, cruxNode) as Map<Keyword, Any>?)
+        TransactionInstant.factory(TO_XTDB_TX(id, cruxNode) as Map<Keyword, Any>?)
     }

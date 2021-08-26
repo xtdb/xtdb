@@ -16,8 +16,8 @@ rm -rf $GRAAL_TARGET_DIR $LEIN_TARGET_DIR
 mkdir -p $GRAAL_TARGET_DIR
 ln -fs $GRAAL_TARGET_DIR $LEIN_TARGET_DIR
 
-export CRUX_DISABLE_LIBGCRYPT=true
-export CRUX_DISABLE_LIBCRYPTO=true
+export XTDB_DISABLE_LIBGCRYPT=true
+export XTDB_DISABLE_LIBCRYPTO=true
 
 lein do version, with-profile graal,uberjar uberjar
 

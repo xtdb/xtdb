@@ -19,7 +19,7 @@
 (def ^:private cw-namespace
   ;; uncomment this to test CW metrics locally, but don't commit it!
   (or #_"crux.bench.dev"
-      (when (Boolean/parseBoolean (System/getenv "CRUX_BENCH_CW_METRICS"))
+      (when (Boolean/parseBoolean (System/getenv "XTDB_BENCH_CW_METRICS"))
         "crux.bench")))
 
 (defn put-cw-metrics! [results]

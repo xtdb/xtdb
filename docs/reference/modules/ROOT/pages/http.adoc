@@ -121,7 +121,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/status
+     $XTDB_URL/_xtdb/status
 ----
 
 EDN::
@@ -130,7 +130,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/status
+     $XTDB_URL/_xtdb/status
 ----
 ====
 
@@ -182,7 +182,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/entity?eid=tommy
+     $XTDB_URL/_xtdb/entity?eid=tommy
 ----
 
 EDN::
@@ -192,7 +192,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/entity?eid-edn=:tommy
+     $XTDB_URL/_xtdb/entity?eid-edn=:tommy
 ----
 ====
 
@@ -249,7 +249,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/entity?eid=tommy&history=true&sortOrder=asc
+     $XTDB_URL/_xtdb/entity?eid=tommy&history=true&sortOrder=asc
 ----
 
 EDN::
@@ -258,7 +258,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/entity?eid-edn=:tommy&history=true&sort-order=asc
+     $XTDB_URL/_xtdb/entity?eid-edn=:tommy&history=true&sort-order=asc
 ----
 ====
 
@@ -341,7 +341,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/entity-tx?eid=tommy
+     $XTDB_URL/_xtdb/entity-tx?eid=tommy
 ----
 
 EDN::
@@ -350,7 +350,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/entity-tx?eid-edn=:tommy
+     $XTDB_URL/_xtdb/entity-tx?eid-edn=:tommy
 ----
 ====
 
@@ -412,7 +412,7 @@ JSON::
 curl -g \
      -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
+     $XTDB_URL/_xtdb/query?queryEdn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
 ----
 
 EDN::
@@ -422,7 +422,7 @@ EDN::
 curl -g \
      -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
+     $XTDB_URL/_xtdb/query?query-edn={%3Afind+[e]+%3Awhere+[[e+%3Axt/id+_]]}
 ----
 ====
 
@@ -475,7 +475,7 @@ curl -g \
      -H "Accept: application/edn" \
      -H "Content-Type: application/edn" \
      -d '{:query {:find [e first-name] :where [[e :first-name first-name] [e :last-name "Tutorial"]]}}' \
-     $CRUX_URL/_xtdb/query
+     $XTDB_URL/_xtdb/query
 ----
 ====
 
@@ -533,7 +533,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/attribute-stats
+     $XTDB_URL/_xtdb/attribute-stats
 ----
 
 EDN::
@@ -542,7 +542,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/attribute-stats
+     $XTDB_URL/_xtdb/attribute-stats
 ----
 ====
 
@@ -592,7 +592,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/sync?timeout=500
+     $XTDB_URL/_xtdb/sync?timeout=500
 ----
 
 EDN::
@@ -601,7 +601,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/sync?timeout=500
+     $XTDB_URL/_xtdb/sync?timeout=500
 ----
 ====
 
@@ -644,7 +644,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/await-tx?txId=1
+     $XTDB_URL/_xtdb/await-tx?txId=1
 ----
 
 EDN::
@@ -653,7 +653,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/await-tx?tx-id=1
+     $XTDB_URL/_xtdb/await-tx?tx-id=1
 ----
 ====
 
@@ -699,7 +699,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
+     $XTDB_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
 ----
 
 EDN::
@@ -708,7 +708,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
+     $XTDB_URL/_xtdb/await-tx-time?tx-time=2020-10-16T14:29:35Z
 ----
 ====
 
@@ -754,7 +754,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-      $CRUX_URL/_xtdb/tx-log
+      $XTDB_URL/_xtdb/tx-log
 ----
 
 EDN::
@@ -763,7 +763,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-      $CRUX_URL/_xtdb/tx-log
+      $XTDB_URL/_xtdb/tx-log
 ----
 ====
 
@@ -848,7 +848,7 @@ curl -X POST \
      -d '{"tx-ops": [["put", {"xt/id": "ivan", "name": "Ivan", "last-name": "Petrov"}],
           	         ["put", {"xt/id": "boris", "name": "Boris", "last-name": "Petrov"}],
           	         ["delete", "maria", "2012-05-07T14:57:08.462-00:00"]]}' \
-     $CRUX_URL/_xtdb/submit-tx
+     $XTDB_URL/_xtdb/submit-tx
 ----
 
 Note: xref:transactions#transaction-functions[Transaction functions] should be submitted as strings containing clojure code, and read in as EDN.
@@ -864,7 +864,7 @@ curl -X POST \
      -d '{:tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan" :last-name "Petrov"}],
           	       [:xt/put {:xt/id :boris, :name "Boris" :last-name "Petrov"}],
           	       [:xt/delete :maria #inst "2012-05-07T14:57:08.462-00:00"]]}' \
-     $CRUX_URL/_xtdb/submit-tx
+     $XTDB_URL/_xtdb/submit-tx
 ----
 ====
 
@@ -908,7 +908,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/tx-committed?txId=1
+     $XTDB_URL/_xtdb/tx-committed?txId=1
 ----
 
 EDN::
@@ -917,7 +917,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/tx-committed?tx-id=1
+     $XTDB_URL/_xtdb/tx-committed?tx-id=1
 ----
 ====
 
@@ -960,7 +960,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/latest-completed-tx
+     $XTDB_URL/_xtdb/latest-completed-tx
 ----
 
 EDN::
@@ -969,7 +969,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/latest-completed-tx
+     $XTDB_URL/_xtdb/latest-completed-tx
 ----
 
 ====
@@ -1007,7 +1007,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/latest-submitted-tx
+     $XTDB_URL/_xtdb/latest-submitted-tx
 ----
 
 EDN::
@@ -1016,7 +1016,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/latest-submitted-tx
+     $XTDB_URL/_xtdb/latest-submitted-tx
 ----
 ====
 
@@ -1053,7 +1053,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/active-queries
+     $XTDB_URL/_xtdb/active-queries
 ----
 
 EDN::
@@ -1062,7 +1062,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/active-queries
+     $XTDB_URL/_xtdb/active-queries
 ----
 ====
 
@@ -1113,7 +1113,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/recent-queries
+     $XTDB_URL/_xtdb/recent-queries
 ----
 
 EDN::
@@ -1122,7 +1122,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/recent-queries
+     $XTDB_URL/_xtdb/recent-queries
 ----
 ====
 
@@ -1173,7 +1173,7 @@ JSON::
 ----
 curl -X GET \
      -H "Accept: application/json" \
-     $CRUX_URL/_xtdb/slowest-queries
+     $XTDB_URL/_xtdb/slowest-queries
 ----
 
 EDN::
@@ -1182,7 +1182,7 @@ EDN::
 ----
 curl -X GET \
      -H "Accept: application/edn" \
-     $CRUX_URL/_xtdb/slowest-queries
+     $XTDB_URL/_xtdb/slowest-queries
 ----
 ====
 

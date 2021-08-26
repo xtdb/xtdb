@@ -466,7 +466,7 @@
                             :where [[e :xt.sql.table/name]]}))))
 
 (defn create-schema [parent-schema name operands]
-  (let [node (get !crux-nodes (get operands "CRUX_NODE"))
+  (let [node (get !crux-nodes (get operands "XTDB_NODE"))
         scan-only? (get operands "SCAN_ONLY")]
     (assert node)
     (proxy [org.apache.calcite.schema.impl.AbstractSchema] []
@@ -490,7 +490,7 @@
 (defn- model-properties [node-uuid scan-only?]
   (doto (Properties.)
     (.put "model" (str "inline:" (-> model
-                                     (update-in [:schemas 0 :operand] assoc "CRUX_NODE" node-uuid)
+                                     (update-in [:schemas 0 :operand] assoc "XTDB_NODE" node-uuid)
                                      (update-in [:schemas 0 :operand] assoc "SCAN_ONLY" scan-only?)
                                      json/generate-string)))
     (.put "timeZone" "UTC")))
