@@ -61,7 +61,7 @@
 
 (t/deftest test-status
   (t/is (= (merge {:crux.index/index-version 19}
-                  (when (instance? crux.kafka.KafkaTxLog (:tx-log *api*))
+                  (when (instance? xtdb.kafka.KafkaTxLog (:tx-log *api*))
                     {:crux.zk/zk-active? true}))
            (select-keys (api/status *api*) [:crux.index/index-version :crux.zk/zk-active?])))
 

@@ -10,8 +10,8 @@
             [crux.fixtures :as f]
             [crux.io :as cio]
             [crux.jdbc :as j]
-            [crux.kafka :as k]
-            [crux.kafka.embedded :as ek]
+            [xtdb.kafka :as k]
+            [xtdb.kafka.embedded :as ek]
             [crux.kv :as kv]
             [crux.lmdb :as lmdb]
             [crux.rocksdb :as rocks])

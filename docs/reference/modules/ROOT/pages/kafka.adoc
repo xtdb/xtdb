@@ -49,7 +49,7 @@ JSON::
 ----
 {
   "xt/tx-log": {
-    "xt/module": "crux.kafka/->tx-log",
+    "xt/module": "xtdb.kafka/->tx-log",
     "kafka-config": {
       "bootstrap-servers": "localhost:9092",
       ...
@@ -71,7 +71,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/tx-log {:xt/module 'crux.kafka/->tx-log
+{:xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
              :kafka-config {:bootstrap-servers "localhost:9092"}
              :tx-topic-opts {:topic-name "crux-transaction-log"}
              :poll-wait-duration (Duration/ofSeconds 1)}
@@ -82,7 +82,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-log {:xt/module crux.kafka/->tx-log
+{:xt/tx-log {:xt/module xtdb.kafka/->tx-log
              :kafka-config {:bootstrap-servers "localhost:9092"}
              :tx-topic-opts {:topic-name "crux-transaction-log"}
              :poll-wait-duration "PT1S"}
@@ -100,7 +100,7 @@ JSON::
 ----
 {
   "xt/document-store": {
-    "xt/module": "crux.kafka/->document-store",
+    "xt/module": "xtdb.kafka/->document-store",
     "kafka-config": {
       "bootstrap-servers": "localhost:9092",
       ...
@@ -126,7 +126,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'crux.kafka/->document-store
+{:xt/document-store {:xt/module 'xtdb.kafka/->document-store
                      :kafka-config {:bootstrap-servers "localhost:9092"
                                     ...}
                      :doc-topic-opts {:topic-name "crux-docs"
@@ -141,7 +141,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module crux.kafka/->document-store
+{:xt/document-store {:xt/module xtdb.kafka/->document-store
                      :kafka-config {:bootstrap-servers "localhost:9092"
                                     ...}
                      :doc-topic-opts {:topic-name "crux-docs"
@@ -153,7 +153,7 @@ EDN::
 ----
 ====
 
-If you do not want the local node to index transactions, you can use the xref:ingest-only-doc-store[`+crux.kafka/->ingest-only-document-store+`] module.
+If you do not want the local node to index transactions, you can use the xref:ingest-only-doc-store[`+xtdb.kafka/->ingest-only-document-store+`] module.
 
 ==== Sharing the local KV store
 
@@ -223,19 +223,19 @@ JSON::
 ----
 {
   "kafka-config": {
-    "xt/module": "crux.kafka/->kafka-config",
+    "xt/module": "xtdb.kafka/->kafka-config",
     "bootstrap-servers": "localhost:9092",
     ...
   },
 
   "xt/tx-log": {
-    "xt/module": "crux.kafka/->tx-log",
+    "xt/module": "xtdb.kafka/->tx-log",
     "kafka-config": "kafka-config",
     ...
   }
 
   "xt/document-store": {
-    "xt/module": "crux.kafka/->document-store",
+    "xt/module": "xtdb.kafka/->document-store",
     "kafka-config": "kafka-config",
     ...
   }
@@ -246,13 +246,13 @@ Clojure::
 +
 [source,clojure]
 ----
-{:kafka-config {:xt/module 'crux.kafka/->kafka-config
+{:kafka-config {:xt/module 'xtdb.kafka/->kafka-config
                 :bootstrap-servers "localhost:9092"
                 ...}
- :xt/tx-log {:xt/module 'crux.kafka/->tx-log
+ :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
                :kafka-config :kafka-config
                ...}
- :xt/document-store {:xt/module 'crux.kafka/->document-store
+ :xt/document-store {:xt/module 'xtdb.kafka/->document-store
                        :kafka-config :kafka-config
                        ...}}
 ----
@@ -261,13 +261,13 @@ EDN::
 +
 [source,clojure]
 ----
-{:kafka-config {:xt/module crux.kafka/->kafka-config
+{:kafka-config {:xt/module xtdb.kafka/->kafka-config
                 :bootstrap-servers "localhost:9092"
                 ...}
- :xt/tx-log {:xt/module crux.kafka/->tx-log
+ :xt/tx-log {:xt/module xtdb.kafka/->tx-log
              :kafka-config :kafka-config
              ...}
- :xt/document-store {:xt/module crux.kafka/->document-store
+ :xt/document-store {:xt/module xtdb.kafka/->document-store
                      :kafka-config :kafka-config
                      ...}}
 ----
@@ -275,14 +275,14 @@ EDN::
 
 == Parameters
 
-=== Connection config (`+crux.kafka/->kafka-config+`)
+=== Connection config (`+xtdb.kafka/->kafka-config+`)
 
 * `tx-topic-opts` (topic options)
 * `bootstrap-servers` (string, default `"localhost:9092"`): URL for connecting to Kafka
 * `properties-file` (string/`File`/`Path`): Kafka connection properties file, supplied directly to Kafka
 * `properties-map` (map): Kafka connection properties map, supplied directly to Kafka
 
-=== Topic options (`+crux.kafka/->topic-opts+`)
+=== Topic options (`+xtdb.kafka/->topic-opts+`)
 
 * `topic-name` (string, required, default `"tx-topic"` for tx-log, `"doc-topic"` for document-store)
 * `num-partitions` (int, default 1)
@@ -290,14 +290,14 @@ EDN::
 * `create-topics?` (boolean, default true): whether to create topics if they do not exist
 * `topic-config` (map): any further topic config to pass directly to Kafka
 
-=== Transaction log (`+crux.kafka/->tx-log+`)
+=== Transaction log (`+xtdb.kafka/->tx-log+`)
 
 * `kafka-config` (connection config)
 * `tx-topic-opts` (topic options)
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
-=== Document store (`+crux.kafka/->document-store+`)
+=== Document store (`+xtdb.kafka/->document-store+`)
 
 * `kafka-config` (connection config)
 * `doc-topic-opts` (topic options)
@@ -306,7 +306,7 @@ EDN::
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
 [#ingest-only-doc-store]
-=== Ingest-only document store (`+crux.kafka/->ingest-only-document-store+`)
+=== Ingest-only document store (`+xtdb.kafka/->ingest-only-document-store+`)
 
 * `kafka-config` (connection config)
 * `tx-topic-opts` (topic options)

@@ -82,14 +82,14 @@ connected to your Confluent Cloud cluster.
 
 (def ^crux.api.ICruxAPI node
   (crux/start-node
-    {:crux.kafka/kafka-config {:bootstrap-servers "XXXXX.confluent.cloud:9092" ; replace with value from your properties file
+    {:xtdb.kafka/kafka-config {:bootstrap-servers "XXXXX.confluent.cloud:9092" ; replace with value from your properties file
                                :properties-file "/home/myuser/cc-config.properties"} ; replace with the path of your properties file
-     :xt/tx-log {:xt/module 'crux.kafka/->tx-log
-                 :kafka-config :crux.kafka/kafka-config
+     :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
+                 :kafka-config :xtdb.kafka/kafka-config
                  :tx-topic-opts {:topic-name "tx-1" ; choose your tx-topic name
                                  :replication-factor 3}} ; Confluent Cloud requires this to be at least `3`
-     :xt/document-store {:xt/module 'crux.kafka/->document-store
-                         :kafka-config :crux.kafka/kafka-config
+     :xt/document-store {:xt/module 'xtdb.kafka/->document-store
+                         :kafka-config :xtdb.kafka/kafka-config
                          :doc-topic-opts {:topic-name "doc-1" ; choose your document-topic name
                                           :replication-factor 3}}})) ; Confluent Cloud requires this to be at least `3`
 ----

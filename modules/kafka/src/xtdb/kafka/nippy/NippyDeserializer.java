@@ -1,4 +1,4 @@
-package crux.kafka.nippy;
+package xtdb.kafka.nippy;
 
 import java.util.Map;
 import clojure.java.api.Clojure;

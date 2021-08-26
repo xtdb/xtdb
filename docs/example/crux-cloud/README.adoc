@@ -47,15 +47,15 @@ code to connect to your cluster and make a transaction:
 
 (def ^crux.api.ICruxAPI node
   (crux/start-node
-   {:crux.kafka/kafka-config {:bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
+   {:xtdb.kafka/kafka-config {:bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
                               :kafka-properties-file "path/to/my-kafka.properties"}
-    :xt/tx-log {:xt/module 'crux.kafka/->tx-log
-                :kafka-config :crux.kafka/kafka-config
+    :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
+                :kafka-config :xtdb.kafka/kafka-config
                 :tx-topic-opts {:replication-factor 3 ; Confluent Cloud requires this to be `3`
                                 :topic-name "tx-1"}}
 
-    :xt/document-store {:xt/module 'crux.kafka/->document-store
-                        :kafka-config :crux.kafka/kafka-config
+    :xt/document-store {:xt/module 'xtdb.kafka/->document-store
+                        :kafka-config :xtdb.kafka/kafka-config
                         :doc-topic-opts {:replication-factor 3
                                          :topic-name "doc-1" ; choose your doc-topic name
                                          :doc-partitions 6} ; Confluent Cloud default

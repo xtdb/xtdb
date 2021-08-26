@@ -1,17 +1,17 @@
-= crux-kafka-connect
+= xtdb-kafka-connect
 
 *Documentation/QuickStart Guides* can be found https://opencrux.com/reference/kafka-connect.html[here].
 
 === Alpha
 
-This project contains both `crux.kafka.connect.CruxSinkConnector`
+This project contains both `xtdb.kafka.connect.XtdbSinkConnector`
 which is an implementation of
 `org.apache.kafka.connect.sink.SinkConnector` and
-`crux.kafka.connect.CruxSourceConnector` which is an implementation of
+`xtdb.kafka.connect.XtdbSourceConnector` which is an implementation of
 `org.apache.kafka.connect.source.SourceConnector` .
 
 
 === Packaging the Connector
 
 To build the connector into a zip archive (for use with confluent hub), use `lein package` in the command line.
-The generated zip archive will be within *targets*, named **juxt-crux-kafka-connect-<VERSION>.zip.**
+The generated zip archive will be within *targets*, named **juxt-xtdb-kafka-connect-<VERSION>.zip.**

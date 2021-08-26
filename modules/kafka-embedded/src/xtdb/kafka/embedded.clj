@@ -1,4 +1,4 @@
-(ns crux.kafka.embedded
+(ns xtdb.kafka.embedded
   "Embedded Kafka for self-contained Crux deployments."
   (:require [clojure.java.io :as io]
             [crux.io :as cio]
@@ -92,7 +92,7 @@
   self-contained single node mode. The options zookeeper-data-dir and
   kafka-log-dir are required.
 
-  Returns a crux.kafka.embedded_kafka.EmbeddedKafka component that
+  Returns a xtdb.kafka.embedded_kafka.EmbeddedKafka component that
   implements java.io.Closeable, which allows ZooKeeper and Kafka to be
   stopped by calling close."
   ^java.io.Closeable

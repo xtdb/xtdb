@@ -1,4 +1,4 @@
-package crux.kafka.edn;
+package xtdb.kafka.edn;
 
 import java.util.Map;
 import java.io.UnsupportedEncodingException;

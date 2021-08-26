@@ -1,5 +1,5 @@
 (ns ^:no-doc crux.soak.config
-  (:require [crux.kafka :as k]
+  (:require [xtdb.kafka :as k]
             [clojure.string :as string]
             [nomad.config :as n])
   (:import software.amazon.awssdk.services.secretsmanager.model.GetSecretValueRequest

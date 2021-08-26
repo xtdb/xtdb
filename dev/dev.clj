@@ -7,8 +7,8 @@
             [integrant.repl :as ir :refer [go halt reset reset-all]]
             [crux.io :as cio]
             [crux.lucene]
-            [crux.kafka :as k]
-            [crux.kafka.embedded :as ek]
+            [xtdb.kafka :as k]
+            [xtdb.kafka.embedded :as ek]
             [crux.rocksdb :as rocks]
             [clojure.java.io :as io])
   (:import (crux.api ICruxAPI)

@@ -2,8 +2,8 @@
   (:require [clojure.java.io :as io]
             [crux.fixtures :as fix]
             [crux.io :as cio]
-            [crux.kafka :as k]
-            [crux.kafka.embedded :as ek])
+            [xtdb.kafka :as k]
+            [xtdb.kafka.embedded :as ek])
   (:import [java.util Properties UUID]
            org.apache.kafka.clients.consumer.KafkaConsumer))
 

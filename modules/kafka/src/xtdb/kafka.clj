@@ -1,4 +1,4 @@
-(ns crux.kafka
+(ns xtdb.kafka
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.tools.logging :as log]
@@ -10,7 +10,7 @@
             [crux.tx :as tx]
             [crux.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
-           [crux.kafka.nippy NippyDeserializer NippySerializer]
+           [xtdb.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
            java.nio.file.Path
            java.time.Duration

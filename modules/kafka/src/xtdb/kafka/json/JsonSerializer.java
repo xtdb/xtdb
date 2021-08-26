@@ -1,4 +1,4 @@
-package crux.kafka.json;
+package xtdb.kafka.json;
 
 import java.util.Map;
 import java.io.IOException;

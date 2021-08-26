@@ -1,4 +1,4 @@
-package crux.kafka;
+package xtdb.kafka;
 
 import java.util.List;
 import java.util.Map;
@@ -16,7 +16,7 @@ import clojure.lang.IFn;
  * Aims to group all version of an entity into the same partition.
  * To use, add this to the producer config:
  *
- * partitioner.class=crux.kafka.EidPartitioner
+ * partitioner.class=xtdb.kafka.EidPartitioner
  */
 public class EidPartitioner implements Partitioner {
     private static final Keyword xtId = (Keyword) Clojure.read(":xt/id");

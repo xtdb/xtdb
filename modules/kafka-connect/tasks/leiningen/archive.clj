@@ -3,7 +3,6 @@
             [clojure.java.shell :as sh]
             [clojure.string :as string]
             [clojure.pprint]
-            [clojure.walk :refer [postwalk]]
             [leiningen.core.eval]
             [leiningen.licenses :as licenses]))
 
@@ -32,10 +31,10 @@
              (io/file doc-dir "README.adoc"))
     (io/copy (io/file "../LICENSE")
              (io/file doc-dir "LICENSE"))
-    (io/copy (io/file "test-resources/local-crux-source.properties")
-             (io/file etc-dir "local-crux-source.properties"))
-    (io/copy (io/file "test-resources/local-crux-sink.properties")
-             (io/file etc-dir "local-crux-sink.properties"))
+    (io/copy (io/file "test-resources/local-xtdb-source.properties")
+             (io/file etc-dir "local-xtdb-source.properties"))
+    (io/copy (io/file "test-resources/local-xtdb-sink.properties")
+             (io/file etc-dir "local-xtdb-sink.properties"))
     (io/copy (io/file "resources/crux-logo.svg")
              (io/file assets-dir "crux-logo.svg"))
 

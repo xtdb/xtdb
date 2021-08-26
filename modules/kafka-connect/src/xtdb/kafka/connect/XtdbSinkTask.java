@@ -1,4 +1,4 @@
-package crux.kafka.connect;
+package xtdb.kafka.connect;
 
 import clojure.lang.Keyword;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
@@ -16,25 +16,25 @@ import java.util.Collection;
 import java.util.Map;
 
 
-public class CruxSinkTask extends SinkTask {
+public class XtdbSinkTask extends SinkTask {
     private Map<String,String> props;
     private Closeable api;
     private static IFn submitSinkRecords;
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.kafka.connect"));
-        submitSinkRecords = Clojure.var("crux.kafka.connect/submit-sink-records");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.kafka.connect"));
+        submitSinkRecords = Clojure.var("xtdb.kafka.connect/submit-sink-records");
     }
 
     @Override
     public String version() {
-        return new CruxSinkConnector().version();
+        return new XtdbSinkConnector().version();
     }
 
     @Override
     public void start(Map<String, String> props) {
         this.props = props;
-        this.api = (Closeable) Clojure.var("crux.api/new-api-client").invoke(props.get(CruxSinkConnector.URL_CONFIG));
+        this.api = (Closeable) Clojure.var("crux.api/new-api-client").invoke(props.get(XtdbSinkConnector.URL_CONFIG));
     }
 
     @Override

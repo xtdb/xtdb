@@ -2,7 +2,7 @@
   (:require [clj-http.client :as http]
             [clojure.string :as string]
             [crux.api :as crux]
-            [crux.kafka :as k]
+            [xtdb.kafka :as k]
             [crux.soak.config :as config]
             [nomad.config :as n])
   (:import java.time.Duration

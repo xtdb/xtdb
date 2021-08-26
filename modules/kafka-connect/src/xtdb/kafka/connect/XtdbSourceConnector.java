@@ -1,4 +1,4 @@
-package crux.kafka.connect;
+package xtdb.kafka.connect;
 
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -14,7 +14,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class CruxSourceConnector extends SourceConnector {
+public class XtdbSourceConnector extends SourceConnector {
     public static final String URL_CONFIG = "url";
     public static final String TOPIC_CONFIG = "topic";
     public static final String FORMAT_CONFIG = "format";
@@ -56,7 +56,7 @@ public class CruxSourceConnector extends SourceConnector {
 
     @Override
     public Class<? extends Task> taskClass() {
-        return CruxSourceTask.class;
+        return XtdbSourceTask.class;
     }
 
     @Override

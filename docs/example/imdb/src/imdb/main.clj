@@ -3,7 +3,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.tools.logging :as log]
-            [crux.kafka.embedded :as ek]
+            [xtdb.kafka.embedded :as ek]
             [crux.api :as api]))
 
 (def list-columns?
@@ -54,11 +54,11 @@
 (def index-dir "data/db-dir")
 
 (def crux-options
-  {:crux.kafka/kafka-config {:bootstrap-servers "localhost:9092"}
-   :xt/tx-log {:xt/module 'crux.kafka/->tx-log
-               :kafka-config :crux.kafka/kafka-config}
-   :xt/document-store {:xt/module 'crux.kafka/->document-store
-                       :kafka-config :crux.kafka/kafka-config
+  {:xtdb.kafka/kafka-config {:bootstrap-servers "localhost:9092"}
+   :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
+               :kafka-config :xtdb.kafka/kafka-config}
+   :xt/document-store {:xt/module 'xtdb.kafka/->document-store
+                       :kafka-config :xtdb.kafka/kafka-config
                        :local-document-store {:kv-store :rocksdb}}
    :xt/index-store {:kv-store :rocksdb}
    :rocksdb {:xt/module 'crux.rocksdb/->kv-store
@@ -66,9 +66,9 @@
 
 (def storage-dir "dev-storage")
 (def embedded-kafka-options
-  {:crux.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
-   :crux.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
-   :crux.kafka.embedded/kafka-port 9092})
+  {:xtdb.kafka.embedded/zookeeper-data-dir (str storage-dir "/zookeeper")
+   :xtdb.kafka.embedded/kafka-log-dir (str storage-dir "/kafka-log")
+   :xtdb.kafka.embedded/kafka-port 9092})
 
 
 (defn run-node [{:keys [server-port] :as options} with-node-fn]

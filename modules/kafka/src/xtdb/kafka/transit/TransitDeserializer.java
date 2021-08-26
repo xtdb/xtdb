@@ -1,4 +1,4 @@
-package crux.kafka.transit;
+package xtdb.kafka.transit;
 
 import java.util.Map;
 import java.util.HashMap;

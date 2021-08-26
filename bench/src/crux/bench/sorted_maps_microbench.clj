@@ -2,9 +2,9 @@
   (:require [clojure.java.io :as io]
             [crux.api :as crux]
             [crux.bench :as bench]
-            [crux.kafka.embedded :as ek]
+            [xtdb.kafka.embedded :as ek]
             [crux.fixtures :as fix]
-            [crux.kafka :as k]
+            [xtdb.kafka :as k]
             [crux.rocksdb :as rocks]))
 
 (defn submit-batches [node]

@@ -1,4 +1,4 @@
-(ns crux.kafka.connect
+(ns xtdb.kafka.connect
   (:require [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json]
             [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate :as json-gen]
             [clojure.tools.logging :as log]
@@ -7,14 +7,14 @@
             [crux.error :as err]
             [cognitect.transit :as transit]
             [crux.api :as api])
-  (:import [org.apache.kafka.connect.data Schema Schema$Type Struct Field]
+  (:import [org.apache.kafka.connect.data Schema Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
            java.io.ByteArrayOutputStream
            [java.util UUID Map]
            [com.fasterxml.jackson.core JsonGenerator JsonParseException]
-           crux.kafka.connect.CruxSinkConnector
-           crux.kafka.connect.CruxSourceConnector
+           xtdb.kafka.connect.XtdbSinkConnector
+           xtdb.kafka.connect.XtdbSourceConnector
            crux.codec.EDNId))
 
 (json-gen/add-encoder
@@ -93,7 +93,7 @@
 
 (defn- find-eid [props ^SinkRecord record doc]
   (let [id (or (get doc :xt/id)
-               (some->> (get props CruxSinkConnector/ID_KEY_CONFIG)
+               (some->> (get props XtdbSinkConnector/ID_KEY_CONFIG)
                         (keyword)
                         (get doc))
                (.key record))]
@@ -200,11 +200,11 @@
                    (inst-ms tx-time))))
 
 (defn poll-source-records [api source-offset props]
-  (let [url (get props CruxSourceConnector/URL_CONFIG)
-        topic (get props CruxSourceConnector/TOPIC_CONFIG)
-        format (get props CruxSourceConnector/FORMAT_CONFIG)
-        mode (get props CruxSourceConnector/MODE_CONFIG)
-        batch-size (get props CruxSourceConnector/TASK_BATCH_SIZE_CONFIG)
+  (let [url (get props XtdbSourceConnector/URL_CONFIG)
+        topic (get props XtdbSourceConnector/TOPIC_CONFIG)
+        format (get props XtdbSourceConnector/FORMAT_CONFIG)
+        mode (get props XtdbSourceConnector/MODE_CONFIG)
+        batch-size (get props XtdbSourceConnector/TASK_BATCH_SIZE_CONFIG)
         source-partition {"url" url}
         formatter (case format
                     "edn" cio/pr-edn-str

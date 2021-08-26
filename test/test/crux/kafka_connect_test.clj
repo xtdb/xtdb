@@ -1,13 +1,10 @@
 (ns crux.kafka-connect-test
   (:require [crux.api :as api]
-            [crux.kafka :as k]
-            [crux.kafka.connect :as cfc]
             [crux.codec :as c]
             [clojure.test :as t]
             [crux.fixtures.http-server :as fh :refer [*api-url*]]
-            [crux.fixtures :as fix :refer [*api*]]
-            [clojure.edn :as edn])
-  (:import [crux.kafka.connect CruxSinkTask CruxSourceTask CruxSourceConnector]
+            [crux.fixtures :as fix :refer [*api*]])
+  (:import [xtdb.kafka.connect XtdbSinkTask XtdbSourceTask]
            org.apache.kafka.connect.sink.SinkRecord
            [org.apache.kafka.connect.source SourceTaskContext SourceRecord]
            org.apache.kafka.connect.storage.OffsetStorageReader))
@@ -19,13 +16,13 @@
                              kafka-offset 0}}]
   (SinkRecord. topic partition key-schema key value-schema value kafka-offset))
 
-(defn get-tx-from-source-task [^CruxSourceTask source-task]
+(defn get-tx-from-source-task [^XtdbSourceTask source-task]
   (some-> (.poll source-task)
           (first)
           (#(.value ^SourceRecord %))
           (c/read-edn-string-with-readers)))
 
-(defn get-docs-from-source-task [^CruxSourceTask source-task]
+(defn get-docs-from-source-task [^XtdbSourceTask source-task]
   (let [docs (.poll source-task)]
     (map
      (fn [record]
@@ -34,7 +31,7 @@
      docs)))
 
 (t/deftest test-sink-task
-  (let [sink-task (doto (CruxSinkTask.) (.start {"url" *api-url*}))]
+  (let [sink-task (doto (XtdbSinkTask.) (.start {"url" *api-url*}))]
     (t/testing "`put` on documents"
       (t/testing "put with key contained in document"
         (.put sink-task [(new-sink-record {:value {:xt/id :foo}})])
@@ -51,7 +48,7 @@
       (t/is (nil? (api/entity (api/db *api*) :foo))))
     (.stop sink-task))
   (t/testing "testing sinktask with custom id.key config"
-    (let [sink-task (doto (CruxSinkTask.) (.start {"url" *api-url*
+    (let [sink-task (doto (XtdbSinkTask.) (.start {"url" *api-url*
                                                    "id.key" "kafka/id"}))]
       (.put sink-task [(new-sink-record {:value {:kafka/id :kafka-id}})])
       (t/is (api/await-tx *api* {:xt/tx-id 3}))
@@ -65,7 +62,7 @@
                       "format" "edn"
                       "mode" "tx"
                       "batch.size" "100"}
-        source-task (-> (CruxSourceTask.)
+        source-task (-> (XtdbSourceTask.)
                         (doto (.start source-props))
                         (doto (.initialize (reify SourceTaskContext
                                              (configs [_]
@@ -74,7 +71,7 @@
                                                (reify OffsetStorageReader
                                                  (offset [_ p] {"offset" nil})
                                                  (offsets [this ps] (map #(.offset this %) ps))))))))]
-    (t/testing "CruxSourceTask outputs single operation transactions"
+    (t/testing "XtdbSourceTask outputs single operation transactions"
       (t/testing ":xt/put"
         (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :hello}]])]
           (t/is
@@ -96,7 +93,7 @@
            (= [[:xt/evict (c/new-id :hello)]]
               (get-tx-from-source-task source-task))))))
 
-    (t/testing "CruxSourceTask outputs a set of mixed transactions"
+    (t/testing "XtdbSourceTask outputs a set of mixed transactions"
       (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :bar :age 20}]
                                                                          [:xt/put {:xt/id :foo}]
                                                                          [:xt/match :foo {:xt/id :foo}]])]
@@ -106,7 +103,7 @@
              [:xt/match (c/new-id :foo) {:xt/id :foo}]]
             (get-tx-from-source-task source-task)))))
 
-    (t/testing "CruxSourceTask doesn't break on failed transactions"
+    (t/testing "XtdbSourceTask doesn't break on failed transactions"
       (t/testing "Failed transactions are skipped, outputted as nil"
         (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :bar2}]
                                                                            [:xt/match :bar2 {:xt/id :bar2 :key "not-found"}]
@@ -128,7 +125,7 @@
                         "format" "edn"
                         "mode" "doc"
                         "batch.size" "100"}
-          source-task (-> (CruxSourceTask.)
+          source-task (-> (XtdbSourceTask.)
                           (doto (.start source-props))
                           (doto (.initialize (reify SourceTaskContext
                                                (configs [_]

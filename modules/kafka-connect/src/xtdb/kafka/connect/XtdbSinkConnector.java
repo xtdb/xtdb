@@ -1,4 +1,4 @@
-package crux.kafka.connect;
+package xtdb.kafka.connect;
 
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
@@ -13,7 +13,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class CruxSinkConnector extends SinkConnector {
+public class XtdbSinkConnector extends SinkConnector {
 
     public static final String URL_CONFIG = "url";
     public static final String ID_KEY_CONFIG = "id.key";
@@ -38,7 +38,7 @@ public class CruxSinkConnector extends SinkConnector {
 
     @Override
     public Class<? extends Task> taskClass() {
-        return CruxSinkTask.class;
+        return XtdbSinkTask.class;
     }
 
     @Override

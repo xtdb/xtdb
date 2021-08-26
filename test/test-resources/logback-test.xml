@@ -14,7 +14,7 @@
     <logger name="crux.mem-kv" level="ERROR" />
     <logger name="crux.hash" level="WARN" />
     <logger name="crux.http-server" level="WARN" />
-    <logger name="crux.kafka" level="WARN" />
+    <logger name="xtdb.kafka" level="WARN" />
     <logger name="crux.jdbc" level="WARN" />
     <logger name="crux.mem-kv" level="ERROR" />
     <logger name="crux.rdf" level="ERROR" />

@@ -21,10 +21,10 @@
                         (with-meta {::embedded-kafka? true}))
        :local-kafka-transit (-> (t/join-fixtures [(partial
                                                    fk/with-kafka-config
-                                                   {:properties-map {"key.serializer" "crux.kafka.transit.TransitSerializer"
-                                                                     "key.deserializer" "crux.kafka.transit.TransitDeserializer"
-                                                                     "value.serializer" "crux.kafka.transit.TransitSerializer"
-                                                                     "value.deserializer" "crux.kafka.transit.TransitDeserializer"}})
+                                                   {:properties-map {"key.serializer" "xtdb.kafka.transit.TransitSerializer"
+                                                                     "key.deserializer" "xtdb.kafka.transit.TransitDeserializer"
+                                                                     "value.serializer" "xtdb.kafka.transit.TransitSerializer"
+                                                                     "value.deserializer" "xtdb.kafka.transit.TransitDeserializer"}})
                                                   fk/with-cluster-tx-log-opts
                                                   fk/with-cluster-doc-store-opts
                                                   fix/with-node])

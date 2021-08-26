@@ -1,5 +1,5 @@
 = crux-kafka-embedded
 
-This project contains the `crux.kafka.embedded` namespace which manages the
+This project contains the `xtdb.kafka.embedded` namespace which manages the
 lifecycle of an embedded Kafka-based node. This is useful for testing and
 small non-clustered deployments.

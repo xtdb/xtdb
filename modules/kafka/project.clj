@@ -27,9 +27,9 @@
                   "-Werror"
                   "-proc:none"]
 
-  :javadoc-opts {:package-names ["crux"]
+  :javadoc-opts {:package-names ["xtdb"]
                  :output-dir "target/javadoc/out"
-                 :additional-args ["-windowtitle" "Crux Kafka Javadoc"
+                 :additional-args ["-windowtitle" "XTDB Kafka Javadoc"
                                    "-quiet"
                                    "-Xdoclint:none"
                                    "-link" "https://docs.oracle.com/javase/8/docs/api/"

@@ -5,7 +5,7 @@
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.kafka :as fk]
-            [crux.kafka :as k])
+            [xtdb.kafka :as k])
   (:import java.time.Duration))
 
 (t/use-fixtures :once fk/with-embedded-kafka-cluster)
