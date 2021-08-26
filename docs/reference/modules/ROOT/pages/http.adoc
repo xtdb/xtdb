@@ -93,7 +93,7 @@ If the node was started on `localhost:3000`, you can connect to it by doing the 
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=start-http-client]
+include::example$test/xtdb/docs/examples_test.clj[tags=start-http-client]
 ----
 
 [#rest-api]

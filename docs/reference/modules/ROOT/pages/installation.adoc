@@ -51,19 +51,19 @@ Java::
 +
 [source,java]
 ----
-include::example$test/crux/docs/Install.java[tag=imports]
+include::example$test/xtdb/docs/Install.java[tag=imports]
 
-include::example$test/crux/docs/Install.java[tag=main-0,indent=0]
-include::example$test/crux/docs/Install.java[tag=main-1,indent=0]
+include::example$test/xtdb/docs/Install.java[tag=main-0,indent=0]
+include::example$test/xtdb/docs/Install.java[tag=main-1,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-include::example$test/crux/docs/Install.kt[tag=imports]
+include::example$test/xtdb/docs/Install.kt[tag=imports]
 
-include::example$test/crux/docs/Install.kt[tag=main,indent=0]
+include::example$test/xtdb/docs/Install.kt[tag=main,indent=0]
 ----
 ====
 

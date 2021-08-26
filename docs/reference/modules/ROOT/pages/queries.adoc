@@ -53,7 +53,7 @@ A query in Crux is performed by calling `crux/q` on a Crux database snapshot wit
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=anatomy,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=anatomy,indent=0]
 ----
 <1> Database value. Usually the snapshot view comes from calling `crux/db` on a Crux node
 <2> Query map or vector (ex. `[:find ...etc... ]`, as found in other Datalog databases)
@@ -89,7 +89,7 @@ The following will return all last names bound to the logic variable `n`.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=triple,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=triple,indent=0]
 ----
 
 [#find-aggregate]
@@ -118,9 +118,9 @@ You can specify an aggregate function to apply to at most one logic variable.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-aggregates,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-aggregates,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=query-aggregates-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-aggregates-r,indent=0]
 ----
 
 Note there is always implicit grouping across aggregates due to how Crux performs the aggregation lazily _before_ turning the result tuples into a set.
@@ -150,29 +150,29 @@ To specify what data you'd like about each entity, include a `(pull ?logic-var p
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-1,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-1-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-1-r,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-2,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-2-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-2-r,indent=0]
 ----
 
 You can quickly grab the whole document by specifying `*` in the projection spec:
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-6,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-6-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-6,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-6-r,indent=0]
 ----
 
 If you have the entity id(s) in hand, you can call `pull` or `pull-many` directly:
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-many-query-1]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-many-query-1-r]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-many-query-2]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-many-query-2-r]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-many-query-1]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-many-query-1-r]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-many-query-2]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-many-query-2-r]
 ----
 
 We can navigate to other entities (and hence build up nested results) using joins.
@@ -180,19 +180,19 @@ Joins are specified in `{}` braces in the projection-spec - each one maps one jo
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-3,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-3-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-3-r,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-4,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-4-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-4,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-4-r,indent=0]
 ----
 
 We can also navigate in the reverse direction, looking for entities that refer to this one, by prepending `_` to the attribute name:
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-5,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=pull-query-5-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-5,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=pull-query-5-r,indent=0]
 ----
 
 ==== Attribute parameters
@@ -240,8 +240,8 @@ To return maps rather than tuples, supply the map keys under `:keys` for keyword
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=return-maps,indent=0]
-include::example$test/crux/docs/examples/query_test.clj[tags=return-maps-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=return-maps,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=return-maps-r,indent=0]
 ----
 
 [#where]
@@ -284,11 +284,11 @@ It restricts results by matching EAV facts
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=double,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=double,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=triple-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=triple-2,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=triple-3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=triple-3,indent=0]
 ----
 <1> This matches all entities, `p`, which have a `:name` field.
 <2> This matches all entities, `p`, which have a `:name` of `"Ivan"`.
@@ -303,7 +303,7 @@ Predicate clauses must be placed in a clause, i.e. with a surrounding vector.
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-pred-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-pred-1,indent=0]
 ----
 
 This matches all entities, `p` which have an odd `:age`.
@@ -317,7 +317,7 @@ You can nest a subquery with a `:where` clause to bind the result for further us
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=sub-query-example-1,indent=0]
 ----
 
 In the above query, we perform a subquery doing some arithmetic operations and returning the result - and bind the resulting relation as a scalar.
@@ -326,14 +326,14 @@ Result set:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-1-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=sub-query-example-1-r,indent=0]
 ----
 
 ==== Binding results as a tuple
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=sub-query-example-2,indent=0]
 ----
 
 Similar to the previous query, except we bind the resulting relation as a tuple.
@@ -342,21 +342,21 @@ Result set:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-2-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=sub-query-example-2-r,indent=0]
 ----
 
 In this example, we bind the results of a subquery and use them to return another result.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=sub-query-example-3,indent=0]
 ----
 
 Result set:
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=sub-query-example-3-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=sub-query-example-3-r,indent=0]
 ----
 
 Any fully qualified Clojure function can also be used to return relation bindings in this way, by returning a list, set or vector.
@@ -370,11 +370,11 @@ Allowed range operators are `<`, `+<=+`, `>=`, `>`, and `=`.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=range-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=range-1,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=range-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=range-2,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=range-3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=range-3,indent=0]
 ----
 <1> Finds any entity, `p`, with an `:age` which is greater than 18
 <2> Finds any entity, `p`, with an `:age` which is greater than the `:age` of any entity
@@ -418,11 +418,11 @@ The `not` clause rejects a graph if all the clauses within it are true.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=not-data,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=not-data,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=not-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=not-2,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=not-2-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=not-2-r,indent=0]
 ----
 <1> Data
 <2> Query
@@ -441,11 +441,11 @@ Any other logic variables within the not-join are scoped only for the join.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=not-join-data,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=not-join-data,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=not-join,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=not-join,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=not-join-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=not-join-r,indent=0]
 ----
 <1> Data
 <2> Declaration of which logic variables need to unify with the rest of the query
@@ -463,11 +463,11 @@ An `or` clause is satisfied if any of its legs are satisfied.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-data,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-data,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=or-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-1,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=or-1-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-1-r,indent=0]
 ----
 <1> Data
 <2> Query
@@ -479,7 +479,7 @@ When within an `or` rule, you can use `and` to group clauses into a single leg (
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-2,indent=0]
 ----
 
 Whenever the query engine complains that each leg in the `or` or `or-join` clause requires the "same logic variables", you can add a no-op predicate clause like `[(any? e)]` within `and` clauses for each of the missing variables in the various legs.
@@ -487,7 +487,7 @@ You need to add such no-op predicates until each leg contains the same set of va
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-3,indent=0]
 ----
 
 Hypothetically, Crux could automatically detect these cases and insert no-op predicates on the user's behalf, but that would be a deviation from the essential semantics of Datalog.
@@ -504,11 +504,11 @@ Any other logic variables within the `or-join` are scoped only for the join.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=or-join-data,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-join-data,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=or-join,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-join,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=or-join-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=or-join-r,indent=0]
 ----
 <1> Data
 <2> Declaration of which logic variables need to unify with the rest of the query
@@ -535,7 +535,7 @@ Crux queries can take a set of additional arguments, binding them to variables u
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments1,indent=0]
 ----
 
 In the above query, we parameterize the `first-name` symbol, and pass in "Ivan" as our input, binding "Ivan" to `first-name` in the query.
@@ -543,14 +543,14 @@ In the above query, we parameterize the `first-name` symbol, and pass in "Ivan" 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments1-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments1-r,indent=0]
 ----
 
 === Collection binding
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments2,indent=0]
 ----
 
 This query shows binding to a collection of inputs - in this case, binding `first-name` to all of the different values in a collection of first-names.
@@ -558,14 +558,14 @@ This query shows binding to a collection of inputs - in this case, binding `firs
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments2-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments2-r,indent=0]
 ----
 
 === Tuple binding
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments3,indent=0]
 ----
 
 In this query we are binding a set of variables to a single value each, passing in a collection as our input. In this case, we are passing a collection with a `first-name` followed by a `last-name`.
@@ -573,14 +573,14 @@ In this query we are binding a set of variables to a single value each, passing 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments3-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments3-r,indent=0]
 ----
 
 === Relation binding
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments4,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments4,indent=0]
 ----
 
 Here we see how we can extend the parameterisation to match using multiple fields at once by passing and destructuring a relation containing multiple tuples.
@@ -588,7 +588,7 @@ Here we see how we can extend the parameterisation to match using multiple field
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-with-arguments4-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-with-arguments4-r,indent=0]
 ----
 
 [#ordering-and-pagination]
@@ -604,7 +604,7 @@ control the result order.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=order-and-pagination-1,indent=0]
 ----
 
 Use of `:order-by` will require that results are fully-realised by the query
@@ -617,7 +617,7 @@ naively scroll through the initial result set each time.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=order-and-pagination-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=order-and-pagination-2,indent=0]
 ----
 
 Ordered results are returned as bags, not sets, so you may want to deduplicate
@@ -639,7 +639,7 @@ They can be used as a shorthand for when you would otherwise be repeating the sa
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=rules-1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=rules-1,indent=0]
 ----
 <1> Rule usage clause (i.e. invocation)
 <2> Rule head (i.e. signature)
@@ -653,7 +653,7 @@ The clauses within Rules can also be further Rule invocation clauses. This allow
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=rules-2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=rules-2,indent=0]
 ----
 
 This example finds all entities that the entity with `:name` "Smith" is connected to via `:follow`, even if the connection is via intermediaries.
@@ -670,14 +670,14 @@ For example, the following query and rule set will work and return the correct r
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=rules-3,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=rules-3,indent=0]
 ----
 
 However, specifying that the `p` variable should be bound before the rule can be evaluated will improve the evalution time by many orders-of-magnitude for large data sets.
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=rules-4,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=rules-4,indent=0]
 ----
 
 [#timeout]
@@ -696,16 +696,16 @@ To query based on a different Valid Time, create this snapshot by specifying the
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-d1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-d1,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-d2,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-d2,indent=0]
 ----
 
 Here, we have `put` different documents in Crux with different Valid Times.
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-q1,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-q1,indent=0]
 ----
 
 Here, we have defined a query, `q` to find all entities with a `:name` of "Malcolma" and `:last-name` of "Sparks"
@@ -714,9 +714,9 @@ We can run the query at different Valid Times as follows
 
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-q1-q,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-q1-q,indent=0]
 
-include::example$test/crux/docs/examples/query_test.clj[tags=query-at-t-q2-q,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=query-at-t-q2-q,indent=0]
 ----
 
 The first query will return an empty result set (`#{}`) because there isn't a document with the `:name` "Malcolma" valid at `#inst "1986-10-23"`
@@ -732,19 +732,19 @@ This will be the case so long as there are no newer versions (in the valid time 
 Given the following documents in the database
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=join-d,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=join-d,indent=0]
 ----
 
 We can run a query to return a set of tuples that satisfy the join on the attribute `:name`
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=join-q,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=join-q,indent=0]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=join-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=join-r,indent=0]
 ----
 
 Note that every person joins once, plus 2 more matches.
@@ -754,19 +754,19 @@ Note that every person joins once, plus 2 more matches.
 Given the following documents in the database
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=join2-d,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=join2-d,indent=0]
 ----
 
 We can run a query to return a set of entities that `:follows` the set of entities with the `:name` value of `"Ivan"`
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=join2-q,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=join2-q,indent=0]
 ----
 
 Result Set:
 [source,clj]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=join2-r,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=join2-r,indent=0]
 ----
 
 Note that because Crux is schemaless there is no need to have elsewhere declared that the `:follows` attribute may take a value of edn type `set`.
@@ -788,7 +788,7 @@ block) will result in undefined behaviour.
 
 [source,clj,indent=0]
 ----
-include::example$test/crux/docs/examples/query_test.clj[tags=streaming-query,indent=0]
+include::example$test/xtdb/docs/examples/query_test.clj[tags=streaming-query,indent=0]
 ----
 
 [#history-api]
@@ -799,14 +799,14 @@ include::example$test/crux/docs/examples/query_test.clj[tags=streaming-query,ind
 Crux allows you to retrieve all versions of a given entity:
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=history-full,indent=0]
+include::example$test/xtdb/docs/examples_test.clj[tags=history-full,indent=0]
 ----
 
 === Retrieving previous documents
 When retrieving the previous versions of an entity, you have the option to additionally return the documents associated with those versions (by using `:with-docs?` in the additional options map)
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=history-with-docs,indent=0]
+include::example$test/xtdb/docs/examples_test.clj[tags=history-with-docs,indent=0]
 ----
 
 [#history-document-history-range]
@@ -821,7 +821,7 @@ Retrievable entity versions can be bounded by four time coordinates:
 All coordinates are inclusive. All coordinates can be null.
 [source,clj]
 ----
-include::example$test/crux/docs/examples_test.clj[tags=history-range,indent=0]
+include::example$test/xtdb/docs/examples_test.clj[tags=history-range,indent=0]
 ----
 
 [#clojure-tips]

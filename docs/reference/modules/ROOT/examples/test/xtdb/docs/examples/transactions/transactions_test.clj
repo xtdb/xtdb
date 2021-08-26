@@ -1,4 +1,4 @@
-(ns crux.docs.examples.transactions.transactions-test
+(ns xtdb.docs.examples.transactions.transactions-test
   (:require [clojure.test :as t]
             [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]))

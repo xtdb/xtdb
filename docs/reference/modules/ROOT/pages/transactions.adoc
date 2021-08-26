@@ -21,17 +21,17 @@ If using the `Consumer` approach, we recommend importing `crux.api.tx.Transactio
 
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=creating-0,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=creating-0,indent=0]
 
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=creating-1,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=creating-1,indent=0]
 
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=creating-2,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=creating-2,indent=0]
 
 // To run the transaction:
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=using-0,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=using-0,indent=0]
 
 // To run a transaction directly:
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=using-1,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=using-1,indent=0]
 ----
 --
 
@@ -96,7 +96,7 @@ Java::
 --
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=put,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=put,indent=0]
 ----
 <1> Putting a document as of now.
 <2> Putting a document with a specific <<valid-time, valid time>>
@@ -108,7 +108,7 @@ Clojure::
 --
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=put,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=put,indent=0]
 ----
 <1> Document to add
 <2> (optional) <<valid-time,`valid time`>>
@@ -128,7 +128,7 @@ Java::
 --
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=delete,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=delete,indent=0]
 ----
 
 <1> Deletes as of now
@@ -141,7 +141,7 @@ Clojure::
 --
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=delete,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=delete,indent=0]
 ----
 <1> Document ID to be deleted
 <2> (optional) <<valid-time,`valid time`>>
@@ -163,7 +163,7 @@ Java::
 --
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=match,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=match,indent=0]
 ----
 
 <1> Passes if `document1` is exactly present now
@@ -178,7 +178,7 @@ Clojure::
 --
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=match,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=match,indent=0]
 ----
 
 <1> ID to be matched (for an entity which may or may not exist)
@@ -202,7 +202,7 @@ Java::
 --
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=evict,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=evict,indent=0]
 ----
 --
 
@@ -211,7 +211,7 @@ Clojure::
 --
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=evict,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=evict,indent=0]
 ----
 --
 ====
@@ -231,7 +231,7 @@ Transaction functions can be used, for example, to safely check the current data
 ==== Anatomy
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-anatomy,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=fn-anatomy,indent=0]
 ----
 <1> Transaction functions are passed a `context` parameter and any number of other parameters.
 <2> The `context` parameter can be used to obtain a database value using `db` or `open-db`.
@@ -256,7 +256,7 @@ It takes the ID for the function as well as a string consisting of the Clojure f
 
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=fn-put,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=fn-put,indent=0]
 ----
 --
 
@@ -267,7 +267,7 @@ The document should use the `:crux.db/fn` key.
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-put,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=fn-put,indent=0]
 ----
 <1> Note that the function itself is quoted
 --
@@ -284,7 +284,7 @@ Java::
 --
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=fn-use,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=fn-use,indent=0]
 ----
 --
 
@@ -293,7 +293,7 @@ Clojure::
 --
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=fn-use,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=fn-use,indent=0]
 ----
 <1> Function ID
 <2> Parameter(s)
@@ -315,13 +315,13 @@ The instance itself is immutable and plusing/minusing data yields a new instance
 Similarly to Transactions, you can use `CruxDocument.Builder` directly or use the `Consumer` approach.
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=doc-builder,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=doc-builder,indent=0]
 
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=doc-consumer,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=doc-consumer,indent=0]
 
 // You can also chain creating new instances of the document,
 // but this will be slow for larger documents.
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=doc-direct,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=doc-direct,indent=0]
 ----
 --
 
@@ -439,7 +439,7 @@ In Java, you receive a `TransactionInstant` from the `submitTx` call.
 
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=ti,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=ti,indent=0]
 ----
 --
 
@@ -450,7 +450,7 @@ In Clojure, you receive a map from `submit-tx` containing `:xt/tx-id` and `:xt/t
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=ti,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=ti,indent=0]
 ----
 --
 ====
@@ -473,7 +473,7 @@ You submit these transactions to an instance of ICruxDatasource using `withTx`:
 
 [source,java]
 ----
-include::example$test/crux/docs/examples/transactions/TransactionsTest.java[tags=with-tx,indent=0]
+include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=with-tx,indent=0]
 ----
 --
 
@@ -484,10 +484,10 @@ You submit these transactions to a database value using `with-tx`:
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-0,indent=0]
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-1,indent=2]
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-2,indent=2]
-include::example$test/crux/docs/examples/transactions/transactions_test.clj[tags=speculative-3,indent=2]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=speculative-0,indent=0]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=speculative-1,indent=2]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=speculative-2,indent=2]
+include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags=speculative-3,indent=2]
 ----
 --
 ====

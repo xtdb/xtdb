@@ -17,13 +17,13 @@ For a Java in-process node, the modules are configured using the supplied Config
 
 [source,java]
 ----
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=import,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=import,indent=0]
 
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-file,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=from-file,indent=0]
 
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-resource,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=from-resource,indent=0]
 
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=from-configurator,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=from-configurator,indent=0]
 ----
 --
 Kotlin::
@@ -33,13 +33,13 @@ For a Kotlin in-process node, the modules are configured using the supplied Conf
 
 [source,kotlin]
 ----
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=import,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=import,indent=0]
 
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=from-file,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=from-file,indent=0]
 
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=from-resource,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=from-resource,indent=0]
 
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=from-configurator,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=from-configurator,indent=0]
 ----
 --
 Clojure::
@@ -49,13 +49,13 @@ For a Clojure in-process node, the `start-node` function accepts a module tree, 
 
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=import,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=import,indent=0]
 
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=from-file,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=from-file,indent=0]
 
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=from-resource,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=from-resource,indent=0]
 
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=from-explicit,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=from-explicit,indent=0]
 ----
 --
 ====
@@ -97,35 +97,35 @@ Java::
 +
 [source,java]
 ----
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=http-server,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=http-server,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=http-server,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=http-server,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-include::example$test/crux/docs/examples/configuration/config.json[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=http-server,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=http-server,indent=0]
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/config.edn[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config.edn[indent=0]
 ----
 ====
 
@@ -140,35 +140,35 @@ Java::
 +
 [source,java]
 ----
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=override-module,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=override-module,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=override-module,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=override-module,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-include::example$test/crux/docs/examples/configuration/config_override.json[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config_override.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=override-module,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=override-module,indent=0]
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/config_override.edn[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config_override.edn[indent=0]
 ----
 ====
 
@@ -185,41 +185,41 @@ Java::
 +
 [source,java]
 ----
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-0,indent=0]
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-1,indent=4]
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-2,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-0,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-1,indent=4]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=nested-modules-2,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-0,indent=0]
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-1,indent=4]
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-2,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-0,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-1,indent=4]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=nested-modules-2,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-include::example$test/crux/docs/examples/configuration/config_nested.json[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config_nested.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=nested-modules-0,indent=0]
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=nested-modules-1,indent=18]
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=nested-modules-2,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=nested-modules-0,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=nested-modules-1,indent=18]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=nested-modules-2,indent=0]
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/config_nested.edn[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config_nested.edn[indent=0]
 ----
 ====
 
@@ -244,7 +244,7 @@ For example, if we were to write the following, the transaction log and the docu
 
 [source,json]
 ----
-include::example$test/crux/docs/examples/configuration/sharing_modules_naive.json[indent=0]
+include::example$test/xtdb/docs/examples/configuration/sharing_modules_naive.json[indent=0]
 ----
 
 We can store both the transaction log and the document store in the same KV store, to save ourselves some hassle.
@@ -257,28 +257,28 @@ Java::
 +
 [source,java]
 ----
-include::example$test/crux/docs/examples/configuration/ConfigurationTest.java[tags=sharing-modules,indent=0]
+include::example$test/xtdb/docs/examples/configuration/ConfigurationTest.java[tags=sharing-modules,indent=0]
 ----
 
 Kotlin::
 +
 [source,kotlin]
 ----
-include::example$test/crux/docs/examples/configuration/KConfigurationTest.kt[tags=sharing-modules,indent=0]
+include::example$test/xtdb/docs/examples/configuration/KConfigurationTest.kt[tags=sharing-modules,indent=0]
 ----
 
 JSON::
 +
 [source,json]
 ----
-include::example$test/crux/docs/examples/configuration/config_shared.json[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config_shared.json[indent=0]
 ----
 
 Clojure::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/configuration_test.clj[tags=sharing-modules,indent=0]
+include::example$test/xtdb/docs/examples/configuration/configuration_test.clj[tags=sharing-modules,indent=0]
 ----
 
 
@@ -286,7 +286,7 @@ EDN::
 +
 [source,clojure]
 ----
-include::example$test/crux/docs/examples/configuration/config_shared.edn[indent=0]
+include::example$test/xtdb/docs/examples/configuration/config_shared.edn[indent=0]
 ----
 ====
 
