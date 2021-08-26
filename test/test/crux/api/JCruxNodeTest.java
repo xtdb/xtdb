@@ -90,7 +90,6 @@ public class JCruxNodeTest {
         assertContains(status, false,"crux.kv/estimate-num-keys");
         assertContains(status, true, "crux.kv/size");
         assertContains(status, false, "crux.index/index-version");
-        assertContains(status, true, "crux.doc-log/consumer-state");
         assertContains(status, true, "crux.tx-log/consumer-state");
     }
 

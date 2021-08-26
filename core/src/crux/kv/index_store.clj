@@ -1111,7 +1111,6 @@
   status/Status
   (status-map [this]
     {:crux.index/index-version (current-index-version kv-store)
-     :crux.doc-log/consumer-state (db/read-index-meta this :crux.doc-log/consumer-state)
      :crux.tx-log/consumer-state (db/read-index-meta this :crux.tx-log/consumer-state)})
 
   Closeable

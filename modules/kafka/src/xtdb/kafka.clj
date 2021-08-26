@@ -252,9 +252,10 @@
                         next-offset])))))
 
 (defn- store-doc-offsets [index-store tp-offsets]
-  (db/store-index-meta index-store :crux.tx-log/consumer-state (->> tp-offsets
-                                                                    (into {} (map (fn [[k v]]
-                                                                                    [(str k) {:next-offset v}]))))))
+  (db/store-index-meta index-store :crux.tx-log/consumer-state
+                       (->> tp-offsets
+                            (into {} (map (fn [[k v]]
+                                            [(str k) {:next-offset v}]))))))
 
 (defn- update-doc-offsets [tp-offsets doc-records]
   (reduce (fn [tp-offsets ^ConsumerRecord record]
