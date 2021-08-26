@@ -1,6 +1,6 @@
 (ns crux.bench.tpch-stress-test
   (:require [crux.bench :as bench]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [clojure.tools.logging :as log]
             [crux.fixtures.tpch :as tpch]))
 
@@ -40,7 +40,7 @@
         opts
         (fn [{:keys [idx q]}]
           (log/info (format "Starting query #%s" idx))
-          {:count (count (crux/q (crux/db node) q))})
+          {:count (count (xt/q (xt/db node) q))})
         (->> q
              (repeat query-count)
              (map-indexed (fn [idx q] {:idx idx, :q q}))))

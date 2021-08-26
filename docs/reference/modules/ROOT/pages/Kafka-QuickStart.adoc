@@ -33,7 +33,7 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 
 [source,clj]
 ----
-(require '[crux.api :as crux]
+(require '[crux.api :as xt]
          '[xtdb.http-server :as srv])
 (import (crux.api ICruxAPI))
 
@@ -61,7 +61,7 @@ Now, verify that this was transacted within your REPL:
 
 [source,clj]
 ----
-(crux/entity (crux/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
+(xt/entity (xt/db node) "415c45c9-7cbe-4660-801b-dab9edc60c84")
 ==>
 {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c84", :value "baz"}
 ----
@@ -79,7 +79,7 @@ Within your REPL, transact an element into Crux:
 
 [source,clj]
 ----
-(crux/submit-tx node [[:xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
+(xt/submit-tx node [[:xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
 ----
 
 Check the contents of 'test.sink.txt' using the command below, and you should see that the transactions were outputted to the _'connect-test'_ topic:

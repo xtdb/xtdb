@@ -4,7 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]])
   (:import [io.airlift.tpch GenerateUtils TpchColumn TpchColumnType$Base TpchEntity TpchTable]
            java.util.UUID))
@@ -102,7 +102,7 @@
       (let [[last-tx doc-count] (->> (tpch-table->docs t sf doc-fn)
                                      (partition-all 1000)
                                      (reduce (fn [[last-tx last-doc-count] chunk]
-                                               [(crux/submit-tx node (vec (for [doc chunk]
+                                               [(xt/submit-tx node (vec (for [doc chunk]
                                                                             [:xt/put doc])))
                                                 (+ last-doc-count (count chunk))])
                                              [nil 0]))]
@@ -112,7 +112,7 @@
     (TpchTable/getTables))))
 
 (defn load-docs! [node & args]
-  (crux/await-tx node (apply submit-docs! node args)))
+  (xt/await-tx node (apply submit-docs! node args)))
 
 ;; "Elapsed time: 21994.835831 msecs"
 (def q1
@@ -688,7 +688,7 @@
   ;; SF 0.01
   (let [node (dev/crux-node)]
     (time (load-docs! node 0.01 tpch-entity->pkey-doc))
-    (prn (crux/attribute-stats node)))
+    (prn (xt/attribute-stats node)))
 
   ;; SQL:
   (slurp (io/resource "io/airlift/tpch/queries/q1.sql"))
@@ -699,9 +699,9 @@
     (time
      (doseq [n (range 1 23)]
        (time
-        (let [db (crux/db node)
+        (let [db (xt/db node)
               query (assoc (get tpch-queries (dec n)) :timeout 120000)
-              actual (crux/q db query)]
+              actual (xt/q db query)]
           (prn n
                (:vars-in-join-order (q/query-plan-for db query))
                (validate-tpch-query actual (parse-tpch-result n)))))))))

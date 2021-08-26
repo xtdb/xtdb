@@ -2,7 +2,7 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.codec :as c]
             [crux.error :as err]
             [xtdb.http-server.entity-ref :as entity-ref]
@@ -65,7 +65,7 @@
   [results db]
   (let [entity-links (->> (apply concat results)
                           (into #{} (filter c/valid-id?))
-                          (into #{} (filter #(crux/entity db %))))]
+                          (into #{} (filter #(xt/entity db %))))]
     (->> results
          (map (fn [tuple]
                 (->> tuple
@@ -77,12 +77,12 @@
   (let [db (util/db-for-request crux-node {:valid-time valid-time
                                            :tx-time tx-time})]
     {:query query
-     :valid-time (crux/valid-time db)
-     :tx-time (crux/transaction-time db)
+     :valid-time (xt/valid-time db)
+     :tx-time (xt/transaction-time db)
      :results (if link-entities?
-                (let [results (apply crux/q db query in-args)]
+                (let [results (apply xt/q db query in-args)]
                   (cio/->cursor (fn []) (with-entity-refs results db)))
-                (apply crux/open-q db query in-args))}))
+                (apply xt/open-q db query in-args))}))
 
 (defn- ->*sv-encoder [{:keys [sep]}]
   (reify mfc/EncodeToOutputStream

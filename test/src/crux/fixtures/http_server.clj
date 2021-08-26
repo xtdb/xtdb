@@ -2,7 +2,7 @@
   (:require [crux.fixtures :as fix :refer [*api*]]
             [xtdb.http-server :as srv]
             [crux.io :as cio]
-            [crux.api :as api]))
+            [crux.api :as xt]))
 
 (def ^:dynamic ^String *host* "localhost")
 (def ^:dynamic *api-url*)
@@ -16,7 +16,7 @@
           (f))))))
 
 (defn with-http-client [f]
-  (with-open [api-client (api/new-api-client *api-url* *api-client-opts*)]
+  (with-open [api-client (xt/new-api-client *api-url* *api-client-opts*)]
     (binding [*api* api-client]
       (f))))
 

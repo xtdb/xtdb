@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.jdbc :as fj]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.tx :as tx])
   (:import (java.util TimeZone)))
 
@@ -21,15 +21,15 @@
 (t/deftest test-tx-time-tz-1071
   (let [tx-time (fix/with-node
                   (fn []
-                    (let [tx (crux/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
-                      (crux/sync *api*)
+                    (let [tx (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
+                      (xt/sync *api*)
                       (t/is (= (:xt/tx-time tx)
-                               (:xt/tx-time (crux/latest-completed-tx *api*))))
+                               (:xt/tx-time (xt/latest-completed-tx *api*))))
                       (:xt/tx-time tx))))]
     (doseq [tz-str ["Etc/UTC" "Japan/Tokyo" "Europe/London"]]
       (t/testing (str "TZ: " tz-str)
         (with-tz tz-str
           (fix/with-node
             (fn []
-              (crux/sync *api*)
-              (t/is (= tx-time (:xt/tx-time (crux/latest-completed-tx *api*)))))))))))
+              (xt/sync *api*)
+              (t/is (= tx-time (:xt/tx-time (xt/latest-completed-tx *api*)))))))))))

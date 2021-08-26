@@ -3,7 +3,7 @@
             [crux.bench :as bench]
             [clojure.java.io :as io]
             [crux.rdf :as rdf]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.sparql :as sparql]
             [clojure.data.json :as json])
   (:import (java.time Duration)))
@@ -32,7 +32,7 @@
     (bench/with-additional-index-metrics node
       (let [{:keys [last-tx entity-count]} (with-open [in (io/input-stream watdiv/watdiv-input-file)]
                                              (rdf/submit-ntriples node in 1000))]
-        (crux/await-tx node last-tx)
+        (xt/await-tx node last-tx)
         {:success? true
          :entity-count entity-count
          :neo4j-time-taken-ms (get-in @parsed-db-results [:neo4j :ingest])
@@ -127,7 +127,7 @@
                      (fn [{:keys [idx q]}]
                        (bench/with-dimensions (merge {:query-idx idx} (get-db-results-at-idx idx))
                          (bench/run-bench (format "query-%d" idx)
-                                          {:result-count (count (crux/q (crux/db node) (sparql/sparql->datalog q)))})))))))))))
+                                          {:result-count (count (xt/q (xt/db node) (sparql/sparql->datalog q)))})))))))))))
 
 (comment
   (def foo-raw-watdiv-results

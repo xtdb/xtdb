@@ -3,7 +3,7 @@
             [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.tools.logging.impl :as log-impl]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]))
 
 (def secret 33489857205)
@@ -46,10 +46,10 @@
   (fix/submit+await-tx [[:xt/evict :secure-document]]))
 
 (t/deftest test-query-with-args
-  (api/q (api/db *api*) {:find ['s 'ss]
+  (xt/q (xt/db *api*) {:find ['s 'ss]
                          :where [['e :secret 's]
                                  ['e :secret-2 'ss]]
                          :args [{'ss secret}]}))
 
 (t/deftest test-querying-doc
-  (api/q (api/db *api*) {:find ['s] :where [['e :secret 's]]}))
+  (xt/q (xt/db *api*) {:find ['s] :where [['e :secret 's]]}))

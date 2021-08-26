@@ -4,7 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.bench.cloudwatch :as cw]
             [crux.bus :as bus]
             [crux.fixtures :as f]
@@ -100,11 +100,11 @@
 
 (defn compact-node [node]
   (run-bench :compaction
-    (let [pre-compact-bytes (:crux.kv/size (api/status node))]
+    (let [pre-compact-bytes (:crux.kv/size (xt/status node))]
       (kv/compact (get-in node [:index-store :kv-store]))
 
       {:bytes-on-disk pre-compact-bytes
-       :compacted-bytes-on-disk (:crux.kv/size (api/status node))})))
+       :compacted-bytes-on-disk (:crux.kv/size (xt/status node))})))
 
 (defn post-to-slack [message]
   (if-let [slack-url (System/getenv "SLACK_URL")]
@@ -341,7 +341,7 @@
 (defn with-nodes* [nodes f]
   (->> (for [[node-type ->node] nodes]
          (f/with-tmp-dir "crux-node" [data-dir]
-           (with-open [node (api/start-node (->node data-dir))]
+           (with-open [node (xt/start-node (->node data-dir))]
              (with-dimensions {:crux-node-type node-type}
                (log/infof "Running bench on %s node." node-type)
                (f node)))))

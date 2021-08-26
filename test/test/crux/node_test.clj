@@ -1,7 +1,7 @@
 (ns crux.node-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.api.java :as java]
             [crux.bus :as bus]
             [crux.fixtures :as f]
@@ -22,7 +22,7 @@
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
     (try
-      (let [n ^ICruxAPI (java/->JCruxNode (api/start-node {}))]
+      (let [n ^ICruxAPI (java/->JCruxNode (xt/start-node {}))]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -33,15 +33,15 @@
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Error parsing opts"
-                          (api/start-node {:xt/document-store {:xt/module `j/->document-store}})))
+                          (xt/start-node {:xt/document-store {:xt/module `j/->document-store}})))
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Missing module .+ :dialect"
-                          (api/start-node {:xt/document-store {:xt/module `j/->document-store
+                          (xt/start-node {:xt/document-store {:xt/module `j/->document-store
                                                                :connection-pool {:db-spec {}}}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+    (with-open [n (xt/start-node {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
                                    :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
                                    ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect,
                                                         :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
@@ -49,7 +49,7 @@
 
 (t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (api/start-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+    (with-open [n (xt/start-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
                                    :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
                                    :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
       (t/is n))))

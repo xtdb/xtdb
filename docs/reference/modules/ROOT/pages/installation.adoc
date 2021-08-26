@@ -42,9 +42,9 @@ Clojure::
 +
 [source,clojure]
 ----
-(require '[crux.api :as crux])
+(require '[crux.api :as xt])
 
-(crux/start-node {})
+(xt/start-node {})
 ----
 
 Java::

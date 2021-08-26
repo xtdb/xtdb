@@ -77,11 +77,11 @@ connected to your Confluent Cloud cluster.
 
 [source,clj]
 ----
-(require '[crux.api :as crux])
+(require '[crux.api :as xt])
 (import (crux.api ICruxAPI))
 
 (def ^crux.api.ICruxAPI node
-  (crux/start-node
+  (xt/start-node
     {:xtdb.kafka/kafka-config {:bootstrap-servers "XXXXX.confluent.cloud:9092" ; replace with value from your properties file
                                :properties-file "/home/myuser/cc-config.properties"} ; replace with the path of your properties file
      :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
@@ -101,15 +101,15 @@ Submit a transaction:
 (def my-doc {:xt/id :some-id
              :color "red"})
 
-(crux/submit-tx node [[:xt/put my-doc]]) ; returns a transaction receipt
+(xt/submit-tx node [[:xt/put my-doc]]) ; returns a transaction receipt
 ----
 
 Retrieve the document:
 
 [source,clj]
 ----
-(crux/sync node) ; ensure the node is synchronised with the latest transaction
-(crux/entity (crux/db node) :some-id) ; returns my-doc
+(xt/sync node) ; ensure the node is synchronised with the latest transaction
+(xt/entity (xt/db node) :some-id) ; returns my-doc
 ----
 
 You could even try this from a second REPL with a second node connecting to the

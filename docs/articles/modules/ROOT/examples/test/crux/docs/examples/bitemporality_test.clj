@@ -1,6 +1,6 @@
 (ns crux.docs.examples.bitemporality-test
     (:require [clojure.test :as t]
-              [crux.api :as crux]
+              [crux.api :as xt]
               [crux.fixtures :as fix :refer [*api*]]))
 (def ^:dynamic *storage-dir*)
 
@@ -12,7 +12,7 @@
 (t/use-fixtures :each fix/with-node with-storage-dir)
 
 (defn put-at-vt [node doc vt]
-      (crux/submit-tx node [[:xt/put doc vt]]))
+      (xt/submit-tx node [[:xt/put doc vt]]))
 
 (t/deftest test-bitemp
   (let [node *api*
@@ -194,7 +194,7 @@
          ;; end::bitemp12[]
          )
 
-       (crux/sync node)
+       (xt/sync node)
 
        (t/is (=
                ;; tag::bitempr[]
@@ -204,8 +204,8 @@
                ;; end::bitempr[]
 
                ;; tag::bitempq-a[]
-               (crux/q
-                 (crux/db node
+               (xt/q
+                 (xt/db node
                           {
                            :xt/valid-time #inst "2019-01-02" ; `as at` valid time
                ;; end::bitempq-a[]

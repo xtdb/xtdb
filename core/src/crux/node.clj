@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.pprint :as pp]
             [clojure.tools.logging :as log]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
@@ -14,8 +14,7 @@
             [crux.system :as sys]
             [crux.tx :as tx]
             [crux.tx.conform :as txc]
-            [crux.tx.event :as txe]
-            [clojure.set :as set])
+            [crux.tx.event :as txe])
   (:import [java.io Closeable Writer]
            [java.time Duration Instant]
            java.util.concurrent.locks.StampedLock
@@ -97,26 +96,26 @@
           (close-fn)
           (reset! closed? true)))))
 
-  api/DBProvider
-  (db [this] (api/db this {}))
+  xt/DBProvider
+  (db [this] (xt/db this {}))
   (db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
-      (api/db this {:xt/valid-time valid-time-or-basis})
-      (api/db query-engine valid-time-or-basis)))
+      (xt/db this {:xt/valid-time valid-time-or-basis})
+      (xt/db query-engine valid-time-or-basis)))
   (db [this valid-time tx-time]
-    (api/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
+    (xt/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
 
-  (open-db [this] (api/open-db this {}))
+  (open-db [this] (xt/open-db this {}))
   (open-db [this valid-time tx-time]
-    (api/open-db this {:xt/valid-time valid-time :xt/tx-time tx-time}))
+    (xt/open-db this {:xt/valid-time valid-time :xt/tx-time tx-time}))
   (open-db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
-      (api/open-db this {:xt/valid-time valid-time-or-basis})
+      (xt/open-db this {:xt/valid-time valid-time-or-basis})
       (cio/with-read-lock lock
         (ensure-node-open this)
-        (api/open-db query-engine valid-time-or-basis))))
+        (xt/open-db query-engine valid-time-or-basis))))
 
-  api/PCruxNode
+  xt/PCruxNode
   (status [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
@@ -130,7 +129,7 @@
   (tx-committed? [this {:keys [:xt/tx-id] :as submitted-tx}]
     (cio/with-read-lock lock
       (ensure-node-open this)
-      (let [{latest-tx-id :xt/tx-id, :as latest-tx} (api/latest-completed-tx this)]
+      (let [{latest-tx-id :xt/tx-id, :as latest-tx} (xt/latest-completed-tx this)]
         (cond
           (nil? tx-id) (throw (err/illegal-arg :invalid-tx {:tx submitted-tx}))
 
@@ -139,11 +138,11 @@
 
           :else (not (db/tx-failed? index-store tx-id))))))
 
-  (sync [this] (api/sync this nil))
+  (sync [this] (xt/sync this nil))
 
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx tx-log)]
-      (-> (api/await-tx this tx timeout)
+      (-> (xt/await-tx this tx timeout)
           :xt/tx-time)))
 
   (sync [this tx-time timeout]
@@ -152,13 +151,13 @@
     (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
 
   (await-tx [this submitted-tx]
-    (api/await-tx this submitted-tx nil))
+    (xt/await-tx this submitted-tx nil))
 
   (await-tx [this submitted-tx timeout]
     (await-tx this :xt/tx-id submitted-tx timeout))
 
   (await-tx-time [this tx-time]
-    (api/await-tx-time this tx-time nil))
+    (xt/await-tx-time this tx-time nil))
 
   (await-tx-time [this tx-time timeout]
     (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
@@ -201,20 +200,20 @@
     (let [running-queries (swap! !running-queries update :slowest clean-slowest-queries this)]
       (map qs/->QueryState (:slowest running-queries))))
 
-  api/PCruxIngestClient
+  xt/PCruxIngestClient
   (submit-tx [this tx-ops]
-    @(api/submit-tx-async this tx-ops))
+    @(xt/submit-tx-async this tx-ops))
 
   (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)]
       (cio/with-read-lock lock
         (ensure-node-open this)
-        (if (let [latest-submitted-tx-id (:xt/tx-id (api/latest-submitted-tx this))]
+        (if (let [latest-submitted-tx-id (:xt/tx-id (xt/latest-submitted-tx this))]
               (or (nil? latest-submitted-tx-id)
                   (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
           cio/empty-cursor
 
-          (let [latest-completed-tx-id (:xt/tx-id (api/latest-completed-tx this))
+          (let [latest-completed-tx-id (:xt/tx-id (xt/latest-completed-tx this))
                 tx-log-iterator (db/open-tx-log tx-log after-tx-id)
                 tx-log (->> (iterator-seq tx-log-iterator)
                             (remove #(db/tx-failed? index-store (:xt/tx-id %)))
@@ -236,9 +235,9 @@
             (cio/->cursor (fn []
                             (.close tx-log-iterator))
                           tx-log))))))
-  api/PCruxAsyncIngestClient
+  xt/PCruxAsyncIngestClient
   (submit-tx-async [this tx-ops]
-    (let [tx-ops (api/conform-tx-ops tx-ops)
+    (let [tx-ops (xt/conform-tx-ops tx-ops)
           conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
       (cio/with-read-lock lock
         (ensure-node-open this)
@@ -271,8 +270,8 @@
 
 (defn attach-current-query-listeners [!running-queries {:keys [bus] :as node-opts}]
   (bus/listen bus {:xt/event-types #{:crux.query/submitted-query
-                                       :crux.query/completed-query
-                                       :crux.query/failed-query}}
+                                     :crux.query/completed-query
+                                     :crux.query/failed-query}}
               (fn [{::q/keys [query-id query error] :keys [xt/event-type]}]
                 (case event-type
                   :crux.query/submitted-query

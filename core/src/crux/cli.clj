@@ -3,7 +3,7 @@
             [clojure.java.io :as io]
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.io :as cio]
             [crux.node :as n]
             [clojure.data.json :as json])
@@ -81,6 +81,6 @@
 
       :else (let [{:keys [version revision]} n/crux-version]
               (log/infof "Crux version: %s revision: %s" version revision)
-              (with-open [node (crux/start-node node-opts)]
+              (with-open [node (xt/start-node node-opts)]
                 (log/info "Node started")
                 @(shutdown-hook-promise))))))

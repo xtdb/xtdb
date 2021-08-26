@@ -1,6 +1,6 @@
 (ns crux.current-queries-test
   (:require [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.every-api :as every-api]
             [crux.node :as n])
@@ -95,21 +95,21 @@
   (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan"}]
                         [:xt/put {:xt/id :petr :name "Petr"}]])
 
-  (let [db (api/db *api*)]
-    (api/q db
+  (let [db (xt/db *api*)]
+    (xt/q db
            '{:find [e]
              :where [[e :name "Ivan"]]})
 
     (t/testing "test recent-query - post successful query"
-      (let [recent-queries (api/recent-queries *api*)]
+      (let [recent-queries (xt/recent-queries *api*)]
         (t/is (= :completed (:status (first recent-queries))))))
 
     (t/is (thrown-with-msg? Exception
                             #"Find refers to unknown variable: f"
-                            (api/q db '{:find [f], :where [[e :xt/id _]]})))
+                            (xt/q db '{:find [f], :where [[e :xt/id _]]})))
 
     (t/testing "test recent-query - post failed query"
-      (let [malformed-query (first (api/recent-queries *api*))]
+      (let [malformed-query (first (xt/recent-queries *api*))]
         (t/is (= '{:find [f], :where [[e :xt/id _]]} (:query malformed-query)))
         (t/is (= :failed (:status malformed-query)))))))
 
@@ -119,13 +119,13 @@
                                  {:xt/id (keyword (str "ivan" n))
                                   :name (str "ivan" n)}])
                         (range 100)))
-  (let [db (api/db *api*)]
-    (api/q db
+  (let [db (xt/db *api*)]
+    (xt/q db
            '{:find [e n]
              :where [[e :name n]]})
 
     (t/testing "test slowest-queries - post query (min threshold - 1 nanosecond)"
-      (t/is (= :completed (:status (first (api/slowest-queries *api*))))))
+      (t/is (= :completed (:status (first (xt/slowest-queries *api*))))))
 
     (t/testing "test slowest-queries - test `slow-query?` check")
     (let [start (Instant/now)
@@ -137,15 +137,15 @@
   (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan"}]
                         [:xt/put {:xt/id :petr :name "Petr"}]])
 
-  (let [db (api/db *api*)]
+  (let [db (xt/db *api*)]
     (t/testing "test active-queries - streaming query"
-      (with-open [res (api/open-q db '{:find [e], :where [[e :name "Ivan"]]})]
+      (with-open [res (xt/open-q db '{:find [e], :where [[e :name "Ivan"]]})]
         (t/testing "test active-queries - streaming query (not realized)"
-          (let [streaming-query (first (api/active-queries *api*))]
+          (let [streaming-query (first (xt/active-queries *api*))]
             (when-not (= :remote every-api/*node-type*)
               ;; can't reliably get active-queries on remote for short queries
               (t/is (= '{:find [e] :where [[e :name "Ivan"]]} (:query streaming-query)))))))
 
       (t/testing "test active-queries & recent-queries - streaming query (result realized)"
-        (t/is (empty? (api/active-queries *api*)))
-        (t/is (= :completed (:status (first (api/recent-queries *api*)))))))))
+        (t/is (empty? (xt/active-queries *api*)))
+        (t/is (= :completed (:status (first (xt/recent-queries *api*)))))))))

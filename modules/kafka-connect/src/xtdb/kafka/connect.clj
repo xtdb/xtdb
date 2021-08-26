@@ -6,7 +6,7 @@
             [crux.io :as cio]
             [crux.error :as err]
             [cognitect.transit :as transit]
-            [crux.api :as api])
+            [crux.api :as xt])
   (:import [org.apache.kafka.connect.data Schema Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
@@ -113,7 +113,7 @@
 
 (defn submit-sink-records [api props records]
   (when (seq records)
-    (api/submit-tx api (vec (for [record records]
+    (xt/submit-tx api (vec (for [record records]
                               (transform-sink-record props record))))))
 
 (defn- write-transit [x]
@@ -214,7 +214,7 @@
                                        "tx" tx-log-entry->tx-source-records
                                        "doc" tx-log-entry->doc-source-records)
         after-tx-id (some-> (get source-offset "offset") long)]
-    (with-open [tx-log-iterator (api/open-tx-log api after-tx-id true)]
+    (with-open [tx-log-iterator (xt/open-tx-log api after-tx-id true)]
       (log/info "source offset:" source-offset "tx-id:" after-tx-id "format:" format "mode:" mode)
       (let [records (->> (iterator-seq tx-log-iterator)
                          (take (Long/parseLong batch-size))

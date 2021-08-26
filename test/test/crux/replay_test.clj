@@ -1,7 +1,7 @@
 (ns crux.replay-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
             [xtdb.rocksdb :as rocks]))
@@ -18,14 +18,14 @@
 
 (defn- with-cluster-node* [f]
   (fix/with-tmp-dir "db-dir" [db-dir]
-    (with-open [node (crux/start-node {:xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
+    (with-open [node (xt/start-node {:xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
                                                                         :db-dir (io/file *event-log-dir* "doc-store")}}
                                        :xt/tx-log {:kv-store {:xt/module `rocks/->kv-store,
                                                                 :db-dir (io/file *event-log-dir* "tx-log")}}
                                        :xt/index-store {:kv-store {:xt/module `rocks/->kv-store,
                                                                      :db-dir db-dir}}})]
       (binding [*api* node]
-        (crux/sync node)
+        (xt/sync node)
         (f)))))
 
 (defmacro with-cluster-node [& body]
@@ -38,9 +38,9 @@
 
     (with-cluster-node
       (t/is (= {:xt/tx-id 0}
-               (crux/latest-submitted-tx *api*)))
+               (xt/latest-submitted-tx *api*)))
       (t/is (= {:xt/id :hello}
-               (crux/entity (crux/db *api*) :hello))))))
+               (xt/entity (xt/db *api*) :hello))))))
 
 (t/deftest test-more-txs
   (let [n 1000]
@@ -51,9 +51,9 @@
 
       (with-cluster-node
         (t/is (= {:xt/tx-id (dec n)}
-                 (crux/latest-submitted-tx *api*)))
+                 (xt/latest-submitted-tx *api*)))
         (t/is (= n
-                 (count (crux/q (crux/db *api*) '{:find [?e]
+                 (count (xt/q (xt/db *api*) '{:find [?e]
                                                   :where [[?e :xt/id]]}))))))))
 
 (t/deftest replaces-tx-fn-arg-docs
@@ -66,11 +66,11 @@
       (fix/submit+await-tx [[:xt/fn :put-ivan {:name "Ivan"}]])
 
       (t/is (= {:xt/id :ivan, :name "Ivan"}
-               (crux/entity (crux/db *api*) :ivan))))
+               (xt/entity (xt/db *api*) :ivan))))
 
     (with-cluster-node
       (t/is (= {:xt/id :ivan, :name "Ivan"}
-               (crux/entity (crux/db *api*) :ivan)))))
+               (xt/entity (xt/db *api*) :ivan)))))
 
   (t/testing "replaces fn with no args"
     (with-cluster
@@ -81,11 +81,11 @@
         (fix/submit+await-tx [[:xt/fn :no-args]])
 
         (t/is (= {:xt/id :no-fn-args-doc}
-                 (crux/entity (crux/db *api*) :no-fn-args-doc))))
+                 (xt/entity (xt/db *api*) :no-fn-args-doc))))
 
       (with-cluster-node
         (t/is (= {:xt/id :no-fn-args-doc}
-                 (crux/entity (crux/db *api*) :no-fn-args-doc))))))
+                 (xt/entity (xt/db *api*) :no-fn-args-doc))))))
 
   (t/testing "nested tx-fn"
     (with-cluster
@@ -102,31 +102,31 @@
         (fix/submit+await-tx [[:xt/fn :put-bob-and-ivan {:name "Bob"} {:name "Ivan2"}]])
 
         (t/is (= {:xt/id :ivan, :name "Ivan2"}
-                 (crux/entity (crux/db *api*) :ivan)))
+                 (xt/entity (xt/db *api*) :ivan)))
 
         (t/is (= {:xt/id :bob, :name "Bob"}
-                 (crux/entity (crux/db *api*) :bob))))
+                 (xt/entity (xt/db *api*) :bob))))
 
       (with-cluster-node
         (t/is (= {:xt/id :ivan, :name "Ivan2"}
-                 (crux/entity (crux/db *api*) :ivan)))
+                 (xt/entity (xt/db *api*) :ivan)))
 
         (t/is (= {:xt/id :bob, :name "Bob"}
-                 (crux/entity (crux/db *api*) :bob))))))
+                 (xt/entity (xt/db *api*) :bob))))))
 
   (t/testing "failed tx-fn"
     (with-cluster
       (with-cluster-node
         (fix/submit+await-tx [[:xt/fn :put-petr {:name "Petr"}]])
 
-        (t/is (nil? (crux/entity (crux/db *api*) :petr)))
+        (t/is (nil? (xt/entity (xt/db *api*) :petr)))
 
         (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
 
         (t/is (= {:xt/id :foo}
-                 (crux/entity (crux/db *api*) :foo))))
+                 (xt/entity (xt/db *api*) :foo))))
 
       (with-cluster-node
-        (t/is (nil? (crux/entity (crux/db *api*) :petr)))
+        (t/is (nil? (xt/entity (xt/db *api*) :petr)))
         (t/is (= {:xt/id :foo}
-                 (crux/entity (crux/db *api*) :foo)))))))
+                 (xt/entity (xt/db *api*) :foo)))))))

@@ -1,6 +1,6 @@
 (ns crux.fixtures.lubm
   (:require [crux.fixtures :refer [*api*]]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.rdf :as rdf]))
 
 (def ^:const lubm-triples-resource-8k "lubm/University0_0.ntriples")
@@ -12,8 +12,8 @@
                      (rdf/->default-language)
                      (partition-all 1000)
                      (reduce (fn [_ tx-ops]
-                               (api/submit-tx *api* (vec tx-ops)))
+                               (xt/submit-tx *api* (vec tx-ops)))
                              nil))]
 
-    (api/await-tx *api* last-tx)
+    (xt/await-tx *api* last-tx)
     (f)))

@@ -138,7 +138,7 @@
   as much of the sequence as you need to, you'll need to `.close` the sequence.
   A common way to do this is using `with-open`:
 
-  (with-open [res (crux/open-q db '{:find [...]
+  (with-open [res (xt/open-q db '{:find [...]
                                     :where [...]})]
     (doseq [row (iterator-seq res)]
       ...))
@@ -361,7 +361,7 @@
   as much of the sequence as you need to, you'll need to `.close` the sequence.
   A common way to do this is using `with-open`:
 
-  (with-open [res (crux/open-q db '{:find [...]
+  (with-open [res (xt/open-q db '{:find [...]
                                     :where [...]})]
     (doseq [row (iterator-seq res)]
       ...))

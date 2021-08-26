@@ -2,7 +2,7 @@
   (:require dev
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [crux.api :as crux]))
+            [crux.api :as xt]))
 
 (defn read-doc
   [doc-title]
@@ -63,7 +63,7 @@
 
 (defn ingest-data
   [data]
-  (crux/submit-tx
+  (xt/submit-tx
    (dev/crux-node)
    (mapv #(do [:xt/put %]) data)))
 

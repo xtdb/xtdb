@@ -1,6 +1,6 @@
 (ns crux.java-test
   (:require [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]])
   (:import java.util.HashMap))
 
@@ -8,19 +8,19 @@
 
 (t/deftest test-java-types
   (t/testing "Can use Java List/Map types when using submit-tx"
-    (t/is (crux/submit-tx *api* [[:xt/put (HashMap. {:xt/id :test})]]))
+    (t/is (xt/submit-tx *api* [[:xt/put (HashMap. {:xt/id :test})]]))
 
-    (t/is (crux/submit-tx *api* (fix/vec->array-list [[:xt/put {:xt/id :test}]])))
+    (t/is (xt/submit-tx *api* (fix/vec->array-list [[:xt/put {:xt/id :test}]])))
 
-    (t/is (crux/submit-tx *api* (fix/vec->array-list
+    (t/is (xt/submit-tx *api* (fix/vec->array-list
                                  [[:xt/put
                                    (HashMap. {:xt/id :test})]])))
 
-    (t/is (crux/submit-tx *api* (fix/vec->array-list
+    (t/is (xt/submit-tx *api* (fix/vec->array-list
                                  [(fix/vec->array-list
                                    [:xt/put {:xt/id :test2}])])))
 
-    (t/is (crux/submit-tx *api* (fix/vec->array-list
+    (t/is (xt/submit-tx *api* (fix/vec->array-list
                                  [(fix/vec->array-list
                                    [:xt/put
                                     (HashMap. {:xt/id :test2})])])))))

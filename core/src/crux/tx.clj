@@ -2,7 +2,7 @@
   (:require [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.bus :as bus]
             [crux.codec :as c]
             [crux.db :as db]
@@ -201,19 +201,19 @@
       (when legacy-body
         (let [f (tx-fn-eval-cache legacy-body)]
           (fn [ctx & args]
-            (apply f (api/db ctx) args))))))
+            (apply f (xt/db ctx) args))))))
 
 (defrecord TxFnContext [db-provider indexing-tx]
-  api/DBProvider
-  (db [_] (api/db db-provider))
-  (db [_ valid-time tx-time] (api/db db-provider valid-time tx-time))
-  (db [_ valid-time-or-basis] (api/db db-provider valid-time-or-basis))
+  xt/DBProvider
+  (db [_] (xt/db db-provider))
+  (db [_ valid-time tx-time] (xt/db db-provider valid-time tx-time))
+  (db [_ valid-time-or-basis] (xt/db db-provider valid-time-or-basis))
 
-  (open-db [_] (api/open-db db-provider))
-  (open-db [_ valid-time tx-time] (api/open-db db-provider valid-time tx-time))
-  (open-db [_ valid-time-or-basis] (api/open-db db-provider valid-time-or-basis))
+  (open-db [_] (xt/open-db db-provider))
+  (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
+  (open-db [_ valid-time-or-basis] (xt/open-db db-provider valid-time-or-basis))
 
-  api/TransactionFnContext
+  xt/TransactionFnContext
   (indexing-tx [_] indexing-tx))
 
 (defmethod index-tx-event :crux.tx/fn [[_op k args-content-hash] tx in-flight-tx]
@@ -237,8 +237,8 @@
 
       :else (try
               (let [ctx (->TxFnContext in-flight-tx tx)
-                    db (api/db ctx)
-                    res (apply (->tx-fn (api/entity db fn-id)) ctx args)]
+                    db (xt/db ctx)
+                    res (apply (->tx-fn (xt/entity db fn-id)) ctx args)]
                 (if (false? res)
                   {:abort? true
                    :docs (when args-doc-id
@@ -281,13 +281,13 @@
   (fetch-docs [_ ids]
     (db/fetch-docs document-store-tx ids))
 
-  api/DBProvider
-  (db [_] (api/db db-provider tx))
-  (db [_ valid-time-or-basis] (api/db db-provider valid-time-or-basis))
-  (db [_ valid-time tx-time] (api/db db-provider valid-time tx-time))
-  (open-db [_] (api/open-db db-provider tx))
-  (open-db [_ valid-time-or-basis] (api/open-db db-provider valid-time-or-basis))
-  (open-db [_ valid-time tx-time] (api/open-db db-provider valid-time tx-time))
+  xt/DBProvider
+  (db [_] (xt/db db-provider tx))
+  (db [_ valid-time-or-basis] (xt/db db-provider valid-time-or-basis))
+  (db [_ valid-time tx-time] (xt/db db-provider valid-time tx-time))
+  (open-db [_] (xt/open-db db-provider tx))
+  (open-db [_ valid-time-or-basis] (xt/open-db db-provider valid-time-or-basis))
+  (open-db [_ valid-time tx-time] (xt/open-db db-provider valid-time tx-time))
 
   db/InFlightTx
   (index-tx-events [this tx-events]

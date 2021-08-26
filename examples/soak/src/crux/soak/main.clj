@@ -5,7 +5,7 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.api :as api]
+            [crux.api :as xt]
             [xtdb.rocksdb :as rocksdb]
             [crux.soak.config :as config]
             [crux.checkpoint :as cp]
@@ -35,10 +35,10 @@
        [true (br/->Redirect 307 :homepage)]]])
 
 (defn get-current-weather [node location valid-time]
-  (let [db (api/db node valid-time)
+  (let [db (xt/db node valid-time)
         eid (keyword (str location "-current"))]
-    (when-let [etx (api/entity-tx db eid)]
-      (merge (api/entity db eid)
+    (when-let [etx (xt/entity-tx db eid)]
+      (merge (xt/entity db eid)
              (select-keys etx [:xt/valid-time :xt/tx-time])))))
 
 (defn get-weather-forecast [node location ^Date valid-time]
@@ -48,12 +48,12 @@
                           (take 5)
                           (map #(Date/from (.toInstant %))))]
          (when-let [db (try
-                         (api/db node valid-time tx-time)
+                         (xt/db node valid-time tx-time)
                          (catch NodeOutOfSyncException e
                            nil))]
            (let [eid (keyword (str location "-forecast"))]
-             (when-let [etx (api/entity-tx db eid)]
-               (merge (api/entity db eid)
+             (when-let [etx (xt/entity-tx db eid)]
+               (merge (xt/entity db eid)
                       (select-keys etx [:xt/valid-time :xt/tx-time]))))))
        (remove nil?)
        distinct))
@@ -129,7 +129,7 @@
                        (Date/from))]
     (resp/response
      (render-weather-page {:location-id location-id
-                           :location-name (-> (api/entity (api/db crux-node)
+                           :location-name (-> (xt/entity (xt/db crux-node)
                                                           (keyword (str location-id "-current")))
                                               (:location-name))
                            :valid-time valid-time
@@ -156,13 +156,13 @@
        [:p [:input {:type "submit" :value "View Location"}]]]]])))
 
 (defn homepage-handler [req {:keys [crux-node]}]
-  (let [location-names (->> (api/q (api/db crux-node) '{:find [l]
+  (let [location-names (->> (xt/q (xt/db crux-node) '{:find [l]
                                                         :where [[e :location-name l]]})
                             (map first))]
     (resp/response (render-homepage location-names))))
 
 (defn status-handler [req {:keys [crux-node]}]
-  (let [status (api/status crux-node)]
+  (let [status (xt/status crux-node)]
     {:status (if (or (not (contains? status :crux.zk/zk-active?))
                      (:crux.zk/zk-active? status))
                200
@@ -179,9 +179,9 @@
                             (constantly (constantly (resp/not-found "Not found"))))))
 
 (defmethod ig/init-key :soak/crux-node [_ node-opts]
-  (let [node (api/start-node node-opts)]
+  (let [node (xt/start-node node-opts)]
     (log/info "Loading Weather Data...")
-    (api/sync node)
+    (xt/sync node)
     (log/info "Weather Data Loaded!")
     node))
 

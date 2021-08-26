@@ -1,6 +1,6 @@
 (ns crux.metrics-test
   (:require [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]
             [xtdb.metrics.index-store :as index-store-metrics]
             [xtdb.metrics.query :as query-metrics]
@@ -37,11 +37,11 @@
 
     (fix/submit+await-tx [[:xt/put {:xt/id :test}]])
     (t/is (= #{[:test]}
-             (api/q (api/db *api*) '{:find [e] :where [[e :xt/id _]]})))
+             (xt/q (xt/db *api*) '{:find [e] :where [[e :xt/id _]]})))
     (t/is (thrown-with-msg?
            IllegalArgumentException
            #"Find refers to unknown variable:"
-           (api/q (api/db *api*) '{:find [e] :where [[f :xt/id _]]})))
+           (xt/q (xt/db *api*) '{:find [e] :where [[f :xt/id _]]})))
     (.close ^Closeable bus)
     (t/testing "post query timer values"
       (t/is (not (zero? (dropwizard/meter-count (:query-timer mets)))))

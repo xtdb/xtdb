@@ -2,7 +2,7 @@
   (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.bench :as bench]
             [crux.io :as cio])
   (:import java.time.Duration
@@ -62,16 +62,16 @@
 (defn submit-ts-devices-data [node]
   (let [info-tx-ops (vec (for [info-doc @info-docs]
                            [:xt/put info-doc]))
-        _ (crux/submit-tx node info-tx-ops)
+        _ (xt/submit-tx node info-tx-ops)
         last-tx (with-readings-docs
                   (fn [readings-docs]
                     (->> readings-docs
                          (partition-all readings-chunk-size)
                          (reduce (fn [last-tx chunk]
-                                   (crux/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
+                                   (xt/submit-tx node (vec (for [{:keys [reading/time] :as reading-doc} chunk]
                                                                [:xt/put reading-doc time]))))
                                  nil))))]
-    (crux/await-tx node last-tx (Duration/ofMinutes 20))
+    (xt/await-tx node last-tx (Duration/ofMinutes 20))
     {:success? true}))
 
 (defn test-battery-readings [node]
@@ -102,7 +102,7 @@
                           [r :reading/battery-temperature battery-temperature]]
                   :order-by [[time :desc] [device-id :desc]]
                   :limit 10}
-          success? (= (crux/q (crux/db node) query)
+          success? (= (xt/q (xt/db node) query)
                       [[#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000999 88.7]
                        [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000998 93.1]
                        [#inst "2016-11-15T20:19:30.000-00:00" :device-info/demo000997 90.7]
@@ -150,7 +150,7 @@
                   :order-by [[cpu-avg-1min :desc] [time :desc]]
                   :limit 5}
 
-          success? (= (crux/q (crux/db node) query)
+          success? (= (xt/q (xt/db node) query)
                       [[#inst "2016-11-15T20:19:30.000-00:00"
                         :device-info/demo000818
                         33.45
@@ -213,15 +213,15 @@
   ;; (12 rows)
 
   (bench/run-bench :min-max-battery-level-per-hour
-    (with-open [db (crux/open-db node)]
-      (let [result (let [reading-ids (->> (crux/q db
+    (with-open [db (xt/open-db node)]
+      (let [result (let [reading-ids (->> (xt/q db
                                                   '{:find [r]
                                                     :where [[r :reading/device-id device-id]
                                                             (or [device-id :device-info/model "pinto"]
                                                                 [device-id :device-info/model "focus"])]})
                                           (reduce into []))
                          histories (for [r reading-ids]
-                                     (crux/open-entity-history db r :asc {:with-docs? true
+                                     (xt/open-entity-history db r :asc {:with-docs? true
                                                                           :start {:xt/valid-time  #inst "1970"}}))]
                      (try
                        (->> (for [history histories]

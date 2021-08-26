@@ -1,7 +1,7 @@
 (ns crux.http-server-test
   (:require [crux.fixtures :as fix :refer [*api*]]
             [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.fixtures.http-server :as fh]))
 
 (t/use-fixtures :each
@@ -10,4 +10,4 @@
 
 (t/deftest test-read-only-node
   (t/is (thrown-with-msg? UnsupportedOperationException #"read-only"
-                          (crux/submit-tx *api* [[:xt/put {:xt/id :foo}]]))))
+                          (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]]))))

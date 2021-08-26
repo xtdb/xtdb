@@ -1,7 +1,7 @@
 (ns dev
   "Internal development namespace for Crux. For end-user usage, see
   examples.clj"
-  (:require [crux.api :as crux]
+  (:require [crux.api :as xt]
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [go halt reset reset-all]]
@@ -39,7 +39,7 @@
   (io/file "dev/dev-node"))
 
 (defmethod i/init-key ::crux [_ {:keys [node-opts]}]
-  (crux/start-node node-opts))
+  (xt/start-node node-opts))
 
 (defmethod i/halt-key! ::crux [_ ^ICruxAPI node]
   (.close node))

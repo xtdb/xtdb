@@ -10,7 +10,7 @@
             [clojure.walk :as w]
             [clojure.tools.logging :as log]
             [crux.codec :as c]
-            [crux.api :as crux])
+            [crux.api :as xt])
   (:import java.io.StringReader
            javax.xml.datatype.DatatypeConstants
            [org.eclipse.rdf4j.rio RDFHandler]
@@ -212,7 +212,7 @@
                  (let [tx-ops (vec (for [entity entities]
                                      [:xt/put entity]))]
                    {:entity-count (+ entity-count (count entities))
-                    :last-tx (crux/submit-tx node tx-ops)}))
+                    :last-tx (xt/submit-tx node tx-ops)}))
 
                {:entity-count 0})))
 

@@ -1,6 +1,6 @@
 (ns crux.datascript-pull-test
   (:require [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]))
 
 ;; adapted from https://github.com/tonsky/datascript/blob/1.0.1/test/datascript/test/pull_api.cljc
@@ -32,20 +32,20 @@
 (defn submit-test-docs [docs]
   (fix/submit+await-tx (for [doc docs]
                          [:xt/put doc]))
-  (crux/db *api*))
+  (xt/db *api*))
 
 (t/deftest test-pull-attr-spec
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{:name "Petr" :aka #{"Devil" "Tupen"}}]}
-             (crux/q db '{:find [(pull ?e [:name :aka])]
+             (xt/q db '{:find [(pull ?e [:name :aka])]
                           :where [[?e :xt/id :petr]]})))
 
     (t/is (= #{[{:name "Matthew" :parent [{:xt/id :thomas}] :xt/id :matthew}]}
-             (crux/q db '{:find [(pull ?e [:name :xt/id {:parent [:xt/id]}])]
+             (xt/q db '{:find [(pull ?e [:name :xt/id {:parent [:xt/id]}])]
                           :where [[?e :xt/id :matthew]]})))
 
     (t/is (= #{[{:name "Petr"}] [{:name "Elizabeth"}] [{:name "Eunan"}] [{:name "Rebecca"}]}
-             (crux/q db '{:find [(pull ?e [:name])]
+             (xt/q db '{:find [(pull ?e [:name])]
                           :where [[?e :xt/id #{:petr :elizabeth :eunan :rebecca}]]})))))
 
 (t/deftest test-pull-reverse-attr-spec
@@ -53,7 +53,7 @@
     ;; TODO reverse props
     #_
     (t/is (= #{[{:name "Thomas" :_parent [:matthew]}]}
-             (crux/q db '{:find [(pull ?e [:name :_parent])]
+             (xt/q db '{:find [(pull ?e [:name :_parent])]
                           :where [[?e :xt/id :thomas]]})))
 
     #_
@@ -61,21 +61,21 @@
              (d/pull test-db '[:name :_parent] 1)))
 
     (t/is (= #{[{:name "Thomas" :_parent [{:name "Matthew"}]}]}
-             (crux/q db '{:find [(pull ?e [:name {:_parent [:name]}])]
+             (xt/q db '{:find [(pull ?e [:name {:_parent [:name]}])]
                           :where [[?e :xt/id :thomas]]})))
 
     (t/is (= #{[{:name "Petr" :_parent [{:name "David"} {:name "Thomas"}]}]}
-             (crux/q db '{:find [(pull ?e [:name {:_parent [:name]}])]
+             (xt/q db '{:find [(pull ?e [:name {:_parent [:name]}])]
                           :where [[?e :xt/id :petr]]})))))
 
 (t/deftest test-pull-wildcard
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{:xt/id :petr :name "Petr" :aka #{"Devil" "Tupen"}}]}
-             (crux/q db '{:find [(pull ?e [*])]
+             (xt/q db '{:find [(pull ?e [*])]
                           :where [[?e :xt/id :petr]]})))
 
     (t/is (= #{[{:xt/id :david, :name "David", :parent [{:xt/id :petr}]}]}
-             (crux/q db '{:find [(pull ?e [* {:parent [:xt/id]}])]
+             (xt/q db '{:find [(pull ?e [* {:parent [:xt/id]}])]
                           :where [[?e :xt/id :david]]})))))
 
 (t/deftest test-pull-limit
@@ -95,14 +95,14 @@
       (t/is (= 2000 (->> (d/pull db '[(limit :aka nil)] 8) :aka count))))
 
     (t/testing "Explicit limit can reduce the default"
-      (t/is (= 500 (->> (crux/q db '{:find [(pull ?e [(:aka {:limit 500})])]
+      (t/is (= 500 (->> (xt/q db '{:find [(pull ?e [(:aka {:limit 500})])]
                                      :where [[?e :xt/id :elizabeth]]})
                         ffirst
                         :aka
                         count))))
 
     (t/testing "Explicit limit can increase the default"
-      (t/is (= 1500 (->> (crux/q db '{:find [(pull ?e [(:aka {:limit 1500})])]
+      (t/is (= 1500 (->> (xt/q db '{:find [(pull ?e [(:aka {:limit 1500})])]
                                       :where [[?e :xt/id :elizabeth]]})
                          ffirst
                          :aka
@@ -110,33 +110,33 @@
 
     (t/testing "Limits can be used as map specification keys"
       (t/is (= #{[{:name "Elizabeth", :friend #{{:name "Kerri"} {:name "Matthew"}}}]}
-               (crux/q db '{:find [(pull ?e [:name {(:friend {:limit 2, :into #{}}) [:name]}])]
+               (xt/q db '{:find [(pull ?e [:name {(:friend {:limit 2, :into #{}}) [:name]}])]
                             :where [[?e :xt/id :elizabeth]]}))))))
 
 (t/deftest test-pull-default
   (let [db (submit-test-docs people-docs)]
     ;; Datascript returns nil here, because there's no matching datom
     (t/is (= #{[{}]}
-             (crux/q db '{:find [(pull ?e [:foo])]
+             (xt/q db '{:find [(pull ?e [:foo])]
                           :where [[?e :xt/id :petr]]}))
           "Missing attrs return empty map")
 
     (t/is (= #{[{:foo "bar"}]}
-             (crux/q db '{:find [(pull ?e [(:foo {:default "bar"})])]
+             (xt/q db '{:find [(pull ?e [(:foo {:default "bar"})])]
                           :where [[?e :xt/id :petr]]}))
           "A default can be used to replace nil results")))
 
 (t/deftest test-pull-as
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{"Name" "Petr", :alias #{"Devil" "Tupen"}}]}
-             (crux/q db '{:find [(pull ?e [(:name {:as "Name"})
+             (xt/q db '{:find [(pull ?e [(:name {:as "Name"})
                                                   (:aka {:as :alias})])]
                           :where [[?e :xt/id :petr]]})))))
 
 (t/deftest test-pull-attr-with-opts
   (let [db (submit-test-docs people-docs)]
     (t/is (= #{[{"Name" "Nothing"}]}
-             (crux/q db '{:find [(pull ?e [(:x {:as "Name", :default "Nothing"})])]
+             (xt/q db '{:find [(pull ?e [(:x {:as "Name", :default "Nothing"})])]
                           :where [[?e :xt/id :petr]]})))))
 
 (t/deftest test-pull-map
@@ -144,24 +144,24 @@
              (submit-test-docs people-docs)
              (submit-test-docs part-docs))]
     (t/is (= #{[{:name "Matthew" :parent [{:name "Thomas"}]}]}
-             (crux/q db '{:find [(pull ?e [:name {:parent [:name]}])]
+             (xt/q db '{:find [(pull ?e [:name {:parent [:name]}])]
                           :where [[?e :xt/id :matthew]]}))
           "Single attrs yield a map")
 
     (t/is (= #{[{:name "Petr" :children [{:name "David"} {:name "Thomas"}]}]}
-             (crux/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:name]}])]
+             (xt/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:name]}])]
                           :where [[?e :xt/id :petr]]}))
           "Multi attrs yield a collection of maps")
 
     (t/is (= #{[{:name "Petr"}]}
-             (crux/q db '{:find [(pull ?e [:name {:parent [:name]}])]
+             (xt/q db '{:find [(pull ?e [:name {:parent [:name]}])]
                           :where [[?e :xt/id :petr]]}))
           "Missing attrs are dropped")
 
     ;; Datascript returns `{:name "Petr", :children []}` for this, but we've matched documents,
     ;; so we can say 'there are two children, but they don't have `:foo`'
     (t/is (= #{[{:name "Petr" :children [{} {}]}]}
-             (crux/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:foo]}])]
+             (xt/q db '{:find [(pull ?e [:name {(:_parent {:as :children}) [:foo]}])]
                           :where [[?e :xt/id :petr]]}))
           "Non matching results are removed from collections")
 
@@ -169,11 +169,11 @@
       (let [parts #{[{:part-name "Part A" :_part-of [{:part-name "Part A.A"}
                                                      {:part-name "Part A.B"}]}]}]
         (t/is (= parts
-                 (crux/q db '{:find [(pull ?e [:part-name {:_part-of [:part-name]}])]
+                 (xt/q db '{:find [(pull ?e [:part-name {:_part-of [:part-name]}])]
                               :where [[?e :xt/id :a]]})))
 
         (t/is (= parts
-                 (crux/q db '{:find [(pull ?e [:part-name {:_part-of 1}])]
+                 (xt/q db '{:find [(pull ?e [:part-name {:_part-of 1}])]
                               :where [[?e :xt/id :a]]})))))))
 
 (t/deftest test-pull-recursion
@@ -197,20 +197,20 @@
                           :enemy [{:name "Kerri"}]}]}]
 
     (t/is (= #{[friends]}
-             (crux/q db '{:find [(pull ?e [:name {:friend ...}])]
+             (xt/q db '{:find [(pull ?e [:name {:friend ...}])]
                           :where [[?e :xt/id :lucy]]}))
           "Infinite recursion")
 
     ;; EQL doesn't support this
     #_
     (t/is (= #{[enemies]}
-             (crux/q db '{:find [(pull ?e [:name {:friend 2, :enemy 2}])]
+             (xt/q db '{:find [(pull ?e [:name {:friend 2, :enemy 2}])]
                           :where [[?e :xt/id :lucy]]}))
           "Multiple recursion specs in one pattern")
 
-    (let [db (crux/with-tx db [[:xt/put {:xt/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
+    (let [db (xt/with-tx db [[:xt/put {:xt/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
       (t/is (= #{[(assoc-in friends (take 7 (cycle [:friend 0])) [{:name "Kerri" :friend [{:xt/id :lucy}]}])]}
-               (crux/q db '{:find [(pull ?e [:name {:friend ...}])]
+               (xt/q db '{:find [(pull ?e [:name {:friend ...}])]
                             :where [[?e :xt/id :lucy]]}))
             "Cycles are handled by returning only the :xt/id of entities which have been seen before"))))
 
@@ -234,7 +234,7 @@
                                :part {:xt/id 1,
                                       :spec {:xt/id 2},
                                       :part {:xt/id 2}}}}}]}
-             (crux/q db '{:find [(pull ?e [:xt/id {:part ...} {:spec ...}])]
+             (xt/q db '{:find [(pull ?e [:xt/id {:part ...} {:spec ...}])]
                           :where [[?e :xt/id 1]]})))))
 
 #_
@@ -253,7 +253,7 @@
                   (into [] cat))]
 
     (t/is (= (str "Person-" depth)
-             (-> (crux/q db
+             (-> (xt/q db
                          '{:find [(pull ?e [:name {:friend ...}])]
                            :in [start]
                            :where [[?e :xt/id start]]}

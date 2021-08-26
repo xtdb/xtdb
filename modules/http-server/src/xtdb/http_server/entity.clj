@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.codec :as c]
             [crux.error :as ce]
             [xtdb.http-server.entity-ref :as entity-ref]
@@ -52,7 +52,7 @@
 (defn entity-links
   [db result]
   (letfn [(recur-on-result [result & key]
-            (if (and (c/valid-id? result) (crux/entity db result) (not= (first key) :xt/id))
+            (if (and (c/valid-id? result) (xt/entity db result) (not= (first key) :xt/id))
               (entity-ref/->EntityRef result)
               (cond
                 (map? result) (map (fn [[k v]] [k (recur-on-result v k)]) result)
@@ -155,7 +155,7 @@
                                      :xt/tx-id end-tx-id}
                                     (into {} (filter val))
                                     not-empty)}
-          entity-history (crux/open-entity-history db eid sort-order history-opts)]
+          entity-history (xt/open-entity-history db eid sort-order history-opts)]
       {:entity-history entity-history})
     (catch Exception e
       {:error e})))
@@ -164,7 +164,7 @@
   (try
     (let [db (util/db-for-request crux-node {:valid-time valid-time
                                              :tx-time tx-time})
-          entity (crux/entity db eid)]
+          entity (xt/entity db eid)]
       (cond
         (empty? entity) {:eid eid :not-found? true}
         link-entities? {:entity (entity-links db entity)}

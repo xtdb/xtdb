@@ -1,6 +1,6 @@
 (ns crux.space-tutorial-test
   (:require [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.codec :as c]
             [crux.fixtures :as fix :refer [*api*]]))
 
@@ -15,7 +15,7 @@
    :cargo ["stereo" "gold fish" "slippers" "secret note"]})
 
 (defn filter-appearance [description]
-  (crux/q (crux/db *api*)
+  (xt/q (xt/db *api*)
           {:find '[name IUPAC]
            :where '[[e :common-name name]
                     [e :IUPAC-name IUPAC]
@@ -28,7 +28,7 @@
 
 (defn stock-check
   [company-id item]
-  {:result (crux/q (crux/db *api*)
+  {:result (xt/q (xt/db *api*)
                    {:find '[name funds stock]
                     :where ['[e :company-name name]
                             '[e :credits funds]
@@ -42,7 +42,7 @@
 
 
 (defn full-query [node]
-  (crux/q (crux/db node)
+  (xt/q (xt/db node)
           '{:find [(pull id [*])]
             :where [[e :xt/id id]]}))
 
@@ -56,10 +56,10 @@
               :id/employee "22910x2",
               :badges "SETUP",
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest)))
+             (xt/entity (xt/db *api*) :manifest)))
 
     (t/is (= #{["secret note"]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      {:find '[belongings]
                       :where '[[e :cargo belongings]]
                       :args [{'belongings "secret note"}]}))))
@@ -125,9 +125,9 @@
                            #inst "2115-02-19T18"]])
 
     (t/is (= {:xt/id :stock/Pu, :commod :commodity/Pu, :weight-ton 21}
-             (crux/entity (crux/db *api* #inst "2115-02-14") :stock/Pu)))
+             (xt/entity (xt/db *api* #inst "2115-02-14") :stock/Pu)))
     (t/is (= {:xt/id :stock/Pu, :commod :commodity/Pu, :weight-ton 22.2}
-             (crux/entity (crux/db *api* #inst "2115-02-18") :stock/Pu)))
+             (xt/entity (xt/db *api* #inst "2115-02-18") :stock/Pu)))
 
     (fix/submit+await-tx [[:xt/put (assoc manifest :badges ["SETUP" "PUT"])]])
 
@@ -137,7 +137,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (xt/entity (xt/db *api*) :manifest))))
 
   (t/testing "mercury-tests"
     (put-all! [{:xt/id :commodity/Pu
@@ -187,52 +187,52 @@
              :appearance "white solid"
              :density 1.73
              :radioactive false}
-            (crux/entity (crux/db *api*) :commodity/borax)))
+            (xt/entity (xt/db *api*) :commodity/borax)))
     (t/is (= #{[:commodity/Pu] [:commodity/Au]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      '{:find [element]
                        :where [[element :type :element/metal]]})))
     (t/is (=
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    '{:find [element]
                      :where [[element :type :element/metal]]} )
 
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    {:find '[element]
                     :where '[[element :type :element/metal]]} )
 
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    (quote
                     {:find [element]
                      :where [[element :type :element/metal]]}) )))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      '{:find [name]
                        :where [[e :type :element/metal]
                                [e :common-name name]]} )))
 
     (t/is (= #{["Nitrogen" 1.2506] ["Carbon" 2.267] ["Methane" 0.717] ["Borax" 1.73] ["Gold" 19.3] ["Plutonium" 19.816]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      '{:find [name rho]
                        :where [[e :density rho]
                                [e :common-name name]]})))
 
     (t/is (= #{["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      '{:find [name]
                        :where [[e :common-name name]
                                [e :radioactive true]]})))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      {:find '[name]
                       :where '[[e :type t]
                                [e :common-name name]]
                       :args [{'t :element/metal}]})))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
-             (crux/q (crux/db *api*)
+             (xt/q (xt/db *api*)
                      {:find '[name]
                       :where '[[e :type t]
                                [e :common-name name]]
@@ -250,7 +250,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (xt/entity (xt/db *api*) :manifest))))
 
   (t/testing "neptune-test"
     (fix/submit+await-tx [[:xt/put
@@ -301,21 +301,21 @@
                            #inst "2112-06-03"]])
 
     (t/is (= #{[true :Full]}
-             (crux/q (crux/db *api* #inst "2115-07-03")
+             (xt/q (xt/db *api* #inst "2115-07-03")
                      '{:find [cover type]
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
                                [e :cover-type type]]})))
 
     (t/is (= #{}
-             (crux/q (crux/db *api* #inst "2112-07-03")
+             (xt/q (xt/db *api* #inst "2112-07-03")
                      '{:find [cover type]
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
                                [e :cover-type type]]})))
 
     (t/is (= #{[true :Promotional]}
-             (crux/q (crux/db *api* #inst "2111-07-03")
+             (xt/q (xt/db *api* #inst "2111-07-03")
                      '{:find [cover type]
                        :where [[e :consumer-id :RJ29sUU]
                                [e :cover? cover]
@@ -330,7 +330,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest))))
+             (xt/entity (xt/db *api*) :manifest))))
 
   (t/testing "saturn-tests"
     (put-all! [{:xt/id :gold-harmony
@@ -457,7 +457,7 @@
               :id/employee "22910x2",
               :badges ["SETUP" "PUT" "DATALOG-QUERIES" "BITEMP" "MATCH"],
               :cargo ["stereo" "gold fish" "slippers" "secret note"]}
-             (crux/entity (crux/db *api*) :manifest)))))
+             (xt/entity (xt/db *api*) :manifest)))))
 
 (t/deftest jupiter-tests
   (let [doc1 {:xt/id :kaarlang/clients, :clients [:encompass-trade]}
@@ -469,7 +469,7 @@
                           [:xt/put doc3 #inst "2113-01-01T09" #inst "2114-01-01T09"]
                           [:xt/put doc4 #inst "2114-01-01T09" #inst "2115-01-01T09"]])
 
-    (t/is (= doc4 (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
+    (t/is (= doc4 (xt/entity (xt/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
     (t/is (= [{:xt/tx-id 0, :xt/valid-time #inst "2110-01-01T09", :xt/content-hash (c/hash-doc doc1), :xt/doc doc1}
               {:xt/tx-id 0, :xt/valid-time #inst "2111-01-01T09", :xt/content-hash (c/hash-doc doc2), :xt/doc doc2}
@@ -477,12 +477,12 @@
               {:xt/tx-id 0, :xt/valid-time #inst "2114-01-01T09", :xt/content-hash (c/hash-doc doc4), :xt/doc doc4}
               {:xt/tx-id 0, :xt/valid-time #inst "2115-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer), :xt/doc nil}]
 
-             (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
+             (->> (xt/entity-history (xt/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
                   (mapv #(dissoc % :xt/tx-time)))))
 
     (fix/submit+await-tx [[:xt/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
 
-    (t/is nil? (crux/entity (crux/db *api* #inst "2114-01-01T09") :kaarlang/clients))
+    (t/is nil? (xt/entity (xt/db *api* #inst "2114-01-01T09") :kaarlang/clients))
 
     (t/is (= [{:xt/tx-id 1, :xt/valid-time #inst "2110-01-01T00", :xt/content-hash (c/new-id c/nil-id-buffer)}
               {:xt/tx-id 1, :xt/valid-time #inst "2110-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
@@ -492,7 +492,7 @@
               {:xt/tx-id 1, :xt/valid-time #inst "2115-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
               {:xt/tx-id 0, :xt/valid-time #inst "2116-01-01T00", :xt/content-hash (c/new-id c/nil-id-buffer)}]
 
-             (->> (crux/entity-history (crux/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? false})
+             (->> (xt/entity-history (xt/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? false})
                   (mapv #(dissoc % :xt/tx-time)))))))
 
 (t/deftest Oumuamua-test
@@ -546,14 +546,14 @@
   (t/is empty? (full-query *api*))
 
   ;; Check not nil, history constantly changing so it is hard to check otherwise
-  (with-open [history (crux/open-entity-history (crux/db *api*) :person/kaarlang :desc)]
+  (with-open [history (xt/open-entity-history (xt/db *api*) :person/kaarlang :desc)]
     (t/is history))
 
-  (with-open [history (crux/open-entity-history (crux/db *api*) :person/ilex :desc)]
+  (with-open [history (xt/open-entity-history (xt/db *api*) :person/ilex :desc)]
     (t/is history))
 
-  (with-open [history (crux/open-entity-history (crux/db *api*) :person/thadd :desc)]
+  (with-open [history (xt/open-entity-history (xt/db *api*) :person/thadd :desc)]
     (t/is history))
 
-  (with-open [history (crux/open-entity-history (crux/db *api*) :person/johanna :desc)]
+  (with-open [history (xt/open-entity-history (xt/db *api*) :person/johanna :desc)]
     (t/is history)))

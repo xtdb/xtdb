@@ -1,5 +1,5 @@
 (ns xtdb.http-server.status
-  (:require [crux.api :as api]
+  (:require [crux.api :as xt]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
@@ -31,7 +31,7 @@
              200
              500)
    :body (merge res
-                {:attribute-stats (api/attribute-stats crux-node)
+                {:attribute-stats (xt/attribute-stats crux-node)
                  :http-options http-options})})
 
 (defmethod transform-query-resp :default [{:keys [status-map]} _]
@@ -46,5 +46,5 @@
     (fn [req]
       (let [req (cond->> req
                   (not (get-in req [:muuntaja/response :format])) (m/negotiate-and-format-request status-muuntaja))]
-        (->> (transform-query-resp (assoc options :status-map (api/status crux-node)) req)
+        (->> (transform-query-resp (assoc options :status-map (xt/status crux-node)) req)
              (m/format-response status-muuntaja req))))))

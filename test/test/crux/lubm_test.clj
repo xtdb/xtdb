@@ -5,7 +5,7 @@
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures.lubm :as fl]
-            [crux.api :as api]))
+            [crux.api :as xt]))
 
 ;; See:
 ;; http://swat.cse.lehigh.edu/projects/lubm/
@@ -44,7 +44,7 @@
              [(keyword "http://www.Department0.University0.edu/GraduateStudent124")]
              [(keyword "http://www.Department0.University0.edu/GraduateStudent142")]
              [(keyword "http://www.Department0.University0.edu/GraduateStudent44")]}
-           (api/q (api/db *api*)
+           (xt/q (xt/db *api*)
                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                     '{:find [x]
                       :where [[x :rdf/type :ub/GraduateStudent]
@@ -55,7 +55,7 @@
 ;; This query increases in complexity: 3 classes and 3 properties are involved. Additionally,
 ;; there is a triangular pattern of relationships between the objects involved.
 (t/deftest test-lubm-query-02
-  (t/is (empty? (api/q (api/db *api*)
+  (t/is (empty? (xt/q (xt/db *api*)
                        (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                          '{:find [x y z]
                            :where [[x :rdf/type :ub/GraduateStudent]
@@ -73,7 +73,7 @@
              [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication3")]
              [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication4")]
              [(keyword "http://www.Department0.University0.edu/AssistantProfessor0/Publication5")]}
-           (api/q (api/db *api*)
+           (xt/q (xt/db *api*)
                   (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                     '{:find [x]
                       :rules [[(sub-class-of? type root-type)
@@ -92,7 +92,7 @@
 ;; feature is that it queries about multiple properties of a single class.
 ;; Should return 34 with lubm10.ntriples.
 (t/deftest test-lubm-query-04
-  (let [result (api/q (api/db *api*)
+  (let [result (xt/q (xt/db *api*)
                       (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                         '{:find [x y1 y2 y3]
                           :rules [[(sub-class-of? type root-type)
@@ -119,7 +119,7 @@
 ;; and subPropertyOf relationship between memberOf and its subproperties.
 ;; Moreover, class Person features a deep and wide hierarchy.
 (t/deftest test-lubm-query-05
-  (t/is (= 719 (count (api/q (api/db *api*)
+  (t/is (= 719 (count (xt/q (xt/db *api*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x]
                                  :rules [[(person? rdf-type) ; there are three root types
@@ -142,7 +142,7 @@
 ;; implicit one between GraduateStudent and Student. In addition, it has large
 ;; input and low selectivity.
 (t/deftest test-lubm-query-06
-  (t/is (= 678 (count (api/q (api/db *api*)
+  (t/is (= 678 (count (xt/q (xt/db *api*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x]
                                  :where [ ;; [x :rdf/type :ub/Student]
@@ -157,7 +157,7 @@
 ;; This query is similar to Query 6 in terms of class Student but it increases in the
 ;; number of classes and properties and its selectivity is high.
 (t/deftest test-lubm-query-07
-  (t/is (= 67 (count (api/q (api/db *api*)
+  (t/is (= 67 (count (xt/q (xt/db *api*)
                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                               '{:find [x y]
                                 :where [ ;; [x :rdf/type :ub/Student]
@@ -178,7 +178,7 @@
 
 ;; This query is further more complex than Query 7 by including one more property.
 (t/deftest test-lubm-query-08
-  (t/is (= 678 (count (api/q (api/db *api*)
+  (t/is (= 678 (count (xt/q (xt/db *api*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x y z]
                                  :where [ ;; [x :rdf/type :ub/Student]
@@ -197,7 +197,7 @@
 ;; class Faculty, like Query 2, this query is characterized by the most classes and
 ;; properties in the query set and there is a triangular pattern of relationships.
 (t/deftest test-lubm-query-09
-  (t/is (= 13 (count (api/q (api/db *api*)
+  (t/is (= 13 (count (xt/q (xt/db *api*)
                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                               '{:find [x y z]
                                 :where [ ;; [x :rdf/type :ub/Student]
@@ -229,7 +229,7 @@
 ;; subClassOf rela-tionship between UndergraduateStudent and Student does not add
 ;; to the results.
 (t/deftest test-lubm-query-10
-  (t/is (= 4 (count (api/q (api/db *api*)
+  (t/is (= 4 (count (xt/q (xt/db *api*)
                            (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                              '{:find [x]
                                :where [ ;; [x :rdf/type :ub/Student]
@@ -249,7 +249,7 @@
 ;; instances of ResearchGroup and University is required to answer this query.
 ;; Additionally, its input is small.
 (t/deftest test-lubm-query-11
-  (t/is (= 10 (count (api/q (api/db *api*)
+  (t/is (= 10 (count (xt/q (xt/db *api*)
                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                               '{:find [x]
                                 :where [[x :rdf/type :ub/ResearchGroup]
@@ -268,7 +268,7 @@
 ;; that professor is an instance of class Chair because he or she is the head of a
 ;; department. Input of this query is small as well.
 (t/deftest test-lubm-query-12
-  (t/is (= 10 (count (api/q (api/db *api*)
+  (t/is (= 10 (count (xt/q (xt/db *api*)
                             (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                               '{:find [x y]
                                 :where [[x :rdf/type :ub/FullProfessor]
@@ -277,7 +277,7 @@
                                         [y :ub/subOrganizationOf #=(keyword "http://www.University0.edu")]]})))))
 
   ;; TODO: actual result, should use rules.
-  #_(t/is (= 1 (count (api/q (api/db *api*)
+  #_(t/is (= 1 (count (xt/q (xt/db *api*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x y]
                                  :where [[y :rdf/type :ub/Department]
@@ -294,7 +294,7 @@
 ;; degreeFrom and its subproperties, and also requires inference about inverseOf.
 (t/deftest test-lubm-query-13
   (t/is (= #{[(keyword "http://www.Department0.University0.edu/AssistantProfessor2")]}
-           (api/q (api/db *api*)
+           (xt/q (xt/db *api*)
                   (rdf/with-prefix {:rdf "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
                                     :ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                     '{:find [x]
@@ -329,7 +329,7 @@
 ;; represents those with large input and low selectivity and does
 ;; not assume any hierarchy information or inference.
 (t/deftest test-lubm-query-14
-  (t/is (= 532 (count (api/q (api/db *api*)
+  (t/is (= 532 (count (xt/q (xt/db *api*)
                              (rdf/with-prefix {:ub "http://swat.cse.lehigh.edu/onto/univ-bench.owl#"}
                                '{:find [x]
                                  :where [[x :rdf/type :ub/UndergraduateStudent]]}))))))

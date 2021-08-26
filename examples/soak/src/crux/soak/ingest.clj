@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.soak.ingest
   (:require [clj-http.client :as http]
             [clojure.string :as string]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [xtdb.kafka :as k]
             [crux.soak.config :as config]
             [nomad.config :as n])
@@ -80,10 +80,10 @@
   (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
 
   (let [mode (first args)]
-    (with-open [node (crux/new-ingest-client [{:xt/tx-log {:xt/module `k/->tx-log}
+    (with-open [node (xt/new-ingest-client [{:xt/tx-log {:xt/module `k/->tx-log}
                                                :xt/document-store {:xt/module `k/->ingest-only-document-store}}
                                               (config/crux-node-config)])]
-      (crux/submit-tx node
+      (xt/submit-tx node
                       (case mode
                         "current" (->> (vals locations)
                                        (map fetch-current-weather)

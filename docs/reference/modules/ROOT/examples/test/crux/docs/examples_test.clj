@@ -1,6 +1,6 @@
 (ns crux.docs.examples-test
   (:require [clojure.java.io :as io]
-            [crux.api :as crux]))
+            [crux.api :as xt]))
 
 ;; tag::require-ek[]
 (require '[xtdb.kafka.embedded :as ek])
@@ -21,18 +21,18 @@
 
 ;; tag::start-http-client[]
 (defn start-http-client [port]
-  (crux/new-api-client (str "http://localhost:" port)))
+  (xt/new-api-client (str "http://localhost:" port)))
 ;; end::start-http-client[]
 
 (defn example-query-entity [node]
 ;; tag::query-entity[]
-(crux/entity (crux/db node) :dbpedia.resource/Pablo-Picasso)
+(xt/entity (xt/db node) :dbpedia.resource/Pablo-Picasso)
 ;; end::query-entity[]
 )
 
 (defn example-query-valid-time [node]
 ;; tag::query-valid-time[]
-(crux/q (crux/db node #inst "2018-05-19T09:20:27.966-00:00")
+(xt/q (xt/db node #inst "2018-05-19T09:20:27.966-00:00")
         '{:find [e]
           :where [[e :name "Pablo"]]})
 ;; end::query-valid-time[]
@@ -42,7 +42,7 @@
 
 #_(comment
 ;; tag::history-full[]
-(api/submit-tx
+(xt/submit-tx
   node
   [[:xt/put
     {:xt/id :ids.persons/Jeff
@@ -61,7 +61,7 @@
 
 ; Returning the history in descending order
 ; To return in ascending order, use :asc in place of :desc
-(api/entity-history (api/db node) :ids.persons/Jeff :desc)
+(xt/entity-history (xt/db node) :ids.persons/Jeff :desc)
 
 ; yields
 [{:xt/tx-time #inst "2019-04-15T07:53:55.817-00:00",
@@ -76,7 +76,7 @@
 ;; end::history-full[]
 
 ;; tag::history-with-docs[]
-(api/entity-history (api/db node) :ids.persons/Jeff :desc {:with-docs? true})
+(xt/entity-history (xt/db node) :ids.persons/Jeff :desc {:with-docs? true})
 
 ; yields
 [{:xt/tx-time #inst "2019-04-15T07:53:55.817-00:00",
@@ -103,8 +103,8 @@
 ; Passing the additional 'opts' map with the start/end bounds.
 ; As we are returning results in :asc order, the map contains the earlier starting coordinates -
 ; If returning history range in descending order, we pass the later coordinates as start coordinates to the map
-(api/entity-history
- (api/db node)
+(xt/entity-history
+ (xt/db node)
  :ids.persons/Jeff
  :asc
  {:start-valid-time #inst "2015-05-18T09:20:27.966"

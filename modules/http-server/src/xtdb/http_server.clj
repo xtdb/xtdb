@@ -8,7 +8,7 @@
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [xtdb.http-server.entity :as entity]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.query :as query]
@@ -51,8 +51,8 @@
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})]
-      (resp/response (merge {:xt/valid-time (crux/valid-time db)}
-                            (crux/db-basis db))))))
+      (resp/response (merge {:xt/valid-time (xt/valid-time db)}
+                            (xt/db-basis db))))))
 
 (s/def ::entity-tx-spec (s/keys :req-un [(or ::util/eid-edn ::util/eid-json ::util/eid)]
                                 :opt-un [::util/valid-time ::util/tx-time ::util/tx-id]))
@@ -64,7 +64,7 @@
           db (util/db-for-request crux-node {:valid-time valid-time
                                              :tx-time tx-time
                                              :tx-id tx-id})
-          entity-tx (crux/entity-tx db eid)]
+          entity-tx (xt/entity-tx db eid)]
       (if entity-tx
         (-> {:status 200
              :body entity-tx}
@@ -103,7 +103,7 @@
 (defn- submit-tx [crux-node]
   (fn [req]
     (let [tx-ops (get-in req [:parameters :body :tx-ops])
-          {:keys [xt/tx-time] :as submitted-tx} (crux/submit-tx crux-node tx-ops)]
+          {:keys [xt/tx-time] :as submitted-tx} (xt/submit-tx crux-node tx-ops)]
       (-> {:status 202
            :body submitted-tx}
           (add-last-modified tx-time)))))
@@ -130,9 +130,9 @@
   (fn [req]
     (let [{:keys [with-ops? after-tx-id]} (get-in req [:parameters :query])]
       (-> {:status 200
-           :body {:results (crux/open-tx-log crux-node after-tx-id with-ops?)}
+           :body {:results (xt/open-tx-log crux-node after-tx-id with-ops?)}
            :return :output-stream}
-          (add-last-modified (:xt/tx-time (crux/latest-completed-tx crux-node)))))))
+          (add-last-modified (:xt/tx-time (xt/latest-completed-tx crux-node)))))))
 
 (s/def ::sync-spec (s/keys :opt-un [::util/tx-time ::util/timeout]))
 
@@ -141,8 +141,8 @@
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
           last-modified (if tx-time
-                          (crux/await-tx-time crux-node tx-time timeout)
-                          (crux/sync crux-node timeout))]
+                          (xt/await-tx-time crux-node tx-time timeout)
+                          (xt/sync crux-node timeout))]
       (-> {:status 200
            :body {:xt/tx-time last-modified}}
           (add-last-modified last-modified)))))
@@ -153,7 +153,7 @@
   (fn [req]
     (let [{:keys [timeout tx-time]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))]
-      (let [last-modified (crux/await-tx-time crux-node tx-time timeout)]
+      (let [last-modified (xt/await-tx-time crux-node tx-time timeout)]
         (->
          {:status 200
           :body {:xt/tx-time last-modified}}
@@ -165,14 +165,14 @@
   (fn [req]
     (let [{:keys [timeout tx-id]} (get-in req [:parameters :query])
           timeout (some-> timeout (Duration/ofMillis))
-          {:keys [xt/tx-time] :as tx} (crux/await-tx crux-node {:xt/tx-id tx-id} timeout)]
+          {:keys [xt/tx-time] :as tx} (xt/await-tx crux-node {:xt/tx-id tx-id} timeout)]
       (-> {:status 200, :body tx}
           (add-last-modified tx-time)))))
 
 (defn- attribute-stats [crux-node]
   (fn [_]
     {:status 200
-     :body (crux/attribute-stats crux-node)}))
+     :body (xt/attribute-stats crux-node)}))
 
 (s/def ::tx-committed-spec (s/keys :req-un [::util/tx-id]))
 
@@ -181,13 +181,13 @@
     (try
       (let [tx-id (get-in req [:parameters :query :tx-id])]
         {:status 200
-         :body {:tx-committed? (crux/tx-committed? crux-node {:xt/tx-id tx-id})}})
+         :body {:tx-committed? (xt/tx-committed? crux-node {:xt/tx-id tx-id})}})
       (catch NodeOutOfSyncException e
         {:status 400, :body e}))))
 
 (defn latest-completed-tx [crux-node]
   (fn [_]
-    (if-let [latest-completed-tx (crux/latest-completed-tx crux-node)]
+    (if-let [latest-completed-tx (xt/latest-completed-tx crux-node)]
       {:status 200
        :body latest-completed-tx}
       {:status 404
@@ -195,7 +195,7 @@
 
 (defn latest-submitted-tx [crux-node]
   (fn [_]
-    (if-let [latest-submitted-tx (crux/latest-submitted-tx crux-node)]
+    (if-let [latest-submitted-tx (xt/latest-submitted-tx crux-node)]
       {:status 200
        :body latest-submitted-tx}
       {:status 404
@@ -204,17 +204,17 @@
 (defn active-queries [crux-node]
   (fn [_]
     {:status 200
-     :body (crux/active-queries crux-node)}))
+     :body (xt/active-queries crux-node)}))
 
 (defn recent-queries [crux-node]
   (fn [_]
     {:status 200
-     :body (crux/recent-queries crux-node)}))
+     :body (xt/recent-queries crux-node)}))
 
 (defn slowest-queries [crux-node]
   (fn [_]
     {:status 200
-     :body (crux/slowest-queries crux-node)}))
+     :body (xt/slowest-queries crux-node)}))
 
 (def ^:private sparql-available?
   (try ; you can change it back to require when clojure.core fixes it to be thread-safe

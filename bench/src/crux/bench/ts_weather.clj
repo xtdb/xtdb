@@ -3,7 +3,7 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.io :as cio])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
@@ -51,17 +51,17 @@
     (bench/with-additional-index-metrics node
       (let [location-tx-ops (vec (for [location-doc @location-docs]
                                    [:xt/put location-doc]))
-            _ (api/submit-tx node location-tx-ops)
+            _ (xt/submit-tx node location-tx-ops)
             last-tx (with-condition-docs
                       (fn [condition-docs]
                         (->> condition-docs
                              (partition-all conditions-chunk-size)
                              (reduce (fn [last-tx chunk]
-                                       (api/submit-tx node
+                                       (xt/submit-tx node
                                                       (vec (for [{:keys [condition/time] :as condition-doc} chunk]
                                                              [:xt/put condition-doc time]))))
                                      nil))))]
-        (api/await-tx node last-tx (Duration/ofMinutes 20))
+        (xt/await-tx node last-tx (Duration/ofMinutes 20))
         {:success? true}))))
 
 (defn test-last-10-readings [node]
@@ -91,7 +91,7 @@
   ;; (10 rows)
 
   (bench/run-bench :last-10-readings
-    (let [success? (= (api/q (api/db node)
+    (let [success? (= (xt/q (xt/db node)
                              '{:find [time device-id temperature humidity]
                                :where [[c :condition/time time]
                                        [c :condition/device-id device-id]
@@ -183,7 +183,7 @@
                   :timeout 120000}
 
           success? (= (for [[time device-id location temperature humidity]
-                            (api/q (api/db node) query)]
+                            (xt/q (xt/db node) query)]
                         [time device-id location (trunc temperature 2) (trunc humidity 2)])
 
                       [[#inst "2016-11-16T21:18:00.000-00:00"
@@ -290,8 +290,8 @@
   ;; NOTE: Assumes locations are stable over time.
 
   (bench/run-bench :hourly-average-min-max-temperatures-for-field-locations
-    (with-open [db (api/db node)]
-      (let [result (let [condition-ids (->> (api/q db
+    (with-open [db (xt/db node)]
+      (let [result (let [condition-ids (->> (xt/q db
                                                    '{:find [c]
                                                      :where [[c :condition/device-id device-id]
                                                              [device-id :location/location location]
@@ -299,7 +299,7 @@
                                                      :timeout 120000})
                                             (reduce into []))
                          histories (for [c condition-ids]
-                                     (api/open-entity-history db c :asc {:with-docs? true
+                                     (xt/open-entity-history db c :asc {:with-docs? true
                                                                          :start {:xt/valid-time  #inst "1970"}}))]
                      (try
                        (->> (for [history histories]

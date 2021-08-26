@@ -4,20 +4,20 @@
             [crux.system :as sys]
             [crux.tx.conform :as txc]
             [clojure.pprint :as pp]
-            [crux.api :as api])
+            [crux.api :as xt])
   (:import [java.io Closeable Writer]
            java.lang.AutoCloseable))
 
 (defrecord CruxIngestClient [tx-log document-store close-fn]
-  api/PCruxAsyncIngestClient
+  xt/PCruxAsyncIngestClient
   (submit-tx-async [_ tx-ops]
     (let [conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
       (db/submit-docs document-store (into {} (mapcat :docs) conformed-tx-ops))
       (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))
 
-  api/PCruxIngestClient
+  xt/PCruxIngestClient
   (submit-tx [this tx-ops]
-    @(api/submit-tx-async this tx-ops))
+    @(xt/submit-tx-async this tx-ops))
 
   (open-tx-log [this after-tx-id with-ops?]
     (when with-ops?

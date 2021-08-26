@@ -1,7 +1,7 @@
 (ns crux.kafka-test
   (:require [clojure.java.io :as io]
             [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.fixtures.kafka :as fk]
@@ -27,17 +27,17 @@
   (fix/with-node
     (fn []
       (t/testing "transacting and indexing"
-        (let [submitted-tx (api/submit-tx *api* [[:xt/put evicted-doc]
+        (let [submitted-tx (xt/submit-tx *api* [[:xt/put evicted-doc]
                                                  [:xt/put non-evicted-doc]])
-              _ (api/await-tx *api* submitted-tx)
-              _ (api/submit-tx *api* [[:xt/evict (:xt/id evicted-doc)]])
-              submitted-tx (api/submit-tx *api* [[:xt/put after-evict-doc]])
-              _ (api/await-tx *api* submitted-tx nil)]
+              _ (xt/await-tx *api* submitted-tx)
+              _ (xt/submit-tx *api* [[:xt/evict (:xt/id evicted-doc)]])
+              submitted-tx (xt/submit-tx *api* [[:xt/put after-evict-doc]])
+              _ (xt/await-tx *api* submitted-tx nil)]
 
           (t/testing "querying transacted data"
-            (t/is (= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
-            (t/is (nil? (api/entity (api/db *api*) (:xt/id :to-be-evicted))))
-            (t/is (= after-evict-doc (api/entity (api/db *api*) :after-evict))))
+            (t/is (= non-evicted-doc (xt/entity (xt/db *api*) :not-evicted)))
+            (t/is (nil? (xt/entity (xt/db *api*) (:xt/id :to-be-evicted))))
+            (t/is (= after-evict-doc (xt/entity (xt/db *api*) :after-evict))))
 
           (with-open [doc-consumer (doto (fk/open-consumer)
                                      (#'k/subscribe-consumer #{fk/*doc-topic*} {}))]
@@ -59,7 +59,7 @@
         (fn []
           (t/testing "new node can pick-up"
             (db/submit-docs (:document-store *api*) compacted-docs)
-            (api/await-tx *api* submitted-tx)
+            (xt/await-tx *api* submitted-tx)
             (f)))))))
 
 (t/deftest test-can-process-compacted-documents
@@ -73,9 +73,9 @@
         (with-compacted-node (submit-txs-to-compact)
           (fn []
             (t/testing "querying transacted data"
-              (t/is (= non-evicted-doc (api/entity (api/db *api*) :not-evicted)))
-              (t/is (nil? (api/entity (api/db *api*) :to-be-evicted)))
-              (t/is (= after-evict-doc (api/entity (api/db *api*) :after-evict))))))))))
+              (t/is (= non-evicted-doc (xt/entity (xt/db *api*) :not-evicted)))
+              (t/is (nil? (xt/entity (xt/db *api*) :to-be-evicted)))
+              (t/is (= after-evict-doc (xt/entity (xt/db *api*) :after-evict))))))))))
 
 (t/deftest test-consumer-seeks-after-restart
   (fix/with-tmp-dir "crux-tmp" [tmp]
@@ -90,10 +90,10 @@
               (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])))
           (fix/with-node
             (fn []
-              (doto (api/submit-tx *api* [[:xt/put {:xt/id :bar}]])
-                (as-> tx (api/await-tx *api* tx (Duration/ofSeconds 5))))
-              (t/is (api/entity (api/db *api*) :foo))
-              (t/is (api/entity (api/db *api*) :bar)))))))))
+              (doto (xt/submit-tx *api* [[:xt/put {:xt/id :bar}]])
+                (as-> tx (xt/await-tx *api* tx (Duration/ofSeconds 5))))
+              (t/is (xt/entity (xt/db *api*) :foo))
+              (t/is (xt/entity (xt/db *api*) :bar)))))))))
 
 (t/deftest submit-oversized-doc
   (let [with-fixtures (t/join-fixtures [(partial
@@ -110,7 +110,7 @@
            (thrown-with-msg?
             java.util.concurrent.ExecutionException
             #"org.apache.kafka.common.errors.RecordTooLargeException"
-            (api/submit-tx
+            (xt/submit-tx
              *api*
              [[:xt/put
                (into {:xt/id :test}

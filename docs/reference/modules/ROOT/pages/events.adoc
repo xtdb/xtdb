@@ -61,12 +61,12 @@ This parameter is a map of the following
 
 [source,clojure]
 ----
-(crux/listen node {:xt/event-type :xt/indexed-tx, :with-tx-ops? true}
+(xt/listen node {:xt/event-type :xt/indexed-tx, :with-tx-ops? true}
   (fn [ev]
     (println "event received!")
     (clojure.pprint/pprint ev)))
 
-(crux/submit-tx node [[:xt/put {:xt/id :ivan, :name "Ivan"}]])
+(xt/submit-tx node [[:xt/put {:xt/id :ivan, :name "Ivan"}]])
 ----
 
 Will print

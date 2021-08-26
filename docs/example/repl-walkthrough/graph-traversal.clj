@@ -2,7 +2,7 @@
 ;; $ clj -Sdeps '{:deps {com.xtdb/xtdb-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.graph-traversal
-  (:require [crux.api :as crux]
+  (:require [crux.api :as xt]
             [clojure.pprint :as pp])
   (:import (crux.api ICruxAPI)))
 
@@ -55,16 +55,16 @@
 
 
 (def node
-  (crux/start-node {}))
+  (xt/start-node {}))
 
-(crux/submit-tx
+(xt/submit-tx
   node
   (mapv (fn [n] [:xt/put n]) nodes))
 
-(def db (crux/db node))
+(def db (xt/db node))
 
 ;; find roles for user and particular groups
-(crux/q db '{:find [?roleName]
+(xt/q db '{:find [?roleName]
              :where
              [[?e :hasRoleInGroups ?roleInGroup]
               [?roleInGroup :hasGroups ?group]
@@ -74,7 +74,7 @@
 
 ;; find all groups and roles for a user
 (pp/pprint
-  (crux/q db '{:find [?groupName ?roleName]
+  (xt/q db '{:find [?groupName ?roleName]
                :where
                [[?e :hasRoleInGroups ?roleInGroup]
                 [?roleInGroup :hasGroups ?group]
@@ -91,7 +91,7 @@
 
 ;; find all groups and roles for a user, using a datalog rule
 (pp/pprint
-  (crux/q db {:find '[?groupName ?roleName]
+  (xt/q db {:find '[?groupName ?roleName]
                :where '[(user-roles-in-groups ?user ?role ?group)
                        [?group :group/name ?groupName]
                        [?role :role/name ?roleName]]

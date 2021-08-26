@@ -7,7 +7,7 @@
             [crux.io :as cio]
             [crux.query-state :as qs]
             [crux.tx :as tx]
-            [crux.api :as api]
+            [crux.api :as xt]
             [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http])
   (:import com.nimbusds.jwt.SignedJWT
            [crux.api RemoteClientOptions]
@@ -126,7 +126,7 @@
   Closeable
   (close [_])
 
-  api/PCruxDatasource
+  xt/PCruxDatasource
   (entity [this eid]
     (api-request-sync (str url "/_xtdb/entity")
                       {:->jwt-token ->jwt-token
@@ -141,7 +141,7 @@
                        :->jwt-token ->jwt-token}))
 
   (q* [this query in-args]
-    (with-open [res (api/open-q* this query in-args)]
+    (with-open [res (xt/open-q* this query in-args)]
       (if (:order-by query)
         (vec (iterator-seq res))
         (set (iterator-seq res)))))
@@ -159,7 +159,7 @@
   (pull [this projection eid]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-      (->> (api/q this
+      (->> (xt/q this
                   {:find [(list 'pull ?eid projection)]
                    :in [?eid]}
                   eid)
@@ -168,7 +168,7 @@
   (pull-many [this projection eids]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-      (->> (api/q this
+      (->> (xt/q this
                   {:find [(list 'pull ?eid projection)]
                    :in [[?eid '...]]}
                   this)
@@ -176,13 +176,13 @@
 
   ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
   ;; as the new Java ones?
-  (entity-history [this eid sort-order] (api/entity-history this eid sort-order {}))
+  (entity-history [this eid sort-order] (xt/entity-history this eid sort-order {}))
 
   (entity-history [this eid sort-order opts]
-   (with-open [history (api/open-entity-history this eid sort-order opts)]
+   (with-open [history (xt/open-entity-history this eid sort-order opts)]
      (vec (iterator-seq history))))
 
-  (open-entity-history [this eid sort-order] (api/open-entity-history this eid sort-order {}))
+  (open-entity-history [this eid sort-order] (xt/open-entity-history this eid sort-order {}))
 
   (open-entity-history [this eid sort-order opts]
    (let [opts (assoc opts :sort-order sort-order)
@@ -224,16 +224,16 @@
   Closeable
   (close [_])
 
-  api/DBProvider
-  (db [this] (api/db this {}))
+  xt/DBProvider
+  (db [this] (xt/db this {}))
 
   (db [this valid-time tx-time]
-   (api/db this {:xt/valid-time valid-time
+   (xt/db this {:xt/valid-time valid-time
                  :xt/tx-time tx-time}))
 
   (db [this valid-time-or-basis]
    (if (instance? Date valid-time-or-basis)
-     (api/db this {:xt/valid-time valid-time-or-basis})
+     (xt/db this {:xt/valid-time valid-time-or-basis})
      (let [db-basis valid-time-or-basis
            qps (temporal-qps {:valid-time (:xt/valid-time db-basis)
                               :tx-time (or (get-in db-basis [:xt/tx :xt/tx-time])
@@ -250,13 +250,13 @@
                            (get-in resolved-tx [:xt/tx :xt/tx-id])
                            ->jwt-token))))
 
-  (open-db [this] (api/db this))
+  (open-db [this] (xt/db this))
 
-  (open-db [this valid-time-or-basis] (api/db this valid-time-or-basis))
+  (open-db [this valid-time-or-basis] (xt/db this valid-time-or-basis))
 
-  (open-db [this valid-time tx-time] (api/db this valid-time tx-time))
+  (open-db [this valid-time tx-time] (xt/db this valid-time tx-time))
 
-  api/PCruxNode
+  xt/PCruxNode
   (status [this]
     (api-request-sync (str url "/_xtdb/status")
                       {:http-opts {:method :get}
@@ -269,7 +269,7 @@
                            :->jwt-token ->jwt-token})
         (get :tx-committed?)))
 
-  (sync [this] (api/sync this nil))
+  (sync [this] (xt/sync this nil))
 
   (sync [this timeout]
    (-> (api-request-sync (str url "/_xtdb/sync")
@@ -281,9 +281,9 @@
   (sync [this tx-time timeout]
    (defonce warn-on-deprecated-sync
             (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-   (api/await-tx-time this tx-time timeout))
+   (xt/await-tx-time this tx-time timeout))
 
-  (await-tx [this submitted-tx] (api/await-tx this submitted-tx nil))
+  (await-tx [this submitted-tx] (xt/await-tx this submitted-tx nil))
   (await-tx [this submitted-tx timeout]
     (api-request-sync (str url "/_xtdb/await-tx")
                       {:http-opts {:method :get
@@ -291,7 +291,7 @@
                                                  :timeout (some-> timeout (cio/format-duration-millis))}}
                        :->jwt-token ->jwt-token}))
 
-  (await-tx-time [this tx-time] (api/await-tx-time this tx-time nil))
+  (await-tx-time [this tx-time] (xt/await-tx-time this tx-time nil))
   (await-tx-time [this tx-time timeout]
     (-> (api-request-sync (str url "/_xtdb/await-tx-time" )
                           {:http-opts {:method :get
@@ -338,9 +338,9 @@
                             :->jwt-token ->jwt-token})
          (map qs/->QueryState)))
 
-  api/PCruxIngestClient
+  xt/PCruxIngestClient
   (submit-tx [this tx-ops]
-    (let [tx-ops (api/conform-tx-ops tx-ops)]
+    (let [tx-ops (xt/conform-tx-ops tx-ops)]
       (try
         (api-request-sync (str url "/_xtdb/submit-tx")
                           {:body {:tx-ops tx-ops}

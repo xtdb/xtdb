@@ -5,7 +5,7 @@
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [clojure.walk :as w]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.bus :as bus]
             [crux.cache :as cache]
             [crux.cache.lru :as lru]
@@ -982,7 +982,7 @@
                            (if (instance? VarBinding arg-binding)
                              (bound-result-for-var index-snapshot arg-binding join-keys)
                              arg-binding))]
-        (with-open [pred-result (api/open-q* db query (object-array args))]
+        (with-open [pred-result (xt/open-q* db query (object-array args))]
           (bind-binding return-type tuple-idxs-in-join-order (get idx-id->idx idx-id) (iterator-seq pred-result)))))))
 
 (defn- built-in-unification-pred [unifier-fn {:keys [encode-value-fn arg-bindings]}]
@@ -1770,7 +1770,7 @@
     (when index-snapshot
       (.close ^Closeable index-snapshot)))
 
-  api/PCruxDatasource
+  xt/PCruxDatasource
   (entity [this eid]
     (with-open [index-snapshot (open-index-snapshot this)]
       (entity this index-snapshot eid)))
@@ -1780,7 +1780,7 @@
       (entity-tx this index-snapshot eid)))
 
   (q* [this query args]
-    (with-open [res (api/open-q* this query args)]
+    (with-open [res (xt/open-q* this query args)]
       (let [result-coll-fn (if (some (normalize-query query) [:order-by :limit :offset]) vec set)
             !timed-out? (atom false)
             ^Future
@@ -1838,7 +1838,7 @@
   (pull [db projection eid]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-      (->> (api/q db
+      (->> (xt/q db
                   {:find [(list 'pull ?eid projection)]
                    :in [?eid]}
                   eid)
@@ -1847,7 +1847,7 @@
   (pull-many [db projection eids]
     (let [?eid (gensym '?eid)
           projection (cond-> projection (string? projection) c/read-edn-string-with-readers)]
-      (->> (api/q db
+      (->> (xt/q db
                   {:find [(list 'pull ?eid projection)]
                    :in [[?eid '...]]}
                   eids)
@@ -1855,13 +1855,13 @@
 
   ;; TODO should we make the Clojure history opts the same format (`:start-valid-time`, `:start-tx`)
   ;; as the new Java ones?
-  (entity-history [this eid sort-order] (api/entity-history this eid sort-order {}))
+  (entity-history [this eid sort-order] (xt/entity-history this eid sort-order {}))
 
   (entity-history [this eid sort-order opts]
-    (with-open [history (api/open-entity-history this eid sort-order opts)]
+    (with-open [history (xt/open-entity-history this eid sort-order opts)]
       (into [] (iterator-seq history))))
 
-  (open-entity-history [this eid sort-order] (api/open-entity-history this eid sort-order {}))
+  (open-entity-history [this eid sort-order] (xt/open-entity-history this eid sort-order {}))
 
   (open-entity-history [this eid sort-order opts]
     (if-not tx-id
@@ -1912,7 +1912,7 @@
       (db/submit-docs in-flight-tx (into {} (mapcat :docs) conformed-tx-ops))
 
       (when (db/index-tx-events in-flight-tx (map txc/->tx-event conformed-tx-ops))
-        (api/db in-flight-tx valid-time)))))
+        (xt/db in-flight-tx valid-time)))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
   (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:xt/valid-time valid-time, :xt/tx-id tx-id}))))
@@ -1933,9 +1933,9 @@
 (defrecord QueryEngine [^ScheduledExecutorService interrupt-executor document-store
                         index-store bus !pred-ctx
                         query-cache conform-cache pull-cache]
-  api/DBProvider
-  (db [this] (api/db this nil))
-  (db [this valid-time tx-time] (api/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
+  xt/DBProvider
+  (db [this] (xt/db this nil))
+  (db [this valid-time tx-time] (xt/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
   (db [this valid-time-or-basis]
     (let [{:keys [xt/valid-time] :as basis} (->basis valid-time-or-basis)
           valid-time (or valid-time (Date.))
@@ -1953,11 +1953,11 @@
                                    :tx-time (:xt/tx-time resolved-tx)
                                    :tx-id (:xt/tx-id resolved-tx)))))
 
-  (open-db [this] (api/open-db this nil nil))
-  (open-db [this valid-time tx-time] (api/open-db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
+  (open-db [this] (xt/open-db this nil nil))
+  (open-db [this valid-time tx-time] (xt/open-db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
 
   (open-db [this valid-time-or-basis]
-    (let [db (api/db this valid-time-or-basis)
+    (let [db (xt/db this valid-time-or-basis)
           index-snapshot (open-index-snapshot db)
           db (assoc db :index-snapshot index-snapshot)
           entity-resolver-fn (new-entity-resolver-fn db)]

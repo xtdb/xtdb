@@ -2,7 +2,7 @@
   (:require [clojure.test :as t]
             [crux.fixtures.kafka :as fk]
             [crux.fixtures :as fix :refer [*api*]]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.rdf :as rdf]
             [clojure.java.io :as io]
             [crux.sparql :as sparql]))
@@ -16,13 +16,13 @@
                             (rdf/->default-language)))
 
   (t/is (= #{[(keyword "http://dbpedia.org/resource/Pablo_Picasso")]}
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"}
                      '{:find [e]
                        :where [[e :foaf/givenName "Pablo"]]}))))
 
   (t/is (= #{[(keyword "http://dbpedia.org/resource/Guernica_(Picasso)")]}
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1/"
                                      :dbo "http://dbpedia.org/ontology/"}
                      '{:find [g]
@@ -69,15 +69,15 @@
                                   (take max-limit)
                                   (partition-all 1000)
                                   (reduce (fn [_ ops]
-                                            (crux/submit-tx *api* ops))))]
-                 (crux/await-tx *api* last-tx))))))
+                                            (xt/submit-tx *api* ops))))]
+                 (xt/await-tx *api* last-tx))))))
 
         (t/testing "querying transacted data"
           (t/is (= (rdf/with-prefix {:dbr "http://dbpedia.org/resource/"}
                      #{[:dbr/Aristotle]
                        [(keyword "dbr/Aristotle_(painting)")]
                        [(keyword "dbr/Aristotle_(book)")]})
-                   (crux/q (crux/db *api*)
+                   (xt/q (xt/db *api*)
                            (rdf/with-prefix {:foaf "http://xmlns.com/foaf/0.1"}
                              '{:find [e]
                                :where [[e :foaf/name "Aristotle"]]}))))))

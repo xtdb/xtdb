@@ -1,10 +1,10 @@
 (ns crux.bench.tpch
-  (:require [crux.api :as crux]
+  (:require [crux.api :as xt]
             [crux.bench :as bench]
             [crux.fixtures.tpch :as tpch]))
 
 (defn run-tpch-query [node n]
-  (crux/q (crux/db node) (assoc (get tpch/tpch-queries (dec n)) :timeout 120000)))
+  (xt/q (xt/db node) (assoc (get tpch/tpch-queries (dec n)) :timeout 120000)))
 
 (defn run-tpch-queries [node {:keys [scale-factor] :as opts}]
   (every? true? (for [n (range 1 23)]

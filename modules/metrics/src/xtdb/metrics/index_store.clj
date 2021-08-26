@@ -1,6 +1,6 @@
 (ns ^:no-doc xtdb.metrics.index-store
   (:require [crux.bus :as bus]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.tx :as tx]
             [xtdb.metrics.dropwizard :as dropwizard])
   (:import (java.util Date)))
@@ -8,8 +8,8 @@
 (defn assign-tx-id-lag [registry {:xt/keys [node]}]
   (dropwizard/gauge registry
                     ["index-store" "tx-id-lag"]
-                    #(when-let [completed (api/latest-completed-tx node)]
-                       (when-let [submitted (api/latest-submitted-tx node)]
+                    #(when-let [completed (xt/latest-completed-tx node)]
+                       (when-let [submitted (xt/latest-submitted-tx node)]
                          (- (:xt/tx-id submitted)
                             (:xt/tx-id completed))))))
 

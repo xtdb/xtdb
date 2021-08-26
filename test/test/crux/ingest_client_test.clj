@@ -1,6 +1,6 @@
 (ns crux.ingest-client-test
   (:require [crux.fixtures :as fix]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io]
             [clojure.test :as t]
@@ -15,8 +15,8 @@
                                                       :db-dir (io/file db-dir "doc-store")}}}
 
           submitted-tx
-          (with-open [ingest-client (crux/new-ingest-client ingest-opts)]
-            (let [submitted-tx (crux/submit-tx ingest-client [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+          (with-open [ingest-client (xt/new-ingest-client ingest-opts)]
+            (let [submitted-tx (xt/submit-tx ingest-client [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
               (with-open [tx-log-iterator (db/open-tx-log (:tx-log ingest-client) nil)]
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))
@@ -26,10 +26,10 @@
                   (t/is (realized? result))))
               submitted-tx))]
 
-      (with-open [node (crux/start-node (merge ingest-opts
+      (with-open [node (xt/start-node (merge ingest-opts
                                                {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
-        (crux/await-tx node submitted-tx)
-        (t/is (true? (crux/tx-committed? node submitted-tx)))
-        (t/is (= #{[:ivan]} (crux/q (crux/db node)
+        (xt/await-tx node submitted-tx)
+        (t/is (true? (xt/tx-committed? node submitted-tx)))
+        (t/is (= #{[:ivan]} (xt/q (xt/db node)
                                     '{:find [e]
                                       :where [[e :name "Ivan"]]})))))))

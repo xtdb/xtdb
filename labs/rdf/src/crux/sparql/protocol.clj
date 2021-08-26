@@ -7,7 +7,7 @@
             [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.request :as req]
             [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.time :as rt]
             [crux.io :as cio]
-            [crux.api :as api])
+            [crux.api :as xt])
   (:import [org.eclipse.rdf4j.model BNode IRI Literal]))
 
 ;; TODO: This is a bit ad-hoc.
@@ -89,21 +89,21 @@
                    "application/sparql-results+xml"
                    accept)
           {:keys [find] :as query-map} (sparql/sparql->datalog query)
-          db (api/db crux-node)
-          results (api/q db query-map (object-array 0))]
+          db (xt/db crux-node)
+          results (xt/q db query-map (object-array 0))]
       (log/debug :sparql query)
       (log/debug :sparql->datalog query-map)
       (cond
         (str/index-of accept "application/sparql-results+xml")
         {:status 200
          :headers {"Content-Type" "application/sparql-results+xml"
-                   "Last-Modified" (rt/format-date (api/transaction-time db))}
+                   "Last-Modified" (rt/format-date (xt/transaction-time db))}
          :body (sparql-xml-response find results)}
 
         (str/index-of accept "application/sparql-results+json")
         {:status 200
          :headers {"Content-Type" "application/sparql-results+json"
-                   "Last-Modified" (rt/format-date (api/transaction-time db))}
+                   "Last-Modified" (rt/format-date (xt/transaction-time db))}
          :body (sparql-json-response find results)}
 
         :else

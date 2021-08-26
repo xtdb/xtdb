@@ -1,5 +1,5 @@
 (ns crux.corda
-  (:require [crux.api :as crux]
+  (:require [crux.api :as xt]
             [crux.tx :as tx]
             [crux.tx.event :as txe]
             [crux.tx.subscribe :as tx-sub]

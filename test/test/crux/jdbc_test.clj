@@ -1,6 +1,6 @@
 (ns crux.jdbc-test
   (:require [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.codec :as c]
             [crux.db :as db]
             [crux.fixtures :as fix :refer [*api*]]
@@ -14,11 +14,11 @@
 
 (t/deftest test-happy-path-jdbc-event-log
   (let [doc {:xt/id :origin-man :name "Adam"}
-        submitted-tx (api/submit-tx *api* [[:xt/put doc]])]
-    (api/await-tx *api* submitted-tx (java.time.Duration/ofSeconds 2))
-    (t/is (api/entity (api/db *api*) :origin-man))
+        submitted-tx (xt/submit-tx *api* [[:xt/put doc]])]
+    (xt/await-tx *api* submitted-tx (java.time.Duration/ofSeconds 2))
+    (t/is (xt/entity (xt/db *api*) :origin-man))
     (t/testing "Tx log"
-      (with-open [tx-log-iterator (api/open-tx-log *api* 0 false)]
+      (with-open [tx-log-iterator (xt/open-tx-log *api* 0 false)]
         (t/is (= [{:xt/tx-id 2,
                    :xt/tx-time (:xt/tx-time submitted-tx)
                    :crux.tx.event/tx-events
@@ -66,10 +66,10 @@
           last-tx (atom nil)]
       (time
        (dotimes [n n]
-         (reset! last-tx (api/submit-tx *api* [[:xt/put {:xt/id (keyword (str n))}]]))))
+         (reset! last-tx (xt/submit-tx *api* [[:xt/put {:xt/id (keyword (str n))}]]))))
 
       (time
-       (api/await-tx *api* last-tx nil))))
+       (xt/await-tx *api* last-tx nil))))
   (t/is true))
 
 (t/deftest test-ingest-bench
@@ -87,18 +87,18 @@
                                                  [[:xt/put doc]])}]])
   (fix/submit+await-tx [[:xt/fn :put {:xt/id :foo, :foo :bar}]])
 
-  (let [db (api/db *api*)]
+  (let [db (xt/db *api*)]
 
     (t/is (= #{[{:xt/id :foo, :foo :bar}]}
-             (api/q db
+             (xt/q db
                     '{:find [(pull ?e [*])]
                       :where [[?e :xt/id :foo]]})))
 
     (t/is (= {:xt/id :foo, :foo :bar}
-             (api/entity db :foo)))
+             (xt/entity db :foo)))
 
     (t/is (= #{[{:xt/id :foo, :foo :bar}]}
-             (api/q db
+             (xt/q db
                     '{:find [(pull ?e [*])]
                       :where [[?e :xt/id :foo]]})))))
 
@@ -113,7 +113,7 @@
     (let [eids #{:foo :bar :baz :quux}]
       (->> (for [_ (range 100)]
              (future
-               (api/submit-tx *api* (for [eid (shuffle eids)]
+               (xt/submit-tx *api* (for [eid (shuffle eids)]
                                       [:xt/put {:xt/id eid}]))))
            doall
            (run! deref))

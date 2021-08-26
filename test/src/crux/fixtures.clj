@@ -1,7 +1,7 @@
 (ns ^:no-doc crux.fixtures
   (:require [clojure.test :as t]
             [clojure.test.check.clojure-test :as tcct]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.codec :as c]
             [crux.io :as cio])
   (:import crux.api.ICruxAPI
@@ -47,15 +47,15 @@
      (f))))
 
 (defn with-node [f]
-  (with-open [node (crux/start-node *opts*)]
+  (with-open [node (xt/start-node *opts*)]
     (binding [*api* node]
       (f))))
 
 (defn submit+await-tx
   ([tx-ops] (submit+await-tx *api* tx-ops))
   ([api tx-ops]
-   (let [tx (crux/submit-tx api tx-ops)]
-     (crux/await-tx api tx)
+   (let [tx (xt/submit-tx api tx-ops)]
+     (xt/await-tx api tx)
      tx)))
 
 (defn maps->tx-ops
@@ -71,8 +71,8 @@
   ([api entities]
    (transact! api entities (Date.)))
   ([^ICruxAPI api entities ts]
-   (let [tx (crux/submit-tx api (maps->tx-ops entities ts))]
-     (crux/await-tx api tx))
+   (let [tx (xt/submit-tx api (maps->tx-ops entities ts))]
+     (xt/await-tx api tx))
    entities))
 
 (defn random-person []

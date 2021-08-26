@@ -1,6 +1,6 @@
 (ns crux.bench-test
   (:require [criterium.core :as crit]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.db :as db]
             [crux.fixtures :refer [*api*] :as fix]
             [crux.fixtures.kv :as fkv]
@@ -51,10 +51,10 @@
     (insert-docs ts people)))
 
 (defn- perform-query [ts query]
-  (let [db (api/db *api* ts)
+  (let [db (xt/db *api* ts)
         res (if (= query :hardcoded-id)
-              (api/entity db :hardcoded-id)
-              (api/q db (get queries query)))]
+              (xt/entity db :hardcoded-id)
+              (xt/q db (get queries query)))]
     (assert (not-empty res))
     res))
 

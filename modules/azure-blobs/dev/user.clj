@@ -1,5 +1,5 @@
 (ns user
-  (:require [crux.api :as crux]
+  (:require [crux.api :as xt]
             [xtdb.azure.blobs :as azb]))
 
 (def init-data
@@ -28,7 +28,7 @@
     :requirements #{:course/math101}}])
 
 (defn start-node []
-  (crux/start-node
+  (xt/start-node
    {:xt/document-store {:xt/module `azb/->document-store
                         :sas-token (System/getenv "XTDB_AZURE_BLOBS_SAS_TOKEN")
                         :storage-account (System/getenv "XTDB_AZURE_BLOBS_STORAGE_ACCOUNT")
@@ -36,18 +36,18 @@
 
 (defn await-ingest
   [node docs]
-  (crux/await-tx node
-                 (crux/submit-tx node
+  (xt/await-tx node
+                 (xt/submit-tx node
                                  (vec (for [doc docs]
                                         [:xt/put doc])))))
 
 (defn ingest-query-entity []
   (with-open [node (start-node)]
     (await-ingest node init-data)
-    (let [db (crux/db node)]
+    (let [db (xt/db node)]
       (->> {:find '[cls]
             :where '[[cls :requirements cid]]
             :args '[{cid :course/math101}]}
-           (crux/q db)
+           (xt/q db)
            (map first)
-           (map #(crux/entity db %))))))
+           (map #(xt/entity db %))))))

@@ -1,6 +1,6 @@
 (ns crux.bench.sorted-maps-microbench
   (:require [clojure.java.io :as io]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.bench :as bench]
             [xtdb.kafka.embedded :as ek]
             [crux.fixtures :as fix]
@@ -14,7 +14,7 @@
                                                 :baz :quux
                                                 :doc-idx n}}])
                        (partition-all 1000))]
-    (crux/submit-tx node (vec doc-batch))))
+    (xt/submit-tx node (vec doc-batch))))
 
 (defn run-benches [node [submit-bench-type await-bench-type]]
   (bench/run-bench await-bench-type
@@ -24,7 +24,7 @@
                            meta
                            :submitted-tx)]
 
-      (crux/await-tx node submitted-tx (java.time.Duration/ofSeconds 20))
+      (xt/await-tx node submitted-tx (java.time.Duration/ofSeconds 20))
       {:success? true})))
 
 (defn run-sorted-maps-microbench [node]
@@ -37,7 +37,7 @@
     (with-open [ek (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file tmp-dir "zk-data")
                                                   :kafka-dir (io/file tmp-dir "kafka-data")
                                                   :kafka-log-dir (io/file tmp-dir "kafka-log")})
-                node (crux/start-node {::k/kafka-config {:bootstrap-servers "localhost:9092"}
+                node (xt/start-node {::k/kafka-config {:bootstrap-servers "localhost:9092"}
                                        :xt/tx-log {:xt/module `k/->tx-log, :kafka-config ::k/kafka-config}
                                        :xt/document-store {:xt/module `k/->document-store
                                                            :kafka-config ::k/kafka-config

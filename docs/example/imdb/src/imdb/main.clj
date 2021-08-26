@@ -4,7 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.kafka.embedded :as ek]
-            [crux.api :as api]))
+            [crux.api :as xt]))
 
 (def list-columns?
   #{:name.basics/knownForTitles
@@ -36,7 +36,7 @@
                   (doseq [rows (partition 100 rest)]
                     (swap! submit-count + 100)
                     (log/infof "submitting %s %s docs" file-path @submit-count)
-                    (api/submit-tx
+                    (xt/submit-tx
                       crux
                       (vec
                         (for [row rows]
@@ -73,7 +73,7 @@
 
 (defn run-node [{:keys [server-port] :as options} with-node-fn]
   (with-open [embedded-kafka (ek/start-embedded-kafka embedded-kafka-options)
-              crux-node (api/start-cluster-node options)]
+              crux-node (xt/start-cluster-node options)]
     (with-node-fn crux-node)))
 
 (defn -main []
@@ -163,7 +163,7 @@
 (defn connected-movies
   [db snapshot person-id]
   (map first
-       (api/q db snapshot
+       (xt/q db snapshot
               {:find '[movie-id]
                :where '[[?p :title.principals/nconst person-id]
                         [?p :title.principals/tconst movie-id]]
@@ -172,7 +172,7 @@
 (defn connected-people
   [db snapshot movie-id]
   (map first
-       (api/q db snapshot
+       (xt/q db snapshot
               {:find '[person-id]
                :where '[[?p :title.principals/tconst movie-id]
                         [?p :title.principals/nconst person-id]]
@@ -193,13 +193,13 @@
     (for [id ids]
       (or
         (first
-          (api/q db snapshot
+          (xt/q db snapshot
                  {:find '[id title]
                   :where '[[?p :title.akas/titleId id]
                            [?p :title.akas/title title]]
                   :args [{:id id}]}))
         (first
-          (api/q db snapshot
+          (xt/q db snapshot
                  {:find '[id title]
                   :where '[[?p :name.basics/nconst id]
                            [?p :name.basics/primaryName title]]
@@ -210,7 +210,7 @@
 
 
   (clojure.pprint/pprint
-    (let [db (api/db crux)]
+    (let [db (xt/db crux)]
       (with-open [snapshot (kv/new-snapshot (:kv-store *api*))]
         (let [paths (find-id-paths db snapshot "nm0000001" "nm0000006")]
           (doall (map (partial ids->docs db snapshot) paths))))))

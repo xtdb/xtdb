@@ -1,7 +1,7 @@
 (ns crux.query-fn-allowlist-test
   (:require [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.query :as query]
             [crux.fixtures :as fix :refer [*api*]]))
 
@@ -19,8 +19,8 @@
       (fn []
         (t/testing "using allowed default functions"
           (= #{[21]}
-             (api/q
-              (api/db *api*)
+             (xt/q
+              (xt/db *api*)
               '{:find [age]
                 :in [[age ...]]
                 :where [[(odd? age)]]}
@@ -30,8 +30,8 @@
            (thrown-with-msg?
             IllegalArgumentException
             #"Query used a function that was not in the allowlist"
-            (api/q
-             (api/db *api*)
+            (xt/q
+             (xt/db *api*)
              '{:find [age]
                :in [[age ...]]
                :where [[(> age 21)] [(spit "crux.txt" age)]]}
@@ -41,8 +41,8 @@
            (thrown-with-msg?
             IllegalArgumentException
             #"Query used a function that was not in the allowlist"
-            (api/q
-             (api/db *api*)
+            (xt/q
+             (xt/db *api*)
              '{:find [age]
                :in [[age ...]]
                :where [[(crux.query-fn-allowlist-test/multiple-of-three? age)]]}
@@ -56,8 +56,8 @@
       (fn []
         (t/is
          (= #{[21]}
-            (api/q
-             (api/db *api*)
+            (xt/q
+             (xt/db *api*)
              '{:find [age]
                :in [[age ...]]
                :where [[(crux.query-fn-allowlist-test/multiple-of-seven? age)]]}
@@ -66,8 +66,8 @@
          (thrown-with-msg?
           IllegalArgumentException
           #"Query used a function that was not in the allowlist"
-          (api/q
-           (api/db *api*)
+          (xt/q
+           (xt/db *api*)
            '{:find [age]
              :in [[age ...]]
              :where [[(crux.query-fn-allowlist-test/multiple-of-three? age)]]}
@@ -84,8 +84,8 @@
            (thrown-with-msg?
             IllegalArgumentException
             #"Query used a function that was not in the allowlist"
-            (api/q
-             (api/db *api*)
+            (xt/q
+             (xt/db *api*)
              '{:find [age]
                :in [[age ...]]
                :where [[(clojure.string/capitalize age)]]}
@@ -93,16 +93,16 @@
         (t/testing "allowed namespace"
           (t/is
            (= #{[21]}
-              (api/q
-               (api/db *api*)
+              (xt/q
+               (xt/db *api*)
                '{:find [age]
                  :in [[age ...]]
                  :where [[(crux.query-fn-allowlist-test/multiple-of-three? age)]]}
                [21 22])))
           (t/is
            (= #{[21]}
-              (api/q
-               (api/db *api*)
+              (xt/q
+               (xt/db *api*)
                '{:find [age]
                  :in [[age ...]]
                  :where [[(crux.query-fn-allowlist-test/multiple-of-seven? age)]]}
@@ -116,8 +116,8 @@
       (fn []
         (t/is
          (= #{[21]}
-            (api/q
-             (api/db *api*)
+            (xt/q
+             (xt/db *api*)
              '{:find [age]
                :in [[age ...]]
                :where [[(crux.query-fn-allowlist-test/multiple-of-seven? age)]]}
@@ -126,8 +126,8 @@
          (thrown-with-msg?
           IllegalArgumentException
           #"Query used a function that was not in the allowlist"
-          (api/q
-           (api/db *api*)
+          (xt/q
+           (xt/db *api*)
            '{:find [age]
              :in [[age ...]]
              :where [[(crux.query-fn-allowlist-test/multiple-of-three? age)]]}

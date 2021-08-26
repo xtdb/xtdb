@@ -1,8 +1,8 @@
 (ns crux.main.graal
   (:require [clojure.tools.logging :as log]
-            [crux.api :as crux])
+            [crux.api :as xt])
   (:gen-class))
 
 (defn -main [& _args]
-  (with-open [node (crux/start-node {})]
+  (with-open [node (xt/start-node {})]
     (log/info "Starting Crux native image" (pr-str (.status node)))))

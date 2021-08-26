@@ -3,7 +3,7 @@
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.codec :as c]
             [xtdb.http-server.json :as http-json]
             [crux.io :as cio]
@@ -117,10 +117,10 @@
   (let [^Map db-basis {:xt/valid-time valid-time
                        :xt/tx-time tx-time
                        :xt/tx-id tx-id}]
-    (api/db crux-node db-basis)))
+    (xt/db crux-node db-basis)))
 
 (defn raw-html [{:keys [title crux-node http-options results]}]
-  (let [latest-completed-tx (api/latest-completed-tx crux-node)]
+  (let [latest-completed-tx (xt/latest-completed-tx crux-node)]
     (str (hiccup2/html
           [:html
            {:lang "en"}

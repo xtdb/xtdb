@@ -1,5 +1,5 @@
 (ns crux.bench.cyclic-microbench
-  (:require [crux.api :as crux]
+  (:require [crux.api :as xt]
             [crux.bench :as bench]
             [datomic.api :as d])
   (:import java.time.Duration))
@@ -84,9 +84,9 @@
             (->> (haystack create-docs :xt/id *needle-count* *haystack-size*)
                  (partition-all crux-tx-size)
                  (reduce (fn [last-tx batch]
-                           (crux/submit-tx node (vec (for [doc batch] [:xt/put doc]))))
+                           (xt/submit-tx node (vec (for [doc batch] [:xt/put doc]))))
                          nil))]
-        (crux/await-tx node last-tx (Duration/ofMinutes 20))
+        (xt/await-tx node last-tx (Duration/ofMinutes 20))
         {:success? true}))))
 
 (defn test-shape [db shape-id shape-q-fn]
@@ -147,7 +147,7 @@
           (bench/with-crux-dimensions
             (submit-data node create-docs)
             (bench/compact-node node)
-            (with-open [db (crux/open-db node)]
+            (with-open [db (xt/open-db node)]
               (let [shape-q-fn (partial crux/q db shape-q)]
                 (test-shape db (str shape-id "-1") shape-q-fn)
                 (test-shape db (str shape-id "-2") shape-q-fn)

@@ -42,7 +42,7 @@ A transaction is performed by calling `crux.api/submit-tx` on a node with a list
 
 [source,clj]
 ----
-(crux/submit-tx node
+(xt/submit-tx node
                 [
                 ;; Operations
                 ])

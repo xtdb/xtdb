@@ -133,17 +133,17 @@ not match, due to the `put` operation immediately preceding it:
 
 [source,clojure,subs=attributes+]
 ----
-(with-open [node (crux/start-node {})]
-  (crux/submit-tx
+(with-open [node (xt/start-node {})]
+  (xt/submit-tx
     node
     [[:xt/put {:xt/id :a, :a "a"}]])
-  (crux/submit-tx
+  (xt/submit-tx
     node
     ; This won't match. Either the match should come first or it should match :a "b"
     [[:xt/put {:xt/id :a, :a "b"}]
      [:xt/match :a {:xt/id :a, :a "a"}]])
-  (crux/sync node)
-  (crux/entity (crux/db node) :a)) ; {:xt/id :a, :a "a"}
+  (xt/sync node)
+  (xt/entity (xt/db node) :a)) ; {:xt/id :a, :a "a"}
 ----
 
 Thank you to https://github.com/jacobobryant/[Jacob O'Bryant] for this example.

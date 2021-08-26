@@ -1,6 +1,6 @@
 (ns crux.pull-test
   (:require [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]
             [crux.pull :as pull]
             [clojure.java.io :as io]))
@@ -10,7 +10,7 @@
 (defn- submit-bond []
   (fix/submit+await-tx (for [doc (read-string (slurp (io/resource "data/james-bond.edn")))]
                          [:xt/put doc]))
-  (crux/db *api*))
+  (xt/db *api*))
 
 (def ->lookup-docs
   (let [f @#'pull/lookup-docs]
@@ -23,7 +23,7 @@
   (let [db (submit-bond)]
 
     (t/is (= #{[{}]}
-             (crux/q db '{:find [(pull ?v [])]
+             (xt/q db '{:find [(pull ?v [])]
                           :where [[?v :vehicle/brand "Aston Martin"]]})))
 
     (t/testing "simple props"
@@ -36,14 +36,14 @@
         (let [!lookup-counts (atom [])]
           (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
             (t/is (= expected
-                     (crux/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
+                     (xt/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
                                   :where [[?v :vehicle/brand "Aston Martin"]]})))
             (t/is (= [6] @!lookup-counts) "batching lookups")))
 
         (let [!lookup-counts (atom [])]
           (with-redefs [pull/lookup-docs (->lookup-docs !lookup-counts)]
             (t/is (= expected
-                     (crux/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
+                     (xt/q db '{:find [(pull ?v [:vehicle/brand :vehicle/model])]
                                   :where [[?v :vehicle/brand "Aston Martin"]]
                                   :batch-size 3})))
             (t/is (= [3 3] @!lookup-counts) "batching lookups")))))
@@ -56,7 +56,7 @@
                  [{:brand "Aston Martin", :model "V8 Vantage Volante"}]
                  [{:brand "Aston Martin", :model "V12 Vanquish"}]}
 
-               (crux/q db '{:find [(pull ?v [(:vehicle/brand {:as :brand})
+               (xt/q db '{:find [(pull ?v [(:vehicle/brand {:as :brand})
                                                     (:vehicle/model {:as :model})])]
                             :where [[?v :vehicle/brand "Aston Martin"]]}))))
 
@@ -71,7 +71,7 @@
                                         {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}
                                         {:vehicle/brand "Ford", :vehicle/model "Thunderbird"}
                                         {:vehicle/brand "Ford", :vehicle/model "Fairlane"}}}]}
-                   (crux/q db '{:find [(pull ?f [{:film/bond [:person/name]}
+                   (xt/q db '{:find [(pull ?f [{:film/bond [:person/name]}
                                                         {:film/director [:person/name]}
                                                         {(:film/vehicles {:into #{}}) [:vehicle/brand :vehicle/model]}
                                                         :film/name :film/year])]
@@ -86,7 +86,7 @@
                                      #:film{:name "Spectre", :year "2015"}
                                      #:film{:name "Casino Royale", :year "2006"}
                                      #:film{:name "Quantum of Solace", :year "2008"}}}]}
-                   (crux/q db '{:find [(pull ?dc [:person/name
+                   (xt/q db '{:find [(pull ?dc [:person/name
                                                          {(:film/_bond {:into #{}}) [:film/name :film/year]}])]
                                 :where [[?dc :person/name "Daniel Craig"]]})))
           (t/is (= [5] @!lookup-counts) "batching lookups"))))
@@ -97,7 +97,7 @@
                            #:film{:name "Spectre", :year "2015"}
                            #:film{:name "Casino Royale", :year "2006"}
                            #:film{:name "Quantum of Solace", :year "2008"}]}]}
-               (crux/q db '{:find [(pull ?dc [:person/name
+               (xt/q db '{:find [(pull ?dc [:person/name
                                                      {(:film/_bond {:as :films}) [:film/name :film/year]}])]
                             :where [[?dc :person/name "Daniel Craig"]]}))))
 
@@ -105,39 +105,39 @@
       (t/is (= #{[{:xt/id :daniel-craig
                    :person/name "Daniel Craig",
                    :type :person}]}
-               (crux/q db '{:find [(pull ?dc [*])]
+               (xt/q db '{:find [(pull ?dc [*])]
                             :where [[?dc :person/name "Daniel Craig"]]}))))
 
     (t/testing "pull fn"
       (t/is (= #:film{:name "Spectre", :year "2015"}
-               (crux/pull db (pr-str [:film/name :film/year]) :spectre)))
+               (xt/pull db (pr-str [:film/name :film/year]) :spectre)))
       (t/is (= #:film{:name "Spectre", :year "2015"}
-               (crux/pull db [:film/name :film/year] :spectre))))
+               (xt/pull db [:film/name :film/year] :spectre))))
 
     (t/testing "pullMany fn"
       (t/is (= #{#:film{:name "Skyfall", :year "2012"}
                  #:film{:name "Spectre", :year "2015"}}
-               (set (crux/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre}))))
+               (set (xt/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre}))))
 
       (t/is (= #{#:film{:name "Skyfall", :year "2012"}
                  #:film{:name "Spectre", :year "2015"}}
-               (set (crux/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))
+               (set (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre})))))
 
     (t/testing "pullMany fn vector"
       (t/is (= [#:film {:name "Skyfall", :year "2012"}
                 #:film {:name "Spectre", :year "2015"}]
-               (crux/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre})))
+               (xt/pull-many db (pr-str [:film/name :film/year]) #{:skyfall :spectre})))
 
       (t/is (= [#:film {:name "Skyfall", :year "2012"}
                 #:film {:name "Spectre", :year "2015"}]
-               (crux/pull-many db [:film/name :film/year] #{:skyfall :spectre}))))))
+               (xt/pull-many db [:film/name :film/year] #{:skyfall :spectre}))))))
 
 (t/deftest test-limit
   (let [db (submit-bond)]
     (t/testing "props"
       (t/is (= #{[{:film/name "Die Another Day"
                    :film/vehicles #{:xkr :v12-vanquish}}]}
-               (crux/q db '{:find [(pull ?f [:film/name (:film/vehicles {:into #{}, :limit 2})])]
+               (xt/q db '{:find [(pull ?f [:film/name (:film/vehicles {:into #{}, :limit 2})])]
                             :where [[?f :film/name "Die Another Day"]]}))))
 
     (t/testing "forward joins"
@@ -149,7 +149,7 @@
                        :film/director {:person/name "Lee Tamahori"},
                        :film/vehicles #{{:vehicle/brand "Jaguar", :vehicle/model "XKR"}
                                         {:vehicle/brand "Aston Martin", :vehicle/model "V12 Vanquish"}}}]}
-                   (crux/q db '{:find [(pull ?f [{:film/bond [:person/name]}
+                   (xt/q db '{:find [(pull ?f [{:film/bond [:person/name]}
                                                         {:film/director [:person/name]}
                                                         {(:film/vehicles {:into #{}, :limit 2}) [:vehicle/brand :vehicle/model]}
                                                         :film/name :film/year])]
@@ -162,7 +162,7 @@
           (t/is (= #{[{:person/name "Daniel Craig",
                        :film/_bond #{#:film{:name "Skyfall", :year "2012"}
                                      #:film{:name "Spectre", :year "2015"}}}]}
-                   (crux/q db '{:find [(pull ?dc [:person/name
+                   (xt/q db '{:find [(pull ?dc [:person/name
                                                          {(:film/_bond {:into #{}, :limit 2}) [:film/name :film/year]}])]
                                 :where [[?dc :person/name "Daniel Craig"]]})))
           (t/is (= [3] @!lookup-counts) "batching lookups"))))))
@@ -180,7 +180,7 @@
 
   (t/is (= #{[{:xt/id :foo, :x 2, :y "this"}]
              [{:xt/id :bar, :z 5}]}
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    '{:find [(pull ?it [{:type {:a [:x :y], :b [:z]}}
                                               :xt/id])]
                      :where [[?it :xt/id]]}))))
@@ -205,7 +205,7 @@
               :parent {:xt/id :ab
                        :parent {:xt/id :a
                                 :parent {:xt/id :root}}}}
-             (ffirst (crux/q (crux/db *api*)
+             (ffirst (xt/q (xt/db *api*)
                              '{:find [(pull ?aba [:xt/id {:parent ...}])]
                                :where [[?aba :xt/id :aba]]})))))
 
@@ -213,7 +213,7 @@
     (t/is (= {:xt/id :aba
               :parent {:xt/id :ab
                        :parent {:xt/id :a}}}
-             (ffirst (crux/q (crux/db *api*)
+             (ffirst (xt/q (xt/db *api*)
                              '{:find [(pull ?aba [:xt/id {:parent 2}])]
                                :where [[?aba :xt/id :aba]]})))))
 
@@ -225,7 +225,7 @@
                                     :_parent [{:xt/id :aba}
                                               {:xt/id :abb}]}]}
                         {:xt/id :b}]}
-             (ffirst (crux/q (crux/db *api*)
+             (ffirst (xt/q (xt/db *api*)
                              '{:find [(pull ?root [:xt/id {:_parent ...}])]
                                :where [[?root :xt/id :root]]})))))
 
@@ -235,22 +235,22 @@
                          :_parent [{:xt/id :aa}
                                    {:xt/id :ab}]}
                         {:xt/id :b}]}
-             (ffirst (crux/q (crux/db *api*)
+             (ffirst (xt/q (xt/db *api*)
                              '{:find [(pull ?root [:xt/id {:_parent 2}])]
                                :where [[?root :xt/id :root]]}))))))
 
 (t/deftest test-doesnt-hang-on-unknown-eid
   (t/is (= #{[{}]}
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    '{:find [(pull ?e [*])]
                      :in [?e]
                      :timeout 500}
                    "doesntexist"))))
 
 (t/deftest test-with-speculative-doc-store
-  (let [db (crux/with-tx (crux/db *api*) [[:xt/put {:xt/id :foo}]])]
+  (let [db (xt/with-tx (xt/db *api*) [[:xt/put {:xt/id :foo}]])]
     (t/is (= #{[{:xt/id :foo}]}
-             (crux/q db
+             (xt/q db
                      '{:find [(pull ?e [*])]
                        :where [[?e :xt/id :foo]]})))))
 
@@ -259,6 +259,6 @@
                         [:xt/put {:xt/id :bar}]])
 
   (t/is (= #{[{:ref [{:xt/id :bar} {}]}]}
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    '{:find [(pull ?it [{:ref [:xt/id]}])]
                      :where [[?it :xt/id :foo]]}))))

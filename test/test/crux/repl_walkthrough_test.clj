@@ -1,6 +1,6 @@
 (ns crux.repl-walkthrough-test
   (:require [clojure.test :as t]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.fixtures :as fix :refer [*api*]]))
 
 (t/use-fixtures :each fix/with-node)
@@ -28,9 +28,9 @@
 (t/deftest graph-traversal-test
   (fix/submit+await-tx (mapv (fn [n] [:xt/put n]) nodes))
 
-  (let [db (crux/db *api*)]
+  (let [db (xt/db *api*)]
     (t/is (= #{[:Role2] [:Role3]}
-             (crux/q db '{:find [?roleName]
+             (xt/q db '{:find [?roleName]
                           :where
                           [[?e :hasRoleInGroups ?roleInGroup]
                            [?roleInGroup :hasGroups ?group]
@@ -40,7 +40,7 @@
 
     (t/is (= #{[:Group1 :Role5] [:Group3 :Role5] [:Group2 :Role4]
                [:Group3 :Role6] [:Group2 :Role3] [:Group1 :Role2]}
-             (crux/q db '{:find [?groupName ?roleName]
+             (xt/q db '{:find [?groupName ?roleName]
                           :where
                           [[?e :hasRoleInGroups ?roleInGroup]
                            [?roleInGroup :hasGroups ?group]
@@ -50,7 +50,7 @@
                           :args [{?e :User2}]})))
 
     (t/is (= #{[:Group3 :Role4] [:Group3 :Role3] [:Group2 :Role3] [:Group2 :Role2]}
-             (crux/q db {:find '[?groupName ?roleName]
+             (xt/q db {:find '[?groupName ?roleName]
                          :where '[(user-roles-in-groups ?user ?role ?group)
                                   [?group :group/name ?groupName]
                                   [?role :role/name ?roleName]]
@@ -91,14 +91,14 @@
                          #inst "1973-04-08T09:20:27.966-00:00"]])
 
   (t/is (= #{[{:xt/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
-           (crux/q
-            (crux/db *api* #inst "1973-04-07T09:20:27.966-00:00")
+           (xt/q
+            (xt/db *api* #inst "1973-04-07T09:20:27.966-00:00")
             '{:find [(pull e [*])]
               :where [[e :name "Pablo"]]})))
 
   (fix/submit+await-tx [[:xt/evict :dbpedia.resource/Pablo-Picasso]])
 
-  (t/is (empty? (crux/q (crux/db *api*)
+  (t/is (empty? (xt/q (xt/db *api*)
                         '{:find [(pull e [*])]
                           :where [[e :name "Pablo"]]})))
 
@@ -114,6 +114,6 @@
                :last-name "Picasso"
                :height 1.63
                :location "France"}]}
-           (crux/q (crux/db *api*)
+           (xt/q (xt/db *api*)
                    '{:find [(pull e [*])]
                      :where [[e :name "Pablo"]]}))))

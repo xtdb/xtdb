@@ -834,7 +834,7 @@ Logic variables used in queries must always be quoted in the `:find` and
 
 [source,clj]
 ----
-(crux/q db
+(xt/q db
   {:find ['?e]
    :where [['?e :event/employee-code '?code]]}))
 ----
@@ -844,7 +844,7 @@ map rather than each individual use of every logic variable, for instance:
 
 [source,clj]
 ----
-(crux/q db
+(xt/q db
   '{:find [?e]
     :where [[?e :event/employee-code ?code]]}))
 ----
@@ -870,7 +870,7 @@ thing` to put the data all on the base level. Like so:
 
 [source,clj]
 ----
-(crux/submit-tx
+(xt/submit-tx
   node
   [[:xt/put
     {:xt/id :me
@@ -888,13 +888,13 @@ To query inside these vectors the code would be:
 
 [source,clj]
 ----
-(crux/q (crux/db node) '{:find [e l]
+(xt/q (xt/db node) '{:find [e l]
                          :where [[e :list l]]
                          :in [l]}
                        "carrots")
 ;; => #{[:you "carrots"] [:me "carrots"]}
 
-(crux/q (crux/db node) '{:find [e p]
+(xt/q (xt/db node) '{:find [e p]
                          :where [[e :pockets/left p]]
                          :in [p]}
                        "watch")

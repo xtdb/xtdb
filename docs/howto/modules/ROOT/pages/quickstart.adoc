@@ -129,14 +129,14 @@ Clojure::
 ----
 (ns crux-in-a-box.db
   (:require [clojure.java.io :as io]
-            [crux.api :as crux]))
+            [crux.api :as xt]))
 
 (defn start-crux! []
   (letfn [(kv-store [dir]
             {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                         :db-dir (io/file dir)
                         :sync? true}})]
-    (crux/start-node
+    (xt/start-node
      {:xt/tx-log (kv-store "data/dev/tx-log")
       :xt/document-store (kv-store "data/dev/doc-store")
       :xt/index-store (kv-store "data/dev/index-store")})))
@@ -248,7 +248,7 @@ Clojure REPL::
 +
 [source,clojure,subs=attributes+]
 ----
-crux-in-a-box.db> (crux/submit-tx crux-node [[:xt/put
+crux-in-a-box.db> (xt/submit-tx crux-node [[:xt/put
                                               {:xt/id "hi2u"
                                                :user/name "zig"}]])
 ;; => #:xt{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}
@@ -283,7 +283,7 @@ Clojure REPL::
 +
 [source,clojure,subs=attributes+]
 ----
-crux-in-a-box.db> (crux/q (crux/db crux-node) '{:find [e]
+crux-in-a-box.db> (xt/q (xt/db crux-node) '{:find [e]
                                                 :where [[e :user/name "zig"]]} )
 ;; => #{["hi2u"]}
 

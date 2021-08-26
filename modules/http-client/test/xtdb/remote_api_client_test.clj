@@ -1,6 +1,6 @@
 (ns xtdb.remote-api-client-test
   (:require [clojure.test :as t]
-            [crux.api :as api]
+            [crux.api :as xt]
             [crux.io :as cio]
             [xtdb.remote-api-client :as sut])
   (:import clojure.lang.ExceptionInfo
@@ -40,9 +40,9 @@
 
 (defn with-api* [{:keys [jwks ->jwt-token]} f]
   (let [server-port (cio/free-port)]
-    (with-open [node (api/start-node {:xtdb.http-server/server {:port server-port
+    (with-open [node (xt/start-node {:xtdb.http-server/server {:port server-port
                                                                 :jwks jwks}})
-                client (api/new-api-client (str "http://localhost:" server-port) {:->jwt-token ->jwt-token})]
+                client (xt/new-api-client (str "http://localhost:" server-port) {:->jwt-token ->jwt-token})]
 
       (binding [*api* client]
         (f)))))
@@ -52,42 +52,42 @@
 
 (t/deftest test-unauthenticated-client-and-unauthenticated-server
   (with-api {}
-    (let [submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
-      (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
-      (t/is (true? (api/tx-committed? *api* submitted-tx))))))
+    (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+      (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
+      (t/is (true? (xt/tx-committed? *api* submitted-tx))))))
 
 (t/deftest test-authenticated-client-and-unauthenticated-server
   (with-api {:->jwt-token (constantly valid-jwt)}
 
-    (let [submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
-      (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
-      (t/is (true? (api/tx-committed? *api* submitted-tx))))))
+    (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+      (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
+      (t/is (true? (xt/tx-committed? *api* submitted-tx))))))
 
 (t/deftest test-unauthenticated-client-and-authenticated-server
   (with-api {:jwks jwks}
     (t/is (thrown-with-msg? ExceptionInfo #"HTTP status 401"
-                            (api/status *api*)))))
+                            (xt/status *api*)))))
 
 (t/deftest test-authenticated-client-and-authenticated-server
   (with-api {:jwks jwks, :->jwt-token (constantly valid-jwt)}
-    (let [submitted-tx (api/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
-      (t/is (= submitted-tx (api/await-tx *api* submitted-tx)))
+    (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+      (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
       (t/is (= #{[:ivan]}
-               (api/q (api/db *api*) '{:find [?e] :where [[?e :name "Ivan"]]}))))))
+               (xt/q (xt/db *api*) '{:find [?e] :where [[?e :name "Ivan"]]}))))))
 
 (t/deftest test-invalid-jwts
   (t/testing "with a dodgy string"
     (with-api {:jwks jwks,
                :->jwt-token (constantly (subs valid-jwt 10))}
       (t/is (thrown-with-msg? Exception #"Invalid JWS header"
-                              (api/status *api*)))))
+                              (xt/status *api*)))))
 
   (t/testing "with different signing key"
     (with-api {:jwks jwks,
                :->jwt-token (constantly (->jwt {:expiration-time future-date
                                                 :ec-key (.. (ECKeyGenerator. Curve/P_256) (keyID "456") generate)}))}
       (t/is (thrown-with-msg? ExceptionInfo #"HTTP status 401"
-                              (api/status *api*))))))
+                              (xt/status *api*))))))
 
 (t/deftest test-caches-and-refreshes-jwt
   (let [expired-date (Date. (- (.getTime (Date.)) (* 60 1000)))

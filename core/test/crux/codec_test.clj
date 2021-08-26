@@ -6,7 +6,7 @@
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [clojure.spec.alpha :as s])
   (:import crux.codec.Id
@@ -205,11 +205,11 @@
                         :foo {:b 2, :a 1}})))))
 
 (t/deftest test-java-type-serialisation-1044
-  (with-open [node (crux/start-node {})]
+  (with-open [node (xt/start-node {})]
     (let [doc {:xt/id :foo
                :date (java.util.Date.)
                :uri (java.net.URI. "https://google.com")
                :url (java.net.URL. "https://google.com")
                :uuid (java.util.UUID/randomUUID)}]
       (fix/submit+await-tx node [[:xt/put doc]])
-      (t/is (= doc (crux/entity (crux/db node) :foo))))))
+      (t/is (= doc (xt/entity (xt/db node) :foo))))))

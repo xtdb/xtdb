@@ -5,7 +5,7 @@
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
-            [crux.api :as crux]
+            [crux.api :as xt]
             [crux.calcite.types]
             [crux.error :as err]
             [crux.system :as sys]
@@ -368,7 +368,7 @@
       []
     (enumerator []
       (let [_ (log/debug "Executing query:" q)
-            results (crux/open-q (crux/db node db-basis) q)
+            results (xt/open-q (xt/db node db-basis) q)
             next-results (atom (iterator-seq results))
             current (atom nil)]
         (proxy [org.apache.calcite.linq4j.Enumerator]
@@ -461,8 +461,8 @@
 (s/def ::table (s/keys :req [:xt/id :xt.sql.table/name :xt.sql.table/columns]))
 
 (defn- lookup-schema [node]
-  (let [db (crux/db node)]
-    (map first (crux/q db '{:find [(pull e [*])]
+  (let [db (xt/db node)]
+    (map first (xt/q db '{:find [(pull e [*])]
                             :where [[e :xt.sql.table/name]]}))))
 
 (defn create-schema [parent-schema name operands]
