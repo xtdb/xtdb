@@ -1,14 +1,11 @@
 package xtdb.kafka.connect;
 
-import clojure.lang.Keyword;
 import org.apache.kafka.clients.consumer.OffsetAndMetadata;
 import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.connect.sink.SinkRecord;
 import org.apache.kafka.connect.sink.SinkTask;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
-import xtdb.api.Crux;
-import xtdb.api.ICruxAPI;
 
 import java.io.Closeable;
 import java.io.IOException;

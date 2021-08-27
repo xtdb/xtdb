@@ -1,24 +1,24 @@
 package xtdb.api.tx;
 
-import xtdb.api.CruxDocument;
+import xtdb.api.XtdbDocument;
 
 import java.util.Date;
 import java.util.Objects;
 
 public final class PutOperation extends TransactionOperation {
-    public static PutOperation create(CruxDocument document) {
+    public static PutOperation create(XtdbDocument document) {
         return new PutOperation(document, null, null);
     }
 
-    public static PutOperation create(CruxDocument document, Date startValidTime) {
+    public static PutOperation create(XtdbDocument document, Date startValidTime) {
         return new PutOperation(document, startValidTime, null);
     }
 
-    public static PutOperation create(CruxDocument document, Date startValidTime, Date endValidTime) {
+    public static PutOperation create(XtdbDocument document, Date startValidTime, Date endValidTime) {
         return new PutOperation(document, startValidTime, endValidTime);
     }
 
-    public CruxDocument getDocument() {
+    public XtdbDocument getDocument() {
         return document;
     }
 
@@ -30,11 +30,11 @@ public final class PutOperation extends TransactionOperation {
         return endValidTime;
     }
 
-    private final CruxDocument document;
+    private final XtdbDocument document;
     private final Date startValidTime;
     private final Date endValidTime;
 
-    private PutOperation(CruxDocument document, Date startValidTime, Date endValidTime) {
+    private PutOperation(XtdbDocument document, Date startValidTime, Date endValidTime) {
         this.document = document;
         this.startValidTime = startValidTime;
         this.endValidTime = endValidTime;

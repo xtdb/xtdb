@@ -117,7 +117,7 @@ class IOUFlowTests {
     @Test
     fun `A lends money to B, B buys a "house"`() {
         val bXtdbService = b.services.cordaService(XtdbService::class.java)
-        val bCruxNode = bXtdbService.node
+        val bXtdbNode = bXtdbService.node
 
         // A lends 23 to B
         val iouValue = 23
@@ -127,8 +127,8 @@ class IOUFlowTests {
         val iouTx = bXtdbService.xtdbTx(future.getOrThrow().id)
 
         // We verify B has received the funds
-        bCruxNode.awaitTx(iouTx, Duration.ofSeconds(2))
-        val currentDb = bCruxNode.db(iouTx)
+        bXtdbNode.awaitTx(iouTx, Duration.ofSeconds(2))
+        val currentDb = bXtdbNode.db(iouTx)
         val bName = b.info.singleIdentity().name.toString()
 
         assertEquals(
@@ -148,11 +148,11 @@ class IOUFlowTests {
         network.runNetwork()
         val itemTx = bXtdbService.xtdbTx(itemFuture.getOrThrow().id)
 
-        bCruxNode.awaitTx(itemTx, Duration.ofSeconds(1))
+        bXtdbNode.awaitTx(itemTx, Duration.ofSeconds(1))
 
         // We get a new instance of the DB and check
         // which items have been bought with money borrowed from A
-        val newDb = bCruxNode.db(itemTx)
+        val newDb = bXtdbNode.db(itemTx)
         assertEquals(
                 listOf("house", 3L),
                 newDb.query("""

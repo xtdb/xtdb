@@ -1,10 +1,10 @@
 = (ns xtdb.api)
 
-`xtdb.api` exposes a union of methods from `ICruxAPI` and `ICruxDatasource`,
+`xtdb.api` exposes a union of methods from `IXtdb` and `IXtdbDatasource`,
 with few lifecycle members added.
 
 [#icruxapi]
-== ICruxAPI
+== IXtdb
 
 === db
 
@@ -216,7 +216,7 @@ with few lifecycle members added.
 ----
 
 [#icruxdatasource]
-== ICruxDatasource
+== IXtdbDatasource
 Represents the database as of a specific valid and transaction time.
 
 === entity
@@ -393,7 +393,7 @@ Represents the database as of a specific valid and transaction time.
 
 [source,clojure]
 ----
-(defn start-node ^ICruxAPI [options])
+(defn start-node ^IXtdb [options])
 ----
 
 NOTE: requires any dependencies on the classpath that the Crux modules may need.
@@ -402,7 +402,7 @@ Accepts a map, or a JSON/EDN file or classpath resource.
 
 See https://opencrux.com/reference/configuration.html for details.
 
-Returns a node which implements ICruxAPI and java.io.Closeable.
+Returns a node which implements IXtdb and java.io.Closeable.
 Latter allows the node to be stopped by calling `(.close node)`.
 
 Throws IndexVersionOutOfSyncException if the index needs rebuilding.
@@ -411,10 +411,10 @@ Throws IndexVersionOutOfSyncException if the index needs rebuilding.
 
 [source,clojure]
 ----
-(defn new-api-client ^ICruxAPI [url])
+(defn new-api-client ^IXtdb [url])
 ----
 
-Creates a new remote API client ICruxAPI.
+Creates a new remote API client IXtdb.
 The remote client requires valid and transaction time to be specified for all calls to `db`.
 
 NOTE: Requires either clj-http or http-kit on the classpath,
@@ -424,18 +424,18 @@ Param `url` the URL to a Crux HTTP end-point.
 
 Returns a remote API client.
 
-=== new-ingest-client
+=== new-submit-client
 
 [source,clojure]
 ----
-(defn new-ingest-client ^ICruxAsyncIngestAPI [options])
+(defn new-submit-client ^IXtdbSubmitClient [options])
 ----
 
-Starts an ingest client for transacting into Crux without running a full local node with index.
+Starts a submit client for transacting into Crux without running a full local node with index.
 
 Accepts a map, or a JSON/EDN file or classpath resource.
 
 For valid options, see https://opencrux.com/reference/configuration.html.
 
-Returns a xtdb.api.ICruxIngestAPI component that implements java.io.Closeable.
+Returns a xtdb.api.IXtdbSubmitClient component that implements java.io.Closeable.
 Latter allows the node to be stopped by calling `(.close node)`.

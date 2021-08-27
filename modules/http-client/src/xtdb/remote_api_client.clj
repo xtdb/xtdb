@@ -126,7 +126,7 @@
   Closeable
   (close [_])
 
-  xt/PCruxDatasource
+  xt/PXtdbDatasource
   (entity [this eid]
     (api-request-sync (str url "/_xtdb/entity")
                       {:->jwt-token ->jwt-token
@@ -256,7 +256,7 @@
 
   (open-db [this valid-time tx-time] (xt/db this valid-time tx-time))
 
-  xt/PCruxNode
+  xt/PXtdb
   (status [this]
     (api-request-sync (str url "/_xtdb/status")
                       {:http-opts {:method :get}
@@ -338,7 +338,7 @@
                             :->jwt-token ->jwt-token})
          (map qs/->QueryState)))
 
-  xt/PCruxIngestClient
+  xt/PXtdbSubmitClient
   (submit-tx [this tx-ops]
     (let [tx-ops (xt/conform-tx-ops tx-ops)]
       (try

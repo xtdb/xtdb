@@ -4,26 +4,25 @@ import clojure.java.api.Clojure;
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
-import xtdb.api.tx.Transaction;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-public final class CruxDocument {
+public final class XtdbDocument {
     private static final Keyword DB_ID = Keyword.intern("xt/id");
     private static final Keyword FN_ID = Keyword.intern("crux.db/fn");
 
     private final Object id;
     private final IPersistentMap data;
 
-    private CruxDocument(Object id, IPersistentMap data) {
+    private XtdbDocument(Object id, IPersistentMap data) {
         this.id = id;
         this.data = data;
     }
 
-    public static CruxDocument build(Object id, Consumer<Builder> f) {
+    public static XtdbDocument build(Object id, Consumer<Builder> f) {
         Builder builder = builder(id);
         f.accept(builder);
         return builder.build();
@@ -34,15 +33,15 @@ public final class CruxDocument {
     }
 
     /**
-     * Creates a CruxDocument from a Clojure map. Not intended for public use, may be removed.
+     * Creates an XtdbDocument from a Clojure map. Not intended for public use, may be removed.
      * @param input
      */
-    public static CruxDocument factory(IPersistentMap input) {
+    public static XtdbDocument factory(IPersistentMap input) {
         if (input == null) return null;
         Object id = input.valAt(DB_ID);
         if (id == null) throw new RuntimeException(":xt/id missing from data map");
         IPersistentMap data = input.without(DB_ID);
-        return new CruxDocument(id, data);
+        return new XtdbDocument(id, data);
     }
 
     public static class Builder {
@@ -93,60 +92,60 @@ public final class CruxDocument {
             return this;
         }
 
-        public CruxDocument build() {
-            return new CruxDocument(id, PersistentArrayMap.create(data));
+        public XtdbDocument build() {
+            return new XtdbDocument(id, PersistentArrayMap.create(data));
         }
     }
 
     /**
-     * Creates a new {@link CruxDocument} with just an ID key.
-     * See {@link CruxDocument} for valid ID types
+     * Creates a new {@link XtdbDocument} with just an ID key.
+     * See {@link XtdbDocument} for valid ID types
      * @param id
-     * @return a new {@link CruxDocument}
+     * @return a new {@link XtdbDocument}
      */
-    public static CruxDocument create(Object id) {
-        return new CruxDocument(id, PersistentArrayMap.EMPTY);
+    public static XtdbDocument create(Object id) {
+        return new XtdbDocument(id, PersistentArrayMap.EMPTY);
     }
 
     /**
-     * Static factory to create a Crux transaction function document.
+     * Static factory to create an XTDB transaction function document.
      * @param id the id of the transaction function
      * @param rawFunction the function body, as a Clojure-code string.
-     * @return the function document, suitable for use in {@link xtdb.api.tx.Transaction.Builder#put(CruxDocument)}
+     * @return the function document, suitable for use in {@link xtdb.api.tx.Transaction.Builder#put(XtdbDocument)}
      */
-    public static CruxDocument createFunction(Object id, String rawFunction) {
-        return new CruxDocument(id, PersistentArrayMap.EMPTY.assoc(FN_ID, Clojure.read(rawFunction)));
+    public static XtdbDocument createFunction(Object id, String rawFunction) {
+        return new XtdbDocument(id, PersistentArrayMap.EMPTY.assoc(FN_ID, Clojure.read(rawFunction)));
     }
 
-    public static CruxDocument create(Object id, Map<String, Object> data) {
+    public static XtdbDocument create(Object id, Map<String, Object> data) {
         return create(id).plusAll(data);
     }
 
     /**
-     * @return a new CruxDocument with the key/value added
+     * @return a new XtdbDocument with the key/value added
      */
-    public CruxDocument plus(String key, Object value) {
+    public XtdbDocument plus(String key, Object value) {
         return toBuilder().put(key, value).build();
     }
 
     /**
-     * @return a new CruxDocument with the entries added
+     * @return a new XtdbDocument with the entries added
      */
-    public CruxDocument plusAll(Map<String, Object> entries) {
+    public XtdbDocument plusAll(Map<String, Object> entries) {
         return toBuilder().putAll(entries).build();
     }
 
     /**
-     * @return a new CruxDocument with the key removed
+     * @return a new XtdbDocument with the key removed
      */
-    public CruxDocument minus(String key) {
+    public XtdbDocument minus(String key) {
         return toBuilder().remove(key).build();
     }
 
     /**
-     * @return a new CruxDocument with the keys removed
+     * @return a new XtdbDocument with the keys removed
      */
-    public CruxDocument minusAll(Iterable<String> keys) {
+    public XtdbDocument minusAll(Iterable<String> keys) {
         return toBuilder().removeAll(keys).build();
     }
 
@@ -180,7 +179,7 @@ public final class CruxDocument {
     public boolean equals(Object o) {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
-        CruxDocument that = (CruxDocument) o;
+        XtdbDocument that = (XtdbDocument) o;
         return id.equals(that.id) && data.equals(that.data);
     }
 

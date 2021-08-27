@@ -13,7 +13,7 @@
             [xtdb.tx :as tx]
             [xtdb.tx.event :as txe]
             [xtdb.db :as db])
-  (:import [xtdb.api Crux ICruxAPI CruxDocument]
+  (:import [xtdb.api IXtdb XtdbDocument]
            [xtdb.api.tx Transaction]
            java.time.Duration
            [java.util Date HashMap Map]
@@ -22,7 +22,7 @@
 (t/deftest test-calling-shutdown-node-fails-gracefully
   (f/with-tmp-dir "data" [data-dir]
     (try
-      (let [n ^ICruxAPI (java/->JCruxNode (xt/start-node {}))]
+      (let [n ^IXtdb (java/->JXtdbNode (xt/start-node {}))]
         (t/is (.status n))
         (.close n)
         (.status n)
@@ -37,26 +37,26 @@
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Missing module .+ :dialect"
                           (xt/start-node {:xt/document-store {:xt/module `j/->document-store
-                                                               :connection-pool {:db-spec {}}}}))))
+                                                              :connection-pool {:db-spec {}}}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (xt/start-node {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                   :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                   ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect,
-                                                        :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
+                                  :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                  ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect,
+                                                       :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n))))
 
 (t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
     (with-open [n (xt/start-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-                                   :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-                                   :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
+                                  :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+                                  :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
       (t/is n))))
 
 (t/deftest start-node-from-java
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [node (Crux/startNode
+    (with-open [node (IXtdb/startNode
                       (doto (HashMap.)
                         (.put "xt/tx-log"
                               (doto (HashMap.)
@@ -85,18 +85,18 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n ^ICruxAPI (Crux/startNode (let [^Map m {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                          :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                          :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
-                                                          ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
-                                                                               :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
-                                              m))]
+    (with-open [n ^IXtdb (IXtdb/startNode (let [^Map m {:xt/tx-log             {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                        :xt/document-store  {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                        :xt/index-store     {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+                                                        ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
+                                                                             :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
+                                            m))]
       (t/is n)
 
       (let [valid-time (Date.)
             submitted-tx (.submitTx n
                                     (-> (Transaction/builder)
-                                        (.put (CruxDocument/factory {:xt/id :ivan :name "Ivan"}) valid-time)
+                                        (.put (XtdbDocument/factory {:xt/id :ivan :name "Ivan"}) valid-time)
                                         (.build)))]
         (t/is (= submitted-tx (.awaitTx n submitted-tx nil)))
         (t/is (= #{[:ivan]} (.query (.db n)
@@ -104,12 +104,12 @@
                                       :where [[e :name "Ivan"]]}
                                     (object-array 0)))))
 
-      (with-open [^ICruxAPI n2 (Crux/startNode (let [^Map m {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                             :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                             :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
-                                                             ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
-                                                                                  :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
-                                                 m))]
+      (with-open [^IXtdb n2 (IXtdb/startNode (let [^Map m {:xt/tx-log             {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                           :xt/document-store  {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                           :xt/index-store     {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+                                                           ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
+                                                                                :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
+                                               m))]
 
         (t/is (= #{} (.query (.db n2)
                              '{:find [e]
@@ -118,10 +118,10 @@
 
         (let [valid-time (Date.)
               submitted-tx (.submitTx
-                             n2
-                             (-> (Transaction/builder)
-                                 (.put (CruxDocument/factory {:xt/id :ivan :name "Iva"}) valid-time)
-                                 (.build)))]
+                            n2
+                            (-> (Transaction/builder)
+                                (.put (XtdbDocument/factory {:xt/id :ivan :name "Iva"}) valid-time)
+                                (.build)))]
           (t/is (= submitted-tx (.awaitTx n2 submitted-tx nil)))
           (t/is (= #{[:ivan]} (.query (.db n2)
                                       '{:find [e]

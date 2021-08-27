@@ -1,6 +1,6 @@
 package xtdb.api.tx;
 
-import xtdb.api.CruxDocument;
+import xtdb.api.XtdbDocument;
 
 import java.util.Date;
 import java.util.Objects;
@@ -14,11 +14,11 @@ public final class MatchOperation extends TransactionOperation {
         return new MatchOperation(id, null, atValidTime);
     }
 
-    public static MatchOperation create(CruxDocument document) {
+    public static MatchOperation create(XtdbDocument document) {
         return new MatchOperation(document.getId(), document, null);
     }
 
-    public static MatchOperation create(CruxDocument document, Date atValidTime) {
+    public static MatchOperation create(XtdbDocument document, Date atValidTime) {
         return new MatchOperation(document.getId(), document, atValidTime);
     }
 
@@ -26,7 +26,7 @@ public final class MatchOperation extends TransactionOperation {
         return id;
     }
 
-    public CruxDocument getDocument() {
+    public XtdbDocument getDocument() {
         return document;
     }
 
@@ -35,10 +35,10 @@ public final class MatchOperation extends TransactionOperation {
     }
 
     private final Object id;
-    private final CruxDocument document;
+    private final XtdbDocument document;
     private final Date atValidTime;
 
-    private MatchOperation(Object id, CruxDocument document, Date atValidTime) {
+    private MatchOperation(Object id, XtdbDocument document, Date atValidTime) {
         this.id = id;
         this.document = document;
         this.atValidTime = atValidTime;

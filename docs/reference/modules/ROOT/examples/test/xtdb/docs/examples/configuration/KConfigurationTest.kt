@@ -4,33 +4,32 @@ import org.junit.*
 import org.junit.Assert.*
 import java.io.IOException
 import java.io.File
-import java.net.URL
-import java.net.URISyntaxException
 
 // tag::import[]
-import xtdb.api.Crux
+import xtdb.api.IXtdb
+
 // end::import[]
 
 class KConfigurationTest {
     public fun `Starting a Crux node from file`() {
         // tag::from-file[]
-        val cruxNode: ICruxAPI = Crux.startNode(File("config.json"))
+        val xtdbNode: IXtdb = IXtdb.startNode(File("config.json"))
         // end::from-file[]
 
-        close(cruxNode)
+        close(xtdbNode)
     }
 
     public fun `Starting a Crux node from resource`() {
         // tag::from-resource[]
-        val cruxNode = Crux.startNode(MyApp::class.java.getResource("config.json"))
+        val xtdbNode = IXtdb.startNode(MyApp::class.java.getResource("config.json"))
         // end::from-resource[]
 
-        close(cruxNode)
+        close(xtdbNode)
     }
 
     public fun `Starting a Crux node with configurator`() {
         // tag::from-configurator[]
-        val cruxNode = Crux.startNode { n ->
+        val xtdbNode = IXtdb.startNode { n ->
             // ...
         }
         // end::from-configurator[]
@@ -38,19 +37,19 @@ class KConfigurationTest {
 
     public fun `Starting a Crux node with http server`() {
         // tag::http-server[]
-        val cruxNode = Crux.startNode { n ->
+        val xtdbNode = IXtdb.startNode { n ->
             n.with("xtdb.http-server/server") { http ->
                 http["port"] = 3000
             }
         }
         // end::http-server[]
 
-        close(cruxNode)
+        close(xtdbNode)
     }
 
     public fun `Starting a Crux node and overriding a module implementation`() {
         // tag::override-module[]
-        val cruxNode = Crux.startNode { n ->
+        val xtdbNode = IXtdb.startNode { n ->
             n.with("xt/document-store") { docStore ->
                 docStore.module("xtdb.s3/->document-store")
                 docStore["bucket"] = "my-bucket"
@@ -59,12 +58,12 @@ class KConfigurationTest {
         }
         // end::override-module[]
 
-        close(cruxNode)
+        close(xtdbNode)
     }
 
     public fun `Starting a Crux node with nested modules`() {
         // tag::nested-modules-0[]
-        val cruxNode = Crux.startNode{ n ->
+        val xtdbNode = IXtdb.startNode{ n ->
             n.with("xt/tx-log") { txLog ->
                 txLog.with("kv-store") { kv ->
                     kv.module("xtdb.rocksdb/->kv-store")
@@ -83,12 +82,12 @@ class KConfigurationTest {
         }
         // end::nested-modules-2[]
 
-        close(cruxNode)
+        close(xtdbNode)
     }
 
     public fun `Starting a Crux node with shared modules`() {
         // tag::sharing-modules[]
-        val cruxNode = Crux.startNode { n ->
+        val xtdbNode = IXtdb.startNode { n ->
             n.with("my-rocksdb") { rocks ->
                 rocks.module("xtdb.rocksdb/->kv-store")
                 rocks["db-dir"] = File("/tmp/rocksdb")
@@ -102,12 +101,12 @@ class KConfigurationTest {
         }
         // end::sharing-modules[]
 
-        close(cruxNode)
+        close(xtdbNode)
     }
 
-    private fun close(cruxNode: ICruxAPI) {
+    private fun close(xtdbNode: IXtdb) {
         try {
-            cruxNode.close()
+            xtdbNode.close()
         } catch (e: IOException) {
             fail()
         }

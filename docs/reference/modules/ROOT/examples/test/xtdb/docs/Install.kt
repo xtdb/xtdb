@@ -1,12 +1,12 @@
 package xtdb.docs
 
 // tag::imports[]
-import xtdb.api.Crux
+import xtdb.api.IXtdb
 // end::imports[]
 
 // tag::main[]
 fun main() {
-    Crux.startNode().use {
+    IXtdb.startNode().use {
         // ...
     }
 }

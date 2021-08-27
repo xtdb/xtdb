@@ -1,6 +1,5 @@
 package xtdb.api;
 
-import clojure.java.api.Clojure;
 import clojure.lang.Keyword;
 
 import java.time.Duration;
@@ -16,19 +15,19 @@ import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
 
 public class TransactionTest {
-    private static CruxDocument personDocument(String id, String name, String lastName, long version) {
-        return CruxDocument.create(id).plus("person/name", name).plus("person/lastName", lastName).plus("person/version", version);
+    private static XtdbDocument personDocument(String id, String name, String lastName, long version) {
+        return XtdbDocument.create(id).plus("person/name", name).plus("person/lastName", lastName).plus("person/version", version);
     }
 
     private static final String pabloId = "PabloPicasso";
     private static List<Date> times;
-    private static List<CruxDocument> pablos;
-    private static ICruxAPI node = null;
+    private static List<XtdbDocument> pablos;
+    private static IXtdb node = null;
 
     @BeforeClass
     public static void beforeClass() {
         ArrayList<Date> _times = new ArrayList<>();
-        ArrayList<CruxDocument> _pablos = new ArrayList<>();
+        ArrayList<XtdbDocument> _pablos = new ArrayList<>();
         for (int i = 0; i < 10; i++) {
             //The few hours after Y2K
             long seconds = 946684800 + i * 3600;
@@ -42,7 +41,7 @@ public class TransactionTest {
 
     @Before
     public void before() {
-        node = Crux.startNode();
+        node = IXtdb.startNode();
     }
 
     @After
@@ -401,7 +400,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionNoArgs() {
-        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db \"PabloPicasso\")] [[:xt/put (update entity :person/version inc)]]))");
+        XtdbDocument function = XtdbDocument.createFunction("incVersion", "(fn [ctx] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db \"PabloPicasso\")] [[:xt/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));
@@ -419,7 +418,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionArgs() {
-        CruxDocument function = CruxDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
+        XtdbDocument function = XtdbDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));
@@ -487,7 +486,7 @@ public class TransactionTest {
     }
 
     private void assertPabloVersion(int version, Date validTime) {
-        CruxDocument fromDb;
+        XtdbDocument fromDb;
         if (validTime == null) {
             fromDb = node.db().entity(pabloId);
         }
@@ -506,7 +505,7 @@ public class TransactionTest {
         return times.get(timeIndex);
     }
 
-    private CruxDocument pablo(int version) {
+    private XtdbDocument pablo(int version) {
         return pablos.get(version);
     }
 

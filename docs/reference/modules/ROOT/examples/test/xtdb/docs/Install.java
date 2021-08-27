@@ -1,8 +1,7 @@
 package xtdb.docs;
 
 // tag::imports[]
-import xtdb.api.Crux;
-import xtdb.api.ICruxAPI;
+import xtdb.api.IXtdb;
 // end::imports[]
 import java.io.IOException;
 
@@ -10,11 +9,11 @@ public class Install {
 
     // tag::main-0[]
     public static void main(String[] args) {
-        try(ICruxAPI cruxNode = Crux.startNode()) {
+        try(IXtdb xtdb = IXtdb.startNode()) {
             // ...
     // end::main-0[]
             // -Werror doesn't like it when the auto-closeable isn't referenced.
-            cruxNode.status();
+            xtdb.status();
     // tag::main-1[]
         }
         catch (IOException e) {

@@ -12,17 +12,17 @@ import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
 
 public class HistoryOptionsTest {
-    private static List<CruxDocument> documents;
+    private static List<XtdbDocument> documents;
     private static List<TransactionInstant> transactions;
-    private static ICruxAPI node;
+    private static IXtdb node;
 
-    private ICruxDatasource db;
+    private IXtdbDatasource db;
 
     @BeforeClass
     public static void beforeClass() {
-        node = Crux.startNode();
+        node = IXtdb.startNode();
 
-        ArrayList<CruxDocument> _documents = new ArrayList<>();
+        ArrayList<XtdbDocument> _documents = new ArrayList<>();
         for (int i=0; i<5; i++) {
             _documents.add(testDocument(i));
         }
@@ -208,7 +208,7 @@ public class HistoryOptionsTest {
     }
 
     private static TransactionInstant p(int documentIndex, Date validTime, Date endValidTime) {
-        CruxDocument document = documents.get(documentIndex);
+        XtdbDocument document = documents.get(documentIndex);
         return put(node, document, validTime, endValidTime);
     }
 }

@@ -7,14 +7,13 @@ import clojure.lang.PersistentArrayMap;
 import xtdb.api.tx.*;
 
 import java.util.HashMap;
-import java.util.Map;
 
 import org.junit.Test;
 
 import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
 
-import static xtdb.api.CruxDocument.build;
+import static xtdb.api.XtdbDocument.build;
 
 public class DocumentTest {
     private static final Keyword foo = Keyword.intern("foo");
@@ -23,18 +22,18 @@ public class DocumentTest {
     @Test(expected = RuntimeException.class)
     public void factoryMissingId() {
         IPersistentMap data = PersistentArrayMap.EMPTY.assoc("foo", "bar");
-        CruxDocument.factory(data);
+        XtdbDocument.factory(data);
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void reassigningId() {
-        CruxDocument document = CruxDocument.create("foo");
+        XtdbDocument document = XtdbDocument.create("foo");
         document.plus("xt/id", "bar");
     }
 
     @Test(expected = IllegalArgumentException.class)
     public void reassigningFnId() {
-        CruxDocument document = CruxDocument.create("foo");
+        XtdbDocument document = XtdbDocument.create("foo");
         document.plus("crux.db/fn", "bar");
     }
 
@@ -43,8 +42,8 @@ public class DocumentTest {
         HashMap<Keyword, Object> compare = new HashMap<>();
 
         compare.put(DB_ID, documentId);
-        CruxDocument document = CruxDocument.create(documentId);
-        CruxDocument builtDocument = build(documentId, doc -> {});
+        XtdbDocument document = XtdbDocument.create(documentId);
+        XtdbDocument builtDocument = build(documentId, doc -> {});
 
         assertEquals(compare, document.toMap());
         assertEquals(compare, builtDocument.toMap());
@@ -66,7 +65,7 @@ public class DocumentTest {
         data.put("bar", 0);
         compare.put(bar, 0);
 
-        CruxDocument document = CruxDocument.create(documentId, data);
+        XtdbDocument document = XtdbDocument.create(documentId, data);
 
         assertEquals(compare, document.toMap());
         assertSameAfterPut(document);
@@ -79,8 +78,8 @@ public class DocumentTest {
         compare.put(DB_ID, documentId);
         compare.put(foo, "bar");
 
-        CruxDocument document = CruxDocument.create(documentId).plus("foo", "bar");
-        CruxDocument builtDocument = build(documentId, doc -> {
+        XtdbDocument document = XtdbDocument.create(documentId).plus("foo", "bar");
+        XtdbDocument builtDocument = build(documentId, doc -> {
             doc.put("foo", "bar");
         });
 
@@ -102,8 +101,8 @@ public class DocumentTest {
         compare.put(bar, 0);
         data.put("bar", 0);
 
-        CruxDocument document = CruxDocument.create(documentId).plusAll(data);
-        CruxDocument builtDocument = build(documentId, doc -> {
+        XtdbDocument document = XtdbDocument.create(documentId).plusAll(data);
+        XtdbDocument builtDocument = build(documentId, doc -> {
             doc.putAll(data);
         });
 
@@ -124,8 +123,8 @@ public class DocumentTest {
 
         data.put("bar", 0);
 
-        CruxDocument document = CruxDocument.create(documentId, data).minus("bar");
-        CruxDocument builtDocument = build(documentId, doc -> {
+        XtdbDocument document = XtdbDocument.create(documentId, data).minus("bar");
+        XtdbDocument builtDocument = build(documentId, doc -> {
             doc.putAll(data);
             doc.remove("bar");
         });
@@ -146,8 +145,8 @@ public class DocumentTest {
         data.put("foo", "bar");
         data.put("bar", 0);
 
-        CruxDocument document = CruxDocument.create(documentId, data).minusAll(data.keySet());
-        CruxDocument builtDocument = build(documentId, doc -> {
+        XtdbDocument document = XtdbDocument.create(documentId, data).minusAll(data.keySet());
+        XtdbDocument builtDocument = build(documentId, doc -> {
             doc.putAll(data);
             doc.removeAll(data.keySet());
         });
@@ -160,17 +159,17 @@ public class DocumentTest {
 
     @Test
     public void functions() {
-        CruxDocument document = CruxDocument.createFunction(documentId,
+        XtdbDocument document = XtdbDocument.createFunction(documentId,
                 "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
         assertSameAfterPut(document);
     }
 
     @Test
     public void immutibility() {
-        CruxDocument document1 = CruxDocument.create(documentId);
-        CruxDocument document2 = document1.plus("foo", "bar");
-        CruxDocument document3 = document2.plus("bar", 0);
-        CruxDocument document4 = document2.minus("foo");
+        XtdbDocument document1 = XtdbDocument.create(documentId);
+        XtdbDocument document2 = document1.plus("foo", "bar");
+        XtdbDocument document3 = document2.plus("bar", 0);
+        XtdbDocument document4 = document2.minus("foo");
 
         assertNotEquals(document1, document2);
         assertNotEquals(document1, document3);
@@ -180,17 +179,17 @@ public class DocumentTest {
 
     @Test
     public void havingAFunctionDocumentWontBreakPlussing() {
-        CruxDocument document = CruxDocument.createFunction("foo", "bar");
+        XtdbDocument document = XtdbDocument.createFunction("foo", "bar");
         document.plus("baz", 7);
     }
 
-    private void assertSameAfterPut(CruxDocument document) {
-        try (ICruxAPI node = Crux.startNode()) {
+    private void assertSameAfterPut(XtdbDocument document) {
+        try (IXtdb node = IXtdb.startNode()) {
             TransactionInstant transaction = node.submitTx(Transaction.buildTx(tx -> {
                 tx.put(document);
             }));
             awaitTx(node, transaction);
-            CruxDocument compare = node.db().entity(document.getId());
+            XtdbDocument compare = node.db().entity(document.getId());
             assertEquals(document, compare);
         }
         catch (Exception e) {

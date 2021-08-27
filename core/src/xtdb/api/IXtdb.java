@@ -1,6 +1,8 @@
 package xtdb.api;
 
 import java.io.Closeable;
+import java.io.File;
+import java.net.URL;
 import java.util.*;
 import java.time.Duration;
 import java.util.function.Consumer;
@@ -9,17 +11,128 @@ import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
 import xtdb.api.tx.Transaction;
 
+import static xtdb.api.XtdbFactory.resolve;
+
 /**
  *  Provides API access to Crux.
  */
 @SuppressWarnings("unused")
-public interface ICruxAPI extends ICruxIngestAPI, Closeable {
+public interface IXtdb extends IXtdbSubmitClient, Closeable {
+
+    /**
+     * Starts an in-memory query node.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @return the started node
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    static IXtdb startNode() {
+        return startNode(NodeConfiguration.EMPTY);
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param options a Map of Crux configuration
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    static IXtdb startNode(Map<?, ?> options) throws IndexVersionOutOfSyncException {
+        return XtdbFactory.startNode(options);
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param file a JSON or EDN file containing Crux configuration
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    static IXtdb startNode(File file) throws IndexVersionOutOfSyncException {
+        return XtdbFactory.startNode(file);
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param url a URL of a JSON or EDN file containing Crux configuration
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    static IXtdb startNode(URL url) throws IndexVersionOutOfSyncException {
+        return XtdbFactory.startNode(url);
+    }
+
+    /**
+     * Starts a Crux node using the provided configuration.
+     * <p>
+     * <pre>
+     * IXtdb xtdbNode = IXtdb.startNode(n -&gt; {
+     *   // ...
+     * });
+     * </pre>
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param f a callback, provided with an object to configure the node before it starts.
+     * @return the started node.
+     * @throws IndexVersionOutOfSyncException if the index needs rebuilding.
+     * @see <a href="https://opencrux.com/reference/installation.html">Installation</a>
+     * @see <a href="https://opencrux.com/reference/configuration.html">Configuration</a>
+     */
+    static IXtdb startNode(Consumer<NodeConfiguration.Builder> f) throws IndexVersionOutOfSyncException {
+        return startNode(NodeConfiguration.buildNode(f));
+    }
+    public static IXtdb startNode(NodeConfiguration configuration) throws IndexVersionOutOfSyncException {
+        return startNode(configuration.toMap());
+    }
+
+    /**
+     * Creates a new remote API client.
+     * <p>
+     * NOTE: requires xtdb-http-client on the classpath.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param url the URL to a Crux HTTP end-point.
+     * @return    a remote API client.
+     */
+    static IXtdb newApiClient(String url) {
+        Object apiClient = resolve("xtdb.remote-api-client/new-api-client").invoke(url);
+        return (IXtdb) resolve("xtdb.api.java/->JXtdbNode").invoke(apiClient);
+    }
+
+    /**
+     * Creates a new remote API client.
+     * <p>
+     * NOTE: requires xtdb-http-client on the classpath.
+     * <p>
+     * When you're done, close the node with {@link java.io.Closeable#close}
+     *
+     * @param url the URL to a Crux HTTP end-point.
+     * @param options options for the remote client.
+     * @return    a remote API client.
+     */
+    public static IXtdb newApiClient(String url, RemoteClientOptions options) {
+        Object apiClient = resolve("xtdb.remote-api-client/new-api-client").invoke(url, options);
+        return (IXtdb) resolve("xtdb.api.java/->JXtdbNode").invoke(apiClient);
+    }
 
     /**
      * Returns a db as of now. Will return the latest consistent snapshot of the
      * db currently known. Does not block.
      */
-    ICruxDatasource db();
+    IXtdbDatasource db();
 
     /**
      * Returns a db as of now. Will return the latest consistent snapshot of the
@@ -28,14 +141,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * This method returns a DB that opens resources shared between method calls
      * - it must be `.close`d when you've finished using it.
      */
-    ICruxDatasource openDB();
+    IXtdbDatasource openDB();
 
     /**
      * Returns a db as of the provided valid time. Will return the latest
      * consistent snapshot of the db currently known, but does not wait for
      * valid time to be current. Does not block.
      */
-    ICruxDatasource db(Date validTime);
+    IXtdbDatasource db(Date validTime);
 
     /**
      * Returns a db as of the provided valid time. Will return the latest
@@ -45,14 +158,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * This method returns a DB that opens resources shared between method calls
      * - it must be `.close`d when you've finished using it.
      */
-    ICruxDatasource openDB(Date validTime);
+    IXtdbDatasource openDB(Date validTime);
 
     /**
      * Returns a db as of valid time and transaction time.
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transactionTime`
      */
-    ICruxDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
+    IXtdbDatasource db(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of valid time and transaction time.
@@ -62,14 +175,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given `transactionTime`
      */
-    ICruxDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
+    IXtdbDatasource openDB(Date validTime, Date transactionTime) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given basis.
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    ICruxDatasource db(DBBasis dbBasis) throws NodeOutOfSyncException;
+    IXtdbDatasource db(DBBasis dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given basis.
@@ -78,14 +191,14 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
     @Deprecated
-    ICruxDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+    IXtdbDatasource db(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the TransactionInstant, with valid-time set to the invocation time of this method.
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    ICruxDatasource db(TransactionInstant txInstant) throws NodeOutOfSyncException;
+    IXtdbDatasource db(TransactionInstant txInstant) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given basis.
@@ -95,7 +208,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    ICruxDatasource openDB(DBBasis dbBasis) throws NodeOutOfSyncException;
+    IXtdbDatasource openDB(DBBasis dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the given basis.
@@ -107,7 +220,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      * @deprecated in favour of {@link #openDB(DBBasis)} or {@link #openDB(TransactionInstant)}
      */
     @Deprecated
-    ICruxDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
+    IXtdbDatasource openDB(Map<Keyword, ?> dbBasis) throws NodeOutOfSyncException;
 
     /**
      * Returns a db as of the TransactionInstant, with valid-time set to the invocation time of this method.
@@ -117,7 +230,7 @@ public interface ICruxAPI extends ICruxIngestAPI, Closeable {
      *
      * @throws NodeOutOfSyncException if the node hasn't indexed up to the given transaction
      */
-    ICruxDatasource openDB(TransactionInstant txInstant) throws NodeOutOfSyncException;
+    IXtdbDatasource openDB(TransactionInstant txInstant) throws NodeOutOfSyncException;
 
     /**
      * Returns the status of this node as a map.

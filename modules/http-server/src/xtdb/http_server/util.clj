@@ -15,7 +15,7 @@
             [juxt.clojars-mirrors.spec-tools.v0v10v5.spec-tools.core :as st]
             [xtdb.http-server.entity-ref :as entity-ref]
             [clojure.instant :as inst])
-  (:import [xtdb.api ICruxDatasource]
+  (:import [xtdb.api IXtdbDatasource]
            [xtdb.codec EDNId Id]
            xtdb.http_server.entity_ref.EntityRef
            [java.io ByteArrayOutputStream OutputStream]
@@ -113,7 +113,7 @@
        (m/install {:name "application/json"
                    :encoder [http-json/->json-encoder opts]}))))
 
-(defn db-for-request ^ICruxDatasource [crux-node {:keys [valid-time tx-time tx-id]}]
+(defn db-for-request ^IXtdbDatasource [crux-node {:keys [valid-time tx-time tx-id]}]
   (let [^Map db-basis {:xt/valid-time valid-time
                        :xt/tx-time tx-time
                        :xt/tx-id tx-id}]

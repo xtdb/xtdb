@@ -48,14 +48,14 @@ To set up a Crux node within Corda, create a Corda Service:
 ----
 @CordaService
 class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializableAsToken() {
-    val node = serviceHub.startCruxNode {
+    val node = serviceHub.startXtdbNode {
         withCordaTxLog { }
         ...
     }
 }
 ----
 
-This is a minimal configuration - see the main xref:configuration.adoc[Crux configuration] documentation for how to further configure the Crux node within the `startCruxNode` block.
+This is a minimal configuration - see the main xref:configuration.adoc[Crux configuration] documentation for how to further configure the Crux node within the `startXtdbNode` block.
 
 == Mapping Corda documents into Crux
 
@@ -85,7 +85,7 @@ This mapping can be customised further by overriding the document mapping in the
 ----
 @CordaService
 class XtdbService(private val serviceHub: AppServiceHub) : SingletonSerializableAsToken() {
-    val node = serviceHub.startCruxNode {
+    val node = serviceHub.startXtdbNode {
         withCordaTxLog {
             // This replicates the default behaviour.
             withDocumentMapping { state ->
@@ -105,9 +105,9 @@ To access the standard Crux query API, you can make the Crux node available as a
 
 [source,kotlin]
 ----
-val cruxNode = serviceHub.cordaService(XtdbService::class.java).node
+val xtdbNode = serviceHub.cordaService(XtdbService::class.java).node
 
-cruxNode.db().query("""
+xtdbNode.db().query("""
     {:find [?l ?b ?v]
      :where [[?iou :iou-state/lender ?l]
              [?iou :iou-state/borrower ?b]

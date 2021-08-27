@@ -13,14 +13,14 @@ import xtdb.api.tx.Transaction;
  * transaction time.
  */
 @SuppressWarnings("unused")
-public interface ICruxDatasource extends Closeable {
+public interface IXtdbDatasource extends Closeable {
     /**
      * Returns the document map for an entity.
      *
      * @param eid an object that can be coerced into an entity id.
      * @return    the entity document map.
      */
-    CruxDocument entity(Object eid);
+    XtdbDocument entity(Object eid);
 
     /**
      * Returns the transaction details for an entity. Details
@@ -169,7 +169,7 @@ public interface ICruxDatasource extends Closeable {
      * @param transaction the transaction to be applied.
      * @return a new db value with the transaction speculatively applied.
     */
-    ICruxDatasource withTx(Transaction transaction);
+    IXtdbDatasource withTx(Transaction transaction);
 
     /**
      * Returns a new db value with the txOps speculatively applied.
@@ -182,5 +182,5 @@ public interface ICruxDatasource extends Closeable {
      * @deprecated in favour of {@link #withTx(Transaction)}
      */
     @Deprecated
-    ICruxDatasource withTx(List<List<?>> transaction);
+    IXtdbDatasource withTx(List<List<?>> transaction);
 }

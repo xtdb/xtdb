@@ -1,10 +1,6 @@
 package xtdb.api;
 
-import clojure.lang.Keyword;
-
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 
 import xtdb.api.tx.*;
 
@@ -20,7 +16,7 @@ public class TransactionBuilderTest {
      * as well as ensuring the .equals method behaves as intended.
      */
     private final static Object documentId = "foo";
-    private final static CruxDocument document = CruxDocument.create(documentId).plus("bar", "baz");
+    private final static XtdbDocument document = XtdbDocument.create(documentId).plus("bar", "baz");
     private final static Date validTime = now;
     private final static Date endValidTime = date(500);
     @Test

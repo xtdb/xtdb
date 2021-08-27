@@ -15,8 +15,6 @@ import static org.junit.Assert.*;
 import static xtdb.api.NodeConfiguration.buildNode;
 import static xtdb.api.ModuleConfiguration.buildModule;
 
-import xtdb.api.*;
-
 public class ConfigurationTest {
     private static final IFn requiringResolve = Clojure.var("clojure.core/requiring-resolve");
     private static final IFn getKvName = (IFn) requiringResolve.invoke(Clojure.read("xtdb.kv/kv-name"));
@@ -31,10 +29,10 @@ public class ConfigurationTest {
         })));
     }
 
-    private ICruxIngestAPI startIngestNode() {
+    private IXtdbSubmitClient startIngestNode() {
         try {
             File docDir = folder.newFolder("docs");
-            return Crux.startNode(n -> {
+            return IXtdb.startNode(n -> {
                 n.with("xt/document-store", createKvConfig(docDir));
             });
         }
@@ -63,13 +61,13 @@ public class ConfigurationTest {
     }
 
     @Test
-    public void canUseRocksOnICruxAPI() {
+    public void canUseRocksOnIXtdb() {
         try {
             File txDir = folder.newFolder("tx");
             File docDir = folder.newFolder("docs");
             File indexDir = folder.newFolder("index");
 
-            ICruxAPI node = Crux.startNode(n -> {
+            IXtdb node = IXtdb.startNode(n -> {
                 n.with("xt/tx-log", createKvConfig(txDir));
                 n.with("xt/document-store", createKvConfig(docDir));
                 n.with("xt/index-store", createKvConfig(indexDir));
@@ -87,11 +85,11 @@ public class ConfigurationTest {
     }
 
     @Test
-    public void canUseRocksOnICruxIngestAPI() {
+    public void canUseRocksOnIXtdbSubmitAPI() {
         try {
             File docDir = folder.newFolder("docs");
 
-            ICruxIngestAPI client = Crux.newIngestClient(n -> {
+            IXtdbSubmitClient client = IXtdbSubmitClient.newSubmitClient(n -> {
                 n.with("xt/document-store", createKvConfig(docDir));
             });
 

@@ -1,22 +1,16 @@
 package xtdb.docs.examples.transactions;
 
-import clojure.lang.IPersistentMap;
-import clojure.lang.Keyword;
-import clojure.lang.PersistentArrayMap;
 import org.junit.*;
 
 import xtdb.api.*;
 import xtdb.api.tx.*;
 
-import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
-import java.util.Map;
 import java.time.Duration;
 
 import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
-import static xtdb.api.CruxDocument.build;
+import static xtdb.api.XtdbDocument.build;
 
 // tag::creating-0[]
 import static xtdb.api.tx.Transaction.buildTx;
@@ -24,10 +18,10 @@ import static xtdb.api.tx.Transaction.buildTx;
 
 public class TransactionsTest {
     private static final String documentId = "foo";
-    private static CruxDocument document;
-    private static CruxDocument document1;
-    private static CruxDocument document2;
-    private static CruxDocument document3;
+    private static XtdbDocument document;
+    private static XtdbDocument document1;
+    private static XtdbDocument document2;
+    private static XtdbDocument document3;
 
     private static Date beforeAll;
     private static Date validTime1;
@@ -38,16 +32,16 @@ public class TransactionsTest {
     private static final String documentId2 = "foo-2";
     private static final String documentId3 = "foo-3";
 
-    private final ICruxAPI node = Crux.startNode();
+    private final IXtdb node = IXtdb.startNode();
 
-    private static CruxDocument createDocument(int version) {
-        return CruxDocument.create(documentId).plus("version", version);
+    private static XtdbDocument createDocument(int version) {
+        return XtdbDocument.create(documentId).plus("version", version);
     }
 
     @BeforeClass
     public static void beforeClass() {
         //We are using individual variables so the examples are clearer.
-        document = CruxDocument.create(documentId);
+        document = XtdbDocument.create(documentId);
         document1 = createDocument(1);
         document2 = createDocument(2);
         document3 = createDocument(3);
@@ -135,9 +129,9 @@ public class TransactionsTest {
     @Test
     public void deleteOperation() {
         node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create(documentId1), beforeAll);
-            tx.put(CruxDocument.create(documentId2), beforeAll);
-            tx.put(CruxDocument.create(documentId3), beforeAll);
+            tx.put(XtdbDocument.create(documentId1), beforeAll);
+            tx.put(XtdbDocument.create(documentId2), beforeAll);
+            tx.put(XtdbDocument.create(documentId3), beforeAll);
         }));
 
         sync(node);
@@ -233,7 +227,7 @@ public class TransactionsTest {
     public void functions() {
         // tag::fn-put[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.createFunction("incAge",
+            tx.put(XtdbDocument.createFunction("incAge",
             "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :age inc)]]))"));
         }));
         // end::fn-put[]
@@ -241,7 +235,7 @@ public class TransactionsTest {
         node.awaitTx(ti, null);
 
         ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("ivan").plus("age", 0L));
+            tx.put(XtdbDocument.create("ivan").plus("age", 0L));
         }));
 
         node.awaitTx(ti, null);
@@ -255,7 +249,7 @@ public class TransactionsTest {
 
         node.awaitTx(ti, null);
 
-        CruxDocument compare = CruxDocument.create("ivan").plus("age", 1L);
+        XtdbDocument compare = XtdbDocument.create("ivan").plus("age", 1L);
 
         assertEquals(compare, node.db().entity("ivan"));
     }
@@ -264,7 +258,7 @@ public class TransactionsTest {
     public void transactionInstant() {
         // tag::ti[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("Ivan"));
+            tx.put(XtdbDocument.create("Ivan"));
         }));
 
         // This will be null because the transaction won't have been indexed yet
@@ -280,15 +274,15 @@ public class TransactionsTest {
 
     @Test
     public void documents() {
-        CruxDocument fromBuilder =
+        XtdbDocument fromBuilder =
         // tag::doc-builder[]
-        CruxDocument.builder("pablo-picasso")
+        XtdbDocument.builder("pablo-picasso")
             .put("name", "Pablo")
             .put("lastName", "Picasso")
             .build();
         // end::doc-builder[]
 
-        CruxDocument fromConsumer =
+        XtdbDocument fromConsumer =
         // tag::doc-consumer[]
         build("pablo-picasso", doc -> {
             doc.put("name", "Pablo");
@@ -296,9 +290,9 @@ public class TransactionsTest {
         });
         // end::doc-consumer[]
 
-        CruxDocument direct =
+        XtdbDocument direct =
         // tag::doc-direct[]
-        CruxDocument.create("pablo-picasso")
+        XtdbDocument.create("pablo-picasso")
             .plus("name", "Pablo")
             .plus("lastName", "Picasso");
         // end::doc-direct[]
@@ -311,18 +305,18 @@ public class TransactionsTest {
     public void withTransactions() {
         // tag::with-tx[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("Ivan"));
+            tx.put(XtdbDocument.create("Ivan"));
         }));
 
         awaitTx(node, ti);
 
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
 
         assertNotNull(db.entity("Ivan"));
         assertNull(db.entity("Petr"));
 
-        ICruxDatasource speculativeDb = db.withTx(buildTx(tx -> {
-            tx.put(CruxDocument.create("Petr"));
+        IXtdbDatasource speculativeDb = db.withTx(buildTx(tx -> {
+            tx.put(XtdbDocument.create("Petr"));
         }));
 
         // Petr is in our speculative db
@@ -339,15 +333,15 @@ public class TransactionsTest {
         // end::with-tx[]
     }
 
-    private void assertDocument(CruxDocument document) {
+    private void assertDocument(XtdbDocument document) {
         assertDocument(document, node.db());
     }
 
-    private void assertDocument(CruxDocument document, Date validTime) {
+    private void assertDocument(XtdbDocument document, Date validTime) {
         assertDocument(document, node.db(validTime));
     }
 
-    private void assertDocument(CruxDocument document, ICruxDatasource db) {
+    private void assertDocument(XtdbDocument document, IXtdbDatasource db) {
         assertEquals(document, db.entity(documentId));
     }
 
@@ -367,7 +361,7 @@ public class TransactionsTest {
         return exists(documentId, node.db(validTime));
     }
 
-    private boolean exists(Object documentId, ICruxDatasource db) {
+    private boolean exists(Object documentId, IXtdbDatasource db) {
         return db.entity(documentId) != null;
     }
 }

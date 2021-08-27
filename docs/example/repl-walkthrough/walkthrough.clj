@@ -3,7 +3,7 @@
 
 (ns walkthrough.crux-standalone
   (:require [xtdb.api :as xt])
-  (:import (xtdb.api ICruxAPI)))
+  (:import (xtdb.api IXtdb)))
 
 ;; this in-memory configuration is the easiest way to try Crux, no Kafka needed
 (def node

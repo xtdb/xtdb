@@ -13,7 +13,7 @@ and not when submitting the transaction.
 Java::
 +
 --
-A transaction is performed by calling `.submitTx` on an `ICruxIngestAPI` with a `Transaction` object.
+A transaction is performed by calling `.submitTx` on an `IXtdbSubmitAPI` with a `Transaction` object.
 
 The `Transaction` object can be created by either using `Transaction.Builder` directly or using a `Consumer`.
 
@@ -250,7 +250,7 @@ Transaction functions are created/updated by submitting a document to Crux with 
 Java::
 +
 --
-You create a function document with `CruxDocument.createFunction`.
+You create a function document with `XtdbDocument.createFunction`.
 
 It takes the ID for the function as well as a string consisting of the Clojure function to run.
 
@@ -308,11 +308,11 @@ include::example$test/xtdb/docs/examples/transactions/transactions_test.clj[tags
 Java::
 +
 --
-A `CruxDocument` is created with an ID that must be of a <<#valid-ids,valid type>>.
+A `XtdbDocument` is created with an ID that must be of a <<#valid-ids,valid type>>.
 
-The instance itself is immutable and plusing/minusing data yields a new instance of `CruxDocument`.
+The instance itself is immutable and plusing/minusing data yields a new instance of `XtdbDocument`.
 
-Similarly to Transactions, you can use `CruxDocument.Builder` directly or use the `Consumer` approach.
+Similarly to Transactions, you can use `XtdbDocument.Builder` directly or use the `Consumer` approach.
 [source,java]
 ----
 include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags=doc-builder,indent=0]
@@ -469,7 +469,7 @@ Only you will see the effect of these transactions - they're not submitted to th
 Java::
 +
 --
-You submit these transactions to an instance of ICruxDatasource using `withTx`:
+You submit these transactions to an instance of IXtdbDatasource using `withTx`:
 
 [source,java]
 ----

@@ -13,15 +13,15 @@ import org.junit.*;
 import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
 
-public class JCruxNodeTest {
+public class JXtdbNodeTest {
     private static final Keyword versionId = Keyword.intern("version");
     private static Map<Keyword, Object> config;
-    private static final CruxDocument document = testDocument(0);
+    private static final XtdbDocument document = testDocument(0);
     private static final Transaction putTransaction = Transaction.buildTx(tx -> {
        tx.put(document);
     });
 
-    private ICruxAPI node;
+    private IXtdb node;
 
     @BeforeClass
     public static void beforeClass() {
@@ -34,7 +34,7 @@ public class JCruxNodeTest {
 
     @Before
     public void before() {
-        node = Crux.startNode(config);
+        node = IXtdb.startNode(config);
     }
 
     @After
@@ -44,7 +44,7 @@ public class JCruxNodeTest {
     }
 
     /*
-     ICruxIngestAPI Tests
+     IXtdbSubmitAPI Tests
      */
     @Test
     public void submitTxTest() {
@@ -77,8 +77,8 @@ public class JCruxNodeTest {
     }
 
     /*
-    ICruxAPI tests.
-    Note that not testing the ones that return an ICruxDatasource as these will be tested as part of JCruxDatasourceTest
+    IXtdb tests.
+    Note that not testing the ones that return an IXtdbDatasource as these will be tested as part of JCruxDatasourceTest
      */
     @Test
     public void statusTest() {
@@ -161,7 +161,7 @@ public class JCruxNodeTest {
     @Test
     public void listenTest() {
         final Object[] events = new Object[]{null};
-        AutoCloseable listener = node.listen(ICruxAPI.TX_INDEXED_EVENT_OPTS, (Map<Keyword,?> e) -> {
+        AutoCloseable listener = node.listen(IXtdb.TX_INDEXED_EVENT_OPTS, (Map<Keyword,?> e) -> {
             events[0] = e;
         });
         TransactionInstant tx = put();

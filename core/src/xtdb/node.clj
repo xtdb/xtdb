@@ -85,7 +85,7 @@
                   (- (.getTime started-at) (.getTime finished-at))))
        (take slow-queries-max-count)))
 
-(defrecord CruxNode [kv-store tx-log document-store index-store tx-ingester bus query-engine
+(defrecord XtdbNode [kv-store tx-log document-store index-store tx-ingester bus query-engine
                      !running-queries close-fn !system closed? ^StampedLock lock]
   Closeable
   (close [_]
@@ -115,7 +115,7 @@
         (ensure-node-open this)
         (xt/open-db query-engine valid-time-or-basis))))
 
-  xt/PCruxNode
+  xt/PXtdb
   (status [this]
     (cio/with-read-lock lock
       (ensure-node-open this)
@@ -200,7 +200,17 @@
     (let [running-queries (swap! !running-queries update :slowest clean-slowest-queries this)]
       (map qs/->QueryState (:slowest running-queries))))
 
-  xt/PCruxIngestClient
+  xt/PXtdbSubmitClient
+  (submit-tx-async [this tx-ops]
+    (let [tx-ops (xt/conform-tx-ops tx-ops)
+          conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
+      (cio/with-read-lock lock
+        (ensure-node-open this)
+        (db/submit-docs document-store (->> conformed-tx-ops
+                                            (into {} (comp (mapcat :docs)))
+                                            (cio/map-vals c/xt->crux)))
+        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
+
   (submit-tx [this tx-ops]
     @(xt/submit-tx-async this tx-ops))
 
@@ -234,20 +244,10 @@
                                                                     (update 1 c/new-id))))))))))))]
             (cio/->cursor (fn []
                             (.close tx-log-iterator))
-                          tx-log))))))
-  xt/PCruxAsyncIngestClient
-  (submit-tx-async [this tx-ops]
-    (let [tx-ops (xt/conform-tx-ops tx-ops)
-          conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (cio/with-read-lock lock
-        (ensure-node-open this)
-        (db/submit-docs document-store (->> conformed-tx-ops
-                                            (into {} (comp (mapcat :docs)))
-                                            (cio/map-vals c/xt->crux)))
-        (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops))))))
+                          tx-log)))))))
 
-(defmethod print-method CruxNode [node ^Writer w] (.write w "#<CruxNode>"))
-(defmethod pp/simple-dispatch CruxNode [it] (print-method it *out*))
+(defmethod print-method XtdbNode [node ^Writer w] (.write w "#<XtdbNode>"))
+(defmethod pp/simple-dispatch XtdbNode [it] (print-method it *out*))
 
 (defn- swap-finished-query! [!running-queries {:keys [query-id] :as query} {:keys [bus] :as  node-opts}]
   (loop []
@@ -320,7 +320,7 @@
                                                         :default (Duration/ofMinutes 1)
                                                         :spec ::sys/duration}}}
   [opts]
-  (map->CruxNode (merge opts
+  (map->XtdbNode (merge opts
                         {:!running-queries (doto (atom {:in-progress {} :completed '()})
                                              (attach-current-query-listeners opts))
                          :closed? (atom false)

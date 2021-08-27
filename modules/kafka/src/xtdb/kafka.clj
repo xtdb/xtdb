@@ -379,19 +379,19 @@
                                                  (.setName "crux-doc-consumer")
                                                  (.start))})))
 
-(defrecord IngestOnlyDocumentStore [^KafkaProducer producer doc-topic]
+(defrecord SubmitOnlyDocumentStore [^KafkaProducer producer doc-topic]
   db/DocumentStore
   (submit-docs [this id-and-docs]
     (submit-docs id-and-docs this))
 
   (fetch-docs [this ids]
-    (throw (UnsupportedOperationException. "Can't fetch docs from ingest-only Kafka document store"))))
+    (throw (UnsupportedOperationException. "Can't fetch docs from submit-only Kafka document store"))))
 
-(defn ->ingest-only-document-store {::sys/deps {:kafka-config `->kafka-config
+(defn ->submit-only-document-store {::sys/deps {:kafka-config `->kafka-config
                                                 :doc-topic-opts {:xt/module `->topic-opts
                                                                  :topic-name "crux-docs"
                                                                  :num-partitions 1}}}
   [{:keys [kafka-config doc-topic-opts] :as opts}]
   (ensure-doc-topic-exists opts)
-  (->IngestOnlyDocumentStore (->producer {:kafka-config kafka-config})
+  (->SubmitOnlyDocumentStore (->producer {:kafka-config kafka-config})
                              (:topic-name doc-topic-opts)))

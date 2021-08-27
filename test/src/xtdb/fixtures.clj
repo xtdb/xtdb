@@ -4,7 +4,7 @@
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.io :as cio])
-  (:import xtdb.api.ICruxAPI
+  (:import xtdb.api.IXtdb
            java.nio.file.attribute.FileAttribute
            java.nio.file.Files
            [java.util ArrayList Date List UUID]))
@@ -37,7 +37,7 @@
            ~@body)))
     `(do ~@body)))
 
-(def ^:dynamic ^ICruxAPI *api*)
+(def ^:dynamic ^IXtdb *api*)
 (def ^:dynamic *opts* [])
 
 (defn with-opts
@@ -70,7 +70,7 @@
   "Helper fn for transacting entities "
   ([api entities]
    (transact! api entities (Date.)))
-  ([^ICruxAPI api entities ts]
+  ([^IXtdb api entities ts]
    (let [tx (xt/submit-tx api (maps->tx-ops entities ts))]
      (xt/await-tx api tx))
    entities))

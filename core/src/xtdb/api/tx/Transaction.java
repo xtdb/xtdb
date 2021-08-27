@@ -3,7 +3,7 @@ package xtdb.api.tx;
 import clojure.lang.IPersistentVector;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentVector;
-import xtdb.api.CruxDocument;
+import xtdb.api.XtdbDocument;
 
 import java.util.ArrayList;
 import java.util.Date;
@@ -43,7 +43,7 @@ public final class Transaction {
          * Adds a put operation to the transaction, putting the given document at validTime = now.
          * @return this
          */
-        public final Builder put(CruxDocument document) {
+        public final Builder put(XtdbDocument document) {
             return add(PutOperation.create(document));
         }
 
@@ -51,7 +51,7 @@ public final class Transaction {
          * Adds a put operation to the transaction, putting the given document starting from the given valid time
          * @return this
          */
-        public final Builder put(CruxDocument document, Date startValidTime) {
+        public final Builder put(XtdbDocument document, Date startValidTime) {
             return add(PutOperation.create(document, startValidTime));
         }
 
@@ -59,7 +59,7 @@ public final class Transaction {
          * Adds a put operation to the transaction, putting the given document starting for the given validTime range
          * @return this
          */
-        public final Builder put(CruxDocument document, Date startValidTime, Date endValidTime) {
+        public final Builder put(XtdbDocument document, Date startValidTime, Date endValidTime) {
             return add(PutOperation.create(document, startValidTime, endValidTime));
         }
 
@@ -118,7 +118,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder match(CruxDocument document) {
+        public final Builder match(XtdbDocument document) {
             return add(MatchOperation.create(document));
         }
 
@@ -140,7 +140,7 @@ public final class Transaction {
          *
          * @return this
          */
-        public final Builder match(CruxDocument document, Date atValidTime) {
+        public final Builder match(XtdbDocument document, Date atValidTime) {
             return add(MatchOperation.create(document, atValidTime));
         }
 
@@ -220,7 +220,7 @@ public final class Transaction {
                     .cons(MATCH)
                     .cons(operation.getId());
 
-            CruxDocument document = operation.getDocument();
+            XtdbDocument document = operation.getDocument();
             if (document == null) {
                 toAdd = toAdd.cons(null);
             }

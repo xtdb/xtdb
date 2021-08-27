@@ -78,9 +78,9 @@ connected to your Confluent Cloud cluster.
 [source,clj]
 ----
 (require '[xtdb.api :as xt])
-(import (xtdb.api ICruxAPI))
+(import (xtdb.api IXtdb))
 
-(def ^xtdb.api.ICruxAPI node
+(def ^xtdb.api.IXtdb node
   (xt/start-node
     {:xtdb.kafka/kafka-config {:bootstrap-servers "XXXXX.confluent.cloud:9092" ; replace with value from your properties file
                                :properties-file "/home/myuser/cc-config.properties"} ; replace with the path of your properties file

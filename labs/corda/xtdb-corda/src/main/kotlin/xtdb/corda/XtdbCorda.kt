@@ -50,9 +50,9 @@ fun NodeConfiguration.Builder.withCordaTxLog(txLogConfigurator: CordaTxLogConfig
 }
 
 @Suppress("unused")
-fun AppServiceHub.startXtdbNode(configurator: NodeConfiguration.Builder.() -> Unit = {}): ICruxAPI {
+fun AppServiceHub.startXtdbNode(configurator: NodeConfiguration.Builder.() -> Unit = {}): IXtdb {
     val hub = this
-    val node = Crux.startNode {
+    val node = IXtdb.startNode {
         it.with("xtdb.corda/service-hub") {
             it.set("xt/module", object : AFunction() {
                 override fun invoke(deps: Any) = hub
@@ -72,7 +72,7 @@ fun AppServiceHub.startXtdbNode(configurator: NodeConfiguration.Builder.() -> Un
 }
 
 @Suppress("UNCHECKED_CAST", "UNUSED")
-fun AppServiceHub.xtdbTx(xtdb: ICruxAPI, id: SecureHash): TransactionInstant? =
+fun AppServiceHub.xtdbTx(xtdb: IXtdb, id: SecureHash): TransactionInstant? =
     database.transaction {
         TransactionInstant.factory(TO_XTDB_TX(id, xtdb) as Map<Keyword, Any>?)
     }

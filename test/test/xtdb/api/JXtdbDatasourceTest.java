@@ -11,23 +11,23 @@ import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
 import static xtdb.api.tx.Transaction.buildTx;
 
-public class JCruxDatasourceTest {
-    private static List<CruxDocument> documents;
+public class JXtdbDatasourceTest {
+    private static List<XtdbDocument> documents;
     private static List<TransactionInstant> transactions;
 
     private static final Keyword pullId1 = Keyword.intern("pull1");
     private static final Keyword pullId2 = Keyword.intern("pull2");
 
-    private static final CruxDocument pullDocument1 = CruxDocument.create(pullId1).plus("foo", "foo").plus("bar", 1);
-    private static final CruxDocument pullDocument2 = CruxDocument.create(pullId2).plus("foo", "bar").plus("bar", 2);
+    private static final XtdbDocument pullDocument1 = XtdbDocument.create(pullId1).plus("foo", "foo").plus("bar", 1);
+    private static final XtdbDocument pullDocument2 = XtdbDocument.create(pullId2).plus("foo", "bar").plus("bar", 2);
 
-    private static ICruxAPI node;
+    private static IXtdb node;
 
     @BeforeClass
     public static void beforeClass() {
-        node = Crux.startNode();
+        node = IXtdb.startNode();
 
-        ArrayList<CruxDocument> _documents = new ArrayList<>();
+        ArrayList<XtdbDocument> _documents = new ArrayList<>();
         for (int i=0; i<3; i++) {
             _documents.add(testDocument(i));
         }
@@ -118,7 +118,7 @@ public class JCruxDatasourceTest {
 
     @Test
     public void pullTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         String projection = "[:xt/id :foo :bar]";
 
         Map<Keyword, ?> result = db.pull(projection, pullId1);
@@ -130,7 +130,7 @@ public class JCruxDatasourceTest {
 
     @Test
     public void pullManyIterableTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         String projection = "[:xt/id :foo :bar]";
 
         List<Map<Keyword, ?>> results = db.pullMany(projection, pullId1, pullId2);
@@ -144,7 +144,7 @@ public class JCruxDatasourceTest {
 
     @Test
     public void pullManyCollectionTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         String projection = "[:xt/id :foo :bar]";
         ArrayList<Keyword> ids = new ArrayList<>();
         ids.add(pullId1);
@@ -161,7 +161,7 @@ public class JCruxDatasourceTest {
 
     @Test
     public void entityTxTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         Map<Keyword,?> tx = db.entityTx(documentId);
 
         assertHasKeys(tx, DB_ID, CONTENT_HASH, VALID_TIME, TX_TIME, TX_ID);
@@ -188,7 +188,7 @@ public class JCruxDatasourceTest {
     @Test
     public void queryTest() {
         String query = "{:find [v] :where [[d :version v]]}";
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         Collection<List<?>> results = db.query(query);
 
         assertEquals(1, results.size());
@@ -209,7 +209,7 @@ public class JCruxDatasourceTest {
     @Test
     public void openQueryTest() {
         String query = "{:find [v] :where [[d :version v]]}";
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         ICursor<List<?>> results = db.openQuery(query);
 
         assertTrue(results.hasNext());
@@ -227,7 +227,7 @@ public class JCruxDatasourceTest {
     @Test
     public void queryWithArgTest() {
         String query = "{:find [d] :where [[d :version v]] :in [v]}";
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
 
         Collection<List<?>> results = db.query(query, 0);
         assertEquals(1, results.size());
@@ -251,7 +251,7 @@ public class JCruxDatasourceTest {
     @Test
     public void openQueryWithArgTest() {
         String query = "{:find [d] :where [[d :version v]] :in [v]}";
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
 
         ICursor<List<?>> results = db.openQuery(query, 0);
 
@@ -273,7 +273,7 @@ public class JCruxDatasourceTest {
 
     @Test
     public void entityHistoryTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         List<Map<Keyword, ?>> history = db.entityHistory(documentId, HistoryOptions.SortOrder.ASC);
         ICursor<Map<Keyword, ?>> openHistory = db.openEntityHistory(documentId, HistoryOptions.SortOrder.ASC);
 
@@ -300,7 +300,7 @@ public class JCruxDatasourceTest {
     @Test
     public void validTimeUnspecifiedTest() {
         long lowerBound = (new Date()).getTime();
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         long upperBound = (new Date()).getTime();
         long validTime = db.validTime().getTime();
 
@@ -313,14 +313,14 @@ public class JCruxDatasourceTest {
     @Test
     public void validTimeSpecifiedTest() {
         Date validTime = new Date();
-        ICruxDatasource db = node.db(validTime);
+        IXtdbDatasource db = node.db(validTime);
         assertEquals(validTime.getTime(), db.validTime().getTime());
         close(db);
     }
 
     @Test
     public void transactionTimeUnspecifiedTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         assertEquals(getLastTransactionTime(), db.transactionTime().getTime());
         close(db);
     }
@@ -328,7 +328,7 @@ public class JCruxDatasourceTest {
     @Test
     public void transactionTimeSpecifiedTest() {
         Date transactionTime = date(-50);
-        ICruxDatasource db = node.db(date(-100), transactionTime);
+        IXtdbDatasource db = node.db(date(-100), transactionTime);
         assertEquals(transactionTime.getTime(), db.transactionTime().getTime());
         close(db);
     }
@@ -336,7 +336,7 @@ public class JCruxDatasourceTest {
     @Test
     public void defaultBasisTest() {
         long lowerBound = (new Date()).getTime();
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         long upperBound = (new Date()).getTime();
 
         DBBasis basis = db.dbBasis();
@@ -358,7 +358,7 @@ public class JCruxDatasourceTest {
         Date validTime = date(-80);
         Date transactionTime = date(90);
 
-        ICruxDatasource db = node.db(validTime, transactionTime);
+        IXtdbDatasource db = node.db(validTime, transactionTime);
         DBBasis basis = db.dbBasis();
 
         assertEquals(validTime, basis.getValidTime());
@@ -367,10 +367,10 @@ public class JCruxDatasourceTest {
 
     @Test
     public void withTxTest() {
-        ICruxDatasource db = node.db();
+        IXtdbDatasource db = node.db();
         assertNotNull(db.entity(documentId));
 
-        ICruxDatasource dbWithTx = db.withTx(buildTx(tx -> {
+        IXtdbDatasource dbWithTx = db.withTx(buildTx(tx -> {
             tx.evict(documentId);
         }));
 
@@ -389,8 +389,8 @@ public class JCruxDatasourceTest {
         return last(transactions).getTime().getTime();
     }
 
-    private void checkEntity(ICruxDatasource db, int documentIndex) {
-        CruxDocument document = db.entity(documentId);
+    private void checkEntity(IXtdbDatasource db, int documentIndex) {
+        XtdbDocument document = db.entity(documentId);
         if (documentIndex >= 0) {
             assertEquals(documents.get(documentIndex), document);
         }
@@ -405,7 +405,7 @@ public class JCruxDatasourceTest {
     }
 
     private static TransactionInstant put(int documentIndex, Date validTime, Date endValidTime) {
-        CruxDocument document = documents.get(documentIndex);
+        XtdbDocument document = documents.get(documentIndex);
         return TestUtils.put(node, document, validTime, endValidTime);
     }
 }

@@ -7,7 +7,6 @@ import java.time.Duration;
 import java.util.*;
 
 import xtdb.api.tx.*;
-import xtdb.api.*;
 
 import static org.junit.Assert.*;
 
@@ -34,8 +33,8 @@ public class TestUtils {
     static final String documentId = "myDoc";
     static final String versionId = "version";
 
-    static CruxDocument testDocument(int version) {
-        CruxDocument document = CruxDocument.create(documentId);
+    static XtdbDocument testDocument(int version) {
+        XtdbDocument document = XtdbDocument.create(documentId);
         return document.plus(versionId, version);
     }
 
@@ -47,7 +46,7 @@ public class TestUtils {
         }
     }
 
-    public static void sync(ICruxAPI node) {
+    public static void sync(IXtdb node) {
         node.sync(duration);
     }
 
@@ -63,18 +62,18 @@ public class TestUtils {
         return now.getTime() - date.getTime();
     }
 
-    static TransactionInstant tx(ICruxAPI node, Transaction transaction) {
+    static TransactionInstant tx(IXtdb node, Transaction transaction) {
         return node.submitTx(transaction);
     }
 
-    static TransactionInstant tx(ICruxAPI node, TransactionOperation transactionOperation) {
+    static TransactionInstant tx(IXtdb node, TransactionOperation transactionOperation) {
         Transaction transaction = Transaction.buildTx(tx -> {
            tx.add(transactionOperation);
         });
         return tx(node, transaction);
     }
 
-    static TransactionInstant put(ICruxAPI node, CruxDocument document, Date validTime, Date endValidTime) {
+    static TransactionInstant put(IXtdb node, XtdbDocument document, Date validTime, Date endValidTime) {
         TransactionOperation txOp;
         if (endValidTime != null) {
             txOp = PutOperation.create(document, validTime, endValidTime);
@@ -89,7 +88,7 @@ public class TestUtils {
         return tx(node, txOp);
     }
 
-    static TransactionInstant delete(ICruxAPI node, Object documentId, Date validTime, Date endValidTime) {
+    static TransactionInstant delete(IXtdb node, Object documentId, Date validTime, Date endValidTime) {
         TransactionOperation txOp;
         if (endValidTime != null) {
             txOp = DeleteOperation.create(documentId, validTime, endValidTime);
@@ -131,7 +130,7 @@ public class TestUtils {
         return list.get(list.size() - 1);
     }
 
-    public static void awaitTx(ICruxAPI node, TransactionInstant tx) {
+    public static void awaitTx(IXtdb node, TransactionInstant tx) {
         node.awaitTx(tx, duration);
     }
 

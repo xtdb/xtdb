@@ -1,4 +1,4 @@
-(ns xtdb.ingest-client-test
+(ns xtdb.submit-client-test
   (:require [xtdb.fixtures :as fix]
             [xtdb.api :as xt]
             [xtdb.rocksdb :as rocks]
@@ -7,17 +7,17 @@
             [xtdb.db :as db]
             [xtdb.codec :as c]))
 
-(t/deftest test-ingest-client
+(t/deftest test-submit-client
   (fix/with-tmp-dir "db" [db-dir]
-    (let [ingest-opts {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store
+    (let [submit-opts {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store
                                               :db-dir (io/file db-dir "tx-log")}}
                        :xt/document-store {:kv-store {:xt/module `rocks/->kv-store
                                                       :db-dir (io/file db-dir "doc-store")}}}
 
           submitted-tx
-          (with-open [ingest-client (xt/new-ingest-client ingest-opts)]
-            (let [submitted-tx (xt/submit-tx ingest-client [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
-              (with-open [tx-log-iterator (db/open-tx-log (:tx-log ingest-client) nil)]
+          (with-open [submit-client (xt/new-submit-client submit-opts)]
+            (let [submitted-tx (xt/submit-tx submit-client [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+              (with-open [tx-log-iterator (db/open-tx-log (:tx-log submit-client) nil)]
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))
                   (t/is (= [(assoc submitted-tx
@@ -26,10 +26,10 @@
                   (t/is (realized? result))))
               submitted-tx))]
 
-      (with-open [node (xt/start-node (merge ingest-opts
-                                               {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
+      (with-open [node (xt/start-node (merge submit-opts
+                                             {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
         (xt/await-tx node submitted-tx)
         (t/is (true? (xt/tx-committed? node submitted-tx)))
         (t/is (= #{[:ivan]} (xt/q (xt/db node)
-                                    '{:find [e]
-                                      :where [[e :name "Ivan"]]})))))))
+                                  '{:find [e]
+                                    :where [[e :name "Ivan"]]})))))))

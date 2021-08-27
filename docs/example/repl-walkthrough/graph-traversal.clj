@@ -4,7 +4,7 @@
 (ns walkthrough.graph-traversal
   (:require [xtdb.api :as xt]
             [clojure.pprint :as pp])
-  (:import (xtdb.api ICruxAPI)))
+  (:import (xtdb.api IXtdb)))
 
 ;; inspired by http://docs.neo4j.org/chunked/stable/cypher-cookbook-hyperedges.html and https://github.com/Datomic/day-of-datomic/blob/master/tutorial/graph.clj
 

@@ -6,7 +6,7 @@
             [xtdb.codec :as c]
             [xtdb.io :as cio]
             [xtdb.system :as sys])
-  (:import [xtdb.api Crux RemoteClientOptions]
+  (:import [xtdb.api IXtdb IXtdbSubmitClient RemoteClientOptions]
            java.lang.AutoCloseable
            java.time.Duration
            [java.util Date Map]
@@ -22,8 +22,8 @@
          :args (s/coll-of symbol? :kind vector? :min-count 1)
          :body (s/* any?)))
 
-(defprotocol PCruxNode
-  "Provides API access to Crux."
+(defprotocol PXtdb
+  "Provides API access to XTDB."
   (status [node]
     "Returns the status of this node as a map.")
 
@@ -62,7 +62,7 @@
   node.")
 
   (listen ^java.lang.AutoCloseable [node event-opts f]
-    "Attaches a listener to Crux's event bus.
+    "Attaches a listener to XTDB's event bus.
 
   `event-opts` should contain `:xt/event-type`, along with any other options the event-type requires.
 
@@ -91,8 +91,14 @@
   (slowest-queries [node]
     "Returns a list of slowest completed/failed queries ran on the node"))
 
-(defprotocol PCruxIngestClient
-  "Provides API access to Crux ingestion."
+(defprotocol PXtdbSubmitClient
+  "Provides API access to XTDB transaction submission."
+  (submit-tx-async [node tx-ops]
+    "Writes transactions to the log for processing tx-ops datalog
+  style transactions. Non-blocking.  Returns a deref with map with
+  details about the submitted transaction, including tx-time and
+  tx-id.")
+
   (submit-tx [node tx-ops]
     "Writes transactions to the log for processing
   tx-ops datalog style transactions.
@@ -103,14 +109,14 @@
     "Reads the transaction log. Optionally includes
   operations, which allow the contents under the :xt/tx-ops
   key to be piped into (submit-tx tx-ops) of another
-  Crux instance.
+  XTDB instance.
 
   after-tx-id      optional transaction id to start after.
   with-ops?       should the operations with documents be included?
 
   Returns an iterator of the TxLog"))
 
-(defprotocol PCruxDatasource
+(defprotocol PXtdbDatasource
   "Represents the database as of a specific valid and
   transaction time."
 
@@ -125,13 +131,13 @@
   eid is an object that can be coerced into an entity id.")
 
   (q* [db query args]
-    "q[uery] a Crux db.
+    "q[uery] an XTDB db.
   query param is a datalog query in map, vector or string form.
   This function will return a set of result tuples if you do not specify `:order-by`, `:limit` or `:offset`;
   otherwise, it will return a vector of result tuples.")
 
   (open-q* ^xtdb.api.ICursor [db query args]
-    "lazily q[uery] a Crux db.
+    "lazily q[uery] an XTDB db.
   query param is a datalog query in map, vector or string form.
 
   This function returns a Cursor of result tuples - once you've consumed
@@ -139,7 +145,7 @@
   A common way to do this is using `with-open`:
 
   (with-open [res (xt/open-q db '{:find [...]
-                                    :where [...]})]
+                                  :where [...]})]
     (doseq [row (iterator-seq res)]
       ...))
 
@@ -207,14 +213,6 @@
   The tx-ops will only be visible in the value returned from this function - they're not submitted to the cluster, nor are they visible to any other database value in your application.
   If the transaction doesn't commit (eg because of a failed 'match'), this function returns nil."))
 
-(defprotocol PCruxAsyncIngestClient
-  "Provides API access to Crux async ingestion."
-  (submit-tx-async [node tx-ops]
-    "Writes transactions to the log for processing tx-ops datalog
-  style transactions. Non-blocking.  Returns a deref with map with
-  details about the submitted transaction, including tx-time and
-  tx-id."))
-
 (defn start-node
   "NOTE: requires any dependencies on the classpath that the Crux modules may need.
 
@@ -222,7 +220,7 @@
 
   See https://opencrux.com/reference/configuration.html for details.
 
-  Returns a node which implements: DBProvider, PCruxNode, PCruxIngestClient, PCruxAsyncIngestClient and java.io.Closeable.
+  Returns a node which implements: DBProvider, PXtdb, PXtdbSubmitClient and java.io.Closeable.
 
   Latter allows the node to be stopped by calling `(.close node)`.
 
@@ -255,7 +253,7 @@
 (defn new-api-client
   "Creates a new remote API client.
 
-  This implements: DBProvider, PCruxNode, PCruxIngestClient and java.io.Closeable.
+  This implements: DBProvider, PXtdb, PXtdbSubmitClient and java.io.Closeable.
 
   The remote client requires valid and transaction time to be specified for all calls to `db`.
 
@@ -267,18 +265,18 @@
 
   returns a remote API client."
   (^java.io.Closeable [url]
-   (:node (Crux/newApiClient url)))
+   (:node (IXtdb/newApiClient url)))
   (^java.io.Closeable [url opts]
-   (:node (Crux/newApiClient url (->RemoteClientOptions opts)))))
+   (:node (IXtdb/newApiClient url (->RemoteClientOptions opts)))))
 
-(defn new-ingest-client
-  "Starts an ingest client for transacting into Crux without running a full local node with index.
+(defn new-submit-client
+  "Starts a submit client for transacting into Crux without running a full local node with index.
   Accepts a map, or a JSON/EDN file or classpath resource.
   See https://opencrux.com/reference/configuration.html for details.
-  Returns a component that implements java.io.Closeable, PCruxIngestClient and PCruxAsyncIngestClient.
+  Returns a component that implements java.io.Closeable and PXtdbSubmitClient.
   Latter allows the node to be stopped by calling `(.close node)`."
   ^java.io.Closeable [options]
-  (:client (Crux/newIngestClient ^Map options)))
+  (:client (IXtdbSubmitClient/newSubmitClient ^Map options)))
 
 (defn conform-tx-ops [tx-ops]
   (->> tx-ops

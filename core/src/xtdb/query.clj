@@ -1770,7 +1770,7 @@
     (when index-snapshot
       (.close ^Closeable index-snapshot)))
 
-  xt/PCruxDatasource
+  xt/PXtdbDatasource
   (entity [this eid]
     (with-open [index-snapshot (open-index-snapshot this)]
       (entity this index-snapshot eid)))

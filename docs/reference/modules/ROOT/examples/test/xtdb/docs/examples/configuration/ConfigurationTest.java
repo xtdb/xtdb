@@ -8,8 +8,7 @@ import java.net.URL;
 import java.net.URISyntaxException;
 
 // tag::import[]
-import xtdb.api.Crux;
-import xtdb.api.ICruxAPI;
+import xtdb.api.IXtdb;
 // end::import[]
 
 public class ConfigurationTest {
@@ -17,10 +16,10 @@ public class ConfigurationTest {
     @Test
     public void fromFile() {
         // tag::from-file[]
-        ICruxAPI cruxNode = Crux.startNode(new File("resources/config.json"));
+        IXtdb xtdbNode = IXtdb.startNode(new File("resources/config.json"));
         // end::from-file[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
     @Test
@@ -34,40 +33,40 @@ public class ConfigurationTest {
             fail();
         }
         // tag::from-resource[]
-        ICruxAPI cruxNode = Crux.startNode(MyApp.class.getResource("config.json"));
+        IXtdb xtdbNode = IXtdb.startNode(MyApp.class.getResource("config.json"));
         // end::from-resource[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
     @Test
     public void withConfigurator() {
         // tag::from-configurator[]
-        ICruxAPI cruxNode = Crux.startNode(n -> {
+        IXtdb xtdbNode = IXtdb.startNode(n -> {
             // ...
         });
         // end::from-configurator[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
     @Test
     public void httpServer() {
         // tag::http-server[]
-        ICruxAPI cruxNode = Crux.startNode(n -> {
+        IXtdb xtdbNode = IXtdb.startNode(n -> {
             n.with("xtdb.http-server/server", http -> {
                 http.set("port", 3000);
             });
         });
         // end::http-server[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
     // Not testing this one as it requires real information
     public void overrideModuleImplementation() {
         // tag::override-module[]
-        ICruxAPI cruxNode = Crux.startNode(n -> {
+        IXtdb xtdbNode = IXtdb.startNode(n -> {
             n.with("xt/document-store", docStore -> {
                 docStore.module("xtdb.s3/->document-store");
                 docStore.set("bucket", "my-bucket");
@@ -76,13 +75,13 @@ public class ConfigurationTest {
         });
         // end::override-module[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
     @Test
     public void nestedModules() {
         // tag::nested-modules-0[]
-        ICruxAPI cruxNode = Crux.startNode(n -> {
+        IXtdb xtdbNode = IXtdb.startNode(n -> {
             n.with("xt/tx-log", txLog -> {
                 txLog.with("kv-store", kv -> {
                     kv.module("xtdb.rocksdb/->kv-store");
@@ -101,13 +100,13 @@ public class ConfigurationTest {
         });
         // end::nested-modules-2[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
     @Test
     public void sharingModules() {
         // tag::sharing-modules[]
-        ICruxAPI cruxNode = Crux.startNode(n -> {
+        IXtdb xtdbNode = IXtdb.startNode(n -> {
             n.with("my-rocksdb", rocks -> {
                 rocks.module("xtdb.rocksdb/->kv-store");
                 rocks.set("db-dir", new File("/tmp/rocksdb"));
@@ -121,12 +120,12 @@ public class ConfigurationTest {
         });
         // end::sharing-modules[]
 
-        close(cruxNode);
+        close(xtdbNode);
     }
 
-    private void close(ICruxAPI cruxNode) {
+    private void close(IXtdb xtdbNode) {
         try {
-            cruxNode.close();
+            xtdbNode.close();
         }
         catch (IOException e) {
             fail();

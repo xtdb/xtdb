@@ -2,16 +2,16 @@
   (:refer-clojure :exclude [sync])
   (:require [xtdb.api :as xt])
   (:import clojure.lang.IDeref
-           [xtdb.api CruxDocument DBBasis ICruxAPI ICruxAsyncIngestAPI ICruxDatasource TransactionInstant]
+           [xtdb.api XtdbDocument DBBasis IXtdb IXtdbSubmitClient IXtdbDatasource TransactionInstant]
            xtdb.api.tx.Transaction
            java.time.Duration
            [java.util Date List Map]
            java.util.concurrent.CompletableFuture
            java.util.function.Supplier))
 
-(defrecord JCruxDatasource [^java.io.Closeable datasource]
-  ICruxDatasource
-  (entity [_ eid] (CruxDocument/factory (xt/entity datasource eid)))
+(defrecord JXtdbDatasource [^java.io.Closeable datasource]
+  IXtdbDatasource
+  (entity [_ eid] (XtdbDocument/factory (xt/entity datasource eid)))
   (entityTx [_ eid] (xt/entity-tx datasource eid))
   (query [_ query args] (xt/q* datasource query args))
   (openQuery [_ query args] (xt/open-q* datasource query args))
@@ -23,25 +23,25 @@
   (validTime [_] (xt/valid-time datasource))
   (transactionTime [_] (xt/transaction-time datasource))
   (dbBasis [_] (DBBasis/factory (xt/db-basis datasource)))
-  (^ICruxDatasource withTx [_ ^Transaction tx] (->JCruxDatasource (xt/with-tx datasource (.toVector tx))))
-  (^ICruxDatasource withTx [_ ^List tx-ops] (->JCruxDatasource (xt/with-tx datasource tx-ops)))
+  (^IXtdbDatasource withTx [_ ^Transaction tx] (->JXtdbDatasource (xt/with-tx datasource (.toVector tx))))
+  (^IXtdbDatasource withTx [_ ^List tx-ops] (->JXtdbDatasource (xt/with-tx datasource tx-ops)))
   (close [_] (.close datasource)))
 
-(defrecord JCruxNode [^java.io.Closeable node]
-  ICruxAPI
-  (^ICruxDatasource db [_] (->JCruxDatasource (xt/db node)))
-  (^ICruxDatasource db [_ ^Date valid-time] (->JCruxDatasource (xt/db node valid-time)))
-  (^ICruxDatasource db [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (xt/db node valid-time tx-time)))
-  (^ICruxDatasource db [_ ^DBBasis basis] (->JCruxDatasource (xt/db node (.toMap basis))))
-  (^ICruxDatasource db [_ ^TransactionInstant tx-instant] (->JCruxDatasource (xt/db node (.toMap tx-instant))))
-  (^ICruxDatasource db [_ ^Map db-basis] (->JCruxDatasource (xt/db node db-basis)))
+(defrecord JXtdbNode [^java.io.Closeable node]
+  IXtdb
+  (^IXtdbDatasource db [_] (->JXtdbDatasource (xt/db node)))
+  (^IXtdbDatasource db [_ ^Date valid-time] (->JXtdbDatasource (xt/db node valid-time)))
+  (^IXtdbDatasource db [_ ^Date valid-time ^Date tx-time] (->JXtdbDatasource (xt/db node valid-time tx-time)))
+  (^IXtdbDatasource db [_ ^DBBasis basis] (->JXtdbDatasource (xt/db node (.toMap basis))))
+  (^IXtdbDatasource db [_ ^TransactionInstant tx-instant] (->JXtdbDatasource (xt/db node (.toMap tx-instant))))
+  (^IXtdbDatasource db [_ ^Map db-basis] (->JXtdbDatasource (xt/db node db-basis)))
 
-  (^ICruxDatasource openDB [_] (->JCruxDatasource (xt/open-db node)))
-  (^ICruxDatasource openDB [_ ^Date valid-time] (->JCruxDatasource (xt/open-db node valid-time)))
-  (^ICruxDatasource openDB [_ ^Date valid-time ^Date tx-time] (->JCruxDatasource (xt/open-db node valid-time tx-time)))
-  (^ICruxDatasource openDB [_ ^DBBasis basis] (->JCruxDatasource (xt/open-db node (.toMap basis))))
-  (^ICruxDatasource openDB [_ ^Map basis] (->JCruxDatasource (xt/open-db node basis)))
-  (^ICruxDatasource openDB [_ ^TransactionInstant tx-instant] (->JCruxDatasource (xt/open-db node (.toMap tx-instant))))
+  (^IXtdbDatasource openDB [_] (->JXtdbDatasource (xt/open-db node)))
+  (^IXtdbDatasource openDB [_ ^Date valid-time] (->JXtdbDatasource (xt/open-db node valid-time)))
+  (^IXtdbDatasource openDB [_ ^Date valid-time ^Date tx-time] (->JXtdbDatasource (xt/open-db node valid-time tx-time)))
+  (^IXtdbDatasource openDB [_ ^DBBasis basis] (->JXtdbDatasource (xt/open-db node (.toMap basis))))
+  (^IXtdbDatasource openDB [_ ^Map basis] (->JXtdbDatasource (xt/open-db node basis)))
+  (^IXtdbDatasource openDB [_ ^TransactionInstant tx-instant] (->JXtdbDatasource (xt/open-db node (.toMap tx-instant))))
 
   (status [_] (xt/status node))
   (attributeStats [_] (xt/attribute-stats node))
@@ -67,8 +67,8 @@
   (slowestQueries [_] (xt/slowest-queries node))
   (close [_] (.close node)))
 
-(defrecord JCruxIngestClient [^java.io.Closeable client]
-  ICruxAsyncIngestAPI
+(defrecord JXtdbSubmitClient [^java.io.Closeable client]
+  IXtdbSubmitClient
   (^TransactionInstant submitTx [_ ^Transaction tx] (TransactionInstant/factory ^Map (xt/submit-tx client (.toVector tx))))
   (^Map submitTx [_ ^List tx] (xt/submit-tx client tx))
 

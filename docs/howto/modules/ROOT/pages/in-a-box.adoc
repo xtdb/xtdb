@@ -126,11 +126,11 @@ package cruxinabox;
 import java.io.File;
 import java.io.IOException;
 import xtdb.api.Crux;
-import xtdb.api.ICruxAPI;
+import xtdb.api.IXtdb;
 
 class Box {
     public static void main(String[] args) {
-        try(ICruxAPI cruxNode = Crux.startNode(new File("config.json"))) {
+        try(IXtdb xtdbNode = IXtdb.startNode(new File("config.json"))) {
             System.out.println("Crux Started.");
         }
         catch (IOException e) {
@@ -202,16 +202,16 @@ Java::
 import java.util.HashMap;
 import java.util.List;
 
-import xtdb.api.ICruxDatasource;
+import xtdb.api.IXtdbDatasource;
 import xtdb.api.ICursor;
-import xtdb.api.CruxDocument;
+import xtdb.api.XtdbDocument;
 import xtdb.api.TransactionInstant;
 import xtdb.api.tx.Transaction;
 
 /* submitTx example: */
 HashMap<String, Object> data = new HashMap<>();
 data.put("user/name", "zig");
-CruxDocument document = CruxDocument.create("hi2u", data);
+XtdbDocument document = XtdbDocument.create("hi2u", data);
 TransactionInstant transaction = node.submitTx(Transaction.buildTx(tx -> {
     tx.put(document);
 }));
@@ -220,7 +220,7 @@ System.out.println(data.toString());
 /* query example: */
 node.awaitTx(transaction, null);
 String query = "{:find [e] :where [[e :user/name \"zig\"]]}";
-ICruxDatasource db = node.db();
+IXtdbDatasource db = node.db();
 ICursor<List<?>> results = db.openQuery(query);
 if (results.hasNext()) {
     List<?> result = results.next();

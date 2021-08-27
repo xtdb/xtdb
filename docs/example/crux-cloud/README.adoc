@@ -43,9 +43,9 @@ code to connect to your cluster and make a transaction:
 [source,clojure]
 ----
 (require '[xtdb.api :as xt])
-(import (xtdb.api ICruxAPI))
+(import (xtdb.api IXtdb))
 
-(def ^xtdb.api.ICruxAPI node
+(def ^xtdb.api.IXtdb node
   (xt/start-node
    {:xtdb.kafka/kafka-config {:bootstrap-servers "" ; the `bootstrap.servers` value found in your generated properties file
                               :kafka-properties-file "path/to/my-kafka.properties"}

@@ -153,7 +153,7 @@ EDN::
 ----
 ====
 
-If you do not want the local node to index transactions, you can use the xref:ingest-only-doc-store[`+xtdb.kafka/->ingest-only-document-store+`] module.
+If you do not want the local node to index transactions, you can use the xref:submit-only-doc-store[`+xtdb.kafka/->submit-only-document-store+`] module.
 
 ==== Sharing the local KV store
 
@@ -305,8 +305,8 @@ EDN::
 * `poll-wait-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to wait on each Kafka poll.
 * `poll-sleep-duration` (string/`Duration`, default 1 second, `"PT1S"`): time to sleep between each poll, if the previous poll didn't yield any transactions.
 
-[#ingest-only-doc-store]
-=== Ingest-only document store (`+xtdb.kafka/->ingest-only-document-store+`)
+[#submit-only-doc-store]
+=== Submit-only document store (`+xtdb.kafka/->submit-only-document-store+`)
 
 * `kafka-config` (connection config)
 * `tx-topic-opts` (topic options)

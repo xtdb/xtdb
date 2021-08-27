@@ -7,9 +7,6 @@ import java.util.List;
 import java.util.Map;
 import clojure.java.api.Clojure;
 import clojure.lang.IFn;
-import clojure.lang.Keyword;
-import xtdb.api.Crux;
-import xtdb.api.ICruxAPI;
 
 import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.connect.source.SourceTask;

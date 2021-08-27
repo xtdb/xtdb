@@ -11,7 +11,7 @@
             [xtdb.kafka.embedded :as ek]
             [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io])
-  (:import (xtdb.api ICruxAPI)
+  (:import (xtdb.api IXtdb)
            java.io.Closeable
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory))
@@ -41,7 +41,7 @@
 (defmethod i/init-key ::crux [_ {:keys [node-opts]}]
   (xt/start-node node-opts))
 
-(defmethod i/halt-key! ::crux [_ ^ICruxAPI node]
+(defmethod i/halt-key! ::crux [_ ^IXtdb node]
   (.close node))
 
 (def standalone-config
