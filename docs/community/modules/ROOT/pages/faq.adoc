@@ -56,7 +56,7 @@ If you are writing acceptance, integration, or end-to-end tests which require an
 A uniqueness constraint can be handled 3 ways:
 
 . Encode the unique value in the ID (e.g. store the value(s) in a string ID, or use a map ID) of an entity representing that value, with a reference to the other entity that currently "owns" the value.
-. Use :xt/match, however this takes time to confirm successful assertions and when there is contention you need to implement retry logic at each client.
+. Use ::xt/match, however this takes time to confirm successful assertions and when there is contention you need to implement retry logic at each client.
 . Use a xref:reference::transactions#transaction-functions[transaction function]. This is slower still, though at least avoids the need to worry about contention & retrying. You can also express very complex constraints in these functions.
 
 
@@ -80,7 +80,7 @@ new identifiers), many users choose UUIDs, like so:
 
 [source,clojure]
 ----
-[[:xt/put
+[[::xt/put
   {:xt/id (java.util.UUID/randomUUID)
    :product/sku "KS93528TUT"}]]
 ----
@@ -95,7 +95,7 @@ like this:
 
 [source,clojure]
 ----
-[[:xt/put
+[[::xt/put
   {:xt/id (java.util.UUID/randomUUID)
    :user/username "satoshi"
    :user/full-name "Satoshi Nakamoto"
@@ -116,7 +116,7 @@ convenience:
 
 [source,clojure]
 ----
-[[:xt/put
+[[::xt/put
   {:xt/id (java.util.UUID/randomUUID)
    :my.custom.ns/type :user
    :user/name "satoshi"}]]
@@ -124,7 +124,7 @@ convenience:
 
 
 [#matchsemantics]
-== Does `:xt/match` see other operations within its transaction?
+== Does `::xt/match` see other operations within its transaction?
 
 Yes. Just as one would expect from SQL transactions, operations performed within the
 scope of the transaction are seen by other operations within the transaction. What
@@ -136,12 +136,12 @@ not match, due to the `put` operation immediately preceding it:
 (with-open [node (xt/start-node {})]
   (xt/submit-tx
     node
-    [[:xt/put {:xt/id :a, :a "a"}]])
+    [[::xt/put {:xt/id :a, :a "a"}]])
   (xt/submit-tx
     node
     ; This won't match. Either the match should come first or it should match :a "b"
-    [[:xt/put {:xt/id :a, :a "b"}]
-     [:xt/match :a {:xt/id :a, :a "a"}]])
+    [[::xt/put {:xt/id :a, :a "b"}]
+     [::xt/match :a {:xt/id :a, :a "a"}]])
   (xt/sync node)
   (xt/entity (xt/db node) :a)) ; {:xt/id :a, :a "a"}
 ----
@@ -341,7 +341,7 @@ by providing the transaction details from the transaction log (returned from
 `xtdb.api/submit-tx`), in a call to `xtdb.api/await-tx`. This will block until
 this transaction time has been seen by the cluster node.
 +
-Write consistency across nodes is provided via the `:xt/match` operation.
+Write consistency across nodes is provided via the `::xt/match` operation.
 The user needs to include a match operation in their transaction, wait for the transaction time (as above), and check that the transaction committed.
 More advanced algorithms can be built on top of this.
 As mentioned above, all match operations in a transaction must pass for the transaction to proceed and get indexed, which enables one to enforce consistency across documents.

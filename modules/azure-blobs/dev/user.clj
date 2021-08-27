@@ -39,7 +39,7 @@
   (xt/await-tx node
                  (xt/submit-tx node
                                  (vec (for [doc docs]
-                                        [:xt/put doc])))))
+                                        [::xt/put doc])))))
 
 (defn ingest-query-entity []
   (with-open [node (start-node)]

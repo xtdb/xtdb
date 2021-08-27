@@ -1021,7 +1021,7 @@
                                 (into {} (map (fn [[ch eid]]
                                                 (MapEntry/create ch
                                                                  {:xt/id (c/new-id eid)
-                                                                  :xt/evicted? true})))))
+                                                                  ::xt/evicted? true})))))
                 content-ks (->> (for [[_ eid-buf ecav-key ^Quad quad] ecav-ks
                                       :let [attr-buf (c/->id-buffer (.attr quad))
                                             value-buf ^DirectBuffer (.value quad)

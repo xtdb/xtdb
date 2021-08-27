@@ -1,6 +1,6 @@
 (ns xtdb.lucene.extension-test
   (:require  [clojure.test :as t]
-             [xtdb.api :as c]
+             [xtdb.api :as xt]
              [xtdb.codec :as cc]
              [xtdb.system :as sys]
              [xtdb.fixtures :as fix :refer [*api* submit+await-tx]]
@@ -21,54 +21,54 @@
 (t/use-fixtures :each (fix/with-opts {::l/lucene-store {}}) fix/with-node)
 
 (t/deftest test-multiple-lucene-stores
-  (with-open [node (c/start-node {:eav {:xtdb/module 'xtdb.lucene/->lucene-store
-                                        :analyzer 'xtdb.lucene/->analyzer
-                                        :indexer 'xtdb.lucene/->indexer}
-                                  :multi {:xtdb/module 'xtdb.lucene/->lucene-store
-                                          :analyzer 'xtdb.lucene/->analyzer
-                                          :indexer 'xtdb.lucene.multi-field/->indexer}})]
-    (submit+await-tx node [[:xt/put {:xt/id :ivan
-                                     :firstname "Fred"
-                                     :surname "Smith"}]])
-    (with-open [db (c/open-db node)]
-      (t/is (seq (c/q db '{:find [?e]
-                           :where [[(text-search :firstname "Fre*" {:lucene-store-k :eav}) [[?e]]]
-                                   [(lucene-text-search "firstname:%s AND surname:%s" "Fred" "Smith" {:lucene-store-k :multi}) [[?e]]]]}))))))
+  (with-open [node (xt/start-node {:eav {:xtdb/module 'xtdb.lucene/->lucene-store
+                                         :analyzer 'xtdb.lucene/->analyzer
+                                         :indexer 'xtdb.lucene/->indexer}
+                                   :multi {:xtdb/module 'xtdb.lucene/->lucene-store
+                                           :analyzer 'xtdb.lucene/->analyzer
+                                           :indexer 'xtdb.lucene.multi-field/->indexer}})]
+    (submit+await-tx node [[::xt/put {:xt/id :ivan
+                                      :firstname "Fred"
+                                      :surname "Smith"}]])
+    (with-open [db (xt/open-db node)]
+      (t/is (seq (xt/q db '{:find [?e]
+                            :where [[(text-search :firstname "Fre*" {:lucene-store-k :eav}) [[?e]]]
+                                    [(lucene-text-search "firstname:%s AND surname:%s" "Fred" "Smith" {:lucene-store-k :multi}) [[?e]]]]}))))))
 
 (t/deftest test-userspace-text-search-limit
-  (submit+await-tx (for [n (range 10)] [:xt/put {:xt/id n, :description (str "Entity " n)}]))
-  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id n, :description (str "Entity v2 " n)}]))
-  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id (+ n 4), :description (str "Entity v2 " n)}]))
+  (submit+await-tx (for [n (range 10)] [::xt/put {:xt/id n, :description (str "Entity " n)}]))
+  (submit+await-tx (for [n (range 4)] [::xt/put {:xt/id n, :description (str "Entity v2 " n)}]))
+  (submit+await-tx (for [n (range 4)] [::xt/put {:xt/id (+ n 4), :description (str "Entity v2 " n)}]))
 
-  (with-open [db (c/open-db *api*)]
+  (with-open [db (xt/open-db *api*)]
     (with-open [s (l/search *api* "Entity*" {:default-field (name :description)})]
       (t/is (= 5 (count (->> (iterator-seq s)
                              (map (fn doc->rel [[^Document doc score]]
                                     [(.get ^Document doc l/field-xt-val) score]))
                              (distinct) ;; rely on the later resolve step to find all the entities sharing a given AV
                              (mapcat (fn resolve-atemporal-av [[v s]]
-                                       (c/q db {:find '[e v s]
-                                                :in '[v s]
-                                                :where [['e :description 'v]]}
-                                            v s)))
+                                       (xt/q db {:find '[e v s]
+                                                 :in '[v s]
+                                                 :where [['e :description 'v]]}
+                                             v s)))
                              (take 5))))))))
 
 (t/deftest test-userspace-wildcard-text-search-limit
-  (submit+await-tx (for [n (range 10)] [:xt/put {:xt/id n, :description (str "Entity " n) :foo (str "Entitybar" n)}]))
-  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id n, :description (str "Entity v2 " n) :foo (str "Entitybaz" n)}]))
-  (submit+await-tx (for [n (range 4)] [:xt/put {:xt/id (+ n 4), :description (str "Entity v2 " n) :foo (str "Entityqaz" n)}]))
+  (submit+await-tx (for [n (range 10)] [::xt/put {:xt/id n, :description (str "Entity " n) :foo (str "Entitybar" n)}]))
+  (submit+await-tx (for [n (range 4)] [::xt/put {:xt/id n, :description (str "Entity v2 " n) :foo (str "Entitybaz" n)}]))
+  (submit+await-tx (for [n (range 4)] [::xt/put {:xt/id (+ n 4), :description (str "Entity v2 " n) :foo (str "Entityqaz" n)}]))
 
-  (with-open [db (c/open-db *api*)]
+  (with-open [db (xt/open-db *api*)]
     (with-open [s (l/search *api* "Entity*" {})]
       (t/is (= 5 (count (->> (iterator-seq s)
                              (map (fn doc->rel [[^Document doc score]]
                                     [(.get ^Document doc l/field-xt-attr) (.get ^Document doc l/field-xt-val) score]))
                              (distinct) ;; rely on the later resolve step to find all the entities sharing a given AV
                              (mapcat (fn resolve-atemporal-av [[a v s]]
-                                       (c/q db {:find '[e a v s]
-                                                :in '[a v s]
-                                                :where [['e (keyword a) 'v]]}
-                                            (keyword a) v s)))
+                                       (xt/q db {:find '[e a v s]
+                                                 :in '[a v s]
+                                                 :where [['e (keyword a) 'v]]}
+                                             (keyword a) v s)))
                              (take 5))))))))
 
 ;;; Egeria Connector use-case, derived from https://github.com/odpi/egeria-connector-crux/
@@ -143,10 +143,10 @@
           (map (fn doc->rel [[^Document doc score]]
                  [(.get ^Document doc l/field-xt-val) score]))
           (mapcat (fn resolve-atemporal-av [[v s]]
-                    (c/q db {:find '[e v s]
-                             :in '[v s]
-                             :where [['e attr 'v]]}
-                         v s)))
+                    (xt/q db {:find '[e v s]
+                              :in '[v s]
+                              :where [['e attr 'v]]}
+                          v s)))
           (into [])))))
 
 (defn custom-wildcard-text-search
@@ -161,19 +161,19 @@
                  [(.get ^Document doc l/field-xt-attr) (.get ^Document doc l/field-xt-val) score]))
           (mapcat (fn resolve-atemporal-av [[a v s]]
                     (let [a (keyword a)]
-                      (c/q db {:find '[e a v s]
-                               :in '[a v s]
-                               :where [['e a 'v]]}
-                           a v s))))
+                      (xt/q db {:find '[e a v s]
+                                :in '[a v s]
+                                :where [['e a 'v]]}
+                            a v s))))
           (into [])))))
 
 (t/deftest test-custom-index-and-analyzer
-  (with-open [node (c/start-node {:xtdb.lucene/lucene-store {:analyzer 'xtdb.lucene.extension-test/->per-field-analyzer
-                                                             :indexer 'xtdb.lucene.extension-test/->custom-eav-indexer}})]
-    (submit+await-tx node [[:xt/put {:xt/id 0, :description "Some Entity"}]
-                           [:xt/put {:xt/id 1, :description "Another entity"}]])
+  (with-open [node (xt/start-node {:xtdb.lucene/lucene-store {:analyzer 'xtdb.lucene.extension-test/->per-field-analyzer
+                                                              :indexer 'xtdb.lucene.extension-test/->custom-eav-indexer}})]
+    (submit+await-tx node [[::xt/put {:xt/id 0, :description "Some Entity"}]
+                           [::xt/put {:xt/id 1, :description "Another entity"}]])
 
-    (let [db (c/db node)]
+    (let [db (xt/db node)]
       ;; text-search + leading-wildcard
       (t/is (= [[0 "Some Entity" 2.0]
                 [1 "Another entity" 1.0]]
@@ -238,18 +238,18 @@
             (.addTokenFilter ^String LowerCaseFilterFactory/NAME ^"[Ljava.lang.String;" (into-array String [])))))
 
 (t/deftest test-example-use-case
-  (with-open [node (c/start-node {:xtdb.lucene/lucene-store {:analyzer 'xtdb.lucene.extension-test/->example-analyzer
-                                                             :indexer 'xtdb.lucene.extension-test/->example-eav-indexer}})]
-    (submit+await-tx node [[:xt/put {:xt/id "SKU-32934"
-                                     :product/title "Brown Summer Hat"
-                                     :product/description "This large and comfortable woven hat will keep you cool in the summer"}]
-                           [:xt/put {:xt/id "SKU-93921"
-                                     :product/title "Yellow Raincoat"
-                                     :product/description "Light and bright - a yellow raincoat to keep you dry all year round"}]
-                           [:xt/put {:xt/id "SKU-13892"
-                                     :product/title "Large Umbrella"
-                                     :product/description "Don't let rain get in the way of your day!"}]])
-    (let [db (c/db node)]
+  (with-open [node (xt/start-node {:xtdb.lucene/lucene-store {:analyzer 'xtdb.lucene.extension-test/->example-analyzer
+                                                              :indexer 'xtdb.lucene.extension-test/->example-eav-indexer}})]
+    (submit+await-tx node [[::xt/put {:xt/id "SKU-32934"
+                                      :product/title "Brown Summer Hat"
+                                      :product/description "This large and comfortable woven hat will keep you cool in the summer"}]
+                           [::xt/put {:xt/id "SKU-93921"
+                                      :product/title "Yellow Raincoat"
+                                      :product/description "Light and bright - a yellow raincoat to keep you dry all year round"}]
+                           [::xt/put {:xt/id "SKU-13892"
+                                      :product/title "Large Umbrella"
+                                      :product/description "Don't let rain get in the way of your day!"}]])
+    (let [db (xt/db node)]
       ;; text-search + leading-wildcard
       (t/is (= [["SKU-32934" "Brown Summer Hat" 1.0]]
                (let [a :product/title]

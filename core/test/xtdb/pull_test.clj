@@ -9,7 +9,7 @@
 
 (defn- submit-bond []
   (fix/submit+await-tx (for [doc (read-string (slurp (io/resource "data/james-bond.edn")))]
-                         [:xt/put doc]))
+                         [::xt/put doc]))
   (xt/db *api*))
 
 (def ->lookup-docs
@@ -168,12 +168,12 @@
           (t/is (= [3] @!lookup-counts) "batching lookups"))))))
 
 (t/deftest test-union
-  (fix/submit+await-tx [[:xt/put {:xt/id :foo
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo
                                        :type :a
                                        :x 2
                                        :y "this"
                                        :z :not-this}]
-                        [:xt/put {:xt/id :bar
+                        [::xt/put {:xt/id :bar
                                        :type :b
                                        :y "not this"
                                        :z 5}]])
@@ -186,18 +186,18 @@
                      :where [[?it :xt/id]]}))))
 
 (t/deftest test-recursive
-  (fix/submit+await-tx [[:xt/put {:xt/id :root}]
-                        [:xt/put {:xt/id :a
+  (fix/submit+await-tx [[::xt/put {:xt/id :root}]
+                        [::xt/put {:xt/id :a
                                        :parent :root}]
-                        [:xt/put {:xt/id :b
+                        [::xt/put {:xt/id :b
                                        :parent :root}]
-                        [:xt/put {:xt/id :aa
+                        [::xt/put {:xt/id :aa
                                        :parent :a}]
-                        [:xt/put {:xt/id :ab
+                        [::xt/put {:xt/id :ab
                                        :parent :a}]
-                        [:xt/put {:xt/id :aba
+                        [::xt/put {:xt/id :aba
                                        :parent :ab}]
-                        [:xt/put {:xt/id :abb
+                        [::xt/put {:xt/id :abb
                                        :parent :ab}]])
 
   (t/testing "forward unbounded recursion"
@@ -248,15 +248,15 @@
                    "doesntexist"))))
 
 (t/deftest test-with-speculative-doc-store
-  (let [db (xt/with-tx (xt/db *api*) [[:xt/put {:xt/id :foo}]])]
+  (let [db (xt/with-tx (xt/db *api*) [[::xt/put {:xt/id :foo}]])]
     (t/is (= #{[{:xt/id :foo}]}
              (xt/q db
                      '{:find [(pull ?e [*])]
                        :where [[?e :xt/id :foo]]})))))
 
 (t/deftest test-missing-forward-join
-  (fix/submit+await-tx [[:xt/put {:xt/id :foo :ref [:bar :baz]}]
-                        [:xt/put {:xt/id :bar}]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo :ref [:bar :baz]}]
+                        [::xt/put {:xt/id :bar}]])
 
   (t/is (= #{[{:ref [{:xt/id :bar} {}]}]}
            (xt/q (xt/db *api*)

@@ -16,7 +16,7 @@
 
           submitted-tx
           (with-open [submit-client (xt/new-submit-client submit-opts)]
-            (let [submitted-tx (xt/submit-tx submit-client [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+            (let [submitted-tx (xt/submit-tx submit-client [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
               (with-open [tx-log-iterator (db/open-tx-log (:tx-log submit-client) nil)]
                 (let [result (iterator-seq tx-log-iterator)]
                   (t/is (not (realized? result)))

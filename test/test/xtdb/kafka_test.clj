@@ -27,11 +27,11 @@
   (fix/with-node
     (fn []
       (t/testing "transacting and indexing"
-        (let [submitted-tx (xt/submit-tx *api* [[:xt/put evicted-doc]
-                                                 [:xt/put non-evicted-doc]])
+        (let [submitted-tx (xt/submit-tx *api* [[::xt/put evicted-doc]
+                                                 [::xt/put non-evicted-doc]])
               _ (xt/await-tx *api* submitted-tx)
-              _ (xt/submit-tx *api* [[:xt/evict (:xt/id evicted-doc)]])
-              submitted-tx (xt/submit-tx *api* [[:xt/put after-evict-doc]])
+              _ (xt/submit-tx *api* [[::xt/evict (:xt/id evicted-doc)]])
+              submitted-tx (xt/submit-tx *api* [[::xt/put after-evict-doc]])
               _ (xt/await-tx *api* submitted-tx nil)]
 
           (t/testing "querying transacted data"
@@ -87,10 +87,10 @@
         (fn []
           (fix/with-node
             (fn []
-              (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])))
+              (fix/submit+await-tx [[::xt/put {:xt/id :foo}]])))
           (fix/with-node
             (fn []
-              (doto (xt/submit-tx *api* [[:xt/put {:xt/id :bar}]])
+              (doto (xt/submit-tx *api* [[::xt/put {:xt/id :bar}]])
                 (as-> tx (xt/await-tx *api* tx (Duration/ofSeconds 5))))
               (t/is (xt/entity (xt/db *api*) :foo))
               (t/is (xt/entity (xt/db *api*) :bar)))))))))
@@ -112,7 +112,7 @@
             #"org.apache.kafka.common.errors.RecordTooLargeException"
             (xt/submit-tx
              *api*
-             [[:xt/put
+             [[::xt/put
                (into {:xt/id :test}
                      (for [n (range 1000)]
                        [(keyword (str "key-" n))

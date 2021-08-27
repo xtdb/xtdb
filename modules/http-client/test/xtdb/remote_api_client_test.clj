@@ -52,14 +52,14 @@
 
 (t/deftest test-unauthenticated-client-and-unauthenticated-server
   (with-api {}
-    (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+    (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
       (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
       (t/is (true? (xt/tx-committed? *api* submitted-tx))))))
 
 (t/deftest test-authenticated-client-and-unauthenticated-server
   (with-api {:->jwt-token (constantly valid-jwt)}
 
-    (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+    (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
       (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
       (t/is (true? (xt/tx-committed? *api* submitted-tx))))))
 
@@ -70,7 +70,7 @@
 
 (t/deftest test-authenticated-client-and-authenticated-server
   (with-api {:jwks jwks, :->jwt-token (constantly valid-jwt)}
-    (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+    (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
       (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
       (t/is (= #{[:ivan]}
                (xt/q (xt/db *api*) '{:find [?e] :where [[?e :name "Ivan"]]}))))))

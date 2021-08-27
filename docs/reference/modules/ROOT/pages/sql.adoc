@@ -137,7 +137,7 @@ For example with the following Crux transaction operation:
 
 [source,clojure]
 ----
-[:xt/put {:xt/id :ivan :name "Ivan" :homeworld "Earth"}]
+[::xt/put {:xt/id :ivan :name "Ivan" :homeworld "Earth"}]
 ----
 
 Get a connection and query as such:

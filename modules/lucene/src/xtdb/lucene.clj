@@ -263,8 +263,8 @@
        (mapcat txc/flatten-tx-fn-ops)
        (reduce (fn xf [acc {:keys [op docs eid]}]
                  (case op
-                   :xt/put (update acc :docs into docs)
-                   :xt/evict (-> acc
+                   ::xt/put (update acc :docs into docs)
+                   ::xt/evict (-> acc
                                  (update :evicted-eids conj eid)
                                  (update :docs dissoc #(into {} (remove (comp #{eid} :xt/id val)) %)))
                    acc))

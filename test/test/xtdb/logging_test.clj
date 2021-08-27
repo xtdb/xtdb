@@ -24,26 +24,26 @@
 (t/use-fixtures :each asserting-no-logged-secrets)
 
 (t/deftest test-submit-putting-doc
-  (fix/submit+await-tx [[:xt/put {:xt/id :secure-document
+  (fix/submit+await-tx [[::xt/put {:xt/id :secure-document
                                   :secret secret}]]))
 
 (t/deftest test-submitting-putting-existing-doc
-  (fix/submit+await-tx [[:xt/put {:xt/id :secure-document
+  (fix/submit+await-tx [[::xt/put {:xt/id :secure-document
                                   :secret-2 secret}]]))
 
 (t/deftest test-submitting-match
-  (fix/submit+await-tx [[:xt/match
+  (fix/submit+await-tx [[::xt/match
                          :secure-document
                          {:xt/id :secure-document
                           :secret secret
                           :secret-2 secret}]
-                        [:xt/put {:xt/id :secure-document, :secret secret}]]))
+                        [::xt/put {:xt/id :secure-document, :secret secret}]]))
 
 (t/deftest test-submitting-delete
-  (fix/submit+await-tx [[:xt/delete :secure-document]]))
+  (fix/submit+await-tx [[::xt/delete :secure-document]]))
 
 (t/deftest test-submitting-evict
-  (fix/submit+await-tx [[:xt/evict :secure-document]]))
+  (fix/submit+await-tx [[::xt/evict :secure-document]]))
 
 (t/deftest test-query-with-args
   (xt/q (xt/db *api*) {:find ['s 'ss]

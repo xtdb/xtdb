@@ -44,12 +44,12 @@
 ;; tag::history-full[]
 (xt/submit-tx
   node
-  [[:xt/put
+  [[::xt/put
     {:xt/id :ids.persons/Jeff
      :person/name "Jeff"
      :person/wealth 100}
     #inst "2018-05-18T09:20:27.966"]
-   [:xt/put
+   [::xt/put
     {:xt/id :ids.persons/Jeff
      :person/name "Jeff"
      :person/wealth 1000}

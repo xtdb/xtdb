@@ -228,7 +228,7 @@ public class TransactionsTest {
         // tag::fn-put[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
             tx.put(XtdbDocument.createFunction("incAge",
-            "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :age inc)]]))"));
+            "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xtdb.api/put (update entity :age inc)]]))"));
         }));
         // end::fn-put[]
 

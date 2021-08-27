@@ -11,8 +11,8 @@ import xtdb.api.tx.*;
 import static org.junit.Assert.*;
 
 public class TestUtils {
-    static final Keyword PUT = Keyword.intern("xt/put");
-    static final Keyword DELETE = Keyword.intern("xt/delete");
+    static final Keyword PUT = Keyword.intern("xtdb.api/put");
+    static final Keyword DELETE = Keyword.intern("xtdb.api/delete");
 
     static final Keyword DB_ID = Keyword.intern("xt/id");
     static final Keyword VALID_TIME = Keyword.intern("xtdb.api/valid-time");

@@ -20,7 +20,7 @@
 
 (s/def :crux.db/id c/valid-id?)
 (s/def :xt/id c/valid-id?)
-(s/def :xt/evicted? boolean?)
+(s/def ::evicted? boolean?)
 (s/def :crux.db.fn/args (s/coll-of any? :kind vector?))
 
 (s/def :crux.db/fn

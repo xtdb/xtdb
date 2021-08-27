@@ -1,6 +1,6 @@
 (ns xtdb.lucene-microbench-test
   (:require [clojure.test :as t]
-            [xtdb.api :as c]
+            [xtdb.api :as xt]
             [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.lucene :as lf]
             [xtdb.fixtures.tpch :as tf]
@@ -51,12 +51,12 @@
       (let [last-tx (->> (customers 50000)
                          (partition-all 1000)
                          (reduce (fn [last-tx chunk]
-                                   (c/submit-tx *api* (vec (for [doc chunk]
-                                                             [:xt/put doc]))))
+                                   (xt/submit-tx *api* (vec (for [doc chunk]
+                                                              [::xt/put doc]))))
                                  nil))]
-        (c/await-tx *api* last-tx)))
+        (xt/await-tx *api* last-tx)))
 
-     (time (count (c/q (c/db *api*) {:find '[?e]
+     (time (count (xt/q (xt/db *api*) {:find '[?e]
                                      :where '[[(text-search :c_comment "ironic") [[?e]]]]}))))))
 
 (comment
@@ -72,7 +72,7 @@
       (let [last-tx (->> (customers 1500)
                          (partition-all 1)
                          (reduce (fn [last-tx chunk]
-                                   (c/submit-tx *api* (vec (for [doc chunk]
-                                                             [:xt/put doc]))))
+                                   (xt/submit-tx *api* (vec (for [doc chunk]
+                                                              [::xt/put doc]))))
                                  nil))]
-        (c/await-tx *api* last-tx))))))
+        (xt/await-tx *api* last-tx))))))

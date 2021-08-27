@@ -13,7 +13,7 @@
 (t/use-fixtures :each fix/with-node with-storage-dir)
 
 (defn put-at-vt [node doc vt]
-  (xt/submit-tx node [[:xt/put doc vt]]))
+  (xt/submit-tx node [[::xt/put doc vt]]))
 
 (t/deftest test-bitemp
   (let [node *api*

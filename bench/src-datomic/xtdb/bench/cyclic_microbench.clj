@@ -84,7 +84,7 @@
             (->> (haystack create-docs :xt/id *needle-count* *haystack-size*)
                  (partition-all crux-tx-size)
                  (reduce (fn [last-tx batch]
-                           (xt/submit-tx node (vec (for [doc batch] [:xt/put doc]))))
+                           (xt/submit-tx node (vec (for [doc batch] [::xt/put doc]))))
                          nil))]
         (xt/await-tx node last-tx (Duration/ofMinutes 20))
         {:success? true}))))

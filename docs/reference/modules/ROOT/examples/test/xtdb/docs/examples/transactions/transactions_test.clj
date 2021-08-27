@@ -23,7 +23,7 @@
 (t/deftest test-put
   (let [node *api*]
     ;; tag::put[]
-    (xt/submit-tx node [[:xt/put
+    (xt/submit-tx node [[::xt/put
                            {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <1>
                            #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
                            #inst "2018-05-19T08:31:15.966-00:00"]] ) ;; <3>
@@ -38,7 +38,7 @@
     (put-pablo)
 
     ;; tag::delete[]
-    (xt/submit-tx node [[:xt/delete
+    (xt/submit-tx node [[::xt/delete
                            :dbpedia.resource/Pablo-Picasso  ;; <1>
                            #inst "2018-05-18T09:20:27.966-00:00" ;; <2>
                            #inst "2018-05-19T08:31:15.966-00:00"]]) ;; <3>
@@ -53,11 +53,11 @@
     (put-pablo)
 
     ;; tag::match[]
-    (xt/submit-tx node [[:xt/match
+    (xt/submit-tx node [[::xt/match
                            :dbpedia.resource/Pablo-Picasso ;; <1>
                            {:xt/id :dbpedia.resource/Pablo-Picasso :first-name :Pablo} ;; <2>
                            #inst "2018-05-18T09:21:31.846-00:00"] ;; <3>
-                          [:xt/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
+                          [::xt/delete :dbpedia.resource/Pablo-Picasso]]) ;; <4>
     ;; end::match[]
     (xt/sync node)
     (t/is (nil? (pablo)))
@@ -69,7 +69,7 @@
     (put-pablo)
 
     ;; tag::evict[]
-    (xt/submit-tx node [[:xt/evict :dbpedia.resource/Pablo-Picasso]])
+    (xt/submit-tx node [[::xt/evict :dbpedia.resource/Pablo-Picasso]])
     ;; end::evict[]
 
     (xt/sync node)
@@ -79,20 +79,20 @@
 
 (t/deftest test-function-anatomy
   (fix/submit+await-tx
-   [[:xt/put {:xt/id :increment-age
-              :crux.db/fn '
-              ;; tag::fn-anatomy[]
-              (fn [ctx eid]  ;;<1>
-                (let [db (xtdb.api/db ctx) ;;<2>
-                      entity (xtdb.api/entity db eid)]
-                  [[:xt/put (update entity :age inc)]])) ;;<3>
-              ;; end::fn-anatomy[]
-              }]
-    [:xt/put {:xt/id :ivan
-              :age 0}]])
+   [[::xt/put {:xt/id :increment-age
+               :crux.db/fn '
+               ;; tag::fn-anatomy[]
+               (fn [ctx eid]  ;;<1>
+                 (let [db (xtdb.api/db ctx) ;;<2>
+                       entity (xtdb.api/entity db eid)]
+                   [[::xt/put (update entity :age inc)]])) ;;<3>
+               ;; end::fn-anatomy[]
+               }]
+    [::xt/put {:xt/id :ivan
+               :age 0}]])
 
   (fix/submit+await-tx
-   [[:xt/fn
+   [[::xt/fn
      :increment-age
      :ivan]])
 
@@ -105,17 +105,17 @@
       [{:xt/id :ivan :age 0}]))
 
     ;; tag::fn-put[]
-    (xt/submit-tx node [[:xt/put {:xt/id :increment-age
+    (xt/submit-tx node [[::xt/put {:xt/id :increment-age
                                     :crux.db/fn '(fn [ctx eid] ;;<1>
                                                    (let [db (xtdb.api/db ctx)
                                                          entity (xtdb.api/entity db eid)]
-                                                     [[:xt/put (update entity :age inc)]]))}]])
+                                                     [[::xt/put (update entity :age inc)]]))}]])
     ;; end::fn-put[]
 
     (xt/sync node)
 
     ;; tag::fn-use[]
-    (xt/submit-tx node [[:xt/fn
+    (xt/submit-tx node [[::xt/fn
                            :increment-age ;; <1>
                            :ivan]]) ;; <2>
     ;; end::fn-use[]
@@ -127,7 +127,7 @@
 (t/deftest speculative-transactions
   (let [node *api*]
     ;; tag::speculative-0[]
-    (let [real-tx (xt/submit-tx node [[:xt/put {:xt/id :ivan, :name "Ivan"}]])
+    (let [real-tx (xt/submit-tx node [[::xt/put {:xt/id :ivan, :name "Ivan"}]])
           _ (xt/await-tx node real-tx)
           all-names '{:find [?name], :where [[?e :name ?name]]}
           db (xt/db node)]
@@ -138,7 +138,7 @@
 
       ;; tag::speculative-1[]
       (let [speculative-db (xt/with-tx db
-                             [[:xt/put {:xt/id :petr, :name "Petr"}]])]
+                             [[::xt/put {:xt/id :petr, :name "Petr"}]])]
         (xt/q speculative-db all-names) ; => #{["Petr"] ["Ivan"]}
         ;; end::speculative-1[]
         (t/is #{["Petr"] ["Ivan"]} (xt/q speculative-db all-names))
@@ -159,7 +159,7 @@
 (t/deftest awaiting
   (let [node *api*]
     ;; tag::ti[]
-    (let [tx (xt/submit-tx node [[:xt/put {:xt/id :ivan}]])]
+    (let [tx (xt/submit-tx node [[::xt/put {:xt/id :ivan}]])]
       ;; The transaction won't have indexed yet so :ivan won't exist in a snapshot
       (xt/entity (xt/db node) :ivan) ;; => nil
 

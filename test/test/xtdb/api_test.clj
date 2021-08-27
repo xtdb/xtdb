@@ -38,19 +38,19 @@
   (let [valid-time (Date.)
         content-ivan {:xt/id :ivan :name "Ivan"}]
     (t/testing "put"
-      (let [tx (fix/submit+await-tx [[:xt/put content-ivan valid-time]])]
+      (let [tx (fix/submit+await-tx [[::xt/put content-ivan valid-time]])]
         (t/is (= {:xt/id :ivan, :name "Ivan"}
                  (xt/entity (xt/db *api* {::xt/valid-time valid-time, ::xt/tx tx}) :ivan)))))
 
     (t/testing "delete"
-      (let [delete-tx (xt/submit-tx *api* [[:xt/delete :ivan valid-time]])]
+      (let [delete-tx (xt/submit-tx *api* [[::xt/delete :ivan valid-time]])]
         (xt/await-tx *api* delete-tx)
         (t/is (nil? (xt/entity (xt/db *api* {::xt/valid-time valid-time, ::xt/tx delete-tx}) :ivan)))))))
 
 (t/deftest test-empty-db
   (let [empty-db (xt/db *api*)]
     (t/is (nil? (xt/sync *api* (Duration/ofSeconds 10))))
-    (fix/submit+await-tx [[:xt/put {:xt/id :foo} #inst "2020"]])
+    (fix/submit+await-tx [[::xt/put {:xt/id :foo} #inst "2020"]])
     (t/is (= {:xt/id :foo} (xt/entity (xt/db *api*) :foo)))
 
     ;; TODO we don't currently distinguish between 'give me empty DB'
@@ -65,7 +65,7 @@
                     {:xtdb.zk/zk-active? true}))
            (select-keys (xt/status *api*) [:xtdb.index/index-version :xtdb.zk/zk-active?])))
 
-  (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+  (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
     (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
     (t/is (true? (xt/tx-committed? *api* submitted-tx)))
 
@@ -76,17 +76,17 @@
 (t/deftest test-can-use-id-literals
   (let [id #xt/id "https://adam.com"
         doc {:xt/id id, :name "Adam"}
-        submitted-tx (xt/submit-tx *api* [[:xt/put doc]])]
+        submitted-tx (xt/submit-tx *api* [[::xt/put doc]])]
     (xt/await-tx *api* submitted-tx nil)
 
     (t/is (= doc (xt/entity (xt/db *api*) id)))))
 
 (t/deftest test-query
   (let [valid-time (Date.)
-        submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]
-                                          [:xt/put {:xt/id :a :foo 1}]
-                                          [:xt/put {:xt/id :b :foo 1}]
-                                          [:xt/put {:xt/id :c :bar 2}]])]
+        submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"} valid-time]
+                                          [::xt/put {:xt/id :a :foo 1}]
+                                          [::xt/put {:xt/id :b :foo 1}]
+                                          [::xt/put {:xt/id :c :bar 2}]])]
     (t/is (= submitted-tx (xt/await-tx *api* submitted-tx)))
     (t/is (true? (xt/tx-committed? *api* submitted-tx)))
 
@@ -147,7 +147,7 @@
 (t/deftest test-history
   (t/testing "transaction"
     (let [valid-time (Date.)
-          submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+          submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
       (xt/await-tx *api* submitted-tx)
       (with-dbs [db (*api*)]
         (let [entity-tx (xt/entity-tx db :ivan)
@@ -164,21 +164,21 @@
 
 (t/deftest test-can-write-entity-using-map-as-id
   (let [doc {:xt/id {:user "Xwop1A7Xog4nD6AfhZaPgg"} :name "Adam"}
-        submitted-tx (xt/submit-tx *api* [[:xt/put doc]])]
+        submitted-tx (xt/submit-tx *api* [[::xt/put doc]])]
     (xt/await-tx *api* submitted-tx)
     (t/is (xt/entity (xt/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"}))
     (t/is (not-empty (xt/entity-history (xt/db *api*) {:user "Xwop1A7Xog4nD6AfhZaPgg"} :asc)))))
 
 (t/deftest test-invalid-doc
   (t/is (thrown? IllegalArgumentException
-                 (xt/submit-tx *api* [[:xt/put {}]]))))
+                 (xt/submit-tx *api* [[::xt/put {}]]))))
 
 (t/deftest test-content-hash-invalid
   (let [valid-time (Date.)
         content-ivan {:xt/id :ivan :name "Ivan"}
         content-hash (str (c/new-id content-ivan))]
     (t/is (thrown-with-msg? IllegalArgumentException #"invalid doc"
-                            (xt/submit-tx *api* [[:xt/put content-hash valid-time]])))))
+                            (xt/submit-tx *api* [[::xt/put content-hash valid-time]])))))
 
 (defn execute-sparql [^RepositoryConnection conn q]
   (with-open [tq (.evaluate (.prepareTupleQuery conn q))]
@@ -189,7 +189,7 @@
                     (lazy-seq (step)))))))))
 
 (t/deftest test-sparql
-  (let [submitted-tx (xt/submit-tx *api* [[:xt/put {:xt/id :ivan :name "Ivan"}]])]
+  (let [submitted-tx (xt/submit-tx *api* [[::xt/put {:xt/id :ivan :name "Ivan"}]])]
     (xt/await-tx *api* submitted-tx))
 
   (t/testing "SPARQL query"
@@ -203,25 +203,25 @@
             (.shutDown repo)))))))
 
 (t/deftest test-adding-back-evicted-document
-  (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo}]])
   (t/is (xt/entity (xt/db *api*) :foo))
 
-  (fix/submit+await-tx [[:xt/evict :foo]])
+  (fix/submit+await-tx [[::xt/evict :foo]])
   (t/is (nil? (xt/entity (xt/db *api*) :foo)))
 
-  (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
+  (fix/submit+await-tx [[::xt/put {:xt/id :foo}]])
   (t/is (xt/entity (xt/db *api*) :foo)))
 
 (t/deftest test-tx-log
   (let [valid-time (Date.)
-        tx1 (fix/submit+await-tx [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+        tx1 (fix/submit+await-tx [[::xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
 
     (t/testing "tx-log"
       (with-open [tx-log-iterator (xt/open-tx-log *api* nil false)]
         (let [result (iterator-seq tx-log-iterator)]
           (t/is (not (realized? result)))
           (t/is (= [(assoc tx1
-                           :xtdb.tx.event/tx-events [[:xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
+                           :xtdb.tx.event/tx-events [[::xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
                    result))
           (t/is (realized? result))))
 
@@ -230,7 +230,7 @@
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
-                             ::xt/tx-ops [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+                             ::xt/tx-ops [[::xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
                      result))
             (t/is (realized? result)))))
 
@@ -239,18 +239,18 @@
           (t/is (empty? (iterator-seq tx-log-iterator)))))
 
       (t/testing "tx log skips failed transactions"
-        (let [tx2 (fix/submit+await-tx [[:xt/match :ivan {:xt/id :ivan :name "Ivan2"}]
-                                        [:xt/put {:xt/id :ivan :name "Ivan3"}]])]
+        (let [tx2 (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :name "Ivan2"}]
+                                        [::xt/put {:xt/id :ivan :name "Ivan3"}]])]
           (t/is (false? (xt/tx-committed? *api* tx2)))
 
           (with-open [tx-log-iterator (xt/open-tx-log *api* nil false)]
             (let [result (iterator-seq tx-log-iterator)]
               (t/is (= [(assoc tx1
-                               :xtdb.tx.event/tx-events [[:xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
+                               :xtdb.tx.event/tx-events [[::xt/put (c/new-id :ivan) (c/hash-doc {:xt/id :ivan :name "Ivan"}) valid-time]])]
                        result))))
 
-          (let [tx3 (fix/submit+await-tx [[:xt/match :ivan {:xt/id :ivan :name "Ivan"}]
-                                          [:xt/put {:xt/id :ivan :name "Ivan3"}]])]
+          (let [tx3 (fix/submit+await-tx [[::xt/match :ivan {:xt/id :ivan :name "Ivan"}]
+                                          [::xt/put {:xt/id :ivan :name "Ivan3"}]])]
             (t/is (true? (xt/tx-committed? *api* tx3)))
             (with-open [tx-log-iterator (xt/open-tx-log *api* nil false)]
               (let [result (iterator-seq tx-log-iterator)]
@@ -261,38 +261,38 @@
           (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
 
       (t/testing "match includes eid"
-        (let [tx (fix/submit+await-tx [[:xt/match :foo nil]])]
+        (let [tx (fix/submit+await-tx [[::xt/match :foo nil]])]
           (with-open [tx-log (xt/open-tx-log *api* (dec (::xt/tx-id tx)) true)]
-            (t/is (= [:xt/match (c/new-id :foo) (c/new-id nil)]
+            (t/is (= [::xt/match (c/new-id :foo) (c/new-id nil)]
                      (-> (iterator-seq tx-log) first ::xt/tx-ops first))))))
 
       ;; Intermittent failure on Kafka, see #1256
       (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
         (t/testing "tx fns return with-ops? correctly"
-          (let [tx4 (fix/submit+await-tx [[:xt/put {:xt/id :jack :age 21}]
-                                          [:xt/put {:xt/id :increment-age
+          (let [tx4 (fix/submit+await-tx [[::xt/put {:xt/id :jack :age 21}]
+                                          [::xt/put {:xt/id :increment-age
                                                     :crux.db/fn '(fn [ctx eid]
                                                                    (let [db (xtdb.api/db ctx)
                                                                          entity (xtdb.api/entity db eid)]
-                                                                     [[:xt/put (update entity :age inc)]]))}]
-                                          [:xt/put {:xt/id :increment-age-2
+                                                                     [[::xt/put (update entity :age inc)]]))}]
+                                          [::xt/put {:xt/id :increment-age-2
                                                     :crux.db/fn '(fn [ctx eid]
-                                                                   [[:xt/fn :increment-age eid]])}]
-                                          [:xt/fn :increment-age-2 :jack]])]
+                                                                   [[::xt/fn :increment-age eid]])}]
+                                          [::xt/fn :increment-age-2 :jack]])]
             (t/is (true? (xt/tx-committed? *api* tx4)))
             (with-open [tx-log-iterator (xt/open-tx-log *api* nil true)]
               (let [tx-ops (-> tx-log-iterator iterator-seq last ::xt/tx-ops)]
-                (t/is (= [:xt/fn
+                (t/is (= [::xt/fn
                           (c/new-id :increment-age-2)
-                          {::xt/tx-ops [[:xt/fn
+                          {::xt/tx-ops [[::xt/fn
                                         (c/new-id :increment-age)
-                                        {::xt/tx-ops [[:xt/put {:xt/id :jack, :age 22}]]}]]}]
+                                        {::xt/tx-ops [[::xt/put {:xt/id :jack, :age 22}]]}]]}]
                          (last tx-ops)))))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
             (let [doc (merge {:xt/id :ivan, :name "Ivan"} m)]
-              (merge (fix/submit+await-tx [[:xt/put doc valid-time]])
+              (merge (fix/submit+await-tx [[::xt/put doc valid-time]])
                      {::xt/doc doc
                       ::xt/valid-time valid-time
                       ::xt/content-hash (c/hash-doc doc)})))]
@@ -357,25 +357,25 @@
                  (xt/entity-history db :ivan :desc {:with-docs? true})))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided-546
-  (let [{::xt/keys [^Date tx-time]} (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
+  (let [{::xt/keys [^Date tx-time]} (fix/submit+await-tx [[::xt/put {:xt/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (xt/db *api* the-future the-future)))))
 
 (t/deftest test-db-is-a-snapshot
-  (let [tx (fix/submit+await-tx [[:xt/put {:xt/id :foo, :count 0}]])
+  (let [tx (fix/submit+await-tx [[::xt/put {:xt/id :foo, :count 0}]])
         db (xt/db *api*)]
     (t/is (= tx (::xt/tx (xt/db-basis db))))
     (t/is (= {:xt/id :foo, :count 0}
              (xt/entity db :foo)))
 
-    (fix/submit+await-tx [[:xt/put {:xt/id :foo, :count 1}]])
+    (fix/submit+await-tx [[::xt/put {:xt/id :foo, :count 1}]])
 
     (t/is (= {:xt/id :foo, :count 0}
              (xt/entity db :foo)))))
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (xt/latest-submitted-tx *api*)))
-  (let [{::xt/keys [tx-id]} (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
+  (let [{::xt/keys [tx-id]} (xt/submit-tx *api* [[::xt/put {:xt/id :foo}]])]
     (t/is (= {::xt/tx-id tx-id}
              (xt/latest-submitted-tx *api*))))
 
@@ -386,42 +386,42 @@
 (t/deftest test-listen-for-indexed-txs
   (when-not (contains? (set t/*testing-contexts*) (str :remote))
     (let [!events (atom [])]
-      (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
+      (fix/submit+await-tx [[::xt/put {:xt/id :foo}]])
 
       (let [[bar-tx baz-tx] (with-open [_ (xt/listen *api* {::xt/event-type ::xt/indexed-tx
                                                             :with-tx-ops? true}
                                                      (fn [evt]
                                                        (swap! !events conj evt)))]
 
-                              (let [bar-tx (fix/submit+await-tx [[:xt/put {:xt/id :bar}]])
-                                    baz-tx (fix/submit+await-tx [[:xt/put {:xt/id :baz}]])]
+                              (let [bar-tx (fix/submit+await-tx [[::xt/put {:xt/id :bar}]])
+                                    baz-tx (fix/submit+await-tx [[::xt/put {:xt/id :baz}]])]
 
                                 (Thread/sleep 100)
 
                                 [bar-tx baz-tx]))]
 
-        (fix/submit+await-tx [[:xt/put {:xt/id :ivan}]])
+        (fix/submit+await-tx [[::xt/put {:xt/id :ivan}]])
 
         (Thread/sleep 100)
 
         (t/is (= [(merge {::xt/event-type ::xt/indexed-tx,
                           :committed? true
-                          ::xt/tx-ops [[:xt/put {:xt/id :bar}]]}
+                          ::xt/tx-ops [[::xt/put {:xt/id :bar}]]}
                          bar-tx)
                   (merge {::xt/event-type ::xt/indexed-tx,
                           :committed? true
-                          ::xt/tx-ops [[:xt/put {:xt/id :baz}]]}
+                          ::xt/tx-ops [[::xt/put {:xt/id :baz}]]}
                          baz-tx)]
                  @!events))))))
 
 (t/deftest test-tx-fn-replacing-arg-docs-866
-  (fix/submit+await-tx [[:xt/put {:xt/id :put-ivan
+  (fix/submit+await-tx [[::xt/put {:xt/id :put-ivan
                                   :crux.db/fn '(fn [ctx doc]
-                                                 [[:xt/put (assoc doc :xt/id :ivan)]])}]])
+                                                 [[::xt/put (assoc doc :xt/id :ivan)]])}]])
 
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
     (t/testing "replaces args doc with resulting ops"
-      (fix/submit+await-tx [[:xt/fn :put-ivan {:name "Ivan"}]])
+      (fix/submit+await-tx [[::xt/fn :put-ivan {:name "Ivan"}]])
 
       (t/is (= {:xt/id :ivan, :name "Ivan"}
                (xt/entity (xt/db *api*) :ivan)))
@@ -439,7 +439,7 @@
 (t/deftest test-await-tx
   (when-not (= *node-type* :remote)
     (t/testing "timeout outputs properly"
-      (let [tx (xt/submit-tx *api* (for [n (range 100)] [:xt/put {:xt/id (str "test-" n)}]))]
+      (let [tx (xt/submit-tx *api* (for [n (range 100)] [::xt/put {:xt/id (str "test-" n)}]))]
         (t/is
          (thrown-with-msg?
           java.util.concurrent.TimeoutException
@@ -463,7 +463,7 @@
 
   (let [clob (pr-str (range 1000))
         clob-doc {:xt/id :clob, :clob clob}]
-    (fix/submit+await-tx [[:xt/put clob-doc]])
+    (fix/submit+await-tx [[::xt/put clob-doc]])
 
     (let [db (xt/db *api*)]
       (t/is (= #{[clob]}

@@ -872,12 +872,12 @@ thing` to put the data all on the base level. Like so:
 ----
 (xt/submit-tx
   node
-  [[:xt/put
+  [[::xt/put
     {:xt/id :me
      :list ["carrots" "peas" "shampoo"]
      :pockets/left ["lint" "change"]
      :pockets/right ["phone"]}]
-   [:xt/put
+   [::xt/put
     {:xt/id :you
      :list ["carrots" "tomatoes" "wig"]
      :pockets/left ["wallet" "watch"]

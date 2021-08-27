@@ -400,7 +400,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionNoArgs() {
-        XtdbDocument function = XtdbDocument.createFunction("incVersion", "(fn [ctx] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db \"PabloPicasso\")] [[:xt/put (update entity :person/version inc)]]))");
+        XtdbDocument function = XtdbDocument.createFunction("incVersion", "(fn [ctx] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db \"PabloPicasso\")] [[:xtdb.api/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));
@@ -418,7 +418,7 @@ public class TransactionTest {
 
     @Test
     public void transactionFunctionArgs() {
-        XtdbDocument function = XtdbDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
+        XtdbDocument function = XtdbDocument.createFunction("incVersion", "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xtdb.api/put (update entity :person/version inc)]]))");
 
         submitTx(false, tx -> {
             tx.put(pablo(0));

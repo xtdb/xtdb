@@ -184,7 +184,7 @@ Clojure REPL::
 +
 [source,clojure,subs=attributes+]
 ----
-crux-in-a-box.db> (xt/submit-tx crux-node [[:xt/put
+crux-in-a-box.db> (xt/submit-tx crux-node [[::xt/put
                                               {:xt/id "hi2u"
                                                :user/name "zig"}]])
 ;; => #::xt{:tx-id 0, :tx-time #inst "2021-03-11T02:27:09.176-00:00"}

@@ -31,7 +31,7 @@
 
 (defn submit-test-docs [docs]
   (fix/submit+await-tx (for [doc docs]
-                         [:xt/put doc]))
+                         [::xt/put doc]))
   (xt/db *api*))
 
 (t/deftest test-pull-attr-spec
@@ -208,7 +208,7 @@
                           :where [[?e :xt/id :lucy]]}))
           "Multiple recursion specs in one pattern")
 
-    (let [db (xt/with-tx db [[:xt/put {:xt/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
+    (let [db (xt/with-tx db [[::xt/put {:xt/id :kerri, :name "Kerri", :friend #{:lucy}}]])]
       (t/is (= #{[(assoc-in friends (take 7 (cycle [:friend 0])) [{:name "Kerri" :friend [{:xt/id :lucy}]}])]}
                (xt/q db '{:find [(pull ?e [:name {:friend ...}])]
                             :where [[?e :xt/id :lucy]]}))

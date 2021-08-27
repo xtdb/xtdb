@@ -79,7 +79,7 @@ Within your REPL, transact an element into Crux:
 
 [source,clj]
 ----
-(xt/submit-tx node [[:xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
+(xt/submit-tx node [[::xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"}]])
 ----
 
 Check the contents of 'test.sink.txt' using the command below, and you should see that the transactions were outputted to the _'connect-test'_ topic:
@@ -87,5 +87,5 @@ Check the contents of 'test.sink.txt' using the command below, and you should se
 ----
 tail test.sink.txt
 ==>
-[[:xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"} #inst "2019-09-19T12:31:21.342-00:00"]]
+[[::xt/put {:xt/id #uuid "415c45c9-7cbe-4660-801b-dab9edc60c82", :value "baz-source"} #inst "2019-09-19T12:31:21.342-00:00"]]
 ----

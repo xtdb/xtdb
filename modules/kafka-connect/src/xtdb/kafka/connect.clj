@@ -104,10 +104,10 @@
   (log/info "sink record:" record)
   (let [tx-op (if (and (nil? (.value record))
                        (.key record))
-                [:xt/delete (coerce-eid (.key record))]
+                [::xt/delete (coerce-eid (.key record))]
                 (let [doc (record->edn record)
                       id (find-eid props record doc)]
-                  [:xt/put (assoc doc :xt/id id)]))]
+                  [::xt/put (assoc doc :xt/id id)]))]
     (log/info "tx op:" tx-op)
     tx-op))
 
@@ -129,16 +129,16 @@
 
 (defn- tx-op-with-explicit-valid-time [[op :as tx-op] tx-time]
   (or (case op
-        :xt/put
+        ::xt/put
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
-        :xt/delete
+        ::xt/delete
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
-        :xt/match
+        ::xt/match
         (when (= 2 (count tx-op))
           (conj tx-op tx-time))
-        :xt/cas
+        ::xt/cas
         (when (= 3 (count tx-op))
           (conj tx-op tx-time))
         nil)
@@ -161,16 +161,16 @@
 
 (defn- tx-op->id+doc [[op :as tx-op]]
   (case op
-    :xt/put
+    ::xt/put
     (when (= 2 (count tx-op))
       (let [[_ new-doc] tx-op]
         [(:xt/id new-doc)
          new-doc]))
-    (:xt/delete :xt/evict)
+    (::xt/delete ::xt/evict)
     (when (= 2 (count tx-op))
       (let [[_ deleted-id] tx-op]
         [deleted-id]))
-    :xt/cas
+    ::xt/cas
     (when (= 3 (count tx-op))
       (let [[_ old-doc new-doc] tx-op]
         [(:xt/id new-doc)
@@ -180,7 +180,7 @@
                                          {::xt/keys [tx-ops tx-id tx-time], :as tx}]
   (log/info "tx-ops:" tx-ops)
   (for [[op :as tx-op] tx-ops
-        :when (not (contains? #{:xt/fn :xt/match} op))
+        :when (not (contains? #{::xt/fn ::xt/match} op))
         :let [[id doc] (tx-op->id+doc tx-op)
               hashed-id (str (c/new-id id))
               _ (log/info "tx-op:" tx-op "id:" id "hashed id:" hashed-id "doc:" doc)]

@@ -22,10 +22,10 @@
           ;; Await data-set data
           (xt/await-tx node last-tx)
           ;; Submit :bar multiple times - entity to showcase entity searching/history.
-          (xt/submit-tx node [[:xt/put {:xt/id :bar} #inst "2018-06-01"]])
-          (xt/submit-tx node [[:xt/put {:xt/id :bar :map {:a 1 :b 2}} #inst "2019-04-04"]])
-          (xt/submit-tx node [[:xt/put {:xt/id :bar :vector [:a :b]} #inst "2020-01-02"]])
-          (xt/await-tx node (xt/submit-tx node [[:xt/put {:xt/id :bar :hello "world"}]]))
+          (xt/submit-tx node [[::xt/put {:xt/id :bar} #inst "2018-06-01"]])
+          (xt/submit-tx node [[::xt/put {:xt/id :bar :map {:a 1 :b 2}} #inst "2019-04-04"]])
+          (xt/submit-tx node [[::xt/put {:xt/id :bar :vector [:a :b]} #inst "2020-01-02"]])
+          (xt/await-tx node (xt/submit-tx node [[::xt/put {:xt/id :bar :hello "world"}]]))
 
           (prn "Sample Data Loaded!"))))
     node))

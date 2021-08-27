@@ -1,6 +1,6 @@
 (ns xtdb.calcite-test
   (:require [clojure.test :as t]
-            [xtdb.api :as c]
+            [xtdb.api :as xt]
             [xtdb.fixtures :as fix :refer [*api* submit+await-tx]]
             [xtdb.fixtures.calcite :as cf :refer [explain prepared-query query]]
             [clojure.string :as str])
@@ -30,8 +30,8 @@
 
 (t/deftest test-valid-time
   (let [id (java.util.UUID/randomUUID)
-        tx1 (submit+await-tx [[:xt/put {:xt/id id :name "Ivan" :homeworld (str id) :age 21 :alive true} #inst "2015"]
-                              [:xt/put {:xt/id id :name "Ivana" :homeworld (str id) :age 21 :alive true} #inst "2018"]])
+        tx1 (submit+await-tx [[::xt/put {:xt/id id :name "Ivan" :homeworld (str id) :age 21 :alive true} #inst "2015"]
+                              [::xt/put {:xt/id id :name "Ivana" :homeworld (str id) :age 21 :alive true} #inst "2018"]])
         q (str "SELECT PERSON.NAME FROM PERSON WHERE HOMEWORLD = '" (str id) "'")]
 
     (t/is (= "Ivana" (:name (first (query q)))))
@@ -49,7 +49,7 @@
       (t/is (thrown-with-msg? java.lang.Exception #"Unrecognized date/time syntax: 2016-12-01TWOT"
                               (query (str "VALIDTIME('2016-12-01TWOT') \n " q)))))
 
-    (submit+await-tx [[:xt/put {:xt/id id :name "Ivanb" :homeworld (str id) :age 21 :alive true} #inst "2016"]])
+    (submit+await-tx [[::xt/put {:xt/id id :name "Ivanb" :homeworld (str id) :age 21 :alive true} #inst "2016"]])
     (assert (= "Ivana" (:name (first (query q)))))
     (assert (= "Ivanb" (:name (first (query (str "VALIDTIME ('2016-12-01T10:13:30Z') " q))))))
 
@@ -372,20 +372,20 @@
   (fix/transact! *api* [{:xt/id :ivan :name "Ivan" :homeworld "Earth" :age 21 :alive true}
                         {:xt/id :malcolm :name "Malcolm" :homeworld ["Mars" "Earth"] :age 25 :alive false}])
 
-  (t/is (= #{["Ivan"] ["Malcolm"]} (c/q (c/db *api*)
-                                        '{:find [?name],
-                                          :where [[?id :name ?name]
-                                                  [?id :homeworld ?homeworld]
-                                                  [?id :alive ?alive]
-                                                  [(= ?homeworld "Earth")]]})))
+  (t/is (= #{["Ivan"] ["Malcolm"]} (xt/q (xt/db *api*)
+                                         '{:find [?name],
+                                           :where [[?id :name ?name]
+                                                   [?id :homeworld ?homeworld]
+                                                   [?id :alive ?alive]
+                                                   [(= ?homeworld "Earth")]]})))
 
-  (t/is (= #{["Ivan"] ["Malcolm"]} (c/q (c/db *api*)
-                                        '{:find [?name],
-                                          :where [[?id :name ?name]
-                                                  [?id :homeworld ?homeworld]
-                                                  [?id :alive ?alive]
-                                                  [(= ?homeworld G__158554)]],
-                                          :args [{G__158554 "Earth"}]})))
+  (t/is (= #{["Ivan"] ["Malcolm"]} (xt/q (xt/db *api*)
+                                         '{:find [?name],
+                                           :where [[?id :name ?name]
+                                                   [?id :homeworld ?homeworld]
+                                                   [?id :alive ?alive]
+                                                   [(= ?homeworld G__158554)]],
+                                           :args [{G__158554 "Earth"}]})))
 
   (let [q "SELECT * FROM PERSON WHERE HOMEWORLD = 'Earth'"]
     (t/is (= ["Ivan" "Malcolm"] (sort (map :name (query q))))))

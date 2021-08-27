@@ -9,7 +9,7 @@
 
 (defn submit-batches [node]
   (for [doc-batch (->> (for [n (range 25000)]
-                         [:xt/put {:xt/id (keyword (str "doc-" n))
+                         [::xt/put {:xt/id (keyword (str "doc-" n))
                                    :nested-map {:foo :bar
                                                 :baz :quux
                                                 :doc-idx n}}])

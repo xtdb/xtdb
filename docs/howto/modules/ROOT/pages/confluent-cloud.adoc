@@ -101,7 +101,7 @@ Submit a transaction:
 (def my-doc {:xt/id :some-id
              :color "red"})
 
-(xt/submit-tx node [[:xt/put my-doc]]) ; returns a transaction receipt
+(xt/submit-tx node [[::xt/put my-doc]]) ; returns a transaction receipt
 ----
 
 Retrieve the document:

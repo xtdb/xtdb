@@ -26,7 +26,7 @@
     (assoc n :xt/id (some n [:user/name :group/name :role/name :roleInGroup/name]))))
 
 (t/deftest graph-traversal-test
-  (fix/submit+await-tx (mapv (fn [n] [:xt/put n]) nodes))
+  (fix/submit+await-tx (mapv (fn [n] [::xt/put n]) nodes))
 
   (let [db (xt/db *api*)]
     (t/is (= #{[:Role2] [:Role3]}
@@ -61,25 +61,25 @@
                          :args '[{?user :User1}]})))))
 
 (t/deftest walkthrough-test
-  (fix/submit+await-tx [[:xt/put {:xt/id :dbpedia.resource/Pablo-Picasso
+  (fix/submit+await-tx [[::xt/put {:xt/id :dbpedia.resource/Pablo-Picasso
                                   :name "Pablo"
                                   :last-name "Picasso"
                                   :location "Spain"}
                          #inst "1881-10-25T09:20:27.966-00:00"]
-                        [:xt/put {:xt/id :dbpedia.resource/Pablo-Picasso
+                        [::xt/put {:xt/id :dbpedia.resource/Pablo-Picasso
                                   :name "Pablo"
                                   :last-name "Picasso"
                                   :location "Sain2"}
                          #inst "1881-10-25T09:20:27.966-00:00"]])
 
-  (fix/submit+await-tx [[:xt/match
+  (fix/submit+await-tx [[::xt/match
                          :dbpedia.resource/Pablo-Picasso
                          {:xt/id :dbpedia.resource/Pablo-Picasso
                           :name "Pablo"
                           :last-name "Picasso"
                           :location "Spain"}
                          #inst "1973-04-08T09:20:27.966-00:00"]
-                        [:xt/put
+                        [::xt/put
                          {:xt/id :dbpedia.resource/Pablo-Picasso
                           :name "Pablo"
                           :last-name "Picasso"
@@ -87,7 +87,7 @@
                           :location "France"}
                          #inst "1973-04-08T09:20:27.966-00:00"]])
 
-  (fix/submit+await-tx [[:xt/delete :dbpedia.resource/Pablo-Picasso
+  (fix/submit+await-tx [[::xt/delete :dbpedia.resource/Pablo-Picasso
                          #inst "1973-04-08T09:20:27.966-00:00"]])
 
   (t/is (= #{[{:xt/id :dbpedia.resource/Pablo-Picasso, :name "Pablo", :last-name "Picasso", :location "Sain2"}]}
@@ -96,13 +96,13 @@
             '{:find [(pull e [*])]
               :where [[e :name "Pablo"]]})))
 
-  (fix/submit+await-tx [[:xt/evict :dbpedia.resource/Pablo-Picasso]])
+  (fix/submit+await-tx [[::xt/evict :dbpedia.resource/Pablo-Picasso]])
 
   (t/is (empty? (xt/q (xt/db *api*)
                         '{:find [(pull e [*])]
                           :where [[e :name "Pablo"]]})))
 
-  (fix/submit+await-tx [[:xt/put {:xt/id :dbpedia.resource/Pablo-Picasso
+  (fix/submit+await-tx [[::xt/put {:xt/id :dbpedia.resource/Pablo-Picasso
                                   :name "Pablo"
                                   :last-name "Picasso"
                                   :height 1.63

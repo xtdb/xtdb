@@ -843,7 +843,7 @@
     (vector)))
 
 (defn evicted-doc? [doc]
-  (boolean (:xt/evicted? doc)))
+  (boolean (:xtdb.api/evicted? doc)))
 
 (defn keep-non-evicted-doc [doc]
   (when-not (evicted-doc? doc)

@@ -18,7 +18,7 @@
       (t/is (zero? (dropwizard/meter-count (:docs-ingested-meter mets))))
       (t/is (zero? (dropwizard/meter-count (:tx-ingest-timer mets)))))
 
-    (fix/submit+await-tx [[:xt/put {:xt/id :test}]])
+    (fix/submit+await-tx [[::xt/put {:xt/id :test}]])
     (.close ^Closeable bus)
 
     (t/testing "post ingest values"
@@ -35,7 +35,7 @@
     (t/testing "initial query timer values"
       (t/is (zero? (dropwizard/meter-count (:query-timer mets)))))
 
-    (fix/submit+await-tx [[:xt/put {:xt/id :test}]])
+    (fix/submit+await-tx [[::xt/put {:xt/id :test}]])
     (t/is (= #{[:test]}
              (xt/q (xt/db *api*) '{:find [e] :where [[e :xt/id _]]})))
     (t/is (thrown-with-msg?

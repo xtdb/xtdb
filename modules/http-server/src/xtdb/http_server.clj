@@ -87,7 +87,7 @@
                               (->> tx-ops
                                    (mapv (fn [tx-op]
                                            (-> tx-op
-                                               (update 0 (fn [op] (keyword "xt" op)))
+                                               (update 0 (fn [op] (keyword "xtdb.api" op)))
                                                (txc/conform-tx-op decoders)
                                                (txc/->tx-op))))))))))))
 

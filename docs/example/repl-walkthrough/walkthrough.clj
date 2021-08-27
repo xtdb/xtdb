@@ -13,13 +13,13 @@
 ;; transaction containing a `put` operation, optionally specifying a valid time
 (xt/submit-tx
  node
- [[:xt/put
+ [[::xt/put
    {:xt/id :dbpedia.resource/Pablo-Picasso ; id
     :name "Pablo"
     :last-name "Picasso"
     :location "Spain"}
    #inst "1881-10-25T09:20:27.966-00:00"]
-  [:xt/put
+  [::xt/put
    {:xt/id :dbpedia.resource/Pablo-Picasso ; id
     :name "Pablo"
     :last-name "Picasso"
@@ -30,14 +30,14 @@
 ;; transaction containing a `match` operation
 (xt/submit-tx
  node
- [[:xt/match ; check old version
+ [[::xt/match ; check old version
    :dbpedia.resource/Pablo-Picasso
    {:xt/id :dbpedia.resource/Pablo-Picasso
     :name "Pablo"
     :last-name "Picasso"
     :location "Spain"}
    #inst "1973-04-08T09:20:27.966-00:00"]
-  [:xt/put ; put new version if it matches
+  [::xt/put ; put new version if it matches
    {:xt/id :dbpedia.resource/Pablo-Picasso
     :name "Pablo"
     :last-name "Picasso"
@@ -49,14 +49,14 @@
 ;; transaction containing a `delete` operation, historical versions remain
 (xt/submit-tx
  node
- [[:xt/delete :dbpedia.resource/Pablo-Picasso
+ [[::xt/delete :dbpedia.resource/Pablo-Picasso
    #inst "1973-04-08T09:20:27.966-00:00"]])
 
 
 ;; transaction containing an `evict` operation, historical data is destroyed
 (xt/submit-tx
  node
- [[:xt/evict :dbpedia.resource/Pablo-Picasso]])
+ [[::xt/evict :dbpedia.resource/Pablo-Picasso]])
 
 
 ;; query the node as-of now
@@ -68,7 +68,7 @@
 ;; `put` the new version of the document again
 (xt/submit-tx
  node
- [[:xt/put
+ [[::xt/put
    {:xt/id :dbpedia.resource/Pablo-Picasso
     :name "Pablo"
     :last-name "Picasso"

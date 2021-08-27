@@ -1,6 +1,7 @@
 (ns xtdb.http-server.json-test
   (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
             [clojure.test :as t]
+            [xtdb.api :as xt]
             [xtdb.fixtures :as fix]
             [xtdb.fixtures.http-server :as fh :refer [*api-url*]]
             [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as json]))
@@ -203,7 +204,7 @@
   (let [tx-fn (pr-str '(fn [ctx eid]
                          (let [db (xtdb.api/db ctx)
                                entity (xtdb.api/entity db eid)]
-                           [[:xt/put (update entity :age inc)]])))
+                           [[::xt/put (update entity :age inc)]])))
         {:strs [txId] :as tx} (submit-tx [["put" {"xt/id" "increment-age", "crux.db/fn" tx-fn}]])]
     (t/is (= tx
              (json-get {:url "/_xtdb/await-tx"
@@ -232,7 +233,7 @@
                         :qps {"eidJson" (pr-str "ivan")}})))))
 
 (t/deftest test-object-mapping
-  (fix/submit+await-tx [[:xt/put {:xt/id "foo"
+  (fix/submit+await-tx [[::xt/put {:xt/id "foo"
                                   :bytes (byte-array [1 2 3])}]])
   (t/is (= {"xt/id" "foo"
             "bytes" "AQID"}

@@ -48,7 +48,7 @@
   (Date. ^long (* 1000 dt)))
 
 (defn ->put [doc ^Date valid-time ^Duration valid-duration]
-  [:xt/put doc valid-time (Date/from (-> (.toInstant valid-time)
+  [::xt/put doc valid-time (Date/from (-> (.toInstant valid-time)
                                          (.plus valid-duration)))])
 
 (defn current-resp->put [resp]

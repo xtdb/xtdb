@@ -160,7 +160,7 @@ public class DocumentTest {
     @Test
     public void functions() {
         XtdbDocument document = XtdbDocument.createFunction(documentId,
-                "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :person/version inc)]]))");
+                "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xtdb.api/put (update entity :person/version inc)]]))");
         assertSameAfterPut(document);
     }
 

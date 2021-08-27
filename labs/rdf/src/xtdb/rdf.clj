@@ -210,7 +210,7 @@
                  (when (zero? (long (mod entity-count *ntriples-log-size*)))
                    (log/debug "submitted" entity-count))
                  (let [tx-ops (vec (for [entity entities]
-                                     [:xt/put entity]))]
+                                     [::xt/put entity]))]
                    {:entity-count (+ entity-count (count entities))
                     :last-tx (xt/submit-tx node tx-ops)}))
 
@@ -274,11 +274,11 @@
     (f (statements->maps (ntriples-seq in)))))
 
 (defn ->tx-op [entity]
-  [:xt/put entity])
+  [::xt/put entity])
 
 (defn ->tx-ops [ntriples]
   (vec (for [entity ntriples]
-         [:xt/put entity])))
+         [::xt/put entity])))
 
 (defn ->default-language [c]
   (mapv #(use-default-language % :en) c))

@@ -10,4 +10,4 @@
 
 (t/deftest test-read-only-node
   (t/is (thrown-with-msg? UnsupportedOperationException #"read-only"
-                          (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]]))))
+                          (xt/submit-tx *api* [[::xt/put {:xt/id :foo}]]))))
