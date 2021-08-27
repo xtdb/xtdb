@@ -20,7 +20,7 @@
                              (.getAttribute "content"))
          edn-content (reader/read-string {:readers {'object pr-str
                                                     'xt/id str
-                                                    'xt.http/entity-ref entity-ref/->EntityRef}} result-meta)]
+                                                    'xtdb.http/entity-ref entity-ref/->EntityRef}} result-meta)]
      (if edn-content
        {:db (assoc db handler edn-content)}
        (js/console.warn "Metadata not found")))))

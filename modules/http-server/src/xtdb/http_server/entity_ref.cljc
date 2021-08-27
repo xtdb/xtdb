@@ -23,12 +23,12 @@
 
 #? (:clj
     (defmethod print-method EntityRef [ref ^Writer w]
-      (.write w "#xt.http/entity-ref ")
+      (.write w "#xtdb.http/entity-ref ")
       (print-method (:eid ref) w)))
 
 #? (:clj
     (def ref-write-handler
-      (transit/write-handler "xt.http/entity-ref" #(:eid %))))
+      (transit/write-handler "xtdb.http/entity-ref" #(:eid %))))
 
 #? (:clj
     (def ref-read-handler

@@ -124,19 +124,19 @@
 
 (t/deftest test-id-reader
   (t/testing "can read and convert to real id"
-    (t/is (not= (c/new-id "http://google.com") #xt/id "http://google.com"))
+    (t/is (not= (c/new-id "http://google.com") #xtdb/id "http://google.com"))
     (t/is (= "234988566c9a0a9cf952cec82b143bf9c207ac16"
-             (str #xt/id "http://google.com")))
-    (t/is (instance? Id (c/new-id #xt/id "http://google.com"))))
+             (str #xtdb/id "http://google.com")))
+    (t/is (instance? Id (c/new-id #xtdb/id "http://google.com"))))
 
   (t/testing "can create different types of ids"
-    (t/is (= (c/new-id :foo) #xt/id ":foo"))
+    (t/is (= (c/new-id :foo) #xtdb/id ":foo"))
     (t/is (= (c/new-id #uuid "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28")
-             #xt/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28"))
-    (t/is (not= #xt/id "234988566c9a0a9cf952cec82b143bf9c207ac16"
+             #xtdb/id "37c20bcd-eb5e-4ef7-b5dc-69fed7d87f28"))
+    (t/is (not= #xtdb/id "234988566c9a0a9cf952cec82b143bf9c207ac16"
                 (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
     (t/is (not= (c/new-id "234988566c9a0a9cf952cec82b143bf9c207ac16")
-                #xt/id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
+                #xtdb/id "234988566c9a0a9cf952cec82b143bf9c207ac16")))
 
   (t/testing "legacy #crux/* reader tags"
     (t/is (= (c/new-id :foo) #crux/id ":foo"))
@@ -151,19 +151,19 @@
     (t/is (not= {:find ['e]
                  :where [['e (c/new-id "http://xmlns.com/foaf/0.1/firstName") "Pablo"]]}
                 '{:find [e]
-                  :where [[e #xt/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]})))
+                  :where [[e #xtdb/id "http://xmlns.com/foaf/0.1/firstName" "Pablo"]]})))
 
   (t/testing "URL and keyword are same id"
     (t/is (= (c/new-id (keyword "http://xmlns.com/foaf/0.1/firstName"))
-             #xt/id "http://xmlns.com/foaf/0.1/firstName"))
+             #xtdb/id "http://xmlns.com/foaf/0.1/firstName"))
     (t/is (= (c/new-id (URL. "http://xmlns.com/foaf/0.1/firstName"))
-             #xt/id ":http://xmlns.com/foaf/0.1/firstName"))
+             #xtdb/id ":http://xmlns.com/foaf/0.1/firstName"))
     (t/is (not= (c/new-id "http://xmlns.com/foaf/0.1/firstName")
-                #xt/id ":http://xmlns.com/foaf/0.1/firstName"))))
+                #xtdb/id ":http://xmlns.com/foaf/0.1/firstName"))))
 
 (t/deftest test-base64-reader
   (t/is (Arrays/equals (byte-array [1 2 3])
-                       ^bytes (c/read-edn-string-with-readers "#xt/base64 \"AQID\"")))
+                       ^bytes (c/read-edn-string-with-readers "#xtdb/base64 \"AQID\"")))
 
   (t/is (Arrays/equals (byte-array [1 2 3])
                        ^bytes (c/read-edn-string-with-readers "#crux/base64 \"AQID\""))
@@ -176,7 +176,7 @@
                {:foo 1} :foo1}]
     (t/is (not= (seq foo-a) (seq foo-b))) ; ordering is different
     (t/is (thrown? ClassCastException (sort foo-a))) ; can't just sort it
-    (t/is (= #xt/id "952fe1092dacf06dc4d9270ce1d27010a6c46508"
+    (t/is (= #xtdb/id "952fe1092dacf06dc4d9270ce1d27010a6c46508"
              (c/new-id {:xt/id :foo
                         :foo foo-a})
              (c/new-id {:xt/id :foo
@@ -184,18 +184,18 @@
 
   (let [foo #{#{:foo} #{:bar}}]
     (t/is (thrown? ClassCastException (sort foo)))
-    (t/is (= #xt/id "3d9559394baad1e185c228dfc5a9f1eb655279fd"
+    (t/is (= #xtdb/id "3d9559394baad1e185c228dfc5a9f1eb655279fd"
              (c/new-id {:xt/id :foo
                         :foo foo}))))
 
   (let [foo #{42 "hello"}]
     (t/is (thrown? ClassCastException (sort foo)))
-    (t/is (= #xt/id "e744f8a121d024c68e20f160b0965b1bacf1bf29"
+    (t/is (= #xtdb/id "e744f8a121d024c68e20f160b0965b1bacf1bf29"
              (c/new-id {:xt/id :foo
                         :foo foo}))))
 
   (t/testing "original coll hashing unaffected"
-    (t/is (= #xt/id "f5282928a8acc2ac6bfc796fea2a676a9bdadfd5"
+    (t/is (= #xtdb/id "f5282928a8acc2ac6bfc796fea2a676a9bdadfd5"
              (c/new-id {:xt/id :foo
                         :foo {:a 1, :b 2}})
              (c/new-id {:xt/id :foo

@@ -744,15 +744,15 @@
 
   (with-open [log-iterator (xt/open-tx-log *api* nil true)]
     (t/is (= [[[::xt/put
-                {:xt/id #xt/id "6abe906510aa2263737167c12c252245bdcf6fb0",
+                {:xt/id #xtdb/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                  ::xt/evicted? true}]]
               [[::xt/cas
-                {:xt/id #xt/id "6abe906510aa2263737167c12c252245bdcf6fb0",
+                {:xt/id #xtdb/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                  ::xt/evicted? true}
-                {:xt/id #xt/id "6abe906510aa2263737167c12c252245bdcf6fb0",
+                {:xt/id #xtdb/id "6abe906510aa2263737167c12c252245bdcf6fb0",
                  ::xt/evicted? true}]]
               [[::xt/evict
-                #xt/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]
+                #xtdb/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]
              (->> (iterator-seq log-iterator)
                   (map ::xt/tx-ops))))))
 
@@ -1013,11 +1013,11 @@
                  :doc-ids doc-ids
                  :av-count 4
                  ::txe/tx-events [[:crux.tx/put
-                                   #xt/id "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
-                                   #xt/id "974e28e6484fb6c66e5ca6444ec616207800d815"]
+                                   #xtdb/id "0beec7b5ea3f0fdbc95d0dd47f3c5bc275da8a33"
+                                   #xtdb/id "974e28e6484fb6c66e5ca6444ec616207800d815"]
                                   [:crux.tx/put
-                                   #xt/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
-                                   #xt/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
+                                   #xtdb/id "62cdb7020ff920e5aa642c3d4066950dd1f01f4d"
+                                   #xtdb/id "f2cb628efd5123743c30137b08282b9dee82104a"]]}]
                (-> (vec @!events)
                    (update 1 dissoc :bytes-indexed)))))))
 

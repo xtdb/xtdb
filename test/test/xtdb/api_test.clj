@@ -74,7 +74,7 @@
       (t/is (= submitted-tx (xt/latest-completed-tx *api*))))))
 
 (t/deftest test-can-use-id-literals
-  (let [id #xt/id "https://adam.com"
+  (let [id #xtdb/id "https://adam.com"
         doc {:xt/id id, :name "Adam"}
         submitted-tx (xt/submit-tx *api* [[::xt/put doc]])]
     (xt/await-tx *api* submitted-tx nil)

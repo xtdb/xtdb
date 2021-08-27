@@ -20,14 +20,14 @@
 
 (defn- parse-body [{:keys [^InputStream body]} content-type]
   (case content-type
-    "application/transit+json" (transit/read (transit/reader body :json {:handlers {"xt.http/entity-ref" entity-ref/ref-read-handler
-                                                                                    "xt/oid" (transit/read-handler c/id-edn-reader)
-                                                                                    "xt/base64" (transit/read-handler c/base64-reader)}}))
+    "application/transit+json" (transit/read (transit/reader body :json {:handlers {"xtdb.http/entity-ref" entity-ref/ref-read-handler
+                                                                                    "xtdb/oid" (transit/read-handler c/id-edn-reader)
+                                                                                    "xtdb/base64" (transit/read-handler c/base64-reader)}}))
     "application/json" (json/read-value body)
-    "application/edn" (edn/read-string {:readers {'xt.http/entity-ref entity-ref/->EntityRef
-                                                  'xt/query-state cqs/->QueryState
-                                                  'xt/query-error cqs/->QueryError
-                                                  'xt/id str}}
+    "application/edn" (edn/read-string {:readers {'xtdb.http/entity-ref entity-ref/->EntityRef
+                                                  'xtdb/query-state cqs/->QueryState
+                                                  'xtdb/query-error cqs/->QueryError
+                                                  'xtdb/id str}}
                                        (slurp body))
     "text/csv" (with-open [rdr (io/reader body)]
                  (doall (csv/read-csv rdr)))

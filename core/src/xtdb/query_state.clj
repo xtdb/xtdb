@@ -23,11 +23,11 @@
   (getError [this] error))
 
 (defmethod print-method QueryState [qs ^Writer w]
-  (.write w "#xt/query-state ")
+  (.write w "#xtdb/query-state ")
   (print-method (into {} qs) w))
 
 (defmethod print-method QueryError [qs ^Writer w]
-  (.write w "#xt/query-error ")
+  (.write w "#xtdb/query-error ")
   (print-method (into {} qs) w))
 
 (defn ->QueryError [error]

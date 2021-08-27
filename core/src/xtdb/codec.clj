@@ -647,11 +647,11 @@
       (mem/compare-buffers (->id-buffer this) (->id-buffer that)))))
 
 (defmethod print-method Id [id ^Writer w]
-  (.write w "#xt/id ")
+  (.write w "#xtdb/id ")
   (.write w (xio/pr-edn-str (str id))))
 
 (defmethod print-dup Id [id ^Writer w]
-  (.write w "#xt/id ")
+  (.write w "#xtdb/id ")
   (.write w (xio/pr-edn-str (str id))))
 
 (extend-protocol IdOrBuffer
@@ -741,13 +741,13 @@
 
 (defn read-edn-string-with-readers [s]
   (edn/read-string {:readers {'crux/id id-edn-reader
-                              'xt/id id-edn-reader
+                              'xtdb/id id-edn-reader
                               'crux/base64 base64-reader
-                              'xt/base64 base64-reader
+                              'xtdb/base64 base64-reader
                               'crux/query-state cqs/->QueryState
-                              'xt/query-state cqs/->QueryState
+                              'xtdb/query-state cqs/->QueryState
                               'crux/query-error cqs/->QueryError
-                              'xt/query-error cqs/->QueryError}}
+                              'xtdb/query-error cqs/->QueryError}}
                    s))
 
 (def ^:const ^:private base64-print-method-enabled?
@@ -755,22 +755,22 @@
 
 (when base64-print-method-enabled?
   (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]
-    (.write w "#xt/base64 ")
+    (.write w "#xtdb/base64 ")
     (.write w (xio/pr-edn-str (base64-writer b))))
 
   (defmethod print-dup (class (byte-array 0)) [^bytes b ^Writer w]
-    (.write w "#xt/base64 ")
+    (.write w "#xtdb/base64 ")
     (.write w (xio/pr-edn-str (base64-writer b)))))
 
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
 
 (defmethod print-method EDNId [^EDNId id ^Writer w]
-  (.write w "#xt/id ")
+  (.write w "#xtdb/id ")
   (.write w (xio/pr-edn-str (edn-id->original-id id))))
 
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
-  (.write w "#xt/id ")
+  (.write w "#xtdb/id ")
   (.write w (xio/pr-edn-str (edn-id->original-id id))))
 
 (nippy/extend-freeze

@@ -73,9 +73,9 @@
 
 (def tj-write-handlers
   {EntityRef entity-ref/ref-write-handler
-   Id (transit/write-handler "xt/oid" str)
-   EDNId (transit/write-handler "xt/oid" str)
-   (Class/forName "[B") (transit/write-handler "xt/base64" c/base64-writer)})
+   Id (transit/write-handler "xtdb/oid" str)
+   EDNId (transit/write-handler "xtdb/oid" str)
+   (Class/forName "[B") (transit/write-handler "xtdb/base64" c/base64-writer)})
 
 (defn ->tj-encoder [_]
   (let [options {:handlers tj-write-handlers}]
