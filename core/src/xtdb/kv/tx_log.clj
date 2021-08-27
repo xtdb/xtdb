@@ -2,7 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [xtdb.codec :as c]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kv :as kv]
             [xtdb.kv.index-store :as kvi]
             [xtdb.memory :as mem]
@@ -96,7 +96,7 @@
                    (concat txs
                            (when (= batch-size (count txs))
                              (tx-log (:xt/tx-id (last txs))))))))]
-        (cio/->cursor (fn []) (tx-log after-tx-id)))))
+        (xio/->cursor (fn []) (tx-log after-tx-id)))))
 
   (subscribe [this after-tx-id f]
     (tx-sub/handle-notifying-subscriber subscriber-handler this after-tx-id f))
@@ -123,6 +123,6 @@
 
 (defn ->tx-log {::sys/deps {:kv-store 'xtdb.mem-kv/->kv-store}}
   [{:keys [kv-store]}]
-  (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (cio/thread-factory "crux-standalone-submit-tx"))
+  (map->KvTxLog {:tx-submit-executor (bounded-solo-thread-pool 16 (xio/thread-factory "crux-standalone-submit-tx"))
                  :kv-store kv-store
                  :subscriber-handler (tx-sub/->notifying-subscriber-handler (latest-submitted-tx kv-store))}))

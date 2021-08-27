@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [xtdb.codec :as c]
             [xtdb.error :as err]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.query-state :as qs]
             [xtdb.tx :as tx]
             [xtdb.api :as xt]
@@ -86,7 +86,7 @@
                                                  {"Content-Type" "application/edn"})
                                                (when ->jwt-token
                                                  {"Authorization" (str "Bearer " (->jwt-token))}))
-                               :body (some-> body cio/pr-edn-str)
+                               :body (some-> body xio/pr-edn-str)
                                :accept :edn
                                :as "UTF-8"
                                :throw-exceptions false}
@@ -118,8 +118,8 @@
       (.close ^Closeable stream))))
 
 (defn- temporal-qps [{:keys [valid-time tx-time tx-id] :as db}]
-  {:valid-time (some-> valid-time (cio/format-rfc3339-date))
-   :tx-time (some-> tx-time (cio/format-rfc3339-date))
+  {:valid-time (some-> valid-time (xio/format-rfc3339-date))
+   :tx-time (some-> tx-time (xio/format-rfc3339-date))
    :tx-id tx-id})
 
 (defrecord RemoteDatasource [url valid-time tx-time tx-id ->jwt-token]
@@ -154,7 +154,7 @@
                                             :query-params (temporal-qps this)}
                                 :body {:query (pr-str query)
                                        :in-args (vec in-args)}})]
-      (cio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
+      (xio/->cursor #(.close ^Closeable in) (edn-list->lazy-seq in))))
 
   (pull [this projection eid]
     (let [?eid (gensym '?eid)
@@ -194,22 +194,22 @@
                      :with-corrections (:with-corrections? opts)
                      :with-docs (:with-docs? opts)
 
-                     :start-valid-time (some-> (:start-valid-time opts) (cio/format-rfc3339-date))
+                     :start-valid-time (some-> (:start-valid-time opts) (xio/format-rfc3339-date))
                      :start-tx-time (some-> (get-in opts [:start-tx :xt/tx-time])
-                                            (cio/format-rfc3339-date))
+                                            (xio/format-rfc3339-date))
                      :start-tx-id (get-in opts [:start-tx :xt/tx-id])
 
-                     :end-valid-time (some-> (:end-valid-time opts) (cio/format-rfc3339-date))
+                     :end-valid-time (some-> (:end-valid-time opts) (xio/format-rfc3339-date))
                      :end-tx-time (some-> (get-in opts [:end-tx :xt/tx-time])
-                                          (cio/format-rfc3339-date))
+                                          (xio/format-rfc3339-date))
                      :end-tx-id (get-in opts [:end-tx :xt/tx-id])})]
      (if-let [in (api-request-sync (str url "/_xtdb/entity")
                                    {:http-opts {:as :stream
                                                 :method :get
                                                 :query-params qps}
                                     :->jwt-token ->jwt-token})]
-       (cio/->cursor #(.close ^java.io.Closeable in) (edn-list->lazy-seq in))
-       cio/empty-cursor)))
+       (xio/->cursor #(.close ^java.io.Closeable in) (edn-list->lazy-seq in))
+       xio/empty-cursor)))
 
   (valid-time [this] valid-time)
 
@@ -274,7 +274,7 @@
   (sync [this timeout]
    (-> (api-request-sync (str url "/_xtdb/sync")
                          {:http-opts {:method :get
-                                      :query-params {:timeout (some-> timeout (cio/format-duration-millis))}}
+                                      :query-params {:timeout (some-> timeout (xio/format-duration-millis))}}
                           :->jwt-token ->jwt-token})
        (get :xt/tx-time)))
 
@@ -288,15 +288,15 @@
     (api-request-sync (str url "/_xtdb/await-tx")
                       {:http-opts {:method :get
                                    :query-params {:tx-id (:xt/tx-id submitted-tx)
-                                                 :timeout (some-> timeout (cio/format-duration-millis))}}
+                                                 :timeout (some-> timeout (xio/format-duration-millis))}}
                        :->jwt-token ->jwt-token}))
 
   (await-tx-time [this tx-time] (xt/await-tx-time this tx-time nil))
   (await-tx-time [this tx-time timeout]
     (-> (api-request-sync (str url "/_xtdb/await-tx-time" )
                           {:http-opts {:method :get
-                                       :query-params {:tx-time (cio/format-rfc3339-date tx-time)
-                                                     :timeout (some-> timeout (cio/format-duration-millis))}}
+                                       :query-params {:tx-time (xio/format-rfc3339-date tx-time)
+                                                     :timeout (some-> timeout (xio/format-duration-millis))}}
                            :->jwt-token ->jwt-token})
         (get :xt/tx-time)))
 
@@ -362,7 +362,7 @@
                                                            :with-ops? with-ops?}}
                                 :->jwt-token ->jwt-token})]
 
-      (cio/->cursor #(.close ^Closeable in)
+      (xio/->cursor #(.close ^Closeable in)
                     (edn-list->lazy-seq in)))))
 
 (defn- ^:dynamic *now* ^Instant []

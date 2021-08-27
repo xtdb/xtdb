@@ -3,7 +3,7 @@
             [xtdb.cache :as cache]
             [xtdb.codec :as c]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
@@ -58,7 +58,7 @@
 
   Closeable
   (close [_]
-    (cio/try-close document-store)))
+    (xio/try-close document-store)))
 
 (defn ->cached-document-store
   {::sys/deps {:document-store :xt/document-store
@@ -75,7 +75,7 @@
                           (fn []
                             (when (Files/exists doc-path (make-array LinkOption 0))
                               (with-open [in (Files/newInputStream doc-path (into-array OpenOption #{StandardOpenOption/READ}))]
-                                (cio/with-nippy-thaw-all
+                                (xio/with-nippy-thaw-all
                                   (MapEntry/create id
                                                    (some->> in
                                                             (DataInputStream.)
@@ -118,4 +118,4 @@
   (->cached-document-store
    (assoc opts
           :document-cache document-cache
-          :document-store (->NIODocumentStore root-path (Executors/newFixedThreadPool pool-size (cio/thread-factory "doc-store"))))))
+          :document-store (->NIODocumentStore root-path (Executors/newFixedThreadPool pool-size (xio/thread-factory "doc-store"))))))

@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [xtdb.codec :as c]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.status :as status]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
@@ -34,7 +34,7 @@
   (merge {"bootstrap.servers" bootstrap-servers}
          (when properties-file
            (with-open [in (io/reader (.toFile properties-file))]
-             (cio/load-properties in)))
+             (xio/load-properties in)))
          properties-map))
 
 (defn ->topic-opts {::sys/args {:topic-name {:required? true
@@ -112,7 +112,7 @@
                                   (seek-consumer consumer tp-offsets)))))
 
 (defn- poll-consumer [^KafkaConsumer consumer ^Duration poll-duration]
-  (cio/with-nippy-thaw-all
+  (xio/with-nippy-thaw-all
     (try
       (.poll consumer poll-duration)
       (catch InterruptException e
@@ -181,7 +181,7 @@
 
   (open-tx-log [this after-tx-id]
     (let [consumer (open-consumer this after-tx-id)]
-      (cio/->cursor #(.close consumer)
+      (xio/->cursor #(.close consumer)
                     (->> (consumer-seqs consumer poll-wait-duration)
                          (mapcat identity)
                          (map tx-record->tx-log-entry)))))
@@ -208,7 +208,7 @@
 
   Closeable
   (close [_]
-    (cio/try-close producer)))
+    (xio/try-close producer)))
 
 (defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
                             :tx-topic-opts {:xt/module `->topic-opts, :topic-name "crux-transaction-log"}}
@@ -270,8 +270,8 @@
                                ^Thread indexing-thread !indexing-error]
   Closeable
   (close [_]
-    (cio/try-close end-offset-consumer)
-    (cio/try-close producer)
+    (xio/try-close end-offset-consumer)
+    (xio/try-close producer)
     (.interrupt indexing-thread)
     (.join indexing-thread))
 

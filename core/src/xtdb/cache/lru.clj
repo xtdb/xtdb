@@ -1,5 +1,5 @@
 (ns ^:no-doc xtdb.cache.lru
-  (:require [xtdb.io :as cio]
+  (:require [xtdb.io :as xio]
             [xtdb.system :as sys])
   (:import xtdb.cache.ICache
            java.util.concurrent.locks.StampedLock
@@ -19,7 +19,7 @@
       (if (= ::not-found v)
         (let [k (stored-key-fn k)
               v (f k)]
-          (cio/with-write-lock lock
+          (xio/with-write-lock lock
             ;; lock the cache only after potentially heavy value and key calculations are done
             (.computeIfAbsent cache k (reify Function
                                         (apply [_ k]
@@ -27,22 +27,22 @@
         v)))
 
   (evict [_ k]
-    (cio/with-write-lock lock
+    (xio/with-write-lock lock
       (.remove cache k)))
 
   (valAt [_ k]
-    (cio/with-write-lock lock
+    (xio/with-write-lock lock
       (.get cache k)))
 
   (valAt [_ k default]
-    (cio/with-write-lock lock
+    (xio/with-write-lock lock
       (.getOrDefault cache k default)))
 
   (count [_]
     (.size cache))
 
   (close [_]
-    (cio/with-write-lock lock
+    (xio/with-write-lock lock
       (.clear cache))))
 
 (defn ->lru-cache

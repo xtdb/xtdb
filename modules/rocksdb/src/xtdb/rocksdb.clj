@@ -6,7 +6,7 @@
             [xtdb.rocksdb.loader]
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.checkpoint :as cp]
             [xtdb.kv.index-store :as kvi]
             [xtdb.codec :as c])
@@ -101,7 +101,7 @@
 
   cp/CheckpointSource
   (save-checkpoint [this dir]
-    (cio/delete-dir dir)
+    (xio/delete-dir dir)
     (let [tx (kvi/latest-completed-tx this)]
       (with-open [checkpoint (Checkpoint/create db)]
         (.createCheckpoint checkpoint (.getAbsolutePath ^File dir)))
@@ -109,11 +109,11 @@
 
   Closeable
   (close [_]
-    (cio/try-close db)
-    (cio/try-close options)
-    (cio/try-close write-options)
-    (cio/try-close metrics)
-    (cio/try-close cp-job)))
+    (xio/try-close db)
+    (xio/try-close options)
+    (xio/try-close write-options)
+    (xio/try-close metrics)
+    (xio/try-close cp-job)))
 
 (def ^:private cp-format {:index-version c/index-version, ::version "6"})
 

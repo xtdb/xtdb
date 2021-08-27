@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [xtdb.bench :as bench]
             [xtdb.bench.watdiv :as watdiv]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.rdf :as rdf])
   (:import java.io.StringReader
            org.eclipse.rdf4j.query.Binding
@@ -13,7 +13,7 @@
            org.eclipse.rdf4j.sail.nativerdf.NativeStore))
 
 (defn with-sail-repository [f]
-  (let [db-dir (str (cio/create-tmpdir "sail-store"))
+  (let [db-dir (str (xio/create-tmpdir "sail-store"))
         db (SailRepository. (NativeStore. (io/file db-dir)))]
     (try
       (.initialize db)
@@ -21,7 +21,7 @@
         (f conn))
       (finally
         (.shutDown db)
-        (cio/delete-dir db-dir)))))
+        (xio/delete-dir db-dir)))))
 
 (defn load-rdf-into-sail [^RepositoryConnection conn]
   (bench/run-bench :ingest-rdf

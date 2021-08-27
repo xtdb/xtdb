@@ -8,7 +8,7 @@
             [xtdb.bench.cloudwatch :as cw]
             [xtdb.bus :as bus]
             [xtdb.fixtures :as f]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.jdbc :as j]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]

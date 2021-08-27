@@ -1,6 +1,6 @@
 (ns ^:no-doc xtdb.kv.document-store
   (:require [xtdb.codec :as c]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.db :as db]
             [xtdb.document-store :as ds]
             [xtdb.memory :as mem]
@@ -38,7 +38,7 @@
 (defrecord KvDocumentStore [kv-store fsync?]
   db/DocumentStore
   (fetch-docs [_ ids]
-    (cio/with-nippy-thaw-all
+    (xio/with-nippy-thaw-all
       (with-open [snapshot (kv/new-snapshot kv-store)]
         (persistent!
          (reduce

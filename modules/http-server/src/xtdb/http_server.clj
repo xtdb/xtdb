@@ -14,7 +14,7 @@
             [xtdb.http-server.query :as query]
             [xtdb.http-server.status :as status]
             [xtdb.http-server.util :as util]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
             [xtdb.tx.conform :as txc]
@@ -73,7 +73,7 @@
          :body {:error (str eid " entity-tx not found")}}))))
 
 (defn- ->submit-json-decoder [_]
-  (let [decoders {::txc/->doc #(cio/update-if % :crux.db/fn edn/read-string)
+  (let [decoders {::txc/->doc #(xio/update-if % :crux.db/fn edn/read-string)
                   ::txc/->valid-time (fn [vt-str]
                                        (try
                                          (instant/read-instant-date vt-str)
@@ -117,8 +117,8 @@
 
 (defn tx-log-json-encode [tx]
   (-> tx
-      (cio/update-if :xt/tx-ops txs->json)
-      (cio/update-if :xtdb.tx.event/tx-events txs->json)
+      (xio/update-if :xt/tx-ops txs->json)
+      (xio/update-if :xtdb.tx.event/tx-events txs->json)
       (http-json/camel-case-keys)))
 
 (def ->tx-log-muuntaja
@@ -296,7 +296,7 @@
 (defn- make-cursors [example]
   (let [example-meta (meta example)]
     (cond
-      (:results-cursor example-meta) {:results (cio/->cursor #() example)}
+      (:results-cursor example-meta) {:results (xio/->cursor #() example)}
       :else example)))
 
 (defn- with-example [{:keys [muuntaja] :or {muuntaja default-muuntaja} :as handler} example-filename]

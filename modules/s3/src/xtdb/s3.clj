@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [xtdb.db :as db]
             [xtdb.document-store :as ds]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys])
   (:import clojure.lang.MapEntry
            xtdb.s3.S3Configurator
@@ -87,7 +87,7 @@
                         (MapEntry/create id (AsyncRequestBody/fromBytes (.freeze configurator doc))))))
 
   (fetch-docs [this ids]
-    (cio/with-nippy-thaw-all
+    (xio/with-nippy-thaw-all
       (->> (get-objects this (for [id ids]
                                (MapEntry/create id (AsyncResponseTransformer/toBytes))))
 

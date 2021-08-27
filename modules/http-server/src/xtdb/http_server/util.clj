@@ -6,7 +6,7 @@
             [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.http-server.json :as http-json]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [juxt.clojars-mirrors.hiccup.v2v0v0-alpha2.hiccup2.core :as hiccup2]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
@@ -69,7 +69,7 @@
                 (print-method (or (iterator-seq results) '()) w)
                 (.write w ^String (pr-str data)))
               (finally
-                (cio/try-close results)))))))))
+                (xio/try-close results)))))))))
 
 (def tj-write-handlers
   {EntityRef entity-ref/ref-write-handler
@@ -95,7 +95,7 @@
                 (transit/write writer (or (iterator-seq results) '()))
                 (transit/write writer data))
               (finally
-                (cio/try-close results)))))))))
+                (xio/try-close results)))))))))
 
 (defn ->default-muuntaja
   ([] (->default-muuntaja {}))

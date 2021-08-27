@@ -7,7 +7,7 @@
             [clojure.tools.logging :as log]
             [clojure.pprint :as pp]
             [juxt.clojars-mirrors.dependency.v1v0v0.com.stuartsierra.dependency :as dep]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.error :as err])
   (:import [java.io Closeable File Writer]
            java.net.URL
@@ -216,7 +216,7 @@
                                (catch Throwable e
                                  (->> (reverse (take-while (complement #{k}) start-order))
                                       (remove ref?)
-                                      (run! (comp cio/try-close system)))
+                                      (run! (comp xio/try-close system)))
                                  (throw (ex-info "Error starting system" {:k k} e))))))
                          {}
                          start-order)]
@@ -227,7 +227,7 @@
           (vary-meta assoc ::close-fn (fn []
                                         (->> (reverse start-order)
                                              (remove ref?)
-                                             (run! (comp cio/try-close system)))))))))
+                                             (run! (comp xio/try-close system)))))))))
 
 ;;;; specs/conformers
 

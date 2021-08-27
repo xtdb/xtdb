@@ -8,7 +8,7 @@
             [xtdb.http-server.entity-ref :as entity-ref]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.edn :as mfe]
@@ -81,7 +81,7 @@
      :tx-time (xt/transaction-time db)
      :results (if link-entities?
                 (let [results (apply xt/q db query in-args)]
-                  (cio/->cursor (fn []) (with-entity-refs results db)))
+                  (xio/->cursor (fn []) (with-entity-refs results db)))
                 (apply xt/open-q db query in-args))}))
 
 (defn- ->*sv-encoder [{:keys [sep]}]
@@ -94,7 +94,7 @@
               (csv/write-csv w (cons (:find query) (iterator-seq results)) :separator sep)
               (.write w (pr-str res)))
             (finally
-              (cio/try-close results))))))))
+              (xio/try-close results))))))))
 
 (defn ->html-encoder [{:keys [crux-node http-options]}]
   (reify mfc/EncodeToBytes
@@ -113,7 +113,7 @@
                                                              {"error" res}})})]
           (.getBytes resp ^String charset))
         (finally
-          (cio/try-close results))))))
+          (xio/try-close results))))))
 
 (defn ->query-muuntaja [opts]
   (m/create (-> m/default-options

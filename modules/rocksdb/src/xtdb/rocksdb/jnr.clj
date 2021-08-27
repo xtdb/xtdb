@@ -3,7 +3,7 @@
   https://github.com/jnr/jnr-ffi"
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kv :as kv]
             [xtdb.rocksdb.loader]
             [xtdb.memory :as mem]
@@ -266,7 +266,7 @@
 
   cp/CheckpointSource
   (save-checkpoint [kv-store dir]
-    (cio/delete-dir dir)
+    (xio/delete-dir dir)
     (let [tx (kvi/latest-completed-tx kv-store)
           errptr-out (make-array String 1)
           checkpoint (try
@@ -286,7 +286,7 @@
     (.rocksdb_options_destroy rocksdb options)
     (.rocksdb_block_based_options_destroy rocksdb block-based-options)
     (.rocksdb_writeoptions_destroy rocksdb write-options)
-    (cio/try-close cp-job)))
+    (xio/try-close cp-job)))
 
 (def ^:private cp-format
   {:index-version c/index-version

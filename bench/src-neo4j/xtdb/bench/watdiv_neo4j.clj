@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [xtdb.bench :as bench]
             [xtdb.bench.watdiv :as watdiv]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql])
   (:import java.util.concurrent.TimeUnit
@@ -15,7 +15,7 @@
 (def neo4j-index-timeout-ms 120000)
 
 (defn with-neo4j [f]
-  (let [db-dir (cio/create-tmpdir "neo4j")
+  (let [db-dir (xio/create-tmpdir "neo4j")
         data-dir (io/file db-dir "data")
         db-manager (-> (DatabaseManagementServiceBuilder. data-dir)
                        (.build))]
@@ -23,7 +23,7 @@
       (f (.database db-manager "neo4j"))
       (finally
         (.shutdown db-manager)
-        (cio/delete-dir db-dir)))))
+        (xio/delete-dir db-dir)))))
 
 (defn sparql->cypher [^GraphDatabaseService graph-db q]
   (let [relationship? (with-open [tx (.beginTx graph-db)]

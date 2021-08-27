@@ -3,7 +3,7 @@
             [clojure.test.check.clojure-test :as tcct]
             [xtdb.api :as xt]
             [xtdb.codec :as c]
-            [xtdb.io :as cio])
+            [xtdb.io :as xio])
   (:import xtdb.api.IXtdb
            java.nio.file.attribute.FileAttribute
            java.nio.file.Files
@@ -18,7 +18,7 @@
     (try
       (f dir)
       (finally
-        (cio/delete-dir dir)))))
+        (xio/delete-dir dir)))))
 
 (defmacro ^:deprecated with-tmp-dir [prefix [dir-binding] & body]
   `(with-tmp-dir* ~prefix

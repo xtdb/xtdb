@@ -5,7 +5,7 @@
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [go halt reset reset-all]]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.lucene]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
@@ -62,7 +62,7 @@
 
 (defmethod i/init-key ::embedded-kafka [_ {:keys [kafka-port kafka-dir]}]
   (ek/start-embedded-kafka #::ek{:zookeeper-data-dir (io/file kafka-dir "zk-data")
-                                 :zookeeper-port (cio/free-port)
+                                 :zookeeper-port (xio/free-port)
                                  :kafka-log-dir (io/file kafka-dir "kafka-log")
                                  :kafka-port kafka-port}))
 
@@ -70,7 +70,7 @@
   (.close embedded-kafka))
 
 (def embedded-kafka-config
-  (let [kafka-port (cio/free-port)]
+  (let [kafka-port (xio/free-port)]
     {::embedded-kafka {:kafka-port kafka-port
                        :kafka-dir (io/file dev-node-dir "kafka")}
      ::crux {:ek (i/ref ::embedded-kafka)

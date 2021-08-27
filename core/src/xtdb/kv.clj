@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.kv
   "Protocols for KV backend implementations."
   (:refer-clojure :exclude [next])
-  (:require [xtdb.io :as cio]
+  (:require [xtdb.io :as xio]
             [xtdb.status :as status]
             [xtdb.system :as sys]))
 
@@ -39,4 +39,4 @@
   (status-map [this]
     {:xtdb.kv/kv-store (kv-name this)
      :xtdb.kv/estimate-num-keys (count-keys this)
-     :xtdb.kv/size (some-> (db-dir this) (cio/folder-size))}))
+     :xtdb.kv/size (some-> (db-dir this) (xio/folder-size))}))

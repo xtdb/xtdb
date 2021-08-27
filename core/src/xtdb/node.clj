@@ -7,7 +7,7 @@
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.query :as q]
             [xtdb.query-state :as qs]
             [xtdb.status :as status]
@@ -24,7 +24,7 @@
 (def crux-version
   (when-let [pom-file (io/resource "META-INF/maven/com.xtdb/xtdb-core/pom.properties")]
     (with-open [in (io/reader pom-file)]
-      (let [{:strs [version revision]} (cio/load-properties in)]
+      (let [{:strs [version revision]} (xio/load-properties in)]
         {:xtdb.version/version version
          :xtdb.version/revision revision}))))
 
@@ -90,7 +90,7 @@
   Closeable
   (close [_]
     (when close-fn
-      (cio/with-write-lock lock
+      (xio/with-write-lock lock
         (when (not @closed?)
           (bus/send bus {:xt/event-type ::node-closing})
           (close-fn)
@@ -111,13 +111,13 @@
   (open-db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
       (xt/open-db this {:xt/valid-time valid-time-or-basis})
-      (cio/with-read-lock lock
+      (xio/with-read-lock lock
         (ensure-node-open this)
         (xt/open-db query-engine valid-time-or-basis))))
 
   xt/PXtdb
   (status [this]
-    (cio/with-read-lock lock
+    (xio/with-read-lock lock
       (ensure-node-open this)
       (letfn [(status [m]
                 (merge (status/status-map m)
@@ -127,7 +127,7 @@
                (status (dissoc @!system :xt/node))))))
 
   (tx-committed? [this {:keys [:xt/tx-id] :as submitted-tx}]
-    (cio/with-read-lock lock
+    (xio/with-read-lock lock
       (ensure-node-open this)
       (let [{latest-tx-id :xt/tx-id, :as latest-tx} (xt/latest-completed-tx this)]
         (cond
@@ -175,7 +175,7 @@
                                 {:xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
   (latest-completed-tx [this]
-    (cio/with-read-lock lock
+    (xio/with-read-lock lock
       (ensure-node-open this)
       (db/latest-completed-tx index-store)))
 
@@ -183,7 +183,7 @@
     (db/latest-submitted-tx tx-log))
 
   (attribute-stats [this]
-    (cio/with-read-lock lock
+    (xio/with-read-lock lock
       (ensure-node-open this)
       (with-open [snapshot (db/open-index-snapshot index-store)]
         (->> (db/all-attrs snapshot)
@@ -204,11 +204,11 @@
   (submit-tx-async [this tx-ops]
     (let [tx-ops (xt/conform-tx-ops tx-ops)
           conformed-tx-ops (mapv txc/conform-tx-op tx-ops)]
-      (cio/with-read-lock lock
+      (xio/with-read-lock lock
         (ensure-node-open this)
         (db/submit-docs document-store (->> conformed-tx-ops
                                             (into {} (comp (mapcat :docs)))
-                                            (cio/map-vals c/xt->crux)))
+                                            (xio/map-vals c/xt->crux)))
         (db/submit-tx tx-log (mapv txc/->tx-event conformed-tx-ops)))))
 
   (submit-tx [this tx-ops]
@@ -216,12 +216,12 @@
 
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)]
-      (cio/with-read-lock lock
+      (xio/with-read-lock lock
         (ensure-node-open this)
         (if (let [latest-submitted-tx-id (:xt/tx-id (xt/latest-submitted-tx this))]
               (or (nil? latest-submitted-tx-id)
                   (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
-          cio/empty-cursor
+          xio/empty-cursor
 
           (let [latest-completed-tx-id (:xt/tx-id (xt/latest-completed-tx this))
                 tx-log-iterator (db/open-tx-log tx-log after-tx-id)
@@ -242,7 +242,7 @@
                                                                 (-> evt
                                                                     (update 0 txc/crux-op->xt-op)
                                                                     (update 1 c/new-id))))))))))))]
-            (cio/->cursor (fn []
+            (xio/->cursor (fn []
                             (.close tx-log-iterator))
                           tx-log)))))))
 

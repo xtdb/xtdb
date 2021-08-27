@@ -1,7 +1,7 @@
 (ns xtdb.tx.subscribe
   (:require [clojure.tools.logging :as log]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.tx :as tx])
   (:import xtdb.api.ICursor
            java.time.Duration
@@ -9,7 +9,7 @@
            java.util.function.BiConsumer))
 
 (def ^java.util.concurrent.ThreadFactory subscription-thread-factory
-  (cio/thread-factory "crux-tx-subscription"))
+  (xio/thread-factory "crux-tx-subscription"))
 
 (defn completable-thread [f]
   (let [fut (CompletableFuture.)

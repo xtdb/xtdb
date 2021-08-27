@@ -6,7 +6,7 @@
             [xtdb.sparql :as sparql]
             [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.request :as req]
             [juxt.clojars-mirrors.ring-core.v1v9v2.ring.util.time :as rt]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.api :as xt])
   (:import [org.eclipse.rdf4j.model BNode IRI Literal]))
 
@@ -53,7 +53,7 @@
        "</sparql>"))
 
 (defn- sparql-json-response [vars results]
-  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp cio/pr-edn-str strip-qmark str) vars)) "]}, "
+  (str "{\"head\": {\"vars\": [" (str/join ", " (map (comp xio/pr-edn-str strip-qmark str) vars)) "]}, "
        "\"results\": { \"bindings\": ["
        (->> (for [result results]
               (str "{"

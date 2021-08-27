@@ -2,7 +2,7 @@
   (:require [clojure.set :as set]
             [xtdb.codec :as c]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.memory :as mem])
   (:import xtdb.codec.EntityTx
            org.agrona.DirectBuffer
@@ -89,7 +89,7 @@
     (db/-read-index-meta index-snapshot k not-found))
 
   java.io.Closeable
-  (close [_] (cio/try-close index-snapshot)))
+  (close [_] (xio/try-close index-snapshot)))
 
 (defrecord MergedIndexSnapshot [persistent-index-snapshot transient-index-snapshot evicted-eids]
   db/IndexSnapshot
@@ -187,8 +187,8 @@
 
   java.io.Closeable
   (close [_]
-    (cio/try-close transient-index-snapshot)
-    (cio/try-close persistent-index-snapshot)))
+    (xio/try-close transient-index-snapshot)
+    (xio/try-close persistent-index-snapshot)))
 
 (defprotocol DocumentStoreTx
   (abort-doc-store-tx [document-store-tx])

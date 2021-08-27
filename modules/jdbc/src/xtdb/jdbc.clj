@@ -5,7 +5,7 @@
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.document-store :as ds]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
@@ -37,7 +37,7 @@
 (defrecord HikariConnectionPool [^HikariDataSource pool dialect]
   Closeable
   (close [_]
-    (cio/try-close pool)))
+    (xio/try-close pool)))
 
 (defn ->connection-pool {::sys/deps {:dialect nil}
                          ::sys/args {:pool-opts {:doc "Extra camelCase options to be set on HikariConfig"
@@ -55,7 +55,7 @@
     (try
       (setup-schema! dialect pool)
       (catch Throwable t
-        (cio/try-close pool)
+        (xio/try-close pool)
         (throw t)))
 
     (->HikariConnectionPool pool dialect)))
@@ -117,7 +117,7 @@
             (update-doc! tx id doc))))))
 
   (fetch-docs [_ ids]
-    (cio/with-nippy-thaw-all
+    (xio/with-nippy-thaw-all
       (->> (for [id-batch (partition-all 100 ids)
                  row (jdbc/execute! pool (into [(format "SELECT EVENT_KEY, V FROM tx_events WHERE TOPIC = 'docs' AND EVENT_KEY IN (%s)"
                                                         (->> (repeat (count id-batch) "?") (str/join ", ")))]
@@ -148,7 +148,7 @@
                              ["SELECT EVENT_OFFSET, TX_TIME, V, TOPIC FROM tx_events WHERE TOPIC = 'txs' and EVENT_OFFSET > ? ORDER BY EVENT_OFFSET"
                               (or after-tx-id 0)])
           rs (.executeQuery stmt)]
-      (cio/->cursor #(run! cio/try-close [rs stmt conn])
+      (xio/->cursor #(run! xio/try-close [rs stmt conn])
                     (->> (resultset-seq rs)
                          (map (fn [y]
                                 {:xt/tx-id (long (:event_offset y))
@@ -166,7 +166,7 @@
 
   Closeable
   (close [_]
-    (cio/try-close tx-consumer)))
+    (xio/try-close tx-consumer)))
 
 (defn ->tx-log {::sys/deps {:connection-pool `->connection-pool}}
   [{{:keys [pool dialect]} :connection-pool}]

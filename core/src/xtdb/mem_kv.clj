@@ -4,7 +4,7 @@
             [clojure.tools.logging :as log]
             [xtdb.checkpoint :as cp]
             [xtdb.codec :as c]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kv :as kv]
             [xtdb.kv.index-store :as kvi]
             [xtdb.memory :as mem]
@@ -23,7 +23,7 @@
          (nippy/freeze-to-file (io/file file "memkv")))))
 
 (defn- restore-db [dir]
-  (cio/with-nippy-thaw-all
+  (xio/with-nippy-thaw-all
     (->> (for [[k v] (nippy/thaw-from-file (io/file dir "memkv"))]
            [(mem/->off-heap k)
             (mem/->off-heap v)])
@@ -104,19 +104,19 @@
 
   Closeable
   (close [_]
-    (cio/try-close cp-job)))
+    (xio/try-close cp-job)))
 
 (def ^:private cp-format
   {:index-version c/index-version
    ::version "1"})
 
 (defn- try-restore-from-checkpoint [checkpointer]
-  (let [db-dir (cio/create-tmpdir "memkv-cp")]
+  (let [db-dir (xio/create-tmpdir "memkv-cp")]
     (try
       (when (cp/try-restore checkpointer db-dir cp-format)
         (restore-db db-dir))
       (finally
-        (cio/delete-dir db-dir)))))
+        (xio/delete-dir db-dir)))))
 
 (defn ->kv-store {::sys/deps {:checkpointer (fn [_])}}
   ([] (->kv-store {}))

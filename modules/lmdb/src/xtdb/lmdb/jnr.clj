@@ -3,7 +3,7 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kv :as kv]
             [xtdb.memory :as mem]
             [xtdb.system :as sys]
@@ -60,7 +60,7 @@
                                   EnvFlags/MDB_NOMETASYNC])
 
 (defn- increase-mapsize [^StampedLock mapsize-lock ^Env env ^long factor]
-  (cio/with-write-lock mapsize-lock
+  (xio/with-write-lock mapsize-lock
     (let [new-mapsize (* factor (.mapSize (.info env)))]
       (log/debug "Increasing mapsize to:" new-mapsize)
       (.setMapSize env new-mapsize))))
@@ -77,7 +77,7 @@
 
   (store [this kvs]
     (try
-      (cio/with-read-lock mapsize-lock
+      (xio/with-read-lock mapsize-lock
         (with-open [tx (.txnWrite env)]
           (let [kb (ExpandableDirectByteBuffer.)
                 vb (ExpandableDirectByteBuffer.)]
@@ -100,7 +100,7 @@
   (compact [_])
 
   (count-keys [_]
-    (cio/with-read-lock mapsize-lock
+    (xio/with-read-lock mapsize-lock
       (with-open [tx (.txnRead env)]
         (.entries (.stat dbi tx)))))
 
@@ -122,9 +122,9 @@
 
   Closeable
   (close [_]
-    (cio/with-write-lock mapsize-lock
+    (xio/with-write-lock mapsize-lock
       (.close env))
-    (cio/try-close cp-job)))
+    (xio/try-close cp-job)))
 
 (def ^:private cp-format
   {:index-version c/index-version

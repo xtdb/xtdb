@@ -8,7 +8,7 @@
             [xtdb.db :as db]
             [xtdb.error :as err]
             [xtdb.fork :as fork]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx.conform :as txc]
             [xtdb.tx.event :as txe])
@@ -56,7 +56,7 @@
 (defn- strict-fetch-docs [{:keys [document-store-tx]} doc-hashes]
   (let [doc-hashes (set doc-hashes)
         docs (->> (db/fetch-docs document-store-tx doc-hashes)
-                  (cio/map-vals c/crux->xt))
+                  (xio/map-vals c/crux->xt))
         fetched-doc-hashes (set (keys docs))]
     (when-not (= fetched-doc-hashes doc-hashes)
       (throw (IllegalStateException. (str "missing docs: " (pr-str (set/difference doc-hashes fetched-doc-hashes))))))
@@ -147,7 +147,7 @@
                                                tx-id)
         match? (= (c/new-id content-hash) (c/new-id v))]
     (when-not match?
-      (log/debug "xt/match failure:" (cio/pr-edn-str match-op) "was:" (c/new-id content-hash)))
+      (log/debug "xt/match failure:" (xio/pr-edn-str match-op) "was:" (c/new-id content-hash)))
 
     {:abort? (not match?)}))
 
@@ -167,7 +167,7 @@
                  (get docs expected-id))))
       {:etxs (put-delete-etxs eid valid-time nil (c/new-id new-v) tx in-flight-tx)}
       (do
-        (log/warn "CAS failure:" (cio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
+        (log/warn "CAS failure:" (xio/pr-edn-str cas-op) "was:" (c/new-id content-hash))
         {:abort? true}))))
 
 (def evict-time-ranges-env-var "XTDB_EVICT_TIME_RANGES")
@@ -314,7 +314,7 @@
                                true)
 
                              (do
-                               (index-docs this (->> docs without-tx-fn-docs (cio/map-vals c/crux->xt)))
+                               (index-docs this (->> docs without-tx-fn-docs (xio/map-vals c/crux->xt)))
                                (db/index-entity-txs index-store-tx etxs)
                                (let [{:keys [tombstones]} (when (seq evict-eids)
                                                             (db/unindex-eids index-store-tx evict-eids))]

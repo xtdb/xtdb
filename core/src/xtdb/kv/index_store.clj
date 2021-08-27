@@ -8,7 +8,7 @@
             [xtdb.error :as err]
             [xtdb.fork :as fork]
             [xtdb.hyper-log-log :as hll]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kv :as kv]
             [xtdb.kv.mutable-kv :as mut-kv]
             [xtdb.memory :as mem]
@@ -661,12 +661,12 @@
   (close [_]
     (when (.compareAndSet closed? false true)
       (doseq [nested-index-snapshot @nested-index-snapshot-state]
-        (cio/try-close nested-index-snapshot))
+        (xio/try-close nested-index-snapshot))
       (doseq [i [level-1-iterator-delay level-2-iterator-delay entity-as-of-iterator-delay decode-value-iterator-delay cache-iterator-delay]
               :when (realized? i)]
-        (cio/try-close @i))
+        (xio/try-close @i))
       (when close-snapshot?
-        (cio/try-close snapshot)
+        (xio/try-close snapshot)
         (snapshot-closed thread-mgr snapshot))))
 
   db/IndexSnapshot
@@ -808,7 +808,7 @@
       (or (.get temp-hash-cache value-buffer)
           (let [i @decode-value-iterator-delay]
             (when (advance-iterator-to-hash-cache-value i value-buffer)
-              (cio/with-nippy-thaw-all
+              (xio/with-nippy-thaw-all
                 (some-> (kv/value i) (mem/<-nippy-buffer))))))))
 
   (encode-value [_ value]
@@ -1115,7 +1115,7 @@
 
   Closeable
   (close [_]
-    (cio/try-close thread-mgr)))
+    (xio/try-close thread-mgr)))
 
 (defn ->kv-index-store {::sys/deps {:kv-store 'xtdb.mem-kv/->kv-store
                                     :cav-cache 'xtdb.cache/->cache

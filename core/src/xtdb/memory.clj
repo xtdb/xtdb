@@ -1,6 +1,6 @@
 (ns ^:no-doc xtdb.memory
   (:require [clojure.tools.logging :as log]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy])
   (:import xtdb.ByteUtils
            [java.io DataInputStream DataOutputStream]
@@ -36,7 +36,7 @@
   (let [chunk (ByteBuffer/allocateDirect size)]
     (assert (= size (.capacity chunk)))
     (log-pool-memory (swap! pool-allocation-stats update :allocated + (.capacity chunk)))
-    (cio/register-cleaner chunk #(log-pool-memory (swap! pool-allocation-stats update :deallocated + size)))
+    (xio/register-cleaner chunk #(log-pool-memory (swap! pool-allocation-stats update :deallocated + size)))
     chunk))
 
 (def ^:private ^ThreadLocal chunk-tl

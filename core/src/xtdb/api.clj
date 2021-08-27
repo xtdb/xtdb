@@ -4,7 +4,7 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
             [xtdb.codec :as c]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys])
   (:import [xtdb.api IXtdb IXtdbSubmitClient RemoteClientOptions]
            java.lang.AutoCloseable
@@ -237,8 +237,8 @@
                                             :xt/secondary-indices 'xtdb.tx/->secondary-indices}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
-    (when (and (nil? @cio/malloc-arena-max)
-               (cio/glibc?))
+    (when (and (nil? @xio/malloc-arena-max)
+               (xio/glibc?))
       (defonce warn-on-malloc-arena-max
         (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for Crux is 2")))
     (reset! (get-in system [:xt/node :!system]) system)

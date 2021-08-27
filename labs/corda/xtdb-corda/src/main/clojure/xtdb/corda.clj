@@ -9,7 +9,7 @@
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
-            [xtdb.io :as cio])
+            [xtdb.io :as xio])
   (:import (xtdb.corda.state XtdbState)
            (xtdb.api ICursor)
            kotlin.jvm.functions.Function1
@@ -141,7 +141,7 @@
                                                        (transform-corda-tx corda-tx tx-log))))
                                             vec))))]
                  (concat txs (tx-log* (:xt/tx-id (last txs)))))))]
-      (cio/->cursor #() (tx-log* after-tx-id)))))
+      (xio/->cursor #() (tx-log* after-tx-id)))))
 
 (defrecord CordaTxLog [dialect, ^AppServiceHub service-hub, document-store
                        document-mapper subscriber-handler]
@@ -152,7 +152,7 @@
 
   (open-tx-log ^xtdb.api.ICursor [this after-tx-id]
     (let [txs (open-tx-log this after-tx-id)]
-      (cio/->cursor #(cio/try-close txs) (iterator-seq txs))))
+      (xio/->cursor #(xio/try-close txs) (iterator-seq txs))))
 
   (latest-submitted-tx [this]
     (latest-submitted-tx this))

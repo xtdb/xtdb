@@ -1,6 +1,6 @@
 (ns ^:no-doc xtdb.hash
   (:require [clojure.tools.logging :as log]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.memory :as mem])
   (:import [org.agrona DirectBuffer MutableDirectBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -35,12 +35,12 @@
     (do (log/debug "Using ByteUtils/sha1 for ID hashing.")
         byte-utils-id-hash-buffer)
     (if-let [openssl-id-hash-buffer (and openssl-enabled?
-                                         (cio/jnr-available?)
+                                         (xio/jnr-available?)
                                          (some-> 'xtdb.hash.jnr/openssl-id-hash-buffer requiring-resolve var-get))]
       (do (log/debug "Using libcrypto (OpenSSL) for ID hashing.")
           openssl-id-hash-buffer)
       (if-let [gcrypt-id-hash-buffer (and gcrypt-enabled?
-                                          (cio/jnr-available?)
+                                          (xio/jnr-available?)
                                           (some-> 'xtdb.hash.jnr/gcrypt-id-hash-buffer requiring-resolve var-get))]
         (do (log/debug "Using libgcrypt for ID hashing.")
             gcrypt-id-hash-buffer)

@@ -4,7 +4,7 @@
             [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.lucene :as lf]
             [xtdb.fixtures.tpch :as tf]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.lucene :as l])
   (:import io.airlift.tpch.TpchTable
            java.nio.file.attribute.FileAttribute
@@ -43,7 +43,7 @@
           (time
            (count (iterator-seq (l/search {:directory directory :analyzer analyzer} "c_comment" "ironic"))))))
       (finally
-        (cio/delete-dir tmp-dir))))
+        (xio/delete-dir tmp-dir))))
 
   ((t/join-fixtures [(fix/with-opts {::l/lucene-store {}}) fix/with-node])
    (fn []

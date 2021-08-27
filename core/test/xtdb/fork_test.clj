@@ -33,11 +33,11 @@
     (t/testing "can delete an entity"
       (t/is (= #{}
                (xt/q (xt/with-tx db [[:xt/delete :ivan]])
-                       all-names-query)))
+                     all-names-query)))
       (t/is (= #{["Petr"]}
                (xt/q (xt/with-tx db [[:xt/put {:xt/id :petr, :name "Petr"}]
-                                         [:xt/delete :ivan]])
-                       all-names-query))))
+                                     [:xt/delete :ivan]])
+                     all-names-query))))
 
     (t/testing "returns nil on failed match"
       (t/is (nil? (xt/with-tx db [[:xt/match :nope {:xt/id :nope}]]))))))
@@ -47,11 +47,11 @@
 
   (let [db (xt/db *api*)
         history (xt/entity-history (xt/with-tx db
-                                       [[:xt/put {:xt/id :ivan, :name "Ivan"}]])
-                                     :ivan
-                                     :asc
-                                     {:with-docs? true
-                                      :with-corrections? true})]
+                                     [[:xt/put {:xt/id :ivan, :name "Ivan"}]])
+                                   :ivan
+                                   :asc
+                                   {:with-docs? true
+                                    :with-corrections? true})]
 
     (t/is (= (xt/valid-time db)
              (:xt/valid-time (last history))))
@@ -82,10 +82,10 @@
       (t/is (= [{:xt/tx-id 0, :xt/doc {:xt/id :ivan, :name "Ivan0"}}
                 {:xt/tx-id 2, :xt/doc {:xt/id :ivan, :name "Ivan2"}}]
                (->> (xt/entity-history (xt/with-tx db0 [[:xt/put {:xt/id :ivan, :name "Ivan2"}]])
-                                         :ivan
-                                         :asc
-                                         {:with-docs? true
-                                          :with-corrections? true})
+                                       :ivan
+                                       :asc
+                                       {:with-docs? true
+                                        :with-corrections? true})
                     (mapv #(select-keys % [:xt/tx-id :xt/doc]))))))))
 
 (t/deftest test-speculative-from-point-in-future
@@ -118,10 +118,10 @@
                :xt/valid-time now+10m,
                :xt/doc {:xt/id :ivan, :name "Future Ivan 2"}}]
              (->> (xt/entity-history db
-                                       :ivan
-                                       :asc
-                                       {:with-docs? true
-                                        :with-corrections? true})
+                                     :ivan
+                                     :asc
+                                     {:with-docs? true
+                                      :with-corrections? true})
                   (mapv #(select-keys % [:xt/tx-id :xt/valid-time :xt/doc])))))))
 
 (t/deftest test-evict
@@ -145,4 +145,4 @@
 
       (t/is (= #{["Ivan"]}
                (xt/q db+evict '{:find [?name]
-                                  :where [[_ :name ?name]]}))))))
+                                :where [[_ :name ?name]]}))))))

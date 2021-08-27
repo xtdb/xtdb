@@ -8,7 +8,7 @@
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.fixtures :as fix :refer [*api*]]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.rdf :as rdf]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]

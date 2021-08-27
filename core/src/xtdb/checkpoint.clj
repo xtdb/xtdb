@@ -1,7 +1,7 @@
 (ns xtdb.checkpoint
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.tx :as tx])
   (:import [java.io Closeable File]
@@ -44,7 +44,7 @@
           (doto (upload-checkpoint store dir {:tx tx, ::cp-format cp-format})
             (->> pr-str (log/info "Uploaded checkpoint:")))))
       (finally
-        (cio/delete-dir dir)))))
+        (xio/delete-dir dir)))))
 
 (defn cp-seq [^Instant start ^Duration freq]
   (lazy-seq
@@ -64,8 +64,8 @@
         cp)))
 
   (start [this src {::keys [cp-format]}]
-    (let [checkpoint-dir (or (some-> checkpoint-dir .toFile) (cio/create-tmpdir "checkpointing"))
-          ses (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-checkpoint"))]
+    (let [checkpoint-dir (or (some-> checkpoint-dir .toFile) (xio/create-tmpdir "checkpointing"))
+          ses (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "crux-checkpoint"))]
       (letfn [(run [[time & more-times]]
                 (try
                   (checkpoint {:approx-frequency approx-frequency,
@@ -80,7 +80,7 @@
                     (throw t))
                   (finally
                     (when-not keep-dir-between-checkpoints?
-                      (cio/delete-dir checkpoint-dir))))
+                      (xio/delete-dir checkpoint-dir))))
                 (schedule more-times))
               (schedule [times]
                 (when (seq times)
@@ -96,7 +96,7 @@
         (close [_]
           (.shutdownNow ses)
           (when-not keep-dir-on-close?
-            (cio/delete-dir checkpoint-dir)))))))
+            (xio/delete-dir checkpoint-dir)))))))
 
 (defn ->checkpointer {::sys/deps {:store {:xt/module (fn [_])}}
                       ::sys/args {:checkpoint-dir {:spec ::sys/path
@@ -155,7 +155,7 @@
   (upload-checkpoint [_ dir {:keys [tx ::cp-format]}]
     (let [from-path (.toPath ^File dir)
           cp-at (java.util.Date.)
-          cp-prefix (format "checkpoint-%s-%s" (:xt/tx-id tx) (cio/format-rfc3339-date cp-at))
+          cp-prefix (format "checkpoint-%s-%s" (:xt/tx-id tx) (xio/format-rfc3339-date cp-at))
           to-path (.resolve root-path cp-prefix)]
       (sync-path from-path to-path)
 

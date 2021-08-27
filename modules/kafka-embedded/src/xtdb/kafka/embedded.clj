@@ -1,7 +1,7 @@
 (ns xtdb.kafka.embedded
   "Embedded Kafka for self-contained Crux deployments."
   (:require [clojure.java.io :as io]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.config :as config]
             [clojure.spec.alpha :as s]
             [xtdb.system :as sys])
@@ -51,7 +51,7 @@
   (^org.apache.zookeeper.server.ServerCnxnFactory [^File data-dir]
    (start-zookeeper data-dir default-zookeeper-port))
   (^org.apache.zookeeper.server.ServerCnxnFactory [^File data-dir ^long port]
-   (cio/delete-dir data-dir)
+   (xio/delete-dir data-dir)
    (let [tick-time 2000
          max-connections 16
          server (ZooKeeperServer. data-dir data-dir tick-time)]

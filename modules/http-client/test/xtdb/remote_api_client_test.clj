@@ -1,7 +1,7 @@
 (ns xtdb.remote-api-client-test
   (:require [clojure.test :as t]
             [xtdb.api :as xt]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.remote-api-client :as sut])
   (:import clojure.lang.ExceptionInfo
            com.nimbusds.jose.crypto.ECDSASigner
@@ -39,7 +39,7 @@
 (def ^:dynamic *api*)
 
 (defn with-api* [{:keys [jwks ->jwt-token]} f]
-  (let [server-port (cio/free-port)]
+  (let [server-port (xio/free-port)]
     (with-open [node (xt/start-node {:xtdb.http-server/server {:port server-port
                                                                 :jwks jwks}})
                 client (xt/new-api-client (str "http://localhost:" server-port) {:->jwt-token ->jwt-token})]

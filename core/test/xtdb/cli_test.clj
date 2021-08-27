@@ -3,7 +3,7 @@
             [clojure.string :as str]
             [clojure.test :as t]
             [xtdb.cli :as cli]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys]))
 
 (def xtdb-cli-edn
@@ -66,7 +66,7 @@
   (into-array String strs))
 
 (t/deftest test-cli-can-start
-  (let [opts {:xtdb.http-server/server {:port (cio/free-port)}}
+  (let [opts {:xtdb.http-server/server {:port (xio/free-port)}}
 
         process (.. (ProcessBuilder. (string-array
                                       "timeout" "30s"

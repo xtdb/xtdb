@@ -2,7 +2,7 @@
   (:require [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.error :as err]
-            [xtdb.io :as cio])
+            [xtdb.io :as xio])
   (:import [java.util Date UUID]))
 
 (defn- check-eid [eid]
@@ -221,7 +221,7 @@
 
 (defn tx-events->tx-ops [document-store tx-events]
   (let [docs (->> (db/fetch-docs document-store (tx-events->doc-hashes tx-events))
-                  (cio/map-vals c/crux->xt))]
+                  (xio/map-vals c/crux->xt))]
     (for [[op id & args] tx-events
           :let [op (crux-op->xt-op op)]]
       (into [op]

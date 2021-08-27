@@ -2,7 +2,7 @@
   (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys]
             [xtdb.document-store :as ds]))
 
@@ -34,7 +34,7 @@
          (run! deref)))
 
   (fetch-docs [_ docs]
-    (cio/with-nippy-thaw-all
+    (xio/with-nippy-thaw-all
       (reduce
        #(if-let [doc (get-blob sas-token storage-account container (str %2))]
           (assoc %1 %2 (nippy/thaw doc))

@@ -4,7 +4,7 @@
             [clojure.tools.cli :as cli]
             [clojure.tools.logging :as log]
             [xtdb.api :as xt]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.node :as n]
             [clojure.data.json :as json])
   (:import java.io.File))
@@ -68,7 +68,7 @@
     shutdown?))
 
 (defn start-node-from-command-line [args]
-  (cio/install-uncaught-exception-handler!)
+  (xio/install-uncaught-exception-handler!)
 
   (let [{::keys [errors help node-opts]} (parse-args args)]
     (cond

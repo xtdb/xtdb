@@ -3,7 +3,7 @@
             [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate :as json-gen]
             [clojure.tools.logging :as log]
             [xtdb.codec :as c]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.error :as err]
             [cognitect.transit :as transit]
             [xtdb.api :as xt])
@@ -207,7 +207,7 @@
         batch-size (get props XtdbSourceConnector/TASK_BATCH_SIZE_CONFIG)
         source-partition {"url" url}
         formatter (case format
-                    "edn" cio/pr-edn-str
+                    "edn" xio/pr-edn-str
                     "json" json/generate-string
                     "transit" write-transit)
         tx-log-entry->source-records (case mode

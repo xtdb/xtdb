@@ -4,7 +4,7 @@
             [xtdb.error :as err]
             [xtdb.hash :as hash]
             [xtdb.query-state :as cqs]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.memory :as mem]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
             [clojure.set :as set])
@@ -648,11 +648,11 @@
 
 (defmethod print-method Id [id ^Writer w]
   (.write w "#xt/id ")
-  (.write w (cio/pr-edn-str (str id))))
+  (.write w (xio/pr-edn-str (str id))))
 
 (defmethod print-dup Id [id ^Writer w]
   (.write w "#xt/id ")
-  (.write w (cio/pr-edn-str (str id))))
+  (.write w (xio/pr-edn-str (str id))))
 
 (extend-protocol IdOrBuffer
   Id
@@ -756,22 +756,22 @@
 (when base64-print-method-enabled?
   (defmethod print-method (class (byte-array 0)) [^bytes b ^Writer w]
     (.write w "#xt/base64 ")
-    (.write w (cio/pr-edn-str (base64-writer b))))
+    (.write w (xio/pr-edn-str (base64-writer b))))
 
   (defmethod print-dup (class (byte-array 0)) [^bytes b ^Writer w]
     (.write w "#xt/base64 ")
-    (.write w (cio/pr-edn-str (base64-writer b)))))
+    (.write w (xio/pr-edn-str (base64-writer b)))))
 
 (defn edn-id->original-id [^EDNId id]
   (str (or (.original-id id) (.hex id))))
 
 (defmethod print-method EDNId [^EDNId id ^Writer w]
   (.write w "#xt/id ")
-  (.write w (cio/pr-edn-str (edn-id->original-id id))))
+  (.write w (xio/pr-edn-str (edn-id->original-id id))))
 
 (defmethod print-dup EDNId [^EDNId id ^Writer w]
   (.write w "#xt/id ")
-  (.write w (cio/pr-edn-str (edn-id->original-id id))))
+  (.write w (xio/pr-edn-str (edn-id->original-id id))))
 
 (nippy/extend-freeze
  EDNId

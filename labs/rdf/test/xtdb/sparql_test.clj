@@ -1,7 +1,7 @@
 (ns xtdb.sparql-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql]))
 
@@ -27,11 +27,11 @@ WHERE
     ?y  <http://www.w3.org/2001/vcard-rdf/3.0#Given>  ?givenName .
   }")))
 
-    (t/is (= (cio/pr-edn-str (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
+    (t/is (= (xio/pr-edn-str (rdf/with-prefix {:vcard "http://www.w3.org/2001/vcard-rdf/3.0#"}
                        '{:find [?g]
                          :where [[?y :vcard/Given ?g]
                                  [(re-find #"(?i)r" ?g)]]}))
-             (cio/pr-edn-str (sparql/sparql->datalog
+             (xio/pr-edn-str (sparql/sparql->datalog
                       "
 PREFIX vcard: <http://www.w3.org/2001/vcard-rdf/3.0#>
 
@@ -172,11 +172,11 @@ SELECT ( CONCAT(?G, \" \", ?S) AS ?name )
 WHERE  { ?P foaf:givenName ?G ; foaf:surname ?S }
 ")))
 
-    (t/is (= (cio/pr-edn-str '{:find [?title],
+    (t/is (= (xio/pr-edn-str '{:find [?title],
                        :where
                        [[?x #=(keyword "http://purl.org/dc/elements/1.1/title") ?title]
                         [(re-find #"^SPARQL" ?title)]]})
-             (cio/pr-edn-str (sparql/sparql->datalog
+             (xio/pr-edn-str (sparql/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title
@@ -184,11 +184,11 @@ WHERE   { ?x dc:title ?title
           FILTER regex(?title, \"^SPARQL\")
         }"))))
 
-    (t/is (= (cio/pr-edn-str '{:find [?title],
+    (t/is (= (xio/pr-edn-str '{:find [?title],
                        :where
                        [[?x #=(keyword "http://purl.org/dc/elements/1.1/title") ?title]
                         [(re-find #"(?i)web" ?title)]]})
-             (cio/pr-edn-str (sparql/sparql->datalog
+             (xio/pr-edn-str (sparql/sparql->datalog
                       "
 PREFIX  dc:  <http://purl.org/dc/elements/1.1/>
 SELECT  ?title

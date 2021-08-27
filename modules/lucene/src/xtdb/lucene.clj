@@ -4,7 +4,7 @@
             [xtdb.checkpoint :as cp]
             [xtdb.codec :as cc]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.query :as q]
             [xtdb.system :as sys]
             [xtdb.tx :as tx]
@@ -28,9 +28,9 @@
   (close [_]
     (doto fsync-thread (.interrupt) (.join))
     (when refresh-thread (doto refresh-thread (.interrupt) (.join)))
-    (cio/try-close cp-job)
-    (cio/try-close index-writer)
-    (cio/try-close directory)))
+    (xio/try-close cp-job)
+    (xio/try-close index-writer)
+    (xio/try-close directory)))
 
 (defn ^String ->hash-str [eid]
   (str (cc/new-id eid)))
@@ -88,7 +88,7 @@
         (when (seq score-docs)
           (log/debug (.explain index-searcher q (.-doc ^ScoreDoc (first score-docs)))))
 
-        (cio/->cursor (fn []
+        (xio/->cursor (fn []
                         (.release searcher-manager index-searcher))
                       (->> score-docs
                            (map (fn [^ScoreDoc d]
@@ -362,11 +362,11 @@
                                   index-writer searcher-manager
                                   indexer
                                   cp-job
-                                  (doto (.newThread (cio/thread-factory "xtdb-lucene-fsync")
+                                  (doto (.newThread (xio/thread-factory "xtdb-lucene-fsync")
                                                     #(fsync-loop {:index-writer index-writer} fsync-frequency))
                                     (.start))
                                   (when-not (or (.isNegative refresh-frequency) (.isZero refresh-frequency))
-                                    (doto (.newThread (cio/thread-factory "xtdb-lucene-refresh")
+                                    (doto (.newThread (xio/thread-factory "xtdb-lucene-refresh")
                                                       #(refresh-loop {:searcher-manager searcher-manager} refresh-frequency))
                                       (.start))))]
 

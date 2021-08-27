@@ -8,7 +8,7 @@
             [xtdb.http-server.entity-ref :as entity-ref]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as j]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
@@ -87,7 +87,7 @@
             entity-history (try
                              (print-method (or (iterator-seq entity-history) '()) w)
                              (finally
-                               (cio/try-close entity-history)))
+                               (xio/try-close entity-history)))
             entity (print-method entity w)
             :else (.write w ^String (pr-str res))))))))
 
@@ -102,7 +102,7 @@
             entity-history (try
                              (transit/write w (or (iterator-seq entity-history) '()))
                              (finally
-                               (cio/try-close entity-history)))
+                               (xio/try-close entity-history)))
             :else (transit/write w res)))))))
 
 (defn- ->json-encoder [_]
@@ -118,7 +118,7 @@
                                                (map http-json/camel-case-keys))
                                           http-json/crux-object-mapper)
                            (finally
-                             (cio/try-close entity-history)))
+                             (xio/try-close entity-history)))
           :else (j/write-value output-stream res http-json/crux-object-mapper))))))
 
 (defn ->entity-muuntaja [opts]

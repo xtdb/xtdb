@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.pull
   (:require [xtdb.codec :as c]
             [xtdb.db :as db]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [juxt.clojars-mirrors.eql.v2021v02v28.edn-query-language.core :as eql]
             [clojure.string :as string])
   (:import clojure.lang.MapEntry))
@@ -19,7 +19,7 @@
 (defn- lookup-docs [v {:keys [document-store]}]
   (when-let [hashes (not-empty (::hashes (meta v)))]
     (->> (db/fetch-docs document-store hashes)
-         (cio/map-vals c/crux->xt))))
+         (xio/map-vals c/crux->xt))))
 
 (defmacro let-docs {:style/indent 1} [[binding hashes] & body]
   `(-> (fn ~'let-docs [~binding]

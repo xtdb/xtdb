@@ -13,7 +13,7 @@
             [xtdb.db :as db]
             [xtdb.error :as err]
             [xtdb.index :as idx]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.memory :as mem]
             [xtdb.pull :as pull]
             [xtdb.system :as sys]
@@ -561,7 +561,7 @@
             e-idx (idx/new-seek-fn-index
                    (fn [k]
                      (db/ave nested-index-snapshot attr-buffer (.deref v-idx) k entity-resolver-fn)))]
-        (log/debug :join-order :ave (cio/pr-edn-str v) e (cio/pr-edn-str clause))
+        (log/debug :join-order :ave (xio/pr-edn-str v) e (xio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [v-idx e-idx]))
       (let [e-idx (idx/new-deref-index
                    (idx/new-seek-fn-index
@@ -570,7 +570,7 @@
             v-idx (idx/new-seek-fn-index
                    (fn [k]
                      (db/aev nested-index-snapshot attr-buffer (.deref e-idx) k entity-resolver-fn)))]
-        (log/debug :join-order :aev e (cio/pr-edn-str v) (cio/pr-edn-str clause))
+        (log/debug :join-order :aev e (xio/pr-edn-str v) (xio/pr-edn-str clause))
         (idx/new-n-ary-join-layered-virtual-index [e-idx v-idx])))))
 
 (defn- sort-triple-clauses [triple-clauses {:keys [index-snapshot]}]
@@ -750,7 +750,7 @@
 ;; TODO: This is a naive, but not totally irrelevant measure. Aims to
 ;; bind variables as early and cheaply as possible.
 (defn- clause-complexity [clause]
-  (count (cio/pr-edn-str clause)))
+  (count (xio/pr-edn-str clause)))
 
 (defn- single-e-var-triple? [vars where]
   (and (= 1 (count where))
@@ -789,11 +789,11 @@
                                     (when-not (= (count free-args)
                                                  (count (set free-args)))
                                       (throw (err/illegal-arg :indistinct-or-join-vars
-                                                              {::err/message (str "Or join free variables not distinct: " (cio/pr-edn-str clause))})))
+                                                              {::err/message (str "Or join free variables not distinct: " (xio/pr-edn-str clause))})))
                                     (doseq [var or-vars
                                             :when (not (contains? body-vars var))]
                                       (throw (err/illegal-arg :unused-or-join-var
-                                                              {::err/message  (str "Or join variable never used: " var " " (cio/pr-edn-str clause))}))))
+                                                              {::err/message  (str "Or join variable never used: " var " " (xio/pr-edn-str clause))}))))
                                   {:or-vars or-vars
                                    :free-vars free-vars
                                    :bound-vars bound-vars
@@ -810,7 +810,7 @@
                                                           (partial db/encode-value index-snapshot)))})]
             (when (not (apply = (map :or-vars or-branches)))
               (throw (err/illegal-arg :or-requires-same-logic-vars
-                                      {::err/message  (str "Or requires same logic variables: " (cio/pr-edn-str clause))})))
+                                      {::err/message  (str "Or requires same logic variables: " (xio/pr-edn-str clause))})))
             [(conj or-clause+idx-id+or-branches [clause idx-id or-branches])
              (into known-vars free-vars)
              (apply merge-with into var->joins (for [v free-vars]
@@ -888,7 +888,7 @@
           :when (logic-var? var)]
     (when-not (contains? var->bindings var)
       (throw (err/illegal-arg :range-constraint-unknown-var
-                              {::err/message (str "Range constraint refers to unknown variable: " var " " (cio/pr-edn-str clause))}))))
+                              {::err/message (str "Range constraint refers to unknown variable: " var " " (xio/pr-edn-str clause))}))))
   (->> (for [[var clauses] (group-by :sym range-clauses)
              :when (logic-var? var)]
          [var (->> (for [{:keys [op val sym]} clauses
@@ -928,7 +928,7 @@
           :when (not (or (pred-constraint? var)
                          (contains? var->bindings var)))]
     (throw (err/illegal-arg :clause-unknown-var
-                            {::err/message  (str "Clause refers to unknown variable: " var " " (cio/pr-edn-str clause))}))))
+                            {::err/message  (str "Clause refers to unknown variable: " var " " (xio/pr-edn-str clause))}))))
 
 (defn bind-binding [bind-type tuple-idxs-in-join-order idx result]
   (case bind-type
@@ -1051,7 +1051,7 @@
         (when-not (= (count return-vars)
                      (count (set return-vars)))
           (throw (err/illegal-arg :return-vars-not-distinct
-                                  {::err/message (str "Return variables not distinct: " (cio/pr-edn-str clause))})))
+                                  {::err/message (str "Return variables not distinct: " (xio/pr-edn-str clause))})))
         (s/assert ::pred-args (cond-> [pred-fn (vec args)]
                                 return (conj (second return))))
         {:join-depth pred-join-depth
@@ -1213,7 +1213,7 @@
                  rules (get rule-name->rules rule-name)]
              (when-not rules
                (throw (err/illegal-arg :unknown-rule
-                                       {::err/message (str "Unknown rule: " (cio/pr-edn-str sub-clause))})))
+                                       {::err/message (str "Unknown rule: " (xio/pr-edn-str sub-clause))})))
              (let [rule-args+num-bound-args+body (for [{:keys [head body]} rules
                                                        :let [{:keys [bound-args free-args]} (:args head)]]
                                                    [(vec (concat bound-args free-args))
@@ -1228,13 +1228,13 @@
                                                                    (distinct))]
                (when-not (= 1 (count arities))
                  (throw (err/illegal-arg :rule-definition-require-same-arity
-                                         {::err/message (str "Rule definitions require same arity: " (cio/pr-edn-str rules))})))
+                                         {::err/message (str "Rule definitions require same arity: " (xio/pr-edn-str rules))})))
                (when-not (= 1 (count num-bound-args-groups))
                  (throw (err/illegal-arg :rule-definition-require-same-num-bound-args
-                                         {::err/message (str "Rule definitions require same number of bound args: " (cio/pr-edn-str rules))})))
+                                         {::err/message (str "Rule definitions require same number of bound args: " (xio/pr-edn-str rules))})))
                (when-not (= arity (count (:args clause)))
                  (throw (err/illegal-arg :rule-invocation-wrong-arity
-                                         {::err/message (str "Rule invocation has wrong arity, expected: " arity " " (cio/pr-edn-str sub-clause))})))
+                                         {::err/message (str "Rule invocation has wrong arity, expected: " arity " " (xio/pr-edn-str sub-clause))})))
                ;; TODO: the caches and expansion here needs
                ;; revisiting.
                (let [expanded-rules (for [[branch-index [args _ body]] (map-indexed vector rule-args+num-bound-args+body)
@@ -1531,9 +1531,9 @@
                       tuple-idxs-in-join-order
                       (get idx-id->idx idx-id)
                       in-arg)))
-    (log/debug :where (cio/pr-edn-str where))
+    (log/debug :where (xio/pr-edn-str where))
     (log/debug :vars-in-join-order vars-in-join-order)
-    (log/debug :var->bindings (cio/pr-edn-str var->bindings))
+    (log/debug :var->bindings (xio/pr-edn-str var->bindings))
     {:n-ary-join (when (constrain-result-fn [] 0)
                    (idx/new-n-ary-join-layered-virtual-index unary-join-indexes constrain-result-fn))
      :var->bindings var->bindings}))
@@ -1687,7 +1687,7 @@
                               {::err/message (str "`full-results?` was removed - use 'pull' instead: "
                                                   "https://opencrux.com/reference/queries.html#pull")})))
 
-    (log/debug :query (cio/pr-edn-str (-> q
+    (log/debug :query (xio/pr-edn-str (-> q
                                           (assoc :in (or in []))
                                           (dissoc :args))))
     (validate-in in)
@@ -1719,7 +1719,7 @@
                         var-bindings))
 
          aggregate? (aggregate-result compiled-find)
-         order-by (cio/external-sort (order-by-comparator find order-by))
+         order-by (xio/external-sort (order-by-comparator find order-by))
          offset (drop offset)
          limit (take limit)
          pull? (pull/->pull-result db compiled-find q-conformed)
@@ -1819,19 +1819,19 @@
                    (assoc db :entity-resolver-fn (or entity-resolver-fn (new-entity-resolver-fn db))))]
 
           (->> (xtdb.query/query db conformed-query args)
-               (cio/->cursor (fn []
-                               (cio/try-close index-snapshot)
+               (xio/->cursor (fn []
+                               (xio/try-close index-snapshot)
                                (when bus
                                  (bus/send bus {:xt/event-type ::completed-query
                                                 ::query safe-query
                                                 ::query-id query-id}))))))
         (catch Exception e
-          (cio/try-close index-snapshot)
+          (xio/try-close index-snapshot)
           (when bus
             (bus/send bus {:xt/event-type ::failed-query
                            ::query safe-query
                            ::query-id query-id
-                           ::error {:type (cio/pr-edn-str (type e))
+                           ::error {:type (xio/pr-edn-str (type e))
                                     :message (.getMessage e)}}))
           (throw e)))))
 
@@ -1865,11 +1865,11 @@
 
   (open-entity-history [this eid sort-order opts]
     (if-not tx-id
-      cio/empty-cursor
+      xio/empty-cursor
       (let [opts (assoc opts :sort-order sort-order)
             index-snapshot (open-index-snapshot this)
             {:keys [with-docs?] :as opts} (-> opts (with-history-bounds this index-snapshot))]
-        (cio/->cursor #(.close index-snapshot)
+        (xio/->cursor #(.close index-snapshot)
                       (->> (for [history-batch (->> (db/entity-history index-snapshot eid sort-order opts)
                                                     (partition-all 100))
                                  :let [docs (when with-docs?
@@ -1878,7 +1878,7 @@
                                                                        (into #{}
                                                                              (comp (keep #(.content-hash ^EntityTx %))
                                                                                    (remove #{(c/new-id c/nil-id-buffer)})))))
-                                                   (cio/map-vals c/crux->xt)))]]
+                                                   (xio/map-vals c/crux->xt)))]]
                              (->> history-batch
                                   (map (fn [^EntityTx etx]
                                          (cond-> {:xt/tx-time (.tt etx)
@@ -1915,7 +1915,7 @@
         (xt/db in-flight-tx valid-time)))))
 
 (defmethod print-method QueryDatasource [{:keys [valid-time tx-id]} ^Writer w]
-  (.write w (format "#<CruxDB %s>" (cio/pr-edn-str {:xt/valid-time valid-time, :xt/tx-id tx-id}))))
+  (.write w (format "#<CruxDB %s>" (xio/pr-edn-str {:xt/valid-time valid-time, :xt/tx-id tx-id}))))
 
 (defmethod pp/simple-dispatch QueryDatasource [it]
   (print-method it *out*))
@@ -2016,5 +2016,5 @@
                                                   :spec ::fn-allow-list}}}
   [opts]
   (map->QueryEngine (assoc opts
-                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (cio/thread-factory "crux-query-interrupter"))
+                           :interrupt-executor (Executors/newSingleThreadScheduledExecutor (xio/thread-factory "crux-query-interrupter"))
                            :!pred-ctx (atom {}))))

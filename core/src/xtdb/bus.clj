@@ -2,7 +2,7 @@
   (:refer-clojure :exclude [send await])
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.system :as sys])
   (:import java.io.Closeable
            java.util.function.BiConsumer
@@ -74,7 +74,7 @@
 
   (listen [_ {:xt/keys [event-types], ::keys [executor]} f]
     (let [close-executor? (nil? executor)
-          executor (or executor (Executors/newSingleThreadExecutor (cio/thread-factory "bus-listener")))
+          executor (or executor (Executors/newSingleThreadExecutor (xio/thread-factory "bus-listener")))
           listener {:executor executor
                     :f f
                     :xt/event-types event-types
@@ -118,5 +118,5 @@
   ([] (->bus {}))
   ([{:keys [sync?]}]
    (->EventBus (atom {})
-               (Executors/newSingleThreadExecutor (cio/thread-factory "crux-bus-await-thread"))
+               (Executors/newSingleThreadExecutor (xio/thread-factory "crux-bus-await-thread"))
                sync?)))

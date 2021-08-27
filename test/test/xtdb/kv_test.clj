@@ -7,7 +7,7 @@
             [xtdb.codec :as c]
             [xtdb.fixtures :as fix]
             [xtdb.fixtures.kv :as fkv]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kv :as kv]
             [xtdb.memory :as mem])
   (:import java.nio.ByteOrder
@@ -162,7 +162,7 @@
     (when (satisfies? cp/CheckpointSource kv-store)
       (fix/with-tmp-dirs #{backup-dir}
         (kv/store kv-store [[(long->bytes 1) (.getBytes "Crux")]])
-        (cio/delete-dir backup-dir)
+        (xio/delete-dir backup-dir)
         (cp/save-checkpoint kv-store backup-dir)
         (binding [fkv/*kv-opts* (merge fkv/*kv-opts* {:db-dir backup-dir})]
           (fkv/with-kv-store [restored-kv]

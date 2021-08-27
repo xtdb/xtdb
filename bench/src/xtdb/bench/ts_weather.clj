@@ -4,7 +4,7 @@
             [clojure.java.io :as io]
             [clojure.string :as str]
             [xtdb.api :as xt]
-            [xtdb.io :as cio])
+            [xtdb.io :as xio])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
            java.time.Duration
@@ -305,7 +305,7 @@
                        (->> (for [history histories]
                               (for [entity-tx (iterator-seq history)]
                                 (update entity-tx :xt/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
-                            (cio/merge-sort (fn [a b]
+                            (xio/merge-sort (fn [a b]
                                               (compare (:xt/valid-time a) (:xt/valid-time b))))
                             (partition-by :xt/valid-time)
                             (take 24)
@@ -316,7 +316,7 @@
                                        (trunc (first temperatures) 2)
                                        (trunc (last temperatures) 2)]))))
                        (finally
-                         (run! cio/try-close histories))))
+                         (run! xio/try-close histories))))
 
             success? (= result
                         [[#inst "2016-11-15T12:00:00.000-00:00" 73.45 68.0 79.2]

@@ -1,7 +1,7 @@
 (ns xtdb.fixtures.kafka
   (:require [clojure.java.io :as io]
             [xtdb.fixtures :as fix]
-            [xtdb.io :as cio]
+            [xtdb.io :as xio]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek])
   (:import [java.util Properties UUID]
@@ -26,8 +26,8 @@
     (fix/with-tmp-dir "kafka-log" [kafka-log-dir]
       (write-kafka-meta-properties kafka-log-dir ek/*broker-id*)
 
-      (let [zookeeper-port (cio/free-port)
-            kafka-port (cio/free-port)]
+      (let [zookeeper-port (xio/free-port)
+            kafka-port (xio/free-port)]
         (with-open [embedded-kafka (ek/start-embedded-kafka
                                     #::ek{:zookeeper-data-dir (str zk-data-dir)
                                           :zookeeper-port zookeeper-port
