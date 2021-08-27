@@ -61,7 +61,7 @@
     (xio/try-close document-store)))
 
 (defn ->cached-document-store
-  {::sys/deps {:document-store :xt/document-store
+  {::sys/deps {:document-store :xtdb/document-store
                :document-cache 'xtdb.cache/->cache}}
   [{:keys [document-cache document-store]}]
   (->CachedDocumentStore document-cache document-store))

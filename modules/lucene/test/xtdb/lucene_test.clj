@@ -257,11 +257,11 @@
   ;; for this:
 
   (fix/with-tmp-dirs #{rocks-tmp-dir}
-    (let [node-config {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store
+    (let [node-config {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store
                                                 :db-dir (io/file rocks-tmp-dir "tx")}}
-                       :xt/document-store {:kv-store {:xt/module `rocks/->kv-store
+                       :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                         :db-dir (io/file rocks-tmp-dir "docs")}}
-                       :xt/index-store {:kv-store {:xt/module `rocks/->kv-store
+                       :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                      :db-dir (io/file rocks-tmp-dir "idx")}}}]
       (with-open [node (c/start-node node-config)]
         (submit+await-tx node [[:xt/put {:xt/id :ivan :name "Ivan"}]]))
@@ -275,14 +275,14 @@
                                     [?e :xt/id]]}))))))))
 
 (defn- with-lucene-rocks-node* [{:keys [node-dir index-dir lucene-dir]} f]
-  (with-open [node (c/start-node (merge {:xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
+  (with-open [node (c/start-node (merge {:xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                           :db-dir (io/file node-dir "documents")}}
-                                         :xt/tx-log {:kv-store {:xt/module `rocks/->kv-store,
+                                         :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                   :db-dir (io/file node-dir "tx-log")}}}
                                         (when lucene-dir
                                           {:xtdb.lucene/lucene-store {:db-dir lucene-dir}})
                                         (when index-dir
-                                          {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store,
+                                          {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                          :db-dir index-dir}}})))]
     (binding [*api* node]
       (c/sync node)
@@ -368,7 +368,7 @@
   (submit+await-tx [[:xt/match :test-id {:xt/id :test-id}]
                     [:xt/put {:xt/id :test-id :name "2345"}]])
 
-  (t/is (= (:xt/tx-id (db/latest-completed-tx (:xt/index-store @(:!system *api*))))
+  (t/is (= (:xt/tx-id (db/latest-completed-tx (:xtdb/index-store @(:!system *api*))))
            (l/latest-completed-tx-id (-> @(:!system *api*)
                                          (get-in [::l/lucene-store :index-writer]))))))
 

@@ -25,7 +25,7 @@ You can `.close` the return value from `(xtdb.api/listen ...)` to detach the lis
 |===
 |Event Type|Trigger
 
-|<<#indexed-tx,`:xt/indexed-tx`>>|Crux indexing a transaction
+|<<#indexed-tx,`:xtdb/indexed-tx`>>|Crux indexing a transaction
 |===
 
 [#indexed-tx]
@@ -42,7 +42,7 @@ You can `.close` the return value from `(xtdb.api/listen ...)` to detach the lis
 
 ==== Function Parameters
 
-`:xt/indexed-tx` passes one parameter to the function supplied to `xtdb.api/listen`
+`:xtdb/indexed-tx` passes one parameter to the function supplied to `xtdb.api/listen`
 
 This parameter is a map of the following
 
@@ -50,7 +50,7 @@ This parameter is a map of the following
 |===
 |Key|Value Type|Value
 
-|`:xt/event-type`|Keyword|`:xt/indexed-tx`
+|`:xt/event-type`|Keyword|`:xtdb/indexed-tx`
 |`:xt/tx-id`|Long|ID of the indexed transaction
 |`:xt/tx-time`|Date|Transaction time of the indexed transaction
 |`:committed?`|Boolean|Whether the transaction was committed or aborted
@@ -61,7 +61,7 @@ This parameter is a map of the following
 
 [source,clojure]
 ----
-(xt/listen node {:xt/event-type :xt/indexed-tx, :with-tx-ops? true}
+(xt/listen node {:xt/event-type :xtdb/indexed-tx, :with-tx-ops? true}
   (fn [ev]
     (println "event received!")
     (clojure.pprint/pprint ev)))
@@ -74,7 +74,7 @@ Will print
 [source,clojure]
 ----
 event received!
-{:xt/event-type :xt/indexed-tx,
+{:xt/event-type :xtdb/indexed-tx,
  :xt/tx-id ...,
  :xt/tx-time #inst "...",
  :committed? true,

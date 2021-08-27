@@ -123,10 +123,10 @@
 
 (defn- opts-reducer [k-path]
   (fn f [opts el]
-    (let [module (or (:xt/module el) (get el "xt/module"))]
+    (let [module (or (:xtdb/module el) (get el "xtdb/module"))]
       (cond
         module (-> opts
-                   (f (dissoc (into {} el) :xt/module "xt/module"))
+                   (f (dissoc (into {} el) :xtdb/module "xtdb/module"))
                    (f (cond-> module (string? module) symbol)))
         (qualified-symbol? el) (reduced (prepare-dep (->ModuleRef el {}) k-path opts))
         (keyword? el) (reduced (prepare-dep (->Ref el) k-path opts))

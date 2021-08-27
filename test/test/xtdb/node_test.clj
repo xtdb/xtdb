@@ -33,48 +33,48 @@
 (t/deftest test-start-node-should-throw-missing-argument-exception
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Error parsing opts"
-                          (xt/start-node {:xt/document-store {:xt/module `j/->document-store}})))
+                          (xt/start-node {:xtdb/document-store {:xtdb/module `j/->document-store}})))
   (t/is (thrown-with-msg? IllegalArgumentException
                           #"Missing module .+ :dialect"
-                          (xt/start-node {:xt/document-store {:xt/module `j/->document-store
+                          (xt/start-node {:xtdb/document-store {:xtdb/module `j/->document-store
                                                               :connection-pool {:db-spec {}}}}))))
 
 (t/deftest test-can-start-JDBC-node
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (xt/start-node {:xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                  :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
+    (with-open [n (xt/start-node {:xtdb/tx-log {:xtdb/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                  :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
                                   ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect,
                                                        :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}})]
       (t/is n))))
 
 (t/deftest test-can-set-indexes-kv-store
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n (xt/start-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-                                  :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-                                  :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
+    (with-open [n (xt/start-node {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+                                  :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+                                  :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}})]
       (t/is n))))
 
 (t/deftest start-node-from-java
   (f/with-tmp-dir "data" [data-dir]
     (with-open [node (IXtdb/startNode
                       (doto (HashMap.)
-                        (.put "xt/tx-log"
+                        (.put "xtdb/tx-log"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "xt/module" "xtdb.rocksdb/->kv-store")
+                                        (.put "xtdb/module" "xtdb.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "txs"))))))
-                        (.put "xt/document-store"
+                        (.put "xtdb/document-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "xt/module" "xtdb.rocksdb/->kv-store")
+                                        (.put "xtdb/module" "xtdb.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "docs"))))))
-                        (.put "xt/index-store"
+                        (.put "xtdb/index-store"
                               (doto (HashMap.)
                                 (.put "kv-store"
                                       (doto (HashMap.)
-                                        (.put "xt/module" "xtdb.rocksdb/->kv-store")
+                                        (.put "xtdb/module" "xtdb.rocksdb/->kv-store")
                                         (.put "db-dir" (io/file data-dir "indexes"))))))))]
       (t/is (= "xtdb.rocksdb.RocksKv"
                (kv/kv-name (get-in node [:node :tx-log :kv-store]))
@@ -85,9 +85,9 @@
 
 (t/deftest test-start-up-2-nodes
   (f/with-tmp-dir "data" [data-dir]
-    (with-open [n ^IXtdb (IXtdb/startNode (let [^Map m {:xt/tx-log             {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                        :xt/document-store  {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                        :xt/index-store     {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
+    (with-open [n ^IXtdb (IXtdb/startNode (let [^Map m {:xtdb/tx-log {:xtdb/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                        :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                        :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "kv")}}
                                                         ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
                                                                              :db-spec {:dbname (str (io/file data-dir "cruxtest"))}}}]
                                             m))]
@@ -104,9 +104,9 @@
                                       :where [[e :name "Ivan"]]}
                                     (object-array 0)))))
 
-      (with-open [^IXtdb n2 (IXtdb/startNode (let [^Map m {:xt/tx-log             {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-                                                           :xt/document-store  {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-                                                           :xt/index-store     {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
+      (with-open [^IXtdb n2 (IXtdb/startNode (let [^Map m {:xtdb/tx-log {:xtdb/module `j/->tx-log, :connection-pool ::j/connection-pool}
+                                                           :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
+                                                           :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "kv2")}}
                                                            ::j/connection-pool {:dialect `xtdb.jdbc.h2/->dialect
                                                                                 :db-spec {:dbname (str (io/file data-dir "cruxtest2"))}}}]
                                                m))]

@@ -1992,14 +1992,14 @@
                    {:allowed-ns #{} :allowed-fns default-allow-list}
                    fal)))))
 
-(defn ->query-engine {::sys/deps {:index-store :xt/index-store
-                                  :bus :xt/bus
-                                  :document-store :xt/document-store
-                                  :query-cache {:xt/module 'xtdb.cache/->cache
+(defn ->query-engine {::sys/deps {:index-store :xtdb/index-store
+                                  :bus :xtdb/bus
+                                  :document-store :xtdb/document-store
+                                  :query-cache {:xtdb/module 'xtdb.cache/->cache
                                                 :cache-size 10240}
-                                  :conform-cache {:xt/module 'xtdb.cache/->cache
+                                  :conform-cache {:xtdb/module 'xtdb.cache/->cache
                                                   :cache-size 10240}
-                                  :pull-cache {:xt/module 'xtdb.cache/->cache
+                                  :pull-cache {:xtdb/module 'xtdb.cache/->cache
                                                :cache-size 10240}}
                       ::sys/args {:entity-cache-size {:doc "Query Entity Cache Size"
                                                       :default (* 32 1024)

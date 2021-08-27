@@ -18,11 +18,11 @@
 
 (defn- with-cluster-node* [f]
   (fix/with-tmp-dir "db-dir" [db-dir]
-    (with-open [node (xt/start-node {:xt/document-store {:kv-store {:xt/module `rocks/->kv-store,
+    (with-open [node (xt/start-node {:xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                         :db-dir (io/file *event-log-dir* "doc-store")}}
-                                       :xt/tx-log {:kv-store {:xt/module `rocks/->kv-store,
+                                       :xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                 :db-dir (io/file *event-log-dir* "tx-log")}}
-                                       :xt/index-store {:kv-store {:xt/module `rocks/->kv-store,
+                                       :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                      :db-dir db-dir}}})]
       (binding [*api* node]
         (xt/sync node)

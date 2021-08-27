@@ -26,14 +26,14 @@ JSON::
 [source,json]
 ----
 {
-  "xt/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "xt/module": "xtdb.rocksdb/->kv-store",
+      "xtdb/module": "xtdb.rocksdb/->kv-store",
       ...
       "checkpointer": {
-        "xt/module": "xtdb.checkpoint/->checkpointer",
+        "xtdb/module": "xtdb.checkpoint/->checkpointer",
         "store": {
-          "xt/module": "xtdb.checkpoint/->filesystem-checkpoint-store",
+          "xtdb/module": "xtdb.checkpoint/->filesystem-checkpoint-store",
           "path": "/path/to/cp-store"
         },
         "approx-frequency": "PT6H"
@@ -48,10 +48,10 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                ...
-                             :checkpointer {:xt/module 'xtdb.checkpoint/->checkpointer
-                                            :store {:xt/module 'xtdb.checkpoint/->filesystem-checkpoint-store
+                             :checkpointer {:xtdb/module 'xtdb.checkpoint/->checkpointer
+                                            :store {:xtdb/module 'xtdb.checkpoint/->filesystem-checkpoint-store
                                                     :path "/path/to/cp-store"}
                                             :approx-frequency (Duration/ofHours 6)}}}
  ...}
@@ -61,10 +61,10 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
                              ...
-                             :checkpointer {:xt/module xtdb.checkpoint/->checkpointer
-                                            :store {:xt/module xtdb.checkpoint/->filesystem-checkpoint-store
+                             :checkpointer {:xtdb/module xtdb.checkpoint/->checkpointer
+                                            :store {:xtdb/module xtdb.checkpoint/->filesystem-checkpoint-store
                                                     :path "/path/to/cp-store"}
                                             :approx-frequency "PT6H"}}}
  ...}

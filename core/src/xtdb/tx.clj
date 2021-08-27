@@ -393,10 +393,10 @@
                            :document-store document-store-tx)
                     bus))))
 
-(defn ->tx-indexer {::sys/deps {:index-store :xt/index-store
-                                :document-store :xt/document-store
-                                :bus :xt/bus
-                                :query-engine :xt/query-engine}}
+(defn ->tx-indexer {::sys/deps {:index-store :xtdb/index-store
+                                :document-store :xtdb/document-store
+                                :bus :xtdb/bus
+                                :query-engine :xtdb/query-engine}}
   [deps]
   (map->TxIndexer deps))
 
@@ -429,12 +429,12 @@
     (.cancel job true)
     (log/info "Shut down tx-ingester")))
 
-(defn ->tx-ingester {::sys/deps {:tx-indexer :xt/tx-indexer
-                                 :index-store :xt/index-store
-                                 :document-store :xt/document-store
-                                 :tx-log :xt/tx-log
-                                 :bus :xt/bus
-                                 :secondary-indices :xt/secondary-indices}}
+(defn ->tx-ingester {::sys/deps {:tx-indexer :xtdb/tx-indexer
+                                 :index-store :xtdb/index-store
+                                 :document-store :xtdb/document-store
+                                 :tx-log :xtdb/tx-log
+                                 :bus :xtdb/bus
+                                 :secondary-indices :xtdb/secondary-indices}}
   [{:keys [tx-log tx-indexer document-store bus index-store secondary-indices]}]
   (log/info "Started tx-ingester")
 

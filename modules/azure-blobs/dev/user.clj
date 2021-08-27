@@ -29,7 +29,7 @@
 
 (defn start-node []
   (xt/start-node
-   {:xt/document-store {:xt/module `azb/->document-store
+   {:xtdb/document-store {:xtdb/module `azb/->document-store
                         :sas-token (System/getenv "XTDB_AZURE_BLOBS_SAS_TOKEN")
                         :storage-account (System/getenv "XTDB_AZURE_BLOBS_STORAGE_ACCOUNT")
                         :container (System/getenv "XTDB_AZURE_BLOBS_CONTAINER")}}))

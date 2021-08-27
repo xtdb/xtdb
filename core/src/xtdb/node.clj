@@ -124,7 +124,7 @@
                        (when (map? m)
                          (into {} (mapcat status) (vals m)))))]
         (merge crux-version
-               (status (dissoc @!system :xt/node))))))
+               (status (dissoc @!system :xtdb/node))))))
 
   (tx-committed? [this {:keys [:xt/tx-id] :as submitted-tx}]
     (xio/with-read-lock lock
@@ -164,11 +164,11 @@
 
   (listen [_ {:xt/keys [event-type] :as event-opts} f]
     (case event-type
-      :xt/indexed-tx
+      :xtdb/indexed-tx
       (bus/listen bus
                   (assoc event-opts :xt/event-types #{::tx/indexed-tx})
                   (fn [{:keys [submitted-tx ::txe/tx-events] :as ev}]
-                    (f (merge {:xt/event-type :xt/indexed-tx}
+                    (f (merge {:xt/event-type :xtdb/indexed-tx}
                               (select-keys ev [:committed?])
                               (select-keys submitted-tx [:xt/tx-time :xt/tx-id])
                               (when (:with-tx-ops? event-opts)
@@ -295,30 +295,30 @@
                                          :status :completed}
                                         node-opts)))))
 
-(defn- ->node {::sys/deps {:index-store :xt/index-store
-                           :tx-ingester :xt/tx-ingester
-                           :bus :xt/bus
-                           :document-store :xt/document-store
-                           :tx-log :xt/tx-log
-                           :query-engine :xt/query-engine}
-               ::sys/args {:await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
-                                              :default nil
-                                              :spec ::sys/duration}
-                           :recent-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
-                                                    :default (Duration/ofMinutes 5)
-                                                    ::spec ::sys/duration}
-                           :recent-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
-                                                      :default 20
-                                                      :spec ::sys/nat-int}
-                           :slow-queries-max-age {:doc "How long to retain queries on the slow query queue"
-                                                  :default (Duration/ofHours 24)
-                                                  :spec ::sys/duration}
-                           :slow-queries-max-count {:doc "Max number of finished queries to retain on the slow query queue"
-                                                    :default 100
-                                                    :spec ::sys/nat-int}
-                           :slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
-                                                        :default (Duration/ofMinutes 1)
-                                                        :spec ::sys/duration}}}
+(defn ->node {::sys/deps {:index-store :xtdb/index-store
+                          :tx-ingester :xtdb/tx-ingester
+                          :bus :xtdb/bus
+                          :document-store :xtdb/document-store
+                          :tx-log :xtdb/tx-log
+                          :query-engine :xtdb/query-engine}
+              ::sys/args {:await-tx-timeout {:doc "Default timeout for awaiting transactions being indexed."
+                                             :default nil
+                                             :spec ::sys/duration}
+                          :recent-queries-max-age {:doc "How long to keep recently ran queries on the query queue"
+                                                   :default (Duration/ofMinutes 5)
+                                                   ::spec ::sys/duration}
+                          :recent-queries-max-count {:doc "Max number of finished queries to retain on the query queue"
+                                                     :default 20
+                                                     :spec ::sys/nat-int}
+                          :slow-queries-max-age {:doc "How long to retain queries on the slow query queue"
+                                                 :default (Duration/ofHours 24)
+                                                 :spec ::sys/duration}
+                          :slow-queries-max-count {:doc "Max number of finished queries to retain on the slow query queue"
+                                                   :default 100
+                                                   :spec ::sys/nat-int}
+                          :slow-queries-min-threshold {:doc "Minimum threshold for a query to be considered slow."
+                                                       :default (Duration/ofMinutes 1)
+                                                       :spec ::sys/duration}}}
   [opts]
   (map->XtdbNode (merge opts
                         {:!running-queries (doto (atom {:in-progress {} :completed '()})

@@ -341,12 +341,12 @@
                                    :spec ::sys/duration
                                    :default "PT0S"
                                    :doc "How often to perform a refresh operation. Negative will disable refresh, zero will refresh after every transaction, positive will refresh on the given interval - updates will not be visible in Lucene searches until the index is refreshed."}}
-   ::sys/deps {:query-engine :xt/query-engine
+   ::sys/deps {:query-engine :xtdb/query-engine
                :indexer `->indexer
                :analyzer `->analyzer
-               :secondary-indices :xt/secondary-indices
+               :secondary-indices :xtdb/secondary-indices
                :checkpointer (fn [_])}
-   ::sys/before #{[:xt/tx-ingester]}}
+   ::sys/before #{[:xtdb/tx-ingester]}}
   [{:keys [^Path db-dir analyzer indexer query-engine secondary-indices checkpointer
            fsync-frequency ^Duration refresh-frequency]
     :as opts}]

@@ -48,8 +48,8 @@ JSON::
 [source,json]
 ----
 {
-  "xt/tx-log": {
-    "xt/module": "xtdb.kafka/->tx-log",
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.kafka/->tx-log",
     "kafka-config": {
       "bootstrap-servers": "localhost:9092",
       ...
@@ -71,7 +71,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
+{:xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
              :kafka-config {:bootstrap-servers "localhost:9092"}
              :tx-topic-opts {:topic-name "crux-transaction-log"}
              :poll-wait-duration (Duration/ofSeconds 1)}
@@ -82,7 +82,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-log {:xt/module xtdb.kafka/->tx-log
+{:xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
              :kafka-config {:bootstrap-servers "localhost:9092"}
              :tx-topic-opts {:topic-name "crux-transaction-log"}
              :poll-wait-duration "PT1S"}
@@ -99,8 +99,8 @@ JSON::
 [source,json]
 ----
 {
-  "xt/document-store": {
-    "xt/module": "xtdb.kafka/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.kafka/->document-store",
     "kafka-config": {
       "bootstrap-servers": "localhost:9092",
       ...
@@ -111,7 +111,7 @@ JSON::
     },
     "local-document-store": {
       "kv-store": {
-        "xt/module": "xtdb.rocksdb/->kv-store",
+        "xtdb/module": "xtdb.rocksdb/->kv-store",
         "db-dir": "/tmp/rocksdb"
       }
     },
@@ -126,12 +126,12 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'xtdb.kafka/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
                      :kafka-config {:bootstrap-servers "localhost:9092"
                                     ...}
                      :doc-topic-opts {:topic-name "crux-docs"
                                       ...}
-                     :local-document-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
+                     :local-document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                                        :db-dir (io/file "/tmp/rocksdb")}}
                      :poll-wait-duration (Duration/ofSeconds 1)}
  ...}
@@ -141,12 +141,12 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module xtdb.kafka/->document-store
+{:xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
                      :kafka-config {:bootstrap-servers "localhost:9092"
                                     ...}
                      :doc-topic-opts {:topic-name "crux-docs"
                                       ...}
-                     :local-document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
+                     :local-document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store
                                                        :db-dir "/tmp/rocksdb"}}
                      :poll-wait-duration "PT1S"}
  ...}
@@ -167,18 +167,18 @@ JSON::
 ----
 {
   "local-rocksdb": {
-    "xt/module": "xtdb.rocksdb/->kv-store",
+    "xtdb/module": "xtdb.rocksdb/->kv-store",
     "db-dir": "/tmp/rocksdb"
   },
 
-  "xt/document-store": {
+  "xtdb/document-store": {
     ...
     "local-document-store": {
       "kv-store": "local-rocksdb"
     }
   },
 
-  "xt/index-store": {
+  "xtdb/index-store": {
     "kv-store": "local-rocksdb"
   }
 
@@ -191,11 +191,11 @@ Clojure::
 [source,clojure]
 ----
 {...
- :local-rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
+ :local-rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
                  :db-dir (io/file "/tmp/rocksdb")}
- :xt/document-store {...
+ :xtdb/document-store {...
                      :local-document-store {:kv-store :local-rocksdb}}
- :xt/index-store {:kv-store :local-rocksdb}}
+ :xtdb/index-store {:kv-store :local-rocksdb}}
 ----
 
 EDN::
@@ -203,11 +203,11 @@ EDN::
 [source,clojure]
 ----
 {...
- :local-rocksdb {:xt/module xtdb.rocksdb/->kv-store
+ :local-rocksdb {:xtdb/module xtdb.rocksdb/->kv-store
                  :db-dir "/tmp/rocksdb"}
- :xt/document-store {...
+ :xtdb/document-store {...
                      :local-document-store {:kv-store :local-rocksdb}}
- :xt/index-store {:kv-store :local-rocksdb}}
+ :xtdb/index-store {:kv-store :local-rocksdb}}
 ----
 ====
 
@@ -223,19 +223,19 @@ JSON::
 ----
 {
   "kafka-config": {
-    "xt/module": "xtdb.kafka/->kafka-config",
+    "xtdb/module": "xtdb.kafka/->kafka-config",
     "bootstrap-servers": "localhost:9092",
     ...
   },
 
-  "xt/tx-log": {
-    "xt/module": "xtdb.kafka/->tx-log",
+  "xtdb/tx-log": {
+    "xtdb/module": "xtdb.kafka/->tx-log",
     "kafka-config": "kafka-config",
     ...
   }
 
-  "xt/document-store": {
-    "xt/module": "xtdb.kafka/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.kafka/->document-store",
     "kafka-config": "kafka-config",
     ...
   }
@@ -246,13 +246,13 @@ Clojure::
 +
 [source,clojure]
 ----
-{:kafka-config {:xt/module 'xtdb.kafka/->kafka-config
+{:kafka-config {:xtdb/module 'xtdb.kafka/->kafka-config
                 :bootstrap-servers "localhost:9092"
                 ...}
- :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
+ :xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
                :kafka-config :kafka-config
                ...}
- :xt/document-store {:xt/module 'xtdb.kafka/->document-store
+ :xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
                        :kafka-config :kafka-config
                        ...}}
 ----
@@ -261,13 +261,13 @@ EDN::
 +
 [source,clojure]
 ----
-{:kafka-config {:xt/module xtdb.kafka/->kafka-config
+{:kafka-config {:xtdb/module xtdb.kafka/->kafka-config
                 :bootstrap-servers "localhost:9092"
                 ...}
- :xt/tx-log {:xt/module xtdb.kafka/->tx-log
+ :xtdb/tx-log {:xtdb/module xtdb.kafka/->tx-log
              :kafka-config :kafka-config
              ...}
- :xt/document-store {:xt/module xtdb.kafka/->document-store
+ :xtdb/document-store {:xtdb/module xtdb.kafka/->document-store
                      :kafka-config :kafka-config
                      ...}}
 ----

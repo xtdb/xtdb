@@ -28,7 +28,7 @@ public class JXtdbNodeTest {
         HashMap<Keyword, Object> nodeConfig = new HashMap<>();
         nodeConfig.put(Keyword.intern("slow-queries-min-threshold"), Duration.ofSeconds(-1));
         HashMap<Keyword, Object> _config = new HashMap<>();
-        _config.put(Keyword.intern("xt/node"), nodeConfig);
+        _config.put(Keyword.intern("xtdb/node"), nodeConfig);
         config = _config;
     }
 
@@ -171,7 +171,7 @@ public class JXtdbNodeTest {
         Map<Keyword, ?> event = (Map<Keyword, ?>) events[0];
         assertNotNull(event);
         assertEquals(5, event.size());
-        assertEquals(Keyword.intern("xt/indexed-tx"), event.get(Keyword.intern("xt/event-type")));
+        assertEquals(Keyword.intern("xtdb/indexed-tx"), event.get(Keyword.intern("xt/event-type")));
         assertTrue((Boolean) event.get(Keyword.intern("committed?")));
         assertEquals(tx.getTime(), event.get(TX_TIME));
         assertEquals(0L, event.get(TX_ID));

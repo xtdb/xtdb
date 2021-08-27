@@ -9,8 +9,8 @@
 
 (t/use-fixtures :once every-api/with-embedded-kafka-cluster)
 (t/use-fixtures :each
-  (partial fix/with-opts {:xt/bus {:sync? true}
-                          :xt/node {:slow-queries-min-threshold (Duration/ofNanos 1)}})
+  (partial fix/with-opts {:xtdb/bus {:sync? true}
+                          :xtdb/node {:slow-queries-min-threshold (Duration/ofNanos 1)}})
   every-api/with-each-api-implementation)
 
 (t/deftest test-cleaning-recent-queries

@@ -116,9 +116,9 @@
 
 (defn with-jdbc-node [f]
   (fix/with-opts {::j/connection-pool *jdbc-opts*
-                  :xt/tx-log {:xt/module `j/->tx-log
+                  :xtdb/tx-log {:xtdb/module `j/->tx-log
                               :connection-pool ::j/connection-pool}
-                  :xt/document-store {:xt/module `j/->document-store,
+                  :xtdb/document-store {:xtdb/module `j/->document-store,
                                       :connection-pool ::j/connection-pool}}
     f))
 

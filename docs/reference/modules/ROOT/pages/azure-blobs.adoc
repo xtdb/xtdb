@@ -40,8 +40,8 @@ JSON::
 [source,json]
 ----
 {
-  "xt/document-store": {
-    "xt/module": "xtdb.azure.blobs/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.azure.blobs/->document-store",
     "sas-token": "your-sas-token",
     "storage-account": "your-storage-account",
     "container": "your-container-name"
@@ -53,7 +53,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'xtdb.azure.blobs/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.azure.blobs/->document-store
                      :sas-token "your-sas-token"
                      :storage-account "your-storage-account"
                      :container "your-container-name"}}
@@ -63,7 +63,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module xtdb.azure.blobs/->document-store
+{:xtdb/document-store {:xtdb/module xtdb.azure.blobs/->document-store
                      :sas-token "your-sas-token"
                      :storage-account "your-storage-account"
                      :container "your-container-name"}}

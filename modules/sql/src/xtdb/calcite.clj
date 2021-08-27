@@ -515,7 +515,7 @@
                             :scan-only? {:doc "XTDB Table Scan Only"
                                          :default false
                                          :spec ::sys/boolean}}
-                ::sys/deps {:node :xt/node}}
+                ::sys/deps {:node :xtdb/node}}
   [{:keys [node port scan-only?]}]
   (let [node-uuid (str (UUID/randomUUID))]
     (.put !xtdb-nodes node-uuid node)

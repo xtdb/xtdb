@@ -145,7 +145,7 @@ with few lifecycle members added.
 
   `event-opts` should contain `:xt/event-type`, along with any other options the event-type requires.
 
-  We currently only support one public event-type: `:xt/indexed-tx`.
+  We currently only support one public event-type: `:xtdb/indexed-tx`.
   Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
 
   `(.close ...)` the return value to detach the listener.

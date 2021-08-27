@@ -10,7 +10,7 @@
 (t/use-fixtures :each fix/with-node)
 
 (t/deftest test-index-store-metrics
-  (let [{:xt/keys [bus] :as sys} @(:!system *api*)
+  (let [{:xtdb/keys [bus] :as sys} @(:!system *api*)
         registry (dropwizard/new-registry)
         mets (index-store-metrics/assign-listeners registry sys)]
     (t/testing "initial ingest values"
@@ -28,7 +28,7 @@
       (t/is (= 1 (dropwizard/meter-count (:tx-ingest-timer mets)))))))
 
 (t/deftest test-query-metrics
-  (let [{:xt/keys [bus] :as sys} @(:!system *api*)
+  (let [{:xtdb/keys [bus] :as sys} @(:!system *api*)
         registry (dropwizard/new-registry)
         mets (query-metrics/assign-listeners registry sys)]
 

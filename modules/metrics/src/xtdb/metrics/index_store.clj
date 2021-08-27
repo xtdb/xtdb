@@ -5,7 +5,7 @@
             [xtdb.metrics.dropwizard :as dropwizard])
   (:import (java.util Date)))
 
-(defn assign-tx-id-lag [registry {:xt/keys [node]}]
+(defn assign-tx-id-lag [registry {:xtdb/keys [node]}]
   (dropwizard/gauge registry
                     ["index-store" "tx-id-lag"]
                     #(when-let [completed (xt/latest-completed-tx node)]
@@ -13,7 +13,7 @@
                          (- (:xt/tx-id submitted)
                             (:xt/tx-id completed))))))
 
-(defn assign-tx-latency-gauge [registry {:xt/keys [bus]}]
+(defn assign-tx-latency-gauge [registry {:xtdb/keys [bus]}]
   (let [!last-tx-lag (atom 0)]
     (bus/listen bus
                 {:xt/event-types #{::tx/indexed-tx}}
@@ -25,7 +25,7 @@
                       (fn []
                         (first (reset-vals! !last-tx-lag 0))))))
 
-(defn assign-doc-meters [registry {:xt/keys [bus]}]
+(defn assign-doc-meters [registry {:xtdb/keys [bus]}]
   (let [docs-ingested-meter (dropwizard/meter registry ["index-store" "indexed-docs"])
         av-ingested-meter (dropwizard/meter registry ["index-store" "indexed-avs"])
         bytes-ingested-meter (dropwizard/meter registry ["index-store" "indexed-bytes"])]
@@ -39,7 +39,7 @@
      :av-ingested-meter av-ingested-meter
      :bytes-ingested-meter bytes-ingested-meter}))
 
-(defn assign-tx-timer [registry {:xt/keys [bus]}]
+(defn assign-tx-timer [registry {:xtdb/keys [bus]}]
   (let [timer (dropwizard/timer registry ["index-store" "indexed-txs"])
         !timer-store (atom {})]
     (bus/listen bus

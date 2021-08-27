@@ -38,11 +38,11 @@
                                                   :kafka-dir (io/file tmp-dir "kafka-data")
                                                   :kafka-log-dir (io/file tmp-dir "kafka-log")})
                 node (xt/start-node {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-                                       :xt/tx-log {:xt/module `k/->tx-log, :kafka-config ::k/kafka-config}
-                                       :xt/document-store {:xt/module `k/->document-store
+                                       :xtdb/tx-log {:xtdb/module `k/->tx-log, :kafka-config ::k/kafka-config}
+                                       :xtdb/document-store {:xtdb/module `k/->document-store
                                                            :kafka-config ::k/kafka-config
-                                                           :local-document-store {:kv-store {:xt/module `rocks/->kv-store,
+                                                           :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store,
                                                                                              :db-dir (io/file tmp-dir "doc-store")}}}
-                                       :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file tmp-dir "index-store")}}})]
+                                       :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file tmp-dir "index-store")}}})]
       (bench/with-bench-ns :sorted-maps
         (run-benches node [:initial-submits :initial-await])))))

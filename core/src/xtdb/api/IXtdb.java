@@ -312,13 +312,13 @@ public interface IXtdb extends IXtdbSubmitClient, Closeable {
      */
     @SuppressWarnings("unchecked")
     Map<Keyword, ?> TX_INDEXED_EVENT_OPTS = (Map<Keyword, Object>) PersistentArrayMap.EMPTY
-            .assoc(Keyword.intern("xt/event-type"), Keyword.intern("xt/indexed-tx"))
+            .assoc(Keyword.intern("xt/event-type"), Keyword.intern("xtdb/indexed-tx"))
             .assoc(Keyword.intern("with-tx-ops?"), true);
 
     /**
      * Attaches a listener to Crux's event bus.
      *
-     * We currently only support one public event-type: `:xt/indexed-tx`.
+     * We currently only support one public event-type: `:xtdb/indexed-tx`.
      * Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
      * See/use {@link #TX_INDEXED_EVENT_OPTS TX_INDEXED_EVENT_OPTS}
      *

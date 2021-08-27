@@ -50,7 +50,7 @@ class KConfigurationTest {
     public fun `Starting a Crux node and overriding a module implementation`() {
         // tag::override-module[]
         val xtdbNode = IXtdb.startNode { n ->
-            n.with("xt/document-store") { docStore ->
+            n.with("xtdb/document-store") { docStore ->
                 docStore.module("xtdb.s3/->document-store")
                 docStore["bucket"] = "my-bucket"
                 docStore["prefix"] = "my-prefix"
@@ -64,7 +64,7 @@ class KConfigurationTest {
     public fun `Starting a Crux node with nested modules`() {
         // tag::nested-modules-0[]
         val xtdbNode = IXtdb.startNode{ n ->
-            n.with("xt/tx-log") { txLog ->
+            n.with("xtdb/tx-log") { txLog ->
                 txLog.with("kv-store") { kv ->
                     kv.module("xtdb.rocksdb/->kv-store")
                     kv["db-dir"] = File("/tmp/rocksdb")
@@ -74,8 +74,8 @@ class KConfigurationTest {
             /*
             This obviously won't compile so has to be commented out
             // tag::nested-modules-1[]
-            n.with("xt/document-store") { docStore -> ... }
-            n.with("xt/index-store") { indexStore -> ... }
+            n.with("xtdb/document-store") { docStore -> ... }
+            n.with("xtdb/index-store") { indexStore -> ... }
             // end::nested-modules-1[]
              */
             // tag::nested-modules-2[]
@@ -92,10 +92,10 @@ class KConfigurationTest {
                 rocks.module("xtdb.rocksdb/->kv-store")
                 rocks["db-dir"] = File("/tmp/rocksdb")
             }
-            n.with("xt/document-store") { docStore ->
+            n.with("xtdb/document-store") { docStore ->
                 docStore["kv-store"] = "my-rocksdb"
             }
-            n.with("xt/tx-log") { txLog ->
+            n.with("xtdb/tx-log") { txLog ->
                 txLog["kv-store"] = "my-rocksdb"
             }
         }

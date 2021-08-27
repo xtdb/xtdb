@@ -211,7 +211,7 @@
     (xio/try-close producer)))
 
 (defn ->tx-log {::sys/deps {:kafka-config `->kafka-config
-                            :tx-topic-opts {:xt/module `->topic-opts, :topic-name "crux-transaction-log"}}
+                            :tx-topic-opts {:xtdb/module `->topic-opts, :topic-name "crux-transaction-log"}}
                 ::sys/args {:poll-wait-duration {:spec ::sys/duration
                                                  :required? true
                                                  :doc "How long to wait when polling Kafka"
@@ -353,11 +353,11 @@
                                                            topic-config)))))))
 
 (defn ->document-store {::sys/deps {:kafka-config `->kafka-config
-                                    :doc-topic-opts {:xt/module `->topic-opts,
+                                    :doc-topic-opts {:xtdb/module `->topic-opts,
                                                      :topic-name "crux-docs",
                                                      :num-partitions 1}
                                     :local-document-store 'xtdb.kv.document-store/->document-store
-                                    :index-store :xt/index-store}
+                                    :index-store :xtdb/index-store}
                         ::sys/args {:group-id {:doc "Kafka client group.id"
                                                :required? false
                                                :spec ::sys/string}
@@ -388,7 +388,7 @@
     (throw (UnsupportedOperationException. "Can't fetch docs from submit-only Kafka document store"))))
 
 (defn ->submit-only-document-store {::sys/deps {:kafka-config `->kafka-config
-                                                :doc-topic-opts {:xt/module `->topic-opts
+                                                :doc-topic-opts {:xtdb/module `->topic-opts
                                                                  :topic-name "crux-docs"
                                                                  :num-partitions 1}}}
   [{:keys [kafka-config doc-topic-opts] :as opts}]

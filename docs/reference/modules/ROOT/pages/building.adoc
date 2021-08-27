@@ -47,9 +47,9 @@ com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
- :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
- :xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xt/tx-log"}}
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/indexes"}}
+ :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/crux/documents"}}
+ :xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/tmp/xt/tx-log"}}
  :xtdb.http-server/server {}}
 ----
 
@@ -72,9 +72,9 @@ Override the topology within `xtdb.edn` with the following:
 
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
- :xt/document-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
- :xt/tx-log {:kv-store {:xt/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xt/tx-log"}}
+{:xtdb/index-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/indexes"}}
+ :xtdb/document-store {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/crux/documents"}}
+ :xtdb/tx-log {:kv-store {:xtdb/module xtdb.rocksdb/->kv-store, :db-dir "/var/lib/xt/tx-log"}}
  :xtdb.http-server/server {}}
 ----
 

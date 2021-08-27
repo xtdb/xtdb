@@ -33,7 +33,7 @@ public class ConfigurationTest {
         try {
             File docDir = folder.newFolder("docs");
             return IXtdb.startNode(n -> {
-                n.with("xt/document-store", createKvConfig(docDir));
+                n.with("xtdb/document-store", createKvConfig(docDir));
             });
         }
         catch (IOException e) {
@@ -68,9 +68,9 @@ public class ConfigurationTest {
             File indexDir = folder.newFolder("index");
 
             IXtdb node = IXtdb.startNode(n -> {
-                n.with("xt/tx-log", createKvConfig(txDir));
-                n.with("xt/document-store", createKvConfig(docDir));
-                n.with("xt/index-store", createKvConfig(indexDir));
+                n.with("xtdb/tx-log", createKvConfig(txDir));
+                n.with("xtdb/document-store", createKvConfig(docDir));
+                n.with("xtdb/index-store", createKvConfig(indexDir));
             });
 
             assertEquals("xtdb.rocksdb.RocksKv", kvStore(node, "node", "tx-log", "kv-store"));
@@ -90,7 +90,7 @@ public class ConfigurationTest {
             File docDir = folder.newFolder("docs");
 
             IXtdbSubmitClient client = IXtdbSubmitClient.newSubmitClient(n -> {
-                n.with("xt/document-store", createKvConfig(docDir));
+                n.with("xtdb/document-store", createKvConfig(docDir));
             });
 
             assertEquals("xtdb.rocksdb.RocksKv", kvStore(client, "client", "document-store", "document-store", "kv-store"));

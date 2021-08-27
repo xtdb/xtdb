@@ -45,7 +45,7 @@
          (t/deftest override-module
            (with-open [node
                        ;; tag::override-module[]
-                       (xt/start-node {:xt/document-store {:xt/module 'xtdb.s3/->document-store
+                       (xt/start-node {:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
                                                            :bucket "my-bucket"
                                                            :prefix "my-prefix"}})
                        ;; end::override-module[]
@@ -55,14 +55,14 @@
 (t/deftest nested-modules
   (with-open [node
               ;; tag::nested-modules-0[]
-              (xt/start-node {:xt/tx-log {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
+              (xt/start-node {:xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                                      :db-dir (io/file "/tmp/txs")}}
                               ;; end::nested-modules-0[]
                               })]
     (comment [( ("This obviously won't run so putting in a comment"
                  ;; tag::nested-modules-1[]
-                 :xt/document-store { }
-                 :xt/index-store { }
+                 :xtdb/document-store { }
+                 :xtdb/index-store { }
                  ;; end::nested-modules-1[]
                  ) {
                     ;; tag::nested-modules-2[]
@@ -74,10 +74,10 @@
 (t/deftest sharing-modules
   (with-open [node
               ;; tag::sharing-modules[]
-              (xt/start-node {:my-rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
+              (xt/start-node {:my-rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
                                            :db-dir (io/file "/tmp/rocksdb")}
-                              :xt/tx-log {:kv-store :my-rocksdb}
-                              :xt/document-store {:kv-store :my-rocksdb}})
+                              :xtdb/tx-log {:kv-store :my-rocksdb}
+                              :xtdb/document-store {:kv-store :my-rocksdb}})
               ;; end::sharing-modules[]
               ]
     (t/is true)))

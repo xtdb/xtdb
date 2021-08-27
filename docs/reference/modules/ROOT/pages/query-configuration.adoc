@@ -9,7 +9,7 @@ JSON::
 [source,json]
 ----
 {
-  "xt/query-engine": {
+  "xtdb/query-engine": {
     "fn-allow-list": ["foo/bar"]
   }
 }
@@ -19,14 +19,14 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/query-engine {:fn-allow-list '[foo/bar]}}
+{:xtdb/query-engine {:fn-allow-list '[foo/bar]}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:xt/query-engine {:fn-allow-list [foo/bar]}
+{:xtdb/query-engine {:fn-allow-list [foo/bar]}
 ----
 ====
 

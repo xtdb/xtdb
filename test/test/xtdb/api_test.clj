@@ -388,7 +388,7 @@
     (let [!events (atom [])]
       (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
 
-      (let [[bar-tx baz-tx] (with-open [_ (xt/listen *api* {:xt/event-type :xt/indexed-tx
+      (let [[bar-tx baz-tx] (with-open [_ (xt/listen *api* {:xt/event-type :xtdb/indexed-tx
                                                             :with-tx-ops? true}
                                                      (fn [evt]
                                                        (swap! !events conj evt)))]
@@ -404,11 +404,11 @@
 
         (Thread/sleep 100)
 
-        (t/is (= [(merge {:xt/event-type :xt/indexed-tx,
+        (t/is (= [(merge {:xt/event-type :xtdb/indexed-tx,
                           :committed? true
                           :xt/tx-ops [[:xt/put {:xt/id :bar}]]}
                          bar-tx)
-                  (merge {:xt/event-type :xt/indexed-tx,
+                  (merge {:xt/event-type :xtdb/indexed-tx,
                           :committed? true
                           :xt/tx-ops [[:xt/put {:xt/id :baz}]]}
                          baz-tx)]

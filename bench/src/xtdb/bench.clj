@@ -220,25 +220,25 @@
 (def nodes
   {"standalone-rocksdb"
    (fn [data-dir]
-     {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+     {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "rocksdb-lucene"
    (fn [data-dir]
-     {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+     {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :xtdb.lucene/lucene-store {:db-dir (io/file data-dir "lucene")}
 
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "standalone-rocksdb-with-metrics"
    (fn [data-dir]
-     {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store
+     {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store
                                   :db-dir (io/file data-dir "indexes")
                                   :metrics `xtdb.rocksdb.metrics/->metrics}}
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
@@ -247,84 +247,84 @@
    (fn [data-dir]
      {::j/connection-pool {:dialect 'xtdb.jdbc.h2/->dialect
                            :db-spec {:dbname (str (io/file data-dir "h2"))}}
-      :xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-      :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :xtdb/tx-log {:xtdb/module `j/->tx-log, :connection-pool ::j/connection-pool}
+      :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
+      :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "sqlite-rocksdb"
    (fn [data-dir]
      {::j/connection-pool {:dialect 'xtdb.jdbc.sqlite/->dialect
                            :db-spec {:dbname (str (io/file data-dir "sqlite"))}}
-      :xt/tx-log {:xt/module `j/->tx-log, :connection-pool ::j/connection-pool}
-      :xt/document-store {:xt/module `j/->document-store, :connection-pool ::j/connection-pool}
-      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
+      :xtdb/tx-log {:xtdb/module `j/->tx-log, :connection-pool ::j/connection-pool}
+      :xtdb/document-store {:xtdb/module `j/->document-store, :connection-pool ::j/connection-pool}
+      :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-        :xt/tx-log {:xt/module `k/->tx-log
+        :xtdb/tx-log {:xtdb/module `k/->tx-log
                     :kafka-config ::k/kafka-config
                     :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
-        :xt/document-store {:xt/module `k/->document-store,
+        :xtdb/document-store {:xtdb/module `k/->document-store,
                             :kafka-config ::k/kafka-config
                             :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
-                            :local-document-store {:kv-store {:xt/module `rocks/->kv-store
+                            :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                               :db-dir (io/file data-dir "doc-store")}}}
-        :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+        :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :xtdb.metrics.cloudwatch/reporter cw-reporter-opts}))
 
    "embedded-kafka-rocksdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9091"}
-        :xt/tx-log {:xt/module `k/->tx-log
+        :xtdb/tx-log {:xtdb/module `k/->tx-log
                     :kafka-config ::k/kafka-config
                     :tx-topic-opts {:topic-name (str "kafka-rocksdb-tx-" uuid)}}
-        :xt/document-store {:xt/module `k/->document-store
+        :xtdb/document-store {:xtdb/module `k/->document-store
                             :kafka-config ::k/kafka-config
                             :doc-topic-opts {:topic-name (str "kafka-rocksdb-doc-" uuid)}
-                            :local-document-store {:kv-store {:xt/module `rocks/->kv-store
+                            :local-document-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                               :db-dir (io/file data-dir "doc-store")}}}
-        :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+        :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :xtdb.metrics.cloudwatch/reporter cw-reporter-opts}))
 
    "postgres-rocksdb"
    (fn [^File data-dir]
-     {:xtdb.jdbc/connection-pool {:dialect {:xt/module 'xtdb.jdbc.psql/->dialect
+     {:xtdb.jdbc/connection-pool {:dialect {:xtdb/module 'xtdb.jdbc.psql/->dialect
                                             :drop-table? true}
                                   :db-spec {:dbname "postgres",
                                             :user "postgres",
                                             :password "postgres"}}
-      :xt/tx-log {:xt/module 'xtdb.jdbc/->tx-log
+      :xtdb/tx-log {:xtdb/module 'xtdb.jdbc/->tx-log
                   :connection-pool :xtdb.jdbc/connection-pool}
-      :xt/document-store {:xt/module 'xtdb.jdbc/->document-store
+      :xtdb/document-store {:xtdb/module 'xtdb.jdbc/->document-store
                           :connection-pool :xtdb.jdbc/connection-pool}
-      :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
+      :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file data-dir "index-store")}}
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "standalone-lmdb"
    (fn [data-dir]
-     {:xt/tx-log {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
-      :xt/document-store {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
-      :xt/index-store {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
+     {:xtdb/tx-log {:kv-store {:xtdb/module `lmdb/->kv-store, :db-dir (io/file data-dir "tx-log")}}
+      :xtdb/document-store {:kv-store {:xtdb/module `lmdb/->kv-store, :db-dir (io/file data-dir "doc-store")}}
+      :xtdb/index-store {:kv-store {:xtdb/module `lmdb/->kv-store, :db-dir (io/file data-dir "indexes")}}
       :xtdb.metrics.cloudwatch/reporter cw-reporter-opts})
 
    "kafka-lmdb"
    (fn [data-dir]
      (let [uuid (UUID/randomUUID)]
        {::k/kafka-config {:bootstrap-servers "localhost:9092"}
-        :xt/tx-log {:xt/module `k/->tx-log
+        :xtdb/tx-log {:xtdb/module `k/->tx-log
                     :kafka-config ::k/kafka-config
                     :tx-topic-opts {:topic-name (str "kafka-lmdb-tx-" uuid)}}
-        :xt/document-store {:xt/module `k/->document-store
+        :xtdb/document-store {:xtdb/module `k/->document-store
                             :kafka-config ::k/kafka-config
                             :doc-topic-opts {:topic-name (str "kafka-lmdb-doc-" uuid)}
-                            :local-document-store {:kv-store {:xt/module `lmdb/->kv-store
+                            :local-document-store {:kv-store {:xtdb/module `lmdb/->kv-store
                                                               :db-dir (io/file data-dir "doc-store")}}}
-        :xt/index-store {:kv-store {:xt/module `lmdb/->kv-store, :db-dir (io/file data-dir "index-store")}}
+        :xtdb/index-store {:kv-store {:xtdb/module `lmdb/->kv-store, :db-dir (io/file data-dir "index-store")}}
         :xtdb.metrics.cloudwatch/reporter cw-reporter-opts}))})
 
 (defn with-embedded-kafka* [f]

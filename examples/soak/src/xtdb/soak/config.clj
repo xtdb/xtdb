@@ -27,10 +27,10 @@
 (defn xt-node-config []
   {::k/kafka-config {:bootstrap-servers (:broker confluent-creds)
                      :properties-map (kafka-properties)}
-   :xt/tx-log {:kafka-config ::k/kafka-config
+   :xtdb/tx-log {:kafka-config ::k/kafka-config
                :tx-topic-opts {:topic-name "soak-transaction-log"
                                :replication-factor 3}}
-   :xt/document-store {:kafka-config ::k/kafka-config
+   :xtdb/document-store {:kafka-config ::k/kafka-config
                        :doc-topic-opts {:topic-name "soak-docs"
                                         :replication-factor 3}}})
 

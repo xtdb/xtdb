@@ -14,7 +14,7 @@ import java.util.stream.Collectors;
  */
 @SuppressWarnings("unused") // entry points
 public final class ModuleConfiguration {
-    private static final String MODULE = "xt/module";
+    private static final String MODULE = "xtdb/module";
     static final ModuleConfiguration EMPTY = new ModuleConfiguration(new HashMap<>());
 
     private final Map<String, Object> opts;

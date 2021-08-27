@@ -66,7 +66,7 @@
 
   `event-opts` should contain `:xt/event-type`, along with any other options the event-type requires.
 
-  We currently only support one public event-type: `:xt/indexed-tx`.
+  We currently only support one public event-type: `:xtdb/indexed-tx`.
   Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
 
   `(.close ...)` the return value to detach the listener.
@@ -226,23 +226,23 @@
 
   Throws IndexVersionOutOfSyncException if the index needs rebuilding."
   ^java.io.Closeable [options]
-  (let [system (-> (sys/prep-system (into [{:xt/node 'xtdb.node/->node
-                                            :xt/index-store 'xtdb.kv.index-store/->kv-index-store
-                                            :xt/bus 'xtdb.bus/->bus
-                                            :xt/tx-ingester 'xtdb.tx/->tx-ingester
-                                            :xt/tx-indexer 'xtdb.tx/->tx-indexer
-                                            :xt/document-store 'xtdb.kv.document-store/->document-store
-                                            :xt/tx-log 'xtdb.kv.tx-log/->tx-log
-                                            :xt/query-engine 'xtdb.query/->query-engine
-                                            :xt/secondary-indices 'xtdb.tx/->secondary-indices}]
+  (let [system (-> (sys/prep-system (into [{:xtdb/node 'xtdb.node/->node
+                                            :xtdb/index-store 'xtdb.kv.index-store/->kv-index-store
+                                            :xtdb/bus 'xtdb.bus/->bus
+                                            :xtdb/tx-ingester 'xtdb.tx/->tx-ingester
+                                            :xtdb/tx-indexer 'xtdb.tx/->tx-indexer
+                                            :xtdb/document-store 'xtdb.kv.document-store/->document-store
+                                            :xtdb/tx-log 'xtdb.kv.tx-log/->tx-log
+                                            :xtdb/query-engine 'xtdb.query/->query-engine
+                                            :xtdb/secondary-indices 'xtdb.tx/->secondary-indices}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
     (when (and (nil? @xio/malloc-arena-max)
                (xio/glibc?))
       (defonce warn-on-malloc-arena-max
         (log/warn "MALLOC_ARENA_MAX not set, memory usage might be high, recommended setting for Crux is 2")))
-    (reset! (get-in system [:xt/node :!system]) system)
-    (-> (:xt/node system)
+    (reset! (get-in system [:xtdb/node :!system]) system)
+    (-> (:xtdb/node system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))
 
 (defn- ->RemoteClientOptions [{:keys [->jwt-token] :as opts}]

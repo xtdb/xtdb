@@ -27,15 +27,15 @@ JSON::
 [source,json]
 ----
 {
-  "xt/index-store": {
+  "xtdb/index-store": {
     "kv-store": {
-      "xt/module": "avisi.crux.xodus/->kv-store",
+      "xtdb/module": "avisi.crux.xodus/->kv-store",
       "db-dir": "/tmp/xodus"
     }
   },
 
-  "xt/document-store": { ... },
-  "xt/tx-log": { ... }
+  "xtdb/document-store": { ... },
+  "xtdb/tx-log": { ... }
 }
 ----
 
@@ -43,20 +43,20 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module 'avisi.crux.xodus/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module 'avisi.crux.xodus/->kv-store
                              :db-dir (io/file "/tmp/xodus")}}
- :xt/document-store {...}
- :xt/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 
 EDN::
 +
 [source,clojure]
 ----
-{:xt/index-store {:kv-store {:xt/module avisi.crux.xodus/->kv-store
+{:xtdb/index-store {:kv-store {:xtdb/module avisi.crux.xodus/->kv-store
                              :db-dir "/tmp/xodus"}}
- :xt/document-store {...}
- :xt/tx-log {...}}
+ :xtdb/document-store {...}
+ :xtdb/tx-log {...}}
 ----
 ====
 

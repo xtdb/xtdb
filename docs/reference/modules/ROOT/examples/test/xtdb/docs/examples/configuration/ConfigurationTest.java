@@ -67,7 +67,7 @@ public class ConfigurationTest {
     public void overrideModuleImplementation() {
         // tag::override-module[]
         IXtdb xtdbNode = IXtdb.startNode(n -> {
-            n.with("xt/document-store", docStore -> {
+            n.with("xtdb/document-store", docStore -> {
                 docStore.module("xtdb.s3/->document-store");
                 docStore.set("bucket", "my-bucket");
                 docStore.set("prefix", "my-prefix");
@@ -82,7 +82,7 @@ public class ConfigurationTest {
     public void nestedModules() {
         // tag::nested-modules-0[]
         IXtdb xtdbNode = IXtdb.startNode(n -> {
-            n.with("xt/tx-log", txLog -> {
+            n.with("xtdb/tx-log", txLog -> {
                 txLog.with("kv-store", kv -> {
                     kv.module("xtdb.rocksdb/->kv-store");
                     kv.set("db-dir", new File("/tmp/rocksdb"));
@@ -92,8 +92,8 @@ public class ConfigurationTest {
             /*
             This obviously won't compile so has to be commented out
             // tag::nested-modules-1[]
-            n.with("xt/document-store", docStore -> { ... });
-            n.with("xt/index-store", indexStore -> { ... });
+            n.with("xtdb/document-store", docStore -> { ... });
+            n.with("xtdb/index-store", indexStore -> { ... });
             // end::nested-modules-1[]
              */
             // tag::nested-modules-2[]
@@ -111,10 +111,10 @@ public class ConfigurationTest {
                 rocks.module("xtdb.rocksdb/->kv-store");
                 rocks.set("db-dir", new File("/tmp/rocksdb"));
             });
-            n.with("xt/document-store", docStore -> {
+            n.with("xtdb/document-store", docStore -> {
                 docStore.with("kv-store", "my-rocksdb");
             });
-            n.with("xt/tx-log", txLog -> {
+            n.with("xtdb/tx-log", txLog -> {
                 txLog.with("kv-store", "my-rocksdb");
             });
         });

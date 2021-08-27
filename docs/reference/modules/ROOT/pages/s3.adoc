@@ -38,8 +38,8 @@ JSON::
 [source,json]
 ----
 {
-  "xt/document-store": {
-    "xt/module": "xtdb.s3/->document-store",
+  "xtdb/document-store": {
+    "xtdb/module": "xtdb.s3/->document-store",
     "bucket": "your-bucket",
     ...
   },
@@ -50,7 +50,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'xtdb.s3/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
                      :bucket "your-bucket"
                      ...}}
 ----
@@ -59,7 +59,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module xtdb.s3/->document-store
+{:xtdb/document-store {:xtdb/module xtdb.s3/->document-store
                      :bucket "your-bucket"
                      ...}}
 ----
@@ -81,10 +81,10 @@ Checkpoints aren't GC'd by Crux - we recommend you set a lifecycle policy on you
 
 [source,clojure]
 ----
-;; under :xt/index-store -> :kv-store -> :checkpointer
+;; under :xtdb/index-store -> :kv-store -> :checkpointer
 ;; see the Checkpointing guide for other parameters
 {:checkpointer {...
-                :store {:xt/module 'xtdb.s3.checkpoint-store/->checkpoint-store
+                :store {:xtdb/module 'xtdb.s3.checkpoint-store/->checkpoint-store
                         :configurator ...
                         :bucket "..."
                         :prefix "..."}}
@@ -113,7 +113,7 @@ Clojure::
 +
 [source,clojure]
 ----
-{:xt/document-store {:xt/module 'xtdb.s3/->document-store
+{:xtdb/document-store {:xtdb/module 'xtdb.s3/->document-store
                      :configurator (fn [_]
                                      (reify S3Configurator
                                        ...)

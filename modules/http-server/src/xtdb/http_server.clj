@@ -452,7 +452,7 @@
 
 (alter-meta! #'->crux-handler assoc :arglists '([crux-node {:keys [jwks read-only? server-label]}]))
 
-(defn ->server {::sys/deps {:crux-node :xt/node}
+(defn ->server {::sys/deps {:crux-node :xtdb/node}
                 ::sys/args {:port {:spec ::sys/nat-int
                                    :doc "Port to start the HTTP server on"
                                    :default default-server-port}

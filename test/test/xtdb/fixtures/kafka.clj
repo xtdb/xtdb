@@ -57,8 +57,8 @@
       (fix/with-opts {::k/kafka-config (merge
                                         {:bootstrap-servers *kafka-bootstrap-servers*}
                                         *kafka-config*)
-                      ::tx-topic-opts {:xt/module `k/->topic-opts, :topic-name *tx-topic*}
-                      :xt/tx-log {:xt/module `k/->tx-log, :kafka-config ::k/kafka-config, :tx-topic-opts ::tx-topic-opts}}
+                      ::tx-topic-opts {:xtdb/module `k/->topic-opts, :topic-name *tx-topic*}
+                      :xtdb/tx-log {:xtdb/module `k/->tx-log, :kafka-config ::k/kafka-config, :tx-topic-opts ::tx-topic-opts}}
         f))))
 
 (defn with-cluster-doc-store-opts [f]
@@ -68,6 +68,6 @@
       (fix/with-opts {::k/kafka-config (merge
                                         {:bootstrap-servers *kafka-bootstrap-servers*}
                                         *kafka-config*)
-                      ::doc-topic-opts {:xt/module `k/->topic-opts, :topic-name *doc-topic*}
-                      :xt/document-store {:xt/module `k/->document-store, :kafka-config ::k/kafka-config, :doc-topic-opts ::doc-topic-opts}}
+                      ::doc-topic-opts {:xtdb/module `k/->topic-opts, :topic-name *doc-topic*}
+                      :xtdb/document-store {:xtdb/module `k/->document-store, :kafka-config ::k/kafka-config, :doc-topic-opts ::doc-topic-opts}}
         f))))

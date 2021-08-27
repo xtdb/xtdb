@@ -260,7 +260,7 @@
           (t/is (empty? history)))))))
 
 (defn index-tx [tx tx-events]
-  (let [{:keys [xt/tx-indexer]} @(:!system *api*)
+  (let [{:keys [xtdb/tx-indexer]} @(:!system *api*)
         in-flight-tx (db/begin-tx tx-indexer tx nil)]
     (db/index-tx-events in-flight-tx tx-events)
     (db/commit in-flight-tx)))
@@ -1183,7 +1183,7 @@
                                                                    (fn [id]
                                                                      (let [[[doc] _] (swap-vals! !arg-doc-resps rest)]
                                                                        (merge doc {:xt/id id})))))))))))]
-    (with-open [node (xt/start-node {:xt/document-store ->mocked-doc-store})]
+    (with-open [node (xt/start-node {:xtdb/document-store ->mocked-doc-store})]
       (xt/submit-tx node [[:xt/put put-fn]])
       (xt/submit-tx node [[:xt/fn :put-fn foo-doc]])
       (xt/sync node)
@@ -1345,14 +1345,14 @@
 (t/deftest handles-secondary-indices
   (letfn [(with-persistent-golden-stores [node-config db-dir]
             (-> node-config
-                (assoc :xt/tx-log {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
+                (assoc :xtdb/tx-log {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                               :db-dir (io/file db-dir "txs")}}
-                       :xt/document-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
+                       :xtdb/document-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                                       :db-dir (io/file db-dir "docs")}})))
 
           (with-persistent-indices [node-config idx-dir]
             (-> node-config
-                (assoc :xt/index-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
+                (assoc :xtdb/index-store {:kv-store {:xtdb/module 'xtdb.rocksdb/->kv-store
                                                    :db-dir idx-dir}})))
 
           (with-secondary-index
@@ -1361,8 +1361,8 @@
                  (assoc ::index2 (-> (fn [{:keys [secondary-indices]}]
                                        (tx/register-index! secondary-indices after-tx-id opts process-tx-f)
                                        nil)
-                                     (with-meta {::sys/deps {:secondary-indices :xt/secondary-indices}
-                                                 ::sys/before #{[:xt/tx-ingester]}}))))))]
+                                     (with-meta {::sys/deps {:secondary-indices :xtdb/secondary-indices}
+                                                 ::sys/before #{[:xtdb/tx-ingester]}}))))))]
 
     (t/testing "indexes into secondary indices"
       (let [!txs (atom [])]

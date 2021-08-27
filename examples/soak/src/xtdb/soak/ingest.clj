@@ -80,8 +80,8 @@
   (n/set-defaults! {:secret-keys {:soak (config/load-secret-key)}})
 
   (let [mode (first args)]
-    (with-open [node (xt/new-submit-client [{:xt/tx-log {:xt/module `k/->tx-log}
-                                             :xt/document-store {:xt/module `k/->submit-only-document-store}}
+    (with-open [node (xt/new-submit-client [{:xtdb/tx-log {:xtdb/module `k/->tx-log}
+                                             :xtdb/document-store {:xtdb/module `k/->submit-only-document-store}}
                                             (config/xt-node-config)])]
       (xt/submit-tx node
                     (case mode

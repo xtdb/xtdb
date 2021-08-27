@@ -31,17 +31,17 @@
 (defmethod print-method XtdbSubmitClient [_ ^Writer w] (.write w "#<XtdbSubmitClient>"))
 (defmethod pp/simple-dispatch XtdbSubmitClient [it] (print-method it *out*))
 
-(defn ->submit-client {::sys/deps {:tx-log :xt/tx-log
-                                   :document-store :xt/document-store}}
+(defn ->submit-client {::sys/deps {:tx-log :xtdb/tx-log
+                                   :document-store :xtdb/document-store}}
   [{:keys [tx-log document-store]}]
   (->XtdbSubmitClient tx-log document-store nil))
 
 (defn open-submit-client ^xtdb.submit_client.XtdbSubmitClient [options]
-  (let [system (-> (sys/prep-system (into [{:xt/submit-client `->submit-client
-                                            :xt/bus 'xtdb.bus/->bus
-                                            :xt/document-store 'xtdb.kv.document-store/->document-store
-                                            :xt/tx-log 'xtdb.kv.tx-log/->tx-log}]
+  (let [system (-> (sys/prep-system (into [{:xtdb/submit-client `->submit-client
+                                            :xtdb/bus 'xtdb.bus/->bus
+                                            :xtdb/document-store 'xtdb.kv.document-store/->document-store
+                                            :xtdb/tx-log 'xtdb.kv.tx-log/->tx-log}]
                                           (cond-> options (not (vector? options)) vector)))
                    (sys/start-system))]
-    (-> (:xt/submit-client system)
+    (-> (:xtdb/submit-client system)
         (assoc :close-fn #(.close ^AutoCloseable system)))))

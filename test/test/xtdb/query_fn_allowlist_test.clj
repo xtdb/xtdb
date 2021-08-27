@@ -13,7 +13,7 @@
 
 (t/deftest test-default-allow-list
   (let [with-fixtures (t/join-fixtures
-                       [(fix/with-opts {:xt/query-engine {:fn-allow-list '[]}})
+                       [(fix/with-opts {:xtdb/query-engine {:fn-allow-list '[]}})
                         fix/with-node])]
     (with-fixtures
       (fn []
@@ -50,7 +50,7 @@
 
 (t/deftest test-allowed-fns
   (let [with-fixtures (t/join-fixtures
-                       [(fix/with-opts {:xt/query-engine {:fn-allow-list '[xtdb.query-fn-allowlist-test/multiple-of-seven?]}})
+                       [(fix/with-opts {:xtdb/query-engine {:fn-allow-list '[xtdb.query-fn-allowlist-test/multiple-of-seven?]}})
                         fix/with-node])]
     (with-fixtures
       (fn []
@@ -75,7 +75,7 @@
 
 (t/deftest test-allowed-ns
   (let [with-fixtures (t/join-fixtures
-                       [(fix/with-opts {:xt/query-engine {:fn-allow-list '[xtdb.query-fn-allowlist-test]}})
+                       [(fix/with-opts {:xtdb/query-engine {:fn-allow-list '[xtdb.query-fn-allowlist-test]}})
                         fix/with-node])]
     (with-fixtures
       (fn []
@@ -110,7 +110,7 @@
 
 (t/deftest test-allowlist-strings
   (let [with-fixtures (t/join-fixtures
-                       [(fix/with-opts {:xt/query-engine {:fn-allow-list ["xtdb.query-fn-allowlist-test/multiple-of-seven?"]}})
+                       [(fix/with-opts {:xtdb/query-engine {:fn-allow-list ["xtdb.query-fn-allowlist-test/multiple-of-seven?"]}})
                         fix/with-node])]
     (with-fixtures
       (fn []

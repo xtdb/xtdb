@@ -4,7 +4,7 @@
             [xtdb.metrics.dropwizard :as dropwizard]))
 
 (defn assign-listeners
-  [registry {:xt/keys [bus]}]
+  [registry {:xtdb/keys [bus]}]
   (let [!timer-store (atom {})
         query-timer (dropwizard/timer registry ["query" "timer"])]
     (bus/listen bus {:xt/event-types #{::q/submitted-query

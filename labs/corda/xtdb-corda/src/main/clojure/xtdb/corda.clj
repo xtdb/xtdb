@@ -172,7 +172,7 @@
       [doc])))
 
 (defn ->tx-log {::sys/deps {:dialect 'xtdb.corda.h2/->dialect
-                            :document-store :xt/document-store
+                            :document-store :xtdb/document-store
                             :service-hub ::service-hub
                             :document-mapper `->document-mapper}}
   [{:keys [dialect ^AppServiceHub service-hub] :as opts}]

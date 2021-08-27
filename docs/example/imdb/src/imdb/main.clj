@@ -55,13 +55,13 @@
 
 (def crux-options
   {:xtdb.kafka/kafka-config {:bootstrap-servers "localhost:9092"}
-   :xt/tx-log {:xt/module 'xtdb.kafka/->tx-log
+   :xtdb/tx-log {:xtdb/module 'xtdb.kafka/->tx-log
                :kafka-config :xtdb.kafka/kafka-config}
-   :xt/document-store {:xt/module 'xtdb.kafka/->document-store
+   :xtdb/document-store {:xtdb/module 'xtdb.kafka/->document-store
                        :kafka-config :xtdb.kafka/kafka-config
                        :local-document-store {:kv-store :rocksdb}}
-   :xt/index-store {:kv-store :rocksdb}
-   :rocksdb {:xt/module 'xtdb.rocksdb/->kv-store
+   :xtdb/index-store {:kv-store :rocksdb}
+   :rocksdb {:xtdb/module 'xtdb.rocksdb/->kv-store
              :db-dir index-dir}})
 
 (def storage-dir "dev-storage")

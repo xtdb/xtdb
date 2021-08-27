@@ -1,12 +1,12 @@
 {
   "my-rocksdb": {
-    "xt/module": "xtdb.rocksdb/->kv-store",
+    "xtdb/module": "xtdb.rocksdb/->kv-store",
     "db-dir": "/tmp/txs"
   },
-  "xt/tx-log": {
+  "xtdb/tx-log": {
     "kv-store": "my-rocksdb"
   },
-  "xt/document-store": {
+  "xtdb/document-store": {
     "kv-store": "my-rocksdb"
   }
 }

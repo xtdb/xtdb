@@ -33,7 +33,7 @@ class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfiguration
 
     fun withDocumentMapping(f: (Any) -> Iterable<XtdbState>?) {
         moduleConfigurator.with("document-mapper") {
-            it.set("xt/module", object : AFunction() {
+            it.set("xtdb/module", object : AFunction() {
                 override fun invoke(opts: Any) = object : AFunction() {
                     override fun invoke(cordaState: Any) = f(cordaState)
                 }
@@ -43,7 +43,7 @@ class CordaTxLogConfigurator(private val moduleConfigurator: ModuleConfiguration
 }
 
 fun NodeConfiguration.Builder.withCordaTxLog(txLogConfigurator: CordaTxLogConfigurator.() -> Unit = {}) {
-    with("xt/tx-log") {
+    with("xtdb/tx-log") {
         it.module("xtdb.corda/->tx-log")
         txLogConfigurator(CordaTxLogConfigurator(it))
     }
@@ -54,7 +54,7 @@ fun AppServiceHub.startXtdbNode(configurator: NodeConfiguration.Builder.() -> Un
     val hub = this
     val node = IXtdb.startNode {
         it.with("xtdb.corda/service-hub") {
-            it.set("xt/module", object : AFunction() {
+            it.set("xtdb/module", object : AFunction() {
                 override fun invoke(deps: Any) = hub
             })
         }

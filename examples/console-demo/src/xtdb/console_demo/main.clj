@@ -34,9 +34,9 @@
   (.close node))
 
 (defn config []
-  {:console-demo/xtdb-node {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/tx-log"}}
-                            :xt/document-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/doc-store"}}
-                            :xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir "data/indices"}}
+  {:console-demo/xtdb-node {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir "data/tx-log"}}
+                            :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir "data/doc-store"}}
+                            :xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir "data/indices"}}
                             :xtdb.http-server/server {:read-only? true
                                                       :server-label "Console Demo"}
                             :xtdb.metrics/registry {}}})

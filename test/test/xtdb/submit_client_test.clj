@@ -9,9 +9,9 @@
 
 (t/deftest test-submit-client
   (fix/with-tmp-dir "db" [db-dir]
-    (let [submit-opts {:xt/tx-log {:kv-store {:xt/module `rocks/->kv-store
+    (let [submit-opts {:xtdb/tx-log {:kv-store {:xtdb/module `rocks/->kv-store
                                               :db-dir (io/file db-dir "tx-log")}}
-                       :xt/document-store {:kv-store {:xt/module `rocks/->kv-store
+                       :xtdb/document-store {:kv-store {:xtdb/module `rocks/->kv-store
                                                       :db-dir (io/file db-dir "doc-store")}}}
 
           submitted-tx
@@ -27,7 +27,7 @@
               submitted-tx))]
 
       (with-open [node (xt/start-node (merge submit-opts
-                                             {:xt/index-store {:kv-store {:xt/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
+                                             {:xtdb/index-store {:kv-store {:xtdb/module `rocks/->kv-store, :db-dir (io/file db-dir "indexes")}}}))]
         (xt/await-tx node submitted-tx)
         (t/is (true? (xt/tx-committed? node submitted-tx)))
         (t/is (= #{[:ivan]} (xt/q (xt/db node)
