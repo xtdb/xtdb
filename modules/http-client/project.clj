@@ -16,7 +16,8 @@
                  [pro.juxt.clojars-mirrors.clj-http/clj-http "3.12.2"]
                  [com.nimbusds/nimbus-jose-jwt "9.7"]]
 
-  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]}
+  :profiles {:dev {:dependencies [[ch.qos.logback/logback-classic "1.2.3"]]
+                   :jvm-opts ["-Dlogback.configurationFile=../../resources/logback-test.xml"]}
              :test {:dependencies [[com.xtdb/xtdb-test]
                                    [com.xtdb/xtdb-http-server]
 

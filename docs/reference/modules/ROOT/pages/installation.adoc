@@ -42,7 +42,7 @@ Clojure::
 +
 [source,clojure]
 ----
-(require '[crux.api :as xt])
+(require '[xtdb.api :as xt])
 
 (xt/start-node {})
 ----
@@ -118,6 +118,6 @@ xtdb.edn::
 ----
 ====
 
-Then, start the node with `clojure -m crux.main`.
+Then, start the node with `clojure -m xtdb.main`.
 
-You can get a listing of CLI flags using `clojure -m crux.main -h`.
+You can get a listing of CLI flags using `clojure -m xtdb.main -h`.

@@ -2,13 +2,13 @@
   (:require [clojure.data.csv :as csv]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [crux.api :as xt]
-            [crux.codec :as c]
-            [crux.error :as err]
+            [xtdb.api :as xt]
+            [xtdb.codec :as c]
+            [xtdb.error :as err]
             [xtdb.http-server.entity-ref :as entity-ref]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.edn :as mfe]
@@ -21,7 +21,7 @@
 
 (s/def ::query
   (st/spec
-   {:spec any? ; checked by crux.query
+   {:spec any? ; checked by xtdb.query
     :swagger/example '{:find [e] :where [[e :xt/id _]] :limit 100}
     :description "Datalog query"}))
 

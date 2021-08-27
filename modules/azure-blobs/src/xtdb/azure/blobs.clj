@@ -1,10 +1,10 @@
 (ns xtdb.azure.blobs
   (:require [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [crux.db :as db]
-            [crux.io :as cio]
-            [crux.system :as sys]
-            [crux.document-store :as ds]))
+            [xtdb.db :as db]
+            [xtdb.io :as cio]
+            [xtdb.system :as sys]
+            [xtdb.document-store :as ds]))
 
 (defn- get-blob [sas-token storage-account container blob-name]
   ;; TODO : ETag
@@ -42,7 +42,7 @@
        {}
        docs))))
 
-(defn ->document-store {::sys/deps {:document-cache 'crux.cache/->cache}
+(defn ->document-store {::sys/deps {:document-cache 'xtdb.cache/->cache}
                         ::sys/args {:sas-token {:required? true
                                                 :spec ::sys/string
                                                 :doc "Azure Blob Storage SAS Token"}

@@ -2,8 +2,8 @@
 ;; $ clj -Sdeps '{:deps {com.xtdb/xtdb-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.crux-standalone
-  (:require [crux.api :as xt])
-  (:import (crux.api ICruxAPI)))
+  (:require [xtdb.api :as xt])
+  (:import (xtdb.api ICruxAPI)))
 
 ;; this in-memory configuration is the easiest way to try Crux, no Kafka needed
 (def node

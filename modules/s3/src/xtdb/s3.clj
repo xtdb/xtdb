@@ -2,10 +2,10 @@
   (:require [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.db :as db]
-            [crux.document-store :as ds]
-            [crux.io :as cio]
-            [crux.system :as sys])
+            [xtdb.db :as db]
+            [xtdb.document-store :as ds]
+            [xtdb.io :as cio]
+            [xtdb.system :as sys])
   (:import clojure.lang.MapEntry
            xtdb.s3.S3Configurator
            java.io.Closeable
@@ -117,7 +117,7 @@
                                              :spec ::prefix
                                              :doc "S3 prefix"}}
                         ::sys/deps {:configurator `->configurator
-                                    :document-cache 'crux.cache/->cache}}
+                                    :document-cache 'xtdb.cache/->cache}}
 
   [{:keys [bucket prefix ^S3Configurator configurator document-cache] :as opts}]
   (ds/->cached-document-store

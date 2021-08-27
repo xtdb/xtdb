@@ -2,13 +2,13 @@
   "LMDB KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
-            [crux.checkpoint :as cp]
-            [crux.codec :as c]
-            [crux.error :as err]
-            [crux.kv :as kv]
-            [crux.kv.index-store :as kvi]
-            [crux.memory :as mem]
-            [crux.system :as sys])
+            [xtdb.checkpoint :as cp]
+            [xtdb.codec :as c]
+            [xtdb.error :as err]
+            [xtdb.kv :as kv]
+            [xtdb.kv.index-store :as kvi]
+            [xtdb.memory :as mem]
+            [xtdb.system :as sys])
   (:import clojure.lang.ExceptionInfo
            java.io.Closeable
            [java.nio.file Files Path]

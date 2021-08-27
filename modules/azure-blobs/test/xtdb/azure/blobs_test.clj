@@ -1,8 +1,8 @@
 (ns xtdb.azure.blobs-test
   (:require [xtdb.azure.blobs :as azb]
             [clojure.test :as t]
-            [crux.fixtures.document-store :as fix.ds]
-            [crux.system :as sys]))
+            [xtdb.fixtures.document-store :as fix.ds]
+            [xtdb.system :as sys]))
 
 (def test-azure-blobs-sas-token
   (System/getenv "XTDB_AZURE_BLOBS_TEST_SAS_TOKEN"))

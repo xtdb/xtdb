@@ -28,11 +28,11 @@ public class EidPartitioner implements Partitioner {
     }
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.memory"));
-        newId = Clojure.var("crux.codec/new-id");
-        toIdBuffer = Clojure.var("crux.codec/->id-buffer");
-        toOnHeap = Clojure.var("crux.memory/->on-heap");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.codec"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.memory"));
+        newId = Clojure.var("xtdb.codec/new-id");
+        toIdBuffer = Clojure.var("xtdb.codec/->id-buffer");
+        toOnHeap = Clojure.var("xtdb.memory/->on-heap");
     }
 
     @SuppressWarnings("unchecked")

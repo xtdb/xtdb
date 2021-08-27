@@ -3,11 +3,11 @@
 [#overview]
 == Overview
 
-You can subscribe to Crux events using `crux.api/listen`
+You can subscribe to Crux events using `xtdb.api/listen`
 
 [source,clojure]
 ----
-(crux.api/listen node
+(xtdb.api/listen node
                  event-opts <1>
                  f) <2>
 ----
@@ -16,7 +16,7 @@ You can subscribe to Crux events using `crux.api/listen`
 
 `event-ops` must contain `:xt/event-type`
 
-You can `.close` the return value from `(crux.api/listen ...)` to detach the listener, should you need to.
+You can `.close` the return value from `(xtdb.api/listen ...)` to detach the listener, should you need to.
 
 [#events]
 == Events
@@ -42,7 +42,7 @@ You can `.close` the return value from `(crux.api/listen ...)` to detach the lis
 
 ==== Function Parameters
 
-`:xt/indexed-tx` passes one parameter to the function supplied to `crux.api/listen`
+`:xt/indexed-tx` passes one parameter to the function supplied to `xtdb.api/listen`
 
 This parameter is a map of the following
 

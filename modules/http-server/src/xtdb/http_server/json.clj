@@ -1,14 +1,14 @@
 (ns xtdb.http-server.json
   (:require [clojure.spec.alpha :as s]
-            [crux.codec :as c]
+            [xtdb.codec :as c]
             [xtdb.http-server.entity-ref :as entity-ref]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as j]
             [juxt.clojars-mirrors.camel-snake-kebab.v0v4v2.camel-snake-kebab.core :as csk]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc])
   (:import clojure.lang.IPersistentList
            com.fasterxml.jackson.core.JsonGenerator
-           [crux.codec EDNId Id]
+           [xtdb.codec EDNId Id]
            xtdb.http_server.entity_ref.EntityRef
            java.io.OutputStream))
 

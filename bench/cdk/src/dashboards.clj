@@ -43,15 +43,15 @@
      :threshold 0.1}]
 
    [{:bench-type "ingest"
-     :bench-ns "watdiv-crux"
+     :bench-ns "watdiv-xtdb"
      :crux-node-type "embedded-kafka-rocksdb"
      :threshold 0.45}
     {:bench-type "ingest"
-     :bench-ns "watdiv-crux"
+     :bench-ns "watdiv-xtdb"
      :crux-node-type "standalone-rocksdb"
      :threshold 0.25}
     {:bench-type "ingest"
-     :bench-ns "watdiv-crux"
+     :bench-ns "watdiv-xtdb"
      :crux-node-type "kafka-rocksdb"
      :threshold 0.1}]])
 

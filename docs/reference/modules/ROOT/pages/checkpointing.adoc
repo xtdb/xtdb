@@ -31,9 +31,9 @@ JSON::
       "xt/module": "xtdb.rocksdb/->kv-store",
       ...
       "checkpointer": {
-        "xt/module": "crux.checkpoint/->checkpointer",
+        "xt/module": "xtdb.checkpoint/->checkpointer",
         "store": {
-          "xt/module": "crux.checkpoint/->filesystem-checkpoint-store",
+          "xt/module": "xtdb.checkpoint/->filesystem-checkpoint-store",
           "path": "/path/to/cp-store"
         },
         "approx-frequency": "PT6H"
@@ -50,8 +50,8 @@ Clojure::
 ----
 {:xt/index-store {:kv-store {:xt/module 'xtdb.rocksdb/->kv-store
                                ...
-                             :checkpointer {:xt/module 'crux.checkpoint/->checkpointer
-                                            :store {:xt/module 'crux.checkpoint/->filesystem-checkpoint-store
+                             :checkpointer {:xt/module 'xtdb.checkpoint/->checkpointer
+                                            :store {:xt/module 'xtdb.checkpoint/->filesystem-checkpoint-store
                                                     :path "/path/to/cp-store"}
                                             :approx-frequency (Duration/ofHours 6)}}}
  ...}
@@ -63,8 +63,8 @@ EDN::
 ----
 {:xt/index-store {:kv-store {:xt/module xtdb.rocksdb/->kv-store
                              ...
-                             :checkpointer {:xt/module crux.checkpoint/->checkpointer
-                                            :store {:xt/module crux.checkpoint/->filesystem-checkpoint-store
+                             :checkpointer {:xt/module xtdb.checkpoint/->checkpointer
+                                            :store {:xt/module xtdb.checkpoint/->filesystem-checkpoint-store
                                                     :path "/path/to/cp-store"}
                                             :approx-frequency "PT6H"}}}
  ...}

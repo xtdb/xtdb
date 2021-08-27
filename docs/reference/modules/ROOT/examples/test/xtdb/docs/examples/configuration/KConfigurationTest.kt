@@ -1,4 +1,4 @@
-package crux.docs.examples.configuration
+package xtdb.docs.examples.configuration
 
 import org.junit.*
 import org.junit.Assert.*
@@ -8,7 +8,7 @@ import java.net.URL
 import java.net.URISyntaxException
 
 // tag::import[]
-import crux.api.Crux
+import xtdb.api.Crux
 // end::import[]
 
 class KConfigurationTest {

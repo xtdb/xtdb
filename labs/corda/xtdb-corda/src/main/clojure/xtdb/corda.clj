@@ -1,17 +1,17 @@
 (ns xtdb.corda
-  (:require [crux.api :as xt]
-            [crux.tx :as tx]
-            [crux.tx.event :as txe]
-            [crux.tx.subscribe :as tx-sub]
-            [crux.db :as db]
-            [crux.codec :as c]
-            [crux.system :as sys]
+  (:require [xtdb.api :as xt]
+            [xtdb.tx :as tx]
+            [xtdb.tx.event :as txe]
+            [xtdb.tx.subscribe :as tx-sub]
+            [xtdb.db :as db]
+            [xtdb.codec :as c]
+            [xtdb.system :as sys]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [clojure.set :as set]
-            [crux.io :as cio])
+            [xtdb.io :as cio])
   (:import (xtdb.corda.state XtdbState)
-           (crux.api ICursor)
+           (xtdb.api ICursor)
            kotlin.jvm.functions.Function1
            (net.corda.core.crypto SecureHash)
            (net.corda.core.node AppServiceHub)
@@ -150,7 +150,7 @@
     (throw (UnsupportedOperationException.
             "CordaTxLog does not support submit-tx - submit transactions directly to Corda")))
 
-  (open-tx-log ^crux.api.ICursor [this after-tx-id]
+  (open-tx-log ^xtdb.api.ICursor [this after-tx-id]
     (let [txs (open-tx-log this after-tx-id)]
       (cio/->cursor #(cio/try-close txs) (iterator-seq txs))))
 

@@ -1,10 +1,10 @@
 (ns xtdb.kafka.embedded
   "Embedded Kafka for self-contained Crux deployments."
   (:require [clojure.java.io :as io]
-            [crux.io :as cio]
-            [crux.config :as config]
+            [xtdb.io :as cio]
+            [xtdb.config :as config]
             [clojure.spec.alpha :as s]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import [kafka.server KafkaConfig KafkaServer]
            [org.apache.zookeeper.server ServerCnxnFactory ZooKeeperServer]
            [org.apache.kafka.common.utils Time]
@@ -76,9 +76,9 @@
     (stop-zookeeper zookeeper)))
 
 (s/def ::zookeeper-data-dir ::sys/path)
-(s/def ::zookeeper-port :crux.io/port)
+(s/def ::zookeeper-port :xtdb.io/port)
 (s/def ::kafka-log-dir ::sys/path)
-(s/def ::kafka-port :crux.io/port)
+(s/def ::kafka-port :xtdb.io/port)
 (s/def ::broker-config (s/map-of string? string?))
 
 (s/def ::options (s/keys :req [::zookeeper-data-dir

@@ -198,7 +198,7 @@ jobs:
             else
               echo 'export DOCS_PREFIX="${CIRCLE_BRANCH}"' >> $BASH_ENV
             fi
-      - run: javadoc -Xdoclint:none -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src crux.api
+      - run: javadoc -Xdoclint:none -d crux-javadoc/ -cp `lein classpath` -sourcepath crux-core/src xtdb.api
       - aws-s3/sync:
           arguments: |
             --acl public-read

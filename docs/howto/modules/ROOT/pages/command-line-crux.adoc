@@ -47,7 +47,7 @@ mkdir crux-cli && cd crux-cli
 
 [source,sh]
 ----
-clojure -M -m crux.main # <1>
+clojure -M -m xtdb.main # <1>
 ----
 <1> You will probably see a `SLF4J: Failed to load class` error. Just ignore it.
 

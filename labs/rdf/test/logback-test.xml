@@ -8,6 +8,6 @@
     <appender-ref ref="STDOUT" />
   </root>
   <logger name="crux" level="INFO" />
-  <logger name="crux.hash" level="WARN" />
+  <logger name="xtdb.hash" level="WARN" />
   <logger name="xtdb.rdf" level="ERROR" />
 </configuration>

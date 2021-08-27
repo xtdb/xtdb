@@ -22,9 +22,9 @@ public class JsonSerializer implements Serializer<Object> {
     static {
         Clojure.var("clojure.core/require").invoke(Clojure.read("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate"));
         IFn addEncoder = Clojure.var("juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate/add-encoder");
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
-        IFn ednIdtoOriginalId = Clojure.var("crux.codec/edn-id->original-id");
-        Class<?> ednIdClass =  (Class<?>) Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId"));
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.codec"));
+        IFn ednIdtoOriginalId = Clojure.var("xtdb.codec/edn-id->original-id");
+        Class<?> ednIdClass =  (Class<?>) Clojure.var("clojure.core/resolve").invoke(Clojure.read("xtdb.codec.EDNId"));
         addEncoder.invoke(ednIdClass, new AFn() {
                 public Object invoke(Object c, Object jsonGenerator) {
                     try {

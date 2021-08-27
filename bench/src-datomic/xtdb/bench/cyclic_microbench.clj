@@ -1,5 +1,5 @@
 (ns xtdb.bench.cyclic-microbench
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [xtdb.bench :as bench]
             [datomic.api :as d])
   (:import java.time.Duration))
@@ -148,7 +148,7 @@
             (submit-data node create-docs)
             (bench/compact-node node)
             (with-open [db (xt/open-db node)]
-              (let [shape-q-fn (partial crux/q db shape-q)]
+              (let [shape-q-fn (partial xt/q db shape-q)]
                 (test-shape db (str shape-id "-1") shape-q-fn)
                 (test-shape db (str shape-id "-2") shape-q-fn)
                 (test-shape db (str shape-id "-3") shape-q-fn))))))))

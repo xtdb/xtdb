@@ -5,10 +5,10 @@
             [clojure.string :as string]
             [clojure.tools.logging :as log]
             [clojure.walk :refer [postwalk]]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.calcite.types]
-            [crux.error :as err]
-            [crux.system :as sys]
+            [xtdb.error :as err]
+            [xtdb.system :as sys]
             [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json])
   (:import clojure.lang.Symbol
            [xtdb.calcite XtdbCalcitePrepareImpl$PreparedSQL XtdbJdbcDriver XtdbTable]

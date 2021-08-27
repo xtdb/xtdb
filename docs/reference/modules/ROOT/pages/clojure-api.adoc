@@ -1,6 +1,6 @@
-= (ns crux.api)
+= (ns xtdb.api)
 
-`crux.api` exposes a union of methods from `ICruxAPI` and `ICruxDatasource`,
+`xtdb.api` exposes a union of methods from `ICruxAPI` and `ICruxDatasource`,
 with few lifecycle members added.
 
 [#icruxapi]
@@ -437,5 +437,5 @@ Accepts a map, or a JSON/EDN file or classpath resource.
 
 For valid options, see https://opencrux.com/reference/configuration.html.
 
-Returns a crux.api.ICruxIngestAPI component that implements java.io.Closeable.
+Returns a xtdb.api.ICruxIngestAPI component that implements java.io.Closeable.
 Latter allows the node to be stopped by calling `(.close node)`.

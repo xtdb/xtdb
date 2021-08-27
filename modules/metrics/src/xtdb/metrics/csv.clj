@@ -1,7 +1,7 @@
 (ns xtdb.metrics.csv
   (:require [clojure.java.io :as io]
             [xtdb.metrics :as metrics]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import [com.codahale.metrics CsvReporter MetricRegistry]
            java.nio.file.Path
            java.time.Duration

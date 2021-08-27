@@ -1,9 +1,9 @@
 (ns xtdb.google.cloud-storage-test
   (:require [xtdb.google.cloud-storage :as gcs]
             [clojure.test :as t]
-            [crux.fixtures.document-store :as fix.ds]
-            [crux.fixtures.checkpoint-store :as fix.cp]
-            [crux.system :as sys])
+            [xtdb.fixtures.document-store :as fix.ds]
+            [xtdb.fixtures.checkpoint-store :as fix.cp]
+            [xtdb.system :as sys])
   (:import java.util.UUID))
 
 (def test-bucket

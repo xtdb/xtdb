@@ -1,6 +1,6 @@
 (ns xtdb.docs.examples-test
   (:require [clojure.java.io :as io]
-            [crux.api :as xt]))
+            [xtdb.api :as xt]))
 
 ;; tag::require-ek[]
 (require '[xtdb.kafka.embedded :as ek])

@@ -1,6 +1,6 @@
 (ns xtdb.metrics.prometheus
   (:require [xtdb.metrics :as metrics]
-            [crux.system :as sys]
+            [xtdb.system :as sys]
             [iapetos.collector.jvm :as jvm]
             [iapetos.core :as prometheus]
             [iapetos.standalone :as server])

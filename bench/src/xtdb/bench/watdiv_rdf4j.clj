@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [xtdb.bench :as bench]
             [xtdb.bench.watdiv :as watdiv]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [xtdb.rdf :as rdf])
   (:import java.io.StringReader
            org.eclipse.rdf4j.query.Binding

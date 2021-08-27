@@ -1,4 +1,4 @@
-package crux.docs.examples.configuration;
+package xtdb.docs.examples.configuration;
 
 class MyApp {
 

@@ -5,10 +5,10 @@
             [clojure.set :as set]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.rocksdb :as rocksdb]
             [xtdb.soak.config :as config]
-            [crux.checkpoint :as cp]
+            [xtdb.checkpoint :as cp]
             [xtdb.kafka :as k]
             [xtdb.s3.checkpoint :as s3.cp]
             [hiccup2.core :refer [html]]
@@ -18,7 +18,7 @@
             [ring.adapter.jetty :as jetty]
             [ring.middleware.params :as params]
             [ring.util.response :as resp])
-  (:import crux.api.NodeOutOfSyncException
+  (:import xtdb.api.NodeOutOfSyncException
            java.io.Closeable
            [java.time Duration LocalDate LocalTime ZonedDateTime ZoneId]
            java.time.format.DateTimeFormatter
@@ -163,8 +163,8 @@
 
 (defn status-handler [req {:keys [xt-node]}]
   (let [status (xt/status xt-node)]
-    {:status (if (or (not (contains? status :crux.zk/zk-active?))
-                     (:crux.zk/zk-active? status))
+    {:status (if (or (not (contains? status :xtdb.zk/zk-active?))
+                     (:xtdb.zk/zk-active? status))
                200
                500)
      :headers {"Content-Type" "application/edn"}

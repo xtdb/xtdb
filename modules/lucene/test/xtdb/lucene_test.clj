@@ -2,14 +2,14 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [clojure.test :as t]
-            [crux.api :as c]
-            [crux.checkpoint :as cp]
-            [crux.codec :as cc]
-            [crux.db :as db]
-            [crux.fixtures :as fix :refer [*api* submit+await-tx]]
+            [xtdb.api :as c]
+            [xtdb.checkpoint :as cp]
+            [xtdb.codec :as cc]
+            [xtdb.db :as db]
+            [xtdb.fixtures :as fix :refer [*api* submit+await-tx]]
             [xtdb.fixtures.lucene :as lf]
             [xtdb.lucene :as l]
-            [crux.query :as q]
+            [xtdb.query :as q]
             [xtdb.rocksdb :as rocks])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.document.Document
@@ -340,7 +340,7 @@
     (.build b)))
 
 (defmethod q/pred-args-spec 'or-text-search [_]
-  (s/cat :pred-fn #{'or-text-search} :args (s/spec (s/cat :attr keyword? :v (s/coll-of string?))) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'or-text-search} :args (s/spec (s/cat :attr keyword? :v (s/coll-of string?))) :return (s/? :xtdb.query/binding)))
 
 (defmethod q/pred-constraint 'or-text-search [_ pred-ctx]
   (let [resolver (partial l/resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
@@ -400,7 +400,7 @@
 
 (t/deftest test-checkpoint
   (fix/with-tmp-dirs #{lucene-dir cp-dir}
-    (with-open [node (crux.api/start-node {::l/lucene-store {:db-dir lucene-dir}})]
+    (with-open [node (xtdb.api/start-node {::l/lucene-store {:db-dir lucene-dir}})]
       (fix/submit+await-tx node [[:xt/put {:xt/id :foo, :foo "foo"}]])
 
       (let [index-writer (-> @(:!system node)
@@ -425,7 +425,7 @@
 
 (t/deftest test-async-refresh
   (fix/with-tmp-dirs #{lucene-dir}
-    (with-open [node (crux.api/start-node {::l/lucene-store {:db-dir lucene-dir
+    (with-open [node (xtdb.api/start-node {::l/lucene-store {:db-dir lucene-dir
                                                              :refresh-frequency "PT-1S"}})]
       (fix/submit+await-tx node [[:xt/put {:xt/id :foo, :foo "foo"}]])
 

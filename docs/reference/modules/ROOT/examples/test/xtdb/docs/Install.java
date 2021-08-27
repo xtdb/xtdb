@@ -1,8 +1,8 @@
-package crux.docs;
+package xtdb.docs;
 
 // tag::imports[]
-import crux.api.Crux;
-import crux.api.ICruxAPI;
+import xtdb.api.Crux;
+import xtdb.api.ICruxAPI;
 // end::imports[]
 import java.io.IOException;
 

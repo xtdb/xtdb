@@ -2,9 +2,9 @@
 ;; $ clj -Sdeps '{:deps {com.xtdb/xtdb-core {:mvn/version "RELEASE"}}}'
 
 (ns walkthrough.graph-traversal
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [clojure.pprint :as pp])
-  (:import (crux.api ICruxAPI)))
+  (:import (xtdb.api ICruxAPI)))
 
 ;; inspired by http://docs.neo4j.org/chunked/stable/cypher-cookbook-hyperedges.html and https://github.com/Datomic/day-of-datomic/blob/master/tutorial/graph.clj
 

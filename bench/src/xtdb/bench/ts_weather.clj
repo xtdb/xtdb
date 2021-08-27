@@ -3,8 +3,8 @@
             [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.api :as xt]
-            [crux.io :as cio])
+            [xtdb.api :as xt]
+            [xtdb.io :as cio])
   (:import java.math.RoundingMode
            java.time.temporal.ChronoUnit
            java.time.Duration

@@ -33,12 +33,12 @@ Ensure first that you have a running Kafka broker to connect to. We import the d
 
 [source,clj]
 ----
-(require '[crux.api :as xt]
+(require '[xtdb.api :as xt]
          '[xtdb.http-server :as srv])
-(import (crux.api ICruxAPI))
+(import (xtdb.api ICruxAPI))
 
-(def ^crux.api.ICruxAPI node
-  (crux/start-node {:crux.node/topology '[crux.kafka/topology crux.http-server/module]
+(def ^xtdb.api.ICruxAPI node
+  (crux/start-node {:crux.node/topology '[xtdb.kafka/topology crux.http-server/module]
                     :crux.kafka/bootstrap-servers "localhost:9092"
                     :xtdb.http-server/port 3000}))
 ----

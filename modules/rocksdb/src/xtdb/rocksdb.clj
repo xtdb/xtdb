@@ -2,14 +2,14 @@
   "RocksDB KV backend for Crux."
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [crux.kv :as kv]
+            [xtdb.kv :as kv]
             [xtdb.rocksdb.loader]
-            [crux.memory :as mem]
-            [crux.system :as sys]
-            [crux.io :as cio]
-            [crux.checkpoint :as cp]
-            [crux.kv.index-store :as kvi]
-            [crux.codec :as c])
+            [xtdb.memory :as mem]
+            [xtdb.system :as sys]
+            [xtdb.io :as cio]
+            [xtdb.checkpoint :as cp]
+            [xtdb.kv.index-store :as kvi]
+            [xtdb.codec :as c])
   (:import (java.io Closeable File)
            java.nio.ByteBuffer
            (java.nio.file Files Path)

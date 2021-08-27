@@ -1,8 +1,8 @@
 (ns xtdb.bench.tpch-stress-test
   (:require [xtdb.bench :as bench]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [clojure.tools.logging :as log]
-            [crux.fixtures.tpch :as tpch]))
+            [xtdb.fixtures.tpch :as tpch]))
 
 (defn- load-tpch-docs [node]
   (bench/run-bench :ingest

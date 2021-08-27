@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.soak.ingest
   (:require [clj-http.client :as http]
             [clojure.string :as string]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.kafka :as k]
             [xtdb.soak.config :as config]
             [nomad.config :as n])

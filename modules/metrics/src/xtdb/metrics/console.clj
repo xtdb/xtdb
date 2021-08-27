@@ -1,7 +1,7 @@
 (ns xtdb.metrics.console
   (:require [xtdb.metrics :as metrics]
             [clojure.string :as string]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import (com.codahale.metrics MetricRegistry ConsoleReporter ScheduledReporter)
            (java.util Locale)
            (java.util.concurrent TimeUnit)

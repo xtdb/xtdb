@@ -2,9 +2,9 @@
   (:require [clojure.instant :as inst]
             [clojure.java.io :as io]
             [clojure.string :as str]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.bench :as bench]
-            [crux.io :as cio])
+            [xtdb.io :as cio])
   (:import java.time.Duration
            java.time.temporal.ChronoUnit
            java.util.Date))

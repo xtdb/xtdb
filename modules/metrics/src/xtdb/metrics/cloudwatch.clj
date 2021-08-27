@@ -1,7 +1,7 @@
 (ns xtdb.metrics.cloudwatch
   (:require [clojure.string :as string]
             [xtdb.metrics :as metrics]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import [com.codahale.metrics MetricFilter MetricRegistry]
            [io.github.azagniotov.metrics.reporter.cloudwatch CloudWatchReporter CloudWatchReporter$Percentile]
            java.time.Duration
@@ -41,7 +41,7 @@
                                                  :default false
                                                  :spec ::sys/boolean}
                               :ignore-rules {:doc "An ordered list of ignore rules for metrics, using gitignore syntax. e.g.
-[\"crux.tx\" \"!crux.tx.ingest-rate\"] -> exclude crux.tx.*, but keep crux.tx.ingest-rate"
+[\"xtdb.tx\" \"!xtdb.tx.ingest-rate\"] -> exclude xtdb.tx.*, but keep xtdb.tx.ingest-rate"
                                              :required? false
                                              :spec ::sys/string-list}}}
   [{:keys [^MetricRegistry registry

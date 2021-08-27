@@ -2,18 +2,18 @@
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
-            [crux.api :as xt]
-            [crux.codec :as c]
-            [crux.error :as ce]
+            [xtdb.api :as xt]
+            [xtdb.codec :as c]
+            [xtdb.error :as ce]
             [xtdb.http-server.entity-ref :as entity-ref]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as j]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
             [juxt.clojars-mirrors.spec-tools.v0v10v5.spec-tools.core :as st])
-  (:import crux.io.Cursor
+  (:import xtdb.io.Cursor
            [java.io Closeable OutputStream]))
 
 (s/def ::sort-order keyword?)

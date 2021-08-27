@@ -15,7 +15,7 @@ Resources:
         EvaluateTargetHealth: false
         HostedZoneId:
           Fn::ImportValue: !Join [':', [!Ref CruxCloudStack, 'LoadBalancerCanonicalHostedZoneId']]
-      HostedZoneName: 'crux.cloud.'
+      HostedZoneName: 'xtdb.cloud.'
       Name: 'console.crux.cloud'
       Type: 'A'
 

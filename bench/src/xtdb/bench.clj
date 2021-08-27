@@ -4,15 +4,15 @@
             [clojure.java.io :as io]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.bench.cloudwatch :as cw]
-            [crux.bus :as bus]
-            [crux.fixtures :as f]
-            [crux.io :as cio]
+            [xtdb.bus :as bus]
+            [xtdb.fixtures :as f]
+            [xtdb.io :as cio]
             [xtdb.jdbc :as j]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
-            [crux.kv :as kv]
+            [xtdb.kv :as kv]
             [xtdb.lmdb :as lmdb]
             [xtdb.rocksdb :as rocks])
   (:import (com.amazonaws.services.logs AWSLogsClient AWSLogsClientBuilder)
@@ -65,7 +65,7 @@
                               :bytes-indexed 0
                               :doc-count 0})]
     (bus/listen (:bus node)
-                {:xt/event-types #{:crux.tx/indexed-tx}}
+                {:xt/event-types #{:xtdb.tx/indexed-tx}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
                   (swap! !index-metrics (fn [index-metrics-map]
                                           (-> index-metrics-map
@@ -100,11 +100,11 @@
 
 (defn compact-node [node]
   (run-bench :compaction
-    (let [pre-compact-bytes (:crux.kv/size (xt/status node))]
+    (let [pre-compact-bytes (:xtdb.kv/size (xt/status node))]
       (kv/compact (get-in node [:index-store :kv-store]))
 
       {:bytes-on-disk pre-compact-bytes
-       :compacted-bytes-on-disk (:crux.kv/size (xt/status node))})))
+       :compacted-bytes-on-disk (:xtdb.kv/size (xt/status node))})))
 
 (defn post-to-slack [message]
   (if-let [slack-url (System/getenv "SLACK_URL")]

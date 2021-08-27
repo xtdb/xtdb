@@ -1,7 +1,7 @@
-package crux.docs
+package xtdb.docs
 
 // tag::imports[]
-import crux.api.Crux
+import xtdb.api.Crux
 // end::imports[]
 
 // tag::main[]

@@ -1,9 +1,9 @@
 (ns xtdb.lucene.extension-test
   (:require  [clojure.test :as t]
-             [crux.api :as c]
-             [crux.codec :as cc]
-             [crux.system :as sys]
-             [crux.fixtures :as fix :refer [*api* submit+await-tx]]
+             [xtdb.api :as c]
+             [xtdb.codec :as cc]
+             [xtdb.system :as sys]
+             [xtdb.fixtures :as fix :refer [*api* submit+await-tx]]
              [xtdb.lucene :as l])
   (:import org.apache.lucene.analysis.Analyzer
            org.apache.lucene.queries.function.FunctionScoreQuery

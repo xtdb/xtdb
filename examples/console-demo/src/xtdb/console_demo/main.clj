@@ -1,5 +1,5 @@
 (ns xtdb.console-demo.main
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [integrant.core :as ig]
             [integrant.repl :as ir]
             [clojure.string :as string]

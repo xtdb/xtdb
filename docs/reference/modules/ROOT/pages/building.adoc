@@ -54,13 +54,13 @@ com.xtdb/xtdb-rocksdb {:mvn/version "{crux_version}"}
 ----
 
 To build the JAR, run the `build-uberjar.sh` script.
-You can optionally pass the environment variable `UBERJAR_NAME` to the script (for example, `UBERJAR_NAME=crux-rocks.jar ./build-uberjar.sh`), otherwise the built uberjar will be called `crux.jar`.
-To run the clojure uberjar, use the following command `java -jar crux.jar`. This will now start up a node with both a HTTP server and persistent storage.
+You can optionally pass the environment variable `UBERJAR_NAME` to the script (for example, `UBERJAR_NAME=crux-rocks.jar ./build-uberjar.sh`), otherwise the built uberjar will be called `xtdb.jar`.
+To run the clojure uberjar, use the following command `java -jar xtdb.jar`. This will now start up a node with both a HTTP server and persistent storage.
 
 === Building a JAR (Maven tooling)
 
 Similarly to building a JAR using the Clojure CLI tooling, we can also build an uberjar using Maven.
-In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `xtdb.edn` file as before, and then run `build-uberjar.sh` to create the uberjar. To run the maven generated uberjar, use the following command: `java -jar crux.jar`
+In the `mvn-uberjar` directory, add dependencies to the `pom.xml` file, update the `xtdb.edn` file as before, and then run `build-uberjar.sh` to create the uberjar. To run the maven generated uberjar, use the following command: `java -jar xtdb.jar`
 
 === Building a Docker Container
 

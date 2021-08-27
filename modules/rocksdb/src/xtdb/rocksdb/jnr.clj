@@ -3,14 +3,14 @@
   https://github.com/jnr/jnr-ffi"
   (:require [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [crux.io :as cio]
-            [crux.kv :as kv]
+            [xtdb.io :as cio]
+            [xtdb.kv :as kv]
             [xtdb.rocksdb.loader]
-            [crux.memory :as mem]
-            [crux.checkpoint :as cp]
-            [crux.system :as sys]
-            [crux.kv.index-store :as kvi]
-            [crux.codec :as c])
+            [xtdb.memory :as mem]
+            [xtdb.checkpoint :as cp]
+            [xtdb.system :as sys]
+            [xtdb.kv.index-store :as kvi]
+            [xtdb.codec :as c])
   (:import java.io.Closeable
            [org.agrona DirectBuffer MutableDirectBuffer ExpandableDirectByteBuffer]
            org.agrona.concurrent.UnsafeBuffer
@@ -19,7 +19,7 @@
 
 ;;; ***** N.B. *****
 ;; NOTE: This backend doesn't currently work, as it requires
-;; defensive copies in `crux.kv.index-store` after calls to `key-suffix`.
+;; defensive copies in `xtdb.kv.index-store` after calls to `key-suffix`.
 
 ;; This isn't currently done, as this does an needless copy for other stores.
 ;; This store is about 10% faster than RocksJava JNI.

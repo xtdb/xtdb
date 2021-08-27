@@ -88,7 +88,7 @@ com.xtdb/xtdb-http-client {:mvn/version "{crux_version}"}
 ----
 
 To connect to a pre-existing remote node, you need a URL to the node and the above on your classpath.
-We can then call `crux.api/new-api-client`, passing the URL.
+We can then call `xtdb.api/new-api-client`, passing the URL.
 If the node was started on `localhost:3000`, you can connect to it by doing the following:
 
 [source,clojure]
@@ -157,12 +157,12 @@ EDN::
 +
 [source,clojure,subs=attributes+]
 ----
-{:crux.version/version "{crux_version}",
- :crux.version/revision nil, :crux.index/index-version 13,
- :crux.tx-log/consumer-state nil,
- :crux.kv/kv-store "xtdb.rocksdb.RocksKv",
- :crux.kv/estimate-num-keys 3,
- :crux.kv/size 132665
+{:xtdb.version/version "{crux_version}",
+ :xtdb.version/revision nil, :xtdb.index/index-version 13,
+ :xtdb.tx-log/consumer-state nil,
+ :xtdb.kv/kv-store "xtdb.rocksdb.RocksKv",
+ :xtdb.kv/estimate-num-keys 3,
+ :xtdb.kv/size 132665
 ----
 ====
 
@@ -814,13 +814,13 @@ EDN::
 ----
 ({:xt/tx-id 0,
   :xt/tx-time #inst "2020-10-16T09:02:43.429-00:00",
-  :crux.tx.event/tx-events [[:xt/put
+  :xtdb.tx.event/tx-events [[:xt/put
   			   #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
 			     #xt/id "f441402b3c5d37365203947aabe85cf471498bf0"
 			     #inst "2020-06-20T20:05:50.000-00:00"]]}
  {:xt/tx-id 1,
   :xt/tx-time #inst "2020-10-16T09:28:27.785-00:00",
-  :crux.tx.event/tx-events [[:xt/put
+  :xtdb.tx.event/tx-events [[:xt/put
   			   #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
 			     #xt/id "f441402b3c5d37365203947aabe85cf471498bf0"
 			     #inst "2020-06-20T20:05:50.000-00:00"]]})

@@ -1,6 +1,6 @@
 (ns xtdb.metrics.jmx
   (:require [xtdb.metrics :as metrics]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import com.codahale.metrics.jmx.JmxReporter
            com.codahale.metrics.MetricRegistry
            java.util.concurrent.TimeUnit))

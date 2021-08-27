@@ -127,13 +127,13 @@ Note there is always implicit grouping across aggregates due to how Crux perform
 
 === Custom Aggregates
 
-Custom (user-defined) aggregates are supported by adding a new method (via Clojure `defmethod`) for `crux.query/aggregate`.
+Custom (user-defined) aggregates are supported by adding a new method (via Clojure `defmethod`) for `xtdb.query/aggregate`.
 This method takes a single (ignored) parameter and returns a multi-arity function which accepts zero parameters, an accumulator, or an accumulator and a single entity.
 For example:
 
 [source,clojure]
 ----
-(defmethod crux.query/aggregate 'sort-reverse [_]
+(defmethod xtdb.query/aggregate 'sort-reverse [_]
   (fn
     ([] [])
     ([acc] (vec (reverse (sort acc))))
@@ -775,7 +775,7 @@ Note that because Crux is schemaless there is no need to have elsewhere declared
 == Streaming Queries
 
 Query results can also be streamed, particularly for queries whose results may
-not fit into memory. For these, we use `crux.api/open-q`, which returns a
+not fit into memory. For these, we use `xtdb.api/open-q`, which returns a
 `Closeable` sequence. Note that results are returned as bags, not sets, so you
 may wish to deduplicate consecutive identical result tuples (e.g. using
 `clojure.core/dedupe` or similar).

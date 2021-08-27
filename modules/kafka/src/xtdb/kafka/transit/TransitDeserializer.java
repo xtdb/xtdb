@@ -20,8 +20,8 @@ public class TransitDeserializer implements Deserializer<Object> {
         read = Clojure.var("cognitect.transit/read");
         reader = Clojure.var("cognitect.transit/reader");
         IFn readHandler = Clojure.var("cognitect.transit/read-handler");
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
-        IFn idEdnReader = Clojure.var("crux.codec/id-edn-reader");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.codec"));
+        IFn idEdnReader = Clojure.var("xtdb.codec/id-edn-reader");
         jsonVerbose = Clojure.read(":json-verbose");
         Map<Object, Object> handlers = new HashMap<>();
         handlers.put("xt/id", readHandler.invoke(idEdnReader));

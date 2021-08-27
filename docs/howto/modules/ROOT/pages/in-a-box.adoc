@@ -99,7 +99,7 @@ Clojure::
 ----
 (ns crux-in-a-box.db
   (:require [clojure.java.io :as io]
-            [crux.api :as xt]))
+            [xtdb.api :as xt]))
 
 (defn start-crux! []
   (letfn [(kv-store [dir]
@@ -125,8 +125,8 @@ package cruxinabox;
 
 import java.io.File;
 import java.io.IOException;
-import crux.api.Crux;
-import crux.api.ICruxAPI;
+import xtdb.api.Crux;
+import xtdb.api.ICruxAPI;
 
 class Box {
     public static void main(String[] args) {
@@ -202,11 +202,11 @@ Java::
 import java.util.HashMap;
 import java.util.List;
 
-import crux.api.ICruxDatasource;
-import crux.api.ICursor;
-import crux.api.CruxDocument;
-import crux.api.TransactionInstant;
-import crux.api.tx.Transaction;
+import xtdb.api.ICruxDatasource;
+import xtdb.api.ICursor;
+import xtdb.api.CruxDocument;
+import xtdb.api.TransactionInstant;
+import xtdb.api.tx.Transaction;
 
 /* submitTx example: */
 HashMap<String, Object> data = new HashMap<>();

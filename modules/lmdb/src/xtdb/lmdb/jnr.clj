@@ -3,13 +3,13 @@
   (:require [clojure.java.io :as io]
             [clojure.tools.logging :as log]
             [clojure.spec.alpha :as s]
-            [crux.io :as cio]
-            [crux.kv :as kv]
-            [crux.memory :as mem]
-            [crux.system :as sys]
-            [crux.checkpoint :as cp]
-            [crux.kv.index-store :as kvi]
-            [crux.codec :as c])
+            [xtdb.io :as cio]
+            [xtdb.kv :as kv]
+            [xtdb.memory :as mem]
+            [xtdb.system :as sys]
+            [xtdb.checkpoint :as cp]
+            [xtdb.kv.index-store :as kvi]
+            [xtdb.codec :as c])
   (:import java.io.Closeable
            java.nio.file.Path
            java.util.concurrent.locks.StampedLock

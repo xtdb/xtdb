@@ -1,8 +1,8 @@
 (ns xtdb.s3-test
   (:require [clojure.test :as t]
-            [crux.fixtures.document-store :as fix.ds]
+            [xtdb.fixtures.document-store :as fix.ds]
             [xtdb.s3 :as s3]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import xtdb.s3.S3Configurator
            java.util.UUID
            software.amazon.awssdk.regions.Region

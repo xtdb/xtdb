@@ -2,7 +2,7 @@
   (:require [clojure.string :as str]
             [xtdb.metrics :as m]
             [xtdb.metrics.dropwizard :as dw]
-            [crux.system :as sys]
+            [xtdb.system :as sys]
             [xtdb.rocksdb :as rocks]
             [clojure.set :as set])
   (:import (org.rocksdb RocksDB Statistics StatisticsCollector StatsCollectorInput StatisticsCollectorCallback TickerType)

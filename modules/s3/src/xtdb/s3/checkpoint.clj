@@ -1,13 +1,13 @@
 (ns xtdb.s3.checkpoint
   (:require [xtdb.s3 :as s3]
-            [crux.checkpoint :as cp]
+            [xtdb.checkpoint :as cp]
             [clojure.string :as string]
             [clojure.java.io :as io]
-            [crux.tx :as tx]
-            [crux.io :as cio]
+            [xtdb.tx :as tx]
+            [xtdb.io :as cio]
             [clojure.edn :as edn]
             [clojure.set :as set]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import (xtdb.s3 S3Configurator)
            (clojure.lang MapEntry)
            (java.io Closeable File)

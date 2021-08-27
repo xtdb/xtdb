@@ -1,7 +1,7 @@
 (ns ^{:clojure.tools.namespace.repl/load false}
     xtdb.rocksdb.loader
   (:require [clojure.java.io :as io]
-            [crux.io :as cio])
+            [xtdb.io :as cio])
   (:import org.rocksdb.util.Environment
            org.rocksdb.NativeLibraryLoader))
 

@@ -1,15 +1,15 @@
 (ns xtdb.lucene
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.checkpoint :as cp]
-            [crux.codec :as cc]
-            [crux.db :as db]
-            [crux.io :as cio]
-            [crux.query :as q]
-            [crux.system :as sys]
-            [crux.tx :as tx]
-            [crux.tx.conform :as txc])
-  (:import crux.query.VarBinding
+            [xtdb.checkpoint :as cp]
+            [xtdb.codec :as cc]
+            [xtdb.db :as db]
+            [xtdb.io :as cio]
+            [xtdb.query :as q]
+            [xtdb.system :as sys]
+            [xtdb.tx :as tx]
+            [xtdb.tx.conform :as txc])
+  (:import xtdb.query.VarBinding
            [java.io Closeable File]
            java.nio.file.Path
            java.time.Duration
@@ -107,7 +107,7 @@
      (string? query) (.parse (QueryParser. default-field analyzer)
                              query))))
 
-(defn ^crux.api.ICursor search
+(defn ^xtdb.api.ICursor search
   "Lazily search a xtdb-lucene index in its raw form, without temporal filtering.
 
   query   Either an unparsed query string or an `org.apache.lucene.search.Query`
@@ -152,7 +152,7 @@
                                 [arg-bindings nil])
           lucene-store (get pred-ctx (or (:lucene-store-k opts) ::lucene-store))
           query (query-builder (:analyzer lucene-store) arg-bindings)
-          tuples (with-open [search-results ^crux.api.ICursor (search* lucene-store query)]
+          tuples (with-open [search-results ^xtdb.api.ICursor (search* lucene-store query)]
                    (->> search-results
                         iterator-seq
                         (results-resolver index-snapshot db)
@@ -181,7 +181,7 @@
                    [(db/decode-value index-snapshot eid) v score])))))
 
 (defmethod q/pred-args-spec 'text-search [_]
-  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? q/logic-var?) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn  #{'text-search} :args (s/spec (s/cat :attr keyword? :v (some-fn string? q/logic-var?) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :xtdb.query/binding)))
 
 (defmethod q/pred-constraint 'text-search [_ pred-ctx]
   (let [resolver (partial resolve-search-results-a-v (second (:arg-bindings pred-ctx)))]
@@ -212,7 +212,7 @@
     (.build b)))
 
 (defmethod q/pred-args-spec 'wildcard-text-search [_]
-  (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v (some-fn string? q/logic-var?) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'wildcard-text-search} :args (s/spec (s/cat :v (some-fn string? q/logic-var?) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :xtdb.query/binding)))
 
 (defmethod q/pred-constraint 'wildcard-text-search [_ pred-ctx]
   (pred-constraint #'build-query-wildcard #'resolve-search-results-a-v-wildcard pred-ctx))

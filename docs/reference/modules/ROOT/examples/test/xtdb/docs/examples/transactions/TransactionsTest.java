@@ -1,12 +1,12 @@
-package crux.docs.examples.transactions;
+package xtdb.docs.examples.transactions;
 
 import clojure.lang.IPersistentMap;
 import clojure.lang.Keyword;
 import clojure.lang.PersistentArrayMap;
 import org.junit.*;
 
-import crux.api.*;
-import crux.api.tx.*;
+import xtdb.api.*;
+import xtdb.api.tx.*;
 
 import java.util.Collections;
 import java.util.Date;
@@ -14,12 +14,12 @@ import java.util.HashMap;
 import java.util.Map;
 import java.time.Duration;
 
-import static crux.api.TestUtils.*;
+import static xtdb.api.TestUtils.*;
 import static org.junit.Assert.*;
-import static crux.api.CruxDocument.build;
+import static xtdb.api.CruxDocument.build;
 
 // tag::creating-0[]
-import static crux.api.tx.Transaction.buildTx;
+import static xtdb.api.tx.Transaction.buildTx;
 // end::creating-0[]
 
 public class TransactionsTest {
@@ -234,7 +234,7 @@ public class TransactionsTest {
         // tag::fn-put[]
         TransactionInstant ti = node.submitTx(buildTx(tx -> {
             tx.put(CruxDocument.createFunction("incAge",
-            "(fn [ctx eid] (let [db (crux.api/db ctx) entity (crux.api/entity db eid)] [[:xt/put (update entity :age inc)]]))"));
+            "(fn [ctx eid] (let [db (xtdb.api/db ctx) entity (xtdb.api/entity db eid)] [[:xt/put (update entity :age inc)]]))"));
         }));
         // end::fn-put[]
 

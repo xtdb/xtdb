@@ -3,10 +3,10 @@
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit]
-            [crux.api :as xt]
-            [crux.codec :as c]
+            [xtdb.api :as xt]
+            [xtdb.codec :as c]
             [xtdb.http-server.json :as http-json]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [juxt.clojars-mirrors.hiccup.v2v0v0-alpha2.hiccup2.core :as hiccup2]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
@@ -15,8 +15,8 @@
             [juxt.clojars-mirrors.spec-tools.v0v10v5.spec-tools.core :as st]
             [xtdb.http-server.entity-ref :as entity-ref]
             [clojure.instant :as inst])
-  (:import [crux.api ICruxDatasource]
-           [crux.codec EDNId Id]
+  (:import [xtdb.api ICruxDatasource]
+           [xtdb.codec EDNId Id]
            xtdb.http_server.entity_ref.EntityRef
            [java.io ByteArrayOutputStream OutputStream]
            (java.util Date Map)))

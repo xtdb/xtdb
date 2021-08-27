@@ -17,7 +17,7 @@ A transaction is performed by calling `.submitTx` on an `ICruxIngestAPI` with a 
 
 The `Transaction` object can be created by either using `Transaction.Builder` directly or using a `Consumer`.
 
-If using the `Consumer` approach, we recommend importing `crux.api.tx.Transaction.buildTx` statically for brevity.
+If using the `Consumer` approach, we recommend importing `xtdb.api.tx.Transaction.buildTx` statically for brevity.
 
 [source,java]
 ----
@@ -38,7 +38,7 @@ include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags
 Clojure::
 +
 --
-A transaction is performed by calling `crux.api/submit-tx` on a node with a list of transaction operations.
+A transaction is performed by calling `xtdb.api/submit-tx` on a node with a list of transaction operations.
 
 [source,clj]
 ----

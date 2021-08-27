@@ -1,9 +1,9 @@
 (ns xtdb.docs.examples.configuration.configuration-test
   (:require [clojure.test :as t]
-            [crux.fixtures :as fix :refer [*api*]]))
+            [xtdb.fixtures :as fix :refer [*api*]]))
 
 ;; tag::import[]
-(require '[crux.api :as xt]
+(require '[xtdb.api :as xt]
          '[clojure.java.io :as io])
 ;; end::import[]
 

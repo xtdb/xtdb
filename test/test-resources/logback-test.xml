@@ -10,15 +10,15 @@
     </root>
 
     <logger name="crux" level="INFO" />
-    <logger name="crux.node" level="WARN" />
-    <logger name="crux.mem-kv" level="ERROR" />
-    <logger name="crux.hash" level="WARN" />
+    <logger name="xtdb.node" level="WARN" />
+    <logger name="xtdb.mem-kv" level="ERROR" />
+    <logger name="xtdb.hash" level="WARN" />
     <logger name="xtdb.http-server" level="WARN" />
     <logger name="xtdb.kafka" level="WARN" />
     <logger name="xtdb.jdbc" level="WARN" />
-    <logger name="crux.mem-kv" level="ERROR" />
+    <logger name="xtdb.mem-kv" level="ERROR" />
     <logger name="xtdb.rdf" level="ERROR" />
-    <logger name="crux.tx" level="ERROR" />
+    <logger name="xtdb.tx" level="ERROR" />
 
     <logger name="org.apache.kafka" level="ERROR" />
     <logger name="org.apache.zookeeper" level="ERROR" />

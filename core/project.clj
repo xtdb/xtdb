@@ -31,7 +31,7 @@
                             :dependencies [[com.xtdb/xtdb-http-server]]}
              :test {:dependencies [[com.xtdb/xtdb-test]]}}
 
-  :aot [crux.main]
+  :aot [xtdb.main]
 
   :java-source-paths ["src"]
   :javac-options ["-source" "8" "-target" "8"
@@ -40,7 +40,7 @@
                   "-Werror"
                   "-proc:none"]
 
-  :javadoc-opts {:package-names ["crux.api"]
+  :javadoc-opts {:package-names ["xtdb.api"]
                  :output-dir "target/javadoc/out"
                  :additional-args ["-windowtitle" "Crux Javadoc"
                                    "-quiet"

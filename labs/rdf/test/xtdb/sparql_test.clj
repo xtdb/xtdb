@@ -1,7 +1,7 @@
 (ns xtdb.sparql-test
   (:require [clojure.test :as t]
             [clojure.java.io :as io]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql]))
 

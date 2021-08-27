@@ -1,9 +1,9 @@
 (ns xtdb.bench.sorted-maps-microbench
   (:require [clojure.java.io :as io]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.bench :as bench]
             [xtdb.kafka.embedded :as ek]
-            [crux.fixtures :as fix]
+            [xtdb.fixtures :as fix]
             [xtdb.kafka :as k]
             [xtdb.rocksdb :as rocks]))
 

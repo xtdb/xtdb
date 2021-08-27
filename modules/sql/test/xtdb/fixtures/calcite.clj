@@ -1,7 +1,7 @@
 (ns xtdb.fixtures.calcite
   (:require [xtdb.calcite :as cal]
-            [crux.fixtures :as fix]
-            [crux.node :as n])
+            [xtdb.fixtures :as fix]
+            [xtdb.node :as n])
   (:import java.sql.DriverManager
            java.sql.PreparedStatement))
 

@@ -1,10 +1,10 @@
 (ns xtdb.lucene-microbench-test
   (:require [clojure.test :as t]
-            [crux.api :as c]
-            [crux.fixtures :as fix :refer [*api*]]
+            [xtdb.api :as c]
+            [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.lucene :as lf]
-            [crux.fixtures.tpch :as tf]
-            [crux.io :as cio]
+            [xtdb.fixtures.tpch :as tf]
+            [xtdb.io :as cio]
             [xtdb.lucene :as l])
   (:import io.airlift.tpch.TpchTable
            java.nio.file.attribute.FileAttribute

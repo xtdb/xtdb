@@ -1,7 +1,7 @@
 (ns xtdb.docs.examples.query-test
   (:require [clojure.test :as t]
-            [crux.api :as xt]
-            [crux.fixtures :as fix :refer [*api*]]))
+            [xtdb.api :as xt]
+            [xtdb.fixtures :as fix :refer [*api*]]))
 
 (def ^:dynamic *storage-dir*)
 

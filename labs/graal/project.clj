@@ -19,5 +19,5 @@
   :jvm-opts ["-Dclojure.compiler.direct-linking=true"
              "-Dclojure.spec.compile-asserts=false"]
 
-  :aot [crux.mem-kv xtdb.rocksdb xtdb.main.graal]
+  :aot [xtdb.mem-kv xtdb.rocksdb xtdb.main.graal]
   :main xtdb.main.graal)

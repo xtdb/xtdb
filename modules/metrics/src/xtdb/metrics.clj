@@ -2,8 +2,8 @@
   (:require [xtdb.metrics.dropwizard :as dropwizard]
             [xtdb.metrics.index-store :as index-store-metrics]
             [xtdb.metrics.query :as query-metrics]
-            [crux.status :as status]
-            [crux.system :as sys])
+            [xtdb.status :as status]
+            [xtdb.system :as sys])
   (:import [com.codahale.metrics Gauge Meter MetricRegistry Snapshot Timer]))
 
 (defn ->registry [_]

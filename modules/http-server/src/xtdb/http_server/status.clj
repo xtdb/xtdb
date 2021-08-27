@@ -1,5 +1,5 @@
 (ns xtdb.http-server.status
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.util :as util]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
@@ -26,8 +26,8 @@
     (get-in req [:muuntaja/response :format])))
 
 (defmethod transform-query-resp "text/html" [{:keys [status-map crux-node http-options] :as res} _]
-  {:status (if (or (not (contains? status-map :crux.zk/zk-active?))
-                   (:crux.zk/zk-active? status-map))
+  {:status (if (or (not (contains? status-map :xtdb.zk/zk-active?))
+                   (:xtdb.zk/zk-active? status-map))
              200
              500)
    :body (merge res
@@ -35,8 +35,8 @@
                  :http-options http-options})})
 
 (defmethod transform-query-resp :default [{:keys [status-map]} _]
-  {:status (if (or (not (contains? status-map :crux.zk/zk-active?))
-                   (:crux.zk/zk-active? status-map))
+  {:status (if (or (not (contains? status-map :xtdb.zk/zk-active?))
+                   (:xtdb.zk/zk-active? status-map))
              200
              500)
    :body status-map})

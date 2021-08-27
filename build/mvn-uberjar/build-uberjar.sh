@@ -2,6 +2,6 @@
 set -x
 
 mvn package \
-    -Dcrux.crux-version=${XTDB_VERSION:-"crux-git-version"} \
-    -Dcrux.artifact-version=${XTDB_ARTIFACT_VERSION:-"crux-git-version"} \
-    -Dcrux.uberjar-name=${UBERJAR_NAME:-crux.jar} $@
+    -Dxtdb.crux-version=${XTDB_VERSION:-"crux-git-version"} \
+    -Dxtdb.artifact-version=${XTDB_ARTIFACT_VERSION:-"crux-git-version"} \
+    -Dxtdb.uberjar-name=${UBERJAR_NAME:-xtdb.jar} $@

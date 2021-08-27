@@ -10,8 +10,8 @@ public class EdnDeserializer implements Deserializer<Object> {
     private static final IFn readString;
 
     static {
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
-        readString = Clojure.var("crux.codec/read-edn-string-with-readers");
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.codec"));
+        readString = Clojure.var("xtdb.codec/read-edn-string-with-readers");
     }
 
     public void close() {

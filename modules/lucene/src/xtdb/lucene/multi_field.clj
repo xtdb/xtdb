@@ -1,9 +1,9 @@
 (ns xtdb.lucene.multi-field
   (:require [clojure.spec.alpha :as s]
-            [crux.codec :as cc]
+            [xtdb.codec :as cc]
             [xtdb.lucene :as l]
-            [crux.memory :as mem]
-            [crux.query :as q])
+            [xtdb.memory :as mem]
+            [xtdb.query :as q])
   (:import org.apache.lucene.analysis.Analyzer
            [org.apache.lucene.document Document Field$Store StoredField StringField TextField]
            [org.apache.lucene.index IndexWriter Term]
@@ -53,7 +53,7 @@
         search-results))
 
 (defmethod q/pred-args-spec 'lucene-text-search [_]
-  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query (some-fn string? q/logic-var?) :bindings (s/* (some-fn string? q/logic-var?)) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :crux.query/binding)))
+  (s/cat :pred-fn #{'lucene-text-search} :args (s/spec (s/cat :query (some-fn string? q/logic-var?) :bindings (s/* (some-fn string? q/logic-var?)) :opts (s/? (some-fn map? q/logic-var?)))) :return (s/? :xtdb.query/binding)))
 
 (defmethod q/pred-constraint 'lucene-text-search [_ pred-ctx]
   (l/pred-constraint #'build-lucene-text-query #'resolve-search-results-content-hash pred-ctx))

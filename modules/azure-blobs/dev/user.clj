@@ -1,5 +1,5 @@
 (ns user
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [xtdb.azure.blobs :as azb]))
 
 (def init-data

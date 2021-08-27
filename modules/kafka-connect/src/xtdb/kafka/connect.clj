@@ -2,11 +2,11 @@
   (:require [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.core :as json]
             [juxt.clojars-mirrors.cheshire.v5v10v0.cheshire.generate :as json-gen]
             [clojure.tools.logging :as log]
-            [crux.codec :as c]
-            [crux.io :as cio]
-            [crux.error :as err]
+            [xtdb.codec :as c]
+            [xtdb.io :as cio]
+            [xtdb.error :as err]
             [cognitect.transit :as transit]
-            [crux.api :as xt])
+            [xtdb.api :as xt])
   (:import [org.apache.kafka.connect.data Schema Struct Field]
            org.apache.kafka.connect.sink.SinkRecord
            org.apache.kafka.connect.source.SourceRecord
@@ -15,7 +15,7 @@
            [com.fasterxml.jackson.core JsonGenerator JsonParseException]
            xtdb.kafka.connect.XtdbSinkConnector
            xtdb.kafka.connect.XtdbSourceConnector
-           crux.codec.EDNId))
+           xtdb.codec.EDNId))
 
 (json-gen/add-encoder
  EDNId

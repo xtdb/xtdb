@@ -2,7 +2,7 @@ package com.example.workflow
 
 import com.example.contract.IOUState
 import com.example.service.XtdbService
-import crux.api.DBBasis
+import xtdb.api.DBBasis
 import net.corda.core.node.services.queryBy
 import net.corda.core.utilities.getOrThrow
 import net.corda.testing.core.singleIdentity

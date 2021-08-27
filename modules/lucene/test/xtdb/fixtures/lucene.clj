@@ -1,5 +1,5 @@
 (ns xtdb.fixtures.lucene
-  (:require [crux.fixtures :as fix :refer [*api*]]
+  (:require [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.lucene :as l])
   (:import [org.apache.lucene.index DirectoryReader IndexReader IndexWriter]))
 
@@ -12,7 +12,7 @@
 (defn- lucene-store []
   (:xtdb.lucene/lucene-store @(:!system *api*)))
 
-(defn ^crux.api.ICursor search [f & args]
+(defn ^xtdb.api.ICursor search [f & args]
   (let [{:keys [analyzer]} (lucene-store)
         q (apply f analyzer args)]
     (l/search *api* q)))

@@ -19,7 +19,7 @@ All of the below commands should be run in the *root* of the Crux repo.
 ** if you add a module, or change any of the dependencies of any of the modules, that'll require another `./lein-sub install` and a REPL bounce
 ** if you change any of the Java classes, that'll require a `./lein-sub javac` and a REPL bounce
 ** otherwise, `(dev/reset)` (or just `(reset)` if you're already in the `dev` ns) should be sufficient.
-* You can run module tests from the root of the git repo without a `./lein-sub install`, because of the lein checkouts - all of the tests are in scope here, so things like `lein test :only crux.tx-test` should also work.
+* You can run module tests from the root of the git repo without a `./lein-sub install`, because of the lein checkouts - all of the tests are in scope here, so things like `lein test :only xtdb.tx-test` should also work.
 * Please don't put any more side-effecting top-level code in dev namespaces - you'll break this reload ability and make me sad.
 
 == Links

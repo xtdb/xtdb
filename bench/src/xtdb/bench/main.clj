@@ -7,7 +7,7 @@
             [xtdb.bench.tpch :as tpch]
             [xtdb.bench.ts-devices :as devices]
             [xtdb.bench.ts-weather :as weather]
-            [xtdb.bench.watdiv-crux :as watdiv-crux]))
+            [xtdb.bench.watdiv-xtdb :as watdiv-xtdb]))
 
 (defn post-to-slack [results]
   (doto results
@@ -34,10 +34,10 @@
 
    :watdiv (fn [nodes _]
              (bench/with-nodes [node nodes]
-               (let [[ingest-results query-results] (->> (watdiv-crux/run-watdiv-bench node {:test-count 100})
+               (let [[ingest-results query-results] (->> (watdiv-xtdb/run-watdiv-bench node {:test-count 100})
                                                          (split-at 2))]
-                 (-> (concat (->> ingest-results (map watdiv-crux/render-comparison-durations))
-                             (watdiv-crux/summarise-query-results query-results))
+                 (-> (concat (->> ingest-results (map watdiv-xtdb/render-comparison-durations))
+                             (watdiv-xtdb/summarise-query-results query-results))
                      (bench/with-comparison-times)
                      (doto post-to-slack)))))
 

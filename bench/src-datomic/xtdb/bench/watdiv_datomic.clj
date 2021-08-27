@@ -2,7 +2,7 @@
   (:require [clojure.java.io :as io]
             [xtdb.bench :as bench]
             [xtdb.bench.watdiv :as watdiv]
-            [crux.codec :as c]
+            [xtdb.codec :as c]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql]
             [datomic.api :as d])

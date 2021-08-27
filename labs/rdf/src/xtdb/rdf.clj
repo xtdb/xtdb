@@ -9,8 +9,8 @@
             [clojure.string :as str]
             [clojure.walk :as w]
             [clojure.tools.logging :as log]
-            [crux.codec :as c]
-            [crux.api :as xt])
+            [xtdb.codec :as c]
+            [xtdb.api :as xt])
   (:import java.io.StringReader
            javax.xml.datatype.DatatypeConstants
            [org.eclipse.rdf4j.rio RDFHandler]

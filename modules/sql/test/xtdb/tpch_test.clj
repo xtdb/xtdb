@@ -1,8 +1,8 @@
 (ns xtdb.tpch-test
   (:require [clojure.test :as t]
-            [crux.fixtures :as fix :refer [*api*]]
+            [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.calcite :as cf]
-            [crux.fixtures.tpch :as tf]
+            [xtdb.fixtures.tpch :as tf]
             [clojure.string :as str])
   (:import io.airlift.tpch.TpchTable))
 

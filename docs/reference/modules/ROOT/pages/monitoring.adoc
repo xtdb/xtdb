@@ -238,7 +238,7 @@ EDN::
 * `dimensions` (`Map<String, String>`): dimensions to include in the pushed metrics
 * `jvm-metrics?` (boolean, default false): includes JVM metrics in the pushed metrics
 * `region` (string): override default AWS region for uploading metrics
-* `ignore-rules` (`List<String>`): a list of metrics to ignore, in gitignore format. e.g. `["crux.tx" "!crux.tx.ingest"]` would ignore `crux.tx.*`, except `crux.tx.ingest`
+* `ignore-rules` (`List<String>`): a list of metrics to ignore, in gitignore format. e.g. `["xtdb.tx" "!xtdb.tx.ingest"]` would ignore `xtdb.tx.*`, except `xtdb.tx.ingest`
 * `dry-run?` (boolean, default false): reporter outputs to a local SLF4J logger instead
 * `dry-run-report-frequency` (string/`Duration`, default `"PT1S"`)
 

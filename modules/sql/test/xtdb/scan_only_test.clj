@@ -1,6 +1,6 @@
 (ns xtdb.scan-only-test
   (:require [clojure.test :as t]
-            [crux.fixtures :as fix :refer [*api*]]
+            [xtdb.fixtures :as fix :refer [*api*]]
             [xtdb.fixtures.calcite :as cf :refer [explain query]]))
 
 (defn- with-each-connection-type [f]

@@ -2,17 +2,17 @@
   (:require [clojure.java.data :as jd]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
-            [crux.codec :as c]
-            [crux.db :as db]
-            [crux.document-store :as ds]
-            [crux.io :as cio]
-            [crux.system :as sys]
-            [crux.tx :as tx]
+            [xtdb.codec :as c]
+            [xtdb.db :as db]
+            [xtdb.document-store :as ds]
+            [xtdb.io :as cio]
+            [xtdb.system :as sys]
+            [xtdb.tx :as tx]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
             [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [crux.tx.subscribe :as tx-sub])
+            [xtdb.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
            [com.zaxxer.hikari HikariConfig HikariDataSource]
            java.io.Closeable
@@ -128,7 +128,7 @@
            (into {})))))
 
 (defn ->document-store {::sys/deps {:connection-pool `->connection-pool
-                                    :document-cache 'crux.cache/->cache}}
+                                    :document-cache 'xtdb.cache/->cache}}
   [{{:keys [pool dialect]} :connection-pool, :keys [document-cache] :as opts}]
   (ds/->cached-document-store
    (assoc opts
@@ -153,7 +153,7 @@
                          (map (fn [y]
                                 {:xt/tx-id (long (:event_offset y))
                                  :xt/tx-time (-> (:tx_time y) (->date dialect))
-                                 :crux.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
+                                 :xtdb.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
   (subscribe [this after-tx-id f]
     (tx-sub/handle-polling-subscription this after-tx-id {:poll-sleep-duration (Duration/ofMillis 100)} f))

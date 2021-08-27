@@ -8,16 +8,16 @@
             [clojure.pprint :as pp]
             [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
-            [crux.api :as xt]
+            [xtdb.api :as xt]
             [xtdb.http-server.entity :as entity]
             [xtdb.http-server.json :as http-json]
             [xtdb.http-server.query :as query]
             [xtdb.http-server.status :as status]
             [xtdb.http-server.util :as util]
-            [crux.io :as cio]
-            [crux.system :as sys]
-            [crux.tx :as tx]
-            [crux.tx.conform :as txc]
+            [xtdb.io :as cio]
+            [xtdb.system :as sys]
+            [xtdb.tx :as tx]
+            [xtdb.tx.conform :as txc]
             [juxt.clojars-mirrors.jsonista.v0v3v1.jsonista.core :as json]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.core :as m]
             [juxt.clojars-mirrors.muuntaja.v0v6v8.muuntaja.format.core :as mfc]
@@ -34,7 +34,7 @@
   (:import [com.nimbusds.jose.crypto ECDSAVerifier RSASSAVerifier]
            [com.nimbusds.jose.jwk ECKey JWKSet KeyType RSAKey]
            com.nimbusds.jwt.SignedJWT
-           [crux.api NodeOutOfSyncException]
+           [xtdb.api NodeOutOfSyncException]
            [java.io Closeable IOException]
            java.time.Duration
            org.eclipse.jetty.server.Server))
@@ -118,7 +118,7 @@
 (defn tx-log-json-encode [tx]
   (-> tx
       (cio/update-if :xt/tx-ops txs->json)
-      (cio/update-if :crux.tx.event/tx-events txs->json)
+      (cio/update-if :xtdb.tx.event/tx-events txs->json)
       (http-json/camel-case-keys)))
 
 (def ->tx-log-muuntaja
@@ -435,8 +435,8 @@
                                       rm/format-response-middleware
                                       (re/create-exception-middleware
                                        (merge re/default-handlers
-                                              {crux.IllegalArgumentException handle-ex-info
-                                               crux.api.NodeOutOfSyncException handle-ex-info
+                                              {xtdb.IllegalArgumentException handle-ex-info
+                                               xtdb.api.NodeOutOfSyncException handle-ex-info
                                                :muuntaja/decode handle-muuntaja-decode-error}))
                                       rm/format-request-middleware
                                       rrc/coerce-response-middleware

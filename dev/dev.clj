@@ -1,17 +1,17 @@
 (ns dev
   "Internal development namespace for Crux. For end-user usage, see
   examples.clj"
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [integrant.core :as i]
             [integrant.repl.state :refer [system]]
             [integrant.repl :as ir :refer [go halt reset reset-all]]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [xtdb.lucene]
             [xtdb.kafka :as k]
             [xtdb.kafka.embedded :as ek]
             [xtdb.rocksdb :as rocks]
             [clojure.java.io :as io])
-  (:import (crux.api ICruxAPI)
+  (:import (xtdb.api ICruxAPI)
            java.io.Closeable
            [ch.qos.logback.classic Level Logger]
            org.slf4j.LoggerFactory))

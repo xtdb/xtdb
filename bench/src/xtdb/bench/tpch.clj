@@ -1,7 +1,7 @@
 (ns xtdb.bench.tpch
-  (:require [crux.api :as xt]
+  (:require [xtdb.api :as xt]
             [xtdb.bench :as bench]
-            [crux.fixtures.tpch :as tpch]))
+            [xtdb.fixtures.tpch :as tpch]))
 
 (defn run-tpch-query [node n]
   (xt/q (xt/db node) (assoc (get tpch/tpch-queries (dec n)) :timeout 120000)))

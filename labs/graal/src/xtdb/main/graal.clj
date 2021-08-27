@@ -1,6 +1,6 @@
 (ns xtdb.main.graal
   (:require [clojure.tools.logging :as log]
-            [crux.api :as xt])
+            [xtdb.api :as xt])
   (:gen-class))
 
 (defn -main [& _args]

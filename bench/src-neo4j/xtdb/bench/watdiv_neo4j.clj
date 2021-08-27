@@ -3,7 +3,7 @@
             [clojure.string :as string]
             [xtdb.bench :as bench]
             [xtdb.bench.watdiv :as watdiv]
-            [crux.io :as cio]
+            [xtdb.io :as cio]
             [xtdb.rdf :as rdf]
             [xtdb.sparql :as sparql])
   (:import java.util.concurrent.TimeUnit

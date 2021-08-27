@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.metrics.index-store
-  (:require [crux.bus :as bus]
-            [crux.api :as xt]
-            [crux.tx :as tx]
+  (:require [xtdb.bus :as bus]
+            [xtdb.api :as xt]
+            [xtdb.tx :as tx]
             [xtdb.metrics.dropwizard :as dropwizard])
   (:import (java.util Date)))
 

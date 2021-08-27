@@ -4,7 +4,7 @@
             [clojure.string :as str]
             [clojure.tools.logging :as log]
             [xtdb.kafka.embedded :as ek]
-            [crux.api :as xt]))
+            [xtdb.api :as xt]))
 
 (def list-columns?
   #{:name.basics/knownForTitles

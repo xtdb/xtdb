@@ -1,7 +1,7 @@
 (ns xtdb.lucene.multi-field-test
   (:require [clojure.test :as t]
-            [crux.api :as c]
-            [crux.fixtures :as fix :refer [*api* submit+await-tx]]
+            [xtdb.api :as c]
+            [xtdb.fixtures :as fix :refer [*api* submit+await-tx]]
             [xtdb.fixtures.lucene :as lf]
             [xtdb.lucene :as l])
   (:import org.apache.lucene.queryparser.classic.ParseException))

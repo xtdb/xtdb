@@ -2,13 +2,13 @@
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.tools.logging :as log]
-            [crux.codec :as c]
-            [crux.db :as db]
-            [crux.io :as cio]
-            [crux.status :as status]
-            [crux.system :as sys]
-            [crux.tx :as tx]
-            [crux.tx.subscribe :as tx-sub])
+            [xtdb.codec :as c]
+            [xtdb.db :as db]
+            [xtdb.io :as cio]
+            [xtdb.status :as status]
+            [xtdb.system :as sys]
+            [xtdb.tx :as tx]
+            [xtdb.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
            [xtdb.kafka.nippy NippyDeserializer NippySerializer]
            java.io.Closeable
@@ -23,7 +23,7 @@
            [org.apache.kafka.common.errors InterruptException TopicExistsException]))
 
 (defn ->kafka-config {::sys/args {:bootstrap-servers {:spec ::sys/string
-                                                      :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.crux.svc.cluster.local:9092\""
+                                                      :doc "URL for connecting to Kafka, eg \"kafka-cluster-kafka-brokers.xtdb.svc.cluster.local:9092\""
                                                       :required? true
                                                       :default "localhost:9092"}
                                   :properties-file {:spec ::sys/path
@@ -133,7 +133,7 @@
     (assert (= 1 (count (.partitions ^TopicDescription (get name->description tx-topic)))))))
 
 (defn- tx-record->tx-log-entry [^ConsumerRecord record]
-  {:crux.tx.event/tx-events (.value record)
+  {:xtdb.tx.event/tx-events (.value record)
    :xt/tx-id (.offset record)
    :xt/tx-time (Date. (.timestamp record))})
 
@@ -198,7 +198,7 @@
 
   status/Status
   (status-map [_]
-    {:crux.zk/zk-active?
+    {:xtdb.zk/zk-active?
      (try
        (with-open [consumer (->consumer {:kafka-config kafka-config})]
          (boolean (.listTopics consumer)))
@@ -245,14 +245,14 @@
       @f)))
 
 (defn- read-doc-offsets [index-store]
-  (->> (db/read-index-meta index-store :crux.tx-log/consumer-state)
+  (->> (db/read-index-meta index-store :xtdb.tx-log/consumer-state)
        (into {} (map (fn [[k {:keys [next-offset]}]]
                        [(let [[_ t p] (re-matches #"(.+)-(\d+)" k)]
                           (TopicPartition. t (Long/parseLong p)))
                         next-offset])))))
 
 (defn- store-doc-offsets [index-store tp-offsets]
-  (db/store-index-meta index-store :crux.tx-log/consumer-state
+  (db/store-index-meta index-store :xtdb.tx-log/consumer-state
                        (->> tp-offsets
                             (into {} (map (fn [[k v]]
                                             [(str k) {:next-offset v}]))))))
@@ -356,7 +356,7 @@
                                     :doc-topic-opts {:xt/module `->topic-opts,
                                                      :topic-name "crux-docs",
                                                      :num-partitions 1}
-                                    :local-document-store 'crux.kv.document-store/->document-store
+                                    :local-document-store 'xtdb.kv.document-store/->document-store
                                     :index-store :xt/index-store}
                         ::sys/args {:group-id {:doc "Kafka client group.id"
                                                :required? false

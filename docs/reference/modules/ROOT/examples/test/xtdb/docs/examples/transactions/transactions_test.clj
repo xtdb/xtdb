@@ -1,7 +1,7 @@
 (ns xtdb.docs.examples.transactions.transactions-test
   (:require [clojure.test :as t]
-            [crux.api :as xt]
-            [crux.fixtures :as fix :refer [*api*]]))
+            [xtdb.api :as xt]
+            [xtdb.fixtures :as fix :refer [*api*]]))
 
 ;; Note: Not using submit-and-await so that the snippets for the doc can include the submit
 
@@ -83,8 +83,8 @@
               :crux.db/fn '
               ;; tag::fn-anatomy[]
               (fn [ctx eid]  ;;<1>
-                (let [db (crux.api/db ctx) ;;<2>
-                      entity (crux.api/entity db eid)]
+                (let [db (xtdb.api/db ctx) ;;<2>
+                      entity (xtdb.api/entity db eid)]
                   [[:xt/put (update entity :age inc)]])) ;;<3>
               ;; end::fn-anatomy[]
               }]
@@ -107,8 +107,8 @@
     ;; tag::fn-put[]
     (xt/submit-tx node [[:xt/put {:xt/id :increment-age
                                     :crux.db/fn '(fn [ctx eid] ;;<1>
-                                                   (let [db (crux.api/db ctx)
-                                                         entity (crux.api/entity db eid)]
+                                                   (let [db (xtdb.api/db ctx)
+                                                         entity (xtdb.api/entity db eid)]
                                                      [[:xt/put (update entity :age inc)]]))}]])
     ;; end::fn-put[]
 

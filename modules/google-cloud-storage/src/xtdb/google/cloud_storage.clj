@@ -1,7 +1,7 @@
 (ns xtdb.google.cloud-storage
-  (:require [crux.system :as sys]
-            [crux.document-store :as ds]
-            [crux.checkpoint :as cp]))
+  (:require [xtdb.system :as sys]
+            [xtdb.document-store :as ds]
+            [xtdb.checkpoint :as cp]))
 
 (defn ->document-store {::sys/deps (::sys/deps (meta #'ds/->nio-document-store))
                         ::sys/args (::sys/args (meta #'ds/->nio-document-store))}

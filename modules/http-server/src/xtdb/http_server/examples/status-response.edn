@@ -1,6 +1,6 @@
-{:crux.version/version "1.18.1",
- :crux.version/revision nil, :crux.index/index-version 13,
- :crux.tx-log/consumer-state nil,
- :crux.kv/kv-store "xtdb.rocksdb.RocksKv",
- :crux.kv/estimate-num-keys 3,
- :crux.kv/size 132665}
+{:xtdb.version/version "1.18.1",
+ :xtdb.version/revision nil, :xtdb.index/index-version 13,
+ :xtdb.tx-log/consumer-state nil,
+ :xtdb.kv/kv-store "xtdb.rocksdb.RocksKv",
+ :xtdb.kv/estimate-num-keys 3,
+ :xtdb.kv/size 132665}

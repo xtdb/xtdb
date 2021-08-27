@@ -2,15 +2,15 @@
   (:require [clojure.edn :as edn]
             [clojure.string :as string]
             [clojure.tools.logging :as log]
-            [crux.codec :as c]
-            [crux.error :as err]
-            [crux.io :as cio]
-            [crux.query-state :as qs]
-            [crux.tx :as tx]
-            [crux.api :as xt]
+            [xtdb.codec :as c]
+            [xtdb.error :as err]
+            [xtdb.io :as cio]
+            [xtdb.query-state :as qs]
+            [xtdb.tx :as tx]
+            [xtdb.api :as xt]
             [juxt.clojars-mirrors.clj-http.v3v12v2.clj-http.client :as http])
   (:import com.nimbusds.jwt.SignedJWT
-           [crux.api RemoteClientOptions]
+           [xtdb.api RemoteClientOptions]
            [java.io Closeable InputStreamReader IOException PushbackReader]
            java.time.Instant
            (java.util Date)
@@ -301,7 +301,7 @@
         (get :xt/tx-time)))
 
   (listen [this event-opts f]
-    (throw (UnsupportedOperationException. "crux/listen not supported on remote clients")))
+    (throw (UnsupportedOperationException. "'listen' not supported on remote clients")))
 
   (latest-completed-tx [this]
     (api-request-sync (str url "/_xtdb/latest-completed-tx")
@@ -353,7 +353,7 @@
             (throw e))))
       ))
 
-  (open-tx-log ^crux.api.ICursor [this after-tx-id with-ops?]
+  (open-tx-log ^xtdb.api.ICursor [this after-tx-id with-ops?]
     (let [with-ops? (boolean with-ops?)
           in (api-request-sync (str url "/_xtdb/tx-log")
                                {:http-opts {:method :get

@@ -1,9 +1,9 @@
 (ns xtdb.s3.checkpoint-test
   (:require [clojure.test :as t]
-            [crux.fixtures.checkpoint-store :as fix.cp-store]
+            [xtdb.fixtures.checkpoint-store :as fix.cp-store]
             [xtdb.s3-test :as s3t]
             [xtdb.s3.checkpoint :as s3c]
-            [crux.system :as sys])
+            [xtdb.system :as sys])
   (:import java.util.UUID))
 
 (t/use-fixtures :once s3t/with-s3-client)

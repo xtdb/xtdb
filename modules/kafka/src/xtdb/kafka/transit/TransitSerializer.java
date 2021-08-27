@@ -25,14 +25,14 @@ public class TransitSerializer implements Serializer<Object> {
         write = Clojure.var("cognitect.transit/write");
         writer = Clojure.var("cognitect.transit/writer");
         writeHandler = Clojure.var("cognitect.transit/write-handler");
-        Clojure.var("clojure.core/require").invoke(Clojure.read("crux.codec"));
-        ednIdToOriginalId = (IFn) ((IDeref) Clojure.var("crux.codec/edn-id->original-id")).deref();
+        Clojure.var("clojure.core/require").invoke(Clojure.read("xtdb.codec"));
+        ednIdToOriginalId = (IFn) ((IDeref) Clojure.var("xtdb.codec/edn-id->original-id")).deref();
         clojureStr = (IFn) ((IDeref) Clojure.var("clojure.core/str")).deref();
         jsonVerbose = Clojure.read(":json-verbose");
         Map<Object, Object> handlers = new HashMap<>();
-        handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.EDNId")),
+        handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("xtdb.codec.EDNId")),
                      writeHandler.invoke("xt/id", ednIdToOriginalId));
-        handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("crux.codec.Id")),
+        handlers.put(Clojure.var("clojure.core/resolve").invoke(Clojure.read("xtdb.codec.Id")),
                      writeHandler.invoke("xt/id", clojureStr));
         options = new HashMap<>();
         options.put(Clojure.read(":handlers"), handlers);

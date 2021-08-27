@@ -1,7 +1,7 @@
 (ns xtdb.remote-api-client-test
   (:require [clojure.test :as t]
-            [crux.api :as xt]
-            [crux.io :as cio]
+            [xtdb.api :as xt]
+            [xtdb.io :as cio]
             [xtdb.remote-api-client :as sut])
   (:import clojure.lang.ExceptionInfo
            com.nimbusds.jose.crypto.ECDSASigner

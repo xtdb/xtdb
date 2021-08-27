@@ -1,6 +1,6 @@
 (ns ^:no-doc xtdb.metrics.query
-  (:require [crux.bus :as bus]
-            [crux.query :as q]
+  (:require [xtdb.bus :as bus]
+            [xtdb.query :as q]
             [xtdb.metrics.dropwizard :as dropwizard]))
 
 (defn assign-listeners
@@ -10,7 +10,7 @@
     (bus/listen bus {:xt/event-types #{::q/submitted-query
                                        ::q/completed-query
                                        ::q/failed-query}}
-                (fn [{:keys [crux.query/query-id xt/event-type]}]
+                (fn [{:keys [xtdb.query/query-id xt/event-type]}]
                   (case event-type
                     ::q/submitted-query
                     (swap! !timer-store assoc query-id (dropwizard/start query-timer))

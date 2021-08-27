@@ -1,9 +1,9 @@
 (ns xtdb.calcite-microbench-test
   (:require [xtdb.calcite :as cal]
-            [crux.api :as c]
-            [crux.fixtures :as fix]
+            [xtdb.api :as c]
+            [xtdb.fixtures :as fix]
             [xtdb.fixtures.calcite :as cf]
-            [crux.fixtures.tpch :as tf])
+            [xtdb.fixtures.tpch :as tf])
   (:import io.airlift.tpch.TpchTable))
 
 (defn- load-docs! [node]

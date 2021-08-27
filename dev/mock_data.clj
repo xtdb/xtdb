@@ -2,7 +2,7 @@
   (:require dev
             [clojure.edn :as edn]
             [clojure.string :as string]
-            [crux.api :as xt]))
+            [xtdb.api :as xt]))
 
 (defn read-doc
   [doc-title]

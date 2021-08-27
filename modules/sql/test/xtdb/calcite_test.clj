@@ -1,7 +1,7 @@
 (ns xtdb.calcite-test
   (:require [clojure.test :as t]
-            [crux.api :as c]
-            [crux.fixtures :as fix :refer [*api* submit+await-tx]]
+            [xtdb.api :as c]
+            [xtdb.fixtures :as fix :refer [*api* submit+await-tx]]
             [xtdb.fixtures.calcite :as cf :refer [explain prepared-query query]]
             [clojure.string :as str])
   (:import [java.time ZonedDateTime ZoneId]

@@ -1,7 +1,7 @@
 (ns ^:no-doc xtdb.jdbc.psql
   (:require [clojure.tools.logging :as log]
             [xtdb.jdbc :as j]
-            [crux.system :as sys]
+            [xtdb.system :as sys]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]))
 

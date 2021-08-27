@@ -5,7 +5,7 @@ package xtdb.corda
 import clojure.java.api.Clojure
 import clojure.lang.AFunction
 import clojure.lang.Keyword
-import crux.api.*
+import xtdb.api.*
 import xtdb.corda.state.XtdbState
 import net.corda.core.crypto.SecureHash
 import net.corda.core.node.AppServiceHub
