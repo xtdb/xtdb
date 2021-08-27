@@ -234,3 +234,62 @@
     (let [metadata (.getCustomMetadata x)]
       (cond-> {:fields (mapv p/datafy (.getFields x))}
         (seq metadata) (assoc :metadata metadata)))))
+
+(def ^:dynamic *merge-union-mode* :DENSE)
+
+(defmulti merge-fields (fn [x y]
+                         [(type-kind (:type x)) (type-kind (:type y))]))
+
+(defmethod merge-fields [:arrow.kind/primitive :arrow.kind/primitive] [x y]
+  (assert (= (:name x) (:name y)))
+  (if (= (:type x) (:type y))
+    (assoc x :nullable (boolean (or (:nullable x) (:nullable y))))
+    (assoc x :type {:name :union :mode *merge-union-mode*} :children [x y])))
+
+(defmethod merge-fields [:arrow.kind/union :arrow.kind/primitive] [x y]
+  (assert (= (:name x) (:name y)))
+  (if (some #{y} (:children x))
+    x
+    (update x :children conj y)))
+
+(defmethod merge-fields [:arrow.kind/primitive :arrow.kind/union] [x y]
+  (merge-fields y x))
+
+
+;; TODO: this is too simplistic, needs to merge compatible kinds as well.
+(defmethod merge-fields [:arrow.kind/union :arrow.kind/union] [x y]
+  (assert (= (:name x) (:name y)))
+  (if (= (get-in x [:type :mode]) (get-in y [:type :mode]))
+    (update x :children (comp vec distinct concat) (:children y))
+    (assoc x :type {:name :union :mode *merge-union-mode*} :children [x y])))
+
+(defmethod merge-fields [:arrow.kind/list :arrow.kind/primitive] [x y]
+  (assert (= (:name x) (:name y)))
+  (assoc x :type {:name :union :mode *merge-union-mode*} :children [x y]))
+
+(defmethod merge-fields [:arrow.kind/primitive :arrow.kind/list] [x y]
+  (assert (= (:name x) (:name y)))
+  (assoc x :type {:name :union :mode *merge-union-mode*} :children [x y]))
+
+(defmethod merge-fields [:arrow.kind/union :arrow.kind/list] [x y]
+  (assert (= (:name x) (:name y)))
+  (if (some #{y} (:children x))
+    x
+    (update x :children conj y)))
+
+(defmethod merge-fields [:arrow.kind/list :arrow.kind/union] [x y]
+  (merge-fields y x))
+
+(defmethod merge-fields [:arrow.kind/primitive :arrow.kind/list] [x y]
+  (assert (= (:name x) (:name y)))
+  (assoc x :type {:name :union :mode *merge-union-mode*} :children [x y]))
+
+(defmethod merge-fields [:arrow.kind/list :arrow.kind/primitive] [x y]
+  (assert (= (:name x) (:name y)))
+  (assoc x :type {:name :union :mode *merge-union-mode*} :children [x y]))
+
+(defmethod merge-fields [:arrow.kind/list :arrow.kind/list] [x y]
+  (assert (= (:name x) (:name y)))
+  (assert (= 1 (count (:children x))))
+  (assert (= 1 (count (:children y))))
+  (assoc x :children [(merge-fields (first (:children x)) (first (:children y)))]))

@@ -38,3 +38,117 @@
   (t/is (= :arrow.kind/largelist (ts/type-kind {:name :largelist})))
   (t/is (= :arrow.kind/fixedsizelist (ts/type-kind {:name :fixedsizelist})))
   (t/is (= :arrow.kind/union (ts/type-kind {:name :union}))))
+
+(t/deftest can-merge-fields
+  (t/testing "primitive"
+    (t/is (= {:name "foo" :type {:name :int :bitWidth 32 :isSigned true} :nullable false}
+             (ts/merge-fields {:name "foo" :type {:name :int :bitWidth 32 :isSigned true}}
+                              {:name "foo" :type {:name :int :bitWidth 32 :isSigned true}})))
+
+    (t/is (= {:name "foo" :type {:name :int :bitWidth 32 :isSigned true} :nullable true}
+             (ts/merge-fields {:name "foo" :type {:name :int :bitWidth 32 :isSigned true} :nullable false}
+                              {:name "foo" :type {:name :int :bitWidth 32 :isSigned true} :nullable true})))
+
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}
+             (ts/merge-fields {:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                              {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}))))
+
+  (t/testing "union"
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}
+                         {:name "foo" :type {:name :varbinary}}]}
+             (ts/merge-fields {:name "foo"
+                               :type {:name :union :mode :DENSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}
+                              {:name "foo" :type {:name :varbinary}})))
+
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}
+                         {:name "foo" :type {:name :varbinary}}]}
+             (ts/merge-fields {:name "foo" :type {:name :varbinary}}
+                              {:name "foo"
+                               :type {:name :union :mode :DENSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]})))
+
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}
+             (ts/merge-fields {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}
+                              {:name "foo"
+                               :type {:name :union :mode :DENSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]})))
+
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                         {:name "foo" :type {:name :varbinary}}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}
+             (ts/merge-fields {:name "foo"
+                               :type {:name :union :mode :DENSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :varbinary}}]}
+                              {:name "foo"
+                               :type {:name :union :mode :DENSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]})))
+
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :SPARSE}
+              :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                         {:name "foo" :type {:name :varbinary}}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}
+             (ts/merge-fields {:name "foo"
+                               :type {:name :union :mode :SPARSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :varbinary}}]}
+                              {:name "foo"
+                               :type {:name :union :mode :SPARSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]})))
+
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo"
+                          :type {:name :union :mode :DENSE}
+                          :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                     {:name "foo" :type {:name :varbinary}}]}
+                         {:name "foo"
+                          :type {:name :union :mode :SPARSE}
+                          :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                     {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}]}
+             (ts/merge-fields {:name "foo"
+                               :type {:name :union :mode :DENSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :varbinary}}]}
+                              {:name "foo"
+                               :type {:name :union :mode :SPARSE}
+                               :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                          {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}))))
+
+  (t/testing "list"
+    (t/is (= {:name "foo"
+              :type {:name :union :mode :DENSE}
+              :children [{:name "foo" :type {:name :list} :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}]}
+                         {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}
+             (ts/merge-fields {:name "foo" :type {:name :list} :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}]}
+                              {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}})))
+
+    (t/is (= {:name "foo"
+              :type {:name :list}
+              :children [{:name "foo"
+                          :type {:name :union :mode :DENSE}
+                          :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}
+                                     {:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]}]}
+             (ts/merge-fields {:name "foo" :type {:name :list} :children [{:name "foo" :type {:name :int :bitWidth 64 :isSigned true}}]}
+                              {:name "foo" :type {:name :list} :children [{:name "foo" :type {:name :floatingpoint :precision :DOUBLE}}]})))))
