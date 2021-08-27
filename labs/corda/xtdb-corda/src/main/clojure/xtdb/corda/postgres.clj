@@ -37,8 +37,8 @@ CREATE TRIGGER crux_tx_mapping
         (jdbc/execute-one! jdbc-session [q])))))
 
 (defmethod xt.corda/tx-row->tx :postgres [tx-row _]
-  {:xt/tx-id (:crux_tx_id tx-row)
-   :xt/tx-time (Date. (.getTime ^Timestamp (:crux_tx_time tx-row)))
+  {::xt/tx-id (:crux_tx_id tx-row)
+   ::xt/tx-time (Date. (.getTime ^Timestamp (:crux_tx_time tx-row)))
    :corda-tx-id (:corda_tx_id tx-row)})
 
 (comment

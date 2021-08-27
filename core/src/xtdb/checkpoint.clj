@@ -1,16 +1,15 @@
 (ns xtdb.checkpoint
-  (:require [clojure.java.io :as io]
-            [clojure.tools.logging :as log]
+  (:require [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.io :as xio]
-            [xtdb.system :as sys]
-            [xtdb.tx :as tx])
+            [xtdb.system :as sys])
   (:import [java.io Closeable File]
            java.net.URI
            java.nio.charset.StandardCharsets
            [java.nio.file CopyOption Files FileVisitOption LinkOption OpenOption Path Paths StandardOpenOption]
            java.nio.file.attribute.FileAttribute
            [java.time Duration Instant]
-           [java.util.concurrent Executors ExecutorService TimeUnit]
+           [java.util.concurrent Executors TimeUnit]
            java.util.Date))
 
 (defprotocol CheckpointStore
@@ -155,7 +154,7 @@
   (upload-checkpoint [_ dir {:keys [tx ::cp-format]}]
     (let [from-path (.toPath ^File dir)
           cp-at (java.util.Date.)
-          cp-prefix (format "checkpoint-%s-%s" (:xt/tx-id tx) (xio/format-rfc3339-date cp-at))
+          cp-prefix (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))
           to-path (.resolve root-path cp-prefix)]
       (sync-path from-path to-path)
 

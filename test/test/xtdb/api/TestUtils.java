@@ -15,16 +15,16 @@ public class TestUtils {
     static final Keyword DELETE = Keyword.intern("xt/delete");
 
     static final Keyword DB_ID = Keyword.intern("xt/id");
-    static final Keyword VALID_TIME = Keyword.intern("xt/valid-time");
-    static final Keyword CONTENT_HASH = Keyword.intern("xt/content-hash");
-    static final Keyword DOC = Keyword.intern("xt/doc");
+    static final Keyword VALID_TIME = Keyword.intern("xtdb.api/valid-time");
+    static final Keyword CONTENT_HASH = Keyword.intern("xtdb.api/content-hash");
+    static final Keyword DOC = Keyword.intern("xtdb.api/doc");
 
-    static final Keyword TX_TIME = Keyword.intern("xt/tx-time");
-    static final Keyword TX_ID = Keyword.intern("xt/tx-id");
+    static final Keyword TX_TIME = Keyword.intern("xtdb.api/tx-time");
+    static final Keyword TX_ID = Keyword.intern("xtdb.api/tx-id");
     static final Keyword TX_EVENTS = Keyword.intern("xtdb.tx.event/tx-events");
-    static final Keyword TX = Keyword.intern("xt/tx");
+    static final Keyword TX = Keyword.intern("xtdb.api/tx");
 
-    static final Keyword TX_OPS = Keyword.intern("xt/tx-ops");
+    static final Keyword TX_OPS = Keyword.intern("xtdb.api/tx-ops");
 
     static final Duration duration = Duration.ofSeconds(10);
 

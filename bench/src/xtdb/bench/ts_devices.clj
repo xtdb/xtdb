@@ -222,18 +222,18 @@
                                           (reduce into []))
                          histories (for [r reading-ids]
                                      (xt/open-entity-history db r :asc {:with-docs? true
-                                                                          :start {:xt/valid-time  #inst "1970"}}))]
+                                                                          :start {::xt/valid-time  #inst "1970"}}))]
                      (try
                        (->> (for [history histories]
                               (for [entity-tx (iterator-seq history)]
-                                (update entity-tx :xt/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                                (update entity-tx ::xt/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                             (xio/merge-sort (fn [a b]
-                                              (compare (:xt/valid-time a) (:xt/valid-time b))))
-                            (partition-by :xt/valid-time)
+                                              (compare (::xt/valid-time a) (::xt/valid-time b))))
+                            (partition-by ::xt/valid-time)
                             (take 12)
                             (mapv (fn [group]
-                                    (let [battery-levels (sort (mapv (comp :reading/battery-level :xt/doc) group))]
-                                      [(:xt/valid-time (first group))
+                                    (let [battery-levels (sort (mapv (comp :reading/battery-level ::xt/doc) group))]
+                                      [(::xt/valid-time (first group))
                                        (first battery-levels)
                                        (last battery-levels)]))))
                        (finally

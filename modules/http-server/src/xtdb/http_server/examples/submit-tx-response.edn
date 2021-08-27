@@ -1,1 +1,1 @@
-{:xt/tx-id 6, :xt/tx-time #inst "2020-10-19T09:21:29Z"}
+{:xtdb.api/tx-id 6, :xtdb.api/tx-time #inst "2020-10-19T09:21:29Z"}

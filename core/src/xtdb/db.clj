@@ -1,6 +1,4 @@
-(ns ^:no-doc xtdb.db
-  (:require [clojure.set :as set]
-            [xtdb.codec :as c]))
+(ns ^:no-doc xtdb.db)
 
 (defprotocol Index
   (seek-values [this k])

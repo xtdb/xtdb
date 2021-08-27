@@ -144,10 +144,8 @@
         nil)
       tx-op))
 
-(defn- tx-log-entry->tx-source-records [source-partition topic formatter {:keys [xt/tx-ops
-                                                                                 xt/tx-id
-                                                                                 xt/tx-time]
-                                                                          :as tx}]
+(defn- tx-log-entry->tx-source-records [source-partition topic formatter
+                                        {::xt/keys [tx-ops tx-id tx-time] :as tx}]
   [(SourceRecord. source-partition
                   {"offset" tx-id}
                   topic
@@ -178,10 +176,8 @@
         [(:xt/id new-doc)
          new-doc]))))
 
-(defn- tx-log-entry->doc-source-records [source-partition topic formatter {:keys [xt/tx-ops
-                                                                                  xt/tx-id
-                                                                                  xt/tx-time]
-                                                                           :as tx}]
+(defn- tx-log-entry->doc-source-records [source-partition topic formatter
+                                         {::xt/keys [tx-ops tx-id tx-time], :as tx}]
   (log/info "tx-ops:" tx-ops)
   (for [[op :as tx-op] tx-ops
         :when (not (contains? #{:xt/fn :xt/match} op))

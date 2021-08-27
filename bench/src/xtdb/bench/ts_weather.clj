@@ -300,18 +300,18 @@
                                             (reduce into []))
                          histories (for [c condition-ids]
                                      (xt/open-entity-history db c :asc {:with-docs? true
-                                                                         :start {:xt/valid-time  #inst "1970"}}))]
+                                                                         :start {::xt/valid-time  #inst "1970"}}))]
                      (try
                        (->> (for [history histories]
                               (for [entity-tx (iterator-seq history)]
-                                (update entity-tx :xt/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
+                                (update entity-tx ::xt/valid-time #(Date/from (.truncatedTo (.toInstant ^Date %) ChronoUnit/HOURS)))))
                             (xio/merge-sort (fn [a b]
-                                              (compare (:xt/valid-time a) (:xt/valid-time b))))
-                            (partition-by :xt/valid-time)
+                                              (compare (::xt/valid-time a) (::xt/valid-time b))))
+                            (partition-by ::xt/valid-time)
                             (take 24)
                             (mapv (fn [group]
-                                    (let [temperatures (sort (mapv (comp :condition/temperature :xt/doc) group))]
-                                      [(:xt/valid-time (first group))
+                                    (let [temperatures (sort (mapv (comp :condition/temperature ::xt/doc) group))]
+                                      [(::xt/valid-time (first group))
                                        (trunc (/ (reduce + temperatures) (count group)) 2)
                                        (trunc (first temperatures) 2)
                                        (trunc (last temperatures) 2)]))))

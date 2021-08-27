@@ -2,12 +2,12 @@
   (:require [clojure.java.io :as io]
             [clojure.set :as set]
             [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.io :as xio]
             [xtdb.status :as status]
             [xtdb.system :as sys]
-            [xtdb.tx :as tx]
             [xtdb.tx.subscribe :as tx-sub])
   (:import clojure.lang.MapEntry
            [xtdb.kafka.nippy NippyDeserializer NippySerializer]
@@ -134,8 +134,8 @@
 
 (defn- tx-record->tx-log-entry [^ConsumerRecord record]
   {:xtdb.tx.event/tx-events (.value record)
-   :xt/tx-id (.offset record)
-   :xt/tx-time (Date. (.timestamp record))})
+   ::xt/tx-id (.offset record)
+   ::xt/tx-time (Date. (.timestamp record))})
 
 (defn- open-consumer ^org.apache.kafka.clients.consumer.KafkaConsumer [{:keys [kafka-config tx-topic]} after-tx-id]
   (let [tp-offsets {(TopicPartition. tx-topic 0) (some-> after-tx-id inc)}]
@@ -176,8 +176,8 @@
     (let [tx-send-future (.send producer (ProducerRecord. tx-topic nil tx-events))]
       (delay
         (let [record-meta ^RecordMetadata @tx-send-future]
-          {:xt/tx-id (.offset record-meta)
-           :xt/tx-time (Date. (.timestamp record-meta))}))))
+          {::xt/tx-id (.offset record-meta)
+           ::xt/tx-time (Date. (.timestamp record-meta))}))))
 
   (open-tx-log [this after-tx-id]
     (let [consumer (open-consumer this after-tx-id)]
@@ -194,7 +194,7 @@
       (let [tx-tp (TopicPartition. tx-topic 0)
             end-offset (-> (.endOffsets consumer [tx-tp]) (get tx-tp))]
         (when (pos? end-offset)
-          {:xt/tx-id (dec end-offset)}))))
+          {::xt/tx-id (dec end-offset)}))))
 
   status/Status
   (status-map [_]

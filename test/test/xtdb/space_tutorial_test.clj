@@ -16,11 +16,11 @@
 
 (defn filter-appearance [description]
   (xt/q (xt/db *api*)
-          {:find '[name IUPAC]
-           :where '[[e :common-name name]
-                    [e :IUPAC-name IUPAC]
-                    [e :appearance appearance]]
-           :args [{'appearance description}]}))
+        {:find '[name IUPAC]
+         :where '[[e :common-name name]
+                  [e :IUPAC-name IUPAC]
+                  [e :appearance appearance]]
+         :args [{'appearance description}]}))
 
 (defn put-all! [docs]
   (fix/submit+await-tx (for [doc docs]
@@ -29,11 +29,11 @@
 (defn stock-check
   [company-id item]
   {:result (xt/q (xt/db *api*)
-                   {:find '[name funds stock]
-                    :where ['[e :company-name name]
-                            '[e :credits funds]
-                            ['e item 'stock]]
-                    :args [{'e company-id}]})
+                 {:find '[name funds stock]
+                  :where ['[e :company-name name]
+                          '[e :credits funds]
+                          ['e item 'stock]]
+                  :args [{'e company-id}]})
    :item item})
 
 (defn format-stock-check [{:keys [result item] :as stock-check}]
@@ -43,8 +43,8 @@
 
 (defn full-query [node]
   (xt/q (xt/db node)
-          '{:find [(pull id [*])]
-            :where [[e :xt/id id]]}))
+        '{:find [(pull id [*])]
+          :where [[e :xt/id id]]}))
 
 (t/deftest space-tutorial-test
   (t/testing "earth-test"
@@ -60,9 +60,9 @@
 
     (t/is (= #{["secret note"]}
              (xt/q (xt/db *api*)
-                     {:find '[belongings]
-                      :where '[[e :cargo belongings]]
-                      :args [{'belongings "secret note"}]}))))
+                   {:find '[belongings]
+                    :where '[[e :cargo belongings]]
+                    :args [{'belongings "secret note"}]}))))
 
   (t/testing "pluto-tests"
     (fix/submit+await-tx [[:xt/put
@@ -190,53 +190,53 @@
             (xt/entity (xt/db *api*) :commodity/borax)))
     (t/is (= #{[:commodity/Pu] [:commodity/Au]}
              (xt/q (xt/db *api*)
-                     '{:find [element]
-                       :where [[element :type :element/metal]]})))
+                   '{:find [element]
+                     :where [[element :type :element/metal]]})))
     (t/is (=
            (xt/q (xt/db *api*)
-                   '{:find [element]
-                     :where [[element :type :element/metal]]} )
+                 '{:find [element]
+                   :where [[element :type :element/metal]]} )
 
            (xt/q (xt/db *api*)
-                   {:find '[element]
-                    :where '[[element :type :element/metal]]} )
+                 {:find '[element]
+                  :where '[[element :type :element/metal]]} )
 
            (xt/q (xt/db *api*)
-                   (quote
-                    {:find [element]
-                     :where [[element :type :element/metal]]}) )))
+                 (quote
+                  {:find [element]
+                   :where [[element :type :element/metal]]}) )))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
              (xt/q (xt/db *api*)
-                     '{:find [name]
-                       :where [[e :type :element/metal]
-                               [e :common-name name]]} )))
+                   '{:find [name]
+                     :where [[e :type :element/metal]
+                             [e :common-name name]]} )))
 
     (t/is (= #{["Nitrogen" 1.2506] ["Carbon" 2.267] ["Methane" 0.717] ["Borax" 1.73] ["Gold" 19.3] ["Plutonium" 19.816]}
              (xt/q (xt/db *api*)
-                     '{:find [name rho]
-                       :where [[e :density rho]
-                               [e :common-name name]]})))
+                   '{:find [name rho]
+                     :where [[e :density rho]
+                             [e :common-name name]]})))
 
     (t/is (= #{["Plutonium"]}
              (xt/q (xt/db *api*)
-                     '{:find [name]
-                       :where [[e :common-name name]
-                               [e :radioactive true]]})))
+                   '{:find [name]
+                     :where [[e :common-name name]
+                             [e :radioactive true]]})))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
              (xt/q (xt/db *api*)
-                     {:find '[name]
-                      :where '[[e :type t]
-                               [e :common-name name]]
-                      :args [{'t :element/metal}]})))
+                   {:find '[name]
+                    :where '[[e :type t]
+                             [e :common-name name]]
+                    :args [{'t :element/metal}]})))
 
     (t/is (= #{["Gold"] ["Plutonium"]}
              (xt/q (xt/db *api*)
-                     {:find '[name]
-                      :where '[[e :type t]
-                               [e :common-name name]]
-                      :args [{'t :element/metal}]})))
+                   {:find '[name]
+                    :where '[[e :type t]
+                             [e :common-name name]]
+                    :args [{'t :element/metal}]})))
 
     (t/is (= (filter-appearance "white solid")
              #{["Borax" "Sodium tetraborate decahydrate"]}
@@ -302,24 +302,24 @@
 
     (t/is (= #{[true :Full]}
              (xt/q (xt/db *api* #inst "2115-07-03")
-                     '{:find [cover type]
-                       :where [[e :consumer-id :RJ29sUU]
-                               [e :cover? cover]
-                               [e :cover-type type]]})))
+                   '{:find [cover type]
+                     :where [[e :consumer-id :RJ29sUU]
+                             [e :cover? cover]
+                             [e :cover-type type]]})))
 
     (t/is (= #{}
              (xt/q (xt/db *api* #inst "2112-07-03")
-                     '{:find [cover type]
-                       :where [[e :consumer-id :RJ29sUU]
-                               [e :cover? cover]
-                               [e :cover-type type]]})))
+                   '{:find [cover type]
+                     :where [[e :consumer-id :RJ29sUU]
+                             [e :cover? cover]
+                             [e :cover-type type]]})))
 
     (t/is (= #{[true :Promotional]}
              (xt/q (xt/db *api* #inst "2111-07-03")
-                     '{:find [cover type]
-                       :where [[e :consumer-id :RJ29sUU]
-                               [e :cover? cover]
-                               [e :cover-type type]]})))
+                   '{:find [cover type]
+                     :where [[e :consumer-id :RJ29sUU]
+                             [e :cover? cover]
+                             [e :cover-type type]]})))
     (fix/submit+await-tx [[:xt/put
                            (assoc manifest :badges ["SETUP" "PUT" "DATALOG-QUERIES"
                                                     "BITEMP"])]])
@@ -471,29 +471,29 @@
 
     (t/is (= doc4 (xt/entity (xt/db *api* #inst "2114-01-01T09") :kaarlang/clients)))
 
-    (t/is (= [{:xt/tx-id 0, :xt/valid-time #inst "2110-01-01T09", :xt/content-hash (c/hash-doc doc1), :xt/doc doc1}
-              {:xt/tx-id 0, :xt/valid-time #inst "2111-01-01T09", :xt/content-hash (c/hash-doc doc2), :xt/doc doc2}
-              {:xt/tx-id 0, :xt/valid-time #inst "2113-01-01T09", :xt/content-hash (c/hash-doc doc3), :xt/doc doc3}
-              {:xt/tx-id 0, :xt/valid-time #inst "2114-01-01T09", :xt/content-hash (c/hash-doc doc4), :xt/doc doc4}
-              {:xt/tx-id 0, :xt/valid-time #inst "2115-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer), :xt/doc nil}]
+    (t/is (= [{::xt/tx-id 0, ::xt/valid-time #inst "2110-01-01T09", ::xt/content-hash (c/hash-doc doc1), ::xt/doc doc1}
+              {::xt/tx-id 0, ::xt/valid-time #inst "2111-01-01T09", ::xt/content-hash (c/hash-doc doc2), ::xt/doc doc2}
+              {::xt/tx-id 0, ::xt/valid-time #inst "2113-01-01T09", ::xt/content-hash (c/hash-doc doc3), ::xt/doc doc3}
+              {::xt/tx-id 0, ::xt/valid-time #inst "2114-01-01T09", ::xt/content-hash (c/hash-doc doc4), ::xt/doc doc4}
+              {::xt/tx-id 0, ::xt/valid-time #inst "2115-01-01T09", ::xt/content-hash (c/new-id c/nil-id-buffer), ::xt/doc nil}]
 
              (->> (xt/entity-history (xt/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? true})
-                  (mapv #(dissoc % :xt/tx-time)))))
+                  (mapv #(dissoc % ::xt/tx-time)))))
 
     (fix/submit+await-tx [[:xt/delete :kaarlang/clients #inst "2110-01-01" #inst "2116-01-01"]])
 
     (t/is nil? (xt/entity (xt/db *api* #inst "2114-01-01T09") :kaarlang/clients))
 
-    (t/is (= [{:xt/tx-id 1, :xt/valid-time #inst "2110-01-01T00", :xt/content-hash (c/new-id c/nil-id-buffer)}
-              {:xt/tx-id 1, :xt/valid-time #inst "2110-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
-              {:xt/tx-id 1, :xt/valid-time #inst "2111-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
-              {:xt/tx-id 1, :xt/valid-time #inst "2113-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
-              {:xt/tx-id 1, :xt/valid-time #inst "2114-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
-              {:xt/tx-id 1, :xt/valid-time #inst "2115-01-01T09", :xt/content-hash (c/new-id c/nil-id-buffer)}
-              {:xt/tx-id 0, :xt/valid-time #inst "2116-01-01T00", :xt/content-hash (c/new-id c/nil-id-buffer)}]
+    (t/is (= [{::xt/tx-id 1, ::xt/valid-time #inst "2110-01-01T00", ::xt/content-hash (c/new-id c/nil-id-buffer)}
+              {::xt/tx-id 1, ::xt/valid-time #inst "2110-01-01T09", ::xt/content-hash (c/new-id c/nil-id-buffer)}
+              {::xt/tx-id 1, ::xt/valid-time #inst "2111-01-01T09", ::xt/content-hash (c/new-id c/nil-id-buffer)}
+              {::xt/tx-id 1, ::xt/valid-time #inst "2113-01-01T09", ::xt/content-hash (c/new-id c/nil-id-buffer)}
+              {::xt/tx-id 1, ::xt/valid-time #inst "2114-01-01T09", ::xt/content-hash (c/new-id c/nil-id-buffer)}
+              {::xt/tx-id 1, ::xt/valid-time #inst "2115-01-01T09", ::xt/content-hash (c/new-id c/nil-id-buffer)}
+              {::xt/tx-id 0, ::xt/valid-time #inst "2116-01-01T00", ::xt/content-hash (c/new-id c/nil-id-buffer)}]
 
              (->> (xt/entity-history (xt/db *api* #inst "2116-01-01T09") :kaarlang/clients :asc {:with-docs? false})
-                  (mapv #(dissoc % :xt/tx-time)))))))
+                  (mapv #(dissoc % ::xt/tx-time)))))))
 
 (t/deftest Oumuamua-test
   (fix/submit+await-tx [[:xt/put {:xt/id :person/kaarlang

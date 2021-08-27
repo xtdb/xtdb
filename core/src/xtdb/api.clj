@@ -12,6 +12,12 @@
            [java.util Date Map]
            java.util.function.Supplier))
 
+(def ^:private date? (partial instance? Date))
+
+(s/def ::tx-id nat-int?)
+(s/def ::tx-time date?)
+(s/def ::tx (s/keys :opt [::tx-id ::tx-time]))
+
 (s/def :crux.db/id c/valid-id?)
 (s/def :xt/id c/valid-id?)
 (s/def :xt/evicted? boolean?)
@@ -64,9 +70,9 @@
   (listen ^java.lang.AutoCloseable [node event-opts f]
     "Attaches a listener to XTDB's event bus.
 
-  `event-opts` should contain `:xt/event-type`, along with any other options the event-type requires.
+  `event-opts` should contain `:xtdb.api/event-type`, along with any other options the event-type requires.
 
-  We currently only support one public event-type: `:xtdb/indexed-tx`.
+  We currently only support one public event-type: `:xtdb.api/indexed-tx`.
   Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
 
   `(.close ...)` the return value to detach the listener.
@@ -107,7 +113,7 @@
 
   (open-tx-log ^java.io.Closeable [this after-tx-id with-ops?]
     "Reads the transaction log. Optionally includes
-  operations, which allow the contents under the :xt/tx-ops
+  operations, which allow the contents under the ::tx-ops
   key to be piped into (submit-tx tx-ops) of another
   XTDB instance.
 
@@ -174,7 +180,7 @@
 
   Options:
   * `sort-order`: `#{:asc :desc}`
-  * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:xt/doc` key
+  * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:xtdb.api/doc` key
   * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
   * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
   * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
@@ -182,11 +188,11 @@
   No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
   Each entry in the result contains the following keys:
-  * `:xt/valid-time`,
-  * `:xt/tx-time`,
-  * `:xt/tx-id`,
-  * `:xt/content-hash`
-  * `:xt/doc` (see `with-docs?`).")
+  * `:xtdb.api/valid-time`,
+  * `:xtdb.api/tx-time`,
+  * `:xtdb.api/tx-id`,
+  * `:xtdb.api/content-hash`
+  * `:xtdb.api/doc` (see `with-docs?`).")
 
   (open-entity-history
     ^xtdb.api.ICursor [db eid sort-order]
@@ -206,7 +212,7 @@
   the specified time.")
 
   (db-basis [db]
-    "returns the basis of this db snapshot - a map containing `:xt/valid-time` and `:xt/tx`")
+    "returns the basis of this db snapshot - a map containing `:xtdb.api/valid-time` and `:xtdb.api/tx`")
 
   (^java.io.Closeable with-tx [db tx-ops]
    "Returns a new db value with the tx-ops speculatively applied.
@@ -294,16 +300,16 @@
     "Returns a DB snapshot at the given time.
 
   db-basis: (optional map, all keys optional)
-    - `:xt/valid-time` (Date):
+    - `:xtdb.api/valid-time` (Date):
         If provided, DB won't return any data with a valid-time greater than the given time.
         Defaults to now.
-    - `:xt/tx` (Map):
+    - `:xtdb.api/tx` (Map):
         If provided, DB will be a snapshot as of the given transaction.
         Defaults to the latest completed transaction.
-    - `:xt/tx-time` (Date):
-        Shorthand for `{:xt/tx {:xt/tx-time <>}}`
+    - `:xtdb.api/tx-time` (Date):
+        Shorthand for `{::tx {::tx-time <>}}`
 
-  Providing both `:xt/tx` and `:xt/tx-time` is undefined.
+  Providing both `:xtdb.api/tx` and `:xtdb.api/tx-time` is undefined.
   Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
   If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
@@ -315,16 +321,16 @@
     "Opens a DB snapshot at the given time.
 
   db-basis: (optional map, all keys optional)
-    - `:xt/valid-time` (Date):
+    - `:xtdb.api/valid-time` (Date):
         If provided, DB won't return any data with a valid-time greater than the given time.
         Defaults to now.
-    - `:xt/tx` (Map):
+    - `:xtdb.api/tx` (Map):
         If provided, DB will be a snapshot as of the given transaction.
         Defaults to the latest completed transaction.
-    - `:xt/tx-time` (Date):
-        Shorthand for `{:xt/tx {:xt/tx-time <>}}`
+    - `:xtdb.api/tx-time` (Date):
+        Shorthand for `{::tx {::tx-time <>}}`
 
-  Providing both `:xt/tx` and `:xt/tx-time` is undefined.
+  Providing both `:xtdb.api/tx` and `:xtdb.api/tx-time` is undefined.
   Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
   If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
@@ -372,11 +378,11 @@
                  [db eid sort-order]
                  ^xtdb.api.ICursor
                  [db eid sort-order {:keys [with-docs? with-corrections?]
-                                     {start-vt :xt/valid-time
-                                      start-tt :xt/tx-time
-                                      start-tx-id :xt/tx-id} :start
-                                     {end-vt :xt/valid-time
-                                      end-tt :xt/tx-time
-                                      end-tx-id :xt/tx-id} :end}])]
+                                     {start-vt ::valid-time
+                                      start-tt ::tx-time
+                                      start-tx-id ::tx-id} :start
+                                     {end-vt ::valid-time
+                                      end-tt ::tx-time
+                                      end-tx-id ::tx-id} :end}])]
   (alter-meta! #'entity-history assoc :arglists arglists)
   (alter-meta! #'open-entity-history assoc :arglists arglists))

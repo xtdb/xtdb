@@ -2,12 +2,12 @@
   (:require [clojure.java.data :as jd]
             [clojure.spec.alpha :as s]
             [clojure.string :as str]
+            [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.db :as db]
             [xtdb.document-store :as ds]
             [xtdb.io :as xio]
             [xtdb.system :as sys]
-            [xtdb.tx :as tx]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.connection :as jdbcc]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc.result-set :as jdbcr]
@@ -79,8 +79,8 @@
                       (jdbc/execute-one! pool ["SELECT * FROM tx_events WHERE ROWID = ?" id]
                                          {:return-keys true :builder-fn jdbcr/as-unqualified-lower-maps}))
                     tx-result)]
-    {:xt/tx-id (long (:event_offset tx-result))
-     :xt/tx-time (-> (:tx_time tx-result) (->date dialect))}))
+    {::xt/tx-id (long (:event_offset tx-result))
+     ::xt/tx-time (-> (:tx_time tx-result) (->date dialect))}))
 
 (defmulti doc-exists-sql
   (fn [dialect doc-id]
@@ -151,8 +151,8 @@
       (xio/->cursor #(run! xio/try-close [rs stmt conn])
                     (->> (resultset-seq rs)
                          (map (fn [y]
-                                {:xt/tx-id (long (:event_offset y))
-                                 :xt/tx-time (-> (:tx_time y) (->date dialect))
+                                {::xt/tx-id (long (:event_offset y))
+                                 ::xt/tx-time (-> (:tx_time y) (->date dialect))
                                  :xtdb.tx.event/tx-events (-> (:v y) (<-blob dialect))}))))))
 
   (subscribe [this after-tx-id f]
@@ -162,7 +162,7 @@
     (when-let [max-offset (-> (jdbc/execute-one! pool ["SELECT max(EVENT_OFFSET) AS max_offset FROM tx_events WHERE topic = 'txs'"]
                                                  {:builder-fn jdbcr/as-unqualified-lower-maps})
                               :max_offset)]
-      {:xt/tx-id (long max-offset)}))
+      {::xt/tx-id (long max-offset)}))
 
   Closeable
   (close [_]

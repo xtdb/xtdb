@@ -65,7 +65,7 @@
                               :bytes-indexed 0
                               :doc-count 0})]
     (bus/listen (:bus node)
-                {:xt/event-types #{:xtdb.tx/indexed-tx}}
+                {::xt/event-types #{:xtdb.tx/indexed-tx}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
                   (swap! !index-metrics (fn [index-metrics-map]
                                           (-> index-metrics-map

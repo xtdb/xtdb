@@ -35,23 +35,23 @@
     (t/testing "`put` on documents"
       (t/testing "put with key contained in document"
         (.put sink-task [(new-sink-record {:value {:xt/id :foo}})])
-        (t/is (xt/await-tx *api* {:xt/tx-id 0}))
+        (t/is (xt/await-tx *api* {::xt/tx-id 0}))
         (t/is (= {:xt/id (c/new-id :foo)} (xt/entity (xt/db *api*) :foo))))
       (t/testing "put with key contained in sink record"
         (.put sink-task [(new-sink-record {:key :bar
                                            :value {:hello "world"}})])
-        (t/is (xt/await-tx *api* {:xt/tx-id 1}))
+        (t/is (xt/await-tx *api* {::xt/tx-id 1}))
         (t/is (= {:xt/id (c/new-id :bar) :hello "world"} (xt/entity (xt/db *api*) :bar)))))
     (t/testing "`delete` on documents - (key with an empty document)"
       (.put sink-task [(new-sink-record {:key :foo})])
-      (t/is (xt/await-tx *api* {:xt/tx-id 2}))
+      (t/is (xt/await-tx *api* {::xt/tx-id 2}))
       (t/is (nil? (xt/entity (xt/db *api*) :foo))))
     (.stop sink-task))
   (t/testing "testing sinktask with custom id.key config"
     (let [sink-task (doto (XtdbSinkTask.) (.start {"url" *api-url*
                                                    "id.key" "kafka/id"}))]
       (.put sink-task [(new-sink-record {:value {:kafka/id :kafka-id}})])
-      (t/is (xt/await-tx *api* {:xt/tx-id 3}))
+      (t/is (xt/await-tx *api* {::xt/tx-id 3}))
       (t/is (= {:kafka/id :kafka-id
                 :xt/id (c/new-id :kafka-id)} (xt/entity (xt/db *api*) :kafka-id)))
       (.stop sink-task))))
@@ -73,28 +73,28 @@
                                                  (offsets [this ps] (map #(.offset this %) ps))))))))]
     (t/testing "XtdbSourceTask outputs single operation transactions"
       (t/testing ":xt/put"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :hello}]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :hello}]])]
           (t/is
            (= [[:xt/put {:xt/id :hello} tx-time]]
               (get-tx-from-source-task source-task)))))
       (t/testing ":xt/match"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/match :hello {:xt/id :hello}]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/match :hello {:xt/id :hello}]])]
           (t/is
            (= [[:xt/match (c/new-id :hello) {:xt/id :hello}]]
               (get-tx-from-source-task source-task)))))
       (t/testing ":xt/delete"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/delete :hello]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/delete :hello]])]
           (t/is
            (= [[:xt/delete (c/new-id :hello) tx-time]]
               (get-tx-from-source-task source-task)))))
       (t/testing ":xt/evict"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/evict :hello]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/evict :hello]])]
           (t/is
            (= [[:xt/evict (c/new-id :hello)]]
               (get-tx-from-source-task source-task))))))
 
     (t/testing "XtdbSourceTask outputs a set of mixed transactions"
-      (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :bar :age 20}]
+      (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :bar :age 20}]
                                                                          [:xt/put {:xt/id :foo}]
                                                                          [:xt/match :foo {:xt/id :foo}]])]
         (t/is
@@ -105,14 +105,14 @@
 
     (t/testing "XtdbSourceTask doesn't break on failed transactions"
       (t/testing "Failed transactions are skipped, outputted as nil"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :bar2}]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :bar2}]
                                                                            [:xt/match :bar2 {:xt/id :bar2 :key "not-found"}]
                                                                            [:xt/put {:xt/id :foo2}]])]
           (t/is
            (= nil
               (get-tx-from-source-task source-task)))))
       (t/testing "Continues to read post a failed transaction"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :test}]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :test}]])]
           (t/is
            (= [[:xt/put {:xt/id :test} tx-time]]
               (get-tx-from-source-task source-task))))))
@@ -136,22 +136,22 @@
                                                    (offsets [this ps] (map #(.offset this %) ps))))))))
           hello-doc-id (str (c/new-id :hello-doc))]
       (t/testing ":xt/put"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :hello-doc}]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/put {:xt/id :hello-doc}]])]
           (t/is
            (= {:doc {:xt/id :hello-doc}
                :id hello-doc-id}
               (first (get-docs-from-source-task source-task))))))
       (t/testing ":xt/match"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/match :hello {:xt/id :hello-doc}]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/match :hello {:xt/id :hello-doc}]])]
           (t/is (empty? (get-docs-from-source-task source-task)))))
       (t/testing ":xt/delete"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/delete :hello-doc]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/delete :hello-doc]])]
           (t/is
            (= {:doc nil
                :id hello-doc-id}
               (first (get-docs-from-source-task source-task))))))
       (t/testing ":xt/evict"
-        (let [{:xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/evict :hello-doc]])]
+        (let [{::xt/keys [tx-time] :as tx} (fix/submit+await-tx *api* [[:xt/evict :hello-doc]])]
           (= {:doc nil
                :id hello-doc-id}
               (first (get-docs-from-source-task source-task)))))

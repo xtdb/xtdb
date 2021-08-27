@@ -310,18 +310,18 @@ EDN::
 +
 [source,clojure]
 ----
-({:xt/tx-time #inst "2020-10-16T14:24:17.025-00:00",
-  :xt/tx-id 3,
-  :xt/valid-time #inst "2020-10-16T14:24:17.025-00:00",
-  :xt/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9"}
- {:xt/tx-time #inst "2020-10-16T14:29:31.928-00:00",
-  :xt/tx-id 4,
-  :xt/valid-time #inst "2020-10-16T14:29:31.928-00:00",
-  :xt/content-hash #xt/id "88d61c8de82eda2a53784bb0438e1a751cd68f96"}
- {:xt/tx-time #inst "2020-10-16T14:29:35.664-00:00",
-  :xt/tx-id 5,
-  :xt/valid-time #inst "2020-10-16T14:29:35.664-00:00",
-  :xt/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9"})
+({::xt/tx-time #inst "2020-10-16T14:24:17.025-00:00",
+  ::xt/tx-id 3,
+  ::xt/valid-time #inst "2020-10-16T14:24:17.025-00:00",
+  ::xt/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9"}
+ {::xt/tx-time #inst "2020-10-16T14:29:31.928-00:00",
+  ::xt/tx-id 4,
+  ::xt/valid-time #inst "2020-10-16T14:29:31.928-00:00",
+  ::xt/content-hash #xt/id "88d61c8de82eda2a53784bb0438e1a751cd68f96"}
+ {::xt/tx-time #inst "2020-10-16T14:29:35.664-00:00",
+  ::xt/tx-id 5,
+  ::xt/valid-time #inst "2020-10-16T14:29:35.664-00:00",
+  ::xt/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9"})
 ----
 ====
 
@@ -388,10 +388,10 @@ EDN::
 [source,clojure]
 ----
 {:xt/id #xt/id "5aeebab117b892fa42002146e4c62be676bc4621",
- :xt/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9",
- :xt/valid-time #inst "2020-10-16T14:29:35.664-00:00",
- :xt/tx-time #inst "2020-10-16T14:29:35.664-00:00",
- :xt/tx-id 5}
+ ::xt/content-hash #xt/id "99747f80357c336ee5efd073c878313bf85b07f9",
+ ::xt/valid-time #inst "2020-10-16T14:29:35.664-00:00",
+ ::xt/tx-time #inst "2020-10-16T14:29:35.664-00:00",
+ ::xt/tx-id 5}
 ----
 ====
 
@@ -624,7 +624,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+{::xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
 ----
 ====
 
@@ -679,7 +679,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-id 5, :xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+{::xt/tx-id 5, ::xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
 ----
 ====
 
@@ -734,7 +734,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+{::xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
 ----
 ====
 
@@ -812,14 +812,14 @@ EDN::
 +
 [source,clojure]
 ----
-({:xt/tx-id 0,
-  :xt/tx-time #inst "2020-10-16T09:02:43.429-00:00",
+({::xt/tx-id 0,
+  ::xt/tx-time #inst "2020-10-16T09:02:43.429-00:00",
   :xtdb.tx.event/tx-events [[:xt/put
   			   #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
 			     #xt/id "f441402b3c5d37365203947aabe85cf471498bf0"
 			     #inst "2020-06-20T20:05:50.000-00:00"]]}
- {:xt/tx-id 1,
-  :xt/tx-time #inst "2020-10-16T09:28:27.785-00:00",
+ {::xt/tx-id 1,
+  ::xt/tx-time #inst "2020-10-16T09:28:27.785-00:00",
   :xtdb.tx.event/tx-events [[:xt/put
   			   #xt/id "83bed47ace572cb94c2f137f58bce73b9b7d0039"
 			     #xt/id "f441402b3c5d37365203947aabe85cf471498bf0"
@@ -889,7 +889,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-id 6, :xt/tx-time #inst "2020-10-19T09:21:29Z"}
+{::xt/tx-id 6, ::xt/tx-time #inst "2020-10-19T09:21:29Z"}
 ----
 ====
 
@@ -988,7 +988,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-id 5, :xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
+{::xt/tx-id 5, ::xt/tx-time #inst "2020-10-16T14:29:35.664-00:00"}
 ----
 ====
 
@@ -1034,7 +1034,7 @@ EDN::
 +
 [source,clojure]
 ----
-{:xt/tx-id 5}
+{::xt/tx-id 5}
 ----
 ====
 

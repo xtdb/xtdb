@@ -14,8 +14,8 @@ import static org.junit.Assert.*;
 import static xtdb.api.TestUtils.*;
 
 public class TransactionInstantTest {
-    private static final Keyword TX_ID = Keyword.intern("xt/tx-id");
-    private static final Keyword TX_TIME = Keyword.intern("xt/tx-time");
+    private static final Keyword TX_ID = Keyword.intern("xtdb.api/tx-id");
+    private static final Keyword TX_TIME = Keyword.intern("xtdb.api/tx-time");
 
     @Test
     public void nullFactoryTest() {

@@ -1,8 +1,8 @@
 (ns xtdb.fixtures.checkpoint-store
-  (:require [xtdb.fixtures :as fix]
-            [clojure.java.io :as io]
+  (:require [xtdb.api :as xt]
+            [xtdb.fixtures :as fix]
             [xtdb.checkpoint :as cp]
-            [xtdb.tx :as tx]
+            [clojure.java.io :as io]
             [clojure.test :as t]))
 
 (defn test-checkpoint-store [cp-store]
@@ -10,9 +10,9 @@
     (let [src-dir (doto (io/file local-dir "src")
                     (.mkdirs))
           cp-1 {::cp/cp-format ::foo-cp-format
-                :tx {:xt/tx-id 1}}
+                :tx {::xt/tx-id 1}}
           cp-2 {::cp/cp-format ::foo-cp-format
-                :tx {:xt/tx-id 2}}]
+                :tx {::xt/tx-id 2}}]
 
       (t/testing "first checkpoint"
         (spit (io/file src-dir "hello.txt") "Hello world")

@@ -37,7 +37,7 @@
       (fix/submit+await-tx [[:xt/put {:xt/id :hello}]]))
 
     (with-cluster-node
-      (t/is (= {:xt/tx-id 0}
+      (t/is (= {::xt/tx-id 0}
                (xt/latest-submitted-tx *api*)))
       (t/is (= {:xt/id :hello}
                (xt/entity (xt/db *api*) :hello))))))
@@ -50,7 +50,7 @@
           (fix/submit+await-tx  [[:xt/put {:xt/id (str "id-" x)}]])))
 
       (with-cluster-node
-        (t/is (= {:xt/tx-id (dec n)}
+        (t/is (= {::xt/tx-id (dec n)}
                  (xt/latest-submitted-tx *api*)))
         (t/is (= n
                  (count (xt/q (xt/db *api*) '{:find [?e]

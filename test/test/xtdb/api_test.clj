@@ -40,12 +40,12 @@
     (t/testing "put"
       (let [tx (fix/submit+await-tx [[:xt/put content-ivan valid-time]])]
         (t/is (= {:xt/id :ivan, :name "Ivan"}
-                 (xt/entity (xt/db *api* {:xt/valid-time valid-time, :xt/tx tx}) :ivan)))))
+                 (xt/entity (xt/db *api* {::xt/valid-time valid-time, ::xt/tx tx}) :ivan)))))
 
     (t/testing "delete"
       (let [delete-tx (xt/submit-tx *api* [[:xt/delete :ivan valid-time]])]
         (xt/await-tx *api* delete-tx)
-        (t/is (nil? (xt/entity (xt/db *api* {:xt/valid-time valid-time, :xt/tx delete-tx}) :ivan)))))))
+        (t/is (nil? (xt/entity (xt/db *api* {::xt/valid-time valid-time, ::xt/tx delete-tx}) :ivan)))))))
 
 (t/deftest test-empty-db
   (let [empty-db (xt/db *api*)]
@@ -155,8 +155,8 @@
               ivan-crux-id (c/hash-doc ivan)]
           (t/is (= (merge submitted-tx
                           {:xt/id (c/new-id :ivan)
-                           :xt/content-hash ivan-crux-id
-                           :xt/valid-time valid-time})
+                           ::xt/content-hash ivan-crux-id
+                           ::xt/valid-time valid-time})
                    entity-tx))
           (t/is (= [(dissoc entity-tx :xt/id)] (xt/entity-history db :ivan :asc)))
 
@@ -230,12 +230,12 @@
           (let [result (iterator-seq tx-log-iterator)]
             (t/is (not (realized? result)))
             (t/is (= [(assoc tx1
-                             :xt/tx-ops [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
+                             ::xt/tx-ops [[:xt/put {:xt/id :ivan :name "Ivan"} valid-time]])]
                      result))
             (t/is (realized? result)))))
 
       (t/testing "from tx id - doesnt't include itself"
-        (with-open [tx-log-iterator (xt/open-tx-log *api* (:xt/tx-id tx1) false)]
+        (with-open [tx-log-iterator (xt/open-tx-log *api* (::xt/tx-id tx1) false)]
           (t/is (empty? (iterator-seq tx-log-iterator)))))
 
       (t/testing "tx log skips failed transactions"
@@ -257,14 +257,14 @@
                 (t/is (= 2 (count result))))))))
 
       (t/testing "from tx id - doesn't include items <= `after-tx-id`"
-        (with-open [tx-log-iterator (xt/open-tx-log *api* (:xt/tx-id tx1) false)]
+        (with-open [tx-log-iterator (xt/open-tx-log *api* (::xt/tx-id tx1) false)]
           (t/is (= 1 (count (iterator-seq tx-log-iterator))))))
 
       (t/testing "match includes eid"
         (let [tx (fix/submit+await-tx [[:xt/match :foo nil]])]
-          (with-open [tx-log (xt/open-tx-log *api* (dec (:xt/tx-id tx)) true)]
+          (with-open [tx-log (xt/open-tx-log *api* (dec (::xt/tx-id tx)) true)]
             (t/is (= [:xt/match (c/new-id :foo) (c/new-id nil)]
-                     (-> (iterator-seq tx-log) first :xt/tx-ops first))))))
+                     (-> (iterator-seq tx-log) first ::xt/tx-ops first))))))
 
       ;; Intermittent failure on Kafka, see #1256
       (when-not (contains? #{:local-kafka :local-kafka-transit} *node-type*)
@@ -281,21 +281,21 @@
                                           [:xt/fn :increment-age-2 :jack]])]
             (t/is (true? (xt/tx-committed? *api* tx4)))
             (with-open [tx-log-iterator (xt/open-tx-log *api* nil true)]
-              (let [tx-ops (-> tx-log-iterator iterator-seq last :xt/tx-ops)]
+              (let [tx-ops (-> tx-log-iterator iterator-seq last ::xt/tx-ops)]
                 (t/is (= [:xt/fn
                           (c/new-id :increment-age-2)
-                          {:xt/tx-ops [[:xt/fn
+                          {::xt/tx-ops [[:xt/fn
                                         (c/new-id :increment-age)
-                                        {:xt/tx-ops [[:xt/put {:xt/id :jack, :age 22}]]}]]}]
+                                        {::xt/tx-ops [[:xt/put {:xt/id :jack, :age 22}]]}]]}]
                          (last tx-ops)))))))))))
 
 (t/deftest test-history-api
   (letfn [(submit-ivan [m valid-time]
             (let [doc (merge {:xt/id :ivan, :name "Ivan"} m)]
               (merge (fix/submit+await-tx [[:xt/put doc valid-time]])
-                     {:xt/doc doc
-                      :xt/valid-time valid-time
-                      :xt/content-hash (c/hash-doc doc)})))]
+                     {::xt/doc doc
+                      ::xt/valid-time valid-time
+                      ::xt/content-hash (c/hash-doc doc)})))]
     (let [v1 (submit-ivan {:version 1} #inst "2019-02-01")
           v2 (submit-ivan {:version 2} #inst "2019-02-02")
           v3 (submit-ivan {:version 3} #inst "2019-02-03")
@@ -338,11 +338,11 @@
           (t/is (= [v3 v2-corrected v1]
                    (iterator-seq history-desc)))))
 
-      (with-dbs [db (*api* {:xt/valid-time #inst "2019-02-04", :xt/tx-time #inst "2019-01-31"})]
+      (with-dbs [db (*api* {::xt/valid-time #inst "2019-02-04", ::xt/tx-time #inst "2019-01-31"})]
         (t/is (empty? (xt/entity-history db :ivan :asc)))
         (t/is (empty? (xt/entity-history db :ivan :desc))))
 
-      (with-dbs [db (*api* {:xt/valid-time #inst "2019-02-02", :xt/tx v2})]
+      (with-dbs [db (*api* {::xt/valid-time #inst "2019-02-02", ::xt/tx v2})]
         (with-open [history-asc (xt/open-entity-history db :ivan :asc {:with-docs? true})
                     history-desc (xt/open-entity-history db :ivan :desc {:with-docs? true})]
           (t/is (= [v1 v2]
@@ -350,21 +350,21 @@
           (t/is (= [v2 v1]
                    (iterator-seq history-desc)))))
 
-      (with-dbs [db (*api* {:xt/valid-time #inst "2019-02-03", :xt/tx v2})]
+      (with-dbs [db (*api* {::xt/valid-time #inst "2019-02-03", ::xt/tx v2})]
         (t/is (= [v1 v2]
                  (xt/entity-history db :ivan :asc {:with-docs? true})))
         (t/is (= [v2 v1]
                  (xt/entity-history db :ivan :desc {:with-docs? true})))))))
 
 (t/deftest test-db-throws-if-future-tx-time-provided-546
-  (let [{:keys [^Date xt/tx-time]} (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
+  (let [{::xt/keys [^Date tx-time]} (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
         the-future (Date. (+ (.getTime tx-time) 10000))]
     (t/is (thrown? NodeOutOfSyncException (xt/db *api* the-future the-future)))))
 
 (t/deftest test-db-is-a-snapshot
   (let [tx (fix/submit+await-tx [[:xt/put {:xt/id :foo, :count 0}]])
         db (xt/db *api*)]
-    (t/is (= tx (:xt/tx (xt/db-basis db))))
+    (t/is (= tx (::xt/tx (xt/db-basis db))))
     (t/is (= {:xt/id :foo, :count 0}
              (xt/entity db :foo)))
 
@@ -375,8 +375,8 @@
 
 (t/deftest test-latest-submitted-tx
   (t/is (nil? (xt/latest-submitted-tx *api*)))
-  (let [{:keys [xt/tx-id] :as tx} (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
-    (t/is (= {:xt/tx-id tx-id}
+  (let [{::xt/keys [tx-id]} (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
+    (t/is (= {::xt/tx-id tx-id}
              (xt/latest-submitted-tx *api*))))
 
   (xt/sync *api*)
@@ -388,7 +388,7 @@
     (let [!events (atom [])]
       (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])
 
-      (let [[bar-tx baz-tx] (with-open [_ (xt/listen *api* {:xt/event-type :xtdb/indexed-tx
+      (let [[bar-tx baz-tx] (with-open [_ (xt/listen *api* {::xt/event-type ::xt/indexed-tx
                                                             :with-tx-ops? true}
                                                      (fn [evt]
                                                        (swap! !events conj evt)))]
@@ -404,13 +404,13 @@
 
         (Thread/sleep 100)
 
-        (t/is (= [(merge {:xt/event-type :xtdb/indexed-tx,
+        (t/is (= [(merge {::xt/event-type ::xt/indexed-tx,
                           :committed? true
-                          :xt/tx-ops [[:xt/put {:xt/id :bar}]]}
+                          ::xt/tx-ops [[:xt/put {:xt/id :bar}]]}
                          bar-tx)
-                  (merge {:xt/event-type :xtdb/indexed-tx,
+                  (merge {::xt/event-type ::xt/indexed-tx,
                           :committed? true
-                          :xt/tx-ops [[:xt/put {:xt/id :baz}]]}
+                          ::xt/tx-ops [[:xt/put {:xt/id :baz}]]}
                          baz-tx)]
                  @!events))))))
 

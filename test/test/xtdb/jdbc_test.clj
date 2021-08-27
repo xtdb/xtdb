@@ -19,8 +19,8 @@
     (t/is (xt/entity (xt/db *api*) :origin-man))
     (t/testing "Tx log"
       (with-open [tx-log-iterator (xt/open-tx-log *api* 0 false)]
-        (t/is (= [{:xt/tx-id 2,
-                   :xt/tx-time (:xt/tx-time submitted-tx)
+        (t/is (= [{::xt/tx-id 2,
+                   ::xt/tx-time (::xt/tx-time submitted-tx)
                    :xtdb.tx.event/tx-events
                    [[:xt/put
                      (c/new-id (:xt/id doc))

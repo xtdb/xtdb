@@ -146,13 +146,13 @@
           history-opts {:with-corrections? with-corrections
                         :with-docs? with-docs
                         :start-valid-time start-valid-time
-                        :start-tx (->> {:xt/tx-time start-tx-time
-                                        :xt/tx-id start-tx-id}
+                        :start-tx (->> {::xt/tx-time start-tx-time
+                                        ::xt/tx-id start-tx-id}
                                        (into {} (filter val))
                                        not-empty)
                         :end-valid-time end-valid-time
-                        :end-tx (->> {:xt/tx-time end-tx-time
-                                     :xt/tx-id end-tx-id}
+                        :end-tx (->> {::xt/tx-time end-tx-time
+                                     ::xt/tx-id end-tx-id}
                                     (into {} (filter val))
                                     not-empty)}
           entity-history (xt/open-entity-history db eid sort-order history-opts)]

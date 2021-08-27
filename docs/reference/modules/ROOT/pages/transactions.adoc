@@ -446,7 +446,7 @@ include::example$test/xtdb/docs/examples/transactions/TransactionsTest.java[tags
 Clojure::
 +
 --
-In Clojure, you receive a map from `submit-tx` containing `:xt/tx-id` and `:xt/tx-time`
+In Clojure, you receive a map from `submit-tx` containing `::xt/tx-id` and `::xt/tx-time`
 
 [source,clojure]
 ----

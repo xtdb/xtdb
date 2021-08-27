@@ -25,8 +25,8 @@ CREATE TRIGGER IF NOT EXISTS crux_tx_trigger
 
 (defmethod xt.corda/tx-row->tx :h2 [tx-row _]
   (let [^TimestampWithTimeZone h2-tx-time (:crux_tx_time tx-row)]
-    {:xt/tx-id (:crux_tx_id tx-row)
-     :xt/tx-time (-> (OffsetDateTime/of (LocalDate/of (.getYear h2-tx-time)
+    {::xt/tx-id (:crux_tx_id tx-row)
+     ::xt/tx-time (-> (OffsetDateTime/of (LocalDate/of (.getYear h2-tx-time)
                                                        (.getMonth h2-tx-time)
                                                        (.getDay h2-tx-time))
                                          (LocalTime/ofNanoOfDay

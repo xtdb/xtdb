@@ -1868,7 +1868,7 @@
 
 (t/deftest test-query-and-match
   (t/testing "can create new user"
-    (let [{:xt/keys [tx-time tx-id] :as submitted-tx}
+    (let [{::xt/keys [tx-time tx-id] :as submitted-tx}
           (xt/submit-tx *api* [[:xt/match :ivan nil]
                                [:xt/put {:xt/id :ivan, :name "Ivan 1st"}]])]
       (xt/await-tx *api* submitted-tx)
@@ -1878,13 +1878,13 @@
                                      '{:find [n]
                                        :where [[:ivan :name n]]})))
 
-      (t/is (= tx-id (:xt/tx-id (xt/entity-tx (xt/db *api* tx-time tx-time) :ivan))))
+      (t/is (= tx-id (::xt/tx-id (xt/entity-tx (xt/db *api* tx-time tx-time) :ivan))))
 
       (t/is (= {:xt/id :ivan
                 :name "Ivan 1st"} (xt/entity (xt/db *api* tx-time tx-time) :ivan)))))
 
   (t/testing "cannot create existing user"
-    (let [{:xt/keys [tx-time tx-id] :as submitted-tx}
+    (let [{::xt/keys [tx-time tx-id] :as submitted-tx}
           (xt/submit-tx *api* [[:xt/match :ivan nil]
                                [:xt/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
 
@@ -1898,7 +1898,7 @@
       (t/is (not= tx-id (:tx-id (xt/entity-tx (xt/db *api* tx-time tx-time) :ivan))))))
 
   (t/testing "can update existing user"
-    (let [{:xt/keys [tx-time] :as submitted-update-tx}
+    (let [{::xt/keys [tx-time] :as submitted-update-tx}
           (xt/submit-tx *api* [[:xt/match :ivan {:xt/id :ivan, :name "Ivan 1st"}]
                                [:xt/put {:xt/id :ivan, :name "Ivan 2nd"}]])]
       (xt/await-tx *api* submitted-update-tx)
@@ -1908,7 +1908,7 @@
                                        :where [[:ivan :name n]]})))
 
       (t/testing "match sees interim state through the transaction"
-        (let [{:xt/keys [tx-time] :as submitted-tx}
+        (let [{::xt/keys [tx-time] :as submitted-tx}
               (xt/submit-tx *api* [[:xt/match :ivan {:xt/id :ivan, :name "Ivan 2nd"}]
                                    [:xt/put {:xt/id :ivan, :name "Ivan 3rd"}]
                                    [:xt/match :ivan {:xt/id :ivan, :name "Ivan 3rd"}]
@@ -1923,7 +1923,7 @@
                            :where [[:ivan :name n]]})))))
 
       (t/testing "normal put works after match"
-        (let [{:xt/keys [tx-time] :as submitted-tx}
+        (let [{::xt/keys [tx-time] :as submitted-tx}
               (xt/submit-tx *api* [[:xt/put
                                     {:xt/id :ivan
                                      :name "Ivan 5th"}]])]
@@ -2086,7 +2086,7 @@
     (t/is (= #{[:p2 :SFO #inst "2018-12-31" :na]
                [:p3 :LA #inst "2018-12-31" :na]
                [:p4 :NY #inst "2019-01-02" :na]}
-             (xt/q (xt/db *api* #inst "2019-01-02" (:xt/tx-time third-day-submitted-tx))
+             (xt/q (xt/db *api* #inst "2019-01-02" (::xt/tx-time third-day-submitted-tx))
                    '{:find [p entry-pt arrival-time departure-time]
                      :where [[p :entry-pt entry-pt]
                              [p :arrival-time arrival-time]

@@ -1,18 +1,15 @@
 (ns xtdb.codec-test
   (:require [clojure.test :as t]
+            [xtdb.api :as xt]
             [xtdb.codec :as c]
             [xtdb.memory :as mem]
             [xtdb.fixtures :as fix]
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
-            [clojure.test.check.properties :as prop]
-            [xtdb.api :as xt]
-            [juxt.clojars-mirrors.nippy.v3v1v1.taoensso.nippy :as nippy]
-            [clojure.spec.alpha :as s])
+            [clojure.test.check.properties :as prop])
   (:import xtdb.codec.Id
            java.math.BigDecimal
-           org.agrona.MutableDirectBuffer
-           [java.time Instant ZonedDateTime LocalDate ZoneId Duration]
+           [java.time Instant ZonedDateTime ZoneId Duration]
            [java.util Arrays Date]
            java.net.URL))
 

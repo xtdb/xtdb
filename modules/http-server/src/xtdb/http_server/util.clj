@@ -114,9 +114,9 @@
                    :encoder [http-json/->json-encoder opts]}))))
 
 (defn db-for-request ^IXtdbDatasource [crux-node {:keys [valid-time tx-time tx-id]}]
-  (let [^Map db-basis {:xt/valid-time valid-time
-                       :xt/tx-time tx-time
-                       :xt/tx-id tx-id}]
+  (let [^Map db-basis {::xt/valid-time valid-time
+                       ::xt/tx-time tx-time
+                       ::xt/tx-id tx-id}]
     (xt/db crux-node db-basis)))
 
 (defn raw-html [{:keys [title crux-node http-options results]}]

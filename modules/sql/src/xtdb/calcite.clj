@@ -398,9 +398,9 @@
           query (cond-> query
                   timeout (assoc :timeout timeout))]
       (->enumerator node
-                    {:xt/valid-time (.get data-context "VALIDTIME")
-                     :xt/tx-time (.get data-context "TRANSACTIONTIME")
-                     :xt/tx-id (.get data-context "TRANSACTIONID")}
+                    {::xt/valid-time (.get data-context "VALIDTIME")
+                     ::xt/tx-time (.get data-context "TRANSACTIONTIME")
+                     ::xt/tx-id (.get data-context "TRANSACTIONID")}
                     column-types query))
     (catch Throwable e
       (log/error e)

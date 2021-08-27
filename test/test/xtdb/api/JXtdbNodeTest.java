@@ -171,13 +171,13 @@ public class JXtdbNodeTest {
         Map<Keyword, ?> event = (Map<Keyword, ?>) events[0];
         assertNotNull(event);
         assertEquals(5, event.size());
-        assertEquals(Keyword.intern("xtdb/indexed-tx"), event.get(Keyword.intern("xt/event-type")));
+        assertEquals(Keyword.intern("xtdb.api/indexed-tx"), event.get(Keyword.intern("xtdb.api/event-type")));
         assertTrue((Boolean) event.get(Keyword.intern("committed?")));
         assertEquals(tx.getTime(), event.get(TX_TIME));
         assertEquals(0L, event.get(TX_ID));
 
         //TODO: Reassert
-        //assertTxOps((LazySeq) event.get(Keyword.intern("xt/tx-ops")));
+        //assertTxOps((LazySeq) event.get(Keyword.intern("xtdb.api/tx-ops")));
 
         try {
             listener.close();

@@ -14,7 +14,7 @@ You can subscribe to Crux events using `xtdb.api/listen`
 <1> A map which contains which event to listen to along with any relevant options
 <2> The function to run when the event triggers
 
-`event-ops` must contain `:xt/event-type`
+`event-ops` must contain `::xt/event-type`
 
 You can `.close` the return value from `(xtdb.api/listen ...)` to detach the listener, should you need to.
 
@@ -25,7 +25,7 @@ You can `.close` the return value from `(xtdb.api/listen ...)` to detach the lis
 |===
 |Event Type|Trigger
 
-|<<#indexed-tx,`:xtdb/indexed-tx`>>|Crux indexing a transaction
+|<<#indexed-tx,`::xt/indexed-tx`>>|Crux indexing a transaction
 |===
 
 [#indexed-tx]
@@ -42,7 +42,7 @@ You can `.close` the return value from `(xtdb.api/listen ...)` to detach the lis
 
 ==== Function Parameters
 
-`:xtdb/indexed-tx` passes one parameter to the function supplied to `xtdb.api/listen`
+`::xt/indexed-tx` passes one parameter to the function supplied to `xtdb.api/listen`
 
 This parameter is a map of the following
 
@@ -50,18 +50,18 @@ This parameter is a map of the following
 |===
 |Key|Value Type|Value
 
-|`:xt/event-type`|Keyword|`:xtdb/indexed-tx`
-|`:xt/tx-id`|Long|ID of the indexed transaction
-|`:xt/tx-time`|Date|Transaction time of the indexed transaction
+|`::xt/event-type`|Keyword|`::xt/indexed-tx`
+|`::xt/tx-id`|Long|ID of the indexed transaction
+|`::xt/tx-time`|Date|Transaction time of the indexed transaction
 |`:committed?`|Boolean|Whether the transaction was committed or aborted
-|`:xt/tx-ops`|List|List of the transaction operations indexed
+|`::xt/tx-ops`|List|List of the transaction operations indexed
 |===
 
 ==== Example
 
 [source,clojure]
 ----
-(xt/listen node {:xt/event-type :xtdb/indexed-tx, :with-tx-ops? true}
+(xt/listen node {::xt/event-type ::xt/indexed-tx, :with-tx-ops? true}
   (fn [ev]
     (println "event received!")
     (clojure.pprint/pprint ev)))
@@ -74,9 +74,9 @@ Will print
 [source,clojure]
 ----
 event received!
-{:xt/event-type :xtdb/indexed-tx,
- :xt/tx-id ...,
- :xt/tx-time #inst "...",
+{::xt/event-type ::xt/indexed-tx,
+ ::xt/tx-id ...,
+ ::xt/tx-time #inst "...",
  :committed? true,
- :xt/tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan"}]]}
+ ::xt/tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan"}]]}
 ----

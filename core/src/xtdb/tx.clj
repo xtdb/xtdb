@@ -15,17 +15,11 @@
   (:import clojure.lang.MapEntry
            xtdb.codec.EntityTx
            java.io.Closeable
-           [java.util.concurrent Future]
-           java.util.Date))
+           [java.util.concurrent Future]))
 
 (set! *unchecked-math* :warn-on-boxed)
 
-(def ^:private date? (partial instance? Date))
-
-(s/def :xt/tx-id nat-int?)
-(s/def :xt/tx-time date?)
-(s/def :xt/tx (s/keys :opt [:xt/tx-id :xt/tx-time]))
-(s/def ::submitted-tx (s/keys :req [:xt/tx-id :xt/tx-time]))
+(s/def ::submitted-tx (s/keys :req [::xt/tx-id ::xt/tx-time]))
 (s/def ::committed? boolean?)
 (s/def ::av-count nat-int?)
 (s/def ::bytes-indexed nat-int?)
@@ -98,7 +92,7 @@
 (alter-meta! #'index-tx-event assoc :arglists '([tx-event tx in-flight-tx]))
 
 (defn- put-delete-etxs [k start-valid-time end-valid-time content-hash
-                        {:xt/keys [tx-time tx-id valid-time]}
+                        {::xt/keys [tx-time tx-id valid-time]}
                         {:keys [index-snapshot]}]
   (let [eid (c/new-id k)
         ->new-entity-tx (fn [vt]
@@ -139,8 +133,8 @@
   {:etxs (put-delete-etxs k start-valid-time end-valid-time nil tx in-flight-tx)})
 
 (defmethod index-tx-event :crux.tx/match [[_op k v at-valid-time :as match-op]
-                                     {:xt/keys [tx-time tx-id valid-time]}
-                                     {:keys [index-snapshot]}]
+                                          {::xt/keys [tx-time tx-id valid-time]}
+                                          {:keys [index-snapshot]}]
   (let [content-hash (db/entity-as-of-resolver index-snapshot
                                                (c/new-id k)
                                                (or at-valid-time valid-time tx-time)
@@ -152,8 +146,8 @@
     {:abort? (not match?)}))
 
 (defmethod index-tx-event :crux.tx/cas [[_op k old-v new-v at-valid-time :as cas-op]
-                                   {:xt/keys [tx-time tx-id valid-time] :as tx}
-                                   {:keys [index-snapshot] :as in-flight-tx}]
+                                        {::xt/keys [tx-time tx-id valid-time] :as tx}
+                                        {:keys [index-snapshot] :as in-flight-tx}]
   (let [eid (c/new-id k)
         valid-time (or at-valid-time valid-time tx-time)
         content-hash (db/entity-as-of-resolver index-snapshot eid valid-time tx-id)
@@ -346,7 +340,7 @@
     (log/debug "Transaction committed:" (pr-str tx))
 
     (let [{:keys [tx-events]} @!tx]
-      (bus/send bus (into {:xt/event-type ::indexed-tx,
+      (bus/send bus (into {::xt/event-type ::indexed-tx,
                            :submitted-tx tx,
                            :committed? true
                            ::txe/tx-events tx-events}
@@ -366,7 +360,7 @@
 
     (log/debug "Transaction aborted:" (pr-str tx))
 
-    (bus/send bus {:xt/event-type ::indexed-tx,
+    (bus/send bus {::xt/event-type ::indexed-tx,
                    :submitted-tx tx,
                    :committed? false
                    ::txe/tx-events (:tx-events @!tx)})))
@@ -375,8 +369,8 @@
   db/TxIndexer
   (begin-tx [_ tx fork-at]
     (when-not fork-at
-      (log/debug "Indexing tx-id:" (:xt/tx-id tx))
-      (bus/send bus {:xt/event-type ::indexing-tx, :submitted-tx tx}))
+      (log/debug "Indexing tx-id:" (::xt/tx-id tx))
+      (bus/send bus {::xt/event-type ::indexing-tx, :submitted-tx tx}))
 
     (let [index-store-tx (db/begin-index-tx index-store tx fork-at)
           document-store-tx (fork/begin-document-store-tx document-store)]
@@ -441,17 +435,17 @@
   (let [!error (atom nil)
         secondary-indices @(:!secondary-indices secondary-indices)
         with-tx-ops? (some :with-tx-ops? secondary-indices)
-        latest-crux-tx-id (:xt/tx-id (db/latest-completed-tx index-store))]
-    (letfn [(process-tx-f [document-store {:keys [:xt/tx-id ::txe/tx-events] :as tx}]
+        latest-crux-tx-id (::xt/tx-id (db/latest-completed-tx index-store))]
+    (letfn [(process-tx-f [document-store {:keys [::xt/tx-id ::txe/tx-events] :as tx}]
               (let [tx (cond-> tx
-                         with-tx-ops? (assoc :xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
+                         with-tx-ops? (assoc ::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)))]
                 (doseq [{:keys [after-tx-id process-tx-f]} secondary-indices
                         :when (or (nil? after-tx-id) (< ^long after-tx-id ^long tx-id))]
                   (process-tx-f tx))))
 
             (set-ingester-error! [t]
               (reset! !error t)
-              (bus/send bus {:xt/event-type ::ingester-error, :ingester-error t}))]
+              (bus/send bus {::xt/event-type ::ingester-error, :ingester-error t}))]
 
       ;; catching all the secondary indices up to where Crux is
       (when (and latest-crux-tx-id (seq secondary-indices))
@@ -463,7 +457,7 @@
                       (< ^long after-tx-id ^long latest-crux-tx-id))
               (with-open [log (db/open-tx-log tx-log after-tx-id)]
                 (doseq [{::keys [tx-id] :as tx} (->> (iterator-seq log)
-                                                     (take-while (comp #(<= ^long % ^long latest-crux-tx-id) :xt/tx-id)))]
+                                                     (take-while (comp #(<= ^long % ^long latest-crux-tx-id) ::xt/tx-id)))]
                   (process-tx-f document-store (assoc tx :committing? (not (db/tx-failed? index-store tx-id)))))))
             (catch Throwable t
               (set-ingester-error! t)
@@ -475,7 +469,7 @@
                               (fn [_fut tx]
                                 (try
                                   (let [in-flight-tx (db/begin-tx tx-indexer
-                                                                  (select-keys tx [:xt/tx-time :xt/tx-id])
+                                                                  (select-keys tx [::xt/tx-time ::xt/tx-id])
                                                                   nil)
                                         committing? (db/index-tx-events in-flight-tx (::txe/tx-events tx))]
                                     (process-tx-f in-flight-tx (assoc tx :committing? committing?))

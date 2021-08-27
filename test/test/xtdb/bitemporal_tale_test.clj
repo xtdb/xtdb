@@ -353,5 +353,5 @@
              (xt/q
               (xt/db node
                        #inst "1715-06-19"
-                       (:xt/tx-time first-ownership-tx-response))
+                       (::xt/tx-time first-ownership-tx-response))
               who-has-what-query)))))

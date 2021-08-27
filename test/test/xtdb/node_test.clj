@@ -147,10 +147,10 @@
                       db/TxIngester (ingester-error [_] nil)
                       db/LatestCompletedTx (latest-completed-tx [_] *latest-completed-tx*))
         await-tx (fn [tx timeout]
-                   (#'n/await-tx {:bus bus :tx-ingester tx-ingester} :xt/tx-id tx timeout))
-        tx1 {:xt/tx-id 1
-             :xt/tx-time (Date.)}
-        tx-evt {:xt/event-type ::tx/indexed-tx
+                   (#'n/await-tx {:bus bus :tx-ingester tx-ingester} ::xt/tx-id tx timeout))
+        tx1 {::xt/tx-id 1
+             ::xt/tx-time (Date.)}
+        tx-evt {::xt/event-type ::tx/indexed-tx
                 :submitted-tx tx1
                 ::txe/tx-events []
                 :committed? true}]
@@ -174,7 +174,7 @@
     (t/testing "times out if it's not quite ready"
       (future
         (Thread/sleep 100)
-        (bus/send bus (assoc-in tx-evt [:submitted-tx :xt/tx-id] 0)))
+        (bus/send bus (assoc-in tx-evt [:submitted-tx ::xt/tx-id] 0)))
 
       (with-latest-tx nil
         (t/is (thrown? TimeoutException (await-tx tx1 (Duration/ofMillis 500))))))
@@ -182,7 +182,7 @@
     (t/testing "throws on ingester error"
       (future
         (Thread/sleep 100)
-        (bus/send bus {:xt/event-type ::tx/ingester-error
+        (bus/send bus {::xt/event-type ::tx/ingester-error
                        :ingester-error (ex-info "Ingester error" {})}))
 
       (with-latest-tx nil
@@ -192,7 +192,7 @@
     (t/testing "throws if node closed"
       (future
         (Thread/sleep 100)
-        (bus/send bus {:xt/event-type ::n/node-closing}))
+        (bus/send bus {::xt/event-type ::n/node-closing}))
 
       (with-latest-tx nil
         (t/is (thrown? InterruptedException (await-tx tx1 nil)))))))

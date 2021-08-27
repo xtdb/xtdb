@@ -23,13 +23,13 @@
                   (fn []
                     (let [tx (xt/submit-tx *api* [[:xt/put {:xt/id :foo}]])]
                       (xt/sync *api*)
-                      (t/is (= (:xt/tx-time tx)
-                               (:xt/tx-time (xt/latest-completed-tx *api*))))
-                      (:xt/tx-time tx))))]
+                      (t/is (= (::xt/tx-time tx)
+                               (::xt/tx-time (xt/latest-completed-tx *api*))))
+                      (::xt/tx-time tx))))]
     (doseq [tz-str ["Etc/UTC" "Japan/Tokyo" "Europe/London"]]
       (t/testing (str "TZ: " tz-str)
         (with-tz tz-str
           (fix/with-node
             (fn []
               (xt/sync *api*)
-              (t/is (= tx-time (:xt/tx-time (xt/latest-completed-tx *api*)))))))))))
+              (t/is (= tx-time (::xt/tx-time (xt/latest-completed-tx *api*)))))))))))

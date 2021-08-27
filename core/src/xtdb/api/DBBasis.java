@@ -12,8 +12,8 @@ import java.util.Objects;
  * A class representing the basis of a DB instance - a valid time and a transaction instant.
  */
 public final class DBBasis {
-    private static final Keyword VALID_TIME = Keyword.intern("xt/valid-time");
-    private static final Keyword TX = Keyword.intern("xt/tx");
+    private static final Keyword VALID_TIME = Keyword.intern("xtdb.api/valid-time");
+    private static final Keyword TX = Keyword.intern("xtdb.api/tx");
 
     private final Date validTime;
     private final TransactionInstant transactionInstant;

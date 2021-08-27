@@ -363,7 +363,7 @@
               entity-error [:div.error-box (str entity-error)]
               (not diffs?) (let [{:keys [entity-history]} @(rf/subscribe [::sub/entity-result-pane-history])]
                              [:div.entity-histories
-                              (for [{:keys [xt/tx-time xt/valid-time xt/doc]
+                              (for [{:keys [xtdb.api/tx-time xtdb.api/valid-time xtdb.api/doc]
                                      :as history-elem} entity-history]
                                 ^{:key history-elem}
                                 [:div.entity-history__container
@@ -374,10 +374,10 @@
                        [:div.entity-histories
                         [:div.entity-history__container
                          [:div.entity-map
-                          [cm/code-snippet (:xt/doc up-to-date-doc) {}]]
+                          [cm/code-snippet (:xtdb.api/doc up-to-date-doc) {}]]
                          [vt-tt-entity-box
-                          (:xt/valid-time up-to-date-doc)
-                          (:xt/tx-time up-to-date-doc)]]
+                          (:xtdb.api/valid-time up-to-date-doc)
+                          (:xtdb.api/tx-time up-to-date-doc)]]
                         (for [{:keys [additions deletions
                                       xt/tx-time xt/valid-time]
                                :as history-elem} history-diffs]

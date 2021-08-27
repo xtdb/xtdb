@@ -38,7 +38,7 @@
 (t/deftest test-can-index-tx-ops-acceptance-test
   (let [content-hash (c/hash-doc picasso)
         valid-time #inst "2018-05-21"
-        {:xt/keys [tx-time tx-id]}
+        {::xt/keys [tx-time tx-id]}
         (fix/submit+await-tx [[:xt/put picasso valid-time]])]
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -70,8 +70,8 @@
       (let [new-picasso (assoc picasso :foo :bar)
             new-content-hash (c/hash-doc new-picasso)
             new-valid-time #inst "2018-05-20"
-            {new-tx-time :xt/tx-time
-             new-tx-id   :xt/tx-id}
+            {new-tx-time ::xt/tx-time
+             new-tx-id   ::xt/tx-id}
             (fix/submit+await-tx [[:xt/put new-picasso new-valid-time]])]
 
         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -88,8 +88,8 @@
       (let [new-picasso (assoc picasso :baz :boz)
             new-content-hash (c/hash-doc new-picasso)
             new-valid-time #inst "2018-05-22"
-            {new-tx-time :xt/tx-time
-             new-tx-id   :xt/tx-id}
+            {new-tx-time ::xt/tx-time
+             new-tx-id   ::xt/tx-id}
             (fix/submit+await-tx [[:xt/put new-picasso new-valid-time]])]
 
         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -112,8 +112,8 @@
                 prev-tx-time new-tx-time
                 prev-tx-id new-tx-id
                 new-valid-time #inst "2018-05-22"
-                {new-tx-time :xt/tx-time
-                 new-tx-id   :xt/tx-id}
+                {new-tx-time ::xt/tx-time
+                 new-tx-id   ::xt/tx-id}
                 (fix/submit+await-tx [[:xt/put new-picasso new-valid-time]])]
 
             (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -129,7 +129,7 @@
 
         (t/testing "can delete entity"
           (let [new-valid-time #inst "2018-05-23"
-                {new-tx-id :xt/tx-id}
+                {new-tx-id ::xt/tx-id}
                 (fix/submit+await-tx [[:xt/delete (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time]])]
             (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
               (t/is (nil? (.content-hash (db/entity-as-of index-snapshot (keyword "http://dbpedia.org/resource/Pablo_Picasso") new-valid-time new-tx-id))))
@@ -142,7 +142,7 @@
                                              {:with-corrections? true}))))))))
 
 (t/deftest test-can-cas-entity
-  (let [{picasso-tx-time :xt/tx-time, picasso-tx-id :xt/tx-id} (xt/submit-tx *api* [[:xt/put picasso]])]
+  (let [{picasso-tx-time ::xt/tx-time, picasso-tx-id ::xt/tx-id} (xt/submit-tx *api* [[:xt/put picasso]])]
 
     (t/testing "compare and set does nothing with wrong content hash"
       (let [wrong-picasso (assoc picasso :baz :boz)
@@ -160,7 +160,7 @@
 
     (t/testing "compare and set updates with correct content hash"
       (let [new-picasso (assoc picasso :new? true)
-            {new-tx-time :xt/tx-time, new-tx-id :xt/tx-id} (fix/submit+await-tx [[:xt/cas picasso new-picasso]])]
+            {new-tx-time ::xt/tx-time, new-tx-id ::xt/tx-id} (fix/submit+await-tx [[:xt/cas picasso new-picasso]])]
 
         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
           (t/is (= [(c/map->EntityTx {:eid picasso-eid
@@ -177,7 +177,7 @@
 
   (t/testing "compare and set can update non existing nil entity"
     (let [ivan {:xt/id :ivan, :value 12}
-          {ivan-tx-time :xt/tx-time, ivan-tx-id :xt/tx-id} (fix/submit+await-tx [[:xt/cas nil ivan]])]
+          {ivan-tx-time ::xt/tx-time, ivan-tx-id ::xt/tx-id} (fix/submit+await-tx [[:xt/cas nil ivan]])]
 
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
         (t/is (= [(c/map->EntityTx {:eid (c/new-id :ivan)
@@ -188,7 +188,7 @@
                  (db/entity-history index-snapshot :ivan :desc {})))))))
 
 (t/deftest test-match-ops
-  (let [{picasso-tx-time :xt/tx-time, picasso-tx-id :xt/tx-id} (xt/submit-tx *api* [[:xt/put picasso]])]
+  (let [{picasso-tx-time ::xt/tx-time, picasso-tx-id ::xt/tx-id} (xt/submit-tx *api* [[:xt/put picasso]])]
 
     (t/testing "match does nothing with wrong content hash"
       (let [wrong-picasso (assoc picasso :baz :boz)
@@ -206,7 +206,7 @@
 
     (t/testing "match continues with correct content hash"
       (let [new-picasso (assoc picasso :new? true)
-            {new-tx-time :xt/tx-time, new-tx-id :xt/tx-id} (fix/submit+await-tx [[:xt/match picasso-id picasso]
+            {new-tx-time ::xt/tx-time, new-tx-id ::xt/tx-id} (fix/submit+await-tx [[:xt/match picasso-id picasso]
                                                                                  [:xt/put new-picasso]])]
 
         (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -224,7 +224,7 @@
 
   (t/testing "match can check non existing entity"
     (let [ivan {:xt/id :ivan, :value 12}
-          {ivan-tx-time :xt/tx-time, ivan-tx-id :xt/tx-id} (fix/submit+await-tx [[:xt/match :ivan nil]
+          {ivan-tx-time ::xt/tx-time, ivan-tx-id ::xt/tx-id} (fix/submit+await-tx [[:xt/match :ivan nil]
                                                                                  [:xt/put ivan]])]
 
       (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -266,14 +266,14 @@
     (db/commit in-flight-tx)))
 
 (t/deftest test-handles-legacy-evict-events
-  (let [{put-tx-time :xt/tx-time, put-tx-id :xt/tx-id} (fix/submit+await-tx [[:xt/put picasso #inst "2018-05-21"]])
+  (let [{put-tx-time ::xt/tx-time, put-tx-id ::xt/tx-id} (fix/submit+await-tx [[:xt/put picasso #inst "2018-05-21"]])
 
         evict-tx-time #inst "2018-05-22"
         evict-tx-id (inc put-tx-id)
 
         index-evict! (fn []
-                       (index-tx {:xt/tx-time evict-tx-time
-                                  :xt/tx-id evict-tx-id}
+                       (index-tx {::xt/tx-time evict-tx-time
+                                  ::xt/tx-id evict-tx-id}
                                  [[:crux.tx/evict picasso-id #inst "2018-05-23"]]))]
 
     ;; we have to index these manually because the new evict API won't allow docs
@@ -311,9 +311,9 @@
     (db/submit-docs (:document-store *api*) {(c/hash-doc ivan1) ivan1
                                              (c/hash-doc ivan2) ivan2})
 
-    (index-tx {:xt/tx-time t, :xt/tx-id 1}
+    (index-tx {::xt/tx-time t, ::xt/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan1))]])
-    (index-tx {:xt/tx-time t, :xt/tx-id 2}
+    (index-tx {::xt/tx-time t, ::xt/tx-id 2}
               [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2))]])
 
     (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
@@ -341,9 +341,9 @@
     (db/submit-docs (:document-store *api*) {(c/hash-doc ivan1) ivan1
                                              (c/hash-doc ivan2) ivan2})
 
-    (index-tx {:xt/tx-time t1, :xt/tx-id 1}
+    (index-tx {::xt/tx-time t1, ::xt/tx-id 1}
               [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan1)) t1]])
-    (index-tx {:xt/tx-time t2, :xt/tx-id 2}
+    (index-tx {::xt/tx-time t2, ::xt/tx-id 2}
               [[:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2)) t1]
                [:crux.tx/put :ivan (c/->id-buffer (c/hash-doc ivan2))]])
 
@@ -401,11 +401,11 @@
 
                          (with-open [index-snapshot (db/open-index-snapshot (:index-store *api*))]
                            (t/is (= (for [[vt tx-idx value] history]
-                                      [vt (get-in res [tx-idx :xt/tx-id]) (c/hash-doc (when value
+                                      [vt (get-in res [tx-idx ::xt/tx-id]) (c/hash-doc (when value
                                                                                         (assoc ivan :value value)))])
 
                                     (->> (db/entity-history index-snapshot eid :asc
-                                                            {:start {:xt/valid-time first-vt}})
+                                                            {:start {::xt/valid-time first-vt}})
                                          (map (juxt :vt :tx-id :content-hash)))))))
 
     ;; pairs
@@ -507,7 +507,7 @@
       (let [baseline-time (let [start-time (System/nanoTime)
                                 valid-time (Date. (+ (.getTime start-valid-time) number-of-versions))]
                             (t/testing "last version of entity is visible at now"
-                              (t/is (= valid-time (:vt (db/entity-as-of index-snapshot :ivan valid-time (:xt/tx-id tx))))))
+                              (t/is (= valid-time (:vt (db/entity-as-of index-snapshot :ivan valid-time (::xt/tx-id tx))))))
                             (- (System/nanoTime) start-time))]
 
         (let [start-time (System/nanoTime)
@@ -526,26 +526,26 @@
 
         tx1-ivan (assoc ivan :version 1)
         tx1-valid-time #inst "2018-11-26"
-        {tx1-id :xt/tx-id
-         tx1-tx-time :xt/tx-time}
+        {tx1-id ::xt/tx-id
+         tx1-tx-time ::xt/tx-time}
         (fix/submit+await-tx [[:xt/put tx1-ivan tx1-valid-time]])
 
         tx2-ivan (assoc ivan :version 2)
         tx2-petr {:xt/id :petr :name "Petr"}
         tx2-valid-time #inst "2018-11-27"
-        {tx2-id :xt/tx-id
-         tx2-tx-time :xt/tx-time}
+        {tx2-id ::xt/tx-id
+         tx2-tx-time ::xt/tx-time}
         (fix/submit+await-tx [[:xt/put tx2-ivan tx2-valid-time]
                               [:xt/put tx2-petr tx2-valid-time]])]
 
     (with-open [log-iterator (db/open-tx-log (:tx-log *api*) nil)]
       (let [log (iterator-seq log-iterator)]
         (t/is (not (realized? log)))
-        (t/is (= [{:xt/tx-id tx1-id
-                   :xt/tx-time tx1-tx-time
+        (t/is (= [{::xt/tx-id tx1-id
+                   ::xt/tx-time tx1-tx-time
                    :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc tx1-ivan) tx1-valid-time]]}
-                  {:xt/tx-id tx2-id
-                   :xt/tx-time tx2-tx-time
+                  {::xt/tx-id tx2-id
+                   ::xt/tx-time tx2-tx-time
                    :xtdb.tx.event/tx-events [[:crux.tx/put (c/new-id :ivan) (c/hash-doc tx2-ivan) tx2-valid-time]
                                              [:crux.tx/put (c/new-id :petr) (c/hash-doc tx2-petr) tx2-valid-time]]}]
                  log))))))
@@ -754,7 +754,7 @@
               [[:xt/evict
                 #xt/id "6abe906510aa2263737167c12c252245bdcf6fb0"]]]
              (->> (iterator-seq log-iterator)
-                  (map :xt/tx-ops))))))
+                  (map ::xt/tx-ops))))))
 
 (t/deftest transaction-fn-return-values-457
   (with-redefs [tx/tx-fn-eval-cache (memoize eval)]
@@ -943,7 +943,7 @@
       (let [eid->history (fn [eid]
                            (let [history (db/entity-history index-snapshot
                                                             (c/new-id eid) :asc
-                                                            {:start {:xt/valid-time #inst "2020-01-01"}})
+                                                            {:start {::xt/valid-time #inst "2020-01-01"}})
                                  docs (db/fetch-docs (:document-store *api*) (map :content-hash history))]
                              (->> history
                                   (mapv (fn [{:keys [content-hash vt]}]
@@ -992,10 +992,10 @@
 (t/deftest raises-tx-events-422
   (let [!events (atom [])
         !latch (promise)]
-    (bus/listen (:bus *api*) {:xt/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
+    (bus/listen (:bus *api*) {::xt/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
                 (fn [evt]
                   (swap! !events conj evt)
-                  (when (= ::tx/indexed-tx (:xt/event-type evt))
+                  (when (= ::tx/indexed-tx (::xt/event-type evt))
                     (deliver !latch @!events))))
 
     (let [doc-1 {:xt/id :foo, :value 1}
@@ -1006,8 +1006,8 @@
       (when (= ::timeout (deref !latch 500 ::timeout))
         (t/is false))
 
-      (t/is (= [{:xt/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
-                {:xt/event-type ::tx/indexed-tx,
+      (t/is (= [{::xt/event-type ::tx/indexing-tx, :submitted-tx submitted-tx}
+                {::xt/event-type ::tx/indexed-tx,
                  :submitted-tx submitted-tx,
                  :committed? true
                  :doc-ids doc-ids
@@ -1156,10 +1156,10 @@
                   (c/xt->crux))]
     (db/submit-docs (:document-store *api*) {(c/hash-doc tx-fn) tx-fn})
 
-    (index-tx {:xt/tx-time (Date.), :xt/tx-id 0}
+    (index-tx {::xt/tx-time (Date.), ::xt/tx-id 0}
               [[:crux.tx/put (c/new-id :tx-fn) tx-fn]])
 
-    (index-tx {:xt/tx-time (Date.), :xt/tx-id 1}
+    (index-tx {::xt/tx-time (Date.), ::xt/tx-id 1}
               [[:crux.tx/fn :tx-fn]])
 
     (t/is (= {:xt/id :ivan}
@@ -1338,7 +1338,7 @@
 (t/deftest empty-tx-can-be-awaited-1519
   (let [tx (xt/submit-tx *api* [])
         _ (xt/await-tx *api* tx (Duration/ofSeconds 1))]
-    (t/is (= (select-keys tx [:xt/tx-id]) (xt/latest-submitted-tx *api*)))
+    (t/is (= (select-keys tx [::xt/tx-id]) (xt/latest-submitted-tx *api*)))
     (t/is (= tx (xt/latest-completed-tx *api*)))
     (t/is (xt/tx-committed? *api* tx))))
 
@@ -1371,7 +1371,7 @@
                                               (fn [tx]
                                                 (swap! !txs conj tx)))))]
           (fix/submit+await-tx node [[:xt/put {:xt/id :foo}]])
-          (t/is (= [0] (map :xt/tx-id @!txs))))))
+          (t/is (= [0] (map ::xt/tx-id @!txs))))))
 
     (t/testing "secondary indices catch up to Crux indices on node startup"
       (fix/with-tmp-dirs #{db-dir idx-dir}
@@ -1388,7 +1388,7 @@
                                                  (fn [tx]
                                                    (swap! !txs conj tx)))))]
             ;; NOTE: don't need `sync` - should happen before node becomes available.
-            (t/is (= [0] (map :xt/tx-id @!txs)))))))
+            (t/is (= [0] (map ::xt/tx-id @!txs)))))))
 
     (t/testing "Crux catches up without replaying tx to secondary indices"
       (fix/with-tmp-dirs #{db-dir}
@@ -1406,8 +1406,8 @@
                                                 (fn [tx]
                                                   (swap! !txs conj tx)))))]
             (xt/sync node)
-            (t/is (= 0 (:xt/tx-id (xt/latest-completed-tx node))))
-            (t/is (= [0] (map :xt/tx-id @!txs)))))))
+            (t/is (= 0 (::xt/tx-id (xt/latest-completed-tx node))))
+            (t/is (= [0] (map ::xt/tx-id @!txs)))))))
 
     (t/testing "passes through tx-ops on request"
       (fix/with-tmp-dirs #{db-dir idx-dir}
@@ -1421,10 +1421,10 @@
 
             (fix/submit+await-tx node [[:xt/put {:xt/id :ivan :name "Ivan"}]])
 
-            (t/is (= [{:xt/tx-id 0
-                       :xt/tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan"}]]}]
+            (t/is (= [{::xt/tx-id 0
+                       ::xt/tx-ops [[:xt/put {:xt/id :ivan, :name "Ivan"}]]}]
                      (->> @!txs
-                          (map #(select-keys % [:xt/tx-id :xt/tx-ops])))))))))
+                          (map #(select-keys % [::xt/tx-id ::xt/tx-ops])))))))))
 
     (with-redefs [log-impl/enabled? (constantly false)]
       (t/testing "handles secondary indexes blowing up"
@@ -1461,13 +1461,13 @@
 (t/deftest tx-committed-throws-correctly-1579
   (let [tx (fix/submit+await-tx [[:xt/put {:xt/id :foo}]])]
     (t/is (xt/tx-committed? *api* tx))
-    (t/is (xt/tx-committed? *api* {:xt/tx-id 0}))
+    (t/is (xt/tx-committed? *api* {::xt/tx-id 0}))
 
     (t/is (thrown? xtdb.IllegalArgumentException (xt/tx-committed? *api* nil)))
     (t/is (thrown? xtdb.IllegalArgumentException (xt/tx-committed? *api* {})))
-    (t/is (thrown? xtdb.IllegalArgumentException (xt/tx-committed? *api* {:xt/tx-id nil})))
-    (t/is (thrown? ClassCastException (xt/tx-committed? *api* {:xt/tx-id :a})))
+    (t/is (thrown? xtdb.IllegalArgumentException (xt/tx-committed? *api* {::xt/tx-id nil})))
+    (t/is (thrown? ClassCastException (xt/tx-committed? *api* {::xt/tx-id :a})))
 
     ;; "skipped" tx-ids (e.g. handling Kafka offsets), and negative or non-integer tx-ids are also incorrect but not currently detected
     #_
-    (t/is (thrown? xtdb.api.NodeOutOfSyncException (xt/tx-committed? *api* {:xt/tx-id -1.5})))))
+    (t/is (thrown? xtdb.api.NodeOutOfSyncException (xt/tx-committed? *api* {::xt/tx-id -1.5})))))

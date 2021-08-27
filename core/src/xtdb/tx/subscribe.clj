@@ -1,8 +1,8 @@
 (ns xtdb.tx.subscribe
   (:require [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.db :as db]
-            [xtdb.io :as xio]
-            [xtdb.tx :as tx])
+            [xtdb.io :as xio])
   (:import xtdb.api.ICursor
            java.time.Duration
            [java.util.concurrent CompletableFuture Semaphore]
@@ -37,7 +37,7 @@
 
     (f fut tx)
 
-    (:xt/tx-id tx)))
+    (::xt/tx-id tx)))
 
 (defn handle-polling-subscription [tx-log after-tx-id {:keys [^Duration poll-sleep-duration]} f]
   (completable-thread
@@ -71,7 +71,7 @@
 (defrecord NotifyingSubscriberHandler [!state]
   PNotifyingSubscriberHandler
   (notify-tx! [_ tx]
-    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (:xt/tx-id tx))]
+    (let [{:keys [semaphores]} (swap! !state assoc :latest-submitted-tx-id (::xt/tx-id tx))]
       (doseq [^Semaphore semaphore semaphores]
         (.release semaphore))))
 
@@ -92,7 +92,7 @@
                                   (reduce (tx-handler f fut)
                                           after-tx-id
                                           (->> (iterator-seq log)
-                                               (take-while #(<= (:xt/tx-id %) latest-submitted-tx-id)))))
+                                               (take-while #(<= (::xt/tx-id %) latest-submitted-tx-id)))))
 
                                 ;; running live
                                 (reduce (tx-handler f fut)
@@ -117,5 +117,5 @@
              (swap! !state update :semaphores disj semaphore))))))))
 
 (defn ->notifying-subscriber-handler [latest-submitted-tx]
-  (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id (:xt/tx-id latest-submitted-tx)
+  (->NotifyingSubscriberHandler (atom {:latest-submitted-tx-id (::xt/tx-id latest-submitted-tx)
                                        :semaphores #{}})))

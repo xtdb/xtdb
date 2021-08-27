@@ -1,17 +1,16 @@
 (ns xtdb.s3.checkpoint
   (:require [xtdb.s3 :as s3]
+            [xtdb.api :as xt]
             [xtdb.checkpoint :as cp]
             [clojure.string :as string]
             [clojure.java.io :as io]
-            [xtdb.tx :as tx]
             [xtdb.io :as xio]
             [clojure.edn :as edn]
-            [clojure.set :as set]
             [xtdb.system :as sys])
   (:import (xtdb.s3 S3Configurator)
            (clojure.lang MapEntry)
            (java.io Closeable File)
-           (java.nio.file Path Paths)
+           (java.nio.file Paths)
            (software.amazon.awssdk.core ResponseBytes)
            (software.amazon.awssdk.core.async AsyncRequestBody AsyncResponseTransformer)
            (software.amazon.awssdk.services.s3 S3AsyncClient)))
@@ -57,7 +56,7 @@
   (upload-checkpoint [this dir {:keys [tx ::cp/cp-format]}]
     (let [dir-path (.toPath ^File dir)
           cp-at (java.util.Date.)
-          s3-dir (format "checkpoint-%s-%s" (:xt/tx-id tx) (xio/format-rfc3339-date cp-at))]
+          s3-dir (format "checkpoint-%s-%s" (::xt/tx-id tx) (xio/format-rfc3339-date cp-at))]
       (->> (file-seq dir)
            (into {} (keep (fn [^File file]
                             (when (.isFile file)

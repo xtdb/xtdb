@@ -18,16 +18,16 @@ with few lifecycle members added.
     "Returns a DB snapshot at the given time.
 
      db-basis: (optional map, all keys optional)
-       - `:xt/valid-time` (Date):
+       - `::xt/valid-time` (Date):
            If provided, DB won't return any data with a valid-time greater than the given time.
            Defaults to now.
-       - `:xt/tx` (Map):
+       - `::xt/tx` (Map):
            If provided, DB will be a snapshot as of the given transaction.
            Defaults to the latest completed transaction.
-       - `:xt/tx-time` (Date):
-           Shorthand for `{:xt/tx {:xt/tx-time <>}}`
+       - `::xt/tx-time` (Date):
+           Shorthand for `{::xt/tx {::xt/tx-time <>}}`
 
-     Providing both `:xt/tx` and `:xt/tx-time` is undefined.
+     Providing both `::xt/tx` and `::xt/tx-time` is undefined.
      Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
      If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException")
@@ -45,16 +45,16 @@ with few lifecycle members added.
     "Opens a DB snapshot at the given time.
 
      db-basis: (optional map, all keys optional)
-       - `:xt/valid-time` (Date):
+       - `::xt/valid-time` (Date):
            If provided, DB won't return any data with a valid-time greater than the given time.
            Defaults to now.
-       - `:xt/tx` (Map):
+       - `::xt/tx` (Map):
            If provided, DB will be a snapshot as of the given transaction.
            Defaults to the latest completed transaction.
-       - `:xt/tx-time` (Date):
-           Shorthand for `{:xt/tx {:xt/tx-time <>}}`
+       - `::xt/tx-time` (Date):
+           Shorthand for `{::xt/tx {::xt/tx-time <>}}`
 
-     Providing both `:xt/tx` and `:xt/tx-time` is undefined.
+     Providing both `::xt/tx` and `::xt/tx-time` is undefined.
      Arities passing dates directly (`node vt` and `node vt tt`) are deprecated and will be removed in a later release.
 
      If the node hasn't yet indexed a transaction at or past the given transaction, this throws NodeOutOfSyncException
@@ -143,9 +143,9 @@ with few lifecycle members added.
   (listen ^java.lang.AutoCloseable [node event-opts f]
     "Attaches a listener to Crux's event bus.
 
-  `event-opts` should contain `:xt/event-type`, along with any other options the event-type requires.
+  `event-opts` should contain `::xt/event-type`, along with any other options the event-type requires.
 
-  We currently only support one public event-type: `:xtdb/indexed-tx`.
+  We currently only support one public event-type: `::xt/indexed-tx`.
   Supplying `:with-tx-ops? true` will include the transaction's operations in the event passed to `f`.
 
   `(.close ...)` the return value to detach the listener.
@@ -159,7 +159,7 @@ with few lifecycle members added.
 ----
 (open-tx-log ^ICursor [this after-tx-id with-ops?]
   "Reads the transaction log. Optionally includes
-  operations, which allow the contents under the :xt/tx-ops
+  operations, which allow the contents under the ::xt/tx-ops
   key to be piped into (submit-tx tx-ops) of another
   Crux instance.
   after-tx-id      optional transaction id to start after.
@@ -315,7 +315,7 @@ Represents the database as of a specific valid and transaction time.
 
     Options:
     * `sort-order`: `#{:asc :desc}`
-    * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `:xt/doc` key
+    * `:with-docs?` (boolean, default false): specifies whether to include documents in the entries under the `::xt/doc` key
     * `:with-corrections?` (boolean, default false): specifies whether to include bitemporal corrections in the sequence, sorted first by valid-time, then tx-id.
     * `:start-valid-time`, `:start-tx-time`, `:start-tx-id` (inclusive, default unbounded): bitemporal co-ordinates to start at
     * `:end-valid-time`, `:end-tx-time`, `:end-tx-id` (exclusive, default unbounded): bitemporal co-ordinates to stop at
@@ -323,11 +323,11 @@ Represents the database as of a specific valid and transaction time.
     No matter what `:start-*` and `:end-*` parameters you specify, you won't receive results later than the valid-time and tx-id of this DB value.
 
     Each entry in the result contains the following keys:
-    * `:xt/valid-time`,
-    * `:xt/tx-time`,
-    * `:xt/tx-id`,
-    * `:xt/content-hash`
-    * `:xt/doc` (see `with-docs?`).")
+    * `::xt/valid-time`,
+    * `::xt/tx-time`,
+    * `::xt/tx-id`,
+    * `::xt/content-hash`
+    * `::xt/doc` (see `with-docs?`).")
 ----
 
 === open-entity-history
@@ -354,7 +354,7 @@ Represents the database as of a specific valid and transaction time.
 [source,clojure]
 ----
   (db-basis [db]
-    "returns the basis of this db snapshot - a map containing `:xt/valid-time` and `:xt/tx`"))
+    "returns the basis of this db snapshot - a map containing `::xt/valid-time` and `::xt/tx`"))
 ----
 
 === valid-time

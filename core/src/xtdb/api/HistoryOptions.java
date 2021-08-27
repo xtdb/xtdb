@@ -66,7 +66,7 @@ public final class HistoryOptions {
      * Specifies whether to return documents in the history response.
      *
      * If this is set to `true`, documents will be included under the
-     * `:xt/doc` key.
+     * `::xt/doc` key.
      */
     public HistoryOptions withDocs(boolean withDocs) {
         this.withDocs = withDocs;

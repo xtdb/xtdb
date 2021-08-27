@@ -1,6 +1,7 @@
 (ns xtdb.lucene
   (:require [clojure.spec.alpha :as s]
             [clojure.tools.logging :as log]
+            [xtdb.api :as xt]
             [xtdb.checkpoint :as cp]
             [xtdb.codec :as cc]
             [xtdb.db :as db]
@@ -48,7 +49,7 @@
 
 (defn- validate-index-version [^IndexWriter writer]
   (let [found-index-version (some-> (into {} (.getLiveCommitData writer))
-                                    (get "xt/index-version")
+                                    (get "xtdb.lucene/index-version")
                                     (Long/parseLong))]
     (when-not (or (zero? (.numDocs (.getDocStats writer)))
                   (= index-version found-index-version))
@@ -63,7 +64,7 @@
 
 (defn- user-data->tx-id [user-data]
   (some-> user-data
-          (get "xt/tx-id")
+          (get "xtdb.api/tx-id")
           (Long/parseLong)))
 
 (defn latest-completed-tx-id [^IndexWriter index-writer]
@@ -284,7 +285,7 @@
                 (with-open [out-dir (FSDirectory/open (.toPath ^File dir))]
                   (doseq [file-name (.getFileNames snapshot)]
                     (.copyFrom out-dir src-dir file-name file-name io-ctx))))
-              {:tx {:xt/tx-id tx-id}})
+              {:tx {::xt/tx-id tx-id}})
             (finally
               (.release snapshotter snapshot))))))))
 
@@ -380,15 +381,15 @@
     (tx/register-index! secondary-indices
                         (latest-completed-tx-id index-writer)
                         {:with-tx-ops? true}
-                        (fn [{:keys [:xt/tx-id :xt/tx-ops committing?]}]
+                        (fn [{:keys [::xt/tx-id ::xt/tx-ops committing?]}]
                           (when committing?
                             (let [{:keys [docs evicted-eids]} (transform-tx-ops tx-ops)]
                               (when-let [evicting-eids (not-empty evicted-eids)]
                                 (evict! indexer index-writer evicting-eids))
                               (index! indexer index-writer docs)))
 
-                          (.setLiveCommitData index-writer {"xt/tx-id" (str tx-id)
-                                                            "xt/index-version" (str index-version)})
+                          (.setLiveCommitData index-writer {"xtdb.api/tx-id" (str tx-id)
+                                                            "xtdb.lucene/index-version" (str index-version)})
                           (when (.isZero refresh-frequency)
                             (.maybeRefreshBlocking searcher-manager))))
 

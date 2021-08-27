@@ -829,10 +829,10 @@
 (defn entity-tx->edn [^EntityTx entity-tx]
   (when entity-tx
     {:xt/id (.eid entity-tx)
-     :xt/content-hash (.content-hash entity-tx)
-     :xt/valid-time (.vt entity-tx)
-     :xt/tx-time (.tt entity-tx)
-     :xt/tx-id (.tx-id entity-tx)}))
+     :xtdb.api/content-hash (.content-hash entity-tx)
+     :xtdb.api/valid-time (.vt entity-tx)
+     :xtdb.api/tx-time (.tt entity-tx)
+     :xtdb.api/tx-id (.tx-id entity-tx)}))
 
 (defn multiple-values? [v]
   (or (vector? v) (set? v)))

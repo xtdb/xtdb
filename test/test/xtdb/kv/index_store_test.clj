@@ -3,6 +3,7 @@
             [clojure.test.check.clojure-test :as tcct]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
+            [xtdb.api :as xt]
             [xtdb.cache.nop :as nop-cache]
             [xtdb.codec :as c]
             [xtdb.db :as db]
@@ -61,7 +62,7 @@
 (defn- write-etxs [etxs]
   (doseq [[^long tx-id etxs] (->> (group-by :tx-id etxs)
                                   (sort-by key))]
-    (doto (db/begin-index-tx *index-store* {:xt/tx-id tx-id, :xt/tx-time (Date. tx-id)} nil)
+    (doto (db/begin-index-tx *index-store* {::xt/tx-id tx-id, ::xt/tx-time (Date. tx-id)} nil)
       (db/index-entity-txs etxs)
       (db/commit-index-tx))))
 
@@ -187,11 +188,11 @@
   (with-fresh-index-store
     (with-open [index-snapshot (db/open-index-snapshot *index-store*)]
       (t/is (nil? (db/resolve-tx index-snapshot nil)))
-      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {:xt/tx-time (Date.)})))
-      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {:xt/tx-id 1}))))
+      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {::xt/tx-time (Date.)})))
+      (t/is (thrown? NodeOutOfSyncException (db/resolve-tx index-snapshot {::xt/tx-id 1}))))
 
-    (let [tx0 {:xt/tx-time #inst "2020", :xt/tx-id 0}
-          tx1 {:xt/tx-time #inst "2022", :xt/tx-id 1}]
+    (let [tx0 {::xt/tx-time #inst "2020", ::xt/tx-id 0}
+          tx1 {::xt/tx-time #inst "2022", ::xt/tx-id 1}]
       (doto (db/begin-index-tx *index-store* tx0 nil)
         (db/index-entity-txs [])
         (db/commit-index-tx))
@@ -206,18 +207,18 @@
         (t/is (= tx1 (db/resolve-tx index-snapshot tx1)))
         (t/is (= tx1 (db/resolve-tx index-snapshot nil)))
 
-        (let [tx #:xt{:tx-time #inst "2021", :tx-id 0}]
+        (let [tx #::xt{:tx-time #inst "2021", :tx-id 0}]
           (t/is (= tx (db/resolve-tx index-snapshot tx)))
-          (t/is (= tx (db/resolve-tx index-snapshot {:xt/tx-time #inst "2021"}))))
+          (t/is (= tx (db/resolve-tx index-snapshot {::xt/tx-time #inst "2021"}))))
 
         (t/is (thrown? IllegalArgumentException
-                       (db/resolve-tx index-snapshot #:xt{:tx-time #inst "2021", :tx-id 1})))
+                       (db/resolve-tx index-snapshot #::xt{:tx-time #inst "2021", :tx-id 1})))
 
         (t/is (thrown? IllegalArgumentException
-                       (db/resolve-tx index-snapshot #:xt{:tx-time #inst "2022", :tx-id 0})))
+                       (db/resolve-tx index-snapshot #::xt{:tx-time #inst "2022", :tx-id 0})))
 
         (t/is (thrown? NodeOutOfSyncException
-                       (db/resolve-tx index-snapshot #:xt{:tx-time #inst "2023", :tx-id 1})))))))
+                       (db/resolve-tx index-snapshot #::xt{:tx-time #inst "2023", :tx-id 1})))))))
 
 (t/deftest test-statistics
   (letfn [(->stats [index-snapshot-factory]
@@ -232,7 +233,7 @@
       (let [ivan {:xt/id :ivan :name "Ivan"}
             ivan2 {:xt/id :ivan :name "Ivan2"}
             petr {:xt/id :petr :name "Petr"}]
-        (let [index-store-tx (db/begin-index-tx *index-store* #:xt{:tx-time #inst "2021", :tx-id 0} nil)]
+        (let [index-store-tx (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)]
 
           (db/index-docs index-store-tx {(c/new-id ivan) ivan})
           (t/is (= {:doc-count 1, :values 1, :eids 1} (:name (->stats index-store-tx))))
@@ -245,7 +246,7 @@
         (t/is (= {:doc-count 2, :values 2, :eids 2} (:name (->stats *index-store*))))
 
         (t/testing "updated"
-          (doto (db/begin-index-tx *index-store* #:xt{:tx-time #inst "2022", :tx-id 1} nil)
+          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1} nil)
             (db/index-docs {(c/new-id ivan2) ivan2})
             (db/commit-index-tx))
 
@@ -259,14 +260,14 @@
                     (let [doc {:xt/id (.next id-iterator)
                                :sub-idx sub-idx}]
                       (MapEntry/create (c/new-id doc) doc))))]
-          (doto (db/begin-index-tx *index-store* #:xt{:tx-time #inst "2021", :tx-id 0} nil)
+          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)
 
             (db/index-docs (mk-docs 50))
             (db/index-docs (mk-docs 50))
 
             (db/commit-index-tx))
 
-          (doto (db/begin-index-tx *index-store* #:xt{:tx-time #inst "2022", :tx-id 1} nil)
+          (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2022", :tx-id 1} nil)
             (db/index-docs (mk-docs 50))
             (db/commit-index-tx))))
 
@@ -281,7 +282,7 @@
                :set-val #{1 3 2 5}
                :vec-val [1 4 6 2 6 1]}
           doc-id (c/new-id doc)]
-      (doto (db/begin-index-tx *index-store* #:xt{:tx-time #inst "2021", :tx-id 0} nil)
+      (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)
         (db/index-docs {doc-id doc})
         (db/commit-index-tx))
 
@@ -299,7 +300,7 @@
           large-vec-doc-id (c/new-id large-vec-doc)
           docs {simple-doc-id simple-doc, large-vec-doc-id large-vec-doc}
           doc-store (kvds/->KvDocumentStore (:kv-store *index-store*) false)]
-      (doto (db/begin-index-tx *index-store* #:xt{:tx-time #inst "2021", :tx-id 0} nil)
+      (doto (db/begin-index-tx *index-store* #::xt{:tx-time #inst "2021", :tx-id 0} nil)
         (db/index-docs docs)
         (db/commit-index-tx))
 

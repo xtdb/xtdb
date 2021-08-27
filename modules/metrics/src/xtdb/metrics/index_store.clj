@@ -10,16 +10,16 @@
                     ["index-store" "tx-id-lag"]
                     #(when-let [completed (xt/latest-completed-tx node)]
                        (when-let [submitted (xt/latest-submitted-tx node)]
-                         (- (:xt/tx-id submitted)
-                            (:xt/tx-id completed))))))
+                         (- (::xt/tx-id submitted)
+                            (::xt/tx-id completed))))))
 
 (defn assign-tx-latency-gauge [registry {:xtdb/keys [bus]}]
   (let [!last-tx-lag (atom 0)]
     (bus/listen bus
-                {:xt/event-types #{::tx/indexed-tx}}
+                {::xt/event-types #{::tx/indexed-tx}}
                 (fn [{:keys [submitted-tx]}]
                   (reset! !last-tx-lag (- (System/currentTimeMillis)
-                                          (.getTime ^Date (:xt/tx-time submitted-tx))))))
+                                          (.getTime ^Date (::xt/tx-time submitted-tx))))))
     (dropwizard/gauge registry
                       ["index-store" "tx-latency"]
                       (fn []
@@ -30,7 +30,7 @@
         av-ingested-meter (dropwizard/meter registry ["index-store" "indexed-avs"])
         bytes-ingested-meter (dropwizard/meter registry ["index-store" "indexed-bytes"])]
     (bus/listen bus
-                {:xt/event-types #{::tx/indexed-tx}}
+                {::xt/event-types #{::tx/indexed-tx}}
                 (fn [{:keys [doc-ids av-count bytes-indexed]}]
                   (dropwizard/mark! docs-ingested-meter (count doc-ids))
                   (dropwizard/mark! av-ingested-meter av-count)
@@ -43,8 +43,8 @@
   (let [timer (dropwizard/timer registry ["index-store" "indexed-txs"])
         !timer-store (atom {})]
     (bus/listen bus
-                {:xt/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
-                (fn [{:keys [xt/event-type submitted-tx]}]
+                {::xt/event-types #{::tx/indexing-tx ::tx/indexed-tx}}
+                (fn [{:keys [::xt/event-type submitted-tx]}]
                   (case event-type
                     ::tx/indexing-tx
                     (swap! !timer-store assoc submitted-tx (dropwizard/start timer))

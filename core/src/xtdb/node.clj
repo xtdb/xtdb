@@ -34,7 +34,7 @@
 
 (defn- await-tx [{:keys [bus tx-ingester]} tx-k awaited-tx ^Duration timeout]
   (let [tx-v (get awaited-tx tx-k)
-        fut (bus/await bus {:xt/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
+        fut (bus/await bus {::xt/event-types #{::tx/indexed-tx ::tx/ingester-error ::node-closing}
                             :->result (letfn [(tx->result [tx]
                                                 (when (and tx (not (neg? (compare (get tx tx-k) tx-v))))
                                                   {:tx tx}))]
@@ -43,7 +43,7 @@
                                                (tx->result (db/latest-completed-tx tx-ingester))
                                                (when-let [ingester-error (db/ingester-error tx-ingester)]
                                                  {:ingester-error ingester-error})))
-                                          ([{:keys [xt/event-type] :as ev}]
+                                          ([{::xt/keys [event-type] :as ev}]
                                            (case event-type
                                              ::tx/indexed-tx (tx->result (:submitted-tx ev))
                                              ::tx/ingester-error {:ingester-error (:ingester-error ev)}
@@ -92,7 +92,7 @@
     (when close-fn
       (xio/with-write-lock lock
         (when (not @closed?)
-          (bus/send bus {:xt/event-type ::node-closing})
+          (bus/send bus {::xt/event-type ::node-closing})
           (close-fn)
           (reset! closed? true)))))
 
@@ -100,17 +100,17 @@
   (db [this] (xt/db this {}))
   (db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
-      (xt/db this {:xt/valid-time valid-time-or-basis})
+      (xt/db this {::xt/valid-time valid-time-or-basis})
       (xt/db query-engine valid-time-or-basis)))
   (db [this valid-time tx-time]
-    (xt/db this {:xt/valid-time valid-time, :xt/tx-time tx-time}))
+    (xt/db this {::xt/valid-time valid-time, ::xt/tx-time tx-time}))
 
   (open-db [this] (xt/open-db this {}))
   (open-db [this valid-time tx-time]
-    (xt/open-db this {:xt/valid-time valid-time :xt/tx-time tx-time}))
+    (xt/open-db this {::xt/valid-time valid-time ::xt/tx-time tx-time}))
   (open-db [this valid-time-or-basis]
     (if (instance? Date valid-time-or-basis)
-      (xt/open-db this {:xt/valid-time valid-time-or-basis})
+      (xt/open-db this {::xt/valid-time valid-time-or-basis})
       (xio/with-read-lock lock
         (ensure-node-open this)
         (xt/open-db query-engine valid-time-or-basis))))
@@ -126,10 +126,10 @@
         (merge crux-version
                (status (dissoc @!system :xtdb/node))))))
 
-  (tx-committed? [this {:keys [:xt/tx-id] :as submitted-tx}]
+  (tx-committed? [this {:keys [::xt/tx-id] :as submitted-tx}]
     (xio/with-read-lock lock
       (ensure-node-open this)
-      (let [{latest-tx-id :xt/tx-id, :as latest-tx} (xt/latest-completed-tx this)]
+      (let [{latest-tx-id ::xt/tx-id, :as latest-tx} (xt/latest-completed-tx this)]
         (cond
           (nil? tx-id) (throw (err/illegal-arg :invalid-tx {:tx submitted-tx}))
 
@@ -143,36 +143,36 @@
   (sync [this timeout]
     (when-let [tx (db/latest-submitted-tx tx-log)]
       (-> (xt/await-tx this tx timeout)
-          :xt/tx-time)))
+          ::xt/tx-time)))
 
   (sync [this tx-time timeout]
     (defonce warn-on-deprecated-sync
       (log/warn "(sync tx-time <timeout?>) is deprecated, replace with either (await-tx-time tx-time <timeout?>) or, preferably, (await-tx tx <timeout?>)"))
-    (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
+    (::xt/tx-time (await-tx this ::xt/tx-time {::xt/tx-time tx-time} timeout)))
 
   (await-tx [this submitted-tx]
     (xt/await-tx this submitted-tx nil))
 
   (await-tx [this submitted-tx timeout]
-    (await-tx this :xt/tx-id submitted-tx timeout))
+    (await-tx this ::xt/tx-id submitted-tx timeout))
 
   (await-tx-time [this tx-time]
     (xt/await-tx-time this tx-time nil))
 
   (await-tx-time [this tx-time timeout]
-    (:xt/tx-time (await-tx this :xt/tx-time {:xt/tx-time tx-time} timeout)))
+    (::xt/tx-time (await-tx this ::xt/tx-time {::xt/tx-time tx-time} timeout)))
 
-  (listen [_ {:xt/keys [event-type] :as event-opts} f]
+  (listen [_ {::xt/keys [event-type] :as event-opts} f]
     (case event-type
-      :xtdb/indexed-tx
+      ::xt/indexed-tx
       (bus/listen bus
-                  (assoc event-opts :xt/event-types #{::tx/indexed-tx})
+                  (assoc event-opts ::xt/event-types #{::tx/indexed-tx})
                   (fn [{:keys [submitted-tx ::txe/tx-events] :as ev}]
-                    (f (merge {:xt/event-type :xtdb/indexed-tx}
+                    (f (merge {::xt/event-type ::xt/indexed-tx}
                               (select-keys ev [:committed?])
-                              (select-keys submitted-tx [:xt/tx-time :xt/tx-id])
+                              (select-keys submitted-tx [::xt/tx-time ::xt/tx-id])
                               (when (:with-tx-ops? event-opts)
-                                {:xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
+                                {::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events)})))))))
 
   (latest-completed-tx [this]
     (xio/with-read-lock lock
@@ -218,21 +218,21 @@
     (let [with-ops? (boolean with-ops?)]
       (xio/with-read-lock lock
         (ensure-node-open this)
-        (if (let [latest-submitted-tx-id (:xt/tx-id (xt/latest-submitted-tx this))]
+        (if (let [latest-submitted-tx-id (::xt/tx-id (xt/latest-submitted-tx this))]
               (or (nil? latest-submitted-tx-id)
                   (and after-tx-id (>= after-tx-id latest-submitted-tx-id))))
           xio/empty-cursor
 
-          (let [latest-completed-tx-id (:xt/tx-id (xt/latest-completed-tx this))
+          (let [latest-completed-tx-id (::xt/tx-id (xt/latest-completed-tx this))
                 tx-log-iterator (db/open-tx-log tx-log after-tx-id)
                 tx-log (->> (iterator-seq tx-log-iterator)
-                            (remove #(db/tx-failed? index-store (:xt/tx-id %)))
-                            (take-while (comp #(<= % latest-completed-tx-id) :xt/tx-id))
+                            (remove #(db/tx-failed? index-store (::xt/tx-id %)))
+                            (take-while (comp #(<= % latest-completed-tx-id) ::xt/tx-id))
                             (map (if with-ops?
                                    (fn [{:keys [xtdb.tx.event/tx-events] :as tx-log-entry}]
                                      (-> tx-log-entry
                                          (dissoc :xtdb.tx.event/tx-events)
-                                         (assoc :xt/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
+                                         (assoc ::xt/tx-ops (txc/tx-events->tx-ops document-store tx-events))))
                                    (fn [tx-log-entry]
                                      (-> tx-log-entry
                                          (update :xtdb.tx.event/tx-events
@@ -265,14 +265,14 @@
                                                             (update :slowest clean-slowest-queries node-opts)))))
         (recur)
         (when slow-query?
-          (bus/send bus {:xt/event-type :slow-query
+          (bus/send bus {::xt/event-type :slow-query
                          :query query}))))))
 
 (defn attach-current-query-listeners [!running-queries {:keys [bus] :as node-opts}]
-  (bus/listen bus {:xt/event-types #{:xtdb.query/submitted-query
+  (bus/listen bus {::xt/event-types #{:xtdb.query/submitted-query
                                      :xtdb.query/completed-query
                                      :xtdb.query/failed-query}}
-              (fn [{::q/keys [query-id query error] :keys [xt/event-type]}]
+              (fn [{::q/keys [query-id query error], ::xt/keys [event-type]}]
                 (case event-type
                   :xtdb.query/submitted-query
                   (swap! !running-queries assoc-in [:in-progress query-id] {:query-id query-id
