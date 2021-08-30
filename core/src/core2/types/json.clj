@@ -21,11 +21,16 @@
                          :json/object :json/object))
 
 (def ^:private json-hierarchy
-  (reduce
-   (fn [acc tag]
-     (derive acc tag :json/scalar))
-   (make-hierarchy)
-   [:json/null :json/boolean :json/int :json/float :json/string]))
+  (-> (make-hierarchy)
+      (derive :json/int :json/number)
+      (derive :json/float :json/number)
+      (derive :json/null :json/scalar)
+      (derive :json/boolean :json/scalar)
+      (derive :json/number :json/scalar)
+      (derive :json/string :json/scalar)
+      (derive :json/array :json/value)
+      (derive :json/object :json/value)
+      (derive :json/scalar :json/value)))
 
 (defn type-kind [[tag x]]
   (cond
