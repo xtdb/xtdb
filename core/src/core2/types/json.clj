@@ -42,5 +42,5 @@
                   :json/int Types$MinorType/BIGINT
                   :json/float Types$MinorType/FLOAT8
                   :json/string Types$MinorType/VARCHAR
-                  :json/list Types$MinorType/LIST
+                  :json/array Types$MinorType/LIST
                   :json/object Types$MinorType/STRUCT})
