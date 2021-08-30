@@ -49,3 +49,52 @@
                   :json/string Types$MinorType/VARCHAR
                   :json/array Types$MinorType/LIST
                   :json/object Types$MinorType/STRUCT})
+
+
+(comment
+  (with-open [a (org.apache.arrow.memory.RootAllocator.)
+              container (org.apache.arrow.vector.complex.NonNullableStructVector/empty "" a)
+              v (.addOrGetStruct container "test")
+              writer (org.apache.arrow.vector.complex.impl.PromotableWriter. v container)]
+    (.allocateNew container)
+
+    (.start writer)
+
+    (.setPosition writer 0)
+    (.writeBit (.bit writer "A") 0)
+
+    (.setPosition writer 1)
+    (.writeNull writer)
+
+    (.setPosition writer 2)
+    (.writeBigInt (.bigInt writer "A") 2)
+
+    (.setPosition writer 3)
+    (.writeFloat8 (.float8 writer "A") 3.14)
+
+    (.setPosition writer 4)
+    (let [bs (.getBytes "Hello" "UTF-8")
+          len (alength bs)]
+      (with-open [buf (.buffer a len)]
+        (.setBytes buf 0 bs)
+        (.writeVarChar (.varChar writer "A") 0 len buf)))
+
+    (.setPosition writer 5)
+    (let [l (.list writer "A")]
+      (.startList l)
+      (.writeBigInt (.bigInt l) 2)
+      (.writeFloat8 (.float8 l) 3.14)
+      (.endList l))
+
+    (.setPosition writer 6)
+    (let [s (.struct writer "A")]
+      (.start s)
+      (.writeBigInt (.bigInt s "B") 2)
+      (.writeFloat8 (.float8 s "B") 3.14)
+      (.end s))
+
+    (.end writer)
+
+    (.setValueCount container 7)
+
+    (str (.getChild v "A" org.apache.arrow.vector.complex.UnionVector))))
