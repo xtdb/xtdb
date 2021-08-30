@@ -90,11 +90,17 @@
     (let [s (.struct writer "A")]
       (.start s)
       (.writeBigInt (.bigInt s "B") 2)
+      (.writeBit (.bit s "C") 1)
+      (.end s))
+
+    (.setPosition writer 7)
+    (let [s (.struct writer "A")]
+      (.start s)
       (.writeFloat8 (.float8 s "B") 3.14)
       (.end s))
 
     (.end writer)
 
-    (.setValueCount container 7)
+    (.setValueCount container 8)
 
     (str (.getChild v "A" org.apache.arrow.vector.complex.UnionVector))))
