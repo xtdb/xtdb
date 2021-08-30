@@ -5,8 +5,8 @@
 
 (s/def :json/null nil?)
 (s/def :json/boolean boolean?)
-(s/def :json/number-float double?)
-(s/def :json/number-int int?)
+(s/def :json/int int?)
+(s/def :json/float float?)
 (s/def :json/string string?)
 
 (s/def :json/array (s/coll-of :json/value :kind vector?))
@@ -14,23 +14,33 @@
 
 (s/def :json/value (s/or :json/null :json/null
                          :json/boolean :json/boolean
-                         :json/number-float :json/number-float
-                         :json/number-int :json/number-int
+                         :json/int :json/int
+                         :json/float :json/float
                          :json/string :json/string
                          :json/array :json/array
                          :json/object :json/object))
 
-(def json-hierarchy
+(def ^:private json-hierarchy
   (reduce
    (fn [acc tag]
      (derive acc tag :json/scalar))
    (make-hierarchy)
-   [:json/null :json/boolean :json/number-float :josn/number-int :json/string]))
+   [:json/null :json/boolean :json/int :json/float :json/string]))
+
+(defn type-kind [[tag x]]
+  (cond
+    (isa? json-hierarchy tag :json/scalar)
+    {:kind :json/scalar}
+    (= :json/array tag)
+    {:kind :json/array}
+    (= :json/object tag)
+    {:kind :json/object
+     :keys (set (keys x))}))
 
 (def json->arrow {:json/null Types$MinorType/NULL
                   :json/boolean Types$MinorType/BIT
-                  :json/number-float Types$MinorType/FLOAT8
-                  :json/number-int Types$MinorType/BIGINT
+                  :json/int Types$MinorType/BIGINT
+                  :json/float Types$MinorType/FLOAT8
                   :json/string Types$MinorType/VARCHAR
                   :json/list Types$MinorType/LIST
                   :json/object Types$MinorType/STRUCT})
