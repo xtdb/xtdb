@@ -95,10 +95,10 @@
                       (mapcat #(->xtdb-docs % opts))
                       (into {} (map (juxt c/new-id identity))))]
     {::txe/tx-events (concat (for [deleted-id (set/difference consumed-ids (set (keys new-docs)))]
-                               [::tx/delete deleted-id])
+                               [:crux.tx/delete deleted-id])
 
                              (for [[new-doc-id new-doc] new-docs]
-                               [::tx/put (:xt/id new-doc) new-doc-id]))
+                               [:crux.tx/put (:xt/id new-doc) new-doc-id]))
      :docs new-docs}))
 
 (defn- with-database-connection [^AppServiceHub service-hub, f]

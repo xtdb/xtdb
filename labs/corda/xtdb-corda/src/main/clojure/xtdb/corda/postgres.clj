@@ -1,5 +1,6 @@
 (ns xtdb.corda.postgres
-  (:require [xtdb.corda :as xt.corda]
+  (:require [xtdb.api :as xt]
+            [xtdb.corda :as xt.corda]
             [juxt.clojars-mirrors.nextjdbc.v1v2v674.next.jdbc :as jdbc])
   (:import (java.util Date)
            (java.sql Timestamp)))
